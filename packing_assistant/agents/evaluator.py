@@ -122,13 +122,36 @@ def agent_evaluator(state: PackingState) -> Dict[str, Any]:
         need_replan = False
         risks.append("已达自动重规划上限，请人工调整箱子或柜型")
 
-    passed = can_fit and weight <= 1.0 and not unpacked
+    # 成箱结构不通过：装得下也不能算评估通过（交由风险合规打回）
+    struct_fail_ids = [
+        str(b.get("box_id") or "")
+        for b in boxes
+        if b.get("structure_conclusion") == "不通过"
+        or "结构不通过" in (b.get("special_attributes") or [])
+    ]
+    if struct_fail_ids:
+        score -= 25
+        risks.append(f"成箱结构不通过：{', '.join(struct_fail_ids[:8])}，须拆箱/改箱型")
+        suggestions.append("split_or_reinforce_boxes")
+        suggestions.append("reject_to_box_scheme")
+
+    passed = can_fit and weight <= 1.0 and not unpacked and not struct_fail_ids
     score = max(0, min(100, round(score, 1)))
+
+    if struct_fail_ids and can_fit:
+        decision = "REJECT_STRUCTURE"
+    elif need_replan:
+        decision = "REPLAN"
+    elif passed:
+        decision = "PASS"
+    else:
+        decision = "FAIL"
 
     evaluation = {
         "passed": passed,
         "score": score,
-        "decision": "PASS" if passed and not need_replan else ("REPLAN" if need_replan else "FAIL"),
+        "decision": decision,
+        "structure_fail_box_ids": struct_fail_ids,
         "space_utilization": space,
         "space_best": space_best,
         "floor_utilization_avg": floor,
