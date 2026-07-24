@@ -36,13 +36,19 @@ Owner：`LUOaini1213`
 
 ---
 
-## 二、分工总表
+## 二、分工总表（已定）
 
-| 角色 | 负责目录/模块 | 交付 |
-|------|----------------|------|
-| **阶段1** | `material_parser` / `structure_*` / `box_scheme` / `packing.py` / `structure_calc` / `knowledge/` / `test/excel` / 确认页文案 | 可信的 `boxes[]` + 确认单 |
-| **阶段2** | `planner` / `loader` / `bin3d` / `evaluator` / `risk_*` / `visualizer` / `frontend` / `skjolber-service` | 装柜 layout + 风险 + 三视图 |
-| **主控/联调** | `orchestrator` / `finalize` / `harness` / `gateway` / `container_select` | 选柜、端到端、发布 |
+| 角色 | GitHub | 负责目录/模块 | 交付 |
+|------|--------|----------------|------|
+| **阶段1** | **@cuizhi-chat** | `material_parser` / `structure_*` / `box_scheme` / `packing.py` / `structure_calc` / `knowledge/` / `test/excel` / 确认页 | 可信的 `boxes[]` + 确认单 |
+| **阶段2** | **@niudongrui** | `planner` / `loader` / `bin3d` / `evaluator` / `risk_*` / `visualizer` / `frontend` / `skjolber-service` | 装柜 layout + 风险 + 三视图 |
+| **主控/联调** | **@LUOaini1213** | `orchestrator` / `finalize` / `harness` / `gateway` / `container_select` | 选柜、端到端、发布 |
+
+| 同学 | 优先 Issues |
+|------|-------------|
+| cuizhi-chat（阶段1） | #1–#8（联调 #4 #11） |
+| niudongrui（阶段2） | #9–#15（联调 #4 #11） |
+| LUOaini1213（主控） | #16–#18 |
 
 **改 `docs/api-spec.md` 或 `boxes[]` 字段 = 两边都要知情。**
 
