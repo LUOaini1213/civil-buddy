@@ -1,133 +1,222 @@
-﻿# ?箄鋆拳銝??繚 憭?賭? Harness
+# 智能装箱与拼柜 · 多智能体 Harness
 
-?Ｗ? **餈??啣??⊿?頝臭漱???璆潮★??* ?Ｙ??辣嚗? 
-**??皜? ???拳/?函拳嚗??????潭?鋆蝸 ??憌?? ??銝???*??
-## ?蝏??9 ?箄雿?+ ?冽蝖株恕嚗?
+面向 **REDACTED-PROJECT** 钢结构件：
+
+**材料清单 → 铁箱/木箱（结构计算）→ 集装箱拼柜装载 → 风险合规 → 三视图**
+
+仓库：https://github.com/LUOaini1213/packing-agent
+
+---
+
+## 整体架构（9 智能体 + 用户确认）
+
+```text
+用户输入（材料清单 / PDF / Excel）
+              │
+              ▼
+┌─────────────────────────────────────────────────┐
+│  1 主控智能体（开头）                              │
+│  · 意图与 9 智能体调度                             │
+│  · 柜型推荐 20GP / 40GP / 40HQ                    │
+│  · 空间/重量双利用率目标                           │
+│  · 二层堆码策略                                    │
+└──────────────────────┬──────────────────────────┘
+                       ▼
+┌─────────────────────────────────────────────────┐
+│  团队 A · 装箱方案                                 │
+│  2 材料解析 → 3 结构约束 → 4 装箱方案（合箱+结构）  │
+└──────────────────────┬──────────────────────────┘
+                       ▼
+              输出装箱方案（箱号/箱型/外廓/结构结论）
+                       ▼
+┌─────────────────────────────────────────────────┐
+│  ★ 用户确认闸门（必须）                            │
+│  确认柜型 / 调整 / 取消                             │
+└──────────────────────┬──────────────────────────┘
+                       ▼
+┌─────────────────────────────────────────────────┐
+│  团队 B · 拼柜方案                                 │
+│  5 规划 → 6 装载(3D) → 7 评估 → 8 风险 → 9 可视化 │
+└──────────────────────┬──────────────────────────┘
+                       ▼
+┌─────────────────────────────────────────────────┐
+│  主控收口（结尾）                                  │
+│  · 复核柜型（可建议换柜）                           │
+│  · 汇总：容积(实心外廓)/重量/风险/三视图            │
+└─────────────────────────────────────────────────┘
 ```
-?冽颲嚗?????
-  ?? 銝餅??憭湧? + ??函??格? + 鈭???蝑
-  ???? ??閫?? 繚 3 蝏? 繚 4 鋆拳?寞?
-  ??颲鋆拳?寞?蝏??  ??瑞＆霈扎? 敹???/ ?航???/ ?臬?瘨?  ???? 閫? 繚 6 鋆蝸 繚 7 霂摯 繚 8 憌 繚 9 ?航???  ?蜓?扳???撠曉??豢???+ 瘙餅??```
 
-### 摰?內
+### 智能体职责
 
-- **銝??漱** `deepseek api.txt`?.env`?遙雿?`*apiKey*` ?辣嚗歇??`.gitignore`嚗?- 憭 `.env.example` ??`.env`嚗‵?亥撌梁? LLM Key
+| # | 名称 | 职责 |
+|---|------|------|
+| 1 | **主控** | 开头选柜 + 目标下达；结尾复核柜型与汇总 |
+| 2 | 材料解析 | 解析/标准化材料（mm/kg） |
+| 3 | 结构计算 | 推荐箱型约束与加固建议（成箱后半严格校核） |
+| 4 | 装箱方案 | 合箱 → 铁架/木箱/铁笼 + 结构计算 |
+| ★ | 用户确认 | **必选**柜型后方可进入拼柜 |
+| 5 | 规划 | 装载策略：重货底层、并排、二层堆码 |
+| 6 | 装载执行 | 3D 摆位（`python-laff-3d` 或可选 skjolber） |
+| 7 | 评估优化 | 空间/底面积/重量打分，是否 replan |
+| 8 | 风险合规 | 偏心、超重、双低利用率、合规分 |
+| 9 | 可视化 | 俯视 / 侧视 / 正视三视图 |
 
-| ?﹝ | 霂湔? |
-|------|------|
-| [docs/overall-architecture.md](docs/overall-architecture.md) | **?蝏??湔??* |
-| [docs/team-a-user-output-template.md](docs/team-a-user-output-template.md) | **?ａ?A 蝏?瑞?颲璅⊥** |
-| [docs/api-spec.md](docs/api-spec.md) | **JSON ?亙摰阮 v2.1** |
-| [docs/phase2-agent2-packer-api.md](docs/phase2-agent2-packer-api.md) | skjolber 撠???|
+> 详细架构见 [docs/overall-architecture.md](docs/overall-architecture.md)
 
-## 霈曇恣??
+### 数据流（简）
 
-- 霈∠??其誨??蝏? / ?拳 / skjolber / 閫?霂?嚗?- LLM嚗??整圾???押??抵圾??獢隋??- ?亙嚗nake_case嚗m/kg嚗gent ?游隡???JSON
+```text
+materials[] ──► boxes[]（外廓实心长方体）──► container_plan + layout
+                      │                            │
+                      │                            ├─ space_utilization
+                      │                            ├─ weight_utilization
+                      │                            └─ views.top/side/front
+                      └─ structure_calc / content
+```
 
-## 餈?嚗誨?歇??蝏??堆?
+**容积定义**：Σ(铁箱/木箱 **外廓** L×W×H) ÷ 柜内几何容积（`solid_outer_aabb`），不是零件镂空体积。
+
+---
+
+## 设计原则
+
+- **计算用代码**：结构、合箱、3D 装载、规则评分
+- **LLM 可选**：意图、解析辅助、风险解释、文案润色（DeepSeek 等）
+- **接口**：snake_case，单位 mm / kg，Agent 间只传标准 JSON
+
+---
+
+## 目录结构
+
+```text
+packing_assistant/     # 核心：agents / tools / harness / graph
+  agents/              # 9 智能体 + present 闸门
+  tools/               # packing / bin3d / structure / container_select
+gateway/               # FastAPI 网关
+frontend/              # Vue2 CDN 演示页
+knowledge/             # 装箱知识库 JSON
+scripts/               # 批跑、基准、Excel、选柜对比
+docs/                  # 架构与 API 文档
+test/                  # PDF 装箱单、Excel 业务集、BPP 基准
+eval/                  # 黄金回归用例
+skjolber-service/      # 可选 Java skjolber 服务
+data/external/         # 公开 3D-BPP 样例
+```
+
+---
+
+## 快速开始
+
+### 安全（必读）
+
+- **不要提交** `deepseek api.txt`、`.env`、任何 `*apiKey*`（已在 `.gitignore`）
+- 复制 `.env.example` → `.env`，填入自己的 LLM Key
 
 ```bash
-cd E:\ai瘥?
 pip install -r requirements.txt
 
-# ?冽?蝔??芸蝖株恕 40HQ嚗噶鈭?蝷綽?
+# 全流程演示（主控自动选柜 + 自动确认）
 python main.py --demo --trace
 
-# ?芾??ａ?A ??phase=await_user_confirm嚗?鈭箇＆霈歹?
+# 只跑团队 A → phase=await_user_confirm
 python main.py --team-a
 
-# 鈭支?嚗? ??颲?? ???ａ?B
+# 交互：团队 A → 输入柜型 → 团队 B
 python main.py --interactive
 
-# ??
+# 回归
 python main.py --eval
 ```
 
-| 隞?? | 撖孵? |
-|------|------|
-| `agents/material_parser` | ?ａ?A ??閫?? |
-| `agents/structure_agent` | ?ａ?A 蝏?霈∠? |
-| `agents/box_scheme` | ?ａ?A 鋆拳?寞? |
-| `agents/present_team_a` | ?冽蝖株恕頧質 |
-| `agents/planner` | ?ａ?B 閫? |
-| `agents/loader` | ?ａ?B 鋆蝸嚗?*??**嚗? skjolber嚗?|
-| `agents/evaluator` | ?ａ?B 霂摯 |
-| `agents/risk_compliance` | ?ａ?B 憌?? |
-| `agents/visualizer` | ?ａ?B 銝?閫?|
-| `harness.run_team_a / run_team_b` | 銝餅?賊 |
+### 网关 + 前端（无需 Java）
 
-## ??臬?撌?
-- Agent0 + ?ａ?A + 蝵嚗ython / LangGraph + **FastAPI**  
-- Agent5嚗?*Java Spring Boot + skjolber**嚗skjolber-service/`嚗? 
-- Agent8嚗views` ??**Vue2**嚗frontend/index.html`嚗DN ?? npm嚗? 
+本机若用不上 JDK，默认 **纯 Python 3D 装载**（`python-laff-3d`），接口与 skjolber 对齐，Vue2 可画三视角。
 
-## ??嚗?頧賢???+ Vue2嚗?*?? Java / 蝞∠?????*嚗?
-?祆?亥?銝? JDK嚗?*暺恕雿輻蝥?Python 3D 撘?**嚗python-laff-3d`嚗??亙銝?skjolber 撖寥?嚗ue2 ?舐?亦銝?閫?
 ```bash
-pip install -r requirements.txt
 python -m uvicorn gateway.app:app --reload --port 8000
-# 瘚??冽?撘 http://127.0.0.1:8000
-# ??? test PDF ?瑚??? ?亥” /api/test-shipments/report
+# 浏览器 http://127.0.0.1:8000
 ```
 
-### test/ 鋆拳??對???憿寧?潭?嚗?霈斗 DeepSeek嚗?
+### 常用脚本
+
 ```bash
+# test/ 装箱单 PDF · 同一项目拼柜
 python scripts/run_test_shipments.py
-# 颲:
-#   output/test_shipments/summary.json
-#   output/test_shipments/report.html
-#   output/test_shipments/report.xlsx
-#   output/test_shipments/*_project.json
+
+# REDACTED-CLIENT Excel → test/excel 业务集
+python scripts/build_steel_test_set.py
+python scripts/run_excel_tests.py
+
+# 公开 BPP 基准
+python scripts/fetch_external_datasets.py
+python scripts/convert_bpp_to_cases.py
+python scripts/run_benchmark_cases.py
+
+# 20GP / 40GP / 40HQ 对比
+python scripts/compare_container_types.py
+
+# 9 智能体逐步输出
+python scripts/dump_nine_agents.py
 ```
 
-### ?Ｙ???Excel 瘚???餈?憭?sheet ?? + ??嚗?
-蝵???瘝⊥?????????銝摰 Excel?誑憿寧??銝”銝箔蜓嚗?
-```bash
-python scripts/build_steel_test_set.py   # 隞?REDACTED-CODE*餈?*.xlsx ?? ??test/excel/
-python scripts/run_excel_tests.py       # ??皜?頝?TeamA/B
-# 颲: output/excel_tests/report.html
-```
+---
 
-| ?辣 | ?交? |
+## 代码映射
+
+| 路径 | 对应 |
 |------|------|
-| `test/excel/test_materials_01.xlsx` | ?乩遠??|
-| `test/excel/test_boxes_2m.xlsx` 蝑?| 鋆揮???蝐餃? |
-| `test/excel/test_full_flow.xlsx` | ??+蝞望?蝏??? |
-| `test/excel/synthetic/*.xlsx` | ?凋辣/頞/餈???頞?/瘛瑁? |
+| `agents/orchestrator` | 主控开头 |
+| `agents/material_parser` | 材料解析 |
+| `agents/structure_agent` | 结构约束 |
+| `agents/box_scheme` | 装箱方案 |
+| `agents/present_team_a` | 用户确认闸门 |
+| `agents/planner` | 规划 |
+| `agents/loader` | 装载（主路径 python-laff-3d） |
+| `agents/evaluator` | 评估 |
+| `agents/risk_compliance` | 风险合规 |
+| `agents/visualizer` | 三视图 |
+| `agents/finalize` | 主控结尾汇总 + 选柜复核 |
+| `tools/container_select.py` | 柜型选型 |
+| `tools/bin3d.py` | 3D 装载与实心容积 |
+| `tools/packing.py` | 合箱与外廓模块化 |
+| `harness.run_team_a / run_team_b` | 主控门面 |
 
-### ?砍? 3D-BPP ?箏?嚗???????蝏?銝嚗?
-```bash
-python scripts/fetch_external_datasets.py   # D-Wave sample txt
-python scripts/convert_bpp_to_cases.py      # ??test/benchmarks/*.json + excel/
-python scripts/run_benchmark_cases.py       # 蝚砌??嗆挾 pack_boxes_api
-# 颲: output/benchmarks/report.html
-```
+### 技术栈
 
-| ?唳 | ?券?|
+- 编排：Python / LangGraph + **FastAPI**
+- 装载：默认 **python-laff-3d**；可选 **Java Spring Boot + skjolber**（`skjolber-service/`）
+- 前端：`views` → **Vue2**（`frontend/index.html`，CDN 无 npm）
+
+---
+
+## 文档索引
+
+| 文档 | 说明 |
 |------|------|
-| D-Wave sample_data_1/2 | ??/憭?蝞??? |
-| case_a 撠辣 20GP | ?? |
-| case_b ?蹂辣 40HQ | ???園???|
-| case_c / overweight | ??銝???|
-| **餈? Excel** | **銝甇?＆??/ 蝑儔銝餅?靘?* |
+| [docs/overall-architecture.md](docs/overall-architecture.md) | **完整架构（最终版）** |
+| [docs/team-a-user-output-template.md](docs/team-a-user-output-template.md) | 团队 A 用户输出模板 |
+| [docs/api-spec.md](docs/api-spec.md) | JSON 接口定稿 |
+| [docs/phase2-agent2-packer-api.md](docs/phase2-agent2-packer-api.md) | skjolber 封装参考 |
+| [PROJECT_SUMMARY.md](PROJECT_SUMMARY.md) | 打包与目录速览 |
+| [knowledge/README.md](knowledge/README.md) | 知识库说明 |
+| [test/excel/README.md](test/excel/README.md) | 钢结构 Excel 测试集 |
+| [test/benchmarks/README.md](test/benchmarks/README.md) | 公开 3D-BPP 基准 |
 
-撠箏站閬?嚗knowledge/dims_override.json`嚗?株??賭葉??Ｖ摯蝞偕撖賂???
-Agent5 鋆蝸隡?蝥改?
+---
 
-1. `SKJOLBER_URL` ????Java skjolber ?嚗? JDK ?嗅??  
-2. **蝥?Python 3D**嚗packing_assistant/tools/bin3d.py`嚗? **?恣???嗥?銝餉楝敺?*  
-3. ??1D 蝥踵批?摨? 
+## 环境变量（摘要）
 
-?恣??/JDK ?嗅?鋆?Java 撟嗉挽蝵?`SKJOLBER_URL` ?喳??摰?skjolber嚗誨???冽??
-### 3嚗PI
+| 变量 | 说明 |
+|------|------|
+| `DEEPSEEK_API_KEY` / `OPENAI_API_KEY` | LLM（可选） |
+| `LLM_MODEL` | 默认 deepseek-v4-flash |
+| `SKJOLBER_URL` | 有 Java 服务时指向 skjolber |
+| `PACKING_KB_PATH` | 自定义知识库路径 |
 
-| ?寞? | 頝臬? | 霂湔? |
-|------|------|------|
-| POST | `/api/team-a` | ?ａ?A嚗???蝞望獢?+ `phase=await_user_confirm` |
-| POST | `/api/confirm` | `action=confirm\|revise\|cancel` |
-| POST | `/api/demo` | ?芸蝖株恕?冽?蝔?|
-| GET | `/api/health` | 蝵 + skjolber ?嗆?|
+详见 `.env.example`。
 
-## ?臬???
+---
 
-閫?`.env.example`嚗 `SKJOLBER_URL`嚗?
+## License
+
+项目代码按仓库声明使用；业务样例数据仅用于演示与测试。
