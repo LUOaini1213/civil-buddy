@@ -120,6 +120,31 @@ def agent_finalize(state: PackingState) -> Dict[str, Any]:
         f"柜 {float(plan.get('container_inner_volume_m3') or 0):.1f} m³）",
         f"**重量利用率**：{weight:.0%}",
         f"**堆码**：{stack_note}；策略=优先二层（矮箱/铁笼上二层，超长仅底层）",
+    ]
+    )
+    ta = state.get("team_a_summary") or {}
+    opts = state.get("packing_options") or {}
+    if ta.get("standard_boxes") or opts.get("standard_boxes", True):
+        mix_on = ta.get("mix_mode") if ta.get("mix_mode") is not None else opts.get("mix_mode", True)
+        counts = ta.get("standard_box_type_counts") or {}
+        count_s = "、".join(f"{k}×{v}" for k, v in list(counts.items())[:8]) or "-"
+        lines.append(
+            f"**装箱模式**：标准箱库外廓"
+            f"{'+跨长度档混装' if mix_on else ''}；"
+            f"箱型分布 {count_s}；"
+            f"箱外廓合计 {ta.get('boxes_outer_volume_m3', '-')} m³，"
+            f"货件 {ta.get('cargo_item_volume_m3', '-')} m³，"
+            f"箱内填充均 {float(ta.get('avg_crate_fill') or 0):.0%}"
+        )
+    elif ta.get("dense_mode") or opts.get("dense_mode"):
+        lines.append(
+            f"**装箱模式**：密装 dense（贴货外廓，不强制 1150 宽/1.2m 层高）；"
+            f"箱外廓合计 {ta.get('boxes_outer_volume_m3', '-')} m³，"
+            f"货件体积 {ta.get('cargo_item_volume_m3', '-')} m³，"
+            f"箱内填充均 {float(ta.get('avg_crate_fill') or 0):.0%}"
+        )
+    lines.extend(
+        [
         f"**利用综合分**：{evaluation.get('util_composite', '-')} "
         f"（空间子分 {evaluation.get('space_subscore', '-')} / "
         f"重量子分 {evaluation.get('weight_subscore', '-')}）",

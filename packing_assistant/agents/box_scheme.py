@@ -38,11 +38,33 @@ def agent_box_scheme(state: PackingState) -> Dict[str, Any]:
         or 3200.0
     )
     revision_mode = bool(rev.get("active") or packing_opts.get("revision_mode"))
+    # 默认：标准箱库外廓 + 跨长度档混装（短件塞进长标准箱）
+    # dense_mode 仅在明确关闭 standard 时生效
+    standard_boxes = packing_opts.get("standard_boxes")
+    if standard_boxes is None:
+        standard_boxes = packing_opts.get("standard_outer")
+    if standard_boxes is None:
+        standard_boxes = True  # 默认标准化
+    standard_boxes = bool(standard_boxes)
+    mix_mode = packing_opts.get("mix_mode")
+    if mix_mode is None:
+        mix_mode = True
+    mix_mode = bool(mix_mode)
+    dense_mode = bool(
+        packing_opts.get("dense_mode")
+        or packing_opts.get("dense")
+        or rev.get("dense_mode")
+    )
+    if standard_boxes:
+        dense_mode = False
     result = run_packing(
         internal,
         container_type=str(ctype),
         max_box_net_kg=max_net,
         revision_mode=revision_mode,
+        dense_mode=dense_mode,
+        standard_boxes=standard_boxes,
+        mix_mode=mix_mode,
     )
     boxes_raw = result.get("箱子列表") or []
     boxes = boxes_to_api(boxes_raw)
@@ -72,9 +94,29 @@ def agent_box_scheme(state: PackingState) -> Dict[str, Any]:
                         break
 
     summary = result.get("结构汇总") or {}
-    note = ""
+    note_parts = []
+    if standard_boxes or summary.get("standard_boxes"):
+        counts = summary.get("standard_box_type_counts") or {}
+        count_s = ",".join(f"{k}×{v}" for k, v in list(counts.items())[:6])
+        note_parts.append(
+            f"标准箱库{'+混装' if mix_mode else ''} "
+            f"外廓{summary.get('boxes_outer_volume_m3', '?')}m³/"
+            f"货{summary.get('cargo_item_volume_m3', '?')}m³ "
+            f"填充均{float(summary.get('avg_crate_fill') or 0):.0%}"
+            + (f" [{count_s}]" if count_s else "")
+        )
+    elif dense_mode or summary.get("dense_mode"):
+        note_parts.append(
+            f"密装外廓 dense "
+            f"箱外廓{summary.get('boxes_outer_volume_m3', '?')}m³/"
+            f"货件{summary.get('cargo_item_volume_m3', '?')}m³ "
+            f"箱内填充均{float(summary.get('avg_crate_fill') or 0):.0%}"
+        )
     if revision_mode or summary.get("revision_mode"):
-        note = f"（改箱模式 max_net={max_net:.0f}kg 拆分后料行={summary.get('item_chunks_after_split', '?')}）"
+        note_parts.append(
+            f"改箱 max_net={max_net:.0f}kg 拆分后料行={summary.get('item_chunks_after_split', '?')}"
+        )
+    note = f"（{'；'.join(note_parts)}）" if note_parts else ""
     return {
         "boxes": boxes,
         "team_a_summary": {
@@ -87,6 +129,14 @@ def agent_box_scheme(state: PackingState) -> Dict[str, Any]:
             "structure_overall": summary.get("结论", ""),
             "max_box_net_kg": summary.get("max_box_net_kg", max_net),
             "revision_mode": bool(revision_mode or summary.get("revision_mode")),
+            "dense_mode": bool(dense_mode or summary.get("dense_mode")),
+            "standard_boxes": bool(standard_boxes or summary.get("standard_boxes")),
+            "mix_mode": bool(mix_mode if mix_mode is not None else summary.get("mix_mode")),
+            "packing_mode": summary.get("packing_mode") or "",
+            "boxes_outer_volume_m3": summary.get("boxes_outer_volume_m3"),
+            "cargo_item_volume_m3": summary.get("cargo_item_volume_m3"),
+            "avg_crate_fill": summary.get("avg_crate_fill"),
+            "standard_box_type_counts": summary.get("standard_box_type_counts"),
         },
         "messages": [
             {
