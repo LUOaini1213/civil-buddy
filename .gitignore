@@ -1,0 +1,53 @@
+# --- secrets (never commit) ---
+.env
+.env.*
+!.env.example
+deepseek api.txt
+deepseek_api.txt
+deepseek-api.txt
+*apiKey*
+*apikey*
+*.pem
+*.key
+credentials*
+
+# --- python ---
+__pycache__/
+*.py[cod]
+*$py.class
+*.egg-info/
+.venv/
+venv/
+.envrc
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+
+# --- IDE / OS ---
+.idea/
+.vscode/
+*.swp
+.DS_Store
+Thumbs.db
+Desktop.ini
+
+# --- runtime outputs (regenerable) ---
+output/traces/
+output/**/*.png
+output/**/side_*.png
+output/**/layout_*.png
+# keep small json reports if useful, ignore huge dumps
+output/e2e_deepseek_report.json
+
+# --- local logs ---
+*.log
+*.tmp
+
+# --- Java build (optional skjolber) ---
+skjolber-service/target/
+*.class
+*.jar
+!**/gradle-wrapper.jar
+
+# --- session / tool caches ---
+.grok/

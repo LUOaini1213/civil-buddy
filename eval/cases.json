@@ -1,0 +1,104 @@
+[
+  {
+    "id": "demo_fallback_3_materials",
+    "description": "无结构化输入时回退演示材料，合箱后可装 40HQ，且含结构计算",
+    "raw_input": "演示：REDACTED-PROJECT钢结构件装箱拼柜",
+    "container_type": "40HQ",
+    "expect": {
+      "min_boxes": 1,
+      "max_boxes": 3,
+      "min_materials": 3,
+      "conclusion_contains_any": ["可以", "顺利", "较紧"],
+      "must_not_overflow": true,
+      "max_space_util_pct": 100,
+      "min_trace_nodes": 6,
+      "require_structure_calc": true
+    }
+  },
+  {
+    "id": "text_two_steel_items",
+    "description": "两行文本材料 → 可合箱，输出结构计算",
+    "raw_input": "H型钢 4件 85kg 3800x400x200\n钢梁 6件 55kg 4200x350x175",
+    "container_type": "40HQ",
+    "expect": {
+      "min_boxes": 1,
+      "max_boxes": 2,
+      "min_materials": 2,
+      "must_not_overflow": true,
+      "conclusion_contains_any": ["可以"],
+      "require_structure_calc": true
+    }
+  },
+  {
+    "id": "json_materials_inject",
+    "description": "JSON 材料清单注入",
+    "raw_input": "[{\"名称\":\"超长梁\",\"规格\":\"H600\",\"数量\":2,\"单重_kg\":200,\"外尺寸_mm\":{\"长\":5900,\"宽\":600,\"高\":300},\"备注\":\"\"}]",
+    "container_type": "40HQ",
+    "expect": {
+      "min_boxes": 1,
+      "max_boxes": 1,
+      "must_have_risk_keyword_any": ["超长", "长度"],
+      "must_not_overflow": true
+    }
+  },
+  {
+    "id": "overflow_many_long_boxes",
+    "description": "多件 6m 级材料在 20GP 上应溢出或结论负面",
+    "raw_input": "",
+    "materials": [
+      {"名称": "件A", "规格": "A", "数量": 1, "单重_kg": 100, "外尺寸_mm": {"长": 5800, "宽": 1000, "高": 1000}, "备注": ""},
+      {"名称": "件B", "规格": "B", "数量": 1, "单重_kg": 100, "外尺寸_mm": {"长": 5800, "宽": 1000, "高": 1000}, "备注": ""},
+      {"名称": "件C", "规格": "C", "数量": 1, "单重_kg": 100, "外尺寸_mm": {"长": 5800, "宽": 1000, "高": 1000}, "备注": ""}
+    ],
+    "container_type": "20GP",
+    "expect": {
+      "min_boxes": 3,
+      "must_overflow_or_negative": true
+    }
+  },
+  {
+    "id": "schema_valid_boxes",
+    "description": "装箱结果字段齐全且无校验错误",
+    "raw_input": "钢板 10件 30kg 1200x800x50",
+    "container_type": "40HQ",
+    "expect": {
+      "min_boxes": 1,
+      "require_box_fields": ["箱号", "箱型", "外尺寸_mm", "毛重_kg", "装载内容", "结构计算", "结构结论"],
+      "max_errors": 0,
+      "require_structure_calc": true
+    }
+  },
+  {
+    "id": "structure_heavy_needs_beam",
+    "description": "重载件应产出结构计算，结论为通过或需加强（非空）",
+    "raw_input": "",
+    "materials": [
+      {
+        "名称": "重型钢柱",
+        "规格": "H500",
+        "数量": 4,
+        "单重_kg": 400,
+        "外尺寸_mm": {"长": 3600, "宽": 500, "高": 300},
+        "备注": ""
+      }
+    ],
+    "container_type": "40HQ",
+    "expect": {
+      "min_boxes": 1,
+      "require_structure_calc": true,
+      "structure_conclusion_any": ["通过", "需加强", "不通过"]
+    }
+  },
+  {
+    "id": "structure_long_6m_frame",
+    "description": "超长件选 6 米级箱并带结构计算",
+    "raw_input": "[{\"名称\":\"超长钢通\",\"规格\":\"600x600\",\"数量\":1,\"单重_kg\":800,\"外尺寸_mm\":{\"长\":5890,\"宽\":600,\"高\":600},\"备注\":\"\"}]",
+    "container_type": "40HQ",
+    "expect": {
+      "min_boxes": 1,
+      "max_boxes": 1,
+      "require_structure_calc": true,
+      "box_type_contains_any": ["6米", "4米"]
+    }
+  }
+]

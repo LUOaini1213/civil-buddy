@@ -1,0 +1,34 @@
+{
+  "source": "E:\\REDACTED-PATH\\REDACTED-DOCREF REDACTED-PROJECT 铁件(1)(1)(2).xlsx",
+  "out_dir": "E:\\REDACTED-PATH\\test\\excel",
+  "files": [
+    "test_boxes_1.1m.xlsx",
+    "test_boxes_2m.xlsx",
+    "test_boxes_4m.xlsx",
+    "test_boxes_6m.xlsx",
+    "test_boxes_all.xlsx",
+    "test_boxes_cage.xlsx",
+    "test_full_flow.xlsx",
+    "test_materials_01.xlsx",
+    "test_materials_from_boxes.xlsx"
+  ],
+  "synthetic": [
+    "syn_long_6m.xlsx",
+    "syn_mixed_realistic.xlsx",
+    "syn_near_payload.xlsx",
+    "syn_overweight_risk.xlsx",
+    "syn_short_frames.xlsx"
+  ],
+  "stats": {
+    "quote_materials": 205,
+    "box_lines": 229,
+    "box_groups": 9,
+    "box_types": {
+      "1.1米铁架": 71,
+      "铁笼": 55,
+      "6米铁架": 23,
+      "2米铁架": 19,
+      "4米铁架": 61
+    }
+  }
+}

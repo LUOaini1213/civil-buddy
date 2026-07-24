@@ -1,0 +1,62 @@
+{
+  "description": "钢结构 材料→铁架→拼柜 测试 Excel 列定义",
+  "material_columns": [
+    "id",
+    "name",
+    "spec",
+    "quantity",
+    "weight_kg",
+    "total_weight_kg",
+    "length_mm",
+    "width_mm",
+    "height_mm",
+    "part_no",
+    "source_sheet",
+    "note"
+  ],
+  "box_line_columns": [
+    "box_group",
+    "box_type",
+    "seq",
+    "name",
+    "part_no",
+    "drawing_no",
+    "length_mm",
+    "width_mm",
+    "height_mm",
+    "weight_kg",
+    "quantity",
+    "total_weight_kg",
+    "source_sheet",
+    "note"
+  ],
+  "full_flow_columns": [
+    "row_type",
+    "id",
+    "name",
+    "box_group",
+    "box_type",
+    "container_type",
+    "quantity",
+    "weight_kg",
+    "total_weight_kg",
+    "length_mm",
+    "width_mm",
+    "height_mm",
+    "part_no",
+    "note"
+  ],
+  "units": {
+    "length": "mm",
+    "weight": "kg"
+  },
+  "synthetic_cases": {
+    "syn_short_frames": "只有短件，期望偏 1.1/2 米铁架",
+    "syn_long_6m": "大量 4–6 米超长件",
+    "syn_near_payload": "总重接近 40HQ 限重",
+    "syn_overweight_risk": "故意超重/超尺，测风险合规",
+    "syn_mixed_realistic": "长短混装，贴近REDACTED-CLIENT"
+  },
+  "source_excel": "REDACTED-DOCREF REDACTED-PROJECT 铁件(1)(1)(2).xlsx",
+  "note": "网上同业务完整 Excel 几乎没有；以本项目REDACTED-CLIENT表 + 合成为主"
+}

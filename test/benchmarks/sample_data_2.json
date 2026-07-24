@@ -1,0 +1,81 @@
+{
+  "schema": "packing_assistant.benchmark_case.v1",
+  "name": "sample_data_2",
+  "description": "From sample_data_2.txt, scale=100.0mm per unit",
+  "source": "dwave-examples:sample_data_2.txt",
+  "stage": "container_load_only",
+  "container": {
+    "type": "TEST_BIN",
+    "inner_length_mm": 5000,
+    "inner_width_mm": 5000,
+    "inner_height_mm": 5000,
+    "max_payload_kg": 99999.0,
+    "max_containers": 2,
+    "source_unit_scale_mm": 100.0
+  },
+  "boxes": [
+    {
+      "box_id": "B0",
+      "length_mm": 200,
+      "width_mm": 400,
+      "height_mm": 1000,
+      "weight_kg": 16.0,
+      "quantity": 5,
+      "allow_rotate": true
+    },
+    {
+      "box_id": "B1",
+      "length_mm": 2700,
+      "width_mm": 500,
+      "height_mm": 1700,
+      "weight_kg": 459.0,
+      "quantity": 5,
+      "allow_rotate": true
+    },
+    {
+      "box_id": "B2",
+      "length_mm": 500,
+      "width_mm": 1400,
+      "height_mm": 1100,
+      "weight_kg": 154.0,
+      "quantity": 4,
+      "allow_rotate": true
+    },
+    {
+      "box_id": "B3",
+      "length_mm": 2600,
+      "width_mm": 2100,
+      "height_mm": 1400,
+      "weight_kg": 1528.8,
+      "quantity": 5,
+      "allow_rotate": true
+    },
+    {
+      "box_id": "B4",
+      "length_mm": 2900,
+      "width_mm": 600,
+      "height_mm": 600,
+      "weight_kg": 208.8,
+      "quantity": 5,
+      "allow_rotate": true
+    },
+    {
+      "box_id": "B5",
+      "length_mm": 2700,
+      "width_mm": 2100,
+      "height_mm": 700,
+      "weight_kg": 793.8,
+      "quantity": 3,
+      "allow_rotate": true
+    },
+    {
+      "box_id": "B6",
+      "length_mm": 100,
+      "width_mm": 1100,
+      "height_mm": 200,
+      "weight_kg": 4.4,
+      "quantity": 3,
+      "allow_rotate": true
+    }
+  ]
+}

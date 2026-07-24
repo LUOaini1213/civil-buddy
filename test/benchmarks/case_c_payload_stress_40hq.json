@@ -1,0 +1,44 @@
+{
+  "schema": "packing_assistant.benchmark_case.v1",
+  "name": "case_c_payload_stress_40hq",
+  "description": "40HQ 但限重压到 8 吨 + 大重箱，测超重/装不下/风险",
+  "source": "synthetic/risk",
+  "stage": "container_load_only",
+  "container": {
+    "type": "40HQ_LIMITED",
+    "inner_length_mm": 12032,
+    "inner_width_mm": 2352,
+    "inner_height_mm": 2698,
+    "max_payload_kg": 8000,
+    "max_containers": 2
+  },
+  "boxes": [
+    {
+      "box_id": "HEAVY1",
+      "length_mm": 3000,
+      "width_mm": 1500,
+      "height_mm": 1500,
+      "weight_kg": 3500,
+      "quantity": 2,
+      "allow_rotate": false
+    },
+    {
+      "box_id": "HEAVY2",
+      "length_mm": 4000,
+      "width_mm": 1200,
+      "height_mm": 1200,
+      "weight_kg": 2800,
+      "quantity": 2,
+      "allow_rotate": false
+    },
+    {
+      "box_id": "MID",
+      "length_mm": 2000,
+      "width_mm": 1000,
+      "height_mm": 1000,
+      "weight_kg": 1200,
+      "quantity": 3,
+      "allow_rotate": true
+    }
+  ]
+}

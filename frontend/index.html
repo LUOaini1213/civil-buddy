@@ -1,0 +1,498 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>装箱拼柜 · 三视角可视化</title>
+  <script src="https://cdn.jsdelivr.net/npm/vue@2.7.16/dist/vue.min.js"></script>
+  <style>
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      font-family: "Segoe UI", "Microsoft YaHei", sans-serif;
+      background: #0f1419;
+      color: #e7ecf3;
+    }
+    .app { max-width: 1280px; margin: 0 auto; padding: 16px 20px 40px; }
+    h1 { font-size: 1.35rem; margin: 0 0 4px; }
+    .sub { color: #8b9bb4; font-size: 0.9rem; margin-bottom: 16px; }
+    .panel {
+      background: #1a2332;
+      border: 1px solid #2a3a52;
+      border-radius: 10px;
+      padding: 14px 16px;
+      margin-bottom: 14px;
+    }
+    .row { display: flex; gap: 12px; flex-wrap: wrap; align-items: flex-start; }
+    textarea {
+      width: 100%;
+      min-height: 90px;
+      background: #0f1419;
+      border: 1px solid #2a3a52;
+      color: #e7ecf3;
+      border-radius: 8px;
+      padding: 10px;
+      font-size: 14px;
+    }
+    button {
+      background: #3b82f6;
+      color: #fff;
+      border: none;
+      border-radius: 8px;
+      padding: 8px 14px;
+      cursor: pointer;
+      font-size: 14px;
+    }
+    button:disabled { opacity: 0.5; cursor: not-allowed; }
+    button.secondary { background: #334155; }
+    button.danger { background: #b91c1c; }
+    select, input {
+      background: #0f1419;
+      border: 1px solid #2a3a52;
+      color: #e7ecf3;
+      border-radius: 6px;
+      padding: 6px 10px;
+    }
+    .badge {
+      display: inline-block;
+      padding: 2px 8px;
+      border-radius: 999px;
+      font-size: 12px;
+      background: #243247;
+      margin-right: 6px;
+    }
+    .badge.ok { background: #14532d; }
+    .badge.warn { background: #713f12; }
+    .badge.err { background: #7f1d1d; }
+    table { width: 100%; border-collapse: collapse; font-size: 13px; }
+    th, td { border-bottom: 1px solid #2a3a52; padding: 6px 8px; text-align: left; }
+    th { color: #8b9bb4; font-weight: 600; }
+    .views {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
+      gap: 12px;
+    }
+    .view-card {
+      background: #0f1419;
+      border: 1px solid #2a3a52;
+      border-radius: 8px;
+      padding: 8px;
+    }
+    .view-card h3 {
+      margin: 0 0 8px;
+      font-size: 14px;
+      color: #93c5fd;
+    }
+    canvas {
+      width: 100%;
+      height: auto;
+      display: block;
+      background: #111827;
+      border-radius: 6px;
+    }
+    .risks li { margin: 4px 0; color: #fcd34d; }
+    .md {
+      white-space: pre-wrap;
+      font-size: 13px;
+      line-height: 1.5;
+      color: #cbd5e1;
+      max-height: 280px;
+      overflow: auto;
+    }
+    .status-bar { font-size: 13px; color: #8b9bb4; margin-top: 8px; }
+    .legend { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 8px; }
+    .legend span {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      font-size: 12px;
+      color: #94a3b8;
+    }
+    .swatch {
+      width: 12px; height: 12px; border-radius: 2px; display: inline-block;
+    }
+  </style>
+</head>
+<body>
+  <div id="app" class="app">
+    <h1>智能装箱与拼柜</h1>
+    <div class="sub">
+      团队A 装箱 → 用户确认 → 团队B 拼柜 · Vue2 消费 <code>views</code> 三视角
+      <span class="badge" :class="skjolberOk ? 'ok' : 'warn'">
+        skjolber: {{ skjolberLabel }}
+      </span>
+      <span class="badge">phase: {{ result.phase || '-' }}</span>
+    </div>
+
+    <div class="panel">
+      <div class="row" style="margin-bottom: 8px;">
+        <button @click="runTeamA" :disabled="loading">1. 生成装箱方案</button>
+        <button class="secondary" @click="runDemo" :disabled="loading">一键演示（自动确认）</button>
+        <button class="secondary" @click="runPdf" :disabled="loading">跑 test PDF 样例</button>
+        <button class="secondary" @click="refreshHealth">检查服务</button>
+        <a class="secondary" href="/api/test-shipments/report" target="_blank" style="padding:8px 14px;border-radius:8px;background:#334155;color:#fff;text-decoration:none;font-size:14px">跑批报表</a>
+      </div>
+      <textarea v-model="userInput" placeholder="粘贴材料清单，或留空使用演示数据"></textarea>
+      <div class="status-bar">{{ statusText }}</div>
+    </div>
+
+    <!-- 团队A 确认区 -->
+    <div class="panel" v-if="result.boxes && result.boxes.length">
+      <h2 style="margin:0 0 10px;font-size:1.05rem;">装箱方案（团队A）</h2>
+      <table>
+        <thead>
+          <tr>
+            <th>箱号</th><th>箱型</th><th>外尺寸 mm</th><th>毛重 kg</th><th>属性</th><th>内容</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr v-for="b in result.boxes" :key="b.box_id">
+            <td>{{ b.box_id }}</td>
+            <td>{{ b.box_type }}</td>
+            <td>
+              {{ b.outer_size_mm && b.outer_size_mm.length }}×
+              {{ b.outer_size_mm && b.outer_size_mm.width }}×
+              {{ b.outer_size_mm && b.outer_size_mm.height }}
+            </td>
+            <td>{{ b.gross_weight_kg }}</td>
+            <td>{{ (b.special_attributes || []).join(', ') }}</td>
+            <td>
+              <span v-for="c in (b.content||[])" :key="c.material_id + c.name">
+                {{ c.name }}×{{ c.quantity }}
+              </span>
+            </td>
+          </tr>
+        </tbody>
+      </table>
+
+      <div class="row" style="margin-top: 12px; align-items: center;" v-if="result.phase === 'await_user_confirm'">
+        <label>集装箱类型
+          <select v-model="containerType">
+            <option v-for="opt in containerOptions" :key="opt.value" :value="opt.value">
+              {{ opt.label }}{{ opt.recommended ? '（推荐）' : '' }}
+            </option>
+          </select>
+        </label>
+        <button @click="confirmPack" :disabled="loading">2. 确认并拼柜</button>
+        <button class="secondary" @click="revise" :disabled="loading">调整重算</button>
+        <button class="danger" @click="cancel" :disabled="loading">取消</button>
+      </div>
+    </div>
+
+    <!-- 拼柜结果 -->
+    <div class="panel" v-if="result.container_plan && result.container_plan.layout">
+      <h2 style="margin:0 0 8px;font-size:1.05rem;">拼柜结果（团队B）</h2>
+      <div>
+        <span class="badge" :class="result.container_plan.can_fit ? 'ok' : 'err'">
+          can_fit={{ result.container_plan.can_fit }}
+        </span>
+        <span class="badge">柜型 {{ result.container_plan.container_type }}</span>
+        <span class="badge">空间 {{ pct(result.container_plan.space_utilization) }}</span>
+        <span class="badge">重量 {{ pct(result.container_plan.weight_utilization) }}</span>
+        <span class="badge">引擎 {{ result.container_plan.engine || '-' }}</span>
+      </div>
+      <div class="legend" v-if="result.legend && result.legend.length">
+        <span v-for="L in result.legend" :key="L.box_id">
+          <i class="swatch" :style="{background: L.color}"></i>
+          {{ L.box_id }} {{ L.box_type }}
+        </span>
+      </div>
+    </div>
+
+    <!-- 三视角 -->
+    <div class="panel" v-if="hasViews">
+      <h2 style="margin:0 0 10px;font-size:1.05rem;">三视角布局（views）</h2>
+      <div class="views">
+        <div class="view-card" v-for="key in viewKeys" :key="key">
+          <h3>{{ viewTitle(key) }}</h3>
+          <canvas :ref="'cv_' + key" width="640" height="360"></canvas>
+        </div>
+      </div>
+    </div>
+
+    <!-- 风险 -->
+    <div class="panel" v-if="(result.risks && result.risks.length) || result.risk_report">
+      <h2 style="margin:0 0 8px;font-size:1.05rem;">风险合规</h2>
+      <div v-if="result.risk_report">
+        <span class="badge" :class="result.risk_report.passed ? 'ok' : 'warn'">
+          score={{ result.risk_report.compliance_score }} level={{ result.risk_report.level }}
+        </span>
+        <p style="color:#94a3b8;font-size:13px;">{{ result.risk_report.explanation }}</p>
+      </div>
+      <ul class="risks">
+        <li v-for="(r,i) in (result.risks||[])" :key="i">{{ r }}</li>
+      </ul>
+    </div>
+
+    <div class="panel" v-if="result.final_response">
+      <h2 style="margin:0 0 8px;font-size:1.05rem;">汇总</h2>
+      <div class="md">{{ result.final_response }}</div>
+    </div>
+  </div>
+
+  <script>
+    const API = '';  // 同域网关
+
+    new Vue({
+      el: '#app',
+      data() {
+        return {
+          userInput: '',
+          sessionId: 'web-' + Date.now(),
+          containerType: '40HQ',
+          loading: false,
+          statusText: '就绪',
+          skjolberOk: false,
+          skjolberLabel: 'unknown',
+          result: {},
+          viewKeys: ['top', 'side', 'front'],
+        };
+      },
+      computed: {
+        hasViews() {
+          const v = this.result.views || {};
+          return v.top || v.side || v.front;
+        },
+        containerOptions() {
+          const opts = (this.result.user_prompt && this.result.user_prompt.container_options) || [
+            { value: '40HQ', label: '40HQ', recommended: true },
+            { value: '40GP', label: '40GP', recommended: false },
+            { value: '20GP', label: '20GP', recommended: false },
+            { value: '45HQ', label: '45HQ', recommended: false },
+          ];
+          return opts;
+        },
+      },
+      mounted() {
+        this.refreshHealth();
+      },
+      watch: {
+        result: {
+          deep: true,
+          handler() {
+            this.$nextTick(() => this.drawAllViews());
+          },
+        },
+      },
+      methods: {
+        pct(v) {
+          if (v == null) return '-';
+          return (Number(v) * 100).toFixed(0) + '%';
+        },
+        viewTitle(key) {
+          const v = (this.result.views || {})[key];
+          return (v && v.name) || key;
+        },
+        async refreshHealth() {
+          try {
+            const r = await fetch(API + '/api/health');
+            const j = await r.json();
+            this.skjolberOk = !!(j.skjolber && j.skjolber.ok);
+            this.skjolberLabel = this.skjolberOk
+              ? 'UP ' + (j.skjolber_url || '')
+              : (j.skjolber && j.skjolber.reason) || '未连接（将用本地回退）';
+          } catch (e) {
+            this.skjolberOk = false;
+            this.skjolberLabel = '网关不可达';
+          }
+        },
+        async runTeamA() {
+          this.loading = true;
+          this.statusText = '团队A 运行中…';
+          try {
+            const r = await fetch(API + '/api/team-a', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({
+                user_input: this.userInput || '演示材料清单',
+                session_id: this.sessionId,
+              }),
+            });
+            this.result = await r.json();
+            this.statusText = '团队A 完成，请确认柜型';
+            const rec = (this.containerOptions.find(o => o.recommended) || {}).value;
+            if (rec) this.containerType = rec;
+          } catch (e) {
+            this.statusText = '失败: ' + e;
+          } finally {
+            this.loading = false;
+          }
+        },
+        async runDemo() {
+          this.loading = true;
+          this.statusText = '一键演示运行中…';
+          try {
+            const r = await fetch(API + '/api/demo', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({
+                user_input: this.userInput || '演示材料清单',
+                container_type: this.containerType,
+                session_id: this.sessionId,
+              }),
+            });
+            this.result = await r.json();
+            this.statusText = '演示完成 phase=' + this.result.phase;
+          } catch (e) {
+            this.statusText = '失败: ' + e;
+          } finally {
+            this.loading = false;
+          }
+        },
+        async runPdf() {
+          this.loading = true;
+          this.statusText = '解析 test PDF 并跑全流程…';
+          try {
+            const r = await fetch(API + '/api/run-pdf', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({
+                container_type: this.containerType,
+                session_id: this.sessionId,
+              }),
+            });
+            this.result = await r.json();
+            if (this.result.detail) {
+              this.statusText = '失败: ' + (this.result.detail || JSON.stringify(this.result));
+            } else {
+              this.statusText = 'PDF ' + (this.result.pdf_file || '') + ' 柜 ' + (this.result.container_no || '') + ' phase=' + this.result.phase;
+            }
+          } catch (e) {
+            this.statusText = '失败: ' + e;
+          } finally {
+            this.loading = false;
+          }
+        },
+        async confirmPack() {
+          this.loading = true;
+          this.statusText = '团队B 拼柜中…';
+          try {
+            const r = await fetch(API + '/api/confirm', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({
+                session_id: this.sessionId,
+                packing_plan_id: this.result.packing_plan_id || '',
+                action: 'confirm',
+                container_type: this.containerType,
+                max_containers: 1,
+              }),
+            });
+            this.result = await r.json();
+            this.statusText = '拼柜完成';
+          } catch (e) {
+            this.statusText = '失败: ' + e;
+          } finally {
+            this.loading = false;
+          }
+        },
+        async revise() {
+          const note = prompt('调整说明（如：去掉 钢梁）', '去掉 连接板');
+          if (note == null) return;
+          this.loading = true;
+          try {
+            const r = await fetch(API + '/api/confirm', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({
+                session_id: this.sessionId,
+                action: 'revise',
+                adjust_note: note,
+              }),
+            });
+            this.result = await r.json();
+            this.statusText = '已重算团队A';
+          } finally {
+            this.loading = false;
+          }
+        },
+        async cancel() {
+          await fetch(API + '/api/confirm', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ session_id: this.sessionId, action: 'cancel' }),
+          });
+          this.statusText = '已取消';
+        },
+        drawAllViews() {
+          if (!this.hasViews) return;
+          for (const key of this.viewKeys) {
+            this.drawView(key);
+          }
+        },
+        drawView(key) {
+          const view = (this.result.views || {})[key];
+          if (!view) return;
+          const ref = this.$refs['cv_' + key];
+          const canvas = Array.isArray(ref) ? ref[0] : ref;
+          if (!canvas) return;
+          const ctx = canvas.getContext('2d');
+          const W = canvas.width;
+          const H = canvas.height;
+          ctx.clearRect(0, 0, W, H);
+          ctx.fillStyle = '#111827';
+          ctx.fillRect(0, 0, W, H);
+
+          const cont = view.container || {};
+          const elements = view.elements || [];
+
+          // 投影轴：top(x,y) side(x,z) front(y,z)
+          let maxA = 1, maxB = 1;
+          if (key === 'top') {
+            maxA = cont.length_mm || 12000;
+            maxB = cont.width_mm || 2400;
+          } else if (key === 'side') {
+            maxA = cont.length_mm || 12000;
+            maxB = cont.height_mm || 2700;
+          } else {
+            maxA = cont.width_mm || 2400;
+            maxB = cont.height_mm || 2700;
+          }
+
+          const pad = 36;
+          const scale = Math.min((W - pad * 2) / maxA, (H - pad * 2) / maxB);
+
+          // 柜轮廓
+          ctx.strokeStyle = '#64748b';
+          ctx.lineWidth = 2;
+          ctx.strokeRect(pad, pad, maxA * scale, maxB * scale);
+
+          // 刻度
+          ctx.fillStyle = '#64748b';
+          ctx.font = '11px sans-serif';
+          ctx.fillText(key === 'front' ? '宽→' : '长→', pad, 16);
+          ctx.fillText(key === 'top' ? '宽↑' : '高↑', 4, pad + 10);
+
+          for (const el of elements) {
+            let a = 0, b = 0, da = 0, db = 0;
+            if (key === 'top') {
+              a = el.x || 0; b = el.y || 0; da = el.width || 0; db = el.depth || 0;
+            } else if (key === 'side') {
+              a = el.x || 0; b = el.z || 0; da = el.width || 0; db = el.height || 0;
+            } else {
+              a = el.y || 0; b = el.z || 0; da = el.depth || 0; db = el.height || 0;
+            }
+            // 屏幕 y 向下，物理 z/宽 向上画
+            const x = pad + a * scale;
+            const y = pad + (maxB - b - db) * scale;
+            const w = Math.max(da * scale, 1);
+            const h = Math.max(db * scale, 1);
+            ctx.fillStyle = el.color || '#4C78A8';
+            ctx.globalAlpha = 0.88;
+            ctx.fillRect(x, y, w, h);
+            ctx.globalAlpha = 1;
+            ctx.strokeStyle = '#e2e8f0';
+            ctx.lineWidth = 1;
+            ctx.strokeRect(x, y, w, h);
+            if (w > 28 && h > 14) {
+              ctx.fillStyle = '#fff';
+              ctx.font = 'bold 11px sans-serif';
+              ctx.fillText(el.label || el.box_id || '', x + 4, y + 14);
+            }
+          }
+        },
+      },
+    });
+  </script>
+</body>
+</html>

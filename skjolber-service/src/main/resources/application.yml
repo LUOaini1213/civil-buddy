@@ -1,0 +1,10 @@
+server:
+  port: ${PORT:8080}
+
+spring:
+  application:
+    name: skjolber-service
+
+packing:
+  default-strategy: LARGEST_AREA_FIT_FIRST
+  default-timeout-ms: 8000

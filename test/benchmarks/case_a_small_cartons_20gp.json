@@ -1,0 +1,44 @@
+{
+  "schema": "packing_assistant.benchmark_case.v1",
+  "name": "case_a_small_cartons_20gp",
+  "description": "小件纸箱级，易装满 20GP",
+  "source": "synthetic/ecommerce-style",
+  "stage": "container_load_only",
+  "container": {
+    "type": "20GP",
+    "inner_length_mm": 5898,
+    "inner_width_mm": 2352,
+    "inner_height_mm": 2385,
+    "max_payload_kg": 21000,
+    "max_containers": 1
+  },
+  "boxes": [
+    {
+      "box_id": "CTN400",
+      "length_mm": 400,
+      "width_mm": 300,
+      "height_mm": 300,
+      "weight_kg": 8,
+      "quantity": 200,
+      "allow_rotate": true
+    },
+    {
+      "box_id": "CTN500",
+      "length_mm": 500,
+      "width_mm": 400,
+      "height_mm": 350,
+      "weight_kg": 12,
+      "quantity": 120,
+      "allow_rotate": true
+    },
+    {
+      "box_id": "CTN600",
+      "length_mm": 600,
+      "width_mm": 400,
+      "height_mm": 400,
+      "weight_kg": 15,
+      "quantity": 80,
+      "allow_rotate": true
+    }
+  ]
+}
