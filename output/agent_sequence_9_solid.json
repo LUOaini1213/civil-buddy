@@ -114,7 +114,7 @@
         "container_adopted_recommendation": true,
         "max_containers_hint": 2,
         "materials_in": 5,
-        "raw_input_preview": "容积按箱体外廓实心长方体；9步原文",
+        "raw_input_preview": "容积按箱体外廓实心长方体；9步原文；标准箱+混装",
         "stacking_policy": {
           "mode": "prefer_two_layer",
           "max_layer": 2,
@@ -265,118 +265,149 @@
       "name": "装箱方案智能体",
       "node": "box_scheme",
       "phase": "team_a_running",
-      "message": "装箱完成：4 箱 — 全部箱结构计算通过",
+      "message": "装箱完成：4 箱 — 全部箱结构计算通过（标准箱库+混装 外廓32.1475m³/货6.893m³ 填充均21% [4米铁架×4]）",
       "boxes": [
         {
           "box_id": "BOX-01",
-          "box_type": "4米铁架(定制)",
-          "base_box_type": "6米铁架",
+          "box_type": "4米铁架(标准加长)",
+          "base_box_type": "4米铁架",
           "outer_size_mm": {
-            "length": 4400.0,
-            "width": 1150.0,
-            "height": 1100.0
+            "length": 4350.0,
+            "width": 1100.0,
+            "height": 1750.0
           },
-          "solid_volume_m3": 5.566,
-          "net_kg": 1100.0,
-          "gross_kg": 1351.0,
+          "solid_volume_m3": 8.3737,
+          "net_kg": 530.0,
+          "gross_kg": 725.7,
           "structure_conclusion": "通过",
           "special_attributes": [
             "内容物超长",
             "超长",
-            "定制外廓"
+            "标准加长",
+            "标准箱库"
           ],
           "content": [
             {
-              "material_id": "M002",
-              "name": "镀锌钢通长件",
-              "quantity": 8
+              "material_id": "M002-S2",
+              "name": "镀锌钢通长件(拆2)",
+              "quantity": 2
             },
             {
-              "material_id": "M003",
-              "name": "幕墙支撑",
-              "quantity": 6
+              "material_id": "M001-S1",
+              "name": "镀锌钢通(拆1)",
+              "quantity": 8
             }
           ],
-          "crate_fill_ratio": 0.7681,
+          "crate_fill_ratio": 0.2531,
           "content_max_length_mm": 4200.0
         },
         {
           "box_id": "BOX-02",
-          "box_type": "3米铁架(定制)",
+          "box_type": "4米铁架(标准加长)",
           "base_box_type": "4米铁架",
           "outer_size_mm": {
-            "length": 3000.0,
-            "width": 1150.0,
-            "height": 1400.0
+            "length": 4350.0,
+            "width": 1100.0,
+            "height": 1750.0
           },
-          "solid_volume_m3": 4.83,
-          "net_kg": 900.0,
-          "gross_kg": 1080.0,
+          "solid_volume_m3": 8.3737,
+          "net_kg": 510.0,
+          "gross_kg": 705.7,
           "structure_conclusion": "通过",
           "special_attributes": [
-            "定制外廓"
+            "内容物超长",
+            "超长",
+            "标准加长",
+            "标准箱库"
           ],
           "content": [
             {
-              "material_id": "M001",
-              "name": "镀锌钢通",
-              "quantity": 20
+              "material_id": "M002-S1",
+              "name": "镀锌钢通长件(拆1)",
+              "quantity": 6
             }
           ],
-          "crate_fill_ratio": 0.7894,
-          "content_max_length_mm": 2500.0
+          "crate_fill_ratio": 0.2246,
+          "content_max_length_mm": 4200.0
         },
         {
           "box_id": "BOX-03",
-          "box_type": "3米铁笼(定制)",
-          "base_box_type": "铁笼",
+          "box_type": "4米铁架",
+          "base_box_type": "4米铁架",
           "outer_size_mm": {
-            "length": 3000.0,
-            "width": 1150.0,
-            "height": 1100.0
+            "length": 4000.0,
+            "width": 1100.0,
+            "height": 1750.0
           },
-          "solid_volume_m3": 3.795,
-          "net_kg": 270.0,
-          "gross_kg": 385.0,
+          "solid_volume_m3": 7.7,
+          "net_kg": 600.0,
+          "gross_kg": 780.0,
           "structure_conclusion": "通过",
           "special_attributes": [
-            "定制外廓"
+            "标准箱库",
+            "需加固"
           ],
           "content": [
+            {
+              "material_id": "M003",
+              "name": "幕墙支撑",
+              "quantity": 6
+            },
+            {
+              "material_id": "M001-S3",
+              "name": "镀锌钢通(拆3)",
+              "quantity": 4
+            }
+          ],
+          "crate_fill_ratio": 0.3097,
+          "content_max_length_mm": 3800.0
+        },
+        {
+          "box_id": "BOX-04",
+          "box_type": "4米铁架",
+          "base_box_type": "4米铁架",
+          "outer_size_mm": {
+            "length": 4000.0,
+            "width": 1100.0,
+            "height": 1750.0
+          },
+          "solid_volume_m3": 7.7,
+          "net_kg": 670.0,
+          "gross_kg": 850.0,
+          "structure_conclusion": "通过",
+          "special_attributes": [
+            "标准箱库",
+            "需加固"
+          ],
+          "content": [
+            {
+              "material_id": "M001-S2",
+              "name": "镀锌钢通(拆2)",
+              "quantity": 8
+            },
             {
               "material_id": "M005",
               "name": "短支撑",
               "quantity": 15
-            }
-          ],
-          "crate_fill_ratio": 0.081,
-          "content_max_length_mm": 800.0
-        },
-        {
-          "box_id": "BOX-04",
-          "box_type": "3米铁笼(定制)",
-          "base_box_type": "铁笼",
-          "outer_size_mm": {
-            "length": 3100.0,
-            "width": 1150.0,
-            "height": 1100.0
-          },
-          "solid_volume_m3": 3.9215,
-          "net_kg": 40.0,
-          "gross_kg": 158.8,
-          "structure_conclusion": "通过",
-          "special_attributes": [
-            "定制外廓"
-          ],
-          "content": [
+            },
             {
-              "material_id": "M004",
-              "name": "铁垫片",
-              "quantity": 200
+              "material_id": "M004-S1",
+              "name": "铁垫片(拆1)",
+              "quantity": 88
+            },
+            {
+              "material_id": "M004-S2",
+              "name": "铁垫片(拆2)",
+              "quantity": 88
+            },
+            {
+              "material_id": "M004-S3",
+              "name": "铁垫片(拆3)",
+              "quantity": 24
             }
           ],
-          "crate_fill_ratio": 0.0087,
-          "content_max_length_mm": 150.0
+          "crate_fill_ratio": 0.2409,
+          "content_max_length_mm": 2500.0
         }
       ],
       "team_a_summary": {
@@ -385,8 +416,20 @@
         "reinforce": 0,
         "fail": 0,
         "total_net_weight_kg": 2310.0,
-        "total_gross_weight_kg": 2974.8,
-        "structure_overall": "全部箱结构计算通过"
+        "total_gross_weight_kg": 3061.4,
+        "structure_overall": "全部箱结构计算通过",
+        "max_box_net_kg": 1500.0,
+        "revision_mode": false,
+        "dense_mode": false,
+        "standard_boxes": true,
+        "mix_mode": true,
+        "packing_mode": "standard_box_library+cross_length_mix",
+        "boxes_outer_volume_m3": 32.1475,
+        "cargo_item_volume_m3": 6.893,
+        "avg_crate_fill": 0.2144,
+        "standard_box_type_counts": {
+          "4米铁架": 4
+        }
       }
     },
     {
@@ -395,9 +438,9 @@
       "node": "present_team_a",
       "phase": "team_b_running",
       "message": "团队A完成，自动确认 40GP",
-      "display_markdown": "# 装箱方案确认单\n\n**方案编号**：PKG-20260724_154729_4190621b\n**生成时间**：2026-07-24 15:47:29\n**项目**：远东新加坡陆路交通局办公楼项目 · 钢结构件\n\n## 一、结论摘要\n\n- 材料：5 种 / 249 件 / 2310.0 kg\n- 箱子：4 个；净重 2310.0 kg；毛重 2974.8 kg\n- 结构：全部箱结构计算通过（通过 4 / 需加强 0 / 不通过 0）\n- 建议柜型：40HQ, 20GP\n- 说明：共 4 箱、总毛重约 2974.8 kg，建议优先 40HQ 评估装载。\n\n> 请确认装箱方案并选择集装箱类型后，再进入拼柜计算。\n\n## 二、装箱明细\n\n### BOX-01 · 4米铁架(定制)\n- 外尺寸：4400.0×1150.0×1100.0 mm\n- 净重/毛重：1100.0 / 1351.0 kg\n- 属性：内容物超长, 超长, 定制外廓；加固：槽钢12#×3\n- 内容：镀锌钢通长件×8, 幕墙支撑×6\n\n### BOX-02 · 3米铁架(定制)\n- 外尺寸：3000.0×1150.0×1400.0 mm\n- 净重/毛重：900.0 / 1080.0 kg\n- 属性：定制外廓；加固：槽钢10#×2\n- 内容：镀锌钢通×20\n\n### BOX-03 · 3米铁笼(定制)\n- 外尺寸：3000.0×1150.0×1100.0 mm\n- 净重/毛重：270.0 / 385.0 kg\n- 属性：定制外廓；加固：槽钢8#×1\n- 内容：短支撑×15\n\n### BOX-04 · 3米铁笼(定制)\n- 外尺寸：3100.0×1150.0×1100.0 mm\n- 净重/毛重：40.0 / 158.8 kg\n- 属性：定制外廓；加固：槽钢8#×1\n- 内容：铁垫片×200\n\n## 三、结构提示\n\n- 6米铁架：结构策略=forced_semi_strict，安全系数≥2.2\n- 4米铁架：结构策略=forced_semi_strict，安全系数≥2.2\n- 2米框：结构策略=semi_strict，安全系数≥2.1\n- 存在超长件：优先铁架，拼柜沿柜长、禁止竖放、加强绑扎\n\n## 四、请您确认\n\n柜型：[ ] 40HQ  [ ] 40GP  [ ] 20GP  [ ] 45HQ\n\n操作：确认并拼柜 / 调整后重算 / 取消\n\n*本页仅含装箱方案，不含三维拼柜布局。*",
+      "display_markdown": "# 装箱方案确认单\n\n**方案编号**：PKG-20260724_191222_f66a6aeb\n**生成时间**：2026-07-24 19:12:22\n**项目**：远东新加坡陆路交通局办公楼项目 · 钢结构件\n\n## 一、结论摘要\n\n- 材料：5 种 / 249 件 / 2310.0 kg\n- 箱子：4 个；净重 2310.0 kg；毛重 3061.4 kg\n- 结构：全部箱结构计算通过（通过 4 / 需加强 0 / 不通过 0）\n- 建议柜型：40HQ, 20GP\n- 说明：共 4 箱、总毛重约 3061.4 kg，建议优先 40HQ 评估装载。\n\n> 请确认装箱方案并选择集装箱类型后，再进入拼柜计算。\n\n## 二、装箱明细\n\n### BOX-01 · 4米铁架(标准加长)\n- 外尺寸：4350.0×1100.0×1750.0 mm\n- 净重/毛重：530.0 / 725.7 kg\n- 属性：内容物超长, 超长, 标准加长, 标准箱库；加固：槽钢10#×2\n- 内容：镀锌钢通长件(拆2)×2, 镀锌钢通(拆1)×8\n\n### BOX-02 · 4米铁架(标准加长)\n- 外尺寸：4350.0×1100.0×1750.0 mm\n- 净重/毛重：510.0 / 705.7 kg\n- 属性：内容物超长, 超长, 标准加长, 标准箱库；加固：槽钢10#×2\n- 内容：镀锌钢通长件(拆1)×6\n\n### BOX-03 · 4米铁架\n- 外尺寸：4000.0×1100.0×1750.0 mm\n- 净重/毛重：600.0 / 780.0 kg\n- 属性：标准箱库, 需加固；加固：纵向加强或铁架\n- 内容：幕墙支撑×6, 镀锌钢通(拆3)×4\n\n### BOX-04 · 4米铁架\n- 外尺寸：4000.0×1100.0×1750.0 mm\n- 净重/毛重：670.0 / 850.0 kg\n- 属性：标准箱库, 需加固；加固：纵向加强或铁架\n- 内容：镀锌钢通(拆2)×8, 短支撑×15, 铁垫片(拆1)×88, 铁垫片(拆2)×88, 铁垫片(拆3)×24\n\n## 三、结构提示\n\n- 6米铁架：结构策略=forced_semi_strict，安全系数≥2.2\n- 4米铁架：结构策略=forced_semi_strict，安全系数≥2.2\n- 2米框：结构策略=semi_strict，安全系数≥2.1\n- 存在超长件：优先铁架，拼柜沿柜长、禁止竖放、加强绑扎\n\n## 四、请您确认\n\n柜型：[ ] 40HQ  [ ] 40GP  [ ] 20GP  [ ] 45HQ\n\n操作：确认并拼柜 / 调整后重算 / 取消\n\n*本页仅含装箱方案，不含三维拼柜布局。*",
       "user_action": "confirm",
-      "packing_plan_id": "PKG-20260724_154729_4190621b"
+      "packing_plan_id": "PKG-20260724_191222_f66a6aeb"
     },
     {
       "n": 5,
@@ -412,25 +455,22 @@
         "priority_order": [
           "BOX-01",
           "BOX-02",
-          "BOX-03",
-          "BOX-04"
+          "BOX-04",
+          "BOX-03"
         ],
         "special_rules": [
           "内容物超长件沿柜长摆放，禁止竖放、禁止上叠",
           "超长件可靠端墙，其余箱并排占满柜宽以提底面积利用率",
           "单箱毛重>200kg必须底层",
+          "需加固箱注意垫木与绑扎",
           "目标：在可装下前提下尽量提高底面积与重量利用率",
-          "可并排铁架优先左右贴放，避免全部居中单列",
-          "二层堆码：允许上二层的箱 BOX-03, BOX-04；底层优先 BOX-01, BOX-02",
-          "第二层仅堆在有支撑的箱顶，超长件禁止上二层"
+          "可并排铁架优先左右贴放，避免全部居中单列"
         ],
-        "stackable_box_ids": [
-          "BOX-03",
-          "BOX-04"
-        ],
+        "stackable_box_ids": [],
         "bottom_box_ids": [
           "BOX-01",
-          "BOX-02"
+          "BOX-02",
+          "BOX-04"
         ],
         "prefer_two_layer": true,
         "utilization_goals": {
@@ -445,49 +485,33 @@
       "name": "装载执行智能体",
       "node": "loader",
       "phase": "team_b_running",
-      "message": "装载完成 engine=python-laff-3d can_fit=True 容积(实心外廓)27% 货18.11m³/柜67.5m³ 最满柜27% 底面积55% 重量11% [python-laff-3d]",
+      "message": "装载完成 engine=python-laff-3d can_fit=True 容积(实心外廓)24% 货32.15m³/柜67.5m³ 最满柜25% 底面积32% 重量6% [python-laff-3d]",
       "container_plan": {
         "can_fit": true,
-        "containers_used": 1,
-        "space_utilization": 0.2684,
-        "space_utilization_best_container": 0.2684,
-        "floor_utilization_avg": 0.5486,
-        "weight_utilization": 0.1115,
+        "containers_used": 2,
+        "space_utilization": 0.2382,
+        "space_utilization_best_container": 0.2481,
+        "floor_utilization_avg": 0.3246,
+        "weight_utilization": 0.0574,
         "engine": "python-laff-3d",
         "message": "可以顺利装下",
-        "metrics_note": "容积利用率=Σ(铁箱/木箱外廓实心长方体体积)÷柜内几何容积（已装 18.113 m³ / 单柜 67.494 m³ ×1）；最满柜 27%，底面积均 55%。不按零件镂空体积；钢结构铁架实务容积常低于普货 70–85%。",
+        "metrics_note": "容积利用率=Σ(铁箱/木箱外廓实心长方体体积)÷柜内几何容积（已装 32.148 m³ / 单柜 67.494 m³ ×2）；最满柜 25%，底面积均 32%。不按零件镂空体积；钢结构铁架实务容积常低于普货 70–85%。",
         "volume_basis": "solid_outer_aabb",
-        "cargo_solid_volume_m3": 18.1125,
+        "cargo_solid_volume_m3": 32.1475,
         "container_inner_volume_m3": 67.4937,
         "layout": [
           {
-            "box_id": "BOX-01",
+            "box_id": "BOX-04",
             "container_no": 1,
             "position": {
-              "x": 3500,
+              "x": 4000,
               "y": 0,
               "z": 0
             },
             "size": {
-              "dx": 4400,
-              "dy": 1150,
-              "dz": 1100
-            },
-            "rotation": "LWH",
-            "layer": 1
-          },
-          {
-            "box_id": "BOX-02",
-            "container_no": 1,
-            "position": {
-              "x": 4500,
-              "y": 1202,
-              "z": 0
-            },
-            "size": {
-              "dx": 3000,
-              "dy": 1150,
-              "dz": 1400
+              "dx": 4000,
+              "dy": 1100,
+              "dz": 1750
             },
             "rotation": "LWH",
             "layer": 1
@@ -496,30 +520,46 @@
             "box_id": "BOX-03",
             "container_no": 1,
             "position": {
-              "x": 1500,
-              "y": 1150,
+              "x": 4000,
+              "y": 1252,
               "z": 0
             },
             "size": {
-              "dx": 3000,
-              "dy": 1150,
-              "dz": 1100
+              "dx": 4000,
+              "dy": 1100,
+              "dz": 1750
             },
             "rotation": "LWH",
             "layer": 1
           },
           {
-            "box_id": "BOX-04",
-            "container_no": 1,
+            "box_id": "BOX-01",
+            "container_no": 2,
             "position": {
-              "x": 0,
+              "x": 3500,
               "y": 0,
               "z": 0
             },
             "size": {
-              "dx": 3100,
-              "dy": 1150,
-              "dz": 1100
+              "dx": 4350,
+              "dy": 1100,
+              "dz": 1750
+            },
+            "rotation": "LWH",
+            "layer": 1
+          },
+          {
+            "box_id": "BOX-02",
+            "container_no": 2,
+            "position": {
+              "x": 3500,
+              "y": 1252,
+              "z": 0
+            },
+            "size": {
+              "dx": 4350,
+              "dy": 1100,
+              "dz": 1750
             },
             "rotation": "LWH",
             "layer": 1
@@ -529,35 +569,44 @@
         "per_container": [
           {
             "container_no": 1,
-            "volume_utilization": 0.2684,
-            "floor_utilization": 0.5486,
-            "boxes": 4,
-            "load_kg": 2974.8,
-            "solid_volume_m3": 18.1125
+            "volume_utilization": 0.2282,
+            "floor_utilization": 0.311,
+            "boxes": 2,
+            "load_kg": 1630.0,
+            "solid_volume_m3": 15.4
+          },
+          {
+            "container_no": 2,
+            "volume_utilization": 0.2481,
+            "floor_utilization": 0.3382,
+            "boxes": 2,
+            "load_kg": 1431.4,
+            "solid_volume_m3": 16.7475
           }
         ]
       },
-      "verify_solid_m3": 18.1125,
-      "verify_util": 0.2372
+      "verify_solid_m3": 32.1475,
+      "verify_util": 0.421
     },
     {
       "n": 7,
       "name": "评估优化智能体",
       "node": "evaluator",
       "phase": "team_b_running",
-      "message": "评估：score=71.5 passed=True replan=False | 实心容积27%(子分64) 底面积55%(子分83) 重量11%(子分19) 综合46",
+      "message": "评估：score=61.1 passed=True replan=False | 实心容积24%(子分57) 底面积32%(子分56) 重量6%(子分10) 综合36",
       "evaluation": {
         "passed": true,
-        "score": 71.5,
+        "score": 61.1,
         "decision": "PASS",
-        "space_utilization": 0.2684,
-        "space_best": 0.2684,
-        "floor_utilization_avg": 0.5486,
-        "weight_utilization": 0.1115,
-        "space_subscore": 63.7,
-        "floor_subscore": 82.7,
-        "weight_subscore": 19.1,
-        "util_composite": 46.5,
+        "structure_fail_box_ids": [],
+        "space_utilization": 0.2382,
+        "space_best": 0.2481,
+        "floor_utilization_avg": 0.3246,
+        "weight_utilization": 0.0574,
+        "space_subscore": 57.2,
+        "floor_subscore": 55.6,
+        "weight_subscore": 9.8,
+        "util_composite": 35.6,
         "volume_basis": "solid_outer_aabb",
         "targets": {
           "space_soft_min": 0.25,
@@ -566,10 +615,11 @@
           "weight_good": 0.6
         },
         "risks": [
-          "重量利用率 11% 低于软目标 35%，柜载未吃满"
+          "实心外廓容积 24%（底面积 32%）与重量 6% 双低，建议合箱/并排装载或减少柜数"
         ],
         "suggestions": [
-          "add_cargo_or_downsize_container"
+          "tighter_pack",
+          "merge_boxes"
         ],
         "need_replan": false
       }
@@ -579,29 +629,31 @@
       "name": "风险合规智能体",
       "node": "risk_compliance",
       "phase": "team_b_running",
-      "message": "风险合规：level=medium score=73 passed=True blockers=0",
+      "message": "风险合规：level=medium score=49 passed=False decision=WARN blockers=0",
       "risk_report": {
-        "passed": true,
-        "compliance_score": 73,
+        "passed": false,
+        "compliance_score": 49,
         "level": "medium",
         "risks": [
           "BOX-01 超长件，沿柜长摆放并加强绑扎",
-          "BOX-01 单箱毛重 1351kg，优先铁箱/钢骨箱",
-          "BOX-02 单箱毛重 1080kg，优先铁箱/钢骨箱",
-          "空隙率 73%（大件稀疏常见），注意填充绑扎；底面积利用 55%",
-          "重量利用率 11% 低于软目标 35%，柜载未吃满",
+          "BOX-02 超长件，沿柜长摆放并加强绑扎",
+          "BOX-03 需加固：纵向加强或铁架",
+          "BOX-04 需加固：纵向加强或铁架",
+          "空隙率 76%（大件稀疏常见），注意填充绑扎；底面积利用 32%",
+          "实心外廓容积 24%（货32.1m³）与重量 6% 双低于软目标，柜资源浪费",
+          "实心外廓容积 24%（底面积 32%）与重量 6% 双低，建议合箱/并排装载或减少柜数",
           "加固建议（6米铁架）：纵向加强或铁架",
           "加固建议（4米铁架）：纵向加强或铁架"
         ],
         "blockers": [],
-        "explanation": "规则侧可讨论出运，正式前仍需 VGM 与人工复核。 合规分 73（medium）。空间 27%，重量 11%，can_fit=True。 关注：超长件，沿柜长摆放并加强绑扎；单箱毛重 1351kg，优先铁箱/钢骨箱；单箱毛重 1080kg，优先铁箱/钢骨箱",
+        "explanation": "**结论：**  \n本次4件4米铁架可装入集装箱（can_fit=true，无阻挡），但装载效率极低：空间利用率仅24%、重量6%，属严重资源浪费。超长件（BOX-01/02）及需加固件（BOX-03/04）风险已标注，需按方案沿柜长摆放并加强纵向绑扎。  \n**建议：**  \n- 优先合箱或并排装载，或选用更小柜型以减少浪费。  \n- 针对76%空隙率，务必填充绑扎，防止运输中移位。  \n- 加固措施（纵向加强/铁架）须严格执行。",
         "cog": {
-          "gx_mm": 4315.8,
-          "gy_mm": 1136.5,
-          "gz_mm": 590.0,
-          "lateral_eccentricity": 0.0336,
-          "longitudinal_position": 0.3587,
-          "height_ratio": 0.2474
+          "gx_mm": 5830.7,
+          "gy_mm": 1176.0,
+          "gz_mm": 875.0,
+          "lateral_eccentricity": 0.0,
+          "longitudinal_position": 0.4846,
+          "height_ratio": 0.3669
         }
       }
     },
@@ -610,7 +662,7 @@
       "name": "可视化智能体",
       "node": "visualizer",
       "phase": "team_b_running",
-      "message": "三视角数据已生成（elements=4）",
+      "message": "三视角数据已生成（elements=4，柜数=2，侧视图2张+总览）",
       "views_keys": [
         "top",
         "side",
@@ -618,8 +670,13 @@
       ],
       "image_paths": {
         "top": null,
-        "side": "output\\side_20260724_154729.png",
-        "front": null
+        "side": "output\\side_20260724_191227_overview.png",
+        "front": null,
+        "side_per_container": [
+          "output\\side_20260724_191227_c01.png",
+          "output\\side_20260724_191227_c02.png"
+        ],
+        "side_overview": "output\\side_20260724_191227_overview.png"
       }
     },
     {
@@ -627,8 +684,8 @@
       "name": "主控汇总 finalize",
       "node": "finalize",
       "phase": "done",
-      "message": "# 拼柜方案结果\n\n**主控流水线**：9 智能体（含主控，首尾选柜）\n**方案编号（装箱）**：PKG-20260724_154729_4190621b\n**柜型（实际）**：40GP\n**主控开头推荐**：40GP\n**主控结尾推荐**：40GP（维持）\n**箱数**：4\n**能否装下**：True\n**用柜数**：1\n**空间利用率（箱体外廓实心长方体）**：27%（最满柜 27%，底面积均 55%；货 18.11 m³ / 柜 67.5 m³）\n**重量利用率**：11%\n**堆码**：二层箱数 0/4；策略=优先二层（矮箱/铁笼上二层，超长仅底层）\n**利用综合分**：46.5 （空间子分 63.7 / 重量子分 19.1）\n**评估分**：71.5（passed=True decision=PASS）\n**合规分**：73（level=medium）\n\n## 主控选柜说明\n- 体积适合 1×40GP 装下\n\n## 风险摘要\n- BOX-01 超长件，沿柜长摆放并加强绑扎\n- BOX-01 单箱毛重 1351kg，优先铁箱/钢骨箱\n- BOX-02 单箱毛重 1080kg，优先铁箱/钢骨箱\n- 空隙率 73%（大件稀疏常见），注意填充绑扎；底面积利用 55%\n- 重量利用率 11% 低于软目标 35%，柜载未吃满\n- 加固建议（6米铁架）：纵向加强或铁架\n- 加固建议（4米铁架）：纵向加强或铁架\n\n## 合规说明\n规则侧可讨论出运，正式前仍需 VGM 与人工复核。 合规分 73（medium）。空间 27%，重量 11%，can_fit=True。 关注：超长件，沿柜长摆放并加强绑扎；单箱毛重 1351kg，优先铁箱/钢骨箱；单箱毛重 1080kg，优先铁箱/钢骨箱\n\n## 布局\n- 三视角数据：views.top/side/front 已生成\n- 侧视 PNG：output\\side_20260724_154729.png\n- 装载引擎：python-laff-3d\n\n---\n主控复核：当前 40GP，推荐 40GP（维持）\n团队B 完成。如需改柜型请重新确认。",
-      "final_response": "# 拼柜方案结果\n\n**主控流水线**：9 智能体（含主控，首尾选柜）\n**方案编号（装箱）**：PKG-20260724_154729_4190621b\n**柜型（实际）**：40GP\n**主控开头推荐**：40GP\n**主控结尾推荐**：40GP（维持）\n**箱数**：4\n**能否装下**：True\n**用柜数**：1\n**空间利用率（箱体外廓实心长方体）**：27%（最满柜 27%，底面积均 55%；货 18.11 m³ / 柜 67.5 m³）\n**重量利用率**：11%\n**堆码**：二层箱数 0/4；策略=优先二层（矮箱/铁笼上二层，超长仅底层）\n**利用综合分**：46.5 （空间子分 63.7 / 重量子分 19.1）\n**评估分**：71.5（passed=True decision=PASS）\n**合规分**：73（level=medium）\n\n## 主控选柜说明\n- 体积适合 1×40GP 装下\n\n## 风险摘要\n- BOX-01 超长件，沿柜长摆放并加强绑扎\n- BOX-01 单箱毛重 1351kg，优先铁箱/钢骨箱\n- BOX-02 单箱毛重 1080kg，优先铁箱/钢骨箱\n- 空隙率 73%（大件稀疏常见），注意填充绑扎；底面积利用 55%\n- 重量利用率 11% 低于软目标 35%，柜载未吃满\n- 加固建议（6米铁架）：纵向加强或铁架\n- 加固建议（4米铁架）：纵向加强或铁架\n\n## 合规说明\n规则侧可讨论出运，正式前仍需 VGM 与人工复核。 合规分 73（medium）。空间 27%，重量 11%，can_fit=True。 关注：超长件，沿柜长摆放并加强绑扎；单箱毛重 1351kg，优先铁箱/钢骨箱；单箱毛重 1080kg，优先铁箱/钢骨箱\n\n## 布局\n- 三视角数据：views.top/side/front 已生成\n- 侧视 PNG：output\\side_20260724_154729.png\n- 装载引擎：python-laff-3d\n\n---\n主控复核：当前 40GP，推荐 40GP（维持）\n团队B 完成。如需改柜型请重新确认。",
+      "message": "根据拼柜方案结果，实际柜型为**40GP**，主控建议维持40GP（不换柜）。容积利用率**24%**（货32.15 m³/柜67.5 m³），重量利用率**6%**，均严重低于软目标。几何装下（True），合规出运（是），但合规分49（medium/WARN），**可出运但效率极低**。\n\n**主控裁决**：可讨论出运，需注意以下风险：\n- 4件4米铁架含2件超长件（BOX-01/02）须沿柜长摆放并加强绑扎；BOX-03/04需纵向加固。\n- 空隙率76%，底面积利用率32%，建议合箱/并排装载或改用更小柜型以减少资源浪费。\n- 加固措施（纵向加强/铁架）必须严格执行。\n\n**结论**：可装入并出运，但属严重资源浪费，建议优化装载方案或换小柜。\n\n---\n<details><summary>结构化原文</summary>\n\n# 拼柜方案结果\n\n## ✅ 主控裁决：可讨论出运\n\n**能否出运**：**是**（规则侧通过；正式前仍需 VGM 与人工复核）\n\n**主控流水线**：9 智能体（含主控，首尾选柜）\n**方案编号（装箱）**：PKG-20260724_191222_f66a6aeb\n**柜型（实际）**：40GP\n**主控开头推荐**：40GP\n**主控结尾推荐**：40GP（维持）\n**箱数**：4\n**能否装下（几何）**：True\n**能否出运（合规）**：是\n**用柜数**：2\n**空间利用率（箱体外廓实心长方体）**：24%（最满柜 25%，底面积均 32%；货 32.15 m³ / 柜 67.5 m³）\n**重量利用率**：6%\n**堆码**：二层箱数 0/4；策略=优先二层（矮箱/铁笼上二层，超长仅底层）\n**装箱模式**：标准箱库外廓+跨长度档混装；箱型分布 4米铁架×4；箱外廓合计 32.1475 m³，货件 6.893 m³，箱内填充均 21%\n**利用综合分**：35.6 （空间子分 57.2 / 重量子分 9.8）\n**评估分**：61.1（passed=True decision=PASS）\n**合规分**：49（level=medium decision=WARN）\n\n## 主控选柜说明\n- 体积适合 1×40GP 装下\n\n## 风险摘要\n- BOX-01 超长件，沿柜长摆放并加强绑扎\n- BOX-02 超长件，沿柜长摆放并加强绑扎\n- BOX-03 需加固：纵向加强或铁架\n- BOX-04 需加固：纵向加强或铁架\n- 空隙率 76%（大件稀疏常见），注意填充绑扎；底面积利用 32%\n- 实心外廓容积 24%（货32.1m³）与重量 6% 双低于软目标，柜资源浪费\n- 实心外廓容积 24%（底面积 32%）与重量 6% 双低，建议合箱/并排装载或减少柜数\n- 加固建议（6米铁架）：纵向加强或铁架\n- 加固建议（4米铁架）：纵向加强或铁架\n\n## 合规说明\n**结论：**  \n本次4件4米铁架可装入集装箱（can_fit=true，无阻挡），但装载效率极低：空间利用率仅24%、重量6%，属严重资源浪费。超长件（BOX-01/02）及需加固件（BOX-03/04）风险已标注，需按方案沿柜长摆放并加强纵向绑扎。  \n**建议：**  \n- 优先合箱或并排装载，或选用更小柜型以减少浪费。  \n- 针对76%空隙率，务必填充绑扎，防止运输中移位。  \n- 加固措施（纵向加强/铁架）须严格执行。\n\n## 布局\n- 三视角数据：views.top/side/front 已生成\n- 侧视 PNG：output\\side_20260724_191227_overview.png\n- 装载引擎：python-laff-3d\n\n---\n主控复核：当前 40GP，推荐 40GP（维持）\n团队B 完成。如需改柜型请重新确认。\n\n</details>\n\n*LLM: deepseek-v4-flash*",
+      "final_response": "根据拼柜方案结果，实际柜型为**40GP**，主控建议维持40GP（不换柜）。容积利用率**24%**（货32.15 m³/柜67.5 m³），重量利用率**6%**，均严重低于软目标。几何装下（True），合规出运（是），但合规分49（medium/WARN），**可出运但效率极低**。\n\n**主控裁决**：可讨论出运，需注意以下风险：\n- 4件4米铁架含2件超长件（BOX-01/02）须沿柜长摆放并加强绑扎；BOX-03/04需纵向加固。\n- 空隙率76%，底面积利用率32%，建议合箱/并排装载或改用更小柜型以减少资源浪费。\n- 加固措施（纵向加强/铁架）必须严格执行。\n\n**结论**：可装入并出运，但属严重资源浪费，建议优化装载方案或换小柜。\n\n---\n<details><summary>结构化原文</summary>\n\n# 拼柜方案结果\n\n## ✅ 主控裁决：可讨论出运\n\n**能否出运**：**是**（规则侧通过；正式前仍需 VGM 与人工复核）\n\n**主控流水线**：9 智能体（含主控，首尾选柜）\n**方案编号（装箱）**：PKG-20260724_191222_f66a6aeb\n**柜型（实际）**：40GP\n**主控开头推荐**：40GP\n**主控结尾推荐**：40GP（维持）\n**箱数**：4\n**能否装下（几何）**：True\n**能否出运（合规）**：是\n**用柜数**：2\n**空间利用率（箱体外廓实心长方体）**：24%（最满柜 25%，底面积均 32%；货 32.15 m³ / 柜 67.5 m³）\n**重量利用率**：6%\n**堆码**：二层箱数 0/4；策略=优先二层（矮箱/铁笼上二层，超长仅底层）\n**装箱模式**：标准箱库外廓+跨长度档混装；箱型分布 4米铁架×4；箱外廓合计 32.1475 m³，货件 6.893 m³，箱内填充均 21%\n**利用综合分**：35.6 （空间子分 57.2 / 重量子分 9.8）\n**评估分**：61.1（passed=True decision=PASS）\n**合规分**：49（level=medium decision=WARN）\n\n## 主控选柜说明\n- 体积适合 1×40GP 装下\n\n## 风险摘要\n- BOX-01 超长件，沿柜长摆放并加强绑扎\n- BOX-02 超长件，沿柜长摆放并加强绑扎\n- BOX-03 需加固：纵向加强或铁架\n- BOX-04 需加固：纵向加强或铁架\n- 空隙率 76%（大件稀疏常见），注意填充绑扎；底面积利用 32%\n- 实心外廓容积 24%（货32.1m³）与重量 6% 双低于软目标，柜资源浪费\n- 实心外廓容积 24%（底面积 32%）与重量 6% 双低，建议合箱/并排装载或减少柜数\n- 加固建议（6米铁架）：纵向加强或铁架\n- 加固建议（4米铁架）：纵向加强或铁架\n\n## 合规说明\n**结论：**  \n本次4件4米铁架可装入集装箱（can_fit=true，无阻挡），但装载效率极低：空间利用率仅24%、重量6%，属严重资源浪费。超长件（BOX-01/02）及需加固件（BOX-03/04）风险已标注，需按方案沿柜长摆放并加强纵向绑扎。  \n**建议：**  \n- 优先合箱或并排装载，或选用更小柜型以减少浪费。  \n- 针对76%空隙率，务必填充绑扎，防止运输中移位。  \n- 加固措施（纵向加强/铁架）须严格执行。\n\n## 布局\n- 三视角数据：views.top/side/front 已生成\n- 侧视 PNG：output\\side_20260724_191227_overview.png\n- 装载引擎：python-laff-3d\n\n---\n主控复核：当前 40GP，推荐 40GP（维持）\n团队B 完成。如需改柜型请重新确认。\n\n</details>\n\n*LLM: deepseek-v4-flash*",
       "status": "success"
     }
   ]
