@@ -329,6 +329,9 @@ def run_nine(
     max_containers=12,
     max_box_net=3200.0,
     revision_mode: bool = False,
+    dense_mode: bool = False,
+    standard_boxes: bool = True,
+    mix_mode: bool = True,
 ):
     agents = [
         (1, "主控智能体", "orchestrator", agent_orchestrator),
@@ -344,16 +347,19 @@ def run_nine(
         (0, "主控汇总", "finalize", agent_finalize),
     ]
     state = make_initial_state(
-        user_input="POR/VMU 真实尺寸+FAC0008估算 9智能体",
+        user_input="POR/VMU 真实尺寸+FAC0008估算 9智能体 标准箱+混装",
         materials=mats,
         container_type=container,
         enable_auto_confirm=True,
         max_containers=max_containers,
-        session_id="por-vmu-real-nine",
+        session_id="por-vmu-real-nine-standard-mix",
     )
     state["packing_options"] = {
         "max_box_net_kg": max_box_net,
         "revision_mode": revision_mode,
+        "dense_mode": dense_mode,
+        "standard_boxes": standard_boxes,
+        "mix_mode": mix_mode,
     }
     if revision_mode:
         state["revision"] = {
@@ -425,20 +431,37 @@ def main() -> int:
     # 铝料+长件：实测 max_box_net≈800 结构可全过
     cap = 800.0
     all_rounds = []
+    # 默认：标准箱库外廓 + 跨长度档混装（非贴货定制）
+    dense = False
+    standard_boxes = True
+    mix_mode = True
     for rnd in range(8):
         print("\n" + "#" * 64)
-        print(f"ROUND {rnd} max_containers={mc} max_box_net={cap}")
+        print(
+            f"ROUND {rnd} max_containers={mc} max_box_net={cap} "
+            f"standard={standard_boxes} mix={mix_mode} dense={dense}"
+        )
         state, steps = run_nine(
             mats,
             container="40HQ",
             max_containers=mc,
             max_box_net=cap,
             revision_mode=(rnd > 0),
+            dense_mode=dense,
+            standard_boxes=standard_boxes,
+            mix_mode=mix_mode,
         )
+        ta = state.get("team_a_summary") or {}
+        opts = state.get("packing_options") or {}
         snap = {
             "round": rnd,
             "max_containers": mc,
             "max_box_net_kg": cap,
+            "dense_mode": bool(dense or ta.get("dense_mode") or opts.get("dense_mode")),
+            "packing_mode": ta.get("packing_mode") or opts.get("packing_mode"),
+            "boxes_outer_m3": ta.get("boxes_outer_volume_m3"),
+            "cargo_item_m3": ta.get("cargo_item_volume_m3"),
+            "avg_crate_fill": ta.get("avg_crate_fill"),
             "packing_plan_id": state.get("packing_plan_id"),
             "boxes": len(state.get("boxes") or []),
             "struct_fail": sum(
@@ -481,7 +504,8 @@ def main() -> int:
         break
 
     rep = {
-        "note": "BGL/FAC0007/FAC0012/BAL 真实尺寸；FAC0008 按文字页样例估算 906 件；排除已发货",
+        "note": "BGL/FAC0007/FAC0012/BAL 真实尺寸；FAC0008 按文字页样例估算 906 件；排除已发货；dense_mode 密装外廓",
+        "dense_mode": dense,
         "materials_file": str(xlsx),
         "materials_count": len(mats),
         "net_kg": net,

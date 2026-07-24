@@ -49,6 +49,19 @@ def agent_present_team_a(state: PackingState) -> Dict[str, Any]:
         "structure_fail": ta.get("fail") or 0,
         "suggested_container_types": suggested,
         "container_suggestion_reason": reason,
+        # 透传装箱模式指标（标准箱/混装/dense）
+        "dense_mode": ta.get("dense_mode"),
+        "standard_boxes": ta.get("standard_boxes"),
+        "mix_mode": ta.get("mix_mode"),
+        "packing_mode": ta.get("packing_mode"),
+        "boxes_outer_volume_m3": ta.get("boxes_outer_volume_m3"),
+        "cargo_item_volume_m3": ta.get("cargo_item_volume_m3"),
+        "avg_crate_fill": ta.get("avg_crate_fill"),
+        "standard_box_type_counts": ta.get("standard_box_type_counts"),
+        "max_box_net_kg": ta.get("max_box_net_kg"),
+        "pass": ta.get("pass") or 0,
+        "reinforce": ta.get("reinforce") or 0,
+        "fail": ta.get("fail") or 0,
     }
 
     user_prompt = {

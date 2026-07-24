@@ -73,7 +73,12 @@ def _normalize_material(mat: Dict[str, Any], idx: int) -> Dict[str, Any]:
     }
 
 
-def _item_fits_box(item: Dict[str, Any], box_name: str) -> bool:
+def _item_fits_box(
+    item: Dict[str, Any],
+    box_name: str,
+    *,
+    allow_length_extend: bool = False,
+) -> bool:
     spec = STANDARD_BOX_TYPES[box_name]
     inner = _inner_dims(spec)
     d = item["外尺寸_mm"]
@@ -81,8 +86,15 @@ def _item_fits_box(item: Dict[str, Any], box_name: str) -> bool:
     need_a = d["宽"] + CLEARANCE_MM
     need_b = d["高"] + CLEARANCE_MM
     inn_L, inn_W, inn_H = inner["长"], inner["宽"], inner["高"]
-    if need_L > inn_L:
-        return False
+    # 标准加长：允许货长略超标准内长（外长会放长，挠度按实际外长算，优于硬跳 6m）
+    if need_L > inn_L + 1e-6:
+        if not allow_length_extend:
+            return False
+        # 最多比标准外长多 20% 或 +800mm
+        outer_L = float(spec["外尺寸_mm"]["长"])
+        max_ext = max(outer_L * 1.2, outer_L + 800.0)
+        if need_L + 2 * float(spec.get("壁厚_mm") or 40) > max_ext + 1e-6:
+            return False
     # 单件截面两种朝向
     return (need_a <= inn_W and need_b <= inn_H) or (
         need_a <= inn_H and need_b <= inn_W
@@ -94,10 +106,40 @@ def _weight_fits(items: List[Dict[str, Any]], box_name: str) -> bool:
     return net <= float(STANDARD_BOX_TYPES[box_name]["最大载荷_kg"]) + 1e-6
 
 
-def _pick_box_type_for_item(item: Dict[str, Any]) -> str:
+def _standard_tier_candidates(content_long_mm: float) -> List[str]:
+    """按货长推荐标准箱档（允许该档加长），从短到长。"""
+    L = float(content_long_mm or 0)
+    if L <= 1050:
+        cands = ["1.1米铁架", "1.1米框", "铁笼", "2米铁架"]
+    elif L <= 1950:
+        cands = ["2米铁架", "2米框", "铁笼", "3米木箱"]
+    elif L <= 2900:
+        # 2.5m 级：优先 4m 铁架（高 1750 截面够用）；3m 木箱偏矮易装不下
+        cands = ["4米铁架", "4米框", "3米木箱", "2米铁架", "铁笼"]
+    elif L <= 4500:
+        # 4.2m 货优先 4 米档加长，勿直接跳 6m（跨距过大易挠度不过）
+        cands = ["4米铁架", "4米框", "6米铁架", "6米框"]
+    else:
+        cands = ["6米铁架", "6米框", "4米铁架"]
+    return [n for n in cands if n in STANDARD_BOX_TYPES]
+
+
+def _pick_box_type_for_item(item: Dict[str, Any], *, standard: bool = False) -> str:
     """选能装下单件几何 + 重量的最小箱型；都不行则用最大并交结构计算暴露问题。"""
     rules = merge_rules()
     L = float(item.get("外尺寸_mm", {}).get("长") or 0)
+    if standard:
+        for name in _standard_tier_candidates(L):
+            if _item_fits_box(item, name, allow_length_extend=True) and _weight_fits(
+                [item], name
+            ):
+                return name
+        for name in _standard_tier_candidates(L):
+            if _item_fits_box(item, name, allow_length_extend=True):
+                return name
+        return "6米铁架" if "6米铁架" in STANDARD_BOX_TYPES else (
+            _BOX_ORDER[-1] if _BOX_ORDER else "6米铁架"
+        )
     # 超长优先 6 米框
     if L >= float(rules.get("solo_overlong_mm") or 5000):
         for name in ("6米框", "6米铁架"):
@@ -114,6 +156,21 @@ def _pick_box_type_for_item(item: Dict[str, Any]) -> str:
     return _BOX_ORDER[-1] if _BOX_ORDER else "6米铁架"
 
 
+def _pick_box_type_for_items(
+    items: List[Dict[str, Any]], *, standard: bool = False
+) -> str:
+    if not items:
+        return "4米铁架"
+    longest = max(items, key=lambda x: float(x["外尺寸_mm"]["长"]))
+    name = _pick_box_type_for_item(longest, standard=standard)
+    # 重量不够则升级
+    if not _weight_fits(items, name):
+        up = _upgrade_box(name, items)
+        if up:
+            return up
+    return name
+
+
 def _can_merge(
     existing: List[Dict[str, Any]],
     new_item: Dict[str, Any],
@@ -122,6 +179,9 @@ def _can_merge(
     aggressive: bool = True,
     allow_reinforce: bool = False,
     max_combined_net_kg: Optional[float] = None,
+    dense: bool = False,
+    standard: bool = False,
+    container_type: str = "40HQ",
 ) -> bool:
     """合箱前做重量 + 结构几何试算；aggressive 时放宽填充率与试算箱外廓。"""
     trial = existing + [new_item]
@@ -132,8 +192,16 @@ def _can_merge(
         return False
     spec = STANDARD_BOX_TYPES[box_name]
     wall = float(spec.get("壁厚_mm") or 40)
-    # 激进合箱：允许用「货包络定制外廓」做几何判定，不困在标准内尺寸
-    outer, inner, _ = _fit_outer_to_cargo(dict(spec["外尺寸_mm"]), wall, trial)
+    # standard：按标准库外廓试算；否则允许货包络定制外廓
+    outer, inner, _ = _fit_outer_to_cargo(
+        dict(spec["外尺寸_mm"]),
+        wall,
+        trial,
+        aggressive=aggressive,
+        container_type=container_type,
+        dense=dense and not standard,
+        standard=standard,
+    )
     max_len = max(float(i["外尺寸_mm"]["长"]) for i in trial)
     if max_len + CLEARANCE_MM > inner["长"] + 1e-6:
         return False
@@ -142,7 +210,8 @@ def _can_merge(
         for i in trial
     )
     vol_box = inner["长"] * inner["宽"] * inner["高"]
-    fill_cap = 0.98 if aggressive else 0.85
+    # dense 贴货后内腔紧，允许更高填充率
+    fill_cap = 0.995 if dense else (0.98 if aggressive else 0.85)
     if vol_box > 0 and vol_items > vol_box * fill_cap:
         return False
 
@@ -176,8 +245,17 @@ def _bin_max_len(b: Dict[str, Any]) -> float:
     return max(float(x["外尺寸_mm"]["长"]) for x in items)
 
 
-def _band_merge_net_cap(band: str) -> float:
+def _band_merge_net_cap(band: str, *, standard: bool = False) -> float:
     """同长度档再合并时的单箱净重上限（结构可过的实务值）。"""
+    if standard:
+        # 标准跨距挠度更紧，合箱净重更保守
+        return {
+            "6m": 480.0,
+            "4m": 560.0,
+            "3m": 900.0,
+            "2m": 1400.0,
+            "1m": 1800.0,
+        }.get(band, 1000.0)
     return {
         "6m": 580.0,   # 约 60 支×9.5kg 级，已实测可过
         "4m": 1200.0,
@@ -209,10 +287,15 @@ def _fit_outer_to_cargo(
     *,
     aggressive: bool = True,
     container_type: str = "40HQ",
+    dense: bool = False,
+    standard: bool = False,
 ) -> Tuple[Dict[str, float], Dict[str, float], bool]:
     """
-    按货包络定制外廓；激进模式卡拼柜模块（2 列宽 / 二层可堆高度）。
-    二层模块高：20GP/40GP 用 1100（2×1100=2200<2385）；40HQ 用 1200（2×1200=2400<2698）。
+    确定箱外廓。
+
+    - standard：锁定标准箱库外廓（知识库 1.1/2/3/4/6 米铁架等），仅超标长时放长。
+    - aggressive：卡拼柜模块（宽1150 / 层高1100~1200），便于二层对齐。
+    - dense：外廓贴货（薄板密装），短件可缩小外廓。
     """
     env = _cargo_envelope_mm(items)
     gap = float(CLEARANCE_MM)
@@ -225,16 +308,40 @@ def _fit_outer_to_cargo(
     ct = (container_type or "40HQ").upper()
     # 二层模块高：保证 2 层能进柜
     stack_module_h = 1100.0 if ct in ("20GP", "40GP") else 1200.0
+    content_long = max((float(i["外尺寸_mm"]["长"]) for i in items), default=0)
+
+    # —— 标准箱库外廓（优先）——
+    if standard:
+        outer = {
+            "长": float(base_outer.get("长") or 0),
+            "宽": float(base_outer.get("宽") or 0),
+            "高": float(base_outer.get("高") or 0),
+        }
+        customized = False
+        # 只按「最长单件」决定是否加长，不用多件并排后的 env 长
+        # （否则小垫片会把 1.1m 箱虚拉成 2.7m）
+        piece_need_L = content_long + gap + 2 * wall
+        if piece_need_L > outer["长"] + 1e-6:
+            step = 50.0
+            outer["长"] = min(math.ceil(piece_need_L / step) * step, max_L)
+            customized = True  # 标准加长
+        inner = {
+            "长": max(outer["长"] - 2 * wall, 0),
+            "宽": max(outer["宽"] - 2 * wall, 0),
+            "高": max(outer["高"] - 2 * wall, 0),
+        }
+        return outer, inner, customized
 
     outer = {
-        "长": min(max(need_L, 800.0), max_L),
-        "宽": min(max(need_W, 600.0), max_W),
-        "高": min(max(need_H, 500.0), max_H),
+        "长": min(max(need_L, 600.0 if dense else 800.0), max_L),
+        "宽": min(max(need_W, 400.0 if dense else 600.0), max_W),
+        "高": min(max(need_H, 200.0 if dense else 500.0), max_H),
     }
     customized = True
+    # 货高很矮（薄板叠层仍 <400）→ 密装时绝不拉到 1.2m 模块高
+    flat_cargo = need_H <= (450.0 if dense else 0.0)
 
-    if aggressive:
-        content_long = max((float(i["外尺寸_mm"]["长"]) for i in items), default=0)
+    if aggressive and not dense:
         if need_W <= 1180:
             outer["宽"] = 1150.0
         else:
@@ -252,10 +359,72 @@ def _fit_outer_to_cargo(
             outer["长"] = max(outer["长"], min(3000.0, max_L))
         elif content_long < 4000:
             outer["长"] = max(outer["长"], min(4000.0, max_L))
+    elif dense:
+        # 混合密装：
+        # - 超长件(≥5m)：仍用半柜宽+二层模块高（几何/结构需要，否则合箱全炸）
+        # - 中长件：半柜宽 + 略矮于模块高
+        # - 短件/薄板：真正贴货，缩小外廓以便柜内多件并排/多层
+        pad = 40.0
+        step = 50.0
+        longish = content_long >= 5000
+        midlong = content_long >= 3500
+
+        if longish or midlong:
+            # ≥3.5m：与 aggressive 同形 1150×模块高（合箱几何/挠度依赖此截面）
+            # 仅外长贴货：50mm 步进 + 余量，避免虚拉到标准 6m/4m 整数档
+            outer["宽"] = 1150.0 if need_W <= 1180 else min(max(need_W + pad, 2200.0), max_W)
+            outer["高"] = min(max(need_H, stack_module_h), max_H)
+            if need_H <= stack_module_h:
+                outer["高"] = stack_module_h
+            # 长：货长+间隙+壁厚+余量；中长不低于 need_L
+            base_L = max(need_L, content_long + gap + 2 * wall + 50.0)
+            outer["长"] = min(math.ceil(base_L / step) * step, max_L)
+            # 短于 2.8m 的中长件仍略抬长便于并排工位（与 aggressive 一致的下限可略降）
+            if content_long < 2800:
+                outer["长"] = max(outer["长"], min(2800.0, max_L))
+        else:
+            # 短件/薄板：真正贴货，缩小外廓以便柜内多件并排/多层
+            if need_W > 1180:
+                outer["宽"] = min(max(need_W + pad, 2200.0), max_W)
+            elif need_W >= 900:
+                outer["宽"] = 1150.0
+            else:
+                outer["宽"] = min(
+                    math.ceil(max(need_W + pad, 400.0) / step) * step, max_W
+                )
+            min_h = 220.0 if flat_cargo else 350.0
+            outer["高"] = min(max(need_H + pad, min_h), max_H)
+            if need_H >= 900:
+                outer["高"] = min(max(outer["高"], min(need_H + pad, stack_module_h)), max_H)
+            outer["长"] = min(math.ceil(max(need_L, 600.0) / step) * step, max_L)
 
     outer["长"] = min(max(outer["长"], need_L), max_L)
     outer["宽"] = min(max(outer["宽"], need_W), max_W)
     outer["高"] = min(max(outer["高"], need_H), max_H)
+
+    # 几何兜底：保证 envelope+间隙 能进内腔（含截面旋转判定）
+    # 否则 dense 合箱会被 structure 几何直接否掉
+    inn_L = max(outer["长"] - 2 * wall, 0)
+    inn_W = max(outer["宽"] - 2 * wall, 0)
+    inn_H = max(outer["高"] - 2 * wall, 0)
+    geo_need_L = float(env.get("长") or 0) + gap
+    geo_need_W = float(env.get("宽") or 0) + gap
+    geo_need_H = float(env.get("高") or 0) + gap
+    if geo_need_L > inn_L + 1e-6:
+        outer["长"] = min(math.ceil((geo_need_L + 2 * wall + 20.0) / 50.0) * 50.0, max_L)
+        inn_L = max(outer["长"] - 2 * wall, 0)
+    # 默认朝向或旋转朝向至少一种通过
+    fit_def = geo_need_W <= inn_W + 1e-6 and geo_need_H <= inn_H + 1e-6
+    fit_rot = geo_need_W <= inn_H + 1e-6 and geo_need_H <= inn_W + 1e-6
+    if not (fit_def or fit_rot):
+        # 优先加高使旋转或默认通过
+        need_inn_h = max(geo_need_H, min(geo_need_W, max_H - 2 * wall))
+        outer["高"] = min(max(outer["高"], need_inn_h + 2 * wall + 20.0), max_H)
+        inn_H = max(outer["高"] - 2 * wall, 0)
+        fit_def = geo_need_W <= inn_W + 1e-6 and geo_need_H <= inn_H + 1e-6
+        fit_rot = geo_need_W <= inn_H + 1e-6 and geo_need_H <= inn_W + 1e-6
+        if not (fit_def or fit_rot):
+            outer["宽"] = min(max(outer["宽"], geo_need_W + 2 * wall + 20.0), max_W)
 
     inner = {
         "长": max(outer["长"] - 2 * wall, 0),
@@ -302,10 +471,37 @@ def _build_box(
     items: List[Dict[str, Any]],
     *,
     container_type: str = "40HQ",
+    dense: bool = False,
+    standard: bool = False,
+    _upgrade_depth: int = 0,
+    _tried_types: Optional[set] = None,
 ) -> Dict[str, Any]:
-    # 选最近标准型作为结构截面/自重基准，外廓按货适配
+    tried = set(_tried_types or set())
+    # 选最近标准型作为结构截面/自重基准；standard 时按货长档选型（可加长）
     if box_name not in STANDARD_BOX_TYPES:
-        box_name = _pick_box_type_for_item(items[0]) if items else "4米铁架"
+        box_name = (
+            _pick_box_type_for_item(items[0], standard=standard)
+            if items
+            else "4米铁架"
+        )
+    if standard and items:
+        # 每次（含升级重试）按货长档重选型；升级深度>0 时仅允许不短于当前
+        picked = _pick_box_type_for_items(items, standard=True)
+        if _upgrade_depth == 0:
+            box_name = picked
+        else:
+            # 升级路径：若重选型不短于当前则采用，避免退回过短箱
+            cur_L = float(
+                (STANDARD_BOX_TYPES.get(box_name) or {}).get("外尺寸_mm", {}).get("长")
+                or 0
+            )
+            pk_L = float(
+                (STANDARD_BOX_TYPES.get(picked) or {}).get("外尺寸_mm", {}).get("长")
+                or 0
+            )
+            if pk_L + 1e-6 >= cur_L and picked not in tried:
+                box_name = picked
+    tried.add(box_name)
     spec = STANDARD_BOX_TYPES[box_name]
     wall = float(spec.get("壁厚_mm") or 40)
     outer, inner, customized = _fit_outer_to_cargo(
@@ -314,8 +510,16 @@ def _build_box(
         items,
         aggressive=True,
         container_type=container_type,
+        dense=dense and not standard,
+        standard=standard,
     )
-    display_type = _display_box_type(box_name, outer, customized)
+    # 标准模式展示名用库名，仅加长时标注
+    if standard and not customized:
+        display_type = box_name
+    else:
+        display_type = _display_box_type(box_name, outer, customized)
+        if standard and customized:
+            display_type = f"{box_name}(标准加长)"
 
     tare = float(spec["自重_kg"])
     # 定制加宽/加长时自重略增
@@ -370,16 +574,96 @@ def _build_box(
         special.append("结构需加强")
     if struct["结论"] == "不通过":
         special.append("结构不通过")
-    if customized:
+    if customized and not standard:
         special.append("定制外廓")
+    if customized and standard:
+        special.append("标准加长")
+    if standard:
+        special.append("标准箱库")
+    if dense and not standard:
+        special.append("密装外廓")
     if not struct["几何"]["尺寸适配"]:
         special.append("尺寸紧张")
 
-    # 仅在结构不通过且非几何尺寸问题时尝试升级箱型截面库
-    if struct["结论"] == "不通过" and "尺寸" not in str(struct.get("风险点") or []):
-        upgraded = _upgrade_box(box_name, items)
-        if upgraded and upgraded != box_name:
-            return _build_box(box_no, upgraded, items, container_type=container_type)
+    # dense 贴货后结构不过：先抬外高（结构截面深度），再升级箱型
+    if dense and not standard and struct["结论"] == "不通过":
+        for bump_h in (900.0, 1100.0, 1200.0, 1400.0):
+            if outer["高"] >= bump_h - 1e-6:
+                continue
+            outer2 = dict(outer)
+            outer2["高"] = min(bump_h, 2650.0)
+            inner2 = {
+                "长": max(outer2["长"] - 2 * wall, 0),
+                "宽": max(outer2["宽"] - 2 * wall, 0),
+                "高": max(outer2["高"] - 2 * wall, 0),
+            }
+            struct2 = run_structure_calc(
+                box_type=box_name,
+                outer_mm=outer2,
+                inner_mm=inner2,
+                tare_kg=tare,
+                max_payload_kg=max_payload,
+                is_steel_frame=is_steel,
+                items=items,
+                safety_factor=sf,
+                box_id=box_no,
+            )
+            if struct2.get("结论") != "不通过":
+                outer, inner, struct = outer2, inner2, struct2
+                try:
+                    from packing_assistant.tools.structure_calc import attach_calc_report_md
+
+                    struct = attach_calc_report_md(struct, outer_mm=outer)
+                except Exception:
+                    pass
+                weights = struct["重量"]
+                special = [s for s in special if s != "结构不通过"]
+                if struct["结论"] == "需加强" and "结构需加强" not in special:
+                    special.append("结构需加强")
+                special.append("密装抬高过结构")
+                break
+
+    # 结构/几何不过：尝试换箱（有深度/已试集合，防死循环）
+    # 注意：挠度超限时禁止升到更长跨距（4m 货进 6m 箱只会更差）
+    risk_txt = " ".join(str(x) for x in (struct.get("风险点") or []))
+    deflect_fail = "挠度" in risk_txt
+    geo_fail = not bool(struct.get("几何", {}).get("尺寸适配"))
+    hard_fail = struct["结论"] == "不通过" or geo_fail
+    if _upgrade_depth < 4 and hard_fail:
+        upgraded = None
+        cur_L = float((STANDARD_BOX_TYPES[box_name]["外尺寸_mm"]).get("长") or 0)
+        # 几何不过 → 只试更长/更高的标准箱；挠度不过 → 禁止更长，只试同档替换
+        if geo_fail and not deflect_fail:
+            upgraded = _upgrade_box(box_name, items)
+        if (not upgraded or upgraded in tried) and standard:
+            for alt in _BOX_ORDER:
+                if alt in tried or alt not in STANDARD_BOX_TYPES:
+                    continue
+                alt_L = float((STANDARD_BOX_TYPES[alt]["外尺寸_mm"]).get("长") or 0)
+                alt_H = float((STANDARD_BOX_TYPES[alt]["外尺寸_mm"]).get("高") or 0)
+                cur_H = float((STANDARD_BOX_TYPES[box_name]["外尺寸_mm"]).get("高") or 0)
+                if deflect_fail and alt_L > cur_L + 1e-6:
+                    continue
+                if geo_fail and alt_L < cur_L - 1e-6 and alt_H <= cur_H + 1e-6:
+                    continue  # 几何失败至少要更长或更高
+                if deflect_fail and alt_L + 1e-6 < cur_L:
+                    continue  # 挠度失败不要无下掉到更短箱
+                if all(
+                    _item_fits_box(it, alt, allow_length_extend=True) for it in items
+                ) and _weight_fits(items, alt):
+                    upgraded = alt
+                    break
+        if upgraded and upgraded not in tried:
+            return _build_box(
+                box_no,
+                upgraded,
+                items,
+                container_type=container_type,
+                dense=dense,
+                standard=standard,
+                _upgrade_depth=_upgrade_depth + 1,
+                _tried_types=tried,
+            )
 
     content = [
         {
@@ -430,11 +714,14 @@ def _build_box(
         "reinforcement": reinf,
         "crate_fill_ratio": round(fill_ratio, 4),
         "customized_outer": customized,
+        "dense_outer": bool(dense and not standard),
+        "standard_outer": bool(standard),
         "base_box_type": box_name,
         "content_max_length_mm": round(content_max_L, 1),
         # 二层堆码：矮箱/非超长可上二层；超长仅底层
+        # dense 矮箱可多层堆（bin3d 按剩余高度放置）
         "stackable": bool(
-            outer["高"] <= 1300
+            outer["高"] <= (1500 if dense else 1300)
             and content_max_L < 4000
             and "超长" not in special
             and struct["结论"] != "不通过"
@@ -571,18 +858,51 @@ def _explode_items_by_net_cap(
     return out
 
 
+def _band_rank(band: str) -> int:
+    return {"1m": 1, "2m": 2, "3m": 3, "4m": 4, "6m": 5}.get(band, 0)
+
+
+def _can_cross_band_mix(
+    host_max_len: float,
+    guest_max_len: float,
+    *,
+    mix_mode: bool,
+) -> bool:
+    """
+    跨长度档混装规则：
+    - mix_mode 关：仅同档（与旧逻辑一致；≥2.5m 不同档禁止）
+    - mix_mode 开：短件可塞进更长档标准箱（guest_rank <= host_rank）；
+      禁止把更长件硬塞进更短档（除非同档）
+    """
+    hb = _length_band(host_max_len)
+    gb = _length_band(guest_max_len)
+    if hb == gb:
+        return True
+    if not mix_mode:
+        # 旧逻辑：短档可互混，长档隔离
+        return max(host_max_len, guest_max_len) < 2500
+    # 混装：只允许「短 → 长」
+    return _band_rank(gb) <= _band_rank(hb)
+
+
 def run_packing(
     materials: List[Dict[str, Any]],
     *,
     container_type: str = "40HQ",
     max_box_net_kg: float = 3200.0,
     revision_mode: bool = False,
+    dense_mode: bool = False,
+    standard_boxes: bool = True,
+    mix_mode: bool = True,
 ) -> Dict[str, Any]:
     """
     装箱算法入口（含结构计算）。
 
     输入: materials 列表；container_type 影响二层模块高度
     max_box_net_kg: 单箱净重上限，超则按件数拆分（结构打回后可再降）
+    standard_boxes: True（默认）锁知识库标准箱外廓，不贴货定制
+    mix_mode: True（默认）允许短件混入更长档标准箱填空
+    dense_mode: True 时外廓贴货（与 standard 互斥，standard 优先）
     输出: {
       "箱子列表": [... 含 结构计算 ...],
       "结构汇总": {...}
@@ -592,12 +912,34 @@ def run_packing(
         return {"箱子列表": [], "结构汇总": _empty_summary()}
 
     ctype = container_type or "40HQ"
+    standard = bool(standard_boxes)
+    dense = bool(dense_mode) and not standard
+    mix = bool(mix_mode)
     # 打回改箱：更严载荷，优先结构通过
     cap = float(max_box_net_kg or 3200.0)
     if revision_mode:
         cap = min(cap, 2500.0)
     items = [_normalize_material(m, i) for i, m in enumerate(materials, start=1)]
-    items = _explode_items_by_net_cap(items, cap)
+    # 标准箱按跨距结构更严：长件单独压低净重上限再拆分，避免 4m 货误装过重
+    if standard:
+        exploded: List[Dict[str, Any]] = []
+        for it in items:
+            L = float(it["外尺寸_mm"]["长"])
+            # 标准箱截面净空有限，长件/中长件单箱件数（净重）更严
+            if L >= 5000:
+                local_cap = min(cap, 480.0)
+            elif L >= 3500:
+                local_cap = min(cap, 560.0)
+            elif L >= 2500:
+                local_cap = min(cap, 400.0)  # 约 8×45kg，避免截面装不下
+            elif L >= 1500:
+                local_cap = min(cap, 700.0)
+            else:
+                local_cap = cap
+            exploded.extend(_explode_items_by_net_cap([it], local_cap))
+        items = exploded
+    else:
+        items = _explode_items_by_net_cap(items, cap)
     # 长件优先，但激进合箱
     items_sorted = sorted(items, key=lambda x: (-x["外尺寸_mm"]["长"], -x["总重_kg"]))
 
@@ -605,8 +947,7 @@ def run_packing(
 
     for it in items_sorted:
         placed = False
-        # 仅极端超长/超重强制独箱
-        # 超长件强制独箱，避免合箱后 6m 梁超挠度/强度
+        # 超长/超重强制独箱起步，靠后轮合并（避免一次装太满导致挠度）
         solo = (
             it["外尺寸_mm"]["长"] >= 5000
             or it["总重_kg"] >= min(2500.0, cap * 0.9)
@@ -618,29 +959,58 @@ def run_packing(
             )
             for b in cand:
                 max_b = max(float(x["外尺寸_mm"]["长"]) for x in b["items"])
-                if _length_band(max_b) != _length_band(it["外尺寸_mm"]["长"]):
-                    # 不同长度档不合，保留多箱以便并排/堆叠吃柜
-                    if max(max_b, it["外尺寸_mm"]["长"]) >= 2500:
-                        continue
-                if _can_merge(b["items"], it, b["box_name"], aggressive=True):
+                if not _can_cross_band_mix(
+                    max_b, it["外尺寸_mm"]["长"], mix_mode=mix
+                ):
+                    continue
+                if _can_merge(
+                    b["items"],
+                    it,
+                    b["box_name"],
+                    aggressive=True,
+                    dense=dense,
+                    standard=standard,
+                    container_type=ctype,
+                ):
                     b["items"].append(it)
                     placed = True
                     break
                 upgraded = _upgrade_box(b["box_name"], b["items"] + [it])
-                if upgraded and _can_merge(b["items"], it, upgraded, aggressive=True):
+                if upgraded and _can_merge(
+                    b["items"],
+                    it,
+                    upgraded,
+                    aggressive=True,
+                    dense=dense,
+                    standard=standard,
+                    container_type=ctype,
+                ):
                     b["box_name"] = upgraded
                     b["items"].append(it)
                     placed = True
                     break
         if not placed:
-            box_name = _pick_box_type_for_item(it)
+            box_name = _pick_box_type_for_item(it, standard=standard)
             bins.append({"box_name": box_name, "items": [it]})
 
     bins_before_merge = len(bins)
     # 二轮：同长度档合并
-    bins = _aggressive_merge_bins(bins, same_length_band_only=True)
-    # 三轮：同长度「小箱」再合并（轻箱优先，结构允许需加强）
-    bins = _merge_same_length_small_bins(bins)
+    bins = _aggressive_merge_bins(
+        bins,
+        same_length_band_only=True,
+        dense=dense,
+        standard=standard,
+        container_type=ctype,
+    )
+    # 三轮：同长度小箱再合并
+    bins = _merge_same_length_small_bins(
+        bins, dense=dense, standard=standard, container_type=ctype
+    )
+    # 四轮：跨长度档混装（短箱并入长箱填空）
+    if mix:
+        bins = _merge_cross_band_mix(
+            bins, dense=dense, standard=standard, container_type=ctype
+        )
     bins_after_merge = len(bins)
 
     boxes: List[Dict[str, Any]] = []
@@ -651,11 +1021,24 @@ def run_packing(
                 b["box_name"],
                 b["items"],
                 container_type=ctype,
+                dense=dense,
+                standard=standard,
             )
         )
 
     summary = _structure_summary(boxes)
-    summary["packing_mode"] = "aggressive_fcl_two_layer+same_length_small_merge"
+    if standard and mix:
+        mode = "standard_box_library+cross_length_mix"
+    elif standard:
+        mode = "standard_box_library"
+    elif dense:
+        mode = "dense_hug_cargo+same_length_small_merge"
+    else:
+        mode = "aggressive_fcl_two_layer+same_length_small_merge"
+    summary["packing_mode"] = mode
+    summary["dense_mode"] = dense
+    summary["standard_boxes"] = standard
+    summary["mix_mode"] = mix
     summary["container_type_for_module"] = ctype
     summary["max_box_net_kg"] = cap
     summary["revision_mode"] = bool(revision_mode)
@@ -663,6 +1046,32 @@ def run_packing(
     summary["bins_before_merge"] = bins_before_merge
     summary["bins_after_merge"] = bins_after_merge
     summary["merged_away"] = max(0, bins_before_merge - bins_after_merge)
+    # 箱外廓体积 vs 货实体体积，便于解释利用率
+    outer_vol = sum(
+        float(bx["外尺寸_mm"]["长"])
+        * float(bx["外尺寸_mm"]["宽"])
+        * float(bx["外尺寸_mm"]["高"])
+        for bx in boxes
+    )
+    cargo_vol = sum(
+        float(it["外尺寸_mm"]["长"])
+        * float(it["外尺寸_mm"]["宽"])
+        * float(it["外尺寸_mm"]["高"])
+        * float(it["数量"])
+        for bx in boxes
+        for it in (bx.get("装载内容") or [])
+    )
+    summary["boxes_outer_volume_m3"] = round(outer_vol / 1e9, 4)
+    summary["cargo_item_volume_m3"] = round(cargo_vol / 1e9, 4)
+    summary["avg_crate_fill"] = round(
+        (cargo_vol / outer_vol) if outer_vol > 0 else 0.0, 4
+    )
+    # 标准箱型分布
+    by_type: Dict[str, int] = {}
+    for bx in boxes:
+        bt = str(bx.get("base_box_type") or bx.get("箱型") or "?")
+        by_type[bt] = by_type.get(bt, 0) + 1
+    summary["standard_box_type_counts"] = by_type
     return {"箱子列表": boxes, "结构汇总": summary}
 
 
@@ -684,6 +1093,9 @@ def _try_absorb_bin(
     *,
     allow_reinforce: bool = True,
     max_combined_net_kg: Optional[float] = None,
+    dense: bool = False,
+    standard: bool = False,
+    container_type: str = "40HQ",
 ) -> Optional[Dict[str, Any]]:
     """尝试把 guest 整箱并入 host；成功返回新 bin，失败 None。"""
     trial_items = list(host["items"])
@@ -696,6 +1108,9 @@ def _try_absorb_bin(
             aggressive=True,
             allow_reinforce=allow_reinforce,
             max_combined_net_kg=max_combined_net_kg,
+            dense=dense,
+            standard=standard,
+            container_type=container_type,
         ):
             trial_items.append(it)
             continue
@@ -707,6 +1122,9 @@ def _try_absorb_bin(
             aggressive=True,
             allow_reinforce=allow_reinforce,
             max_combined_net_kg=max_combined_net_kg,
+            dense=dense,
+            standard=standard,
+            container_type=container_type,
         ):
             trial_name = up
             trial_items.append(it)
@@ -719,6 +1137,9 @@ def _aggressive_merge_bins(
     bins: List[Dict[str, Any]],
     *,
     same_length_band_only: bool = True,
+    dense: bool = False,
+    standard: bool = False,
+    container_type: str = "40HQ",
 ) -> List[Dict[str, Any]]:
     """箱间合并：默认只合同长度档，保持多箱并排/堆叠以吃满柜。"""
     if len(bins) <= 1:
@@ -737,7 +1158,7 @@ def _aggressive_merge_bins(
             cur = {"box_name": bi["box_name"], "items": list(bi["items"])}
             max_i = _bin_max_len(cur)
             band_i = _length_band(max_i)
-            net_cap = _band_merge_net_cap(band_i)
+            net_cap = _band_merge_net_cap(band_i, standard=standard)
             for j in range(i + 1, len(bins)):
                 if used[j]:
                     continue
@@ -748,13 +1169,19 @@ def _aggressive_merge_bins(
                 if _bin_net_kg(cur) + _bin_net_kg(bj) > net_cap + 1e-6:
                     continue
                 merged = _try_absorb_bin(
-                    cur, bj, allow_reinforce=True, max_combined_net_kg=net_cap
+                    cur,
+                    bj,
+                    allow_reinforce=True,
+                    max_combined_net_kg=net_cap,
+                    dense=dense,
+                    standard=standard,
+                    container_type=container_type,
                 )
                 if merged:
                     cur = merged
                     max_i = _bin_max_len(cur)
                     band_i = _length_band(max_i)
-                    net_cap = _band_merge_net_cap(band_i)
+                    net_cap = _band_merge_net_cap(band_i, standard=standard)
                     used[j] = True
                     changed = True
             used[i] = True
@@ -768,6 +1195,9 @@ def _merge_same_length_small_bins(
     *,
     small_net_ratio: float = 0.72,
     max_rounds: int = 16,
+    dense: bool = False,
+    standard: bool = False,
+    container_type: str = "40HQ",
 ) -> List[Dict[str, Any]]:
     """
     同长度小箱再合并：
@@ -781,7 +1211,7 @@ def _merge_same_length_small_bins(
 
     def is_small(b: Dict[str, Any]) -> bool:
         band = _length_band(_bin_max_len(b))
-        cap = _band_merge_net_cap(band)
+        cap = _band_merge_net_cap(band, standard=standard)
         return _bin_net_kg(b) <= cap * small_net_ratio + 1e-6
 
     changed = True
@@ -798,7 +1228,7 @@ def _merge_same_length_small_bins(
                 continue
             cur = {"box_name": bi["box_name"], "items": list(bi["items"])}
             band = _length_band(_bin_max_len(cur))
-            net_cap = _band_merge_net_cap(band)
+            net_cap = _band_merge_net_cap(band, standard=standard)
             # 非小箱也可作 host 吃小 guest
             for j in range(i + 1, len(bins)):
                 if used[j]:
@@ -812,7 +1242,13 @@ def _merge_same_length_small_bins(
                 if _bin_net_kg(cur) + _bin_net_kg(bj) > net_cap + 1e-6:
                     continue
                 merged = _try_absorb_bin(
-                    cur, bj, allow_reinforce=True, max_combined_net_kg=net_cap
+                    cur,
+                    bj,
+                    allow_reinforce=True,
+                    max_combined_net_kg=net_cap,
+                    dense=dense,
+                    standard=standard,
+                    container_type=container_type,
                 )
                 if not merged:
                     # host/guest 对调再试（箱型不同时有时更易过）
@@ -821,11 +1257,81 @@ def _merge_same_length_small_bins(
                         cur,
                         allow_reinforce=True,
                         max_combined_net_kg=net_cap,
+                        dense=dense,
+                        standard=standard,
+                        container_type=container_type,
                     )
                 if merged:
                     cur = merged
                     band = _length_band(_bin_max_len(cur))
-                    net_cap = _band_merge_net_cap(band)
+                    net_cap = _band_merge_net_cap(band, standard=standard)
+                    used[j] = True
+                    changed = True
+            used[i] = True
+            out.append(cur)
+        bins = out
+    return bins
+
+
+def _merge_cross_band_mix(
+    bins: List[Dict[str, Any]],
+    *,
+    max_rounds: int = 12,
+    dense: bool = False,
+    standard: bool = False,
+    container_type: str = "40HQ",
+) -> List[Dict[str, Any]]:
+    """
+    跨长度档混装：把更短/更轻的整箱并入更长档标准箱填空。
+    例：2m 短支撑 + 垫片 → 并入未满的 4m 铁架。
+    """
+    if len(bins) <= 1:
+        return bins
+    changed = True
+    guard = 0
+    while changed and guard < max_rounds:
+        guard += 1
+        changed = False
+        # host：更长更重优先；guest：更短更轻优先
+        bins = sorted(bins, key=lambda b: (-_bin_max_len(b), -_bin_net_kg(b)))
+        out: List[Dict[str, Any]] = []
+        used = [False] * len(bins)
+        for i, bi in enumerate(bins):
+            if used[i]:
+                continue
+            cur = {"box_name": bi["box_name"], "items": list(bi["items"])}
+            host_L = _bin_max_len(cur)
+            host_band = _length_band(host_L)
+            net_cap = _band_merge_net_cap(host_band, standard=standard)
+            for j in range(i + 1, len(bins)):
+                if used[j]:
+                    continue
+                bj = bins[j]
+                guest_L = _bin_max_len(bj)
+                if not _can_cross_band_mix(host_L, guest_L, mix_mode=True):
+                    continue
+                # 只吸更短或同档的 guest
+                if _band_rank(_length_band(guest_L)) > _band_rank(host_band):
+                    continue
+                if _bin_net_kg(cur) + _bin_net_kg(bj) > net_cap + 1e-6:
+                    continue
+                # 已较满的 host 不再硬塞（留余量给结构）
+                if _bin_net_kg(cur) > net_cap * 0.88:
+                    continue
+                merged = _try_absorb_bin(
+                    cur,
+                    bj,
+                    allow_reinforce=True,
+                    max_combined_net_kg=net_cap,
+                    dense=dense,
+                    standard=standard,
+                    container_type=container_type,
+                )
+                if merged:
+                    cur = merged
+                    host_L = _bin_max_len(cur)
+                    host_band = _length_band(host_L)
+                    net_cap = _band_merge_net_cap(host_band, standard=standard)
                     used[j] = True
                     changed = True
             used[i] = True

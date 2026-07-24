@@ -1,0 +1,1025 @@
+[
+  {
+    "case": "syn_mixed_realistic",
+    "opts": {
+      "standard_boxes": true,
+      "mix_mode": true,
+      "dense_mode": false
+    },
+    "boxes": 13,
+    "struct_fail": 0,
+    "struct_pass": 13,
+    "packing_mode": "standard_box_library+cross_length_mix",
+    "outer_m3": 96.91,
+    "cargo_m3": 18.84,
+    "crate_fill": 0.1944,
+    "type_counts": {
+      "4米铁架": 12,
+      "1.1米铁架": 1
+    },
+    "standard_outer_hits": 13,
+    "mixed_content_boxes": 3,
+    "bins": "13->13",
+    "containers": 4,
+    "can_fit": true,
+    "space": 0.3173,
+    "floor": 0.4908,
+    "weight": 0.081,
+    "sample_outers": [
+      {
+        "type": "4米铁架(标准加长)",
+        "base": "4米铁架",
+        "LWH": {
+          "长": 4350.0,
+          "宽": 1100.0,
+          "高": 1750.0
+        },
+        "std": true,
+        "concl": "通过",
+        "items": [
+          "镀锌钢通长件(拆4)",
+          "镀锌钢通(拆1)"
+        ]
+      },
+      {
+        "type": "4米铁架(标准加长)",
+        "base": "4米铁架",
+        "LWH": {
+          "长": 4350.0,
+          "宽": 1100.0,
+          "高": 1750.0
+        },
+        "std": true,
+        "concl": "通过",
+        "items": [
+          "镀锌钢通长件(拆1)"
+        ]
+      },
+      {
+        "type": "4米铁架(标准加长)",
+        "base": "4米铁架",
+        "LWH": {
+          "长": 4350.0,
+          "宽": 1100.0,
+          "高": 1750.0
+        },
+        "std": true,
+        "concl": "通过",
+        "items": [
+          "镀锌钢通长件(拆2)"
+        ]
+      },
+      {
+        "type": "4米铁架(标准加长)",
+        "base": "4米铁架",
+        "LWH": {
+          "长": 4350.0,
+          "宽": 1100.0,
+          "高": 1750.0
+        },
+        "std": true,
+        "concl": "通过",
+        "items": [
+          "镀锌钢通长件(拆3)"
+        ]
+      }
+    ],
+    "ok": true
+  },
+  {
+    "case": "syn_mixed_realistic",
+    "opts": {
+      "standard_boxes": true,
+      "mix_mode": false,
+      "dense_mode": false
+    },
+    "boxes": 15,
+    "struct_fail": 0,
+    "struct_pass": 15,
+    "packing_mode": "standard_box_library",
+    "outer_m3": 106.425,
+    "cargo_m3": 18.84,
+    "crate_fill": 0.177,
+    "type_counts": {
+      "4米铁架": 13,
+      "1.1米铁架": 2
+    },
+    "standard_outer_hits": 15,
+    "mixed_content_boxes": 2,
+    "bins": "15->15",
+    "containers": 4,
+    "can_fit": true,
+    "space": 0.3485,
+    "floor": 0.5403,
+    "weight": 0.0836,
+    "sample_outers": [
+      {
+        "type": "4米铁架(标准加长)",
+        "base": "4米铁架",
+        "LWH": {
+          "长": 4350.0,
+          "宽": 1100.0,
+          "高": 1750.0
+        },
+        "std": true,
+        "concl": "通过",
+        "items": [
+          "镀锌钢通长件(拆4)"
+        ]
+      },
+      {
+        "type": "1.1米铁架",
+        "base": "1.1米铁架",
+        "LWH": {
+          "长": 1100.0,
+          "宽": 1100.0,
+          "高": 1500.0
+        },
+        "std": true,
+        "concl": "通过",
+        "items": [
+          "短支撑(拆2)"
+        ]
+      },
+      {
+        "type": "4米铁架",
+        "base": "4米铁架",
+        "LWH": {
+          "长": 4000.0,
+          "宽": 1100.0,
+          "高": 1750.0
+        },
+        "std": true,
+        "concl": "通过",
+        "items": [
+          "镀锌钢通(拆2)"
+        ]
+      },
+      {
+        "type": "4米铁架",
+        "base": "4米铁架",
+        "LWH": {
+          "长": 4000.0,
+          "宽": 1100.0,
+          "高": 1750.0
+        },
+        "std": true,
+        "concl": "通过",
+        "items": [
+          "镀锌钢通(拆3)"
+        ]
+      }
+    ],
+    "ok": true
+  },
+  {
+    "case": "syn_mixed_realistic",
+    "opts": {
+      "standard_boxes": false,
+      "mix_mode": false,
+      "dense_mode": false
+    },
+    "boxes": 14,
+    "struct_fail": 10,
+    "struct_pass": 4,
+    "packing_mode": "aggressive_fcl_two_layer+same_length_small_merge",
+    "outer_m3": 65.619,
+    "cargo_m3": 18.84,
+    "crate_fill": 0.2871,
+    "type_counts": {
+      "1.1米铁架": 8,
+      "4米铁架": 2,
+      "3米木箱": 2,
+      "6米铁架": 2
+    },
+    "standard_outer_hits": 0,
+    "mixed_content_boxes": 3,
+    "bins": "14->14",
+    "containers": 3,
+    "can_fit": true,
+    "space": 0.2865,
+    "floor": 0.6204,
+    "weight": 0.1077,
+    "sample_outers": [
+      {
+        "type": "3米铁架(定制)",
+        "base": "1.1米铁架",
+        "LWH": {
+          "长": 3000.0,
+          "宽": 1150.0,
+          "高": 1200.0
+        },
+        "std": false,
+        "concl": "不通过",
+        "items": [
+          "铁垫片(拆6)"
+        ]
+      },
+      {
+        "type": "3米铁架(定制)",
+        "base": "1.1米铁架",
+        "LWH": {
+          "长": 3000.0,
+          "宽": 1150.0,
+          "高": 1200.0
+        },
+        "std": false,
+        "concl": "不通过",
+        "items": [
+          "铁垫片(拆1)"
+        ]
+      },
+      {
+        "type": "3米铁架(定制)",
+        "base": "1.1米铁架",
+        "LWH": {
+          "长": 3000.0,
+          "宽": 1150.0,
+          "高": 1200.0
+        },
+        "std": false,
+        "concl": "不通过",
+        "items": [
+          "铁垫片(拆2)"
+        ]
+      },
+      {
+        "type": "3米铁架(定制)",
+        "base": "1.1米铁架",
+        "LWH": {
+          "长": 3000.0,
+          "宽": 1150.0,
+          "高": 1200.0
+        },
+        "std": false,
+        "concl": "不通过",
+        "items": [
+          "铁垫片(拆3)"
+        ]
+      }
+    ],
+    "ok": false
+  },
+  {
+    "case": "syn_short_frames",
+    "opts": {
+      "standard_boxes": true,
+      "mix_mode": true,
+      "dense_mode": false
+    },
+    "boxes": 3,
+    "struct_fail": 0,
+    "struct_pass": 3,
+    "packing_mode": "standard_box_library+cross_length_mix",
+    "outer_m3": 8.965,
+    "cargo_m3": 1.2096,
+    "crate_fill": 0.1349,
+    "type_counts": {
+      "2米铁架": 1,
+      "1.1米铁架": 1,
+      "铁笼": 1
+    },
+    "standard_outer_hits": 3,
+    "mixed_content_boxes": 2,
+    "bins": "3->3",
+    "containers": 1,
+    "can_fit": true,
+    "space": 0.1174,
+    "floor": 0.1982,
+    "weight": 0.0986,
+    "sample_outers": [
+      {
+        "type": "2米铁架",
+        "base": "2米铁架",
+        "LWH": {
+          "长": 2000.0,
+          "宽": 1100.0,
+          "高": 1750.0
+        },
+        "std": true,
+        "concl": "通过",
+        "items": [
+          "镀锌圆通短料",
+          "镀锌短钢通(拆1)",
+          "角码(拆3)"
+        ]
+      },
+      {
+        "type": "1.1米铁架",
+        "base": "1.1米铁架",
+        "LWH": {
+          "长": 1100.0,
+          "宽": 1100.0,
+          "高": 1500.0
+        },
+        "std": true,
+        "concl": "通过",
+        "items": [
+          "镀锌短钢通(拆2)",
+          "角码(拆1)",
+          "角码(拆2)"
+        ]
+      },
+      {
+        "type": "铁笼",
+        "base": "铁笼",
+        "LWH": {
+          "长": 2000.0,
+          "宽": 1100.0,
+          "高": 1500.0
+        },
+        "std": true,
+        "concl": "通过",
+        "items": [
+          "连接板"
+        ]
+      }
+    ],
+    "ok": true
+  },
+  {
+    "case": "syn_short_frames",
+    "opts": {
+      "standard_boxes": true,
+      "mix_mode": false,
+      "dense_mode": false
+    },
+    "boxes": 3,
+    "struct_fail": 0,
+    "struct_pass": 3,
+    "packing_mode": "standard_box_library",
+    "outer_m3": 8.965,
+    "cargo_m3": 1.2096,
+    "crate_fill": 0.1349,
+    "type_counts": {
+      "1.1米铁架": 1,
+      "铁笼": 1,
+      "2米铁架": 1
+    },
+    "standard_outer_hits": 3,
+    "mixed_content_boxes": 2,
+    "bins": "3->3",
+    "containers": 1,
+    "can_fit": true,
+    "space": 0.1174,
+    "floor": 0.1982,
+    "weight": 0.0986,
+    "sample_outers": [
+      {
+        "type": "1.1米铁架",
+        "base": "1.1米铁架",
+        "LWH": {
+          "长": 1100.0,
+          "宽": 1100.0,
+          "高": 1500.0
+        },
+        "std": true,
+        "concl": "通过",
+        "items": [
+          "镀锌短钢通(拆2)",
+          "角码(拆1)",
+          "角码(拆2)"
+        ]
+      },
+      {
+        "type": "铁笼",
+        "base": "铁笼",
+        "LWH": {
+          "长": 2000.0,
+          "宽": 1100.0,
+          "高": 1500.0
+        },
+        "std": true,
+        "concl": "通过",
+        "items": [
+          "连接板"
+        ]
+      },
+      {
+        "type": "2米铁架",
+        "base": "2米铁架",
+        "LWH": {
+          "长": 2000.0,
+          "宽": 1100.0,
+          "高": 1750.0
+        },
+        "std": true,
+        "concl": "通过",
+        "items": [
+          "镀锌圆通短料",
+          "镀锌短钢通(拆1)",
+          "角码(拆3)"
+        ]
+      }
+    ],
+    "ok": true
+  },
+  {
+    "case": "syn_short_frames",
+    "opts": {
+      "standard_boxes": false,
+      "mix_mode": false,
+      "dense_mode": false
+    },
+    "boxes": 4,
+    "struct_fail": 3,
+    "struct_pass": 1,
+    "packing_mode": "aggressive_fcl_two_layer+same_length_small_merge",
+    "outer_m3": 16.974,
+    "cargo_m3": 1.2096,
+    "crate_fill": 0.0713,
+    "type_counts": {
+      "1.1米铁架": 3,
+      "2米铁架": 1
+    },
+    "standard_outer_hits": 0,
+    "mixed_content_boxes": 1,
+    "bins": "4->4",
+    "containers": 1,
+    "can_fit": true,
+    "space": 0.2223,
+    "floor": 0.4998,
+    "weight": 0.1102,
+    "sample_outers": [
+      {
+        "type": "3米铁架(定制)",
+        "base": "1.1米铁架",
+        "LWH": {
+          "长": 3100.0,
+          "宽": 1150.0,
+          "高": 1200.0
+        },
+        "std": false,
+        "concl": "不通过",
+        "items": [
+          "角码(拆2)"
+        ]
+      },
+      {
+        "type": "3米铁架(定制)",
+        "base": "2米铁架",
+        "LWH": {
+          "长": 3100.0,
+          "宽": 1150.0,
+          "高": 1200.0
+        },
+        "std": false,
+        "concl": "通过",
+        "items": [
+          "镀锌圆通短料",
+          "镀锌短钢通(拆2)",
+          "角码(拆1)",
+          "角码(拆3)"
+        ]
+      },
+      {
+        "type": "3米铁架(定制)",
+        "base": "1.1米铁架",
+        "LWH": {
+          "长": 3100.0,
+          "宽": 1150.0,
+          "高": 1200.0
+        },
+        "std": false,
+        "concl": "不通过",
+        "items": [
+          "连接板"
+        ]
+      },
+      {
+        "type": "3米铁架(定制)",
+        "base": "1.1米铁架",
+        "LWH": {
+          "长": 3000.0,
+          "宽": 1150.0,
+          "高": 1200.0
+        },
+        "std": false,
+        "concl": "不通过",
+        "items": [
+          "镀锌短钢通(拆1)"
+        ]
+      }
+    ],
+    "ok": false
+  },
+  {
+    "case": "syn_long_6m",
+    "opts": {
+      "standard_boxes": true,
+      "mix_mode": true,
+      "dense_mode": false
+    },
+    "boxes": 7,
+    "struct_fail": 0,
+    "struct_pass": 7,
+    "packing_mode": "standard_box_library+cross_length_mix",
+    "outer_m3": 72.633,
+    "cargo_m3": 9.798,
+    "crate_fill": 0.1349,
+    "type_counts": {
+      "6米铁架": 7
+    },
+    "standard_outer_hits": 7,
+    "mixed_content_boxes": 6,
+    "bins": "13->7",
+    "containers": 4,
+    "can_fit": true,
+    "space": 0.2378,
+    "floor": 0.414,
+    "weight": 0.043,
+    "sample_outers": [
+      {
+        "type": "6米铁架(标准加长)",
+        "base": "6米铁架",
+        "LWH": {
+          "长": 6150.0,
+          "宽": 1100.0,
+          "高": 1550.0
+        },
+        "std": true,
+        "concl": "通过",
+        "items": [
+          "热镀锌空心铁通6m(拆5)",
+          "幕墙支撑钢构件6m(拆1)"
+        ]
+      },
+      {
+        "type": "6米铁架(标准加长)",
+        "base": "6米铁架",
+        "LWH": {
+          "长": 6150.0,
+          "宽": 1100.0,
+          "高": 1550.0
+        },
+        "std": true,
+        "concl": "通过",
+        "items": [
+          "幕墙支撑钢构件6m(拆2)",
+          "幕墙支撑钢构件6m(拆3)"
+        ]
+      },
+      {
+        "type": "6米铁架(标准加长)",
+        "base": "6米铁架",
+        "LWH": {
+          "长": 6150.0,
+          "宽": 1100.0,
+          "高": 1550.0
+        },
+        "std": true,
+        "concl": "通过",
+        "items": [
+          "幕墙支撑钢构件6m(拆4)",
+          "幕墙支撑钢构件6m(拆5)"
+        ]
+      },
+      {
+        "type": "6米铁架(标准加长)",
+        "base": "6米铁架",
+        "LWH": {
+          "长": 6150.0,
+          "宽": 1100.0,
+          "高": 1550.0
+        },
+        "std": true,
+        "concl": "通过",
+        "items": [
+          "幕墙支撑钢构件6m(拆6)"
+        ]
+      }
+    ],
+    "ok": true
+  },
+  {
+    "case": "syn_long_6m",
+    "opts": {
+      "standard_boxes": true,
+      "mix_mode": false,
+      "dense_mode": false
+    },
+    "boxes": 7,
+    "struct_fail": 0,
+    "struct_pass": 7,
+    "packing_mode": "standard_box_library",
+    "outer_m3": 72.633,
+    "cargo_m3": 9.798,
+    "crate_fill": 0.1349,
+    "type_counts": {
+      "6米铁架": 7
+    },
+    "standard_outer_hits": 7,
+    "mixed_content_boxes": 6,
+    "bins": "13->7",
+    "containers": 4,
+    "can_fit": true,
+    "space": 0.2378,
+    "floor": 0.414,
+    "weight": 0.043,
+    "sample_outers": [
+      {
+        "type": "6米铁架(标准加长)",
+        "base": "6米铁架",
+        "LWH": {
+          "长": 6150.0,
+          "宽": 1100.0,
+          "高": 1550.0
+        },
+        "std": true,
+        "concl": "通过",
+        "items": [
+          "幕墙支撑钢构件6m(拆6)"
+        ]
+      },
+      {
+        "type": "6米铁架(标准加长)",
+        "base": "6米铁架",
+        "LWH": {
+          "长": 6150.0,
+          "宽": 1100.0,
+          "高": 1550.0
+        },
+        "std": true,
+        "concl": "通过",
+        "items": [
+          "幕墙支撑钢构件6m(拆2)",
+          "幕墙支撑钢构件6m(拆3)"
+        ]
+      },
+      {
+        "type": "6米铁架(标准加长)",
+        "base": "6米铁架",
+        "LWH": {
+          "长": 6150.0,
+          "宽": 1100.0,
+          "高": 1550.0
+        },
+        "std": true,
+        "concl": "通过",
+        "items": [
+          "幕墙支撑钢构件6m(拆4)",
+          "幕墙支撑钢构件6m(拆5)"
+        ]
+      },
+      {
+        "type": "6米铁架(标准加长)",
+        "base": "6米铁架",
+        "LWH": {
+          "长": 6150.0,
+          "宽": 1100.0,
+          "高": 1550.0
+        },
+        "std": true,
+        "concl": "通过",
+        "items": [
+          "热镀锌空心铁通6m(拆5)",
+          "幕墙支撑钢构件6m(拆1)"
+        ]
+      }
+    ],
+    "ok": true
+  },
+  {
+    "case": "syn_long_6m",
+    "opts": {
+      "standard_boxes": false,
+      "mix_mode": false,
+      "dense_mode": false
+    },
+    "boxes": 6,
+    "struct_fail": 0,
+    "struct_pass": 6,
+    "packing_mode": "aggressive_fcl_two_layer+same_length_small_merge",
+    "outer_m3": 50.094,
+    "cargo_m3": 9.798,
+    "crate_fill": 0.1956,
+    "type_counts": {
+      "6米框": 6
+    },
+    "standard_outer_hits": 0,
+    "mixed_content_boxes": 5,
+    "bins": "13->6",
+    "containers": 3,
+    "can_fit": true,
+    "space": 0.2187,
+    "floor": 0.4917,
+    "weight": 0.0539,
+    "sample_outers": [
+      {
+        "type": "6米框(定制)",
+        "base": "6米框",
+        "LWH": {
+          "长": 6200.0,
+          "宽": 1150.0,
+          "高": 1200.0
+        },
+        "std": false,
+        "concl": "通过",
+        "items": [
+          "幕墙支撑钢构件6m(拆6)"
+        ]
+      },
+      {
+        "type": "6米框(定制)",
+        "base": "6米框",
+        "LWH": {
+          "长": 6000.0,
+          "宽": 1150.0,
+          "高": 1200.0
+        },
+        "std": false,
+        "concl": "通过",
+        "items": [
+          "热镀锌空心铁通6m(拆1)",
+          "热镀锌空心铁通6m(拆2)"
+        ]
+      },
+      {
+        "type": "6米框(定制)",
+        "base": "6米框",
+        "LWH": {
+          "长": 6000.0,
+          "宽": 1150.0,
+          "高": 1200.0
+        },
+        "std": false,
+        "concl": "通过",
+        "items": [
+          "热镀锌空心铁通6m(拆3)",
+          "热镀锌空心铁通6m(拆4)"
+        ]
+      },
+      {
+        "type": "6米框(定制)",
+        "base": "6米框",
+        "LWH": {
+          "长": 5700.0,
+          "宽": 1150.0,
+          "高": 1200.0
+        },
+        "std": false,
+        "concl": "通过",
+        "items": [
+          "长杆件(拆1)",
+          "长杆件(拆2)"
+        ]
+      }
+    ],
+    "ok": true
+  },
+  {
+    "case": "web_small_cartons",
+    "opts": {
+      "standard_boxes": true,
+      "mix_mode": true,
+      "dense_mode": false
+    },
+    "boxes": 12,
+    "struct_fail": 0,
+    "struct_pass": 12,
+    "packing_mode": "standard_box_library+cross_length_mix",
+    "outer_m3": 21.78,
+    "cargo_m3": 4.032,
+    "crate_fill": 0.1851,
+    "type_counts": {
+      "1.1米铁架": 12
+    },
+    "standard_outer_hits": 12,
+    "mixed_content_boxes": 0,
+    "bins": "12->12",
+    "containers": 1,
+    "can_fit": true,
+    "space": 0.2853,
+    "floor": 0.5131,
+    "weight": 0.0625,
+    "sample_outers": [
+      {
+        "type": "1.1米铁架",
+        "base": "1.1米铁架",
+        "LWH": {
+          "长": 1100.0,
+          "宽": 1100.0,
+          "高": 1500.0
+        },
+        "std": true,
+        "concl": "通过",
+        "items": [
+          "纸箱1"
+        ]
+      },
+      {
+        "type": "1.1米铁架",
+        "base": "1.1米铁架",
+        "LWH": {
+          "长": 1100.0,
+          "宽": 1100.0,
+          "高": 1500.0
+        },
+        "std": true,
+        "concl": "通过",
+        "items": [
+          "纸箱2"
+        ]
+      },
+      {
+        "type": "1.1米铁架",
+        "base": "1.1米铁架",
+        "LWH": {
+          "长": 1100.0,
+          "宽": 1100.0,
+          "高": 1500.0
+        },
+        "std": true,
+        "concl": "通过",
+        "items": [
+          "纸箱3"
+        ]
+      },
+      {
+        "type": "1.1米铁架",
+        "base": "1.1米铁架",
+        "LWH": {
+          "长": 1100.0,
+          "宽": 1100.0,
+          "高": 1500.0
+        },
+        "std": true,
+        "concl": "通过",
+        "items": [
+          "纸箱4"
+        ]
+      }
+    ],
+    "ok": true
+  },
+  {
+    "case": "web_small_cartons",
+    "opts": {
+      "standard_boxes": true,
+      "mix_mode": false,
+      "dense_mode": false
+    },
+    "boxes": 12,
+    "struct_fail": 0,
+    "struct_pass": 12,
+    "packing_mode": "standard_box_library",
+    "outer_m3": 21.78,
+    "cargo_m3": 4.032,
+    "crate_fill": 0.1851,
+    "type_counts": {
+      "1.1米铁架": 12
+    },
+    "standard_outer_hits": 12,
+    "mixed_content_boxes": 0,
+    "bins": "12->12",
+    "containers": 1,
+    "can_fit": true,
+    "space": 0.2853,
+    "floor": 0.5131,
+    "weight": 0.0625,
+    "sample_outers": [
+      {
+        "type": "1.1米铁架",
+        "base": "1.1米铁架",
+        "LWH": {
+          "长": 1100.0,
+          "宽": 1100.0,
+          "高": 1500.0
+        },
+        "std": true,
+        "concl": "通过",
+        "items": [
+          "纸箱1"
+        ]
+      },
+      {
+        "type": "1.1米铁架",
+        "base": "1.1米铁架",
+        "LWH": {
+          "长": 1100.0,
+          "宽": 1100.0,
+          "高": 1500.0
+        },
+        "std": true,
+        "concl": "通过",
+        "items": [
+          "纸箱2"
+        ]
+      },
+      {
+        "type": "1.1米铁架",
+        "base": "1.1米铁架",
+        "LWH": {
+          "长": 1100.0,
+          "宽": 1100.0,
+          "高": 1500.0
+        },
+        "std": true,
+        "concl": "通过",
+        "items": [
+          "纸箱3"
+        ]
+      },
+      {
+        "type": "1.1米铁架",
+        "base": "1.1米铁架",
+        "LWH": {
+          "长": 1100.0,
+          "宽": 1100.0,
+          "高": 1500.0
+        },
+        "std": true,
+        "concl": "通过",
+        "items": [
+          "纸箱4"
+        ]
+      }
+    ],
+    "ok": true
+  },
+  {
+    "case": "web_small_cartons",
+    "opts": {
+      "standard_boxes": false,
+      "mix_mode": false,
+      "dense_mode": false
+    },
+    "boxes": 12,
+    "struct_fail": 12,
+    "struct_pass": 0,
+    "packing_mode": "aggressive_fcl_two_layer+same_length_small_merge",
+    "outer_m3": 49.68,
+    "cargo_m3": 4.032,
+    "crate_fill": 0.0812,
+    "type_counts": {
+      "1.1米铁架": 12
+    },
+    "standard_outer_hits": 0,
+    "mixed_content_boxes": 0,
+    "bins": "12->12",
+    "containers": 1,
+    "can_fit": true,
+    "space": 0.6507,
+    "floor": 0.9753,
+    "weight": 0.0952,
+    "sample_outers": [
+      {
+        "type": "3米铁架(定制)",
+        "base": "1.1米铁架",
+        "LWH": {
+          "长": 3000.0,
+          "宽": 1150.0,
+          "高": 1200.0
+        },
+        "std": false,
+        "concl": "不通过",
+        "items": [
+          "纸箱1"
+        ]
+      },
+      {
+        "type": "3米铁架(定制)",
+        "base": "1.1米铁架",
+        "LWH": {
+          "长": 3000.0,
+          "宽": 1150.0,
+          "高": 1200.0
+        },
+        "std": false,
+        "concl": "不通过",
+        "items": [
+          "纸箱2"
+        ]
+      },
+      {
+        "type": "3米铁架(定制)",
+        "base": "1.1米铁架",
+        "LWH": {
+          "长": 3000.0,
+          "宽": 1150.0,
+          "高": 1200.0
+        },
+        "std": false,
+        "concl": "不通过",
+        "items": [
+          "纸箱3"
+        ]
+      },
+      {
+        "type": "3米铁架(定制)",
+        "base": "1.1米铁架",
+        "LWH": {
+          "长": 3000.0,
+          "宽": 1150.0,
+          "高": 1200.0
+        },
+        "std": false,
+        "concl": "不通过",
+        "items": [
+          "纸箱4"
+        ]
+      }
+    ],
+    "ok": false
+  }
+]

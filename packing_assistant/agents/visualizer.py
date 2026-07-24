@@ -111,15 +111,31 @@ def agent_visualizer(state: PackingState) -> Dict[str, Any]:
         },
     }
 
-    # 后端侧视 PNG 兜底（复用旧 draw_layout 风格）
+    # 后端侧视 PNG：多柜时每柜一张 + 总览
     image_data: Dict[str, Any] = {
         "top": {"path": None, "format": "png", "base64": None},
         "side": {"path": None, "format": "png", "base64": None},
         "front": {"path": None, "format": "png", "base64": None},
+        "side_per_container": [],
+        "side_overview": None,
     }
-    side_path = _draw_side_png(plan, boxes, ctype)
+    plan_for_draw = dict(plan)
+    side_path = _draw_side_png(plan_for_draw, boxes, ctype)
     if side_path:
         image_data["side"]["path"] = side_path
+    side_images = plan_for_draw.get("side_images") or {}
+    if side_images:
+        image_data["side_overview"] = side_images.get("overview_path")
+        image_data["side_per_container"] = side_images.get("per_container") or []
+        if side_images.get("primary_path"):
+            image_data["side"]["path"] = side_images["primary_path"]
+
+    layout_for_count = plan.get("layout") or []
+    n_c = len({int(it.get("container_no") or 1) for it in layout_for_count}) or 1
+    msg = f"三视角数据已生成（elements={len(top_el)}，柜数={n_c}"
+    if side_images.get("per_container"):
+        msg += f"，侧视图{len(side_images['per_container'])}张+总览"
+    msg += "）"
 
     return {
         "views": views,
@@ -128,7 +144,7 @@ def agent_visualizer(state: PackingState) -> Dict[str, Any]:
         "messages": [
             {
                 "role": "assistant",
-                "content": f"三视角数据已生成（elements={len(top_el)}）",
+                "content": msg,
             }
         ],
     }
@@ -138,28 +154,43 @@ def _draw_side_png(plan: Dict[str, Any], boxes: List[Dict[str, Any]], ctype: str
     layout = plan.get("layout") or []
     if not layout:
         return None
-    # 转为旧版 container_plan 供 matplotlib
-    old = {
-        "柜型": ctype,
-        "结论": plan.get("message") or "",
-        "空间利用率": f"{float(plan.get('space_utilization') or 0)*100:.0f}%",
-        "重量利用率": f"{float(plan.get('weight_utilization') or 0)*100:.0f}%",
-        "布局": [
-            {
-                "箱号": it.get("box_id"),
-                "起始位置_m": (it.get("position") or {}).get("x", 0) / 1000.0,
-                "长度_m": (it.get("size") or {}).get("dx", 0) / 1000.0,
-                "层级": it.get("layer") or 1,
-                "颜色": "blue",
-            }
-            for it in layout
-        ],
-    }
     try:
-        from packing_assistant.tools.visualize import draw_layout
+        from packing_assistant.tools.visualize import draw_layout, draw_layout_multi
 
         os.makedirs("output", exist_ok=True)
         ts = datetime.now().strftime("%Y%m%d_%H%M%S")
+        # 多柜：每柜一张 + 总览；返回总览路径作为主图
+        nos = {
+            int(it.get("container_no") or 1)
+            for it in layout
+        }
+        if len(nos) > 1:
+            multi = draw_layout_multi(
+                plan,
+                container_type=ctype,
+                output_dir="output",
+                prefix=f"side_{ts}",
+            )
+            # 把分柜路径挂到 plan 便于 finalize/xlsx
+            plan["side_images"] = multi
+            return multi.get("primary_path") or multi.get("overview_path")
+        # 单柜：保持原侧视图
+        old = {
+            "柜型": ctype,
+            "结论": plan.get("message") or "",
+            "空间利用率": f"{float(plan.get('space_utilization') or 0)*100:.0f}%",
+            "重量利用率": f"{float(plan.get('weight_utilization') or 0)*100:.0f}%",
+            "布局": [
+                {
+                    "箱号": it.get("box_id"),
+                    "起始位置_m": (it.get("position") or {}).get("x", 0) / 1000.0,
+                    "长度_m": (it.get("size") or {}).get("dx", 0) / 1000.0,
+                    "层级": it.get("layer") or 1,
+                    "颜色": "blue",
+                }
+                for it in layout
+            ],
+        }
         return draw_layout(old, output_dir="output", filename=f"side_{ts}.png")
     except Exception:
         return None
