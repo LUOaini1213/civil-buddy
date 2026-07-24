@@ -10,6 +10,30 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
 
+# 加载 .env / deepseek api，便于风险/汇总可选调用 DeepSeek
+try:
+    from dotenv import load_dotenv
+
+    load_dotenv(ROOT / ".env")
+except Exception:
+    pass
+for name in ("deepseek api.txt", "deepseek_api.txt"):
+    kf = ROOT / name
+    if kf.exists():
+        try:
+            key = kf.read_text(encoding="utf-8-sig").strip().splitlines()[0].strip()
+            if key.startswith("sk-"):
+                import os
+
+                os.environ.setdefault("DEEPSEEK_API_KEY", key)
+                os.environ.setdefault("OPENAI_API_KEY", key)
+                os.environ.setdefault("LLM_API_KEY", key)
+                os.environ.setdefault("OPENAI_BASE_URL", "https://api.deepseek.com")
+                os.environ.setdefault("LLM_MODEL", "deepseek-v4-flash")
+        except Exception:
+            pass
+        break
+
 from packing_assistant.agents import (
     agent_box_scheme,
     agent_evaluator,
@@ -95,13 +119,18 @@ def main() -> int:
     ]
 
     state = make_initial_state(
-        user_input="容积按箱体外廓实心长方体；9步原文",
+        user_input="容积按箱体外廓实心长方体；9步原文；标准箱+混装",
         materials=materials,
         container_type="40HQ",
         enable_auto_confirm=True,
         max_containers=2,
         session_id="nine-solid-vol",
     )
+    state["packing_options"] = {
+        "standard_boxes": True,
+        "mix_mode": True,
+        "max_box_net_kg": 1500,
+    }
 
     steps = []
     for num, name, node, fn in agents:
@@ -238,11 +267,19 @@ def main() -> int:
         if node == "visualizer":
             step["views_keys"] = list((state.get("views") or {}).keys())
             img = state.get("image_data") or {}
-            step["image_paths"] = (
-                {k: (v or {}).get("path") for k, v in img.items()}
-                if isinstance(img, dict)
-                else {}
-            )
+            paths = {}
+            if isinstance(img, dict):
+                for k, v in img.items():
+                    if isinstance(v, dict):
+                        paths[k] = v.get("path")
+                    elif isinstance(v, list):
+                        paths[k] = [
+                            (x or {}).get("path") if isinstance(x, dict) else x
+                            for x in v
+                        ]
+                    else:
+                        paths[k] = v
+            step["image_paths"] = paths
         if node == "finalize":
             step["final_response"] = state.get("final_response")
             step["status"] = state.get("status")
