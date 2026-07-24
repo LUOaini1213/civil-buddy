@@ -120,9 +120,14 @@ def _can_merge(
     box_name: str,
     *,
     aggressive: bool = True,
+    allow_reinforce: bool = False,
+    max_combined_net_kg: Optional[float] = None,
 ) -> bool:
     """合箱前做重量 + 结构几何试算；aggressive 时放宽填充率与试算箱外廓。"""
     trial = existing + [new_item]
+    net = sum(float(i.get("总重_kg") or 0) for i in trial)
+    if max_combined_net_kg is not None and net > float(max_combined_net_kg) + 1e-6:
+        return False
     if not _weight_fits(trial, box_name):
         return False
     spec = STANDARD_BOX_TYPES[box_name]
@@ -152,9 +157,34 @@ def _can_merge(
     )
     if not trial_struct.get("几何", {}).get("尺寸适配"):
         return False
-    if trial_struct.get("结论") == "不通过":
+    conclusion = trial_struct.get("结论") or "不通过"
+    if conclusion == "不通过":
+        return False
+    if conclusion == "需加强" and not (allow_reinforce or aggressive):
         return False
     return True
+
+
+def _bin_net_kg(b: Dict[str, Any]) -> float:
+    return sum(float(x.get("总重_kg") or 0) for x in (b.get("items") or []))
+
+
+def _bin_max_len(b: Dict[str, Any]) -> float:
+    items = b.get("items") or []
+    if not items:
+        return 0.0
+    return max(float(x["外尺寸_mm"]["长"]) for x in items)
+
+
+def _band_merge_net_cap(band: str) -> float:
+    """同长度档再合并时的单箱净重上限（结构可过的实务值）。"""
+    return {
+        "6m": 580.0,   # 约 60 支×9.5kg 级，已实测可过
+        "4m": 1200.0,
+        "3m": 1600.0,
+        "2m": 1800.0,
+        "1m": 2000.0,
+    }.get(band, 1500.0)
 
 
 def _cargo_envelope_mm(items: List[Dict[str, Any]]) -> Dict[str, float]:
@@ -440,15 +470,119 @@ def _upgrade_box(current: str, items: List[Dict[str, Any]]) -> Optional[str]:
     return None
 
 
+def _max_qty_for_crate(item: Dict[str, Any], max_box_net_kg: float) -> int:
+    """
+    单箱允许件数：净重上限 ∩ 可堆高度/截面启发式。
+    长杆沿柜长独排时，截面堆码高度控制在 ~1100mm；薄板叠层同理。
+    """
+    qty = max(int(item.get("数量") or 1), 1)
+    unit = float(item.get("单重_kg") or 0)
+    total = float(item.get("总重_kg") or unit * qty)
+    if unit <= 0 and qty > 0:
+        unit = total / qty
+    cap = float(max_box_net_kg or 3200)
+    by_w = qty
+    if unit > 0 and cap > 0:
+        by_w = max(1, int(cap // unit))
+
+    dims = item.get("外尺寸_mm") or {}
+    L = float(dims.get("长") or 0)
+    W = float(dims.get("宽") or 0)
+    H = float(dims.get("高") or 0)
+    # 薄板叠高
+    th = min(W, H) if W > 0 and H > 0 else max(H, 1)
+    face = max(W, H)
+    stack_h = 1100.0
+    by_geom = qty
+    if face >= 400 and th <= 80:
+        # 铝板/玻璃：短件允许更高叠层（单箱可高，不必为二层模块砍半）
+        panel_stack = 2000.0 if L <= 2200 else stack_h
+        by_geom = max(1, int(panel_stack // max(th, 1)))
+        if face >= 1000:
+            by_geom = min(by_geom, max(1, int(1200 // max(th, 1))))
+        if face >= 1100:
+            # 大面玻璃仍限层，防木箱超高失稳
+            by_geom = min(by_geom, 12)
+    elif L >= 3500:
+        # 长杆：截面堆码 + 跨距限重（6m 梁挠度敏感，净重宜 ≤800kg 级）
+        cross = max(min(W, H), 20)
+        n_w = max(1, int(1000 // cross))
+        n_h = max(1, int(stack_h // cross))
+        by_geom = max(1, n_w * n_h // 2)  # 半满，留绑扎
+        # 6m 框：预拆偏轻，便于同长度小箱再合并到 ~580kg
+        long_cap = 280.0 if L >= 5000 else 900.0
+        if unit > 0:
+            by_w = min(by_w, max(1, int(min(cap, long_cap) // unit)))
+    else:
+        by_geom = max(1, int(stack_h // max(min(W, H), 50)) * 4)
+
+    # 薄板叠层再限净重（板架弯曲）
+    if face >= 400 and th <= 80 and unit > 0:
+        by_w = min(by_w, max(1, int(min(cap, 1500.0) // unit)))
+
+    return max(1, min(qty, by_w, by_geom))
+
+
+def _explode_items_by_net_cap(
+    items: List[Dict[str, Any]],
+    max_box_net_kg: float,
+) -> List[Dict[str, Any]]:
+    """
+    按单箱净重 + 几何可装件数拆分材料行。
+    避免 2000+ 件铝型材合成 1 箱 20t / 超高堆 → 结构必败。
+    """
+    cap = float(max_box_net_kg or 0)
+    if cap <= 0:
+        return items
+    out: List[Dict[str, Any]] = []
+    for it in items:
+        qty = max(int(it.get("数量") or 1), 1)
+        unit = float(it.get("单重_kg") or 0)
+        total = float(it.get("总重_kg") or unit * qty)
+        if unit <= 0 and qty > 0:
+            unit = total / qty
+        max_qty = _max_qty_for_crate(it, cap)
+        if max_qty >= qty and total <= cap + 1e-6:
+            row = dict(it)
+            row["总重_kg"] = round(total, 3)
+            out.append(row)
+            continue
+        if max_qty >= qty:
+            max_qty = max(1, qty // 2)
+        remaining = qty
+        part = 0
+        base_name = str(it.get("名称") or "材料")
+        base_id = str(it.get("加工件编号") or it.get("id") or "M")
+        while remaining > 0:
+            part += 1
+            q = min(max_qty, remaining)
+            chunk = dict(it)
+            chunk["数量"] = q
+            chunk["单重_kg"] = unit
+            chunk["总重_kg"] = round(unit * q, 3)
+            chunk["名称"] = base_name if part == 1 and q == qty else f"{base_name}(拆{part})"
+            chunk["加工件编号"] = f"{base_id}-S{part}"
+            chunk["id"] = chunk["加工件编号"]
+            chunk["备注"] = (
+                str(it.get("备注") or "") + f";split_net<={cap:.0f}kg,q<={max_qty}"
+            ).strip(";")
+            out.append(chunk)
+            remaining -= q
+    return out
+
+
 def run_packing(
     materials: List[Dict[str, Any]],
     *,
     container_type: str = "40HQ",
+    max_box_net_kg: float = 3200.0,
+    revision_mode: bool = False,
 ) -> Dict[str, Any]:
     """
     装箱算法入口（含结构计算）。
 
     输入: materials 列表；container_type 影响二层模块高度
+    max_box_net_kg: 单箱净重上限，超则按件数拆分（结构打回后可再降）
     输出: {
       "箱子列表": [... 含 结构计算 ...],
       "结构汇总": {...}
@@ -458,7 +592,12 @@ def run_packing(
         return {"箱子列表": [], "结构汇总": _empty_summary()}
 
     ctype = container_type or "40HQ"
+    # 打回改箱：更严载荷，优先结构通过
+    cap = float(max_box_net_kg or 3200.0)
+    if revision_mode:
+        cap = min(cap, 2500.0)
     items = [_normalize_material(m, i) for i, m in enumerate(materials, start=1)]
+    items = _explode_items_by_net_cap(items, cap)
     # 长件优先，但激进合箱
     items_sorted = sorted(items, key=lambda x: (-x["外尺寸_mm"]["长"], -x["总重_kg"]))
 
@@ -467,7 +606,11 @@ def run_packing(
     for it in items_sorted:
         placed = False
         # 仅极端超长/超重强制独箱
-        solo = it["外尺寸_mm"]["长"] >= 5800 or it["总重_kg"] >= 2500
+        # 超长件强制独箱，避免合箱后 6m 梁超挠度/强度
+        solo = (
+            it["外尺寸_mm"]["长"] >= 5000
+            or it["总重_kg"] >= min(2500.0, cap * 0.9)
+        )
         if not solo:
             cand = sorted(
                 bins,
@@ -493,8 +636,12 @@ def run_packing(
             box_name = _pick_box_type_for_item(it)
             bins.append({"box_name": box_name, "items": [it]})
 
-    # 二轮：仅合并「同长度档」小箱，避免合成过少箱导致柜内空洞变大
+    bins_before_merge = len(bins)
+    # 二轮：同长度档合并
     bins = _aggressive_merge_bins(bins, same_length_band_only=True)
+    # 三轮：同长度「小箱」再合并（轻箱优先，结构允许需加强）
+    bins = _merge_same_length_small_bins(bins)
+    bins_after_merge = len(bins)
 
     boxes: List[Dict[str, Any]] = []
     for i, b in enumerate(bins, start=1):
@@ -508,8 +655,14 @@ def run_packing(
         )
 
     summary = _structure_summary(boxes)
-    summary["packing_mode"] = "aggressive_fcl_two_layer"
+    summary["packing_mode"] = "aggressive_fcl_two_layer+same_length_small_merge"
     summary["container_type_for_module"] = ctype
+    summary["max_box_net_kg"] = cap
+    summary["revision_mode"] = bool(revision_mode)
+    summary["item_chunks_after_split"] = len(items)
+    summary["bins_before_merge"] = bins_before_merge
+    summary["bins_after_merge"] = bins_after_merge
+    summary["merged_away"] = max(0, bins_before_merge - bins_after_merge)
     return {"箱子列表": boxes, "结构汇总": summary}
 
 
@@ -525,6 +678,43 @@ def _length_band(mm: float) -> str:
     return "1m"
 
 
+def _try_absorb_bin(
+    host: Dict[str, Any],
+    guest: Dict[str, Any],
+    *,
+    allow_reinforce: bool = True,
+    max_combined_net_kg: Optional[float] = None,
+) -> Optional[Dict[str, Any]]:
+    """尝试把 guest 整箱并入 host；成功返回新 bin，失败 None。"""
+    trial_items = list(host["items"])
+    trial_name = host["box_name"]
+    for it in guest["items"]:
+        if _can_merge(
+            trial_items,
+            it,
+            trial_name,
+            aggressive=True,
+            allow_reinforce=allow_reinforce,
+            max_combined_net_kg=max_combined_net_kg,
+        ):
+            trial_items.append(it)
+            continue
+        up = _upgrade_box(trial_name, trial_items + [it])
+        if up and _can_merge(
+            trial_items,
+            it,
+            up,
+            aggressive=True,
+            allow_reinforce=allow_reinforce,
+            max_combined_net_kg=max_combined_net_kg,
+        ):
+            trial_name = up
+            trial_items.append(it)
+            continue
+        return None
+    return {"box_name": trial_name, "items": trial_items}
+
+
 def _aggressive_merge_bins(
     bins: List[Dict[str, Any]],
     *,
@@ -538,42 +728,104 @@ def _aggressive_merge_bins(
     while changed and guard < 12:
         guard += 1
         changed = False
-        bins = sorted(
-            bins,
-            key=lambda b: -sum(float(x.get("总重_kg") or 0) for x in b["items"]),
-        )
+        bins = sorted(bins, key=lambda b: -_bin_net_kg(b))
         out: List[Dict[str, Any]] = []
         used = [False] * len(bins)
         for i, bi in enumerate(bins):
             if used[i]:
                 continue
             cur = {"box_name": bi["box_name"], "items": list(bi["items"])}
-            max_i = max(float(x["外尺寸_mm"]["长"]) for x in cur["items"])
+            max_i = _bin_max_len(cur)
+            band_i = _length_band(max_i)
+            net_cap = _band_merge_net_cap(band_i)
             for j in range(i + 1, len(bins)):
                 if used[j]:
                     continue
                 bj = bins[j]
-                max_j = max(float(x["外尺寸_mm"]["长"]) for x in bj["items"])
-                if same_length_band_only and _length_band(max_i) != _length_band(max_j):
+                max_j = _bin_max_len(bj)
+                if same_length_band_only and band_i != _length_band(max_j):
                     continue
-                ok = True
-                trial_items = list(cur["items"])
-                trial_name = cur["box_name"]
-                for it in bj["items"]:
-                    if _can_merge(trial_items, it, trial_name, aggressive=True):
-                        trial_items.append(it)
-                        continue
-                    up = _upgrade_box(trial_name, trial_items + [it])
-                    if up and _can_merge(trial_items, it, up, aggressive=True):
-                        trial_name = up
-                        trial_items.append(it)
-                        continue
-                    ok = False
-                    break
-                if ok:
-                    cur["items"] = trial_items
-                    cur["box_name"] = trial_name
-                    max_i = max(float(x["外尺寸_mm"]["长"]) for x in cur["items"])
+                if _bin_net_kg(cur) + _bin_net_kg(bj) > net_cap + 1e-6:
+                    continue
+                merged = _try_absorb_bin(
+                    cur, bj, allow_reinforce=True, max_combined_net_kg=net_cap
+                )
+                if merged:
+                    cur = merged
+                    max_i = _bin_max_len(cur)
+                    band_i = _length_band(max_i)
+                    net_cap = _band_merge_net_cap(band_i)
+                    used[j] = True
+                    changed = True
+            used[i] = True
+            out.append(cur)
+        bins = out
+    return bins
+
+
+def _merge_same_length_small_bins(
+    bins: List[Dict[str, Any]],
+    *,
+    small_net_ratio: float = 0.72,
+    max_rounds: int = 16,
+) -> List[Dict[str, Any]]:
+    """
+    同长度小箱再合并：
+    - 仅合同长度档
+    - 优先合并「轻箱」（净重 < 档位上限 × small_net_ratio）
+    - 合并后净重不超过档位上限
+    - 结构「需加强」允许，硬「不通过」不允许
+    """
+    if len(bins) <= 1:
+        return bins
+
+    def is_small(b: Dict[str, Any]) -> bool:
+        band = _length_band(_bin_max_len(b))
+        cap = _band_merge_net_cap(band)
+        return _bin_net_kg(b) <= cap * small_net_ratio + 1e-6
+
+    changed = True
+    guard = 0
+    while changed and guard < max_rounds:
+        guard += 1
+        changed = False
+        # 轻箱优先做 host，便于吞并其它轻箱
+        bins = sorted(bins, key=lambda b: (_bin_net_kg(b), -_bin_max_len(b)))
+        out: List[Dict[str, Any]] = []
+        used = [False] * len(bins)
+        for i, bi in enumerate(bins):
+            if used[i]:
+                continue
+            cur = {"box_name": bi["box_name"], "items": list(bi["items"])}
+            band = _length_band(_bin_max_len(cur))
+            net_cap = _band_merge_net_cap(band)
+            # 非小箱也可作 host 吃小 guest
+            for j in range(i + 1, len(bins)):
+                if used[j]:
+                    continue
+                bj = bins[j]
+                if _length_band(_bin_max_len(bj)) != band:
+                    continue
+                # 至少一方是小箱，避免两大箱硬刚
+                if not (is_small(cur) or is_small(bj)):
+                    continue
+                if _bin_net_kg(cur) + _bin_net_kg(bj) > net_cap + 1e-6:
+                    continue
+                merged = _try_absorb_bin(
+                    cur, bj, allow_reinforce=True, max_combined_net_kg=net_cap
+                )
+                if not merged:
+                    # host/guest 对调再试（箱型不同时有时更易过）
+                    merged = _try_absorb_bin(
+                        {"box_name": bj["box_name"], "items": list(bj["items"])},
+                        cur,
+                        allow_reinforce=True,
+                        max_combined_net_kg=net_cap,
+                    )
+                if merged:
+                    cur = merged
+                    band = _length_band(_bin_max_len(cur))
+                    net_cap = _band_merge_net_cap(band)
                     used[j] = True
                     changed = True
             used[i] = True

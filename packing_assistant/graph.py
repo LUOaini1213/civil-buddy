@@ -44,9 +44,22 @@ def _after_evaluator(
     state: PackingState,
 ) -> Literal["planner", "risk_compliance"]:
     ev = state.get("evaluation") or {}
+    # 结构不通过不能靠加柜重规划解决，直接进风险合规打回
+    if ev.get("decision") == "REJECT_STRUCTURE" or ev.get("structure_fail_box_ids"):
+        return "risk_compliance"
     if ev.get("need_replan") and int(state.get("replan_round") or 0) <= 2:
         return "planner"
     return "risk_compliance"
+
+
+def _after_risk(
+    state: PackingState,
+) -> Literal["visualizer", "finalize"]:
+    """
+    有硬阻断时仍出可视化便于看布局，但 finalize 会标 rejected/打回。
+    （自动回 box_scheme 需跨 TeamA 会话，由 harness/HITL 承接 reject_to。）
+    """
+    return "visualizer"
 
 
 def build_team_a_graph() -> StateGraph:

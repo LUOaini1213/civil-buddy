@@ -1,0 +1,535 @@
+{
+  "note": "BGL/FAC0007/FAC0012/BAL 真实尺寸；FAC0008 按文字页样例估算 906 件；排除已发货",
+  "materials_file": "E:\\REDACTED-PATH\\output\\por_vmu_nine\\materials_por_vmu_real_fac8est.xlsx",
+  "materials_count": 143,
+  "net_kg": 39497.4,
+  "by_spec_qty": {
+    "FAC0008_estimated": 906,
+    "FAC0007": 22,
+    "FAC0012": 40,
+    "BGL0003": 61,
+    "BAL0004": 1206,
+    "BAL0005": 265,
+    "BAL0020": 12
+  },
+  "rounds": [
+    {
+      "snapshot": {
+        "round": 0,
+        "max_containers": 4,
+        "max_box_net_kg": 800.0,
+        "packing_plan_id": "PKG-20260724_181814_93358012",
+        "boxes": 43,
+        "struct_fail": 0,
+        "can_fit": false,
+        "containers_used": 4,
+        "space": 0.2892,
+        "floor": 0.4998,
+        "weight": 0.218,
+        "risk_decision": "REJECT",
+        "risk_level": "high",
+        "ship_ok": false,
+        "status": "rejected",
+        "phase": "need_revision"
+      },
+      "steps": [
+        {
+          "n": 1,
+          "name": "主控智能体",
+          "node": "orchestrator",
+          "message": "【主控·开头】9 智能体启动 | intent=full_process | 材料=143 行 | 推荐柜型=40GP（采纳=True，当前=40GP）| 理由：最长件/箱 7200mm > 5900，排除 20GP；40GP 预估体积可能超实务可用容；40GP 可能超重；单柜重量紧张，可能需多柜；对照：原先倾向 40HQ，综合体积/重量后推荐 40GP | 策略：二层堆码优先 + 空间/重量双利用率",
+          "phase": "team_a_running"
+        },
+        {
+          "n": 2,
+          "name": "材料解析智能体",
+          "node": "material_parser",
+          "message": "材料解析完成(inject)：2512 件 / 39497.4 kg",
+          "phase": "team_a_running"
+        },
+        {
+          "n": 3,
+          "name": "结构计算智能体",
+          "node": "structure",
+          "message": "结构约束完成：6 组推荐箱型约束（本步仅建议；半严格校核在装箱成箱后执行）",
+          "phase": "team_a_running"
+        },
+        {
+          "n": 4,
+          "name": "装箱方案智能体",
+          "node": "box_scheme",
+          "message": "装箱完成：43 箱 — 全部箱结构计算通过",
+          "phase": "team_a_running"
+        },
+        {
+          "n": 0,
+          "name": "确认闸门",
+          "node": "present_team_a",
+          "message": "团队A完成，自动确认 40HQ",
+          "phase": "team_b_running"
+        },
+        {
+          "n": 5,
+          "name": "规划智能体",
+          "node": "planner",
+          "message": "规划完成：40HQ ×≤4，优先序 43 箱",
+          "phase": "team_b_running"
+        },
+        {
+          "n": 6,
+          "name": "装载执行智能体",
+          "node": "loader",
+          "message": "装载完成 engine=python-laff-3d can_fit=False 容积(实心外廓)29% 货88.31m³/柜76.4m³ 最满柜31% 底面积50% 重量22% [python-laff-3d]",
+          "phase": "team_b_running"
+        },
+        {
+          "n": 7,
+          "name": "评估优化智能体",
+          "node": "evaluator",
+          "message": "评估：score=58.7 passed=False replan=True | 实心容积29%(子分68) 底面积50%(子分77) 重量22%(子分37) 综合56",
+          "phase": "team_b_running"
+        },
+        {
+          "n": 8,
+          "name": "风险合规智能体",
+          "node": "risk_compliance",
+          "message": "风险合规：level=high score=5 passed=False decision=REJECT blockers=28 ⛔打回→await_user_confirm：存在合规阻断项，打回人工确认/调整后重跑",
+          "phase": "need_revision"
+        },
+        {
+          "n": 9,
+          "name": "可视化智能体",
+          "node": "visualizer",
+          "message": "三视角数据已生成（elements=16）",
+          "phase": "need_revision"
+        },
+        {
+          "n": 0,
+          "name": "主控汇总",
+          "node": "finalize",
+          "message": "# 拼柜方案结果\n\n## ⛔ 主控裁决：打回 / 不可出运\n\n**能否出运**：**否**\n**合规决策**：REJECT（level=high）\n**打回目标**：await_user_confirm\n**打回原因**：存在合规阻断项，打回人工确认/调整后重跑\n**阻断项**：\n- 未完全装入: BOX-28, BOX-27, BOX-26, BOX-25, BOX-24, BOX-23, BOX-22, BOX-21, BOX-20, BOX-19, BOX-18, BOX-16, BOX-15, BOX-13, BOX-12, BOX-11, BOX-09, BOX-10, BOX-08, BOX-07…共27件\n- BOX-28 未装入集装箱\n- BOX-27 未装入集装箱\n- BOX-26 未装入集装箱\n- BOX-25 未装入集装箱\n- BOX-24 未装入集装箱\n- BOX-23 未装入集装箱\n- BOX-22 未装入集装箱\n- BOX-21 未装入集装箱\n- BOX-20 未装入集装箱\n- BOX-19 未装入集装箱\n- BOX-18 未装入集装箱\n\n> 装得下（can_fit）不等于可出运。存在结构/合规阻断时必须整改后重跑 Team A→确认→Team B。\n\n**主控流水线**：9 智能体（含主控，首尾选柜）\n**方案编号（装箱）**：PKG-20260724_181814_93358012\n**柜型（实际）**：40HQ\n**主控开头推荐**：40GP\n**主控结尾推荐**：40GP ⚠️ 建议换柜为 40GP\n**箱数**：43\n**能否装下（几何）**：False\n**能否出运（合规）**：否\n**用柜数**：4\n**空间利用率（箱体外廓实心长方体）**：29%（最满柜 31%，底面积均 50%；货 88.31 m³ / 柜 76.4 m³）\n**重量利用率**：22%\n**堆码**：二层箱数 0/16；策略=优先二层（矮箱/铁笼上二层，超长仅底层）\n**利用综合分**：55.7 （空间子分 68.2 / 重量子分 37.4）\n**评估分**：58.7（passed=False decision=REPLAN）\n**合规分**：5（level=high decision=REJECT）\n\n## 主控选柜说明\n- 最长件/箱 7400mm > 5900，排除 20GP\n- 40GP 预估体积可能超实务可用容\n- 40GP 可能超重\n- 单柜重量紧张，可能需多柜\n- 对照：原先倾向 40HQ，综合体积/重量后推荐 40GP\n\n## 风险摘要\n- BOX-02 超长件，沿柜长摆放并加强绑扎\n- BOX-03 超长件，沿柜长摆放并加强绑扎\n- BOX-04 超长件，沿柜长摆放并加强绑扎\n- BOX-06 超长件，沿柜长摆放并加强绑扎\n- BOX-07 超长件，沿柜长摆放并加强绑扎\n- BOX-08 超长件，沿柜长摆放并加强绑扎\n- BOX-09 超长件，沿柜长摆放并加强绑扎\n- BOX-10 超长件，沿柜长摆放并加强绑扎\n- BOX-11 超长件，沿柜长摆放并加强绑扎\n- BOX-12 超长件，沿柜长摆放并加强绑扎\n- BOX-13 超长件，沿柜长摆放并加强绑扎\n- BOX-18 超长件，沿柜长摆放并加强绑扎\n- BOX-18 单箱毛重 1237kg，优先铁箱/钢骨箱\n- BOX-19 超长件，沿柜长摆放并加强绑扎\n- BOX-19 单箱毛重 1263kg，优先铁箱/钢骨箱\n- BOX-20 超长件，沿柜长摆放并加强绑扎\n- BOX-20 单箱毛重 1266kg，优先铁箱/钢骨箱\n- BOX-21 超长件，沿柜长摆放并加强绑扎\n- BOX-21 单箱毛重 1266kg，优先铁箱/钢骨箱\n- BOX-22 超长件，沿柜长摆放并加强绑扎\n\n## 合规说明\n存在阻断项，需整改后再出运。 合规分 5（high）。空间 29%，重量 22%，can_fit=False。 关注：超长件，沿柜长摆放并加强绑扎；超长件，沿柜长摆放并加强绑扎；超长件，沿柜长摆放并加强绑扎\n\n## 布局\n- 三视角数据：views.top/side/front 已生成\n- 侧视 PNG：output\\side_20260724_181814.png\n- 装载引擎：python-laff-3d\n\n---\n主控复核：当前 40HQ，推荐 40GP（建议换柜）\n**流程状态：已打回** → 请按「await_user_confirm」整改后重跑；在合规通过前不得作为正式出运方案。",
+          "phase": "need_revision"
+        }
+      ],
+      "final": "# 拼柜方案结果\n\n## ⛔ 主控裁决：打回 / 不可出运\n\n**能否出运**：**否**\n**合规决策**：REJECT（level=high）\n**打回目标**：await_user_confirm\n**打回原因**：存在合规阻断项，打回人工确认/调整后重跑\n**阻断项**：\n- 未完全装入: BOX-28, BOX-27, BOX-26, BOX-25, BOX-24, BOX-23, BOX-22, BOX-21, BOX-20, BOX-19, BOX-18, BOX-16, BOX-15, BOX-13, BOX-12, BOX-11, BOX-09, BOX-10, BOX-08, BOX-07…共27件\n- BOX-28 未装入集装箱\n- BOX-27 未装入集装箱\n- BOX-26 未装入集装箱\n- BOX-25 未装入集装箱\n- BOX-24 未装入集装箱\n- BOX-23 未装入集装箱\n- BOX-22 未装入集装箱\n- BOX-21 未装入集装箱\n- BOX-20 未装入集装箱\n- BOX-19 未装入集装箱\n- BOX-18 未装入集装箱\n\n> 装得下（can_fit）不等于可出运。存在结构/合规阻断时必须整改后重跑 Team A→确认→Team B。\n\n**主控流水线**：9 智能体（含主控，首尾选柜）\n**方案编号（装箱）**：PKG-20260724_181814_93358012\n**柜型（实际）**：40HQ\n**主控开头推荐**：40GP\n**主控结尾推荐**：40GP ⚠️ 建议换柜为 40GP\n**箱数**：43\n**能否装下（几何）**：False\n**能否出运（合规）**：否\n**用柜数**：4\n**空间利用率（箱体外廓实心长方体）**：29%（最满柜 31%，底面积均 50%；货 88.31 m³ / 柜 76.4 m³）\n**重量利用率**：22%\n**堆码**：二层箱数 0/16；策略=优先二层（矮箱/铁笼上二层，超长仅底层）\n**利用综合分**：55.7 （空间子分 68.2 / 重量子分 37.4）\n**评估分**：58.7（passed=False decision=REPLAN）\n**合规分**：5（level=high decision=REJECT）\n\n## 主控选柜说明\n- 最长件/箱 7400mm > 5900，排除 20GP\n- 40GP 预估体积可能超实务可用容\n- 40GP 可能超重\n- 单柜重量紧张，可能需多柜\n- 对照：原先倾向 40HQ，综合体积/重量后推荐 40GP\n\n## 风险摘要\n- BOX-02 超长件，沿柜长摆放并加强绑扎\n- BOX-03 超长件，沿柜长摆放并加强绑扎\n- BOX-04 超长件，沿柜长摆放并加强绑扎\n- BOX-06 超长件，沿柜长摆放并加强绑扎\n- BOX-07 超长件，沿柜长摆放并加强绑扎\n- BOX-08 超长件，沿柜长摆放并加强绑扎\n- BOX-09 超长件，沿柜长摆放并加强绑扎\n- BOX-10 超长件，沿柜长摆放并加强绑扎\n- BOX-11 超长件，沿柜长摆放并加强绑扎\n- BOX-12 超长件，沿柜长摆放并加强绑扎\n- BOX-13 超长件，沿柜长摆放并加强绑扎\n- BOX-18 超长件，沿柜长摆放并加强绑扎\n- BOX-18 单箱毛重 1237kg，优先铁箱/钢骨箱\n- BOX-19 超长件，沿柜长摆放并加强绑扎\n- BOX-19 单箱毛重 1263kg，优先铁箱/钢骨箱\n- BOX-20 超长件，沿柜长摆放并加强绑扎\n- BOX-20 单箱毛重 1266kg，优先铁箱/钢骨箱\n- BOX-21 超长件，沿柜长摆放并加强绑扎\n- BOX-21 单箱毛重 1266kg，优先铁箱/钢骨箱\n- BOX-22 超长件，沿柜长摆放并加强绑扎\n\n## 合规说明\n存在阻断项，需整改后再出运。 合规分 5（high）。空间 29%，重量 22%，can_fit=False。 关注：超长件，沿柜长摆放并加强绑扎；超长件，沿柜长摆放并加强绑扎；超长件，沿柜长摆放并加强绑扎\n\n## 布局\n- 三视角数据：views.top/side/front 已生成\n- 侧视 PNG：output\\side_20260724_181814.png\n- 装载引擎：python-laff-3d\n\n---\n主控复核：当前 40HQ，推荐 40GP（建议换柜）\n**流程状态：已打回** → 请按「await_user_confirm」整改后重跑；在合规通过前不得作为正式出运方案。"
+    },
+    {
+      "snapshot": {
+        "round": 1,
+        "max_containers": 7,
+        "max_box_net_kg": 800.0,
+        "packing_plan_id": "PKG-20260724_181815_4e7b7cee",
+        "boxes": 43,
+        "struct_fail": 0,
+        "can_fit": false,
+        "containers_used": 7,
+        "space": 0.2594,
+        "floor": 0.4888,
+        "weight": 0.177,
+        "risk_decision": "REJECT",
+        "risk_level": "high",
+        "ship_ok": false,
+        "status": "rejected",
+        "phase": "need_revision"
+      },
+      "steps": [
+        {
+          "n": 1,
+          "name": "主控智能体",
+          "node": "orchestrator",
+          "message": "【主控·开头】9 智能体启动 | intent=full_process | 材料=143 行 | 推荐柜型=40GP（采纳=True，当前=40GP）| 理由：最长件/箱 7200mm > 5900，排除 20GP；40GP 预估体积可能超实务可用容；40GP 可能超重；单柜重量紧张，可能需多柜；对照：原先倾向 40HQ，综合体积/重量后推荐 40GP | 策略：二层堆码优先 + 空间/重量双利用率",
+          "phase": "team_a_running"
+        },
+        {
+          "n": 2,
+          "name": "材料解析智能体",
+          "node": "material_parser",
+          "message": "材料解析完成(inject)：2512 件 / 39497.4 kg",
+          "phase": "team_a_running"
+        },
+        {
+          "n": 3,
+          "name": "结构计算智能体",
+          "node": "structure",
+          "message": "结构约束完成：6 组推荐箱型约束（本步仅建议；半严格校核在装箱成箱后执行）",
+          "phase": "team_a_running"
+        },
+        {
+          "n": 4,
+          "name": "装箱方案智能体",
+          "node": "box_scheme",
+          "message": "装箱完成：43 箱 — 全部箱结构计算通过（改箱模式 max_net=800kg 拆分后料行=205）",
+          "phase": "team_a_running"
+        },
+        {
+          "n": 0,
+          "name": "确认闸门",
+          "node": "present_team_a",
+          "message": "团队A完成，自动确认 40HQ",
+          "phase": "team_b_running"
+        },
+        {
+          "n": 5,
+          "name": "规划智能体",
+          "node": "planner",
+          "message": "规划完成：40HQ ×≤7，优先序 43 箱",
+          "phase": "team_b_running"
+        },
+        {
+          "n": 6,
+          "name": "装载执行智能体",
+          "node": "loader",
+          "message": "装载完成 engine=python-laff-3d can_fit=False 容积(实心外廓)26% 货138.61m³/柜76.4m³ 最满柜31% 底面积49% 重量18% [python-laff-3d]",
+          "phase": "team_b_running"
+        },
+        {
+          "n": 7,
+          "name": "评估优化智能体",
+          "node": "evaluator",
+          "message": "评估：score=57.7 passed=False replan=True | 实心容积26%(子分69) 底面积49%(子分76) 重量18%(子分30) 综合52",
+          "phase": "team_b_running"
+        },
+        {
+          "n": 8,
+          "name": "风险合规智能体",
+          "node": "risk_compliance",
+          "message": "风险合规：level=high score=5 passed=False decision=REJECT blockers=20 ⛔打回→await_user_confirm：存在合规阻断项，打回人工确认/调整后重跑",
+          "phase": "need_revision"
+        },
+        {
+          "n": 9,
+          "name": "可视化智能体",
+          "node": "visualizer",
+          "message": "三视角数据已生成（elements=24）",
+          "phase": "need_revision"
+        },
+        {
+          "n": 0,
+          "name": "主控汇总",
+          "node": "finalize",
+          "message": "# 拼柜方案结果\n\n## ⛔ 主控裁决：打回 / 不可出运\n\n**能否出运**：**否**\n**合规决策**：REJECT（level=high）\n**打回目标**：await_user_confirm\n**打回原因**：存在合规阻断项，打回人工确认/调整后重跑\n**阻断项**：\n- 未完全装入: BOX-22, BOX-21, BOX-20, BOX-19, BOX-18, BOX-15, BOX-13, BOX-12, BOX-11, BOX-09, BOX-10, BOX-08, BOX-07, BOX-06, BOX-04, BOX-05, BOX-03, BOX-02, BOX-01\n- BOX-22 未装入集装箱\n- BOX-21 未装入集装箱\n- BOX-20 未装入集装箱\n- BOX-19 未装入集装箱\n- BOX-18 未装入集装箱\n- BOX-15 未装入集装箱\n- BOX-13 未装入集装箱\n- BOX-12 未装入集装箱\n- BOX-11 未装入集装箱\n- BOX-09 未装入集装箱\n- BOX-10 未装入集装箱\n\n> 装得下（can_fit）不等于可出运。存在结构/合规阻断时必须整改后重跑 Team A→确认→Team B。\n\n**主控流水线**：9 智能体（含主控，首尾选柜）\n**方案编号（装箱）**：PKG-20260724_181815_4e7b7cee\n**柜型（实际）**：40HQ\n**主控开头推荐**：40GP\n**主控结尾推荐**：40GP ⚠️ 建议换柜为 40GP\n**箱数**：43\n**能否装下（几何）**：False\n**能否出运（合规）**：否\n**用柜数**：7\n**空间利用率（箱体外廓实心长方体）**：26%（最满柜 31%，底面积均 49%；货 138.61 m³ / 柜 76.4 m³）\n**重量利用率**：18%\n**堆码**：二层箱数 0/24；策略=优先二层（矮箱/铁笼上二层，超长仅底层）\n**利用综合分**：52.5 （空间子分 68.6 / 重量子分 30.3）\n**评估分**：57.7（passed=False decision=REPLAN）\n**合规分**：5（level=high decision=REJECT）\n\n## 主控选柜说明\n- 最长件/箱 7400mm > 5900，排除 20GP\n- 40GP 预估体积可能超实务可用容\n- 40GP 可能超重\n- 单柜重量紧张，可能需多柜\n- 对照：原先倾向 40HQ，综合体积/重量后推荐 40GP\n\n## 风险摘要\n- BOX-02 超长件，沿柜长摆放并加强绑扎\n- BOX-03 超长件，沿柜长摆放并加强绑扎\n- BOX-04 超长件，沿柜长摆放并加强绑扎\n- BOX-06 超长件，沿柜长摆放并加强绑扎\n- BOX-07 超长件，沿柜长摆放并加强绑扎\n- BOX-08 超长件，沿柜长摆放并加强绑扎\n- BOX-09 超长件，沿柜长摆放并加强绑扎\n- BOX-10 超长件，沿柜长摆放并加强绑扎\n- BOX-11 超长件，沿柜长摆放并加强绑扎\n- BOX-12 超长件，沿柜长摆放并加强绑扎\n- BOX-13 超长件，沿柜长摆放并加强绑扎\n- BOX-18 超长件，沿柜长摆放并加强绑扎\n- BOX-18 单箱毛重 1237kg，优先铁箱/钢骨箱\n- BOX-19 超长件，沿柜长摆放并加强绑扎\n- BOX-19 单箱毛重 1263kg，优先铁箱/钢骨箱\n- BOX-20 超长件，沿柜长摆放并加强绑扎\n- BOX-20 单箱毛重 1266kg，优先铁箱/钢骨箱\n- BOX-21 超长件，沿柜长摆放并加强绑扎\n- BOX-21 单箱毛重 1266kg，优先铁箱/钢骨箱\n- BOX-22 超长件，沿柜长摆放并加强绑扎\n\n## 合规说明\n存在阻断项，需整改后再出运。 合规分 5（high）。空间 26%，重量 18%，can_fit=False。 关注：超长件，沿柜长摆放并加强绑扎；超长件，沿柜长摆放并加强绑扎；超长件，沿柜长摆放并加强绑扎\n\n## 布局\n- 三视角数据：views.top/side/front 已生成\n- 侧视 PNG：output\\side_20260724_181815.png\n- 装载引擎：python-laff-3d\n\n---\n主控复核：当前 40HQ，推荐 40GP（建议换柜）\n**流程状态：已打回** → 请按「await_user_confirm」整改后重跑；在合规通过前不得作为正式出运方案。",
+          "phase": "need_revision"
+        }
+      ],
+      "final": "# 拼柜方案结果\n\n## ⛔ 主控裁决：打回 / 不可出运\n\n**能否出运**：**否**\n**合规决策**：REJECT（level=high）\n**打回目标**：await_user_confirm\n**打回原因**：存在合规阻断项，打回人工确认/调整后重跑\n**阻断项**：\n- 未完全装入: BOX-22, BOX-21, BOX-20, BOX-19, BOX-18, BOX-15, BOX-13, BOX-12, BOX-11, BOX-09, BOX-10, BOX-08, BOX-07, BOX-06, BOX-04, BOX-05, BOX-03, BOX-02, BOX-01\n- BOX-22 未装入集装箱\n- BOX-21 未装入集装箱\n- BOX-20 未装入集装箱\n- BOX-19 未装入集装箱\n- BOX-18 未装入集装箱\n- BOX-15 未装入集装箱\n- BOX-13 未装入集装箱\n- BOX-12 未装入集装箱\n- BOX-11 未装入集装箱\n- BOX-09 未装入集装箱\n- BOX-10 未装入集装箱\n\n> 装得下（can_fit）不等于可出运。存在结构/合规阻断时必须整改后重跑 Team A→确认→Team B。\n\n**主控流水线**：9 智能体（含主控，首尾选柜）\n**方案编号（装箱）**：PKG-20260724_181815_4e7b7cee\n**柜型（实际）**：40HQ\n**主控开头推荐**：40GP\n**主控结尾推荐**：40GP ⚠️ 建议换柜为 40GP\n**箱数**：43\n**能否装下（几何）**：False\n**能否出运（合规）**：否\n**用柜数**：7\n**空间利用率（箱体外廓实心长方体）**：26%（最满柜 31%，底面积均 49%；货 138.61 m³ / 柜 76.4 m³）\n**重量利用率**：18%\n**堆码**：二层箱数 0/24；策略=优先二层（矮箱/铁笼上二层，超长仅底层）\n**利用综合分**：52.5 （空间子分 68.6 / 重量子分 30.3）\n**评估分**：57.7（passed=False decision=REPLAN）\n**合规分**：5（level=high decision=REJECT）\n\n## 主控选柜说明\n- 最长件/箱 7400mm > 5900，排除 20GP\n- 40GP 预估体积可能超实务可用容\n- 40GP 可能超重\n- 单柜重量紧张，可能需多柜\n- 对照：原先倾向 40HQ，综合体积/重量后推荐 40GP\n\n## 风险摘要\n- BOX-02 超长件，沿柜长摆放并加强绑扎\n- BOX-03 超长件，沿柜长摆放并加强绑扎\n- BOX-04 超长件，沿柜长摆放并加强绑扎\n- BOX-06 超长件，沿柜长摆放并加强绑扎\n- BOX-07 超长件，沿柜长摆放并加强绑扎\n- BOX-08 超长件，沿柜长摆放并加强绑扎\n- BOX-09 超长件，沿柜长摆放并加强绑扎\n- BOX-10 超长件，沿柜长摆放并加强绑扎\n- BOX-11 超长件，沿柜长摆放并加强绑扎\n- BOX-12 超长件，沿柜长摆放并加强绑扎\n- BOX-13 超长件，沿柜长摆放并加强绑扎\n- BOX-18 超长件，沿柜长摆放并加强绑扎\n- BOX-18 单箱毛重 1237kg，优先铁箱/钢骨箱\n- BOX-19 超长件，沿柜长摆放并加强绑扎\n- BOX-19 单箱毛重 1263kg，优先铁箱/钢骨箱\n- BOX-20 超长件，沿柜长摆放并加强绑扎\n- BOX-20 单箱毛重 1266kg，优先铁箱/钢骨箱\n- BOX-21 超长件，沿柜长摆放并加强绑扎\n- BOX-21 单箱毛重 1266kg，优先铁箱/钢骨箱\n- BOX-22 超长件，沿柜长摆放并加强绑扎\n\n## 合规说明\n存在阻断项，需整改后再出运。 合规分 5（high）。空间 26%，重量 18%，can_fit=False。 关注：超长件，沿柜长摆放并加强绑扎；超长件，沿柜长摆放并加强绑扎；超长件，沿柜长摆放并加强绑扎\n\n## 布局\n- 三视角数据：views.top/side/front 已生成\n- 侧视 PNG：output\\side_20260724_181815.png\n- 装载引擎：python-laff-3d\n\n---\n主控复核：当前 40HQ，推荐 40GP（建议换柜）\n**流程状态：已打回** → 请按「await_user_confirm」整改后重跑；在合规通过前不得作为正式出运方案。"
+    },
+    {
+      "snapshot": {
+        "round": 2,
+        "max_containers": 10,
+        "max_box_net_kg": 800.0,
+        "packing_plan_id": "PKG-20260724_181816_28343b87",
+        "boxes": 43,
+        "struct_fail": 0,
+        "can_fit": false,
+        "containers_used": 10,
+        "space": 0.2481,
+        "floor": 0.4917,
+        "weight": 0.1541,
+        "risk_decision": "REJECT",
+        "risk_level": "high",
+        "ship_ok": false,
+        "status": "rejected",
+        "phase": "need_revision"
+      },
+      "steps": [
+        {
+          "n": 1,
+          "name": "主控智能体",
+          "node": "orchestrator",
+          "message": "【主控·开头】9 智能体启动 | intent=full_process | 材料=143 行 | 推荐柜型=40GP（采纳=True，当前=40GP）| 理由：最长件/箱 7200mm > 5900，排除 20GP；40GP 预估体积可能超实务可用容；40GP 可能超重；单柜重量紧张，可能需多柜；对照：原先倾向 40HQ，综合体积/重量后推荐 40GP | 策略：二层堆码优先 + 空间/重量双利用率",
+          "phase": "team_a_running"
+        },
+        {
+          "n": 2,
+          "name": "材料解析智能体",
+          "node": "material_parser",
+          "message": "材料解析完成(inject)：2512 件 / 39497.4 kg",
+          "phase": "team_a_running"
+        },
+        {
+          "n": 3,
+          "name": "结构计算智能体",
+          "node": "structure",
+          "message": "结构约束完成：6 组推荐箱型约束（本步仅建议；半严格校核在装箱成箱后执行）",
+          "phase": "team_a_running"
+        },
+        {
+          "n": 4,
+          "name": "装箱方案智能体",
+          "node": "box_scheme",
+          "message": "装箱完成：43 箱 — 全部箱结构计算通过（改箱模式 max_net=800kg 拆分后料行=205）",
+          "phase": "team_a_running"
+        },
+        {
+          "n": 0,
+          "name": "确认闸门",
+          "node": "present_team_a",
+          "message": "团队A完成，自动确认 40HQ",
+          "phase": "team_b_running"
+        },
+        {
+          "n": 5,
+          "name": "规划智能体",
+          "node": "planner",
+          "message": "规划完成：40HQ ×≤10，优先序 43 箱",
+          "phase": "team_b_running"
+        },
+        {
+          "n": 6,
+          "name": "装载执行智能体",
+          "node": "loader",
+          "message": "装载完成 engine=python-laff-3d can_fit=False 容积(实心外廓)25% 货189.40m³/柜76.4m³ 最满柜31% 底面积49% 重量15% [python-laff-3d]",
+          "phase": "team_b_running"
+        },
+        {
+          "n": 7,
+          "name": "评估优化智能体",
+          "node": "evaluator",
+          "message": "评估：score=57.2 passed=False replan=False | 实心容积25%(子分69) 底面积49%(子分76) 重量15%(子分26) 综合51",
+          "phase": "team_b_running"
+        },
+        {
+          "n": 8,
+          "name": "风险合规智能体",
+          "node": "risk_compliance",
+          "message": "风险合规：level=high score=5 passed=False decision=REJECT blockers=12 ⛔打回→await_user_confirm：存在合规阻断项，打回人工确认/调整后重跑",
+          "phase": "need_revision"
+        },
+        {
+          "n": 9,
+          "name": "可视化智能体",
+          "node": "visualizer",
+          "message": "三视角数据已生成（elements=32）",
+          "phase": "need_revision"
+        },
+        {
+          "n": 0,
+          "name": "主控汇总",
+          "node": "finalize",
+          "message": "# 拼柜方案结果\n\n## ⛔ 主控裁决：打回 / 不可出运\n\n**能否出运**：**否**\n**合规决策**：REJECT（level=high）\n**打回目标**：await_user_confirm\n**打回原因**：存在合规阻断项，打回人工确认/调整后重跑\n**阻断项**：\n- 未完全装入: BOX-13, BOX-12, BOX-11, BOX-09, BOX-10, BOX-08, BOX-07, BOX-06, BOX-04, BOX-03, BOX-02\n- BOX-13 未装入集装箱\n- BOX-12 未装入集装箱\n- BOX-11 未装入集装箱\n- BOX-09 未装入集装箱\n- BOX-10 未装入集装箱\n- BOX-08 未装入集装箱\n- BOX-07 未装入集装箱\n- BOX-06 未装入集装箱\n- BOX-04 未装入集装箱\n- BOX-03 未装入集装箱\n- BOX-02 未装入集装箱\n\n> 装得下（can_fit）不等于可出运。存在结构/合规阻断时必须整改后重跑 Team A→确认→Team B。\n\n**主控流水线**：9 智能体（含主控，首尾选柜）\n**方案编号（装箱）**：PKG-20260724_181816_28343b87\n**柜型（实际）**：40HQ\n**主控开头推荐**：40GP\n**主控结尾推荐**：40GP ⚠️ 建议换柜为 40GP\n**箱数**：43\n**能否装下（几何）**：False\n**能否出运（合规）**：否\n**用柜数**：10\n**空间利用率（箱体外廓实心长方体）**：25%（最满柜 31%，底面积均 49%；货 189.40 m³ / 柜 76.4 m³）\n**重量利用率**：15%\n**堆码**：二层箱数 0/32；策略=优先二层（矮箱/铁笼上二层，超长仅底层）\n**利用综合分**：50.7 （空间子分 68.6 / 重量子分 26.4）\n**评估分**：57.2（passed=False decision=FAIL）\n**合规分**：5（level=high decision=REJECT）\n\n## 主控选柜说明\n- 最长件/箱 7400mm > 5900，排除 20GP\n- 40GP 预估体积可能超实务可用容\n- 40GP 可能超重\n- 单柜重量紧张，可能需多柜\n- 对照：原先倾向 40HQ，综合体积/重量后推荐 40GP\n\n## 风险摘要\n- BOX-02 超长件，沿柜长摆放并加强绑扎\n- BOX-03 超长件，沿柜长摆放并加强绑扎\n- BOX-04 超长件，沿柜长摆放并加强绑扎\n- BOX-06 超长件，沿柜长摆放并加强绑扎\n- BOX-07 超长件，沿柜长摆放并加强绑扎\n- BOX-08 超长件，沿柜长摆放并加强绑扎\n- BOX-09 超长件，沿柜长摆放并加强绑扎\n- BOX-10 超长件，沿柜长摆放并加强绑扎\n- BOX-11 超长件，沿柜长摆放并加强绑扎\n- BOX-12 超长件，沿柜长摆放并加强绑扎\n- BOX-13 超长件，沿柜长摆放并加强绑扎\n- BOX-18 超长件，沿柜长摆放并加强绑扎\n- BOX-18 单箱毛重 1237kg，优先铁箱/钢骨箱\n- BOX-19 超长件，沿柜长摆放并加强绑扎\n- BOX-19 单箱毛重 1263kg，优先铁箱/钢骨箱\n- BOX-20 超长件，沿柜长摆放并加强绑扎\n- BOX-20 单箱毛重 1266kg，优先铁箱/钢骨箱\n- BOX-21 超长件，沿柜长摆放并加强绑扎\n- BOX-21 单箱毛重 1266kg，优先铁箱/钢骨箱\n- BOX-22 超长件，沿柜长摆放并加强绑扎\n\n## 合规说明\n存在阻断项，需整改后再出运。 合规分 5（high）。空间 25%，重量 15%，can_fit=False。 关注：超长件，沿柜长摆放并加强绑扎；超长件，沿柜长摆放并加强绑扎；超长件，沿柜长摆放并加强绑扎\n\n## 布局\n- 三视角数据：views.top/side/front 已生成\n- 侧视 PNG：output\\side_20260724_181816.png\n- 装载引擎：python-laff-3d\n\n---\n主控复核：当前 40HQ，推荐 40GP（建议换柜）\n**流程状态：已打回** → 请按「await_user_confirm」整改后重跑；在合规通过前不得作为正式出运方案。",
+          "phase": "need_revision"
+        }
+      ],
+      "final": "# 拼柜方案结果\n\n## ⛔ 主控裁决：打回 / 不可出运\n\n**能否出运**：**否**\n**合规决策**：REJECT（level=high）\n**打回目标**：await_user_confirm\n**打回原因**：存在合规阻断项，打回人工确认/调整后重跑\n**阻断项**：\n- 未完全装入: BOX-13, BOX-12, BOX-11, BOX-09, BOX-10, BOX-08, BOX-07, BOX-06, BOX-04, BOX-03, BOX-02\n- BOX-13 未装入集装箱\n- BOX-12 未装入集装箱\n- BOX-11 未装入集装箱\n- BOX-09 未装入集装箱\n- BOX-10 未装入集装箱\n- BOX-08 未装入集装箱\n- BOX-07 未装入集装箱\n- BOX-06 未装入集装箱\n- BOX-04 未装入集装箱\n- BOX-03 未装入集装箱\n- BOX-02 未装入集装箱\n\n> 装得下（can_fit）不等于可出运。存在结构/合规阻断时必须整改后重跑 Team A→确认→Team B。\n\n**主控流水线**：9 智能体（含主控，首尾选柜）\n**方案编号（装箱）**：PKG-20260724_181816_28343b87\n**柜型（实际）**：40HQ\n**主控开头推荐**：40GP\n**主控结尾推荐**：40GP ⚠️ 建议换柜为 40GP\n**箱数**：43\n**能否装下（几何）**：False\n**能否出运（合规）**：否\n**用柜数**：10\n**空间利用率（箱体外廓实心长方体）**：25%（最满柜 31%，底面积均 49%；货 189.40 m³ / 柜 76.4 m³）\n**重量利用率**：15%\n**堆码**：二层箱数 0/32；策略=优先二层（矮箱/铁笼上二层，超长仅底层）\n**利用综合分**：50.7 （空间子分 68.6 / 重量子分 26.4）\n**评估分**：57.2（passed=False decision=FAIL）\n**合规分**：5（level=high decision=REJECT）\n\n## 主控选柜说明\n- 最长件/箱 7400mm > 5900，排除 20GP\n- 40GP 预估体积可能超实务可用容\n- 40GP 可能超重\n- 单柜重量紧张，可能需多柜\n- 对照：原先倾向 40HQ，综合体积/重量后推荐 40GP\n\n## 风险摘要\n- BOX-02 超长件，沿柜长摆放并加强绑扎\n- BOX-03 超长件，沿柜长摆放并加强绑扎\n- BOX-04 超长件，沿柜长摆放并加强绑扎\n- BOX-06 超长件，沿柜长摆放并加强绑扎\n- BOX-07 超长件，沿柜长摆放并加强绑扎\n- BOX-08 超长件，沿柜长摆放并加强绑扎\n- BOX-09 超长件，沿柜长摆放并加强绑扎\n- BOX-10 超长件，沿柜长摆放并加强绑扎\n- BOX-11 超长件，沿柜长摆放并加强绑扎\n- BOX-12 超长件，沿柜长摆放并加强绑扎\n- BOX-13 超长件，沿柜长摆放并加强绑扎\n- BOX-18 超长件，沿柜长摆放并加强绑扎\n- BOX-18 单箱毛重 1237kg，优先铁箱/钢骨箱\n- BOX-19 超长件，沿柜长摆放并加强绑扎\n- BOX-19 单箱毛重 1263kg，优先铁箱/钢骨箱\n- BOX-20 超长件，沿柜长摆放并加强绑扎\n- BOX-20 单箱毛重 1266kg，优先铁箱/钢骨箱\n- BOX-21 超长件，沿柜长摆放并加强绑扎\n- BOX-21 单箱毛重 1266kg，优先铁箱/钢骨箱\n- BOX-22 超长件，沿柜长摆放并加强绑扎\n\n## 合规说明\n存在阻断项，需整改后再出运。 合规分 5（high）。空间 25%，重量 15%，can_fit=False。 关注：超长件，沿柜长摆放并加强绑扎；超长件，沿柜长摆放并加强绑扎；超长件，沿柜长摆放并加强绑扎\n\n## 布局\n- 三视角数据：views.top/side/front 已生成\n- 侧视 PNG：output\\side_20260724_181816.png\n- 装载引擎：python-laff-3d\n\n---\n主控复核：当前 40HQ，推荐 40GP（建议换柜）\n**流程状态：已打回** → 请按「await_user_confirm」整改后重跑；在合规通过前不得作为正式出运方案。"
+    },
+    {
+      "snapshot": {
+        "round": 3,
+        "max_containers": 13,
+        "max_box_net_kg": 800.0,
+        "packing_plan_id": "PKG-20260724_181817_e93f5042",
+        "boxes": 43,
+        "struct_fail": 0,
+        "can_fit": false,
+        "containers_used": 13,
+        "space": 0.2428,
+        "floor": 0.4951,
+        "weight": 0.1326,
+        "risk_decision": "REJECT",
+        "risk_level": "high",
+        "ship_ok": false,
+        "status": "rejected",
+        "phase": "need_revision"
+      },
+      "steps": [
+        {
+          "n": 1,
+          "name": "主控智能体",
+          "node": "orchestrator",
+          "message": "【主控·开头】9 智能体启动 | intent=full_process | 材料=143 行 | 推荐柜型=40GP（采纳=True，当前=40GP）| 理由：最长件/箱 7200mm > 5900，排除 20GP；40GP 预估体积可能超实务可用容；40GP 可能超重；单柜重量紧张，可能需多柜；对照：原先倾向 40HQ，综合体积/重量后推荐 40GP | 策略：二层堆码优先 + 空间/重量双利用率",
+          "phase": "team_a_running"
+        },
+        {
+          "n": 2,
+          "name": "材料解析智能体",
+          "node": "material_parser",
+          "message": "材料解析完成(inject)：2512 件 / 39497.4 kg",
+          "phase": "team_a_running"
+        },
+        {
+          "n": 3,
+          "name": "结构计算智能体",
+          "node": "structure",
+          "message": "结构约束完成：6 组推荐箱型约束（本步仅建议；半严格校核在装箱成箱后执行）",
+          "phase": "team_a_running"
+        },
+        {
+          "n": 4,
+          "name": "装箱方案智能体",
+          "node": "box_scheme",
+          "message": "装箱完成：43 箱 — 全部箱结构计算通过（改箱模式 max_net=800kg 拆分后料行=205）",
+          "phase": "team_a_running"
+        },
+        {
+          "n": 0,
+          "name": "确认闸门",
+          "node": "present_team_a",
+          "message": "团队A完成，自动确认 40HQ",
+          "phase": "team_b_running"
+        },
+        {
+          "n": 5,
+          "name": "规划智能体",
+          "node": "planner",
+          "message": "规划完成：40HQ ×≤13，优先序 43 箱",
+          "phase": "team_b_running"
+        },
+        {
+          "n": 6,
+          "name": "装载执行智能体",
+          "node": "loader",
+          "message": "装载完成 engine=python-laff-3d can_fit=False 容积(实心外廓)24% 货241.01m³/柜76.4m³ 最满柜31% 底面积50% 重量13% [python-laff-3d]",
+          "phase": "team_b_running"
+        },
+        {
+          "n": 7,
+          "name": "评估优化智能体",
+          "node": "evaluator",
+          "message": "评估：score=56.7 passed=False replan=False | 实心容积24%(子分69) 底面积50%(子分77) 重量13%(子分23) 综合49",
+          "phase": "team_b_running"
+        },
+        {
+          "n": 8,
+          "name": "风险合规智能体",
+          "node": "risk_compliance",
+          "message": "风险合规：level=high score=5 passed=False decision=REJECT blockers=6 ⛔打回→await_user_confirm：存在合规阻断项，打回人工确认/调整后重跑",
+          "phase": "need_revision"
+        },
+        {
+          "n": 9,
+          "name": "可视化智能体",
+          "node": "visualizer",
+          "message": "三视角数据已生成（elements=38）",
+          "phase": "need_revision"
+        },
+        {
+          "n": 0,
+          "name": "主控汇总",
+          "node": "finalize",
+          "message": "# 拼柜方案结果\n\n## ⛔ 主控裁决：打回 / 不可出运\n\n**能否出运**：**否**\n**合规决策**：REJECT（level=high）\n**打回目标**：await_user_confirm\n**打回原因**：存在合规阻断项，打回人工确认/调整后重跑\n**阻断项**：\n- 未完全装入: BOX-07, BOX-06, BOX-04, BOX-03, BOX-02\n- BOX-07 未装入集装箱\n- BOX-06 未装入集装箱\n- BOX-04 未装入集装箱\n- BOX-03 未装入集装箱\n- BOX-02 未装入集装箱\n\n> 装得下（can_fit）不等于可出运。存在结构/合规阻断时必须整改后重跑 Team A→确认→Team B。\n\n**主控流水线**：9 智能体（含主控，首尾选柜）\n**方案编号（装箱）**：PKG-20260724_181817_e93f5042\n**柜型（实际）**：40HQ\n**主控开头推荐**：40GP\n**主控结尾推荐**：40GP ⚠️ 建议换柜为 40GP\n**箱数**：43\n**能否装下（几何）**：False\n**能否出运（合规）**：否\n**用柜数**：13\n**空间利用率（箱体外廓实心长方体）**：24%（最满柜 31%，底面积均 50%；货 241.01 m³ / 柜 76.4 m³）\n**重量利用率**：13%\n**堆码**：二层箱数 0/38；策略=优先二层（矮箱/铁笼上二层，超长仅底层）\n**利用综合分**：49.1 （空间子分 68.6 / 重量子分 22.7）\n**评估分**：56.7（passed=False decision=FAIL）\n**合规分**：5（level=high decision=REJECT）\n\n## 主控选柜说明\n- 最长件/箱 7400mm > 5900，排除 20GP\n- 40GP 预估体积可能超实务可用容\n- 40GP 可能超重\n- 单柜重量紧张，可能需多柜\n- 对照：原先倾向 40HQ，综合体积/重量后推荐 40GP\n\n## 风险摘要\n- BOX-02 超长件，沿柜长摆放并加强绑扎\n- BOX-03 超长件，沿柜长摆放并加强绑扎\n- BOX-04 超长件，沿柜长摆放并加强绑扎\n- BOX-06 超长件，沿柜长摆放并加强绑扎\n- BOX-07 超长件，沿柜长摆放并加强绑扎\n- BOX-08 超长件，沿柜长摆放并加强绑扎\n- BOX-09 超长件，沿柜长摆放并加强绑扎\n- BOX-10 超长件，沿柜长摆放并加强绑扎\n- BOX-11 超长件，沿柜长摆放并加强绑扎\n- BOX-12 超长件，沿柜长摆放并加强绑扎\n- BOX-13 超长件，沿柜长摆放并加强绑扎\n- BOX-18 超长件，沿柜长摆放并加强绑扎\n- BOX-18 单箱毛重 1237kg，优先铁箱/钢骨箱\n- BOX-19 超长件，沿柜长摆放并加强绑扎\n- BOX-19 单箱毛重 1263kg，优先铁箱/钢骨箱\n- BOX-20 超长件，沿柜长摆放并加强绑扎\n- BOX-20 单箱毛重 1266kg，优先铁箱/钢骨箱\n- BOX-21 超长件，沿柜长摆放并加强绑扎\n- BOX-21 单箱毛重 1266kg，优先铁箱/钢骨箱\n- BOX-22 超长件，沿柜长摆放并加强绑扎\n\n## 合规说明\n存在阻断项，需整改后再出运。 合规分 5（high）。空间 24%，重量 13%，can_fit=False。 关注：超长件，沿柜长摆放并加强绑扎；超长件，沿柜长摆放并加强绑扎；超长件，沿柜长摆放并加强绑扎\n\n## 布局\n- 三视角数据：views.top/side/front 已生成\n- 侧视 PNG：output\\side_20260724_181817.png\n- 装载引擎：python-laff-3d\n\n---\n主控复核：当前 40HQ，推荐 40GP（建议换柜）\n**流程状态：已打回** → 请按「await_user_confirm」整改后重跑；在合规通过前不得作为正式出运方案。",
+          "phase": "need_revision"
+        }
+      ],
+      "final": "# 拼柜方案结果\n\n## ⛔ 主控裁决：打回 / 不可出运\n\n**能否出运**：**否**\n**合规决策**：REJECT（level=high）\n**打回目标**：await_user_confirm\n**打回原因**：存在合规阻断项，打回人工确认/调整后重跑\n**阻断项**：\n- 未完全装入: BOX-07, BOX-06, BOX-04, BOX-03, BOX-02\n- BOX-07 未装入集装箱\n- BOX-06 未装入集装箱\n- BOX-04 未装入集装箱\n- BOX-03 未装入集装箱\n- BOX-02 未装入集装箱\n\n> 装得下（can_fit）不等于可出运。存在结构/合规阻断时必须整改后重跑 Team A→确认→Team B。\n\n**主控流水线**：9 智能体（含主控，首尾选柜）\n**方案编号（装箱）**：PKG-20260724_181817_e93f5042\n**柜型（实际）**：40HQ\n**主控开头推荐**：40GP\n**主控结尾推荐**：40GP ⚠️ 建议换柜为 40GP\n**箱数**：43\n**能否装下（几何）**：False\n**能否出运（合规）**：否\n**用柜数**：13\n**空间利用率（箱体外廓实心长方体）**：24%（最满柜 31%，底面积均 50%；货 241.01 m³ / 柜 76.4 m³）\n**重量利用率**：13%\n**堆码**：二层箱数 0/38；策略=优先二层（矮箱/铁笼上二层，超长仅底层）\n**利用综合分**：49.1 （空间子分 68.6 / 重量子分 22.7）\n**评估分**：56.7（passed=False decision=FAIL）\n**合规分**：5（level=high decision=REJECT）\n\n## 主控选柜说明\n- 最长件/箱 7400mm > 5900，排除 20GP\n- 40GP 预估体积可能超实务可用容\n- 40GP 可能超重\n- 单柜重量紧张，可能需多柜\n- 对照：原先倾向 40HQ，综合体积/重量后推荐 40GP\n\n## 风险摘要\n- BOX-02 超长件，沿柜长摆放并加强绑扎\n- BOX-03 超长件，沿柜长摆放并加强绑扎\n- BOX-04 超长件，沿柜长摆放并加强绑扎\n- BOX-06 超长件，沿柜长摆放并加强绑扎\n- BOX-07 超长件，沿柜长摆放并加强绑扎\n- BOX-08 超长件，沿柜长摆放并加强绑扎\n- BOX-09 超长件，沿柜长摆放并加强绑扎\n- BOX-10 超长件，沿柜长摆放并加强绑扎\n- BOX-11 超长件，沿柜长摆放并加强绑扎\n- BOX-12 超长件，沿柜长摆放并加强绑扎\n- BOX-13 超长件，沿柜长摆放并加强绑扎\n- BOX-18 超长件，沿柜长摆放并加强绑扎\n- BOX-18 单箱毛重 1237kg，优先铁箱/钢骨箱\n- BOX-19 超长件，沿柜长摆放并加强绑扎\n- BOX-19 单箱毛重 1263kg，优先铁箱/钢骨箱\n- BOX-20 超长件，沿柜长摆放并加强绑扎\n- BOX-20 单箱毛重 1266kg，优先铁箱/钢骨箱\n- BOX-21 超长件，沿柜长摆放并加强绑扎\n- BOX-21 单箱毛重 1266kg，优先铁箱/钢骨箱\n- BOX-22 超长件，沿柜长摆放并加强绑扎\n\n## 合规说明\n存在阻断项，需整改后再出运。 合规分 5（high）。空间 24%，重量 13%，can_fit=False。 关注：超长件，沿柜长摆放并加强绑扎；超长件，沿柜长摆放并加强绑扎；超长件，沿柜长摆放并加强绑扎\n\n## 布局\n- 三视角数据：views.top/side/front 已生成\n- 侧视 PNG：output\\side_20260724_181817.png\n- 装载引擎：python-laff-3d\n\n---\n主控复核：当前 40HQ，推荐 40GP（建议换柜）\n**流程状态：已打回** → 请按「await_user_confirm」整改后重跑；在合规通过前不得作为正式出运方案。"
+    },
+    {
+      "snapshot": {
+        "round": 4,
+        "max_containers": 16,
+        "max_box_net_kg": 800.0,
+        "packing_plan_id": "PKG-20260724_181818_6a3cdc36",
+        "boxes": 43,
+        "struct_fail": 0,
+        "can_fit": true,
+        "containers_used": 16,
+        "space": 0.2352,
+        "floor": 0.4876,
+        "weight": 0.1153,
+        "risk_decision": "WARN",
+        "risk_level": "medium",
+        "ship_ok": true,
+        "status": "success",
+        "phase": "done"
+      },
+      "steps": [
+        {
+          "n": 1,
+          "name": "主控智能体",
+          "node": "orchestrator",
+          "message": "【主控·开头】9 智能体启动 | intent=full_process | 材料=143 行 | 推荐柜型=40GP（采纳=True，当前=40GP）| 理由：最长件/箱 7200mm > 5900，排除 20GP；40GP 预估体积可能超实务可用容；40GP 可能超重；单柜重量紧张，可能需多柜；对照：原先倾向 40HQ，综合体积/重量后推荐 40GP | 策略：二层堆码优先 + 空间/重量双利用率",
+          "phase": "team_a_running"
+        },
+        {
+          "n": 2,
+          "name": "材料解析智能体",
+          "node": "material_parser",
+          "message": "材料解析完成(inject)：2512 件 / 39497.4 kg",
+          "phase": "team_a_running"
+        },
+        {
+          "n": 3,
+          "name": "结构计算智能体",
+          "node": "structure",
+          "message": "结构约束完成：6 组推荐箱型约束（本步仅建议；半严格校核在装箱成箱后执行）",
+          "phase": "team_a_running"
+        },
+        {
+          "n": 4,
+          "name": "装箱方案智能体",
+          "node": "box_scheme",
+          "message": "装箱完成：43 箱 — 全部箱结构计算通过（改箱模式 max_net=800kg 拆分后料行=205）",
+          "phase": "team_a_running"
+        },
+        {
+          "n": 0,
+          "name": "确认闸门",
+          "node": "present_team_a",
+          "message": "团队A完成，自动确认 40HQ",
+          "phase": "team_b_running"
+        },
+        {
+          "n": 5,
+          "name": "规划智能体",
+          "node": "planner",
+          "message": "规划完成：40HQ ×≤16，优先序 43 箱",
+          "phase": "team_b_running"
+        },
+        {
+          "n": 6,
+          "name": "装载执行智能体",
+          "node": "loader",
+          "message": "装载完成 engine=python-laff-3d can_fit=True 容积(实心外廓)24% 货287.38m³/柜76.4m³ 最满柜31% 底面积49% 重量12% [python-laff-3d]",
+          "phase": "team_b_running"
+        },
+        {
+          "n": 7,
+          "name": "评估优化智能体",
+          "node": "evaluator",
+          "message": "评估：score=72.1 passed=True replan=False | 实心容积24%(子分69) 底面积49%(子分76) 重量12%(子分20) 综合48",
+          "phase": "team_b_running"
+        },
+        {
+          "n": 8,
+          "name": "风险合规智能体",
+          "node": "risk_compliance",
+          "message": "风险合规：level=medium score=40 passed=False decision=WARN blockers=0",
+          "phase": "team_b_running"
+        },
+        {
+          "n": 9,
+          "name": "可视化智能体",
+          "node": "visualizer",
+          "message": "三视角数据已生成（elements=43）",
+          "phase": "team_b_running"
+        },
+        {
+          "n": 0,
+          "name": "主控汇总",
+          "node": "finalize",
+          "message": "# 拼柜方案结果\n\n## ✅ 主控裁决：可讨论出运\n\n**能否出运**：**是**（规则侧通过；正式前仍需 VGM 与人工复核）\n\n**主控流水线**：9 智能体（含主控，首尾选柜）\n**方案编号（装箱）**：PKG-20260724_181818_6a3cdc36\n**柜型（实际）**：40HQ\n**主控开头推荐**：40GP\n**主控结尾推荐**：40GP ⚠️ 建议换柜为 40GP\n**箱数**：43\n**能否装下（几何）**：True\n**能否出运（合规）**：是\n**用柜数**：16\n**空间利用率（箱体外廓实心长方体）**：24%（最满柜 31%，底面积均 49%；货 287.38 m³ / 柜 76.4 m³）\n**重量利用率**：12%\n**堆码**：二层箱数 0/43；策略=优先二层（矮箱/铁笼上二层，超长仅底层）\n**利用综合分**：47.7 （空间子分 68.6 / 重量子分 19.8）\n**评估分**：72.1（passed=True decision=PASS）\n**合规分**：40（level=medium decision=WARN）\n\n## 主控选柜说明\n- 最长件/箱 7400mm > 5900，排除 20GP\n- 40GP 预估体积可能超实务可用容\n- 40GP 可能超重\n- 单柜重量紧张，可能需多柜\n- 对照：原先倾向 40HQ，综合体积/重量后推荐 40GP\n\n## 风险摘要\n- BOX-02 超长件，沿柜长摆放并加强绑扎\n- BOX-03 超长件，沿柜长摆放并加强绑扎\n- BOX-04 超长件，沿柜长摆放并加强绑扎\n- BOX-06 超长件，沿柜长摆放并加强绑扎\n- BOX-07 超长件，沿柜长摆放并加强绑扎\n- BOX-08 超长件，沿柜长摆放并加强绑扎\n- BOX-09 超长件，沿柜长摆放并加强绑扎\n- BOX-10 超长件，沿柜长摆放并加强绑扎\n- BOX-11 超长件，沿柜长摆放并加强绑扎\n- BOX-12 超长件，沿柜长摆放并加强绑扎\n- BOX-13 超长件，沿柜长摆放并加强绑扎\n- BOX-18 超长件，沿柜长摆放并加强绑扎\n- BOX-18 单箱毛重 1237kg，优先铁箱/钢骨箱\n- BOX-19 超长件，沿柜长摆放并加强绑扎\n- BOX-19 单箱毛重 1263kg，优先铁箱/钢骨箱\n- BOX-20 超长件，沿柜长摆放并加强绑扎\n- BOX-20 单箱毛重 1266kg，优先铁箱/钢骨箱\n- BOX-21 超长件，沿柜长摆放并加强绑扎\n- BOX-21 单箱毛重 1266kg，优先铁箱/钢骨箱\n- BOX-22 超长件，沿柜长摆放并加强绑扎\n\n## 合规说明\n存在关注风险，建议优化后出运。 合规分 40（medium）。空间 24%，重量 12%，can_fit=True。 关注：超长件，沿柜长摆放并加强绑扎；超长件，沿柜长摆放并加强绑扎；超长件，沿柜长摆放并加强绑扎\n\n## 布局\n- 三视角数据：views.top/side/front 已生成\n- 侧视 PNG：output\\side_20260724_181818.png\n- 装载引擎：python-laff-3d\n\n---\n主控复核：当前 40HQ，推荐 40GP（建议换柜）\n团队B 完成。如需改柜型请重新确认。",
+          "phase": "done"
+        }
+      ],
+      "final": "# 拼柜方案结果\n\n## ✅ 主控裁决：可讨论出运\n\n**能否出运**：**是**（规则侧通过；正式前仍需 VGM 与人工复核）\n\n**主控流水线**：9 智能体（含主控，首尾选柜）\n**方案编号（装箱）**：PKG-20260724_181818_6a3cdc36\n**柜型（实际）**：40HQ\n**主控开头推荐**：40GP\n**主控结尾推荐**：40GP ⚠️ 建议换柜为 40GP\n**箱数**：43\n**能否装下（几何）**：True\n**能否出运（合规）**：是\n**用柜数**：16\n**空间利用率（箱体外廓实心长方体）**：24%（最满柜 31%，底面积均 49%；货 287.38 m³ / 柜 76.4 m³）\n**重量利用率**：12%\n**堆码**：二层箱数 0/43；策略=优先二层（矮箱/铁笼上二层，超长仅底层）\n**利用综合分**：47.7 （空间子分 68.6 / 重量子分 19.8）\n**评估分**：72.1（passed=True decision=PASS）\n**合规分**：40（level=medium decision=WARN）\n\n## 主控选柜说明\n- 最长件/箱 7400mm > 5900，排除 20GP\n- 40GP 预估体积可能超实务可用容\n- 40GP 可能超重\n- 单柜重量紧张，可能需多柜\n- 对照：原先倾向 40HQ，综合体积/重量后推荐 40GP\n\n## 风险摘要\n- BOX-02 超长件，沿柜长摆放并加强绑扎\n- BOX-03 超长件，沿柜长摆放并加强绑扎\n- BOX-04 超长件，沿柜长摆放并加强绑扎\n- BOX-06 超长件，沿柜长摆放并加强绑扎\n- BOX-07 超长件，沿柜长摆放并加强绑扎\n- BOX-08 超长件，沿柜长摆放并加强绑扎\n- BOX-09 超长件，沿柜长摆放并加强绑扎\n- BOX-10 超长件，沿柜长摆放并加强绑扎\n- BOX-11 超长件，沿柜长摆放并加强绑扎\n- BOX-12 超长件，沿柜长摆放并加强绑扎\n- BOX-13 超长件，沿柜长摆放并加强绑扎\n- BOX-18 超长件，沿柜长摆放并加强绑扎\n- BOX-18 单箱毛重 1237kg，优先铁箱/钢骨箱\n- BOX-19 超长件，沿柜长摆放并加强绑扎\n- BOX-19 单箱毛重 1263kg，优先铁箱/钢骨箱\n- BOX-20 超长件，沿柜长摆放并加强绑扎\n- BOX-20 单箱毛重 1266kg，优先铁箱/钢骨箱\n- BOX-21 超长件，沿柜长摆放并加强绑扎\n- BOX-21 单箱毛重 1266kg，优先铁箱/钢骨箱\n- BOX-22 超长件，沿柜长摆放并加强绑扎\n\n## 合规说明\n存在关注风险，建议优化后出运。 合规分 40（medium）。空间 24%，重量 12%，can_fit=True。 关注：超长件，沿柜长摆放并加强绑扎；超长件，沿柜长摆放并加强绑扎；超长件，沿柜长摆放并加强绑扎\n\n## 布局\n- 三视角数据：views.top/side/front 已生成\n- 侧视 PNG：output\\side_20260724_181818.png\n- 装载引擎：python-laff-3d\n\n---\n主控复核：当前 40HQ，推荐 40GP（建议换柜）\n团队B 完成。如需改柜型请重新确认。"
+    }
+  ],
+  "final_snapshot": {
+    "round": 4,
+    "max_containers": 16,
+    "max_box_net_kg": 800.0,
+    "packing_plan_id": "PKG-20260724_181818_6a3cdc36",
+    "boxes": 43,
+    "struct_fail": 0,
+    "can_fit": true,
+    "containers_used": 16,
+    "space": 0.2352,
+    "floor": 0.4876,
+    "weight": 0.1153,
+    "risk_decision": "WARN",
+    "risk_level": "medium",
+    "ship_ok": true,
+    "status": "success",
+    "phase": "done"
+  }
+}

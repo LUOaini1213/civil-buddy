@@ -12,6 +12,8 @@ from packing_assistant.tools.packing import run_packing
 def agent_box_scheme(state: PackingState) -> Dict[str, Any]:
     materials = state.get("materials") or []
     constraints = state.get("structure_constraints") or []
+    rev = state.get("revision") or {}
+    packing_opts = state.get("packing_options") or {}
 
     internal = [material_api_to_internal(m) for m in materials]
     # 把 material id 写入内部便于 content 回填
@@ -20,11 +22,28 @@ def agent_box_scheme(state: PackingState) -> Dict[str, Any]:
         dst["id"] = src.get("id") or ""
 
     ctype = (
-        (state.get("orchestrator") or {}).get("container_type_chosen")
-        or state.get("container_type")
+        state.get("container_type")
+        or (state.get("orchestrator") or {}).get("container_type_chosen")
         or "40HQ"
     )
-    result = run_packing(internal, container_type=str(ctype))
+    # 拼柜模块高度：20GP 二层模块过矮，长件/大票用 20GP 模块会结构大批失败。
+    # 装箱阶段按「实际可拼柜型」抬升到至少 40GP/40HQ。
+    max_L = max((float(m.get("length_mm") or 0) for m in materials), default=0)
+    total_w = sum(float(m.get("total_weight_kg") or 0) for m in materials)
+    if str(ctype).upper() == "20GP" and (max_L >= 4000 or total_w >= 8000):
+        ctype = "40HQ"
+    max_net = float(
+        rev.get("max_box_net_kg")
+        or packing_opts.get("max_box_net_kg")
+        or 3200.0
+    )
+    revision_mode = bool(rev.get("active") or packing_opts.get("revision_mode"))
+    result = run_packing(
+        internal,
+        container_type=str(ctype),
+        max_box_net_kg=max_net,
+        revision_mode=revision_mode,
+    )
     boxes_raw = result.get("箱子列表") or []
     boxes = boxes_to_api(boxes_raw)
 
@@ -53,6 +72,9 @@ def agent_box_scheme(state: PackingState) -> Dict[str, Any]:
                         break
 
     summary = result.get("结构汇总") or {}
+    note = ""
+    if revision_mode or summary.get("revision_mode"):
+        note = f"（改箱模式 max_net={max_net:.0f}kg 拆分后料行={summary.get('item_chunks_after_split', '?')}）"
     return {
         "boxes": boxes,
         "team_a_summary": {
@@ -63,11 +85,13 @@ def agent_box_scheme(state: PackingState) -> Dict[str, Any]:
             "total_net_weight_kg": summary.get("总净重_kg", 0),
             "total_gross_weight_kg": summary.get("总毛重_kg", 0),
             "structure_overall": summary.get("结论", ""),
+            "max_box_net_kg": summary.get("max_box_net_kg", max_net),
+            "revision_mode": bool(revision_mode or summary.get("revision_mode")),
         },
         "messages": [
             {
                 "role": "assistant",
-                "content": f"装箱完成：{len(boxes)} 箱 — {summary.get('结论', '')}",
+                "content": f"装箱完成：{len(boxes)} 箱 — {summary.get('结论', '')}{note}",
             }
         ],
     }

@@ -21,6 +21,7 @@ def agent_finalize(state: PackingState) -> Dict[str, Any]:
     evaluation = state.get("evaluation") or {}
     risk_report = state.get("risk_report") or {}
     risks = state.get("risks") or risk_report.get("risks") or []
+    blockers = list(risk_report.get("blockers") or [])
     image = state.get("image_data") or {}
     side_path = (image.get("side") or {}).get("path")
 
@@ -46,6 +47,18 @@ def agent_finalize(state: PackingState) -> Dict[str, Any]:
     end_rec = end_review.get("recommended")
     switch = end_review.get("suggest_switch")
 
+    # 合规：仅 REJECT（硬阻断/装不下）打回；WARN 可讨论出运
+    risk_passed = bool(risk_report.get("passed"))
+    risk_decision = str(risk_report.get("decision") or "")
+    need_revision = bool(
+        risk_report.get("need_revision")
+        or risk_decision == "REJECT"
+        or blockers
+    )
+    reject_to = risk_report.get("reject_to") or ""
+    reject_reason = risk_report.get("reject_reason") or ""
+    ship_ok = bool(plan.get("can_fit")) and not need_revision and risk_decision != "REJECT"
+
     # 二层堆码统计
     layout = plan.get("layout") or []
     layer2 = sum(1 for p in layout if int(p.get("layer") or 1) >= 2 or float((p.get("position") or {}).get("z") or 0) > 0)
@@ -58,6 +71,39 @@ def agent_finalize(state: PackingState) -> Dict[str, Any]:
     lines = [
         "# 拼柜方案结果",
         "",
+    ]
+    if need_revision or not ship_ok:
+        lines.extend(
+            [
+                "## ⛔ 主控裁决：打回 / 不可出运",
+                "",
+                f"**能否出运**：**否**",
+                f"**合规决策**：{risk_decision or 'REJECT'}（level={risk_report.get('level')}）",
+                f"**打回目标**：{reject_to or 'await_user_confirm / 团队A 装箱方案'}",
+                f"**打回原因**：{reject_reason or '风险合规未通过或存在阻断项'}",
+            ]
+        )
+        if blockers:
+            lines.append("**阻断项**：")
+            for b in blockers[:12]:
+                lines.append(f"- {b}")
+        lines.append("")
+        lines.append(
+            "> 装得下（can_fit）不等于可出运。存在结构/合规阻断时必须整改后重跑 Team A→确认→Team B。"
+        )
+        lines.append("")
+    else:
+        lines.extend(
+            [
+                "## ✅ 主控裁决：可讨论出运",
+                "",
+                f"**能否出运**：**是**（规则侧通过；正式前仍需 VGM 与人工复核）",
+                "",
+            ]
+        )
+
+    lines.extend(
+        [
         f"**主控流水线**：{orch.get('agent_count') or 9} 智能体（含主控，首尾选柜）",
         f"**方案编号（装箱）**：{state.get('packing_plan_id') or '-'}",
         f"**柜型（实际）**：{current_ct}",
@@ -65,7 +111,8 @@ def agent_finalize(state: PackingState) -> Dict[str, Any]:
         f"**主控结尾推荐**：{end_rec or '-'}"
         + (f" ⚠️ 建议换柜为 {end_rec}" if switch else "（维持）"),
         f"**箱数**：{len(boxes)}",
-        f"**能否装下**：{plan.get('can_fit')}",
+        f"**能否装下（几何）**：{plan.get('can_fit')}",
+        f"**能否出运（合规）**：{'是' if ship_ok else '否'}",
         f"**用柜数**：{plan.get('containers_used')}",
         f"**空间利用率（箱体外廓实心长方体）**：{space:.0%}"
         f"（最满柜 {space_best:.0%}，底面积均 {floor:.0%}；"
@@ -78,10 +125,12 @@ def agent_finalize(state: PackingState) -> Dict[str, Any]:
         f"重量子分 {evaluation.get('weight_subscore', '-')}）",
         f"**评估分**：{evaluation.get('score', '-') }（passed={evaluation.get('passed')} "
         f"decision={evaluation.get('decision', '-')}）",
-        f"**合规分**：{risk_report.get('compliance_score', '-') }（level={risk_report.get('level')}）",
+        f"**合规分**：{risk_report.get('compliance_score', '-') }（level={risk_report.get('level')} "
+        f"decision={risk_decision or '-'}）",
         "",
         "## 主控选柜说明",
-    ]
+        ]
+    )
     for r in (end_review.get("reasons") or [])[:6]:
         lines.append(f"- {r}")
     if not end_review.get("reasons"):
@@ -106,7 +155,13 @@ def agent_finalize(state: PackingState) -> Dict[str, Any]:
     lines.append("")
     lines.append("---")
     lines.append(end_review.get("review_message") or "主控复核完成。")
-    lines.append("团队B 完成。如需改柜型请重新确认。")
+    if need_revision or not ship_ok:
+        lines.append(
+            f"**流程状态：已打回** → 请按「{reject_to or 'box_scheme'}」整改后重跑；"
+            "在合规通过前不得作为正式出运方案。"
+        )
+    else:
+        lines.append("团队B 完成。如需改柜型请重新确认。")
 
     final = "\n".join(lines)
 
@@ -117,7 +172,8 @@ def agent_finalize(state: PackingState) -> Dict[str, Any]:
             polished = chat(
                 system=(
                     "你是货运装箱顾问。根据结构化结果写简洁专业的中文汇总，"
-                    "必须点明：实际柜型、主控是否建议换柜、容积/重量利用率、能否出运。"
+                    "必须点明：实际柜型、主控是否建议换柜、容积/重量利用率、"
+                    "能否装下 vs 能否出运；若合规 REJECT 必须明确写「打回/不可出运」。"
                     "保留关键数字，不要编造。控制在 400 字内。"
                 ),
                 user=final,
@@ -136,15 +192,22 @@ def agent_finalize(state: PackingState) -> Dict[str, Any]:
     except Exception:
         pass
 
-    status = "success"
     if not boxes:
         status = "need_more_info"
+        phase = "done"
+    elif need_revision or not ship_ok:
+        status = "rejected"
+        phase = "need_revision"
+    else:
+        status = "success"
+        phase = "done"
 
     return {
-        "phase": "done",
+        "phase": phase,
         "status": status,
         "orchestrator": orch,
         "final_response": final,
         "risks": risks,
+        "ship_ok": ship_ok,
         "messages": [{"role": "assistant", "content": final}],
     }

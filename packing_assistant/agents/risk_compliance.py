@@ -370,28 +370,75 @@ def agent_risk_compliance(state: PackingState) -> Dict[str, Any]:
     except Exception:
         pass
 
+    # 决策语义：
+    # - 有 blockers（结构不通过/超重等）→ REJECT 打回
+    # - 无 blockers 但分数低/等级 medium → WARN（可讨论出运，须人工关注）
+    # - 通过 → PASS
+    struct_blocks = [b for b in blockers if "结构" in b]
+    if hard_block and struct_blocks:
+        decision = "REJECT"
+        reject_to = "box_scheme"  # 回团队A改箱/拆件
+        reject_reason = "成箱结构不通过，打回装箱方案智能体拆箱或改箱型加固"
+        need_revision = True
+    elif hard_block:
+        decision = "REJECT"
+        reject_to = "await_user_confirm"
+        reject_reason = "存在合规阻断项，打回人工确认/调整后重跑"
+        need_revision = True
+    elif not plan.get("can_fit"):
+        decision = "REJECT"
+        reject_to = "planner"
+        reject_reason = "未能全部装入集装箱，打回规划/加柜"
+        need_revision = True
+    elif not passed:
+        # 无硬阻断：装得下但评分偏低 → 警告，不打回装箱
+        decision = "WARN"
+        reject_to = ""
+        reject_reason = ""
+        need_revision = False
+    elif level in ("high", "medium"):
+        decision = "WARN"
+        reject_to = ""
+        reject_reason = ""
+        need_revision = False
+    else:
+        decision = "PASS"
+        reject_to = ""
+        reject_reason = ""
+        need_revision = False
+
     risk_report = {
         "passed": passed,
         "compliance_score": score,
         "level": level,
+        "decision": decision,
+        "need_revision": need_revision,
+        "reject_to": reject_to,
+        "reject_reason": reject_reason,
         "items": items,
         "risks": risks,
-        "explanation": explanation,
         "blockers": blockers,
+        "explanation": explanation,
         "principles": thr.get("loading_principles") or [],
         "cog": cog,
     }
 
-    return {
+    msg = (
+        f"风险合规：level={level} score={score} passed={passed} "
+        f"decision={decision} blockers={len(blockers)}"
+    )
+    if need_revision:
+        msg += f" ⛔打回→{reject_to or '人工'}：{reject_reason}"
+
+    updates: Dict[str, Any] = {
         "risk_report": risk_report,
         "risks": risks,
-        "messages": [
-            {
-                "role": "assistant",
-                "content": f"风险合规：level={level} score={score} passed={passed} blockers={len(blockers)}",
-            }
-        ],
+        "messages": [{"role": "assistant", "content": msg}],
     }
+    if need_revision:
+        updates["phase"] = "need_revision"
+        updates["status"] = "rejected"
+    return updates
 
 
 def _cog_metrics(plan: Dict[str, Any]) -> Optional[Dict[str, float]]:
