@@ -1,0 +1,327 @@
+{
+  "version": "1.0.0",
+  "title": "材料→木箱/铁箱/铁笼→集装箱拼柜 知识库（最终版）",
+  "units": { "length": "mm", "weight": "kg", "stress": "MPa" },
+
+  "containers": {
+    "20GP": {
+      "inner_mm": { "length": 5898, "width": 2352, "height": 2385 },
+      "volume_m3_theory": 33.1,
+      "volume_m3_practical": [26, 28],
+      "payload_ton_typical": [17.5, 21],
+      "tare_ton_approx": 2.2,
+      "max_load_kg": 21000
+    },
+    "40GP": {
+      "inner_mm": { "length": 12032, "width": 2352, "height": 2385 },
+      "volume_m3_theory": 67.7,
+      "volume_m3_practical": [55, 58],
+      "payload_ton_typical": [22, 26],
+      "tare_ton_approx": 3.9,
+      "max_load_kg": 26680
+    },
+    "40HQ": {
+      "inner_mm": { "length": 12032, "width": 2352, "height": 2698 },
+      "volume_m3_theory": 76.3,
+      "volume_m3_practical": [65, 68],
+      "payload_ton_typical": [22, 26.5],
+      "tare_ton_approx": 4.1,
+      "max_load_kg": 26480,
+      "notes": ["钢结构件最常用柜型"]
+    },
+    "45HQ": {
+      "inner_mm": { "length": 13556, "width": 2352, "height": 2698 },
+      "volume_m3_theory": 86,
+      "volume_m3_practical": [75, 78],
+      "payload_ton_typical": [26, 26],
+      "tare_ton_approx": 4.5,
+      "max_load_kg": 27700
+    },
+    "rules": {
+      "clearance_mm": [50, 100],
+      "prefer_container": "40HQ",
+      "require_vgm": true,
+      "payload_note": "限重以柜门 CSC 铭牌为准，并考虑公路限重"
+    }
+  },
+
+  "box_types": {
+    "1.1米框": {
+      "aliases": ["1.1米铁架", "1.1米框"],
+      "outer_mm": { "length": 1100, "width": 1100, "height": 1500 },
+      "wall_mm": 40,
+      "tare_kg": 90,
+      "payload_kg_range": [800, 1200],
+      "max_payload_kg": 1200,
+      "volume_m3_ref": 1.8,
+      "floor": "15–20mm 木板/钢板",
+      "beams": "建议 2 根简易纵梁",
+      "frame": "轻型角钢/方管",
+      "lift_points": "可选",
+      "calc_strategy": "simple",
+      "safety_factor": 1.8,
+      "is_steel_frame": true,
+      "color": "#3B82F6",
+      "apply": "短件、小件、轻货"
+    },
+    "铁笼": {
+      "aliases": ["铁笼", "透空笼"],
+      "outer_mm": { "length": 2000, "width": 1100, "height": 1500 },
+      "wall_mm": 30,
+      "tare_kg": 100,
+      "payload_kg_range": [1000, 2000],
+      "max_payload_kg": 2000,
+      "volume_m3_ref": 3.3,
+      "floor": "必须有承重梁（槽钢/加厚方管）",
+      "beams": "底部承重梁必须",
+      "frame": "角钢/方管 40×40 或 50×50，杆件间距 100–200mm",
+      "lift_points": "建议四角对称",
+      "calc_strategy": "semi_strict",
+      "safety_factor": 2.0,
+      "is_steel_frame": true,
+      "color": "#A78BFA",
+      "apply": "透空可视、框架抗弯"
+    },
+    "2米框": {
+      "aliases": ["2米铁架", "2米框"],
+      "outer_mm": { "length": 2000, "width": 1100, "height": 1750 },
+      "wall_mm": 50,
+      "tare_kg": 120,
+      "payload_kg_range": [1500, 2500],
+      "max_payload_kg": 2500,
+      "volume_m3_ref": 3.85,
+      "floor": "板 + 纵梁（≥2 根）",
+      "beams": "≥2 根纵梁",
+      "frame": "槽钢/方管",
+      "lift_points": "建议对称",
+      "calc_strategy": "semi_strict",
+      "safety_factor": 2.1,
+      "is_steel_frame": true,
+      "color": "#06B6D4",
+      "apply": "中短件，项目已有装箱记录"
+    },
+    "3米木箱": {
+      "aliases": ["3米木箱"],
+      "outer_mm": { "length": 3000, "width": 1100, "height": 1200 },
+      "wall_mm": 40,
+      "tare_kg": 60,
+      "payload_kg_range": [800, 1500],
+      "max_payload_kg": 1500,
+      "volume_m3_ref": 3.96,
+      "floor": "木板 + 底梁",
+      "beams": "按载重选型",
+      "frame": "木质",
+      "lift_points": "可选",
+      "calc_strategy": "simple",
+      "safety_factor": 1.8,
+      "is_steel_frame": false,
+      "color": "#92400E",
+      "apply": "中小件、需封闭"
+    },
+    "4米框": {
+      "aliases": ["4米铁架", "4米框"],
+      "outer_mm": { "length": 4000, "width": 1100, "height": 1750 },
+      "wall_mm": 50,
+      "tare_kg": 180,
+      "payload_kg_range": [2000, 3500],
+      "max_payload_kg": 3500,
+      "volume_m3_ref": 7.7,
+      "floor": "必须有纵梁 2–3 根",
+      "beams": "2–3 根纵梁",
+      "frame": "加强型，建议斜撑",
+      "lift_points": "必须对称",
+      "calc_strategy": "forced_semi_strict",
+      "safety_factor": 2.2,
+      "is_steel_frame": true,
+      "color": "#22C55E",
+      "apply": "项目已有 4米框1/2 数据"
+    },
+    "6米框": {
+      "aliases": ["6米铁架", "6米框"],
+      "outer_mm": { "length": 6000, "width": 1100, "height": 1550 },
+      "wall_mm": 50,
+      "tare_kg": 251,
+      "payload_kg_range": [2500, 4000],
+      "max_payload_kg": 4000,
+      "volume_m3_ref": 11.0,
+      "floor": "多道纵梁，严格控制跨距",
+      "beams": "多道纵梁",
+      "frame": "加强纵向刚度，防弯扭",
+      "lift_points": "多点吊装，禁止随意两点吊",
+      "calc_strategy": "forced_semi_strict",
+      "safety_factor": 2.2,
+      "is_steel_frame": true,
+      "color": "#EAB308",
+      "apply": "超长件优先单独或严格限量合箱"
+    }
+  },
+
+  "structure": {
+    "load_combination": {
+      "formula": "Fd = G * gamma",
+      "gamma_default": 1.8,
+      "gamma_heavy_or_impact": [2.0, 2.2],
+      "gamma_lift": [2.0, 2.5],
+      "gamma_if_gross_over_2000kg": 2.2
+    },
+    "allowable_stress_mpa": {
+      "softwood_bending": [8, 12],
+      "softwood_compression": [6, 10],
+      "hardwood_bending": [12, 16],
+      "hardwood_compression": [10, 14],
+      "q235_bending_design": [145, 160]
+    },
+    "working_stress_mpa": {
+      "wood_fb": 10.0,
+      "steel_fb": 150.0,
+      "wood_floor_kg_per_m2": 800,
+      "steel_floor_kg_per_m2": 2500
+    },
+    "deflection_limit_ratio": 200,
+    "mandatory_checks": [
+      "底板抗弯",
+      "框架稳定性",
+      "局部承压",
+      "吊装点",
+      "动态载荷系数"
+    ],
+    "reinforcement_triggers": [
+      { "when": "piece_length_mm > 3000", "action": "纵向加强或铁架" },
+      { "when": "piece_length_mm > 5000", "action": "专用超长架 + 多点支撑" },
+      { "when": "piece_weight_kg > 200", "action": "底部托盘/横梁" },
+      { "when": "piece_weight_kg > 500", "action": "加强底座 + 限位" },
+      { "when": "box_gross_kg > 1000", "action": "优先铁箱/钢骨箱" },
+      { "when": "box_gross_kg > 2000", "action": "必须铁箱 + 全项校核" },
+      { "when": "many_slender_bars", "action": "内部支撑防窜动" }
+    ]
+  },
+
+  "merge_rules": {
+    "cluster_priority": [
+      "超长件 length>=4000 单独或严格限量",
+      "重件 unit>=200kg 控制数量与承重",
+      "同规格同材质优先合并",
+      "普通中小件贪心合箱"
+    ],
+    "sort_keys": ["length_desc", "weight_desc", "volume_desc"],
+    "algorithm": "first_fit_with_structure_check",
+    "forbid": [
+      "超长件与大量小件强混装",
+      "重货压轻薄件",
+      "尖锐件与易损件相邻"
+    ],
+    "overlong_mm": 4000,
+    "heavy_unit_kg": 200,
+    "solo_overlong_mm": 5000
+  },
+
+  "risk_rules": {
+    "overweight": { "warn": 0.9, "block": 1.0 },
+    "oversize": { "warn": true, "block": true },
+    "cog_longitudinal": {
+      "ideal_range": [0.40, 0.60],
+      "warn_outside": [0.35, 0.65],
+      "block_outside": [0.25, 0.75],
+      "note": "前后重心宜在柜深 40%–60%（装箱作业规范/CTU 实践）"
+    },
+    "cog_transverse": {
+      "warn": 0.05,
+      "block": 0.15,
+      "note": "左右偏心率 |重心-中线|/(半宽)，宜≤5%（参考配载偏心率要求）"
+    },
+    "heavy_on_top_ratio": { "warn": 0.3, "block": 0.5 },
+    "void_ratio": { "warn": 0.5, "block": null },
+    "loading_principles": [
+      "重下轻上，重量尽量均布",
+      "重心宜中低：高度方向宜在柜高 50% 以下",
+      "前后重心宜在柜深 40%–60%",
+      "左右重心宜在中线附近（偏心率约≤5%）",
+      "超长件沿柜长方向并固定",
+      "装完记录柜号、实际总重、封条号",
+      "SOLAS 要求 VGM",
+      "木质包装注意 ISPM15"
+    ]
+  },
+
+  "visualization": {
+    "views": ["top", "side", "front"],
+    "view_names": { "top": "俯视", "side": "侧视", "front": "正视" },
+    "draw_fields": ["box_id", "x", "y", "z", "dx", "dy", "dz", "layer", "color", "label"],
+    "colors_by_box_type": {
+      "1.1米框": "#3B82F6",
+      "1.1米铁架": "#3B82F6",
+      "铁笼": "#A78BFA",
+      "2米框": "#06B6D4",
+      "2米铁架": "#06B6D4",
+      "3米木箱": "#92400E",
+      "4米框": "#22C55E",
+      "4米铁架": "#22C55E",
+      "6米框": "#EAB308",
+      "6米铁架": "#EAB308",
+      "empty": "#9CA3AF"
+    }
+  },
+
+  "materials": {
+    "name_aliases": {
+      "镀锌钢通": ["钢通", "方通", "镀锌方通"],
+      "镀锌圆通": ["圆通", "钢管"],
+      "角铁": ["角钢"],
+      "铁板": ["钢板", "镀锌铁板"],
+      "铁架": ["框架", "铁框"]
+    },
+    "categories": {
+      "超长件": { "length_mm_gte": 4000 },
+      "重件": { "unit_weight_kg_gte": 200, "or_total_weight_kg_gte": 1500 },
+      "普通件": {}
+    },
+    "spec_patterns": ["{a}x{b}x{t}", "{a}×{b}×{t}"]
+  },
+
+  "section_i_table": {
+    "unit": "cm",
+    "formula": "lambda = L0_cm / i_cm",
+    "channel": {
+      "槽钢8#": 3.2,
+      "槽钢10#": 4.0,
+      "槽钢12#": 4.8,
+      "槽钢14#": 5.5
+    },
+    "square_tube": {
+      "40x40x3": 1.5,
+      "50x50x4": 1.9,
+      "60x60x4": 2.3,
+      "80x60x5": 2.2,
+      "80x80x5": 3.0
+    },
+    "angle": {
+      "40x40x4": 1.2,
+      "50x50x5": 1.5
+    },
+    "box_default_i_cm": {
+      "1.1米框": {"frame": 1.5, "bottom_beam": 1.5},
+      "铁笼": {"frame": 1.9, "bottom_beam": 3.2},
+      "2米框": {"frame": 3.2, "bottom_beam": 3.2},
+      "4米框": {"frame": 4.0, "bottom_beam": 4.0},
+      "6米框": {"frame": 4.8, "bottom_beam": 4.8}
+    },
+    "lambda_guide": {
+      "comfortable": "λ < 80～100 相对稳妥",
+      "caution": "λ > 120～150 需警惕失稳，加大截面或加支撑",
+      "steel_allow": 150,
+      "wood_allow": 120
+    }
+  },
+
+  "priority_must": [
+    "集装箱规范",
+    "标准箱型结构参数",
+    "结构计算与加固规则",
+    "风险评分阈值"
+  ],
+  "priority_later": [
+    "精确型材型号",
+    "历史案例",
+    "完整规范原文 RAG"
+  ]
+}

@@ -1,0 +1,21 @@
+{
+  "dir": "E:\\ai比赛\\test\\benchmarks",
+  "cases": [
+    "sample_data_1.json",
+    "sample_data_2.json",
+    "case_a_small_cartons_20gp.json",
+    "case_b_long_frames_40hq.json",
+    "case_c_payload_stress_40hq.json",
+    "test_case_40hq_style.json",
+    "test_case_overweight.json"
+  ],
+  "usage": {
+    "stage2_load": "scripts/run_benchmark_cases.py",
+    "convert": "scripts/convert_bpp_to_cases.py",
+    "business": "test/excel 远东真实数据"
+  },
+  "notes": [
+    "通用 BPP 数据只测拼柜引擎，不做结构计算当真",
+    "业务正确性仍以远东 Excel 为主"
+  ]
+}

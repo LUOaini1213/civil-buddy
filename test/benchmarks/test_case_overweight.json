@@ -1,0 +1,26 @@
+{
+  "schema": "packing_assistant.benchmark_case.v1",
+  "name": "test_case_overweight",
+  "description": "故意超重，测风险合规",
+  "source": "synthetic/overweight",
+  "stage": "container_load_only",
+  "container": {
+    "type": "20GP",
+    "inner_length_mm": 5898,
+    "inner_width_mm": 2352,
+    "inner_height_mm": 2385,
+    "max_payload_kg": 5000,
+    "max_containers": 1
+  },
+  "boxes": [
+    {
+      "box_id": "OW1",
+      "length_mm": 2000,
+      "width_mm": 1000,
+      "height_mm": 1000,
+      "weight_kg": 3000,
+      "quantity": 3,
+      "allow_rotate": false
+    }
+  ]
+}

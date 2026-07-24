@@ -1,0 +1,63 @@
+{
+  "schema": "packing_assistant.benchmark_case.v1",
+  "name": "case_b_long_frames_40hq",
+  "description": "2m/4m/6m 铁架风格长件，偏业务",
+  "source": "synthetic/steel-frame-style",
+  "stage": "container_load_only",
+  "container": {
+    "type": "40HQ",
+    "inner_length_mm": 12032,
+    "inner_width_mm": 2352,
+    "inner_height_mm": 2698,
+    "max_payload_kg": 26480,
+    "max_containers": 2
+  },
+  "boxes": [
+    {
+      "box_id": "FR2M",
+      "length_mm": 2100,
+      "width_mm": 1100,
+      "height_mm": 1200,
+      "weight_kg": 1800,
+      "quantity": 2,
+      "allow_rotate": false,
+      "special_attributes": [
+        "需加固"
+      ]
+    },
+    {
+      "box_id": "FR4M",
+      "length_mm": 4100,
+      "width_mm": 1100,
+      "height_mm": 1300,
+      "weight_kg": 3200,
+      "quantity": 3,
+      "allow_rotate": false,
+      "special_attributes": [
+        "需加固"
+      ]
+    },
+    {
+      "box_id": "FR6M",
+      "length_mm": 6000,
+      "width_mm": 1100,
+      "height_mm": 1200,
+      "weight_kg": 4500,
+      "quantity": 2,
+      "allow_rotate": false,
+      "special_attributes": [
+        "超长",
+        "需加固"
+      ]
+    },
+    {
+      "box_id": "CAGE",
+      "length_mm": 2200,
+      "width_mm": 1100,
+      "height_mm": 1100,
+      "weight_kg": 800,
+      "quantity": 2,
+      "allow_rotate": true
+    }
+  ]
+}

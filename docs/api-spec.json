@@ -1,0 +1,73 @@
+{
+  "version": "2.0.0",
+  "title": "packing-multi-agent-api",
+  "naming": "snake_case",
+  "composition": "agent_0 + agent_1..8",
+  "units": { "length": "mm", "weight": "kg", "utilization": "0..1" },
+  "flow": [
+    "agent_1_material_parser",
+    "agent_2_structure",
+    "agent_3_box_scheme",
+    "agent_4_planner",
+    "agent_5_loader_skjolber",
+    "agent_6_evaluator",
+    "agent_7_risk_compliance",
+    "agent_8_visualizer"
+  ],
+  "agents": {
+    "agent_0_orchestrator": {
+      "input": ["user_input", "session_id", "context"],
+      "output": [
+        "intent",
+        "final_response",
+        "boxes",
+        "container_plan",
+        "evaluation",
+        "risk_report",
+        "risks",
+        "image_data",
+        "views",
+        "status"
+      ]
+    },
+    "agent_1_material_parser": {
+      "input": ["raw_data"],
+      "output": ["materials", "summary"]
+    },
+    "agent_2_structure": {
+      "input": ["materials"],
+      "output": ["structure_constraints", "global_advice"]
+    },
+    "agent_3_box_scheme": {
+      "input": ["materials", "structure_constraints"],
+      "output": ["boxes"]
+    },
+    "agent_4_planner": {
+      "input": ["boxes", "replan_context?"],
+      "output": ["plan"]
+    },
+    "agent_5_loader_skjolber": {
+      "input": ["boxes", "plan"],
+      "output": ["container_plan"]
+    },
+    "agent_6_evaluator": {
+      "input": ["container_plan", "boxes"],
+      "output": ["evaluation"]
+    },
+    "agent_7_risk_compliance": {
+      "input": [
+        "boxes",
+        "plan",
+        "container_plan",
+        "evaluation",
+        "structure_constraints",
+        "global_advice"
+      ],
+      "output": ["risk_report"]
+    },
+    "agent_8_visualizer": {
+      "input": ["container_plan", "boxes", "options"],
+      "output": ["views", "image_data", "legend"]
+    }
+  }
+}

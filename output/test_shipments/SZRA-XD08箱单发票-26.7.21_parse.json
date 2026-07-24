@@ -1,0 +1,32 @@
+{
+  "source_file": "SZRA-XD08箱单发票-26.7.21.pdf",
+  "contract_no": "FEZH-SG/SZRA/XD08",
+  "package_note": "注：包装：铁框",
+  "containers": [
+    "CAAU5249274"
+  ],
+  "materials": [
+    {
+      "id": "M001",
+      "name": "幕墙预埋件 Structural steel",
+      "spec": "幕墙预埋件 Structural steel",
+      "length_mm": 800.0,
+      "width_mm": 400.0,
+      "height_mm": 300.0,
+      "weight_kg": 12.8064,
+      "quantity": 1689,
+      "total_weight_kg": 21630.0,
+      "category": "普通件",
+      "package": "铁框",
+      "container_no": "CAAU5249274",
+      "gross_weight_kg": 22580.0,
+      "source_file": "SZRA-XD08箱单发票-26.7.21.pdf",
+      "dims_estimated": false,
+      "unit": "件",
+      "dims_source": "override"
+    }
+  ],
+  "material_count": 1,
+  "total_net_kg": 21630.0,
+  "total_pieces": 1689
+}

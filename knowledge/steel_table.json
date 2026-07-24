@@ -1,0 +1,221 @@
+{
+  "version": "1.0",
+  "unit": {
+    "A": "cm2",
+    "I": "cm4",
+    "W": "cm3",
+    "i": "cm"
+  },
+  "note": "近似/常用值，正式项目请用国家型钢表标准值覆盖；未列出型号走 sectionproperties",
+  "sections": {
+    "槽钢8#": {
+      "name": "槽钢8#",
+      "type": "channel",
+      "A_cm2": 10.24,
+      "I_cm4": 101.3,
+      "W_cm3": 25.3,
+      "i_cm": 3.15,
+      "source": "steel_table"
+    },
+    "槽钢10#": {
+      "name": "槽钢10#",
+      "type": "channel",
+      "A_cm2": 12.74,
+      "I_cm4": 198.3,
+      "W_cm3": 39.7,
+      "i_cm": 3.95,
+      "source": "steel_table"
+    },
+    "槽钢12#": {
+      "name": "槽钢12#",
+      "type": "channel",
+      "A_cm2": 15.36,
+      "I_cm4": 346.3,
+      "W_cm3": 57.7,
+      "i_cm": 4.75,
+      "source": "steel_table"
+    },
+    "槽钢14#": {
+      "name": "槽钢14#",
+      "type": "channel",
+      "A_cm2": 18.51,
+      "I_cm4": 564.0,
+      "W_cm3": 80.5,
+      "i_cm": 5.52,
+      "source": "steel_table"
+    },
+    "方管40x40x3": {
+      "name": "方管40x40x3",
+      "type": "square_tube",
+      "A_cm2": 4.32,
+      "I_cm4": 11.5,
+      "W_cm3": 5.8,
+      "i_cm": 1.5,
+      "b_mm": 40,
+      "h_mm": 40,
+      "t_mm": 3,
+      "source": "steel_table"
+    },
+    "方管50x50x4": {
+      "name": "方管50x50x4",
+      "type": "square_tube",
+      "A_cm2": 7.04,
+      "I_cm4": 28.5,
+      "W_cm3": 11.4,
+      "i_cm": 1.9,
+      "b_mm": 50,
+      "h_mm": 50,
+      "t_mm": 4,
+      "source": "steel_table"
+    },
+    "方管60x60x4": {
+      "name": "方管60x60x4",
+      "type": "square_tube",
+      "A_cm2": 8.64,
+      "I_cm4": 52.0,
+      "W_cm3": 17.3,
+      "i_cm": 2.3,
+      "b_mm": 60,
+      "h_mm": 60,
+      "t_mm": 4,
+      "source": "steel_table"
+    },
+    "方管80x60x5": {
+      "name": "方管80x60x5",
+      "type": "rect_tube",
+      "A_cm2": 13.0,
+      "I_cm4": 110.0,
+      "W_cm3": 27.5,
+      "i_cm": 2.2,
+      "b_mm": 80,
+      "h_mm": 60,
+      "t_mm": 5,
+      "note": "i 按弱轴偏安全",
+      "source": "steel_table"
+    },
+    "方管80x80x5": {
+      "name": "方管80x80x5",
+      "type": "square_tube",
+      "A_cm2": 15.0,
+      "I_cm4": 150.0,
+      "W_cm3": 37.5,
+      "i_cm": 3.0,
+      "b_mm": 80,
+      "h_mm": 80,
+      "t_mm": 5,
+      "source": "steel_table"
+    },
+    "角钢40x40x4": {
+      "name": "角钢40x40x4",
+      "type": "angle",
+      "A_cm2": 3.08,
+      "I_cm4": 9.5,
+      "W_cm3": 3.3,
+      "i_cm": 1.2,
+      "source": "steel_table"
+    },
+    "角钢50x50x5": {
+      "name": "角钢50x50x5",
+      "type": "angle",
+      "A_cm2": 4.8,
+      "I_cm4": 22.5,
+      "W_cm3": 6.2,
+      "i_cm": 1.5,
+      "source": "steel_table"
+    },
+    "木梁80x80": {
+      "name": "木梁80x80",
+      "type": "wood_rect",
+      "A_cm2": 64.0,
+      "I_cm4": 341.3,
+      "W_cm3": 85.3,
+      "i_cm": 2.31,
+      "b_mm": 80,
+      "h_mm": 80,
+      "source": "steel_table"
+    }
+  },
+  "box_default_sections": {
+    "1.1米框": {
+      "frame": "方管40x40x3",
+      "bottom_beam": "方管40x40x3",
+      "bottom_beam_count": 2,
+      "gamma": 1.8,
+      "calc_strategy": "simple",
+      "lift_points_default": 4
+    },
+    "1.1米铁架": {
+      "frame": "方管40x40x3",
+      "bottom_beam": "方管40x40x3",
+      "bottom_beam_count": 2,
+      "gamma": 1.8,
+      "calc_strategy": "simple",
+      "lift_points_default": 4
+    },
+    "铁笼": {
+      "frame": "方管50x50x4",
+      "bottom_beam": "槽钢8#",
+      "bottom_beam_count": 1,
+      "gamma": 2.0,
+      "calc_strategy": "semi_strict",
+      "lift_points_default": 4
+    },
+    "2米框": {
+      "frame": "槽钢8#",
+      "bottom_beam": "槽钢8#",
+      "bottom_beam_count": 2,
+      "gamma": 2.1,
+      "calc_strategy": "semi_strict",
+      "lift_points_default": 4
+    },
+    "2米铁架": {
+      "frame": "槽钢8#",
+      "bottom_beam": "槽钢8#",
+      "bottom_beam_count": 2,
+      "gamma": 2.1,
+      "calc_strategy": "semi_strict",
+      "lift_points_default": 4
+    },
+    "3米木箱": {
+      "frame": "木梁80x80",
+      "bottom_beam": "木梁80x80",
+      "bottom_beam_count": 2,
+      "gamma": 1.8,
+      "calc_strategy": "simple",
+      "lift_points_default": 4,
+      "material": "wood"
+    },
+    "4米框": {
+      "frame": "槽钢10#",
+      "bottom_beam": "槽钢10#",
+      "bottom_beam_count": 2,
+      "gamma": 2.2,
+      "calc_strategy": "forced_semi_strict",
+      "lift_points_default": 4
+    },
+    "4米铁架": {
+      "frame": "槽钢10#",
+      "bottom_beam": "槽钢10#",
+      "bottom_beam_count": 2,
+      "gamma": 2.2,
+      "calc_strategy": "forced_semi_strict",
+      "lift_points_default": 4
+    },
+    "6米框": {
+      "frame": "槽钢12#",
+      "bottom_beam": "槽钢12#",
+      "bottom_beam_count": 3,
+      "gamma": 2.2,
+      "calc_strategy": "forced_semi_strict",
+      "lift_points_default": 4
+    },
+    "6米铁架": {
+      "frame": "槽钢12#",
+      "bottom_beam": "槽钢12#",
+      "bottom_beam_count": 3,
+      "gamma": 2.2,
+      "calc_strategy": "forced_semi_strict",
+      "lift_points_default": 4
+    }
+  }
+}

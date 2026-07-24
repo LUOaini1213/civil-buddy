@@ -1,0 +1,22 @@
+{
+  "by_keyword": {
+    "预埋": { "length_mm": 800, "width_mm": 400, "height_mm": 300, "source": "override" },
+    "铁通": { "length_mm": 4000, "width_mm": 200, "height_mm": 200, "source": "override" },
+    "空心铁通": { "length_mm": 4000, "width_mm": 200, "height_mm": 200, "source": "override" },
+    "支撑钢构": { "length_mm": 4200, "width_mm": 250, "height_mm": 200, "source": "override" },
+    "铁折槽": { "length_mm": 2500, "width_mm": 200, "height_mm": 150, "source": "override" },
+    "铁垫片": { "length_mm": 200, "width_mm": 200, "height_mm": 20, "source": "override" },
+    "连接件": { "length_mm": 300, "width_mm": 200, "height_mm": 100, "source": "override" },
+    "玻璃墙": { "length_mm": 2500, "width_mm": 1200, "height_mm": 200, "source": "override" },
+    "百叶": { "length_mm": 2200, "width_mm": 1100, "height_mm": 180, "source": "override" },
+    "幕墙板": { "length_mm": 2200, "width_mm": 1100, "height_mm": 150, "source": "override" },
+    "异型材": { "length_mm": 5800, "width_mm": 100, "height_mm": 80, "source": "override" },
+    "EXTRUSION": { "length_mm": 5800, "width_mm": 100, "height_mm": 80, "source": "override" },
+    "支架": { "length_mm": 2400, "width_mm": 900, "height_mm": 600, "source": "override" },
+    "螺栓": { "length_mm": 200, "width_mm": 150, "height_mm": 100, "source": "override" },
+    "螺钉": { "length_mm": 150, "width_mm": 100, "height_mm": 80, "source": "override" },
+    "垫块": { "length_mm": 200, "width_mm": 150, "height_mm": 80, "source": "override" },
+    "卷材": { "length_mm": 600, "width_mm": 600, "height_mm": 400, "source": "override" }
+  },
+  "by_id": {}
+}

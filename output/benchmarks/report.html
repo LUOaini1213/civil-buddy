@@ -1,0 +1,19 @@
+<!DOCTYPE html><html><head><meta charset="utf-8"/><title>BPP 基准</title>
+<style>
+body{font-family:Microsoft YaHei,sans-serif;margin:24px;background:#0f1419;color:#e7ecf3}
+table{border-collapse:collapse;width:100%;font-size:12px}
+th,td{border:1px solid #2a3a52;padding:6px} th{background:#1a2332;color:#93c5fd}
+.note{background:#1e293b;padding:12px;border-radius:8px;line-height:1.5}
+.fail{color:#fca5a5}
+</style></head><body>
+<h1>公开 3D-BPP 拼柜基准 ok=7 fail=0</h1>
+<div class="note">
+<strong>用途分层：</strong>D-Wave/Case A → 算法冒烟；Case B/40HQ style → 长件风格；
+Case C/overweight → 限重风险；<b>业务正确性仍以 test/excel 远东数据为准</b>。
+结构计算勿用这些通用箱当真。
+</div>
+<table><thead><tr>
+<th>用例</th><th>柜型</th><th>箱数</th><th>can_fit</th><th>用柜</th>
+<th>容积率</th><th>最满柜</th><th>重量率</th><th>未装</th><th>ms</th>
+</tr></thead><tbody><tr><td>case_a_small_cartons_20gp</td><td>20GP</td><td>400</td><td>True</td><td>1</td><td>0.7036</td><td>0.7036</td><td>0.2019</td><td>0</td><td>8181</td></tr><tr><td>case_b_long_frames_40hq</td><td>40HQ</td><td>9</td><td>True</td><td>2</td><td>0.2901</td><td>0.3959</td><td>0.4494</td><td>0</td><td>0</td></tr><tr><td>case_c_payload_stress_40hq</td><td>40HQ_LIMITED</td><td>7</td><td>False</td><td>2</td><td>0.19</td><td>0.2033</td><td>0.9375</td><td>1</td><td>0</td></tr><tr><td>sample_data_1</td><td>TEST_BIN</td><td>35</td><td>False</td><td>1</td><td>0.5516</td><td>0.5516</td><td>0.0496</td><td>1</td><td>22</td></tr><tr><td>sample_data_2</td><td>TEST_BIN</td><td>30</td><td>True</td><td>1</td><td>0.5629</td><td>0.5629</td><td>0.1407</td><td>0</td><td>30</td></tr><tr><td>test_case_40hq_style</td><td>40HQ</td><td>7</td><td>True</td><td>1</td><td>0.4022</td><td>0.4022</td><td>0.5929</td><td>0</td><td>0</td></tr><tr><td>test_case_overweight</td><td>20GP</td><td>3</td><td>False</td><td>1</td><td>0.0605</td><td>0.0605</td><td>0.6</td><td>2</td><td>0</td></tr></tbody></table>
+</body></html>

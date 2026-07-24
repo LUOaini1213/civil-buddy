@@ -1,0 +1,54 @@
+{
+  "schema": "packing_assistant.benchmark_case.v1",
+  "name": "sample_data_1",
+  "description": "From sample_data_1.txt, scale=100.0mm per unit",
+  "source": "dwave-examples:sample_data_1.txt",
+  "stage": "container_load_only",
+  "container": {
+    "type": "TEST_BIN",
+    "inner_length_mm": 3000,
+    "inner_width_mm": 3000,
+    "inner_height_mm": 5000,
+    "max_payload_kg": 99999.0,
+    "max_containers": 1,
+    "source_unit_scale_mm": 100.0
+  },
+  "boxes": [
+    {
+      "box_id": "B0",
+      "length_mm": 500,
+      "width_mm": 300,
+      "height_mm": 800,
+      "weight_kg": 24.0,
+      "quantity": 12,
+      "allow_rotate": true
+    },
+    {
+      "box_id": "B1",
+      "length_mm": 1200,
+      "width_mm": 1500,
+      "height_mm": 1200,
+      "weight_kg": 432.0,
+      "quantity": 9,
+      "allow_rotate": true
+    },
+    {
+      "box_id": "B2",
+      "length_mm": 800,
+      "width_mm": 500,
+      "height_mm": 1100,
+      "weight_kg": 88.0,
+      "quantity": 7,
+      "allow_rotate": true
+    },
+    {
+      "box_id": "B3",
+      "length_mm": 900,
+      "width_mm": 1200,
+      "height_mm": 400,
+      "weight_kg": 86.4,
+      "quantity": 7,
+      "allow_rotate": true
+    }
+  ]
+}

@@ -1,0 +1,211 @@
+"""
+主控门面：团队A → 用户确认 → 团队B。
+"""
+
+from __future__ import annotations
+
+from typing import Any, Dict, List, Optional
+
+from packing_assistant.config import DEFAULT_CONTAINER_TYPE, HarnessMeta, normalize_container_type
+from packing_assistant.graph import create_app, create_team_a_app, create_team_b_app
+from packing_assistant.trace import new_run_id, save_trace
+
+
+def make_initial_state(
+    *,
+    user_input: str = "",
+    session_id: str = "",
+    materials: Optional[List[Dict[str, Any]]] = None,
+    boxes: Optional[List[Dict[str, Any]]] = None,
+    container_type: str = DEFAULT_CONTAINER_TYPE,
+    enable_auto_confirm: bool = False,
+    run_id: Optional[str] = None,
+    adjust_note: str = "",
+    max_containers: int = 1,
+) -> Dict[str, Any]:
+    rid = run_id or new_run_id()
+    return {
+        "user_input": user_input or "",
+        "session_id": session_id or rid,
+        "run_id": rid,
+        "phase": "team_a_running",
+        "status": "success",
+        "intent": "full_process",
+        "packing_plan_id": "",
+        "final_response": "",
+        "harness_meta": HarnessMeta().to_dict(),
+        "user_action": None,
+        "container_type": normalize_container_type(container_type),
+        "max_containers": int(max_containers or 1),
+        "adjust_note": adjust_note or "",
+        "confirmed_box_ids": [],
+        "materials": list(materials or []),
+        "materials_summary": {},
+        "structure_constraints": [],
+        "global_advice": {},
+        "boxes": list(boxes or []),
+        "structure_notes": [],
+        "team_a_summary": {},
+        "user_prompt": {},
+        "display_markdown": "",
+        "plan": {},
+        "container_plan": {},
+        "evaluation": {},
+        "risk_report": {},
+        "risks": [],
+        "views": {},
+        "image_data": {},
+        "legend": [],
+        "messages": [],
+        "traces": [],
+        "errors": [],
+        "validation_warnings": [],
+        "replan_round": 0,
+        "enable_auto_confirm": enable_auto_confirm,
+    }
+
+
+def run_team_a(
+    user_input: str = "",
+    *,
+    materials: Optional[List[Dict[str, Any]]] = None,
+    session_id: str = "",
+    adjust_note: str = "",
+    persist_trace: bool = False,
+) -> Dict[str, Any]:
+    """只跑团队A，停在 await_user_confirm。"""
+    app = create_team_a_app()
+    state = make_initial_state(
+        user_input=user_input,
+        materials=materials,
+        session_id=session_id,
+        adjust_note=adjust_note,
+        enable_auto_confirm=False,
+    )
+    result = app.invoke(state)
+    if persist_trace:
+        result = {**result, "trace_path": save_trace(result)}
+    return result
+
+
+def apply_user_confirmation(
+    state: Dict[str, Any],
+    *,
+    action: str,
+    container_type: str = "40HQ",
+    max_containers: int = 1,
+    adjust_note: str = "",
+    confirmed_box_ids: Optional[List[str]] = None,
+) -> Dict[str, Any]:
+    """写入用户确认结果。"""
+    s = dict(state)
+    s["user_action"] = action
+    s["container_type"] = normalize_container_type(container_type)
+    s["max_containers"] = int(max_containers or 1)
+    s["adjust_note"] = adjust_note or ""
+    s["confirmed_box_ids"] = list(confirmed_box_ids or [])
+    return s
+
+
+def run_team_b(state: Dict[str, Any], *, persist_trace: bool = False) -> Dict[str, Any]:
+    """用户 confirm 后跑团队B。"""
+    if state.get("user_action") != "confirm":
+        return {
+            **state,
+            "status": "error",
+            "final_response": "未确认，不能进入拼柜。请 action=confirm 并选择柜型。",
+            "phase": state.get("phase") or "await_user_confirm",
+        }
+    app = create_team_b_app()
+    result = app.invoke(state)
+    if persist_trace:
+        result = {**result, "trace_path": save_trace(result)}
+    return result
+
+
+def run_pipeline(
+    raw_input: str = "",
+    *,
+    materials: Optional[List[Dict[str, Any]]] = None,
+    container_type: str = DEFAULT_CONTAINER_TYPE,
+    user_instruction: Optional[str] = None,
+    persist_trace: bool = False,
+    enable_auto_reroute: bool = False,
+    enable_auto_confirm: bool = True,
+    max_containers: int = 1,
+    **kwargs: Any,
+) -> Dict[str, Any]:
+    """
+    全流程（默认自动确认柜型，便于 demo/eval）。
+
+    若 enable_auto_confirm=False，仅跑团队A并返回等待确认状态。
+    """
+    # 兼容旧参数名
+    user_input = raw_input or kwargs.get("user_input") or ""
+    if user_instruction and not user_input:
+        user_input = user_instruction
+    mc = int(kwargs.get("max_containers", max_containers) or max_containers or 1)
+
+    if not enable_auto_confirm:
+        return run_team_a(
+            user_input,
+            materials=materials,
+            persist_trace=persist_trace,
+        )
+
+    app = create_app()
+    initial = make_initial_state(
+        user_input=user_input,
+        materials=materials,
+        container_type=container_type,
+        enable_auto_confirm=True,
+        max_containers=mc,
+    )
+    result = app.invoke(initial)
+    if persist_trace:
+        result = {**result, "trace_path": save_trace(result)}
+    return result
+
+
+def public_response(state: Dict[str, Any]) -> Dict[str, Any]:
+    """对外 API 形状（主控输出）。"""
+    return {
+        "intent": state.get("intent") or "full_process",
+        "phase": state.get("phase"),
+        "status": state.get("status"),
+        "session_id": state.get("session_id"),
+        "packing_plan_id": state.get("packing_plan_id"),
+        "final_response": state.get("final_response") or "",
+        "materials": state.get("materials") or [],
+        "boxes": state.get("boxes") or [],
+        "summary": state.get("team_a_summary") or {},
+        "structure_notes": state.get("structure_notes") or [],
+        "user_prompt": state.get("user_prompt") or {},
+        "plan": state.get("plan") or {},
+        "container_plan": state.get("container_plan") or {},
+        "evaluation": state.get("evaluation") or {},
+        "risk_report": state.get("risk_report") or {},
+        "risks": state.get("risks") or [],
+        "views": state.get("views") or {},
+        "image_data": state.get("image_data") or {},
+        "legend": state.get("legend") or [],
+        "run_id": state.get("run_id"),
+        "traces": state.get("traces") or [],
+    }
+
+
+def format_trace_report(state: Dict[str, Any]) -> str:
+    lines = [
+        f"run_id={state.get('run_id')}",
+        f"phase={state.get('phase')}",
+        f"harness={(state.get('harness_meta') or {}).get('harness_version')}",
+        "-" * 48,
+    ]
+    for ev in state.get("traces") or []:
+        flag = "OK" if ev.get("status") == "ok" else "ERR"
+        lines.append(
+            f"[{flag}] {str(ev.get('node')):22} {ev.get('duration_ms', 0):>8} ms"
+        )
+        if ev.get("error"):
+            lines.append(f"       error: {ev['error']}")
+    return "\n".join(lines)

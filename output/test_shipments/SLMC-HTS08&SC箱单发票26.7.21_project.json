@@ -1,0 +1,387 @@
+{
+  "PROJECT←FFAU6865771": {
+    "phase": "done",
+    "status": "success",
+    "boxes": [
+      {
+        "box_id": "BOX-01",
+        "box_type": "4米铁架(定制)",
+        "outer_size_mm": {
+          "length": 2350.0,
+          "width": 1050.0,
+          "height": 2650.0
+        },
+        "gross_weight_kg": 12571.0,
+        "net_weight_kg": 12391.0,
+        "content": [
+          {
+            "material_id": "M001",
+            "name": "铝合金幕墙板 Aluminium Curtain wall",
+            "quantity": 339
+          }
+        ],
+        "special_attributes": [
+          "超重关注",
+          "结构不通过",
+          "定制外廓",
+          "尺寸紧张"
+        ],
+        "reinforcement": "加大底板纵梁截面或增加纵梁根数；净重超设计载荷 3500.0kg，拆箱或升级箱型；件体尺寸超出内净空，调整箱型或拆件",
+        "structure_conclusion": "不通过",
+        "structure_calc": {
+          "box_id": "BOX-01",
+          "box_type": "4米铁架",
+          "total_weight_kg": 12571.0,
+          "safety_factor_gamma": 2.2,
+          "design_load_kg": 27656.2,
+          "section_used": {
+            "frame": "槽钢10#",
+            "bottom_beam": "槽钢10#×2",
+            "source": "steel_table",
+            "frame_detail": {
+              "name": "槽钢10#",
+              "A_cm2": 12.74,
+              "I_cm4": 198.3,
+              "W_cm3": 39.7,
+              "i_cm": 3.95,
+              "source": "steel_table"
+            },
+            "bottom_beam_detail": {
+              "name": "槽钢10#",
+              "A_cm2": 12.74,
+              "I_cm4": 198.3,
+              "W_cm3": 39.7,
+              "i_cm": 3.95,
+              "count": 2,
+              "source": "steel_table"
+            }
+          },
+          "bottom_bending": {
+            "span_mm": 2350.0,
+            "moment_Nm": 39834.66,
+            "section_modulus_Wx_cm3": 39.7,
+            "I_cm4": 198.3,
+            "beam_count": 2,
+            "effective_beam_count": 2,
+            "stress_MPa": 1003.39,
+            "allowable_MPa": 150.0,
+            "deflection_mm": 56.1,
+            "deflection_limit_mm": 11.75,
+            "model": "纵梁沿箱长简支均布",
+            "status": "不通过",
+            "suggestion": "加大底板纵梁截面或增加纵梁根数"
+          },
+          "frame_stability": {
+            "member": "立柱",
+            "axial_force_N": 67803.7,
+            "L0_cm": 265.0,
+            "L0_mm": 2650.0,
+            "k_factor": 1.0,
+            "section_i_cm": 3.95,
+            "slenderness_lambda": 67.1,
+            "lambda_formula": "λ = L0_cm / i_cm",
+            "lambda_allow": 150.0,
+            "lambda_band": "稳妥",
+            "lambda_guide": {
+              "comfortable_max": 100.0,
+              "caution_max": 120.0,
+              "note": "λ<80～100 相对稳妥；>120～150 需警惕失稳"
+            },
+            "stress_MPa": 53.22,
+            "allowable_MPa": 105.0,
+            "column_count": 4,
+            "status": "通过",
+            "suggestion": null
+          },
+          "local_bearing": {
+            "force_N": 430.1,
+            "area_mm2": 6400.0,
+            "stress_MPa": 0.07,
+            "allowable_MPa": 120.0,
+            "status": "通过",
+            "suggestion": null
+          },
+          "lifting_points": {
+            "count": 4,
+            "force_per_point_N": 67803.7,
+            "eccentricity_factor": 1.0,
+            "symmetric": true,
+            "status": "通过",
+            "suggestion": null
+          },
+          "summary": {
+            "passed": false,
+            "risk_level": "高",
+            "reinforcement_required": true,
+            "reinforcement_plan": [
+              "加大底板纵梁截面或增加纵梁根数",
+              "净重超设计载荷 3500.0kg，拆箱或升级箱型",
+              "件体尺寸超出内净空，调整箱型或拆件"
+            ],
+            "final_conclusion": "按默认截面与γ=2.2校核不通过；建议：加大底板纵梁截面或增加纵梁根数；净重超设计载荷 3500.0kg，拆箱或升级箱型；件体尺寸超出内净空，调整箱型或拆件",
+            "calc_strategy": "forced_semi_strict",
+            "checks": {
+              "geometry": "不通过",
+              "payload": "不通过",
+              "bottom_bending": "不通过",
+              "frame_stability": "通过",
+              "local_bearing": "通过",
+              "lifting_points": "通过"
+            }
+          },
+          "结论": "不通过",
+          "安全系数": 2.2,
+          "箱型": "4米铁架",
+          "是否铁架": true,
+          "重量": {
+            "净重_kg": 12391.0,
+            "箱自重_kg": 180.0,
+            "毛重_kg": 12571.0
+          },
+          "设计载荷_kg": 3500.0,
+          "载荷利用率": "354.0%",
+          "件体包围盒_mm": {
+            "长": 2200.0,
+            "宽": 900.0,
+            "高": 62700.0
+          },
+          "几何": {
+            "尺寸适配": false,
+            "需求尺寸_mm": {
+              "长": 2250.0,
+              "宽": 950.0,
+              "高": 62750.0
+            },
+            "内净空_mm": {
+              "长": 2250.0,
+              "宽": 950.0,
+              "高": 2550.0
+            },
+            "间隙_mm": 50.0,
+            "体积利用率": "999.0%",
+            "体积利用率_数值": 2257.67
+          },
+          "底面荷载": {
+            "底面积_m2": 2.1375,
+            "均布荷载_kg_m2": 5797.0,
+            "通过": false
+          },
+          "底梁建议": {
+            "截面建议_mm": "槽钢10#",
+            "主梁间距_mm": 1175,
+            "纵向主梁数": 2,
+            "材质建议": "钢材",
+            "说明": "截面来源 steel_table（方案C：steel_table优先）"
+          },
+          "底梁抗弯": {
+            "模型": "纵梁沿箱长简支均布",
+            "计算应力_MPa": 1003.39,
+            "许用应力_MPa": 150.0,
+            "应力利用率": "668.9%",
+            "应力通过": false,
+            "挠度_mm": 56.1,
+            "挠度限值_mm": 11.75,
+            "挠度通过": false,
+            "安全系数": 2.2
+          },
+          "重心稳定性": {
+            "合成重心高_mm": 31350.0,
+            "稳定性": "关注",
+            "通过": true
+          },
+          "结构利用率": "668.9%",
+          "风险点": [
+            "加大底板纵梁截面或增加纵梁根数",
+            "净重超设计载荷 3500.0kg，拆箱或升级箱型",
+            "件体尺寸超出内净空，调整箱型或拆件",
+            "净重 12391.0kg 超过箱型设计载荷 3500.0kg",
+            "件体需求超出内净空 {'长': 2250.0, '宽': 950.0, '高': 2550.0}"
+          ],
+          "计算假定": [
+            "荷载组合 Fd=G×γ，γ 按箱型 1.8～2.2",
+            "截面：steel_table.json 优先，未命中走 sectionproperties/解析式",
+            "底板抗弯：简支均布，多梁有效根数偏安全",
+            "立柱轴压+长细比 λ=L0_cm/i_cm",
+            "局部承压与吊点分载为经验公式",
+            "正式出运前需包装工程师按图纸复核"
+          ],
+          "calc_report_md_len": 1740
+        },
+        "structure_detail": {
+          "safety_factor_gamma": 2.2,
+          "design_load_kg": 27656.2,
+          "section_used": {
+            "frame": "槽钢10#",
+            "bottom_beam": "槽钢10#×2",
+            "source": "steel_table",
+            "frame_detail": {
+              "name": "槽钢10#",
+              "A_cm2": 12.74,
+              "I_cm4": 198.3,
+              "W_cm3": 39.7,
+              "i_cm": 3.95,
+              "source": "steel_table"
+            },
+            "bottom_beam_detail": {
+              "name": "槽钢10#",
+              "A_cm2": 12.74,
+              "I_cm4": 198.3,
+              "W_cm3": 39.7,
+              "i_cm": 3.95,
+              "count": 2,
+              "source": "steel_table"
+            }
+          },
+          "bottom_bending": {
+            "span_mm": 2350.0,
+            "moment_Nm": 39834.66,
+            "section_modulus_Wx_cm3": 39.7,
+            "I_cm4": 198.3,
+            "beam_count": 2,
+            "effective_beam_count": 2,
+            "stress_MPa": 1003.39,
+            "allowable_MPa": 150.0,
+            "deflection_mm": 56.1,
+            "deflection_limit_mm": 11.75,
+            "model": "纵梁沿箱长简支均布",
+            "status": "不通过",
+            "suggestion": "加大底板纵梁截面或增加纵梁根数"
+          },
+          "frame_stability": {
+            "member": "立柱",
+            "axial_force_N": 67803.7,
+            "L0_cm": 265.0,
+            "L0_mm": 2650.0,
+            "k_factor": 1.0,
+            "section_i_cm": 3.95,
+            "slenderness_lambda": 67.1,
+            "lambda_formula": "λ = L0_cm / i_cm",
+            "lambda_allow": 150.0,
+            "lambda_band": "稳妥",
+            "lambda_guide": {
+              "comfortable_max": 100.0,
+              "caution_max": 120.0,
+              "note": "λ<80～100 相对稳妥；>120～150 需警惕失稳"
+            },
+            "stress_MPa": 53.22,
+            "allowable_MPa": 105.0,
+            "column_count": 4,
+            "status": "通过",
+            "suggestion": null
+          },
+          "local_bearing": {
+            "force_N": 430.1,
+            "area_mm2": 6400.0,
+            "stress_MPa": 0.07,
+            "allowable_MPa": 120.0,
+            "status": "通过",
+            "suggestion": null
+          },
+          "lifting_points": {
+            "count": 4,
+            "force_per_point_N": 67803.7,
+            "eccentricity_factor": 1.0,
+            "symmetric": true,
+            "status": "通过",
+            "suggestion": null
+          },
+          "summary": {
+            "passed": false,
+            "risk_level": "高",
+            "reinforcement_required": true,
+            "reinforcement_plan": [
+              "加大底板纵梁截面或增加纵梁根数",
+              "净重超设计载荷 3500.0kg，拆箱或升级箱型",
+              "件体尺寸超出内净空，调整箱型或拆件"
+            ],
+            "final_conclusion": "按默认截面与γ=2.2校核不通过；建议：加大底板纵梁截面或增加纵梁根数；净重超设计载荷 3500.0kg，拆箱或升级箱型；件体尺寸超出内净空，调整箱型或拆件",
+            "calc_strategy": "forced_semi_strict",
+            "checks": {
+              "geometry": "不通过",
+              "payload": "不通过",
+              "bottom_bending": "不通过",
+              "frame_stability": "通过",
+              "local_bearing": "通过",
+              "lifting_points": "通过"
+            }
+          }
+        },
+        "crate_fill_ratio": 1.0,
+        "customized_outer": true
+      }
+    ],
+    "container_plan": {
+      "container_type": "40HQ",
+      "containers_used": 1,
+      "space_utilization": 0.0856,
+      "weight_utilization": 0.4747,
+      "space_utilization_best_container": 0.0856,
+      "floor_utilization_avg": 0.0872,
+      "per_container": [
+        {
+          "container_no": 1,
+          "volume_utilization": 0.0856,
+          "floor_utilization": 0.0872,
+          "boxes": 1,
+          "load_kg": 12571.0
+        }
+      ],
+      "metrics_note": "容积利用率=箱体外体积/柜内容积；最满柜 9%，底面积均 9%。钢结构铁架件行业常低于普货 70–85% 满载水平。",
+      "can_fit": true,
+      "layout": [
+        {
+          "box_id": "BOX-01",
+          "container_no": 1,
+          "position": {
+            "x": 0,
+            "y": 1,
+            "z": 0
+          },
+          "size": {
+            "dx": 1050,
+            "dy": 2350,
+            "dz": 2650
+          },
+          "rotation": "LWH",
+          "layer": 1
+        }
+      ],
+      "unpacked_box_ids": [],
+      "message": "可以顺利装下",
+      "engine": "python-laff-3d"
+    },
+    "risk_report": {
+      "passed": false,
+      "compliance_score": 50,
+      "level": "high",
+      "risks": [
+        "BOX-01 成箱结构校核不通过",
+        "BOX-01 单箱毛重 12571kg，需全项校核与铁箱",
+        "空隙率 91%（大件稀疏常见），注意填充绑扎",
+        "前后重心位于柜深 4% 处（宜 40%–60%）",
+        "空间利用率偏低（大件稀疏属正常）",
+        "加固建议（4米铁架）：必须铁箱 + 全项校核；组净重 12391kg 接近/超过设计载荷 3500kg，建议拆箱"
+      ],
+      "blockers": [
+        "BOX-01 成箱结构校核不通过",
+        "前后重心位于柜深 4% 处（宜 40%–60%）"
+      ],
+      "explanation": "根据您的 JSON 数据，当前方案可装入集装箱（can_fit=true），但存在**两项阻碍**：① BOX-01 结构校核不通过；② 前后重心位于柜深 4%（远低于安全区间 40%–60%）。**建议**：必须更换为铁箱并通过全项校核；通过配载调整使重心达到 40%–60%；单箱毛重 12571kg 需专项评估；空隙率 91%，应加强填充与绑扎。",
+      "cog": {
+        "gx_mm": 525.0,
+        "gy_mm": 1176.0,
+        "gz_mm": 1325.0,
+        "lateral_eccentricity": 0.0,
+        "longitudinal_position": 0.0436,
+        "height_ratio": 0.4911
+      }
+    },
+    "views_keys": [
+      "top",
+      "side",
+      "front"
+    ],
+    "final_response": "**能否出运**：否，需整改。  \n**箱数与柜型**：1×40HQ  \n**利用率**：空间9%，重量47%  \n**主要风险与建议**  \n- BOX-01结构校核不通过，单箱毛重12571kg需全项校核与铁箱。  \n- 前后重心位于柜深4%（安全区间40%–60%），需调整配载。  \n- 空隙率91%，须加强填充绑扎。  \n- 组净重12391kg接近设计载荷3500kg，建议拆箱分摊。  \n\n**建议**：必须更换铁箱并通过全项校核，重新调整重心至40%–60%区间。\n\n---\n<details><summary>结构化原文</summary>\n\n# 拼柜方案结果\n\n**方案编号（装箱）**：PKG-20260724_141856_bf92951c\n**柜型**：40HQ\n**箱数**：1\n**能否装下**：True\n**空间利用率**：9%\n**重量利用率**：47%\n**评估分**：95.0（passed=True）\n**合规分**：50（level=high）\n\n## 风险摘要\n- BOX-01 成箱结构校核不通过\n- BOX-01 单箱毛重 12571kg，需全项校核与铁箱\n- 空隙率 91%（大件稀疏常见），注意填充绑扎\n- 前后重心位于柜深 4% 处（宜 40%–60%）\n- 空间利用率偏低（大件稀疏属正常）\n- 加固建议（4米铁架）：必须铁箱 + 全项校核；组净重 12391kg 接近/超过设计载荷 3500kg，建议拆箱\n\n## 合规说明\n根据您的 JSON 数据，当前方案可装入集装箱（can_fit=true），但存在**两项阻碍**：① BOX-01 结构校核不通过；② 前后重心位于柜深 4%（远低于安全区间 40%–60%）。**建议**：必须更换为铁箱并通过全项校核；通过配载调整使重心达到 40%–60%；单箱毛重 12571kg 需专项评估；空隙率 91%，应加强填充与绑扎。\n\n## 布局\n- 三视角数据：views.top/side/front 已生成\n- 侧视 PNG：output\\side_20260724_141859.png\n- 装载引擎：python-laff-3d\n\n---\n团队B 完成。如需改柜型请重新确认。\n\n</details>\n\n*LLM: deepseek-v4-flash*",
+    "llm_used": true
+  }
+}

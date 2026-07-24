@@ -1,0 +1,1958 @@
+{
+  "UETU5722970": {
+    "phase": "done",
+    "status": "success",
+    "boxes": [
+      {
+        "box_id": "BOX-01",
+        "box_type": "4米铁架(定制)",
+        "outer_size_mm": {
+          "length": 2650.0,
+          "width": 950.0,
+          "height": 1350.0
+        },
+        "gross_weight_kg": 1568.0,
+        "net_weight_kg": 1388.0,
+        "content": [
+          {
+            "material_id": "M001",
+            "name": "铝合金玻璃墙 Aluminium Glass wall",
+            "quantity": 4
+          }
+        ],
+        "special_attributes": [
+          "定制外廓"
+        ],
+        "reinforcement": "槽钢10#×2",
+        "structure_conclusion": "通过",
+        "structure_calc": {
+          "box_id": "BOX-01",
+          "box_type": "4米铁架",
+          "total_weight_kg": 1568.0,
+          "safety_factor_gamma": 2.2,
+          "design_load_kg": 3449.6,
+          "section_used": {
+            "frame": "槽钢10#",
+            "bottom_beam": "槽钢10#×2",
+            "source": "steel_table",
+            "frame_detail": {
+              "name": "槽钢10#",
+              "A_cm2": 12.74,
+              "I_cm4": 198.3,
+              "W_cm3": 39.7,
+              "i_cm": 3.95,
+              "source": "steel_table"
+            },
+            "bottom_beam_detail": {
+              "name": "槽钢10#",
+              "A_cm2": 12.74,
+              "I_cm4": 198.3,
+              "W_cm3": 39.7,
+              "i_cm": 3.95,
+              "count": 2,
+              "source": "steel_table"
+            }
+          },
+          "bottom_bending": {
+            "span_mm": 2650.0,
+            "moment_Nm": 5602.93,
+            "section_modulus_Wx_cm3": 39.7,
+            "I_cm4": 198.3,
+            "beam_count": 2,
+            "effective_beam_count": 2,
+            "stress_MPa": 141.13,
+            "allowable_MPa": 150.0,
+            "deflection_mm": 10.03,
+            "deflection_limit_mm": 13.25,
+            "model": "纵梁沿箱长简支均布",
+            "status": "通过",
+            "suggestion": null
+          },
+          "frame_stability": {
+            "member": "立柱",
+            "axial_force_N": 8457.3,
+            "L0_cm": 135.0,
+            "L0_mm": 1350.0,
+            "k_factor": 1.0,
+            "section_i_cm": 3.95,
+            "slenderness_lambda": 34.2,
+            "lambda_formula": "λ = L0_cm / i_cm",
+            "lambda_allow": 150.0,
+            "lambda_band": "稳妥",
+            "lambda_guide": {
+              "comfortable_max": 100.0,
+              "caution_max": 120.0,
+              "note": "λ<80～100 相对稳妥；>120～150 需警惕失稳"
+            },
+            "stress_MPa": 6.64,
+            "allowable_MPa": 105.0,
+            "column_count": 4,
+            "status": "通过",
+            "suggestion": null
+          },
+          "local_bearing": {
+            "force_N": 4083.5,
+            "area_mm2": 6400.0,
+            "stress_MPa": 0.64,
+            "allowable_MPa": 120.0,
+            "status": "通过",
+            "suggestion": null
+          },
+          "lifting_points": {
+            "count": 4,
+            "force_per_point_N": 8457.3,
+            "eccentricity_factor": 1.0,
+            "symmetric": true,
+            "status": "通过",
+            "suggestion": null
+          },
+          "summary": {
+            "passed": true,
+            "risk_level": "低",
+            "reinforcement_required": false,
+            "reinforcement_plan": [],
+            "final_conclusion": "按默认截面与γ=2.2校核通过",
+            "calc_strategy": "forced_semi_strict",
+            "checks": {
+              "geometry": "通过",
+              "payload": "通过",
+              "bottom_bending": "通过",
+              "frame_stability": "通过",
+              "local_bearing": "通过",
+              "lifting_points": "通过"
+            }
+          },
+          "结论": "通过",
+          "安全系数": 2.2,
+          "箱型": "4米铁架",
+          "是否铁架": true,
+          "重量": {
+            "净重_kg": 1388.0,
+            "箱自重_kg": 180.0,
+            "毛重_kg": 1568.0
+          },
+          "设计载荷_kg": 3500.0,
+          "载荷利用率": "39.7%",
+          "件体包围盒_mm": {
+            "长": 2500.0,
+            "宽": 800.0,
+            "高": 1200.0
+          },
+          "几何": {
+            "尺寸适配": true,
+            "需求尺寸_mm": {
+              "长": 2550.0,
+              "宽": 850.0,
+              "高": 1250.0
+            },
+            "内净空_mm": {
+              "长": 2550.0,
+              "宽": 850.0,
+              "高": 1250.0
+            },
+            "间隙_mm": 50.0,
+            "体积利用率": "88.6%",
+            "体积利用率_数值": 88.58
+          },
+          "底面荷载": {
+            "底面积_m2": 2.1675,
+            "均布荷载_kg_m2": 640.4,
+            "通过": true
+          },
+          "底梁建议": {
+            "截面建议_mm": "槽钢10#",
+            "主梁间距_mm": 1325,
+            "纵向主梁数": 2,
+            "材质建议": "钢材",
+            "说明": "截面来源 steel_table（方案C：steel_table优先）"
+          },
+          "底梁抗弯": {
+            "模型": "纵梁沿箱长简支均布",
+            "计算应力_MPa": 141.13,
+            "许用应力_MPa": 150.0,
+            "应力利用率": "94.1%",
+            "应力通过": true,
+            "挠度_mm": 10.03,
+            "挠度限值_mm": 13.25,
+            "挠度通过": true,
+            "安全系数": 2.2
+          },
+          "重心稳定性": {
+            "合成重心高_mm": 600.0,
+            "稳定性": "关注",
+            "通过": true
+          },
+          "结构利用率": "94.1%",
+          "风险点": [],
+          "计算假定": [
+            "荷载组合 Fd=G×γ，γ 按箱型 1.8～2.2",
+            "截面：steel_table.json 优先，未命中走 sectionproperties/解析式",
+            "底板抗弯：简支均布，多梁有效根数偏安全",
+            "立柱轴压+长细比 λ=L0_cm/i_cm",
+            "局部承压与吊点分载为经验公式",
+            "正式出运前需包装工程师按图纸复核"
+          ],
+          "calc_report_md_len": 1585
+        },
+        "structure_detail": {
+          "safety_factor_gamma": 2.2,
+          "design_load_kg": 3449.6,
+          "section_used": {
+            "frame": "槽钢10#",
+            "bottom_beam": "槽钢10#×2",
+            "source": "steel_table",
+            "frame_detail": {
+              "name": "槽钢10#",
+              "A_cm2": 12.74,
+              "I_cm4": 198.3,
+              "W_cm3": 39.7,
+              "i_cm": 3.95,
+              "source": "steel_table"
+            },
+            "bottom_beam_detail": {
+              "name": "槽钢10#",
+              "A_cm2": 12.74,
+              "I_cm4": 198.3,
+              "W_cm3": 39.7,
+              "i_cm": 3.95,
+              "count": 2,
+              "source": "steel_table"
+            }
+          },
+          "bottom_bending": {
+            "span_mm": 2650.0,
+            "moment_Nm": 5602.93,
+            "section_modulus_Wx_cm3": 39.7,
+            "I_cm4": 198.3,
+            "beam_count": 2,
+            "effective_beam_count": 2,
+            "stress_MPa": 141.13,
+            "allowable_MPa": 150.0,
+            "deflection_mm": 10.03,
+            "deflection_limit_mm": 13.25,
+            "model": "纵梁沿箱长简支均布",
+            "status": "通过",
+            "suggestion": null
+          },
+          "frame_stability": {
+            "member": "立柱",
+            "axial_force_N": 8457.3,
+            "L0_cm": 135.0,
+            "L0_mm": 1350.0,
+            "k_factor": 1.0,
+            "section_i_cm": 3.95,
+            "slenderness_lambda": 34.2,
+            "lambda_formula": "λ = L0_cm / i_cm",
+            "lambda_allow": 150.0,
+            "lambda_band": "稳妥",
+            "lambda_guide": {
+              "comfortable_max": 100.0,
+              "caution_max": 120.0,
+              "note": "λ<80～100 相对稳妥；>120～150 需警惕失稳"
+            },
+            "stress_MPa": 6.64,
+            "allowable_MPa": 105.0,
+            "column_count": 4,
+            "status": "通过",
+            "suggestion": null
+          },
+          "local_bearing": {
+            "force_N": 4083.5,
+            "area_mm2": 6400.0,
+            "stress_MPa": 0.64,
+            "allowable_MPa": 120.0,
+            "status": "通过",
+            "suggestion": null
+          },
+          "lifting_points": {
+            "count": 4,
+            "force_per_point_N": 8457.3,
+            "eccentricity_factor": 1.0,
+            "symmetric": true,
+            "status": "通过",
+            "suggestion": null
+          },
+          "summary": {
+            "passed": true,
+            "risk_level": "低",
+            "reinforcement_required": false,
+            "reinforcement_plan": [],
+            "final_conclusion": "按默认截面与γ=2.2校核通过",
+            "calc_strategy": "forced_semi_strict",
+            "checks": {
+              "geometry": "通过",
+              "payload": "通过",
+              "bottom_bending": "通过",
+              "frame_stability": "通过",
+              "local_bearing": "通过",
+              "lifting_points": "通过"
+            }
+          }
+        },
+        "crate_fill_ratio": 0.8858,
+        "customized_outer": true
+      },
+      {
+        "box_id": "BOX-02",
+        "box_type": "4米铁架(定制)",
+        "outer_size_mm": {
+          "length": 2550.0,
+          "width": 1050.0,
+          "height": 2550.0
+        },
+        "gross_weight_kg": 1660.0,
+        "net_weight_kg": 1480.0,
+        "content": [
+          {
+            "material_id": "M003",
+            "name": "铁支架 Steel bracket",
+            "quantity": 4
+          }
+        ],
+        "special_attributes": [
+          "定制外廓"
+        ],
+        "reinforcement": "槽钢10#×2",
+        "structure_conclusion": "通过",
+        "structure_calc": {
+          "box_id": "BOX-02",
+          "box_type": "4米铁架",
+          "total_weight_kg": 1660.0,
+          "safety_factor_gamma": 2.2,
+          "design_load_kg": 3652.0,
+          "section_used": {
+            "frame": "槽钢10#",
+            "bottom_beam": "槽钢10#×2",
+            "source": "steel_table",
+            "frame_detail": {
+              "name": "槽钢10#",
+              "A_cm2": 12.74,
+              "I_cm4": 198.3,
+              "W_cm3": 39.7,
+              "i_cm": 3.95,
+              "source": "steel_table"
+            },
+            "bottom_beam_detail": {
+              "name": "槽钢10#",
+              "A_cm2": 12.74,
+              "I_cm4": 198.3,
+              "W_cm3": 39.7,
+              "i_cm": 3.95,
+              "count": 2,
+              "source": "steel_table"
+            }
+          },
+          "bottom_bending": {
+            "span_mm": 2550.0,
+            "moment_Nm": 5707.84,
+            "section_modulus_Wx_cm3": 39.7,
+            "I_cm4": 198.3,
+            "beam_count": 2,
+            "effective_beam_count": 2,
+            "stress_MPa": 143.77,
+            "allowable_MPa": 150.0,
+            "deflection_mm": 9.46,
+            "deflection_limit_mm": 12.75,
+            "model": "纵梁沿箱长简支均布",
+            "status": "通过",
+            "suggestion": null
+          },
+          "frame_stability": {
+            "member": "立柱",
+            "axial_force_N": 8953.5,
+            "L0_cm": 255.0,
+            "L0_mm": 2550.0,
+            "k_factor": 1.0,
+            "section_i_cm": 3.95,
+            "slenderness_lambda": 64.6,
+            "lambda_formula": "λ = L0_cm / i_cm",
+            "lambda_allow": 150.0,
+            "lambda_band": "稳妥",
+            "lambda_guide": {
+              "comfortable_max": 100.0,
+              "caution_max": 120.0,
+              "note": "λ<80～100 相对稳妥；>120～150 需警惕失稳"
+            },
+            "stress_MPa": 7.03,
+            "allowable_MPa": 105.0,
+            "column_count": 4,
+            "status": "通过",
+            "suggestion": null
+          },
+          "local_bearing": {
+            "force_N": 4354.2,
+            "area_mm2": 6400.0,
+            "stress_MPa": 0.68,
+            "allowable_MPa": 120.0,
+            "status": "通过",
+            "suggestion": null
+          },
+          "lifting_points": {
+            "count": 4,
+            "force_per_point_N": 8953.5,
+            "eccentricity_factor": 1.0,
+            "symmetric": true,
+            "status": "通过",
+            "suggestion": null
+          },
+          "summary": {
+            "passed": true,
+            "risk_level": "低",
+            "reinforcement_required": false,
+            "reinforcement_plan": [],
+            "final_conclusion": "按默认截面与γ=2.2校核通过",
+            "calc_strategy": "forced_semi_strict",
+            "checks": {
+              "geometry": "通过",
+              "payload": "通过",
+              "bottom_bending": "通过",
+              "frame_stability": "通过",
+              "local_bearing": "通过",
+              "lifting_points": "通过"
+            }
+          },
+          "结论": "通过",
+          "安全系数": 2.2,
+          "箱型": "4米铁架",
+          "是否铁架": true,
+          "重量": {
+            "净重_kg": 1480.0,
+            "箱自重_kg": 180.0,
+            "毛重_kg": 1660.0
+          },
+          "设计载荷_kg": 3500.0,
+          "载荷利用率": "42.3%",
+          "件体包围盒_mm": {
+            "长": 2400.0,
+            "宽": 900.0,
+            "高": 2400.0
+          },
+          "几何": {
+            "尺寸适配": true,
+            "需求尺寸_mm": {
+              "长": 2450.0,
+              "宽": 950.0,
+              "高": 2450.0
+            },
+            "内净空_mm": {
+              "长": 2450.0,
+              "宽": 950.0,
+              "高": 2450.0
+            },
+            "间隙_mm": 50.0,
+            "体积利用率": "90.9%",
+            "体积利用率_数值": 90.91
+          },
+          "底面荷载": {
+            "底面积_m2": 2.3275,
+            "均布荷载_kg_m2": 635.9,
+            "通过": true
+          },
+          "底梁建议": {
+            "截面建议_mm": "槽钢10#",
+            "主梁间距_mm": 1275,
+            "纵向主梁数": 2,
+            "材质建议": "钢材",
+            "说明": "截面来源 steel_table（方案C：steel_table优先）"
+          },
+          "底梁抗弯": {
+            "模型": "纵梁沿箱长简支均布",
+            "计算应力_MPa": 143.77,
+            "许用应力_MPa": 150.0,
+            "应力利用率": "95.8%",
+            "应力通过": true,
+            "挠度_mm": 9.46,
+            "挠度限值_mm": 12.75,
+            "挠度通过": true,
+            "安全系数": 2.2
+          },
+          "重心稳定性": {
+            "合成重心高_mm": 1200.0,
+            "稳定性": "关注",
+            "通过": true
+          },
+          "结构利用率": "95.8%",
+          "风险点": [],
+          "计算假定": [
+            "荷载组合 Fd=G×γ，γ 按箱型 1.8～2.2",
+            "截面：steel_table.json 优先，未命中走 sectionproperties/解析式",
+            "底板抗弯：简支均布，多梁有效根数偏安全",
+            "立柱轴压+长细比 λ=L0_cm/i_cm",
+            "局部承压与吊点分载为经验公式",
+            "正式出运前需包装工程师按图纸复核"
+          ],
+          "calc_report_md_len": 1585
+        },
+        "structure_detail": {
+          "safety_factor_gamma": 2.2,
+          "design_load_kg": 3652.0,
+          "section_used": {
+            "frame": "槽钢10#",
+            "bottom_beam": "槽钢10#×2",
+            "source": "steel_table",
+            "frame_detail": {
+              "name": "槽钢10#",
+              "A_cm2": 12.74,
+              "I_cm4": 198.3,
+              "W_cm3": 39.7,
+              "i_cm": 3.95,
+              "source": "steel_table"
+            },
+            "bottom_beam_detail": {
+              "name": "槽钢10#",
+              "A_cm2": 12.74,
+              "I_cm4": 198.3,
+              "W_cm3": 39.7,
+              "i_cm": 3.95,
+              "count": 2,
+              "source": "steel_table"
+            }
+          },
+          "bottom_bending": {
+            "span_mm": 2550.0,
+            "moment_Nm": 5707.84,
+            "section_modulus_Wx_cm3": 39.7,
+            "I_cm4": 198.3,
+            "beam_count": 2,
+            "effective_beam_count": 2,
+            "stress_MPa": 143.77,
+            "allowable_MPa": 150.0,
+            "deflection_mm": 9.46,
+            "deflection_limit_mm": 12.75,
+            "model": "纵梁沿箱长简支均布",
+            "status": "通过",
+            "suggestion": null
+          },
+          "frame_stability": {
+            "member": "立柱",
+            "axial_force_N": 8953.5,
+            "L0_cm": 255.0,
+            "L0_mm": 2550.0,
+            "k_factor": 1.0,
+            "section_i_cm": 3.95,
+            "slenderness_lambda": 64.6,
+            "lambda_formula": "λ = L0_cm / i_cm",
+            "lambda_allow": 150.0,
+            "lambda_band": "稳妥",
+            "lambda_guide": {
+              "comfortable_max": 100.0,
+              "caution_max": 120.0,
+              "note": "λ<80～100 相对稳妥；>120～150 需警惕失稳"
+            },
+            "stress_MPa": 7.03,
+            "allowable_MPa": 105.0,
+            "column_count": 4,
+            "status": "通过",
+            "suggestion": null
+          },
+          "local_bearing": {
+            "force_N": 4354.2,
+            "area_mm2": 6400.0,
+            "stress_MPa": 0.68,
+            "allowable_MPa": 120.0,
+            "status": "通过",
+            "suggestion": null
+          },
+          "lifting_points": {
+            "count": 4,
+            "force_per_point_N": 8953.5,
+            "eccentricity_factor": 1.0,
+            "symmetric": true,
+            "status": "通过",
+            "suggestion": null
+          },
+          "summary": {
+            "passed": true,
+            "risk_level": "低",
+            "reinforcement_required": false,
+            "reinforcement_plan": [],
+            "final_conclusion": "按默认截面与γ=2.2校核通过",
+            "calc_strategy": "forced_semi_strict",
+            "checks": {
+              "geometry": "通过",
+              "payload": "通过",
+              "bottom_bending": "通过",
+              "frame_stability": "通过",
+              "local_bearing": "通过",
+              "lifting_points": "通过"
+            }
+          }
+        },
+        "crate_fill_ratio": 0.9091,
+        "customized_outer": true
+      },
+      {
+        "box_id": "BOX-03",
+        "box_type": "6米铁架(定制)",
+        "outer_size_mm": {
+          "length": 2350.0,
+          "width": 1050.0,
+          "height": 2350.0
+        },
+        "gross_weight_kg": 2791.0,
+        "net_weight_kg": 2540.0,
+        "content": [
+          {
+            "material_id": "M002",
+            "name": "铝合金百叶幕墙 Aluminum Louver Curtain Wall",
+            "quantity": 10
+          }
+        ],
+        "special_attributes": [
+          "超重关注",
+          "定制外廓"
+        ],
+        "reinforcement": "槽钢12#×3",
+        "structure_conclusion": "通过",
+        "structure_calc": {
+          "box_id": "BOX-03",
+          "box_type": "6米铁架",
+          "total_weight_kg": 2791.0,
+          "safety_factor_gamma": 2.2,
+          "design_load_kg": 6140.2,
+          "section_used": {
+            "frame": "槽钢12#",
+            "bottom_beam": "槽钢12#×3",
+            "source": "steel_table",
+            "frame_detail": {
+              "name": "槽钢12#",
+              "A_cm2": 15.36,
+              "I_cm4": 346.3,
+              "W_cm3": 57.7,
+              "i_cm": 4.75,
+              "source": "steel_table"
+            },
+            "bottom_beam_detail": {
+              "name": "槽钢12#",
+              "A_cm2": 15.36,
+              "I_cm4": 346.3,
+              "W_cm3": 57.7,
+              "i_cm": 4.75,
+              "count": 3,
+              "source": "steel_table"
+            }
+          },
+          "bottom_bending": {
+            "span_mm": 2350.0,
+            "moment_Nm": 7075.24,
+            "section_modulus_Wx_cm3": 57.7,
+            "I_cm4": 346.3,
+            "beam_count": 3,
+            "effective_beam_count": 2.5,
+            "stress_MPa": 122.62,
+            "allowable_MPa": 150.0,
+            "deflection_mm": 5.71,
+            "deflection_limit_mm": 11.75,
+            "model": "纵梁沿箱长简支均布",
+            "status": "通过",
+            "suggestion": null
+          },
+          "frame_stability": {
+            "member": "立柱",
+            "axial_force_N": 15053.7,
+            "L0_cm": 235.0,
+            "L0_mm": 2350.0,
+            "k_factor": 1.0,
+            "section_i_cm": 4.75,
+            "slenderness_lambda": 49.5,
+            "lambda_formula": "λ = L0_cm / i_cm",
+            "lambda_allow": 150.0,
+            "lambda_band": "稳妥",
+            "lambda_guide": {
+              "comfortable_max": 100.0,
+              "caution_max": 120.0,
+              "note": "λ<80～100 相对稳妥；>120～150 需警惕失稳"
+            },
+            "stress_MPa": 9.8,
+            "allowable_MPa": 105.0,
+            "column_count": 4,
+            "status": "通过",
+            "suggestion": null
+          },
+          "local_bearing": {
+            "force_N": 2989.1,
+            "area_mm2": 6400.0,
+            "stress_MPa": 0.47,
+            "allowable_MPa": 120.0,
+            "status": "通过",
+            "suggestion": null
+          },
+          "lifting_points": {
+            "count": 4,
+            "force_per_point_N": 15053.7,
+            "eccentricity_factor": 1.0,
+            "symmetric": true,
+            "status": "通过",
+            "suggestion": null
+          },
+          "summary": {
+            "passed": true,
+            "risk_level": "低",
+            "reinforcement_required": false,
+            "reinforcement_plan": [],
+            "final_conclusion": "按默认截面与γ=2.2校核通过",
+            "calc_strategy": "forced_semi_strict",
+            "checks": {
+              "geometry": "通过",
+              "payload": "通过",
+              "bottom_bending": "通过",
+              "frame_stability": "通过",
+              "local_bearing": "通过",
+              "lifting_points": "通过"
+            }
+          },
+          "结论": "通过",
+          "安全系数": 2.2,
+          "箱型": "6米铁架",
+          "是否铁架": true,
+          "重量": {
+            "净重_kg": 2540.0,
+            "箱自重_kg": 251.0,
+            "毛重_kg": 2791.0
+          },
+          "设计载荷_kg": 4000.0,
+          "载荷利用率": "63.5%",
+          "件体包围盒_mm": {
+            "长": 2200.0,
+            "宽": 900.0,
+            "高": 2200.0
+          },
+          "几何": {
+            "尺寸适配": true,
+            "需求尺寸_mm": {
+              "长": 2250.0,
+              "宽": 950.0,
+              "高": 2250.0
+            },
+            "内净空_mm": {
+              "长": 2250.0,
+              "宽": 950.0,
+              "高": 2250.0
+            },
+            "间隙_mm": 50.0,
+            "体积利用率": "90.6%",
+            "体积利用率_数值": 90.57
+          },
+          "底面荷载": {
+            "底面积_m2": 2.1375,
+            "均布荷载_kg_m2": 1188.3,
+            "通过": true
+          },
+          "底梁建议": {
+            "截面建议_mm": "槽钢12#",
+            "主梁间距_mm": 783,
+            "纵向主梁数": 3,
+            "材质建议": "钢材",
+            "说明": "截面来源 steel_table（方案C：steel_table优先）"
+          },
+          "底梁抗弯": {
+            "模型": "纵梁沿箱长简支均布",
+            "计算应力_MPa": 122.62,
+            "许用应力_MPa": 150.0,
+            "应力利用率": "81.7%",
+            "应力通过": true,
+            "挠度_mm": 5.71,
+            "挠度限值_mm": 11.75,
+            "挠度通过": true,
+            "安全系数": 2.2
+          },
+          "重心稳定性": {
+            "合成重心高_mm": 1100.0,
+            "稳定性": "关注",
+            "通过": true
+          },
+          "结构利用率": "81.7%",
+          "风险点": [],
+          "计算假定": [
+            "荷载组合 Fd=G×γ，γ 按箱型 1.8～2.2",
+            "截面：steel_table.json 优先，未命中走 sectionproperties/解析式",
+            "底板抗弯：简支均布，多梁有效根数偏安全",
+            "立柱轴压+长细比 λ=L0_cm/i_cm",
+            "局部承压与吊点分载为经验公式",
+            "正式出运前需包装工程师按图纸复核"
+          ],
+          "calc_report_md_len": 1586
+        },
+        "structure_detail": {
+          "safety_factor_gamma": 2.2,
+          "design_load_kg": 6140.2,
+          "section_used": {
+            "frame": "槽钢12#",
+            "bottom_beam": "槽钢12#×3",
+            "source": "steel_table",
+            "frame_detail": {
+              "name": "槽钢12#",
+              "A_cm2": 15.36,
+              "I_cm4": 346.3,
+              "W_cm3": 57.7,
+              "i_cm": 4.75,
+              "source": "steel_table"
+            },
+            "bottom_beam_detail": {
+              "name": "槽钢12#",
+              "A_cm2": 15.36,
+              "I_cm4": 346.3,
+              "W_cm3": 57.7,
+              "i_cm": 4.75,
+              "count": 3,
+              "source": "steel_table"
+            }
+          },
+          "bottom_bending": {
+            "span_mm": 2350.0,
+            "moment_Nm": 7075.24,
+            "section_modulus_Wx_cm3": 57.7,
+            "I_cm4": 346.3,
+            "beam_count": 3,
+            "effective_beam_count": 2.5,
+            "stress_MPa": 122.62,
+            "allowable_MPa": 150.0,
+            "deflection_mm": 5.71,
+            "deflection_limit_mm": 11.75,
+            "model": "纵梁沿箱长简支均布",
+            "status": "通过",
+            "suggestion": null
+          },
+          "frame_stability": {
+            "member": "立柱",
+            "axial_force_N": 15053.7,
+            "L0_cm": 235.0,
+            "L0_mm": 2350.0,
+            "k_factor": 1.0,
+            "section_i_cm": 4.75,
+            "slenderness_lambda": 49.5,
+            "lambda_formula": "λ = L0_cm / i_cm",
+            "lambda_allow": 150.0,
+            "lambda_band": "稳妥",
+            "lambda_guide": {
+              "comfortable_max": 100.0,
+              "caution_max": 120.0,
+              "note": "λ<80～100 相对稳妥；>120～150 需警惕失稳"
+            },
+            "stress_MPa": 9.8,
+            "allowable_MPa": 105.0,
+            "column_count": 4,
+            "status": "通过",
+            "suggestion": null
+          },
+          "local_bearing": {
+            "force_N": 2989.1,
+            "area_mm2": 6400.0,
+            "stress_MPa": 0.47,
+            "allowable_MPa": 120.0,
+            "status": "通过",
+            "suggestion": null
+          },
+          "lifting_points": {
+            "count": 4,
+            "force_per_point_N": 15053.7,
+            "eccentricity_factor": 1.0,
+            "symmetric": true,
+            "status": "通过",
+            "suggestion": null
+          },
+          "summary": {
+            "passed": true,
+            "risk_level": "低",
+            "reinforcement_required": false,
+            "reinforcement_plan": [],
+            "final_conclusion": "按默认截面与γ=2.2校核通过",
+            "calc_strategy": "forced_semi_strict",
+            "checks": {
+              "geometry": "通过",
+              "payload": "通过",
+              "bottom_bending": "通过",
+              "frame_stability": "通过",
+              "local_bearing": "通过",
+              "lifting_points": "通过"
+            }
+          }
+        },
+        "crate_fill_ratio": 0.9057,
+        "customized_outer": true
+      }
+    ],
+    "container_plan": {
+      "container_type": "40HQ",
+      "containers_used": 1,
+      "space_utilization": 0.2099,
+      "weight_utilization": 0.2273,
+      "space_utilization_best_container": 0.2099,
+      "floor_utilization_avg": 0.2271,
+      "per_container": [
+        {
+          "container_no": 1,
+          "volume_utilization": 0.2099,
+          "floor_utilization": 0.2271,
+          "boxes": 3,
+          "load_kg": 6019.0
+        }
+      ],
+      "metrics_note": "容积利用率=箱体外体积/柜内容积；最满柜 21%，底面积均 23%。钢结构铁架件行业常低于普货 70–85% 满载水平。",
+      "can_fit": true,
+      "layout": [
+        {
+          "box_id": "BOX-02",
+          "container_no": 1,
+          "position": {
+            "x": 0,
+            "y": 651,
+            "z": 0
+          },
+          "size": {
+            "dx": 2550,
+            "dy": 1050,
+            "dz": 2550
+          },
+          "rotation": "LWH",
+          "layer": 1
+        },
+        {
+          "box_id": "BOX-01",
+          "container_no": 1,
+          "position": {
+            "x": 2550,
+            "y": 651,
+            "z": 0
+          },
+          "size": {
+            "dx": 1350,
+            "dy": 950,
+            "dz": 2650
+          },
+          "rotation": "LWH",
+          "layer": 1
+        },
+        {
+          "box_id": "BOX-03",
+          "container_no": 1,
+          "position": {
+            "x": 3900,
+            "y": 651,
+            "z": 0
+          },
+          "size": {
+            "dx": 2350,
+            "dy": 1050,
+            "dz": 2350
+          },
+          "rotation": "LWH",
+          "layer": 1
+        }
+      ],
+      "unpacked_box_ids": [],
+      "message": "可以顺利装下",
+      "engine": "python-laff-3d"
+    },
+    "risk_report": {
+      "passed": true,
+      "compliance_score": 63,
+      "level": "medium",
+      "risks": [
+        "BOX-01 单箱毛重 1568kg，优先铁箱/钢骨箱",
+        "BOX-02 单箱毛重 1660kg，优先铁箱/钢骨箱",
+        "BOX-03 单箱毛重 2791kg，需全项校核与铁箱",
+        "空隙率 79%（大件稀疏常见），注意填充绑扎",
+        "前后重心位于柜深 25% 处（宜 40%–60%）",
+        "空间利用率偏低（大件稀疏属正常）",
+        "加固建议（4米铁架）：底部托盘/横梁；必须铁箱 + 全项校核；组净重 3928kg 接近/超过设计载荷 3500kg，建议拆箱",
+        "加固建议（3米木箱）：底部托盘/横梁；优先铁箱/钢骨箱"
+      ],
+      "blockers": [],
+      "explanation": "规则侧可讨论出运，正式前仍需 VGM 与人工复核。 合规分 63（medium）。空间 21%，重量 23%，can_fit=True。 关注：单箱毛重 1568kg，优先铁箱/钢骨箱；单箱毛重 1660kg，优先铁箱/钢骨箱；单箱毛重 2791kg，需全项校核与铁箱",
+      "cog": {
+        "gx_mm": 3063.6,
+        "gy_mm": 1165.4,
+        "gz_mm": 1249.4,
+        "lateral_eccentricity": 0.009,
+        "longitudinal_position": 0.2546,
+        "height_ratio": 0.4631
+      }
+    },
+    "views_keys": [
+      "top",
+      "side",
+      "front"
+    ],
+    "final_response": "# 拼柜方案结果\n\n**方案编号（装箱）**：PKG-20260724_141155_900e38a1\n**柜型**：40HQ\n**箱数**：3\n**能否装下**：True\n**空间利用率**：21%\n**重量利用率**：23%\n**评估分**：95.0（passed=True）\n**合规分**：63（level=medium）\n\n## 风险摘要\n- BOX-01 单箱毛重 1568kg，优先铁箱/钢骨箱\n- BOX-02 单箱毛重 1660kg，优先铁箱/钢骨箱\n- BOX-03 单箱毛重 2791kg，需全项校核与铁箱\n- 空隙率 79%（大件稀疏常见），注意填充绑扎\n- 前后重心位于柜深 25% 处（宜 40%–60%）\n- 空间利用率偏低（大件稀疏属正常）\n- 加固建议（4米铁架）：底部托盘/横梁；必须铁箱 + 全项校核；组净重 3928kg 接近/超过设计载荷 3500kg，建议拆箱\n- 加固建议（3米木箱）：底部托盘/横梁；优先铁箱/钢骨箱\n\n## 合规说明\n规则侧可讨论出运，正式前仍需 VGM 与人工复核。 合规分 63（medium）。空间 21%，重量 23%，can_fit=True。 关注：单箱毛重 1568kg，优先铁箱/钢骨箱；单箱毛重 1660kg，优先铁箱/钢骨箱；单箱毛重 2791kg，需全项校核与铁箱\n\n## 布局\n- 三视角数据：views.top/side/front 已生成\n- 侧视 PNG：output\\side_20260724_141156.png\n- 装载引擎：python-laff-3d\n\n---\n团队B 完成。如需改柜型请重新确认。"
+  },
+  "FFAU1173615": {
+    "phase": "done",
+    "status": "success",
+    "boxes": [
+      {
+        "box_id": "BOX-01",
+        "box_type": "4米铁架(定制)",
+        "outer_size_mm": {
+          "length": 2650.0,
+          "width": 800.0,
+          "height": 1350.0
+        },
+        "gross_weight_kg": 1446.0,
+        "net_weight_kg": 1266.0,
+        "content": [
+          {
+            "material_id": "M001",
+            "name": "铝合金玻璃墙 Aluminium Glass wall",
+            "quantity": 3
+          }
+        ],
+        "special_attributes": [
+          "定制外廓"
+        ],
+        "reinforcement": "槽钢10#×2",
+        "structure_conclusion": "通过",
+        "structure_calc": {
+          "box_id": "BOX-01",
+          "box_type": "4米铁架",
+          "total_weight_kg": 1446.0,
+          "safety_factor_gamma": 2.2,
+          "design_load_kg": 3181.2,
+          "section_used": {
+            "frame": "槽钢10#",
+            "bottom_beam": "槽钢10#×2",
+            "source": "steel_table",
+            "frame_detail": {
+              "name": "槽钢10#",
+              "A_cm2": 12.74,
+              "I_cm4": 198.3,
+              "W_cm3": 39.7,
+              "i_cm": 3.95,
+              "source": "steel_table"
+            },
+            "bottom_beam_detail": {
+              "name": "槽钢10#",
+              "A_cm2": 12.74,
+              "I_cm4": 198.3,
+              "W_cm3": 39.7,
+              "i_cm": 3.95,
+              "count": 2,
+              "source": "steel_table"
+            }
+          },
+          "bottom_bending": {
+            "span_mm": 2650.0,
+            "moment_Nm": 5166.99,
+            "section_modulus_Wx_cm3": 39.7,
+            "I_cm4": 198.3,
+            "beam_count": 2,
+            "effective_beam_count": 2,
+            "stress_MPa": 130.15,
+            "allowable_MPa": 150.0,
+            "deflection_mm": 9.25,
+            "deflection_limit_mm": 13.25,
+            "model": "纵梁沿箱长简支均布",
+            "status": "通过",
+            "suggestion": null
+          },
+          "frame_stability": {
+            "member": "立柱",
+            "axial_force_N": 7799.2,
+            "L0_cm": 135.0,
+            "L0_mm": 1350.0,
+            "k_factor": 1.0,
+            "section_i_cm": 3.95,
+            "slenderness_lambda": 34.2,
+            "lambda_formula": "λ = L0_cm / i_cm",
+            "lambda_allow": 150.0,
+            "lambda_band": "稳妥",
+            "lambda_guide": {
+              "comfortable_max": 100.0,
+              "caution_max": 120.0,
+              "note": "λ<80～100 相对稳妥；>120～150 需警惕失稳"
+            },
+            "stress_MPa": 6.12,
+            "allowable_MPa": 105.0,
+            "column_count": 4,
+            "status": "通过",
+            "suggestion": null
+          },
+          "local_bearing": {
+            "force_N": 4966.1,
+            "area_mm2": 6400.0,
+            "stress_MPa": 0.78,
+            "allowable_MPa": 120.0,
+            "status": "通过",
+            "suggestion": null
+          },
+          "lifting_points": {
+            "count": 4,
+            "force_per_point_N": 7799.2,
+            "eccentricity_factor": 1.0,
+            "symmetric": true,
+            "status": "通过",
+            "suggestion": null
+          },
+          "summary": {
+            "passed": true,
+            "risk_level": "低",
+            "reinforcement_required": false,
+            "reinforcement_plan": [],
+            "final_conclusion": "按默认截面与γ=2.2校核通过",
+            "calc_strategy": "forced_semi_strict",
+            "checks": {
+              "geometry": "通过",
+              "payload": "通过",
+              "bottom_bending": "通过",
+              "frame_stability": "通过",
+              "local_bearing": "通过",
+              "lifting_points": "通过"
+            }
+          },
+          "结论": "通过",
+          "安全系数": 2.2,
+          "箱型": "4米铁架",
+          "是否铁架": true,
+          "重量": {
+            "净重_kg": 1266.0,
+            "箱自重_kg": 180.0,
+            "毛重_kg": 1446.0
+          },
+          "设计载荷_kg": 3500.0,
+          "载荷利用率": "36.2%",
+          "件体包围盒_mm": {
+            "长": 2500.0,
+            "宽": 600.0,
+            "高": 1200.0
+          },
+          "几何": {
+            "尺寸适配": true,
+            "需求尺寸_mm": {
+              "长": 2550.0,
+              "宽": 650.0,
+              "高": 1250.0
+            },
+            "内净空_mm": {
+              "长": 2550.0,
+              "宽": 700.0,
+              "高": 1250.0
+            },
+            "间隙_mm": 50.0,
+            "体积利用率": "80.7%",
+            "体积利用率_数值": 80.67
+          },
+          "底面荷载": {
+            "底面积_m2": 1.785,
+            "均布荷载_kg_m2": 709.2,
+            "通过": true
+          },
+          "底梁建议": {
+            "截面建议_mm": "槽钢10#",
+            "主梁间距_mm": 1325,
+            "纵向主梁数": 2,
+            "材质建议": "钢材",
+            "说明": "截面来源 steel_table（方案C：steel_table优先）"
+          },
+          "底梁抗弯": {
+            "模型": "纵梁沿箱长简支均布",
+            "计算应力_MPa": 130.15,
+            "许用应力_MPa": 150.0,
+            "应力利用率": "86.8%",
+            "应力通过": true,
+            "挠度_mm": 9.25,
+            "挠度限值_mm": 13.25,
+            "挠度通过": true,
+            "安全系数": 2.2
+          },
+          "重心稳定性": {
+            "合成重心高_mm": 600.0,
+            "稳定性": "关注",
+            "通过": true
+          },
+          "结构利用率": "86.8%",
+          "风险点": [],
+          "计算假定": [
+            "荷载组合 Fd=G×γ，γ 按箱型 1.8～2.2",
+            "截面：steel_table.json 优先，未命中走 sectionproperties/解析式",
+            "底板抗弯：简支均布，多梁有效根数偏安全",
+            "立柱轴压+长细比 λ=L0_cm/i_cm",
+            "局部承压与吊点分载为经验公式",
+            "正式出运前需包装工程师按图纸复核"
+          ],
+          "calc_report_md_len": 1582
+        },
+        "structure_detail": {
+          "safety_factor_gamma": 2.2,
+          "design_load_kg": 3181.2,
+          "section_used": {
+            "frame": "槽钢10#",
+            "bottom_beam": "槽钢10#×2",
+            "source": "steel_table",
+            "frame_detail": {
+              "name": "槽钢10#",
+              "A_cm2": 12.74,
+              "I_cm4": 198.3,
+              "W_cm3": 39.7,
+              "i_cm": 3.95,
+              "source": "steel_table"
+            },
+            "bottom_beam_detail": {
+              "name": "槽钢10#",
+              "A_cm2": 12.74,
+              "I_cm4": 198.3,
+              "W_cm3": 39.7,
+              "i_cm": 3.95,
+              "count": 2,
+              "source": "steel_table"
+            }
+          },
+          "bottom_bending": {
+            "span_mm": 2650.0,
+            "moment_Nm": 5166.99,
+            "section_modulus_Wx_cm3": 39.7,
+            "I_cm4": 198.3,
+            "beam_count": 2,
+            "effective_beam_count": 2,
+            "stress_MPa": 130.15,
+            "allowable_MPa": 150.0,
+            "deflection_mm": 9.25,
+            "deflection_limit_mm": 13.25,
+            "model": "纵梁沿箱长简支均布",
+            "status": "通过",
+            "suggestion": null
+          },
+          "frame_stability": {
+            "member": "立柱",
+            "axial_force_N": 7799.2,
+            "L0_cm": 135.0,
+            "L0_mm": 1350.0,
+            "k_factor": 1.0,
+            "section_i_cm": 3.95,
+            "slenderness_lambda": 34.2,
+            "lambda_formula": "λ = L0_cm / i_cm",
+            "lambda_allow": 150.0,
+            "lambda_band": "稳妥",
+            "lambda_guide": {
+              "comfortable_max": 100.0,
+              "caution_max": 120.0,
+              "note": "λ<80～100 相对稳妥；>120～150 需警惕失稳"
+            },
+            "stress_MPa": 6.12,
+            "allowable_MPa": 105.0,
+            "column_count": 4,
+            "status": "通过",
+            "suggestion": null
+          },
+          "local_bearing": {
+            "force_N": 4966.1,
+            "area_mm2": 6400.0,
+            "stress_MPa": 0.78,
+            "allowable_MPa": 120.0,
+            "status": "通过",
+            "suggestion": null
+          },
+          "lifting_points": {
+            "count": 4,
+            "force_per_point_N": 7799.2,
+            "eccentricity_factor": 1.0,
+            "symmetric": true,
+            "status": "通过",
+            "suggestion": null
+          },
+          "summary": {
+            "passed": true,
+            "risk_level": "低",
+            "reinforcement_required": false,
+            "reinforcement_plan": [],
+            "final_conclusion": "按默认截面与γ=2.2校核通过",
+            "calc_strategy": "forced_semi_strict",
+            "checks": {
+              "geometry": "通过",
+              "payload": "通过",
+              "bottom_bending": "通过",
+              "frame_stability": "通过",
+              "local_bearing": "通过",
+              "lifting_points": "通过"
+            }
+          }
+        },
+        "crate_fill_ratio": 0.8067,
+        "customized_outer": true
+      },
+      {
+        "box_id": "BOX-02",
+        "box_type": "4米铁架(定制)",
+        "outer_size_mm": {
+          "length": 2550.0,
+          "width": 1050.0,
+          "height": 1350.0
+        },
+        "gross_weight_kg": 920.0,
+        "net_weight_kg": 740.0,
+        "content": [
+          {
+            "material_id": "M003",
+            "name": "铁支架 Steel bracket",
+            "quantity": 2
+          }
+        ],
+        "special_attributes": [
+          "定制外廓"
+        ],
+        "reinforcement": "槽钢10#×2",
+        "structure_conclusion": "通过",
+        "structure_calc": {
+          "box_id": "BOX-02",
+          "box_type": "4米铁架",
+          "total_weight_kg": 920.0,
+          "safety_factor_gamma": 2.2,
+          "design_load_kg": 2024.0,
+          "section_used": {
+            "frame": "槽钢10#",
+            "bottom_beam": "槽钢10#×2",
+            "source": "steel_table",
+            "frame_detail": {
+              "name": "槽钢10#",
+              "A_cm2": 12.74,
+              "I_cm4": 198.3,
+              "W_cm3": 39.7,
+              "i_cm": 3.95,
+              "source": "steel_table"
+            },
+            "bottom_beam_detail": {
+              "name": "槽钢10#",
+              "A_cm2": 12.74,
+              "I_cm4": 198.3,
+              "W_cm3": 39.7,
+              "i_cm": 3.95,
+              "count": 2,
+              "source": "steel_table"
+            }
+          },
+          "bottom_bending": {
+            "span_mm": 2550.0,
+            "moment_Nm": 3163.38,
+            "section_modulus_Wx_cm3": 39.7,
+            "I_cm4": 198.3,
+            "beam_count": 2,
+            "effective_beam_count": 2,
+            "stress_MPa": 79.68,
+            "allowable_MPa": 150.0,
+            "deflection_mm": 5.25,
+            "deflection_limit_mm": 12.75,
+            "model": "纵梁沿箱长简支均布",
+            "status": "通过",
+            "suggestion": null
+          },
+          "frame_stability": {
+            "member": "立柱",
+            "axial_force_N": 4962.2,
+            "L0_cm": 135.0,
+            "L0_mm": 1350.0,
+            "k_factor": 1.0,
+            "section_i_cm": 3.95,
+            "slenderness_lambda": 34.2,
+            "lambda_formula": "λ = L0_cm / i_cm",
+            "lambda_allow": 150.0,
+            "lambda_band": "稳妥",
+            "lambda_guide": {
+              "comfortable_max": 100.0,
+              "caution_max": 120.0,
+              "note": "λ<80～100 相对稳妥；>120～150 需警惕失稳"
+            },
+            "stress_MPa": 3.89,
+            "allowable_MPa": 105.0,
+            "column_count": 4,
+            "status": "通过",
+            "suggestion": null
+          },
+          "local_bearing": {
+            "force_N": 4354.2,
+            "area_mm2": 6400.0,
+            "stress_MPa": 0.68,
+            "allowable_MPa": 120.0,
+            "status": "通过",
+            "suggestion": null
+          },
+          "lifting_points": {
+            "count": 4,
+            "force_per_point_N": 4962.2,
+            "eccentricity_factor": 1.0,
+            "symmetric": true,
+            "status": "通过",
+            "suggestion": null
+          },
+          "summary": {
+            "passed": true,
+            "risk_level": "低",
+            "reinforcement_required": false,
+            "reinforcement_plan": [],
+            "final_conclusion": "按默认截面与γ=2.2校核通过",
+            "calc_strategy": "forced_semi_strict",
+            "checks": {
+              "geometry": "通过",
+              "payload": "通过",
+              "bottom_bending": "通过",
+              "frame_stability": "通过",
+              "local_bearing": "通过",
+              "lifting_points": "通过"
+            }
+          },
+          "结论": "通过",
+          "安全系数": 2.2,
+          "箱型": "4米铁架",
+          "是否铁架": true,
+          "重量": {
+            "净重_kg": 740.0,
+            "箱自重_kg": 180.0,
+            "毛重_kg": 920.0
+          },
+          "设计载荷_kg": 3500.0,
+          "载荷利用率": "21.1%",
+          "件体包围盒_mm": {
+            "长": 2400.0,
+            "宽": 900.0,
+            "高": 1200.0
+          },
+          "几何": {
+            "尺寸适配": true,
+            "需求尺寸_mm": {
+              "长": 2450.0,
+              "宽": 950.0,
+              "高": 1250.0
+            },
+            "内净空_mm": {
+              "长": 2450.0,
+              "宽": 950.0,
+              "高": 1250.0
+            },
+            "间隙_mm": 50.0,
+            "体积利用率": "89.1%",
+            "体积利用率_数值": 89.09
+          },
+          "底面荷载": {
+            "底面积_m2": 2.3275,
+            "均布荷载_kg_m2": 317.9,
+            "通过": true
+          },
+          "底梁建议": {
+            "截面建议_mm": "槽钢10#",
+            "主梁间距_mm": 1275,
+            "纵向主梁数": 2,
+            "材质建议": "钢材",
+            "说明": "截面来源 steel_table（方案C：steel_table优先）"
+          },
+          "底梁抗弯": {
+            "模型": "纵梁沿箱长简支均布",
+            "计算应力_MPa": 79.68,
+            "许用应力_MPa": 150.0,
+            "应力利用率": "53.1%",
+            "应力通过": true,
+            "挠度_mm": 5.25,
+            "挠度限值_mm": 12.75,
+            "挠度通过": true,
+            "安全系数": 2.2
+          },
+          "重心稳定性": {
+            "合成重心高_mm": 600.0,
+            "稳定性": "关注",
+            "通过": true
+          },
+          "结构利用率": "53.1%",
+          "风险点": [],
+          "计算假定": [
+            "荷载组合 Fd=G×γ，γ 按箱型 1.8～2.2",
+            "截面：steel_table.json 优先，未命中走 sectionproperties/解析式",
+            "底板抗弯：简支均布，多梁有效根数偏安全",
+            "立柱轴压+长细比 λ=L0_cm/i_cm",
+            "局部承压与吊点分载为经验公式",
+            "正式出运前需包装工程师按图纸复核"
+          ],
+          "calc_report_md_len": 1581
+        },
+        "structure_detail": {
+          "safety_factor_gamma": 2.2,
+          "design_load_kg": 2024.0,
+          "section_used": {
+            "frame": "槽钢10#",
+            "bottom_beam": "槽钢10#×2",
+            "source": "steel_table",
+            "frame_detail": {
+              "name": "槽钢10#",
+              "A_cm2": 12.74,
+              "I_cm4": 198.3,
+              "W_cm3": 39.7,
+              "i_cm": 3.95,
+              "source": "steel_table"
+            },
+            "bottom_beam_detail": {
+              "name": "槽钢10#",
+              "A_cm2": 12.74,
+              "I_cm4": 198.3,
+              "W_cm3": 39.7,
+              "i_cm": 3.95,
+              "count": 2,
+              "source": "steel_table"
+            }
+          },
+          "bottom_bending": {
+            "span_mm": 2550.0,
+            "moment_Nm": 3163.38,
+            "section_modulus_Wx_cm3": 39.7,
+            "I_cm4": 198.3,
+            "beam_count": 2,
+            "effective_beam_count": 2,
+            "stress_MPa": 79.68,
+            "allowable_MPa": 150.0,
+            "deflection_mm": 5.25,
+            "deflection_limit_mm": 12.75,
+            "model": "纵梁沿箱长简支均布",
+            "status": "通过",
+            "suggestion": null
+          },
+          "frame_stability": {
+            "member": "立柱",
+            "axial_force_N": 4962.2,
+            "L0_cm": 135.0,
+            "L0_mm": 1350.0,
+            "k_factor": 1.0,
+            "section_i_cm": 3.95,
+            "slenderness_lambda": 34.2,
+            "lambda_formula": "λ = L0_cm / i_cm",
+            "lambda_allow": 150.0,
+            "lambda_band": "稳妥",
+            "lambda_guide": {
+              "comfortable_max": 100.0,
+              "caution_max": 120.0,
+              "note": "λ<80～100 相对稳妥；>120～150 需警惕失稳"
+            },
+            "stress_MPa": 3.89,
+            "allowable_MPa": 105.0,
+            "column_count": 4,
+            "status": "通过",
+            "suggestion": null
+          },
+          "local_bearing": {
+            "force_N": 4354.2,
+            "area_mm2": 6400.0,
+            "stress_MPa": 0.68,
+            "allowable_MPa": 120.0,
+            "status": "通过",
+            "suggestion": null
+          },
+          "lifting_points": {
+            "count": 4,
+            "force_per_point_N": 4962.2,
+            "eccentricity_factor": 1.0,
+            "symmetric": true,
+            "status": "通过",
+            "suggestion": null
+          },
+          "summary": {
+            "passed": true,
+            "risk_level": "低",
+            "reinforcement_required": false,
+            "reinforcement_plan": [],
+            "final_conclusion": "按默认截面与γ=2.2校核通过",
+            "calc_strategy": "forced_semi_strict",
+            "checks": {
+              "geometry": "通过",
+              "payload": "通过",
+              "bottom_bending": "通过",
+              "frame_stability": "通过",
+              "local_bearing": "通过",
+              "lifting_points": "通过"
+            }
+          }
+        },
+        "crate_fill_ratio": 0.8909,
+        "customized_outer": true
+      },
+      {
+        "box_id": "BOX-03",
+        "box_type": "6米铁架(定制)",
+        "outer_size_mm": {
+          "length": 2350.0,
+          "width": 1050.0,
+          "height": 2350.0
+        },
+        "gross_weight_kg": 2069.0,
+        "net_weight_kg": 1818.0,
+        "content": [
+          {
+            "material_id": "M002",
+            "name": "铝合金百叶幕墙 Aluminum Louver Curtain Wall",
+            "quantity": 8
+          }
+        ],
+        "special_attributes": [
+          "超重关注",
+          "定制外廓"
+        ],
+        "reinforcement": "槽钢12#×3",
+        "structure_conclusion": "通过",
+        "structure_calc": {
+          "box_id": "BOX-03",
+          "box_type": "6米铁架",
+          "total_weight_kg": 2069.0,
+          "safety_factor_gamma": 2.2,
+          "design_load_kg": 4551.8,
+          "section_used": {
+            "frame": "槽钢12#",
+            "bottom_beam": "槽钢12#×3",
+            "source": "steel_table",
+            "frame_detail": {
+              "name": "槽钢12#",
+              "A_cm2": 15.36,
+              "I_cm4": 346.3,
+              "W_cm3": 57.7,
+              "i_cm": 4.75,
+              "source": "steel_table"
+            },
+            "bottom_beam_detail": {
+              "name": "槽钢12#",
+              "A_cm2": 15.36,
+              "I_cm4": 346.3,
+              "W_cm3": 57.7,
+              "i_cm": 4.75,
+              "count": 3,
+              "source": "steel_table"
+            }
+          },
+          "bottom_bending": {
+            "span_mm": 2350.0,
+            "moment_Nm": 5244.95,
+            "section_modulus_Wx_cm3": 57.7,
+            "I_cm4": 346.3,
+            "beam_count": 3,
+            "effective_beam_count": 2.5,
+            "stress_MPa": 90.9,
+            "allowable_MPa": 150.0,
+            "deflection_mm": 4.23,
+            "deflection_limit_mm": 11.75,
+            "model": "纵梁沿箱长简支均布",
+            "status": "通过",
+            "suggestion": null
+          },
+          "frame_stability": {
+            "member": "立柱",
+            "axial_force_N": 11159.5,
+            "L0_cm": 235.0,
+            "L0_mm": 2350.0,
+            "k_factor": 1.0,
+            "section_i_cm": 4.75,
+            "slenderness_lambda": 49.5,
+            "lambda_formula": "λ = L0_cm / i_cm",
+            "lambda_allow": 150.0,
+            "lambda_band": "稳妥",
+            "lambda_guide": {
+              "comfortable_max": 100.0,
+              "caution_max": 120.0,
+              "note": "λ<80～100 相对稳妥；>120～150 需警惕失稳"
+            },
+            "stress_MPa": 7.27,
+            "allowable_MPa": 105.0,
+            "column_count": 4,
+            "status": "通过",
+            "suggestion": null
+          },
+          "local_bearing": {
+            "force_N": 2674.3,
+            "area_mm2": 6400.0,
+            "stress_MPa": 0.42,
+            "allowable_MPa": 120.0,
+            "status": "通过",
+            "suggestion": null
+          },
+          "lifting_points": {
+            "count": 4,
+            "force_per_point_N": 11159.5,
+            "eccentricity_factor": 1.0,
+            "symmetric": true,
+            "status": "通过",
+            "suggestion": null
+          },
+          "summary": {
+            "passed": true,
+            "risk_level": "低",
+            "reinforcement_required": false,
+            "reinforcement_plan": [],
+            "final_conclusion": "按默认截面与γ=2.2校核通过",
+            "calc_strategy": "forced_semi_strict",
+            "checks": {
+              "geometry": "通过",
+              "payload": "通过",
+              "bottom_bending": "通过",
+              "frame_stability": "通过",
+              "local_bearing": "通过",
+              "lifting_points": "通过"
+            }
+          },
+          "结论": "通过",
+          "安全系数": 2.2,
+          "箱型": "6米铁架",
+          "是否铁架": true,
+          "重量": {
+            "净重_kg": 1818.0,
+            "箱自重_kg": 251.0,
+            "毛重_kg": 2069.0
+          },
+          "设计载荷_kg": 4000.0,
+          "载荷利用率": "45.5%",
+          "件体包围盒_mm": {
+            "长": 2200.0,
+            "宽": 900.0,
+            "高": 2200.0
+          },
+          "几何": {
+            "尺寸适配": true,
+            "需求尺寸_mm": {
+              "长": 2250.0,
+              "宽": 950.0,
+              "高": 2250.0
+            },
+            "内净空_mm": {
+              "长": 2250.0,
+              "宽": 950.0,
+              "高": 2250.0
+            },
+            "间隙_mm": 50.0,
+            "体积利用率": "72.5%",
+            "体积利用率_数值": 72.46
+          },
+          "底面荷载": {
+            "底面积_m2": 2.1375,
+            "均布荷载_kg_m2": 850.5,
+            "通过": true
+          },
+          "底梁建议": {
+            "截面建议_mm": "槽钢12#",
+            "主梁间距_mm": 783,
+            "纵向主梁数": 3,
+            "材质建议": "钢材",
+            "说明": "截面来源 steel_table（方案C：steel_table优先）"
+          },
+          "底梁抗弯": {
+            "模型": "纵梁沿箱长简支均布",
+            "计算应力_MPa": 90.9,
+            "许用应力_MPa": 150.0,
+            "应力利用率": "60.6%",
+            "应力通过": true,
+            "挠度_mm": 4.23,
+            "挠度限值_mm": 11.75,
+            "挠度通过": true,
+            "安全系数": 2.2
+          },
+          "重心稳定性": {
+            "合成重心高_mm": 1100.0,
+            "稳定性": "关注",
+            "通过": true
+          },
+          "结构利用率": "60.6%",
+          "风险点": [],
+          "计算假定": [
+            "荷载组合 Fd=G×γ，γ 按箱型 1.8～2.2",
+            "截面：steel_table.json 优先，未命中走 sectionproperties/解析式",
+            "底板抗弯：简支均布，多梁有效根数偏安全",
+            "立柱轴压+长细比 λ=L0_cm/i_cm",
+            "局部承压与吊点分载为经验公式",
+            "正式出运前需包装工程师按图纸复核"
+          ],
+          "calc_report_md_len": 1585
+        },
+        "structure_detail": {
+          "safety_factor_gamma": 2.2,
+          "design_load_kg": 4551.8,
+          "section_used": {
+            "frame": "槽钢12#",
+            "bottom_beam": "槽钢12#×3",
+            "source": "steel_table",
+            "frame_detail": {
+              "name": "槽钢12#",
+              "A_cm2": 15.36,
+              "I_cm4": 346.3,
+              "W_cm3": 57.7,
+              "i_cm": 4.75,
+              "source": "steel_table"
+            },
+            "bottom_beam_detail": {
+              "name": "槽钢12#",
+              "A_cm2": 15.36,
+              "I_cm4": 346.3,
+              "W_cm3": 57.7,
+              "i_cm": 4.75,
+              "count": 3,
+              "source": "steel_table"
+            }
+          },
+          "bottom_bending": {
+            "span_mm": 2350.0,
+            "moment_Nm": 5244.95,
+            "section_modulus_Wx_cm3": 57.7,
+            "I_cm4": 346.3,
+            "beam_count": 3,
+            "effective_beam_count": 2.5,
+            "stress_MPa": 90.9,
+            "allowable_MPa": 150.0,
+            "deflection_mm": 4.23,
+            "deflection_limit_mm": 11.75,
+            "model": "纵梁沿箱长简支均布",
+            "status": "通过",
+            "suggestion": null
+          },
+          "frame_stability": {
+            "member": "立柱",
+            "axial_force_N": 11159.5,
+            "L0_cm": 235.0,
+            "L0_mm": 2350.0,
+            "k_factor": 1.0,
+            "section_i_cm": 4.75,
+            "slenderness_lambda": 49.5,
+            "lambda_formula": "λ = L0_cm / i_cm",
+            "lambda_allow": 150.0,
+            "lambda_band": "稳妥",
+            "lambda_guide": {
+              "comfortable_max": 100.0,
+              "caution_max": 120.0,
+              "note": "λ<80～100 相对稳妥；>120～150 需警惕失稳"
+            },
+            "stress_MPa": 7.27,
+            "allowable_MPa": 105.0,
+            "column_count": 4,
+            "status": "通过",
+            "suggestion": null
+          },
+          "local_bearing": {
+            "force_N": 2674.3,
+            "area_mm2": 6400.0,
+            "stress_MPa": 0.42,
+            "allowable_MPa": 120.0,
+            "status": "通过",
+            "suggestion": null
+          },
+          "lifting_points": {
+            "count": 4,
+            "force_per_point_N": 11159.5,
+            "eccentricity_factor": 1.0,
+            "symmetric": true,
+            "status": "通过",
+            "suggestion": null
+          },
+          "summary": {
+            "passed": true,
+            "risk_level": "低",
+            "reinforcement_required": false,
+            "reinforcement_plan": [],
+            "final_conclusion": "按默认截面与γ=2.2校核通过",
+            "calc_strategy": "forced_semi_strict",
+            "checks": {
+              "geometry": "通过",
+              "payload": "通过",
+              "bottom_bending": "通过",
+              "frame_stability": "通过",
+              "local_bearing": "通过",
+              "lifting_points": "通过"
+            }
+          }
+        },
+        "crate_fill_ratio": 0.7246,
+        "customized_outer": true
+      }
+    ],
+    "container_plan": {
+      "container_type": "40HQ",
+      "containers_used": 1,
+      "space_utilization": 0.1608,
+      "weight_utilization": 0.1675,
+      "space_utilization_best_container": 0.1608,
+      "floor_utilization_avg": 0.1754,
+      "per_container": [
+        {
+          "container_no": 1,
+          "volume_utilization": 0.1608,
+          "floor_utilization": 0.1754,
+          "boxes": 3,
+          "load_kg": 4435.0
+        }
+      ],
+      "metrics_note": "容积利用率=箱体外体积/柜内容积；最满柜 16%，底面积均 18%。钢结构铁架件行业常低于普货 70–85% 满载水平。",
+      "can_fit": true,
+      "layout": [
+        {
+          "box_id": "BOX-02",
+          "container_no": 1,
+          "position": {
+            "x": 0,
+            "y": 501,
+            "z": 0
+          },
+          "size": {
+            "dx": 1050,
+            "dy": 1350,
+            "dz": 2550
+          },
+          "rotation": "LWH",
+          "layer": 1
+        },
+        {
+          "box_id": "BOX-03",
+          "container_no": 1,
+          "position": {
+            "x": 1050,
+            "y": 501,
+            "z": 0
+          },
+          "size": {
+            "dx": 2350,
+            "dy": 1050,
+            "dz": 2350
+          },
+          "rotation": "LWH",
+          "layer": 1
+        },
+        {
+          "box_id": "BOX-01",
+          "container_no": 1,
+          "position": {
+            "x": 3400,
+            "y": 501,
+            "z": 0
+          },
+          "size": {
+            "dx": 800,
+            "dy": 1350,
+            "dz": 2650
+          },
+          "rotation": "LWH",
+          "layer": 1
+        }
+      ],
+      "unpacked_box_ids": [],
+      "message": "可以顺利装下",
+      "engine": "python-laff-3d"
+    },
+    "risk_report": {
+      "passed": false,
+      "compliance_score": 53,
+      "level": "high",
+      "risks": [
+        "BOX-01 单箱毛重 1446kg，优先铁箱/钢骨箱",
+        "BOX-03 单箱毛重 2069kg，需全项校核与铁箱",
+        "空隙率 84%（大件稀疏常见），注意填充绑扎",
+        "左右重心偏心率 6.0%（建议≤5%）",
+        "前后重心位于柜深 17% 处（宜 40%–60%）",
+        "空间利用率偏低（大件稀疏属正常）",
+        "加固建议（4米铁架）：底部托盘/横梁；必须铁箱 + 全项校核",
+        "加固建议（3米木箱）：底部托盘/横梁"
+      ],
+      "blockers": [
+        "前后重心位于柜深 17% 处（宜 40%–60%）"
+      ],
+      "explanation": "存在阻断项，需整改后再出运。 合规分 53（high）。空间 16%，重量 17%，can_fit=True。 关注：单箱毛重 1446kg，优先铁箱/钢骨箱；单箱毛重 2069kg，需全项校核与铁箱；空隙率 84%（大件稀疏常见），注意填充绑扎",
+      "cog": {
+        "gx_mm": 2091.6,
+        "gy_mm": 1105.1,
+        "gz_mm": 1239.4,
+        "lateral_eccentricity": 0.0603,
+        "longitudinal_position": 0.1738,
+        "height_ratio": 0.4594
+      }
+    },
+    "views_keys": [
+      "top",
+      "side",
+      "front"
+    ],
+    "final_response": "# 拼柜方案结果\n\n**方案编号（装箱）**：PKG-20260724_141156_9c63cacb\n**柜型**：40HQ\n**箱数**：3\n**能否装下**：True\n**空间利用率**：16%\n**重量利用率**：17%\n**评估分**：95.0（passed=True）\n**合规分**：53（level=high）\n\n## 风险摘要\n- BOX-01 单箱毛重 1446kg，优先铁箱/钢骨箱\n- BOX-03 单箱毛重 2069kg，需全项校核与铁箱\n- 空隙率 84%（大件稀疏常见），注意填充绑扎\n- 左右重心偏心率 6.0%（建议≤5%）\n- 前后重心位于柜深 17% 处（宜 40%–60%）\n- 空间利用率偏低（大件稀疏属正常）\n- 加固建议（4米铁架）：底部托盘/横梁；必须铁箱 + 全项校核\n- 加固建议（3米木箱）：底部托盘/横梁\n\n## 合规说明\n存在阻断项，需整改后再出运。 合规分 53（high）。空间 16%，重量 17%，can_fit=True。 关注：单箱毛重 1446kg，优先铁箱/钢骨箱；单箱毛重 2069kg，需全项校核与铁箱；空隙率 84%（大件稀疏常见），注意填充绑扎\n\n## 布局\n- 三视角数据：views.top/side/front 已生成\n- 侧视 PNG：output\\side_20260724_141156.png\n- 装载引擎：python-laff-3d\n\n---\n团队B 完成。如需改柜型请重新确认。"
+  }
+}
