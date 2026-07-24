@@ -1,151 +1,133 @@
-# 智能装箱与拼柜 · 多智能体 Harness
+﻿# ?箄鋆拳銝??繚 憭?賭? Harness
 
-面向 **远东新加坡陆路交通局办公楼项目** 钢结构件：  
-**材料清单 → 铁箱/木箱（结构）→ 拼柜装载 → 风险合规 → 三视图**。
-
-## 最终架构（9 智能体 + 用户确认）
-
+?Ｗ? **餈??啣??⊿?頝臭漱???璆潮★??* ?Ｙ??辣嚗? 
+**??皜? ???拳/?函拳嚗??????潭?鋆蝸 ??憌?? ??銝???*??
+## ?蝏??9 ?箄雿?+ ?冽蝖株恕嚗?
 ```
-用户输入（材料清单）
-  →【1 主控】开头选柜 + 双利用率目标 + 二层堆码策略
-  →【团队A】2 材料解析 · 3 结构 · 4 装箱方案
-  → 输出装箱方案给用户
-  →【用户确认】★ 必选柜型 / 可调整 / 可取消
-  →【团队B】5 规划 · 6 装载 · 7 评估 · 8 风险 · 9 可视化
-  →【主控收口】结尾复核柜型 + 汇总报告
-```
+?冽颲嚗?????
+  ?? 銝餅??憭湧? + ??函??格? + 鈭???蝑
+  ???? ??閫?? 繚 3 蝏? 繚 4 鋆拳?寞?
+  ??颲鋆拳?寞?蝏??  ??瑞＆霈扎? 敹???/ ?航???/ ?臬?瘨?  ???? 閫? 繚 6 鋆蝸 繚 7 霂摯 繚 8 憌 繚 9 ?航???  ?蜓?扳???撠曉??豢???+ 瘙餅??```
 
-### 安全提示
+### 摰?內
 
-- **不要提交** `deepseek api.txt`、`.env`、任何 `*apiKey*` 文件（已在 `.gitignore`）
-- 复制 `.env.example` → `.env`，填入自己的 LLM Key
+- **銝??漱** `deepseek api.txt`?.env`?遙雿?`*apiKey*` ?辣嚗歇??`.gitignore`嚗?- 憭 `.env.example` ??`.env`嚗‵?亥撌梁? LLM Key
 
-| 文档 | 说明 |
+| ?﹝ | 霂湔? |
 |------|------|
-| [docs/overall-architecture.md](docs/overall-architecture.md) | **最终完整架构** |
-| [docs/team-a-user-output-template.md](docs/team-a-user-output-template.md) | **团队A 给用户的输出模板** |
-| [docs/api-spec.md](docs/api-spec.md) | **JSON 接口定稿 v2.1** |
-| [docs/phase2-agent2-packer-api.md](docs/phase2-agent2-packer-api.md) | skjolber 封装参考 |
+| [docs/overall-architecture.md](docs/overall-architecture.md) | **?蝏??湔??* |
+| [docs/team-a-user-output-template.md](docs/team-a-user-output-template.md) | **?ａ?A 蝏?瑞?颲璅⊥** |
+| [docs/api-spec.md](docs/api-spec.md) | **JSON ?亙摰阮 v2.1** |
+| [docs/phase2-agent2-packer-api.md](docs/phase2-agent2-packer-api.md) | skjolber 撠???|
 
-## 设计原则
+## 霈曇恣??
 
-- 计算用代码（结构 / 合箱 / skjolber / 规则评分）
-- LLM：意图、解析辅助、风险解释、文案润色
-- 接口：snake_case，mm/kg，Agent 间只传标准 JSON
+- 霈∠??其誨??蝏? / ?拳 / skjolber / 閫?霂?嚗?- LLM嚗??整圾???押??抵圾??獢隋??- ?亙嚗nake_case嚗m/kg嚗gent ?游隡???JSON
 
-## 运行（代码已按最终架构落地）
+## 餈?嚗誨?歇??蝏??堆?
 
 ```bash
-cd E:\ai比赛
+cd E:\ai瘥?
 pip install -r requirements.txt
 
-# 全流程（自动确认 40HQ，便于演示）
+# ?冽?蝔??芸蝖株恕 40HQ嚗噶鈭?蝷綽?
 python main.py --demo --trace
 
-# 只跑团队A → phase=await_user_confirm（等人确认）
+# ?芾??ａ?A ??phase=await_user_confirm嚗?鈭箇＆霈歹?
 python main.py --team-a
 
-# 交互：团队A → 输入柜型 → 团队B
+# 鈭支?嚗? ??颲?? ???ａ?B
 python main.py --interactive
 
-# 回归
+# ??
 python main.py --eval
 ```
 
-| 代码 | 对应 |
+| 隞?? | 撖孵? |
 |------|------|
-| `agents/material_parser` | 团队A 材料解析 |
-| `agents/structure_agent` | 团队A 结构计算 |
-| `agents/box_scheme` | 团队A 装箱方案 |
-| `agents/present_team_a` | 用户确认载荷 |
-| `agents/planner` | 团队B 规划 |
-| `agents/loader` | 团队B 装载（**占位**，待 skjolber） |
-| `agents/evaluator` | 团队B 评估 |
-| `agents/risk_compliance` | 团队B 风险合规 |
-| `agents/visualizer` | 团队B 三视角 |
-| `harness.run_team_a / run_team_b` | 主控闸门 |
+| `agents/material_parser` | ?ａ?A ??閫?? |
+| `agents/structure_agent` | ?ａ?A 蝏?霈∠? |
+| `agents/box_scheme` | ?ａ?A 鋆拳?寞? |
+| `agents/present_team_a` | ?冽蝖株恕頧質 |
+| `agents/planner` | ?ａ?B 閫? |
+| `agents/loader` | ?ａ?B 鋆蝸嚗?*??**嚗? skjolber嚗?|
+| `agents/evaluator` | ?ａ?B 霂摯 |
+| `agents/risk_compliance` | ?ａ?B 憌?? |
+| `agents/visualizer` | ?ａ?B 銝?閫?|
+| `harness.run_team_a / run_team_b` | 銝餅?賊 |
 
-## 技术分工
+## ??臬?撌?
+- Agent0 + ?ａ?A + 蝵嚗ython / LangGraph + **FastAPI**  
+- Agent5嚗?*Java Spring Boot + skjolber**嚗skjolber-service/`嚗? 
+- Agent8嚗views` ??**Vue2**嚗frontend/index.html`嚗DN ?? npm嚗? 
 
-- Agent0 + 团队A + 网关：Python / LangGraph + **FastAPI**  
-- Agent5：**Java Spring Boot + skjolber**（`skjolber-service/`）  
-- Agent8：`views` → **Vue2**（`frontend/index.html`，CDN 无需 npm）  
-
-## 联调：装载引擎 + Vue2（**无需 Java / 管理员权限**）
-
-本机若装不了 JDK，**默认使用纯 Python 3D 引擎**（`python-laff-3d`），接口与 skjolber 对齐，Vue2 可直接画三视角。
-
+## ??嚗?頧賢???+ Vue2嚗?*?? Java / 蝞∠?????*嚗?
+?祆?亥?銝? JDK嚗?*暺恕雿輻蝥?Python 3D 撘?**嚗python-laff-3d`嚗??亙銝?skjolber 撖寥?嚗ue2 ?舐?亦銝?閫?
 ```bash
 pip install -r requirements.txt
 python -m uvicorn gateway.app:app --reload --port 8000
-# 浏览器打开 http://127.0.0.1:8000
-# 按钮「跑 test PDF 样例」/ 报表 /api/test-shipments/report
+# 瘚??冽?撘 http://127.0.0.1:8000
+# ??? test PDF ?瑚??? ?亥” /api/test-shipments/report
 ```
 
-### test/ 装箱单整批（同一项目拼柜，默认接 DeepSeek）
-
+### test/ 鋆拳??對???憿寧?潭?嚗?霈斗 DeepSeek嚗?
 ```bash
 python scripts/run_test_shipments.py
-# 输出:
+# 颲:
 #   output/test_shipments/summary.json
 #   output/test_shipments/report.html
 #   output/test_shipments/report.xlsx
 #   output/test_shipments/*_project.json
 ```
 
-### 钢结构 Excel 测试集（远东多 sheet 拆分 + 合成）
-
-网上几乎没有「材料→铁架→拼柜」同业务完整 Excel。以项目内远东表为主：
-
+### ?Ｙ???Excel 瘚???餈?憭?sheet ?? + ??嚗?
+蝵???瘝⊥?????????銝摰 Excel?誑憿寧??銝”銝箔蜓嚗?
 ```bash
-python scripts/build_steel_test_set.py   # 从 SLT0*远东*.xlsx 拆分 → test/excel/
-python scripts/run_excel_tests.py       # 材料清单跑 TeamA/B
-# 输出: output/excel_tests/report.html
+python scripts/build_steel_test_set.py   # 隞?SLT0*餈?*.xlsx ?? ??test/excel/
+python scripts/run_excel_tests.py       # ??皜?頝?TeamA/B
+# 颲: output/excel_tests/report.html
 ```
 
-| 文件 | 来源 |
+| ?辣 | ?交? |
 |------|------|
-| `test/excel/test_materials_01.xlsx` | 报价单 |
-| `test/excel/test_boxes_2m.xlsx` 等 | 装货单按铁架类型 |
-| `test/excel/test_full_flow.xlsx` | 材料+箱明细+柜型 |
-| `test/excel/synthetic/*.xlsx` | 短件/超长/近限重/超重/混装 |
+| `test/excel/test_materials_01.xlsx` | ?乩遠??|
+| `test/excel/test_boxes_2m.xlsx` 蝑?| 鋆揮???蝐餃? |
+| `test/excel/test_full_flow.xlsx` | ??+蝞望?蝏??? |
+| `test/excel/synthetic/*.xlsx` | ?凋辣/頞/餈???頞?/瘛瑁? |
 
-### 公开 3D-BPP 基准（拼柜引擎冒烟，非钢结构业务）
-
+### ?砍? 3D-BPP ?箏?嚗???????蝏?銝嚗?
 ```bash
 python scripts/fetch_external_datasets.py   # D-Wave sample txt
-python scripts/convert_bpp_to_cases.py      # → test/benchmarks/*.json + excel/
-python scripts/run_benchmark_cases.py       # 第二阶段 pack_boxes_api
-# 输出: output/benchmarks/report.html
+python scripts/convert_bpp_to_cases.py      # ??test/benchmarks/*.json + excel/
+python scripts/run_benchmark_cases.py       # 蝚砌??嗆挾 pack_boxes_api
+# 颲: output/benchmarks/report.html
 ```
 
-| 数据 | 用途 |
+| ?唳 | ?券?|
 |------|------|
-| D-Wave sample_data_1/2 | 单柜/多柜算法冒烟 |
-| case_a 小件 20GP | 易装 |
-| case_b 长件 40HQ | 偏铁架风格 |
-| case_c / overweight | 限重与风险 |
-| **远东 Excel** | **业务正确性 / 答辩主案例** |
+| D-Wave sample_data_1/2 | ??/憭?蝞??? |
+| case_a 撠辣 20GP | ?? |
+| case_b ?蹂辣 40HQ | ???園???|
+| case_c / overweight | ??銝???|
+| **餈? Excel** | **銝甇?＆??/ 蝑儔銝餅?靘?* |
 
-尺寸覆盖：`knowledge/dims_override.json`（关键词命中则替换估算尺寸）。
+撠箏站閬?嚗knowledge/dims_override.json`嚗?株??賭葉??Ｖ摯蝞偕撖賂???
+Agent5 鋆蝸隡?蝥改?
 
-Agent5 装载优先级：
+1. `SKJOLBER_URL` ????Java skjolber ?嚗? JDK ?嗅??  
+2. **蝥?Python 3D**嚗packing_assistant/tools/bin3d.py`嚗? **?恣???嗥?銝餉楝敺?*  
+3. ??1D 蝥踵批?摨? 
 
-1. `SKJOLBER_URL` 指向的 Java skjolber 服务（有 JDK 时可选）  
-2. **纯 Python 3D**（`packing_assistant/tools/bin3d.py`）← **无管理员时的主路径**  
-3. 旧 1D 线性兜底  
+?恣??/JDK ?嗅?鋆?Java 撟嗉挽蝵?`SKJOLBER_URL` ?喳??摰?skjolber嚗誨???冽??
+### 3嚗PI
 
-有管理员/JDK 时再装 Java 并设置 `SKJOLBER_URL` 即可无真实 skjolber，代码不用改。
-
-### 3）API
-
-| 方法 | 路径 | 说明 |
+| ?寞? | 頝臬? | 霂湔? |
 |------|------|------|
-| POST | `/api/team-a` | 团队A，返回装箱方案 + `phase=await_user_confirm` |
+| POST | `/api/team-a` | ?ａ?A嚗???蝞望獢?+ `phase=await_user_confirm` |
 | POST | `/api/confirm` | `action=confirm\|revise\|cancel` |
-| POST | `/api/demo` | 自动确认全流程 |
-| GET | `/api/health` | 网关 + skjolber 状态 |
+| POST | `/api/demo` | ?芸蝖株恕?冽?蝔?|
+| GET | `/api/health` | 蝵 + skjolber ?嗆?|
 
-## 环境变量
+## ?臬???
 
-见 `.env.example`（含 `SKJOLBER_URL`）。
+閫?`.env.example`嚗 `SKJOLBER_URL`嚗?
