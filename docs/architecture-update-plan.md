@@ -111,7 +111,7 @@ while N ≤ N_max:          # N_max 默认 N0+8，用户 cap 仅封顶
 | P0 | `tools/booking.py` | ✅ | compute_booking + pack_with_auto_containers |
 | P0 | `agents/planner.py` | ✅ | 写 N0；max_containers=搜索上限非目标 |
 | P0 | `agents/loader.py` | ✅ | 自 N0 递增至 can_fit |
-| P0 | `tools/bin3d.py` | ✅ | outer 碰撞；PAYLOAD 28610 |
+| P0 | `tools/bin3d.py` | ✅ | outer 碰撞；PAYLOAD 28610；**贴端墙+长架条带**（禁居中碎片） |
 | P1 | evaluator / risk / finalize | ✅ | 三指标 + VOLUME_SUSPICIOUS |
 | P1 | knowledge 40HQ | ✅ | COSCO PAYLOAD/CU.CAP |
 | P2 | material 过滤（目的地/已发） | ⏳ | 脚本侧已有 site-only；通用入主控待做 |
