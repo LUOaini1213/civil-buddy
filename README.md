@@ -152,6 +152,16 @@ python scripts/run_precommit_tests.py --quick
 
 **创新点一句：** 多智能体成箱+拼柜；订柜用有效体积、外廓只做 3D；避免空心包装虚高柜数。
 
+### Agent 有没有用？（两条路径）
+
+| 路径 | 命令 | 作用 |
+|------|------|------|
+| **订舱数字（稳）** | `python scripts/demo_vmu1_site.py` | **不经 9 Agent**，booking+3D，领导数字 |
+| **Agent 过程（可讲）** | `python scripts/demo_nine_agents_trace.py` | **逐步跑 9 Agent**，看每步 message |
+| **API** | `uvicorn gateway.app:app --port 8000` 后 `POST /api/pipeline/trace` 或 `/api/team-a`→`/api/confirm` | 网关编排同一套 Agent |
+
+说明：柜数/体积/can_fit 由 **tools** 算；Agent 负责分工、确认闸门、结构/风险、出图与裁决文案。详见 [docs/agents-vs-tools.md](docs/agents-vs-tools.md)。
+
 ### 安全（必读）
 
 - **不要提交** `deepseek api.txt`、`.env`、任何 `*apiKey*`（已在 `.gitignore`）
