@@ -66,18 +66,28 @@ def classify_material(length_mm: float, weight_kg: float, total_kg: float) -> st
 def box_internal_to_api(b: Dict[str, Any]) -> Dict[str, Any]:
     """packing 工具中文输出 → api-spec boxes。"""
     if "box_id" in b and "outer_size_mm" in b:
-        return b
+        # 已是 API 形态：仍补齐体积字段别名，避免缺键
+        out = dict(b)
+        if out.get("content_m3") is None and out.get("content_volume_m3") is not None:
+            out["content_m3"] = out.get("content_volume_m3")
+        return out
     dims = b.get("外尺寸_mm") or b.get("outer_size_mm") or {}
     content_in = b.get("装载内容") or b.get("content") or []
     content = []
     for c in content_in:
-        content.append(
-            {
-                "material_id": c.get("material_id") or c.get("加工件编号") or "",
-                "name": c.get("name") or c.get("名称") or "",
-                "quantity": int(c.get("quantity") or c.get("数量") or 1),
+        cdims = c.get("outer_size_mm") or c.get("外尺寸_mm") or {}
+        item = {
+            "material_id": c.get("material_id") or c.get("加工件编号") or "",
+            "name": c.get("name") or c.get("名称") or "",
+            "quantity": int(c.get("quantity") or c.get("数量") or 1),
+        }
+        if cdims:
+            item["outer_size_mm"] = {
+                "length": float(cdims.get("length") or cdims.get("长") or 0),
+                "width": float(cdims.get("width") or cdims.get("宽") or 0),
+                "height": float(cdims.get("height") or cdims.get("高") or 0),
             }
-        )
+        content.append(item)
     special = b.get("特殊属性") or b.get("special_attributes") or []
     struct = b.get("结构计算") or b.get("structure_calc") or {}
     detail = b.get("structure_detail") or {}
@@ -125,10 +135,38 @@ def box_internal_to_api(b: Dict[str, Any]) -> Dict[str, Any]:
 
 
 def box_api_to_internal(b: Dict[str, Any]) -> Dict[str, Any]:
-    """snake_case box → consolidation 等内部工具。"""
+    """snake_case box → consolidation 等内部工具（透传体积字段）。"""
     if "外尺寸_mm" in b:
-        return b
+        # 已是内部形态：仍确保体积键存在
+        out = dict(b)
+        for k in ("content_m3", "crate_fill_ratio", "outer_m3", "booking_volume_m3"):
+            if k not in out and b.get(k) is not None:
+                out[k] = b.get(k)
+        return out
     outer = b.get("outer_size_mm") or {}
+    content_in = b.get("content") or b.get("contents") or b.get("装载内容") or []
+    content = []
+    for c in content_in:
+        cdims = c.get("outer_size_mm") or c.get("外尺寸_mm") or {}
+        item = {
+            "material_id": c.get("material_id") or c.get("加工件编号") or "",
+            "名称": c.get("name") or c.get("名称") or "",
+            "name": c.get("name") or c.get("名称") or "",
+            "数量": int(c.get("quantity") or c.get("数量") or 1),
+            "quantity": int(c.get("quantity") or c.get("数量") or 1),
+        }
+        if cdims:
+            item["外尺寸_mm"] = {
+                "长": float(cdims.get("length") or cdims.get("长") or 0),
+                "宽": float(cdims.get("width") or cdims.get("宽") or 0),
+                "高": float(cdims.get("height") or cdims.get("高") or 0),
+            }
+            item["outer_size_mm"] = {
+                "length": float(cdims.get("length") or cdims.get("长") or 0),
+                "width": float(cdims.get("width") or cdims.get("宽") or 0),
+                "height": float(cdims.get("height") or cdims.get("高") or 0),
+            }
+        content.append(item)
     return {
         "箱号": b.get("box_id") or "",
         "箱型": b.get("box_type") or "",
@@ -141,6 +179,15 @@ def box_api_to_internal(b: Dict[str, Any]) -> Dict[str, Any]:
         "净重_kg": float(b.get("net_weight_kg") or 0),
         "特殊属性": list(b.get("special_attributes") or []),
         "结构结论": b.get("structure_conclusion") or "",
+        "装载内容": content,
+        "content": content,
+        # 订柜体积字段透传（1D 回落/consolidation 后再估柜不丢）
+        "crate_fill_ratio": b.get("crate_fill_ratio"),
+        "content_m3": b.get("content_m3"),
+        "outer_m3": b.get("outer_m3"),
+        "booking_volume_m3": b.get("booking_volume_m3"),
+        "stackable": bool(b.get("stackable")),
+        "prefer_bottom": bool(b.get("prefer_bottom")),
     }
 
 

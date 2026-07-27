@@ -205,6 +205,9 @@ def main() -> int:
                         "special_attributes": b.get("special_attributes"),
                         "content": b.get("content") or b.get("contents"),
                         "crate_fill_ratio": b.get("crate_fill_ratio"),
+                        "content_m3": b.get("content_m3"),
+                        "outer_m3": b.get("outer_m3"),
+                        "booking_volume_m3": b.get("booking_volume_m3"),
                         "content_max_length_mm": b.get("content_max_length_mm"),
                     }
                 )

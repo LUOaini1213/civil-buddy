@@ -462,6 +462,7 @@ def run_pack(mats: List[Dict[str, Any]], container: str = "40HQ") -> Dict[str, A
                 "net": b["net_weight_kg"],
                 "gross": b["gross_weight_kg"],
                 "content_m3": b.get("content_m3"),
+                "crate_fill_ratio": b.get("crate_fill_ratio"),
                 "booking_volume_m3": b.get("booking_volume_m3"),
                 "struct": "当量跳过",
                 "content": [c.get("name") for c in b.get("content") or []],

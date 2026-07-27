@@ -38,7 +38,9 @@ def agent_finalize(state: PackingState) -> Dict[str, Any]:
     orch["container_select_end"] = end_review
     orch["container_review_done"] = True
 
-    space = float(plan.get("space_utilization") or 0)
+    space = float(
+        plan.get("outer_space_utilization") or plan.get("space_utilization") or 0
+    )
     space_best = float(plan.get("space_utilization_best_container") or space)
     floor = float(plan.get("floor_utilization_avg") or 0)
     weight = float(plan.get("weight_utilization") or 0)
@@ -175,7 +177,8 @@ def agent_finalize(state: PackingState) -> Dict[str, Any]:
     lines.extend(
         [
         f"**利用综合分**：{evaluation.get('util_composite', '-')} "
-        f"（空间子分 {evaluation.get('space_subscore', '-')} / "
+        f"（订柜有效体积子分 {evaluation.get('booking_volume_subscore') or evaluation.get('space_subscore', '-')} / "
+        f"底面积子分 {evaluation.get('floor_subscore', '-')} / "
         f"重量子分 {evaluation.get('weight_subscore', '-')}）",
         f"**评估分**：{evaluation.get('score', '-') }（passed={evaluation.get('passed')} "
         f"decision={evaluation.get('decision', '-')}）",
@@ -226,7 +229,8 @@ def agent_finalize(state: PackingState) -> Dict[str, Any]:
             polished = chat(
                 system=(
                     "你是货运装箱顾问。根据结构化结果写简洁专业的中文汇总，"
-                    "必须点明：实际柜型、主控是否建议换柜、容积/重量利用率、"
+                    "必须点明：实际柜型、主控是否建议换柜、"
+                    "外廓摆柜率/订柜有效体积率/重量利用率（三者分开，勿把外廓当订柜）、"
                     "能否装下 vs 能否出运；若合规 REJECT 必须明确写「打回/不可出运」。"
                     "保留关键数字，不要编造。控制在 400 字内。"
                 ),
