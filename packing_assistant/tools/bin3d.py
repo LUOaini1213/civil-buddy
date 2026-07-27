@@ -556,10 +556,12 @@ def pack_items(
     cargo_m3 = used_vol / 1e9
     cont_m3 = cont_vol / 1e9
     note = (
-        f"容积利用率=Σ(铁箱/木箱外廓实心长方体体积)÷柜内几何容积"
+        f"摆柜几何容积率=Σ(箱外廓AABB)÷柜内几何容积"
         f"（已装 {cargo_m3:.3f} m³ / 单柜 {cont_m3:.3f} m³ ×{max(used_bins,1)}）；"
         f"最满柜 {best_vol:.0%}，底面积均 {avg_floor:.0%}。"
-        f"不按零件镂空体积；钢结构铁架实务容积常低于普货 70–85%。"
+        f"此指标用于已成箱3D摆位，不等于材料估柜体积；"
+        f"估柜请用 volume_estimate.pack_effective（件体积×货种膨胀≤1.8）。"
+        f"钢结构常重量先满、此外廓容积率偏低属正常。"
     )
 
     return {
@@ -572,6 +574,7 @@ def pack_items(
         "per_container": per_container,
         "metrics_note": note,
         "volume_basis": "solid_outer_aabb",
+        "volume_basis_note": "摆柜几何用外廓；材料估柜用 pack_effective，勿混用",
         "cargo_solid_volume_mm3": round(used_vol, 1),
         "cargo_solid_volume_m3": round(cargo_m3, 4),
         "container_inner_volume_m3": round(cont_m3, 4),
