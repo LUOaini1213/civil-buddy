@@ -212,6 +212,10 @@ python scripts/compare_container_types.py
 
 # 9 智能体逐步输出
 python scripts/dump_nine_agents.py
+
+# 仿真材料（假设数据，回归/演示）
+python scripts/gen_sim_materials.py --run-booking
+# 输出 test/sim_materials/<case>/materials.json|xlsx
 ```
 
 ---

@@ -1,0 +1,62 @@
+{
+  "case_id": "overweight_risk",
+  "story": "重货应力，重量柜应≥3",
+  "expect": {
+    "containers_by_weight_min": 3
+  },
+  "packing_options_hint": null,
+  "materials": [
+    {
+      "id": "SIM-0001",
+      "name": "重件块-1",
+      "spec": "13—铁件",
+      "quantity": 1,
+      "weight_kg": 16000.0,
+      "total_weight_kg": 16000.0,
+      "length_mm": 2000.0,
+      "width_mm": 1500.0,
+      "height_mm": 1200.0,
+      "part_no": "SIM-HEAVY",
+      "note": "sim:overweight stress"
+    },
+    {
+      "id": "SIM-0002",
+      "name": "重件块-2",
+      "spec": "13—铁件",
+      "quantity": 1,
+      "weight_kg": 16000.0,
+      "total_weight_kg": 16000.0,
+      "length_mm": 2000.0,
+      "width_mm": 1500.0,
+      "height_mm": 1200.0,
+      "part_no": "SIM-HEAVY",
+      "note": "sim:overweight stress"
+    },
+    {
+      "id": "SIM-0003",
+      "name": "重件块-3",
+      "spec": "13—铁件",
+      "quantity": 1,
+      "weight_kg": 16000.0,
+      "total_weight_kg": 16000.0,
+      "length_mm": 2000.0,
+      "width_mm": 1500.0,
+      "height_mm": 1200.0,
+      "part_no": "SIM-HEAVY",
+      "note": "sim:overweight stress"
+    },
+    {
+      "id": "SIM-0004",
+      "name": "重件块-4",
+      "spec": "13—铁件",
+      "quantity": 1,
+      "weight_kg": 16000.0,
+      "total_weight_kg": 16000.0,
+      "length_mm": 2000.0,
+      "width_mm": 1500.0,
+      "height_mm": 1200.0,
+      "part_no": "SIM-HEAVY",
+      "note": "sim:overweight stress"
+    }
+  ]
+}
