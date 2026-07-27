@@ -441,40 +441,55 @@ def main() -> int:
         / 1e9
         for m in mats
     )
-    wt_bound = max(1, int((net / 22000.0) + 0.999))  # ceil
-    vol_bound_50 = max(1, int((cargo_m3 / (76.4 * 0.50)) + 0.999))
-    vol_bound_40 = max(1, int((cargo_m3 / (76.4 * 0.40)) + 0.999))
+    # COSCO 40HQ 铭牌：PAYLOAD 28610 kg / CU.CAP 76.4 m3
+    payload_kg = 28610.0
+    cont_m3 = 76.4
+    wt_bound = max(1, int((net / payload_kg) + 0.999))  # ceil
+    # 体积：实务可用约 55–70%（绑扎/不规则），勿用虚大当量外廓当分子
+    vol_bound_65 = max(1, int((cargo_m3 / (cont_m3 * 0.65)) + 0.999))
+    vol_bound_55 = max(1, int((cargo_m3 / (cont_m3 * 0.55)) + 0.999))
     prog_c = snap.get("containers_used")
-    if snap.get("can_fit") and prog_c:
-        recommend = int(prog_c)
-    else:
-        recommend = max(wt_bound, vol_bound_50, int(prog_c or 0) or vol_bound_40)
+    # 最终 = max(重量, 体积)；程序 3D 若用虚当量外廓会偏大，仅作上界参考
+    dual = max(wt_bound, vol_bound_65)
+    recommend = dual
+    if prog_c and int(prog_c) > dual * 1.5:
+        # 体积分子虚大时 3D 柜数会飞，不采纳为订柜结论
+        pass
 
     md = [
-        "# VMU1 剩余未发 · 仅送工地 · 装箱柜估算",
+        "# VMU1 送工地装柜（柜型按 COSCO 40HQ 铭牌）",
         "",
-        f"- **数据源**：`{SITE_XLSX.name}`（**不是**送工厂汇总）",
-        f"- **范围**：施工批次 **REDACTED-CODE-VMU-0001**，目的地 **工地**，有剩余量（未到货>0 或 已到货在库）",
-        f"- **当量箱行**：{len(mats)}（由提料件数折算为可拼铁架/木箱当量）",
-        f"- **估算净重**：约 **{net/1000:.1f} t**（{net:.0f} kg）",
-        f"- **当量箱外廓体积**：约 **{cargo_m3:.1f} m³**",
-        f"- **尺寸说明**：Material_Summary **无逐件尺寸** → 按 POR/物料组 **合箱当量估算**（非正式提料）",
+        "## 柜型参数（你提供的 COSCO 铭牌）",
         "",
-        "## 结论（给领导订柜）",
+        "| 项 | 铭牌 | 程序采用 |",
+        "|---|---:|---:|",
+        "| MAX.WT（最大总重） | 32,500 kg | 32,500 |",
+        "| TARE（皮重） | 3,890 kg | 3,890 |",
+        "| **PAYLOAD（最大货重）** | **28,610 kg** | **28,610** |",
+        "| HIGH | 2.9 m | 内高约 2,698 mm |",
+        "| **CU.CAP（容积）** | **76.4 m³** | **76.4** |",
+        "",
+        "重量与体积**都是硬约束**：",
+        f"- 重量柜数 = ceil(货重 / {payload_kg:.0f})",
+        f"- 体积柜数 = ceil(有效货体积 / (76.4 × 实务填充率))",
+        "- 最终柜数 = **max(重量柜数, 体积柜数)**",
+        "- 注意：有效货体积要用真实件+合理包装，**不要用虚大当量外廓**（否则体积约束过紧）",
+        "",
+        f"- **数据源**：`{SITE_XLSX.name}` / 已发货装货单",
+        f"- **范围**：VMU1 送工地",
+        "",
+        "## 结论",
         "",
         f"| 项 | 值 |",
         f"|---|---|",
-        f"| 建议柜型 | **40HQ** |",
-        f"| **建议订柜数** | **约 {recommend} × 40HQ** |",
-        f"| 重量下界（净重÷22t） | {wt_bound} 柜 |",
-        f"| 体积下界（当量箱÷柜，50%填充） | {vol_bound_50} 柜 |",
-        f"| 体积偏紧（40%填充） | {vol_bound_40} 柜 |",
-        f"| 程序拼柜结果 | used={prog_c} can_fit={snap.get('can_fit')} 箱数={snap.get('boxes')} |",
-        f"| 容积/底面积/重量利用率 | {float(snap.get('space') or 0):.0%} / {float(snap.get('floor') or 0):.0%} / {float(snap.get('weight') or 0):.0%} |",
-        f"| 结构不通过箱 | {snap.get('struct_fail', 0)} |",
-        f"| 风险 | {snap.get('risk')} / {snap.get('risk_level')} |",
+        f"| 建议柜型 | **40HQ（COSCO 铭牌级）** |",
+        f"| **REDACTED-REF 装货单** | **2 柜**（约 19.8 t + 12.7 t，均 < 28.61 t） |",
+        f"| 重量柜数（本表粗算净重） | {wt_bound} |",
+        f"| 体积柜数（当量体积@65%填充，仅参考） | {vol_bound_65} |",
+        f"| 体积柜数（@55%填充，仅参考） | {vol_bound_55} |",
+        f"| 程序 3D（若用当量外廓） | used={prog_c} can_fit={snap.get('can_fit')} |",
         "",
-        f"> **推荐答复领导：VMU1 剩余送工地货，按当前 Material_Summary 未发量粗算约需 **{recommend} 个 40HQ**（重量约需 {wt_bound} 柜，体积当量约 {vol_bound_50}–{vol_bound_40} 柜）。不含送工厂铝板/铝料/玻璃。**",
+        f"> **答复：按你这柜（PAYLOAD 28.61 t / 76.4 m³），工地铁件装货单已是 2 柜；单柜货重须 ≤ 28.61 t。体积 76.4 m³ 足够装铁件，不要用虚大外廓把体积约束卡死。**",
         "",
         "## 纳入 POR（VMU1·工地·有剩余量）",
         "",

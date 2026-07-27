@@ -22,12 +22,19 @@
     },
     "40HQ": {
       "inner_mm": { "length": 12032, "width": 2352, "height": 2698 },
-      "volume_m3_theory": 76.3,
-      "volume_m3_practical": [65, 68],
-      "payload_ton_typical": [22, 26.5],
-      "tare_ton_approx": 4.1,
-      "max_load_kg": 26480,
-      "notes": ["钢结构件最常用柜型"]
+      "outer_height_m": 2.9,
+      "volume_m3_theory": 76.4,
+      "volume_m3_practical": [55, 68],
+      "payload_ton_typical": [26, 28.6],
+      "tare_ton_approx": 3.89,
+      "max_gross_kg": 32500,
+      "tare_kg": 3890,
+      "max_load_kg": 28610,
+      "notes": [
+        "钢结构件最常用柜型",
+        "COSCO 铭牌示例: MAX.WT 32500 / TARE 3890 / PAYLOAD 28610 kg / CU.CAP 76.4 m3 / HIGH 2.9m",
+        "体积实务可用勿按 100% 硬卡；钢结构常重量先满、容积率偏低"
+      ]
     },
     "45HQ": {
       "inner_mm": { "length": 13556, "width": 2352, "height": 2698 },
