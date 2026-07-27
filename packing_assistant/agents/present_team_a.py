@@ -157,11 +157,15 @@ def _suggest_containers(boxes: List[Dict[str, Any]]) -> List[str]:
         return [prefer]
     max_len = max(float((b.get("outer_size_mm") or {}).get("length") or 0) for b in boxes)
     gross = sum(float(b.get("gross_weight_kg") or 0) for b in boxes)
+    n = len(boxes)
     if max_len > 12000:
         return ["45HQ", prefer]
     if max_len > 5900 or gross > 20000:
         return [prefer, "40GP"] if prefer == "40HQ" else ["40HQ", "40GP"]
-    if max_len <= 5000 and gross < 15000:
+    # 3+ 箱且 ≥3.5m：勿首推 20GP（并排+纵向常要 40 尺）
+    if max_len >= 3500 and n >= 3:
+        return [prefer, "40GP"] if prefer == "40HQ" else ["40HQ", "40GP"]
+    if max_len <= 5000 and gross < 15000 and n <= 2:
         return [prefer, "20GP"]
     return [prefer]
 

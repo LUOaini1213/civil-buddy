@@ -154,9 +154,42 @@ def test_auto_pack_can_fit() -> None:
     print("OK auto pack used=", plan.get("containers_used"), "n0=", plan.get("n0"))
 
 
+def test_four_long_frames_one_40hq() -> None:
+    """4 个 ~4m 铁架应 1×40HQ 装下（贴端墙双列，禁止居中碎片）。"""
+    from packing_assistant.tools.bin3d import pack_boxes_api
+
+    boxes = [
+        {
+            "box_id": f"F{i}",
+            "outer_size_mm": {
+                "length": 4350 if i < 2 else 4000,
+                "width": 1100,
+                "height": 1750,
+            },
+            "gross_weight_kg": 750,
+            "stackable": False,
+            "prefer_bottom": True,
+            "content_m3": 1.5,
+            "outer_m3": 8.0,
+            "crate_fill_ratio": 0.2,
+        }
+        for i in range(4)
+    ]
+    p = pack_boxes_api(boxes, container_type="40HQ", max_containers=1)
+    assert p.get("can_fit") is True, p
+    assert int(p.get("containers_used") or 0) == 1, p
+    # 不得出现居中 x≈4000 却只装 2 箱的旧 bug：4 箱全在柜 1
+    nos = {L.get("container_no") for L in (p.get("layout") or [])}
+    assert nos == {1}, p.get("layout")
+    xs = [L["position"]["x"] for L in p["layout"]]
+    assert min(xs) == 0, f"应贴端墙 x=0，实际 xs={xs}"
+    print("OK 4 long frames in 1×40HQ xs=", sorted(xs))
+
+
 if __name__ == "__main__":
     test_steel_pieces_about_two()
     test_hollow_outer_not_dominate()
     test_outer_only_suspicious()
     test_auto_pack_can_fit()
+    test_four_long_frames_one_40hq()
     print("ALL BOOKING REGRESSION OK")

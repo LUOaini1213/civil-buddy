@@ -67,7 +67,7 @@ def _est_from_boxes(boxes: Sequence[Dict[str, Any]]) -> Dict[str, float]:
     max_L = 0.0
     max_H = 0.0
     gross = 0.0
-    cargo_m3 = 0.0
+    outer_m3 = 0.0
     for b in boxes:
         o = b.get("outer_size_mm") or {}
         L = float(o.get("length") or 0)
@@ -76,13 +76,23 @@ def _est_from_boxes(boxes: Sequence[Dict[str, Any]]) -> Dict[str, float]:
         max_L = max(max_L, L)
         max_H = max(max_H, H)
         gross += float(b.get("gross_weight_kg") or 0)
-        cargo_m3 += L * W * H / 1e9
+        outer_m3 += L * W * H / 1e9
+    # 选型体积：优先订柜有效体积；几何是否挤仍看箱数/最长边
+    try:
+        from packing_assistant.tools.volume_estimate import booking_volume_from_boxes
+
+        bv = booking_volume_from_boxes(boxes)
+        cargo_m3 = float(bv.get("booking_volume_m3") or outer_m3)
+    except Exception:
+        cargo_m3 = outer_m3
     return {
         "max_length_mm": max_L,
         "max_height_mm": max_H,
         "net_kg": gross * 0.85,
         "gross_kg_est": gross,
         "cargo_m3_est": cargo_m3,
+        "outer_m3": outer_m3,
+        "box_count": float(len(boxes)),
     }
 
 
@@ -117,6 +127,21 @@ def recommend_container(
     if max_L > 5900:
         candidates = [c for c in candidates if c != "20GP"]
         reasons.append(f"最长件/箱 {max_L:.0f}mm > 5900，排除 20GP")
+    # 多箱长铁架：单件虽可进 20GP，但 3+ 箱 4m 级并排纵向常需 40 尺才 1 柜装完
+    box_n = int(est.get("box_count") or 0)
+    if max_L >= 3500 and box_n >= 3:
+        if "20GP" in candidates and len(candidates) > 1:
+            candidates = [c for c in candidates if c != "20GP"]
+            reasons.append(
+                f"共 {box_n} 箱且最长 {max_L:.0f}mm≥3.5m，20GP 易被迫双柜，优先 40 尺"
+            )
+    elif max_L >= 4000 and box_n == 0:
+        # 材料阶段：≥4m 长件成箱后多箱并排，20GP 实务易双柜
+        if "20GP" in candidates and len(candidates) > 1 and W >= 800:
+            candidates = [c for c in candidates if c != "20GP"]
+            reasons.append(
+                f"最长件 {max_L:.0f}mm≥4m（货量约 {W:.0f}kg），材料阶段排除 20GP、优先 40 尺"
+            )
     # 高度约束
     if max_H > 2350:
         candidates = ["40HQ"] if "40HQ" in candidates else candidates
@@ -172,9 +197,21 @@ def recommend_container(
             if ct == "20GP" and V > PRACTICAL_CBM["20GP"] * 0.85:
                 s -= 35
                 n.append("货体积接近/超过 1×20GP 实务容，易被迫双柜，降权")
+            # 外廓合计（若有）相对 20GP 几何容积过大
+            outer = float(est.get("outer_m3") or 0)
+            if ct == "20GP" and outer > 28:
+                s -= 40
+                n.append(f"箱外廓合计 {outer:.1f}m³ 超过 20GP 几何容，降权")
+            if ct == "20GP" and max_L >= 3500 and box_n >= 3:
+                s -= 30
+                n.append("多箱长件在 20GP 摆位差，降权")
             if ct == "40GP" and V <= PRACTICAL_CBM["40GP"] * 0.9 and max_L <= 5800:
                 s += 12
                 n.append("体积适合 1×40GP 装下")
+            # 多箱长架：40 尺吃长度更稳
+            if ct in ("40GP", "40HQ") and max_L >= 3500 and box_n >= 3:
+                s += 15
+                n.append("多箱长件适合 40 尺纵向拼接+双列并排")
             scored.append((s, ct, n))
 
     scored.sort(key=lambda x: -x[0])
