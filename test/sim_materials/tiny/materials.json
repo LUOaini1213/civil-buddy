@@ -1,0 +1,23 @@
+{
+  "case_id": "tiny",
+  "story": "极小票，证明未写死 2 柜",
+  "expect": {
+    "containers_needed_max": 1
+  },
+  "packing_options_hint": null,
+  "materials": [
+    {
+      "id": "SIM-0001",
+      "name": "样品螺栓包",
+      "spec": "23—紧固件/螺丝",
+      "quantity": 20,
+      "weight_kg": 0.5,
+      "total_weight_kg": 10.0,
+      "length_mm": 100.0,
+      "width_mm": 50.0,
+      "height_mm": 50.0,
+      "part_no": "SIM-TINY",
+      "note": "sim:tiny"
+    }
+  ]
+}

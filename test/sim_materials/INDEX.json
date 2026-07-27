@@ -1,0 +1,236 @@
+{
+  "description": "仿真材料（假设数据），用于回归/演示，非真实项目提料",
+  "units": {
+    "length": "mm",
+    "weight": "kg"
+  },
+  "cases": {
+    "weight_bound_32t": {
+      "story": "重量主导，体积不应抬高柜数",
+      "n_lines": 230,
+      "net_kg": 32200.0,
+      "json": "test/sim_materials/weight_bound_32t/materials.json",
+      "xlsx": "test/sim_materials/weight_bound_32t/materials.xlsx",
+      "expect": {
+        "containers_by_weight": 2,
+        "containers_needed_max": 2,
+        "binding_in": [
+          "weight",
+          "both"
+        ]
+      },
+      "packing_options_hint": null,
+      "booking_check": {
+        "ok": true,
+        "fails": [],
+        "containers_by_weight": 2,
+        "containers_by_volume": 1,
+        "containers_needed": 2,
+        "binding_constraint": "weight",
+        "gross_kg": 36064.0,
+        "volume_m3": 26.1625
+      }
+    },
+    "volume_bound_light": {
+      "story": "轻泡货，体积可能主导",
+      "n_lines": 40,
+      "net_kg": 600.0,
+      "json": "test/sim_materials/volume_bound_light/materials.json",
+      "xlsx": "test/sim_materials/volume_bound_light/materials.xlsx",
+      "expect": {
+        "containers_by_weight": 1,
+        "containers_needed_min": 1,
+        "binding_in": [
+          "volume",
+          "both",
+          "weight"
+        ]
+      },
+      "packing_options_hint": null,
+      "booking_check": {
+        "ok": true,
+        "fails": [],
+        "containers_by_weight": 1,
+        "containers_by_volume": 2,
+        "containers_needed": 2,
+        "binding_constraint": "volume",
+        "gross_kg": 672.0,
+        "volume_m3": 107.52
+      }
+    },
+    "small_one_container": {
+      "story": "小票一柜可订",
+      "n_lines": 8,
+      "net_kg": 400.0,
+      "json": "test/sim_materials/small_one_container/materials.json",
+      "xlsx": "test/sim_materials/small_one_container/materials.xlsx",
+      "expect": {
+        "containers_needed_max": 1
+      },
+      "packing_options_hint": null,
+      "booking_check": {
+        "ok": true,
+        "fails": [],
+        "containers_by_weight": 1,
+        "containers_by_volume": 1,
+        "containers_needed": 1,
+        "binding_constraint": "both",
+        "gross_kg": 448.0,
+        "volume_m3": 0.2496
+      }
+    },
+    "long_frames": {
+      "story": "超长件，柜型应倾向 40 尺",
+      "n_lines": 15,
+      "net_kg": 1900.0,
+      "json": "test/sim_materials/long_frames/materials.json",
+      "xlsx": "test/sim_materials/long_frames/materials.xlsx",
+      "expect": {
+        "containers_needed_min": 1,
+        "max_length_mm_min": 4000
+      },
+      "packing_options_hint": null,
+      "booking_check": {
+        "ok": true,
+        "fails": [],
+        "containers_by_weight": 1,
+        "containers_by_volume": 1,
+        "containers_needed": 1,
+        "binding_constraint": "both",
+        "gross_kg": 2128.0,
+        "volume_m3": 2.6582
+      }
+    },
+    "overweight_risk": {
+      "story": "重货应力，重量柜应≥3",
+      "n_lines": 4,
+      "net_kg": 64000.0,
+      "json": "test/sim_materials/overweight_risk/materials.json",
+      "xlsx": "test/sim_materials/overweight_risk/materials.xlsx",
+      "expect": {
+        "containers_by_weight_min": 3
+      },
+      "packing_options_hint": null,
+      "booking_check": {
+        "ok": true,
+        "fails": [],
+        "containers_by_weight": 3,
+        "containers_by_volume": 1,
+        "containers_needed": 3,
+        "binding_constraint": "weight",
+        "gross_kg": 71680.0,
+        "volume_m3": 18.72
+      }
+    },
+    "near_payload": {
+      "story": "接近单柜载荷（含箱皮后可能 2 柜）",
+      "n_lines": 27,
+      "net_kg": 27000.0,
+      "json": "test/sim_materials/near_payload/materials.json",
+      "xlsx": "test/sim_materials/near_payload/materials.xlsx",
+      "expect": {
+        "containers_by_weight": 2,
+        "containers_needed_max": 2
+      },
+      "packing_options_hint": null,
+      "booking_check": {
+        "ok": true,
+        "fails": [],
+        "containers_by_weight": 2,
+        "containers_by_volume": 1,
+        "containers_needed": 2,
+        "binding_constraint": "weight",
+        "gross_kg": 30240.0,
+        "volume_m3": 2.5272
+      }
+    },
+    "mixed_realistic": {
+      "story": "混装真实感小票",
+      "n_lines": 35,
+      "net_kg": 3200.0,
+      "json": "test/sim_materials/mixed_realistic/materials.json",
+      "xlsx": "test/sim_materials/mixed_realistic/materials.xlsx",
+      "expect": {
+        "containers_needed_min": 1,
+        "containers_needed_max": 3
+      },
+      "packing_options_hint": null,
+      "booking_check": {
+        "ok": true,
+        "fails": [],
+        "containers_by_weight": 1,
+        "containers_by_volume": 1,
+        "containers_needed": 1,
+        "binding_constraint": "both",
+        "gross_kg": 3584.0,
+        "volume_m3": 5.138
+      }
+    },
+    "hollow_crate_lines": {
+      "story": "当量 1.1m 架行；配合 crate_passthrough 做 Agent 测",
+      "n_lines": 20,
+      "net_kg": 25600.0,
+      "json": "test/sim_materials/hollow_crate_lines/materials.json",
+      "xlsx": "test/sim_materials/hollow_crate_lines/materials.xlsx",
+      "expect": {
+        "containers_by_weight": 2,
+        "containers_needed_max": 2
+      },
+      "packing_options_hint": {
+        "crate_passthrough": true
+      },
+      "booking_check": {
+        "ok": true,
+        "fails": [],
+        "containers_by_weight": 2,
+        "containers_by_volume": 1,
+        "containers_needed": 2,
+        "binding_constraint": "weight",
+        "gross_kg": 28672.0,
+        "volume_m3": 55.055
+      }
+    },
+    "glass_category": {
+      "story": "玻璃货种，pack_factor 应高于钢",
+      "n_lines": 12,
+      "net_kg": 1152.0,
+      "json": "test/sim_materials/glass_category/materials.json",
+      "xlsx": "test/sim_materials/glass_category/materials.xlsx",
+      "expect": {
+        "containers_needed_max": 2
+      },
+      "packing_options_hint": null,
+      "booking_check": {
+        "ok": true,
+        "fails": [],
+        "containers_by_weight": 1,
+        "containers_by_volume": 1,
+        "containers_needed": 1,
+        "binding_constraint": "both",
+        "gross_kg": 1290.2,
+        "volume_m3": 3.3178
+      }
+    },
+    "tiny": {
+      "story": "极小票，证明未写死 2 柜",
+      "n_lines": 1,
+      "net_kg": 10.0,
+      "json": "test/sim_materials/tiny/materials.json",
+      "xlsx": "test/sim_materials/tiny/materials.xlsx",
+      "expect": {
+        "containers_needed_max": 1
+      },
+      "packing_options_hint": null,
+      "booking_check": {
+        "ok": true,
+        "fails": [],
+        "containers_by_weight": 1,
+        "containers_by_volume": 1,
+        "containers_needed": 1,
+        "binding_constraint": "both",
+        "gross_kg": 11.2,
+        "volume_m3": 0.007
+      }
+    }
+  }
+}
