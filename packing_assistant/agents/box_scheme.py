@@ -9,11 +9,163 @@ from packing_assistant.state import PackingState
 from packing_assistant.tools.packing import run_packing
 
 
+def _crate_passthrough_enabled(materials: List[Dict[str, Any]], opts: Dict[str, Any]) -> bool:
+    """
+    工地当量箱直通：材料行本身已是「一箱一当量」，禁止再标准箱库二次放大外廓。
+    开启方式：
+      - packing_options.crate_passthrough = True
+      - 或 materials 多数带 note: dims=crate_equiv_est / crate=
+    """
+    if opts.get("crate_passthrough") or opts.get("materials_are_crates"):
+        return True
+    if not materials:
+        return False
+    hits = 0
+    for m in materials:
+        note = str(m.get("note") or m.get("备注") or "")
+        name = str(m.get("name") or "")
+        if "crate_equiv" in note or "crate=" in note or "当量" in name or "铁件架" in name:
+            hits += 1
+    return hits >= max(1, int(0.5 * len(materials)))
+
+
+def _fill_hint(m: Dict[str, Any]) -> float:
+    name = str(m.get("name") or "")
+    spec = str(m.get("spec") or "")
+    if "铁件" in name or "铁件" in spec or "米铁" in name:
+        return 0.28
+    if "铝板" in name or "铝板" in spec:
+        return 0.35
+    if "瓦楞" in name or "木板" in name:
+        return 0.40
+    if "五金" in name or "紧固" in spec or "螺丝" in spec:
+        return 0.65
+    if "胶" in name or "垫" in name:
+        return 0.55
+    return 0.35
+
+
+def materials_to_passthrough_boxes(materials: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+    """一行材料 = 一箱（外廓=材料 LWH），输出 API boxes，含订柜体积字段。"""
+    boxes: List[Dict[str, Any]] = []
+    for i, m in enumerate(materials, 1):
+        L = float(m.get("length_mm") or m.get("L") or 0)
+        W = float(m.get("width_mm") or m.get("W") or 0)
+        H = float(m.get("height_mm") or m.get("H") or 0)
+        if L <= 0 or W <= 0 or H <= 0:
+            continue
+        outer = L * W * H / 1e9
+        fill = _fill_hint(m)
+        content = outer * fill
+        net = float(m.get("total_weight_kg") or m.get("weight_kg") or 0)
+        # 当量路径：材料重已含货；略加箱皮
+        gross = net + 40.0
+        longish = L >= 4000
+        bid = str(m.get("id") or f"CRATE-{i:03d}")
+        name = str(m.get("name") or bid)
+        boxes.append(
+            {
+                "box_id": bid if bid.startswith("CRATE") or bid.startswith("S") else f"PT-{i:03d}",
+                "box_type": name.split("|")[0].strip()[:40] or "当量箱",
+                "base_box_type": "crate_passthrough",
+                "outer_size_mm": {
+                    "length": round(L, 1),
+                    "width": round(W, 1),
+                    "height": round(H, 1),
+                },
+                "outer_m3": round(outer, 6),
+                "content_m3": round(content, 6),
+                "crate_fill_ratio": round(fill, 4),
+                "booking_volume_m3": round(min(outer, content * 1.50), 6),
+                "gross_weight_kg": round(gross, 2),
+                "net_weight_kg": round(net, 2),
+                "stackable": bool(H <= 1200 and not longish),
+                "prefer_bottom": bool(longish or "铁" in name or net >= 800),
+                "special_attributes": (["超长", "当量直通"] if longish else ["当量直通"]),
+                "structure_conclusion": "通过",
+                "content": [
+                    {
+                        "material_id": str(m.get("id") or ""),
+                        "name": name,
+                        "quantity": 1,
+                        "outer_size_mm": {
+                            "length": max(1, int(L * 0.9)),
+                            "width": max(1, int(W * 0.7)),
+                            "height": max(1, int(H * fill / 0.7)) if fill > 0 else max(1, int(H // 3)),
+                        },
+                    }
+                ],
+                "part_no": m.get("part_no"),
+                "note": m.get("note"),
+            }
+        )
+    # 保证 box_id 唯一
+    seen = set()
+    for i, b in enumerate(boxes):
+        if b["box_id"] in seen:
+            b["box_id"] = f"{b['box_id']}-{i}"
+        seen.add(b["box_id"])
+    return boxes
+
+
 def agent_box_scheme(state: PackingState) -> Dict[str, Any]:
     materials = state.get("materials") or []
     constraints = state.get("structure_constraints") or []
     rev = state.get("revision") or {}
     packing_opts = state.get("packing_options") or {}
+
+    ctype = (
+        state.get("container_type")
+        or (state.get("orchestrator") or {}).get("container_type_chosen")
+        or "40HQ"
+    )
+    max_L = max((float(m.get("length_mm") or 0) for m in materials), default=0)
+    total_w = sum(float(m.get("total_weight_kg") or 0) for m in materials)
+    if str(ctype).upper() == "20GP" and (max_L >= 4000 or total_w >= 8000):
+        ctype = "40HQ"
+
+    # —— 当量箱直通：不二次标准箱合箱 ——
+    if _crate_passthrough_enabled(materials, packing_opts):
+        boxes = materials_to_passthrough_boxes(materials)
+        outer_sum = sum(float(b.get("outer_m3") or 0) for b in boxes)
+        content_sum = sum(float(b.get("content_m3") or 0) for b in boxes)
+        fills = [float(b.get("crate_fill_ratio") or 0) for b in boxes]
+        avg_fill = sum(fills) / len(fills) if fills else 0.0
+        summary = {
+            "pass": len(boxes),
+            "reinforce": 0,
+            "fail": 0,
+            "crate_passthrough": True,
+            "standard_boxes": False,
+            "mix_mode": False,
+            "boxes_outer_volume_m3": round(outer_sum, 4),
+            "cargo_item_volume_m3": round(content_sum, 4),
+            "avg_crate_fill": round(avg_fill, 4),
+            "packing_mode": "crate_passthrough",
+        }
+        return {
+            "boxes": boxes,
+            "team_a_summary": {
+                **summary,
+                "structure_overall": "通过(当量直通)",
+                "total_net_weight_kg": round(sum(float(b.get("net_weight_kg") or 0) for b in boxes), 1),
+                "total_gross_weight_kg": round(
+                    sum(float(b.get("gross_weight_kg") or 0) for b in boxes), 1
+                ),
+            },
+            "structure_notes": [
+                "当量箱直通：材料行=箱外廓，未再走标准箱库合箱（避免外廓虚高）"
+            ],
+            "messages": [
+                {
+                    "role": "assistant",
+                    "content": (
+                        f"装箱完成：{len(boxes)} 箱 — 当量直通（crate_passthrough）"
+                        f" 外廓{outer_sum:.2f}m³/有效内容{content_sum:.2f}m³ 填充均{avg_fill:.0%}"
+                    ),
+                }
+            ],
+        }
 
     internal = [material_api_to_internal(m) for m in materials]
     # 把 material id 写入内部便于 content 回填
@@ -21,17 +173,6 @@ def agent_box_scheme(state: PackingState) -> Dict[str, Any]:
         dst["加工件编号"] = src.get("id") or ""
         dst["id"] = src.get("id") or ""
 
-    ctype = (
-        state.get("container_type")
-        or (state.get("orchestrator") or {}).get("container_type_chosen")
-        or "40HQ"
-    )
-    # 拼柜模块高度：20GP 二层模块过矮，长件/大票用 20GP 模块会结构大批失败。
-    # 装箱阶段按「实际可拼柜型」抬升到至少 40GP/40HQ。
-    max_L = max((float(m.get("length_mm") or 0) for m in materials), default=0)
-    total_w = sum(float(m.get("total_weight_kg") or 0) for m in materials)
-    if str(ctype).upper() == "20GP" and (max_L >= 4000 or total_w >= 8000):
-        ctype = "40HQ"
     max_net = float(
         rev.get("max_box_net_kg")
         or packing_opts.get("max_box_net_kg")

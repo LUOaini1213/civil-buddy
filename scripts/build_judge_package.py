@@ -100,6 +100,7 @@ def main() -> int:
         ROOT / "output/vmu1_site_only/vmu1_site_only_pack.json",
         ROOT / "output/vmu1_shipped/VMU1_已发货_REDACTED-REF_装柜复算.md",
         ROOT / "output/agent_trace_demo.json",
+        ROOT / "output/vmu1_nine_passthrough.json",
     ):
         if src.exists():
             shutil.copy2(src, pack / src.name)
