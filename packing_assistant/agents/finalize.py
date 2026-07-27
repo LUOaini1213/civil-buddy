@@ -113,27 +113,43 @@ def agent_finalize(state: PackingState) -> Dict[str, Any]:
         f"**箱数**：{len(boxes)}",
         f"**能否装下（几何）**：{plan.get('can_fit')}",
         f"**能否出运（合规）**：{'是' if ship_ok else '否'}",
-        f"**用柜数**：{plan.get('containers_used')}"
-        f"（自主N0={plan.get('n0') or (state.get('plan') or {}).get('n0') or '-'}）",
-        f"**外廓摆柜率**（仅布局松紧，铁架常见偏低）：{space:.0%}"
-        f"（最满柜 {space_best:.0%}，底面积均 {floor:.0%}）",
-        f"**订柜有效体积率**：{float(plan.get('booking_volume_utilization') or 0):.0%}"
-        f"（V_eff 基于 min(outer, content×k)，非空心架实心）",
-        f"**重量利用率**：{weight:.0%}",
-        f"**堆码**：{stack_note}；策略=优先二层（矮箱/铁笼上二层，超长仅底层）",
     ]
     )
     booking = plan.get("booking") or state.get("booking") or (state.get("plan") or {}).get("booking") or {}
+    n0 = plan.get("n0") or booking.get("n0") or (state.get("plan") or {}).get("n0")
+    used_3d = plan.get("containers_used")
+    # 固定双口径：订柜 N0（汇报） vs 3D 建议柜数（摆柜上界）— 禁止合成一个硬报
+    lines.extend(
+        [
+            f"**订柜 N0**（重量+有效体积，给订舱/汇报）：**{n0 if n0 is not None else '-'}**",
+            f"**3D 建议柜数**（当量外廓 can_fit 上界）：**{used_3d if used_3d is not None else '-'}**"
+            + (
+                f"（自 N0={n0} 递增）"
+                if n0 is not None and used_3d is not None and int(used_3d or 0) > int(n0 or 0)
+                else ""
+            ),
+            f"**外廓摆柜率**（仅布局松紧，不作订柜；铁架常见偏低）：{space:.0%}"
+            f"（最满柜 {space_best:.0%}，底面积均 {floor:.0%}）",
+            f"**订柜有效体积率**：{float(plan.get('booking_volume_utilization') or 0):.0%}"
+            f"（V_eff=min(outer, content×k)，非空心架实心）",
+            f"**重量利用率**：{weight:.0%}",
+            f"**堆码**：{stack_note}；策略=优先二层（矮箱/铁笼上二层，超长仅底层）",
+        ]
+    )
     if booking:
         lines.append(
-            f"**自主定柜**：N0={booking.get('n0') or booking.get('containers_needed')} "
-            f"重量柜={booking.get('containers_by_weight')} "
+            f"**自主定柜明细**：重量柜={booking.get('containers_by_weight')} "
             f"有效体积柜={booking.get('containers_by_volume')} "
             f"绑定={booking.get('binding_constraint')} "
             f"PAYLOAD={booking.get('payload_kg')}kg η={booking.get('fill_ratio')}"
         )
         if booking.get("volume_suspicious") or booking.get("warning"):
             lines.append(f"**体积可疑 WARN**：{booking.get('warning') or 'N_volume≥2×N_weight'}")
+        if n0 is not None and used_3d is not None and int(used_3d or 0) > int(n0 or 0):
+            lines.append(
+                f"**口径说明**：3D={used_3d} > 订柜 N0={n0} 属成箱/摆柜上界，"
+                f"不是又一次体积虚高；订舱仍以 N0 为准，工程可备注精细合箱争取贴近 N0。"
+            )
 
     ta = state.get("team_a_summary") or {}
     opts = state.get("packing_options") or {}

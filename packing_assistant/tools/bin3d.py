@@ -603,11 +603,16 @@ def pack_items(
         ),
     )
 
-    def _is_long_frame_set(its: List[Item3D]) -> bool:
-        if not its or len(its) > 40:
-            return False
-        long_n = sum(1 for it in its if max(it.dx, it.dy, it.dz) >= 3000)
-        return long_n >= max(2, int(0.6 * len(its)))
+    def _is_frame_like(it: Item3D) -> bool:
+        """铁架/底层长货：条带优先，避免与小箱混排碎片。"""
+        m = max(it.dx, it.dy, it.dz)
+        h = min(it.dz, max(it.dx, it.dy)) if it.no_tip else it.dz
+        # 1.1m 立方架 H≈1750、2m/4m 长架
+        return bool(
+            it.prefer_bottom
+            or m >= 2000
+            or (it.dz >= 1500 and max(it.dx, it.dy) <= 4500 and min(it.dx, it.dy) >= 900)
+        )
 
     def _commit_bin_placements(b: Bin3D, pls: List[Placement3D]) -> None:
         b.placements = list(pls)
@@ -625,19 +630,30 @@ def pack_items(
                 }
             )
 
-    # 阶段 A：长铁架主导时，整柜条带贴端墙并排（避免 EP 居中碎片）
+    # 阶段 A：铁架/底层件先条带贴端墙（即使混有大量五金小箱也先清架）
+    # 按 max_c 均分重量上限，避免第一柜吃满 PAYLOAD 把剩余货挤到第 3 柜
+    frames = [it for it in ordered if _is_frame_like(it)]
     to_ep: List[Item3D] = list(ordered)
-    if _is_long_frame_set(ordered) and max_c >= 1:
-        left_strip = list(ordered)
+    if len(frames) >= 2 and max_c >= 1:
+        left_strip = list(frames)
         strip_packed_ids: set = set()
+        frame_w = sum(float(it.weight_kg or 0) for it in frames)
+        # 预留约 15% 重量给板箱/五金填缝
+        bal_cap = min(
+            float(spec["max_load_kg"]) * 0.88,
+            max(frame_w / max(max_c, 1) * 1.12, float(spec["max_load_kg"]) * 0.55),
+        )
         while left_strip and len(bins) < max_c:
             b = new_bin(len(bins) + 1)
+            bins_left = max_c - len(bins)
+            # 最后一柜可用满载；前面的柜用均衡上限
+            cap = float(spec["max_load_kg"]) if bins_left <= 1 else bal_cap
             pls, left_strip, used_w = _strip_pack_floor(
                 left_strip,
                 L=b.L,
                 W=b.W,
                 H=b.H,
-                max_load_kg=b.max_load_kg,
+                max_load_kg=cap,
                 container_no=b.container_no,
             )
             if not pls:
@@ -646,11 +662,10 @@ def pack_items(
             bins.append(b)
             _commit_bin_placements(b, pls)
             strip_packed_ids.update(p.box_id for p in pls)
-            # 若本柜一条都没推进（防御）则跳出
             if used_w <= 0:
                 break
+        # 未装入的架 + 全部非架 → EP 填缝（优先塞已有柜）
         to_ep = [it for it in ordered if it.box_id not in strip_packed_ids]
-        # 若条带一柜都没开成，回退全量 EP
         if not bins:
             to_ep = list(ordered)
 
