@@ -1,0 +1,349 @@
+{
+  "source": "A:\\JOB\\REDACTED-JOB\\Project\\6. Quality QAQC\\6.06 POR\\VMU\\Material_Summary_VMU送工地.xlsx",
+  "batches": {
+    "VMU1": {
+      "tag": "VMU1",
+      "empty": false,
+      "materials_lines": 71,
+      "qty_units": 71,
+      "net_kg": 43758.0,
+      "by_group": {
+        "23—紧固件/螺丝": 24,
+        "19—胶条、垫块、胶皮": 4,
+        "28—杂项配件": 12,
+        "11—铝板": 3,
+        "14—不锈钢": 2,
+        "13—铁件": 26
+      },
+      "by_por": {
+        "REDACTED-CODE-VMU-0001-BBF0007": 22,
+        "REDACTED-CODE-VMU-0001-BBF0022": 2,
+        "REDACTED-CODE-VMU-0001-BGK0015": 2,
+        "REDACTED-CODE-VMU-0001-BGK0055": 2,
+        "REDACTED-CODE-VMU-0001-BOM0016": 3,
+        "REDACTED-CODE-VMU-0001-BOM0019": 9,
+        "REDACTED-CODE-VMU-0001-FAC0011": 3,
+        "REDACTED-CODE-VMU-0001-FSS0005": 2,
+        "REDACTED-CODE-VMU-0001-REDACTED-REF": 20,
+        "REDACTED-CODE-VMU-0001-FST0017": 4,
+        "REDACTED-CODE-VMU-0001-FST0022": 2
+      },
+      "ms": 96,
+      "booking": {
+        "n0": 2,
+        "containers_by_weight": 2,
+        "containers_by_volume": 1,
+        "binding_constraint": "weight",
+        "volume_m3": 48.2215,
+        "crate_outer_m3": 94.6165,
+        "gross_kg": 46598.0,
+        "payload_kg": 28610.0,
+        "fill_ratio": 0.82,
+        "volume_suspicious": false,
+        "warning": null
+      },
+      "snapshot": {
+        "round": 0,
+        "n0": 2,
+        "booking_containers": 2,
+        "layout_containers": 2,
+        "max_containers": 2,
+        "boxes": 71,
+        "can_fit": true,
+        "containers_used": 2,
+        "space": 0.6196,
+        "booking_volume_util": 0.3849,
+        "floor": 0.8763,
+        "weight": 0.8144,
+        "n_tried": [
+          {
+            "n": 2,
+            "can_fit": true,
+            "used": 2,
+            "unpacked": 0
+          }
+        ],
+        "gap_at_n0": {},
+        "risk": "N/A_estimate",
+        "risk_level": "estimate",
+        "ship_ok": true,
+        "struct_fail": 0,
+        "engine": "python-laff-3d",
+        "volume_suspicious": false,
+        "binding_constraint": "weight"
+      },
+      "n0": 2,
+      "pack_path": "booking+bin3d (site.run_pack)",
+      "used_agents": false
+    },
+    "VMU2": {
+      "tag": "VMU2",
+      "empty": false,
+      "materials_lines": 19,
+      "qty_units": 19,
+      "net_kg": 7530.0,
+      "by_group": {
+        "23—紧固件/螺丝": 9,
+        "19—胶条、垫块、胶皮": 5,
+        "28—杂项配件": 1,
+        "13—铁件": 4
+      },
+      "by_por": {
+        "REDACTED-CODE-VMU-0002-BBF0031": 9,
+        "REDACTED-CODE-VMU-0002-BGK0037": 5,
+        "REDACTED-CODE-VMU-0002-BOM0039": 1,
+        "REDACTED-CODE-VMU-0002-FST0023": 4
+      },
+      "ms": 38,
+      "booking": {
+        "n0": 1,
+        "containers_by_weight": 1,
+        "containers_by_volume": 1,
+        "binding_constraint": "both",
+        "volume_m3": 7.5107,
+        "crate_outer_m3": 12.982,
+        "gross_kg": 8290.0,
+        "payload_kg": 28610.0,
+        "fill_ratio": 0.82,
+        "volume_suspicious": false,
+        "warning": null
+      },
+      "snapshot": {
+        "round": 0,
+        "n0": 1,
+        "booking_containers": 1,
+        "layout_containers": 1,
+        "max_containers": 1,
+        "boxes": 19,
+        "can_fit": true,
+        "containers_used": 1,
+        "space": 0.17,
+        "booking_volume_util": 0.1199,
+        "floor": 0.5223,
+        "weight": 0.2898,
+        "n_tried": [
+          {
+            "n": 1,
+            "can_fit": true,
+            "used": 1,
+            "unpacked": 0
+          }
+        ],
+        "gap_at_n0": {},
+        "risk": "N/A_estimate",
+        "risk_level": "estimate",
+        "ship_ok": true,
+        "struct_fail": 0,
+        "engine": "python-laff-3d",
+        "volume_suspicious": false,
+        "binding_constraint": "both"
+      },
+      "n0": 1,
+      "pack_path": "booking+bin3d (site.run_pack)",
+      "used_agents": false
+    },
+    "VMU3": {
+      "tag": "VMU3",
+      "empty": false,
+      "materials_lines": 4,
+      "qty_units": 4,
+      "net_kg": 3270.0,
+      "by_group": {
+        "23—紧固件/螺丝": 2,
+        "13—铁件": 2
+      },
+      "by_por": {
+        "REDACTED-CODE-VMU-0003-BBF0042": 2,
+        "REDACTED-CODE-VMU-0003-FST0026": 2
+      },
+      "ms": 3,
+      "booking": {
+        "n0": 1,
+        "containers_by_weight": 1,
+        "containers_by_volume": 1,
+        "binding_constraint": "both",
+        "volume_m3": 2.2587,
+        "crate_outer_m3": 4.715,
+        "gross_kg": 3430.0,
+        "payload_kg": 28610.0,
+        "fill_ratio": 0.82,
+        "volume_suspicious": false,
+        "warning": null
+      },
+      "snapshot": {
+        "round": 0,
+        "n0": 1,
+        "booking_containers": 1,
+        "layout_containers": 1,
+        "max_containers": 1,
+        "boxes": 4,
+        "can_fit": true,
+        "containers_used": 1,
+        "space": 0.0618,
+        "booking_volume_util": 0.0361,
+        "floor": 0.1572,
+        "weight": 0.1199,
+        "n_tried": [
+          {
+            "n": 1,
+            "can_fit": true,
+            "used": 1,
+            "unpacked": 0
+          }
+        ],
+        "gap_at_n0": {},
+        "risk": "N/A_estimate",
+        "risk_level": "estimate",
+        "ship_ok": true,
+        "struct_fail": 0,
+        "engine": "python-laff-3d",
+        "volume_suspicious": false,
+        "binding_constraint": "both"
+      },
+      "n0": 1,
+      "pack_path": "booking+bin3d (site.run_pack)",
+      "used_agents": false
+    },
+    "VMU4": {
+      "tag": "VMU4",
+      "empty": false,
+      "materials_lines": 182,
+      "qty_units": 182,
+      "net_kg": 2790.0,
+      "by_group": {
+        "23—紧固件/螺丝": 1,
+        "19—胶条、垫块、胶皮": 1,
+        "28—杂项配件": 180
+      },
+      "by_por": {
+        "REDACTED-CODE-VMU-0004-BBF0049": 1,
+        "REDACTED-CODE-VMU-0004-BGK0057": 1,
+        "REDACTED-CODE-VMU-0004-BOM0056": 180
+      },
+      "ms": 27722,
+      "booking": {
+        "n0": 1,
+        "containers_by_weight": 1,
+        "containers_by_volume": 1,
+        "binding_constraint": "both",
+        "volume_m3": 10.128,
+        "crate_outer_m3": 17.76,
+        "gross_kg": 10070.0,
+        "payload_kg": 28610.0,
+        "fill_ratio": 0.82,
+        "volume_suspicious": false,
+        "warning": null
+      },
+      "snapshot": {
+        "round": 0,
+        "n0": 1,
+        "booking_containers": 1,
+        "layout_containers": 1,
+        "max_containers": 1,
+        "boxes": 182,
+        "can_fit": true,
+        "containers_used": 1,
+        "space": 0.2326,
+        "booking_volume_util": 0.1617,
+        "floor": 0.5484,
+        "weight": 0.352,
+        "n_tried": [
+          {
+            "n": 1,
+            "can_fit": true,
+            "used": 1,
+            "unpacked": 0
+          }
+        ],
+        "gap_at_n0": {},
+        "risk": "N/A_estimate",
+        "risk_level": "estimate",
+        "ship_ok": true,
+        "struct_fail": 0,
+        "engine": "python-laff-3d",
+        "volume_suspicious": false,
+        "binding_constraint": "both"
+      },
+      "n0": 1,
+      "pack_path": "booking+bin3d (site.run_pack)",
+      "used_agents": false
+    }
+  },
+  "note": "订柜 N0=booking；3D=outer can_fit；agents 仅在 --agents 时启用",
+  "nine_agents": {
+    "tag": "VMU1",
+    "used_agents": true,
+    "agents": [
+      "orchestrator",
+      "material_parser",
+      "structure",
+      "box_scheme",
+      "present_team_a",
+      "planner",
+      "loader",
+      "evaluator",
+      "risk_compliance",
+      "visualizer",
+      "finalize"
+    ],
+    "materials_fed": 71,
+    "materials_total": 71,
+    "boxes": 53,
+    "n0": 3,
+    "containers_used": 9,
+    "can_fit": true,
+    "booking_volume_utilization": 0.2486,
+    "outer_space_utilization": 0.5364,
+    "weight_utilization": 0.2071,
+    "evaluation": 47.3,
+    "risk_decision": "REJECT",
+    "ms": 7879,
+    "steps": [
+      {
+        "agent": "orchestrator",
+        "message": "【主控·开头】9 智能体启动 | intent=full_process | 材料=71 行 | 推荐柜型=40GP（采纳=True，当前=40GP）| 理由：最长件 4000mm≥4m（货量约 50322kg），材料阶段排除 20GP、优先 40 尺；40GP 预估体积可能超实务可用容；40GP 可能超重；单柜重量紧张，可能需多柜；对照：原先倾向 40HQ，综合体积/重量后推荐 40GP | 策略：二层堆码优先 + 空间/重量双利用率"
+      },
+      {
+        "agent": "material_parser",
+        "message": "材料解析完成(inject)：71 件 / 43758.0 kg"
+      },
+      {
+        "agent": "structure",
+        "message": "结构约束完成：5 组推荐箱型约束（本步仅建议；半严格校核在装箱成箱后执行）"
+      },
+      {
+        "agent": "box_scheme",
+        "message": "装箱完成：53 箱 — 存在结构不通过箱，需改箱型或拆件（标准箱库+混装 外廓368.61m³/货94.6165m³ 填充均26% [6米框×20,4米铁架×17,2米铁架×2,1.1米铁架×14]）"
+      },
+      {
+        "agent": "present_team_a",
+        "message": "团队A完成，自动确认 40GP"
+      },
+      {
+        "agent": "planner",
+        "message": "规划完成：40HQ 自主N0=3 (重量柜2 / 有效体积柜3 / 绑定volume)，优先序 53 箱；3D 将从 N0 递增至 can_fit"
+      },
+      {
+        "agent": "loader",
+        "message": "装载完成 engine=python-laff-3d can_fit=True 用柜=9(自N0=3递增) 外廓摆柜率54% 订柜有效体积率25% 货外廓368.61m³/柜76.4m³ 底面积90% 重量21% [auto_N0=3->used=9 booking_vol_util=0.2486; python-laff-3d]"
+      },
+      {
+        "agent": "evaluator",
+        "message": "评估：score=47.3 passed=False replan=False | 外廓摆柜54% 订柜有效体积25% 底面积90% 重量21% 综合57"
+      },
+      {
+        "agent": "risk_compliance",
+        "message": "风险合规：level=high score=5 passed=False decision=REJECT blockers=20 ⛔打回→box_scheme：成箱结构不通过，打回装箱方案智能体拆箱或改箱型加固"
+      },
+      {
+        "agent": "visualizer",
+        "message": "三视角数据已生成（elements=53，柜数=9，侧视图9张+总览）｜订柜有效体积率 25%｜外廓摆柜率 54%｜重量 21%；外廓率≠订柜装满度，铁架常见偏低"
+      },
+      {
+        "agent": "finalize",
+        "message": "# 拼柜方案结果\n\n## ⛔ 主控裁决：打回 / 不可出运\n\n**能否出运**：**否**\n**合规决策**：REJECT（level=high）\n**打回目标**：box_scheme\n**打回原因**：成箱结构不通过，打回装箱方案智能体拆箱或改箱型加固\n**阻断项**：\n- BOX-01 成箱结构校核不通过\n- BOX-02 成箱结构校核不通过\n- BOX-18 成箱结构校核不通过\n- BOX-19 成箱结构校核不通过\n- BOX-20 成箱结构校核不通过\n- BOX-23 成箱结构校核不通过\n- BOX-24 成箱结构校核不通过\n- BOX-25 成箱结构校核不通过\n- BOX-26 成"
+      }
+    ],
+    "final_preview": "# 拼柜方案结果\n\n## ⛔ 主控裁决：打回 / 不可出运\n\n**能否出运**：**否**\n**合规决策**：REJECT（level=high）\n**打回目标**：box_scheme\n**打回原因**：成箱结构不通过，打回装箱方案智能体拆箱或改箱型加固\n**阻断项**：\n- BOX-01 成箱结构校核不通过\n- BOX-02 成箱结构校核不通过\n- BOX-18 成箱结构校核不通过\n- BOX-19 成箱结构校核不通过\n- BOX-20 成箱结构校核不通过\n- BOX-23 成箱结构校核不通过\n- BOX-24 成箱结构校核不通过\n- BOX-25 成箱结构校核不通过\n- BOX-26 成箱结构校核不通过\n- BOX-27 成箱结构校核不通过\n- BOX-28 成箱结构校核不通过\n- BOX-29 成箱结构校核不通过\n\n> 装得下（can_fit）不等于可出运。存在结构/合规阻断时必须整改后重跑 Team A→确认→Team B。\n\n**主控流水线**：9 智能体（含主控，首尾选柜）\n**方案编号（装箱）**：PKG-20260727_161014_22a5fed4\n**柜型（实际"
+  }
+}
