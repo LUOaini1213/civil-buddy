@@ -162,6 +162,7 @@ python scripts/run_precommit_tests.py --quick
 | **B+ 工地 Agent** | `python scripts/demo_vmu1_nine_passthrough.py` | 当量直通 9 Agent，N0≈2 与订舱同量级 |
 
 - 柜数由 **tools** 算；API 把 9 Agent **产品化**，不另算一套柜。  
+- **Agent 对齐（五能力）**：[docs/ai-agent-alignment.md](docs/ai-agent-alignment.md)  
 - 详解：[docs/agents-vs-tools.md](docs/agents-vs-tools.md) · 提交粘贴稿：[docs/submission-demo-A-B.md](docs/submission-demo-A-B.md)
 
 ### 安全（必读）

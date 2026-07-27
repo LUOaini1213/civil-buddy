@@ -145,9 +145,28 @@ def run_local_trace() -> Dict[str, Any]:
             rr = state.get("risk_report") or {}
             extra = f" | decision={rr.get('decision')} level={rr.get('level')}"
 
+        # 仅用本步 upd 的 agent_meta，避免串到上一 Agent
+        meta = upd.get("agent_meta") if isinstance(upd.get("agent_meta"), dict) else {}
+        tools = meta.get("tools_used") or []
+        caps = meta.get("capability") or []
+        if tools:
+            extra += f" | tools={tools}"
+        if caps:
+            extra += f" | cap={caps}"
+
         print(f"\n### {title} [{node}]{extra}")
         print((last or "(no message)")[:280])
-        steps.append({"title": title, "node": node, "message": last[:500], "extra": extra})
+        steps.append(
+            {
+                "title": title,
+                "node": node,
+                "message": last[:500],
+                "extra": extra,
+                "tools_used": tools,
+                "capability": caps,
+                "artifacts": meta.get("artifacts") or {},
+            }
+        )
 
     plan = state.get("container_plan") or {}
     book = state.get("booking") or plan.get("booking") or {}

@@ -115,14 +115,28 @@ def agent_loader(state: PackingState) -> Dict[str, Any]:
     )
     book_u = float(container_plan.get("booking_volume_utilization") or 0)
     n0_used = container_plan.get("n0") or n0
+    eng = str(container_plan.get("engine") or "python-laff-3d")
+    tools_used = ["booking.pack_with_auto_containers", "bin3d.pack_boxes_api", f"engine:{eng}"]
     return {
         "container_plan": container_plan,
         "booking": booking_out,
+        "agent_meta": {
+            "node": "loader",
+            "capability": ["使用工具", "采取行动"],
+            "tools_used": tools_used,
+            "artifacts": {
+                "can_fit": container_plan.get("can_fit"),
+                "containers_used": container_plan.get("containers_used"),
+                "n0": n0_used,
+                "booking_volume_utilization": book_u,
+                "outer_space_utilization": outer_u,
+            },
+        },
         "messages": [
             {
                 "role": "assistant",
                 "content": (
-                    f"装载完成 engine={container_plan.get('engine')} "
+                    f"装载完成 engine={eng} "
                     f"can_fit={container_plan.get('can_fit')} "
                     f"用柜={container_plan.get('containers_used')}(自N0={n0_used}递增) "
                     f"外廓摆柜率{outer_u:.0%} "
@@ -132,6 +146,7 @@ def agent_loader(state: PackingState) -> Dict[str, Any]:
                     f"底面积{float(container_plan.get('floor_utilization_avg') or 0):.0%} "
                     f"重量{float(container_plan.get('weight_utilization') or 0):.0%} "
                     f"[{'; '.join(notes)}]"
+                    f"｜tools={','.join(tools_used)}（已写入 layout，属系统内行动）"
                 ),
             }
         ],

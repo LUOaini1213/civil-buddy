@@ -75,6 +75,10 @@ def agent_orchestrator(state: PackingState) -> Dict[str, Any]:
         "roster": AGENT_ROSTER,
         "intent": intent,
         "goals": goals,
+        # 任务域目标（非无限自治）
+        "goal": "deliver_valid_pack_plan",
+        "goal_desc": "产出可解释的成箱/订柜/拼柜方案（可确认、可风险拦截）",
+        "agent_style": "multi_agent_workflow",
         "dispatch": (
             "主控选柜 → TeamA(材料→结构→装箱) → 用户确认 → "
             "TeamB(规划→装载→评估→风险→可视化) → 主控复核柜型"
@@ -83,7 +87,7 @@ def agent_orchestrator(state: PackingState) -> Dict[str, Any]:
         "container_type_chosen": chosen,
         "container_type_user": user_ct,
         "container_adopted_recommendation": adopt,
-        "max_containers_hint": int(state.get("max_containers") or 1),
+        "max_containers_hint": int(state.get("max_containers") or 0),
         "materials_in": len(mats),
         "raw_input_preview": raw[:200],
         "stacking_policy": {
@@ -93,21 +97,31 @@ def agent_orchestrator(state: PackingState) -> Dict[str, Any]:
             "no_stack_if": ["内容物超长", "超长", "结构不通过"],
             "note": "轻箱/矮箱上二层；重箱与超长件仅底层",
         },
+        "tools_policy": "数值由 tools 计算；LLM 仅润色，不改柜数/can_fit",
     }
 
     updates: Dict[str, Any] = {
         "intent": intent,
+        "goal": "deliver_valid_pack_plan",
         "phase": "team_a_running",
         "orchestrator": orch,
         "container_type": chosen,
+        "agent_meta": {
+            "node": "orchestrator",
+            "capability": ["感知", "规划", "追求目标"],
+            "tools_used": ["container_select.recommend_container"],
+            "artifacts": {"container_type": chosen, "materials_in": len(mats)},
+        },
         "messages": [
             {
                 "role": "assistant",
                 "content": (
-                    f"【主控·开头】9 智能体启动 | intent={intent} | 材料={len(mats)} 行 | "
+                    f"【主控·开头】9 智能体流水线启动 | goal=deliver_valid_pack_plan | "
+                    f"intent={intent} | 材料={len(mats)} 行 | "
                     f"推荐柜型={recommended}（采纳={adopt}，当前={chosen}）| "
                     f"理由：{'；'.join(rec.get('reasons') or [])[:120]} | "
-                    f"策略：二层堆码优先 + 空间/重量双利用率"
+                    f"策略：二层堆码优先 + 空间/重量双利用率 | "
+                    f"形态=多智能体工作流（非单体全能Agent）；tools 算数"
                 ),
             }
         ],

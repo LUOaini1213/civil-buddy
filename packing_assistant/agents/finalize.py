@@ -106,7 +106,11 @@ def agent_finalize(state: PackingState) -> Dict[str, Any]:
 
     lines.extend(
         [
-        f"**主控流水线**：{orch.get('agent_count') or 9} 智能体（含主控，首尾选柜）",
+        f"**主控流水线**：{orch.get('agent_count') or 9} 智能体（多智能体工作流，含主控首尾选柜）",
+        f"**任务目标**：{orch.get('goal') or state.get('goal') or 'deliver_valid_pack_plan'}"
+        f"（{orch.get('goal_desc') or '可解释成箱/订柜/拼柜方案'}）",
+        f"**Agent 形态**：分工编排 + 工具执行 + 可选 HITL；"
+        f"**数值由 tools 计算，非 LLM 编造**",
         f"**方案编号（装箱）**：{state.get('packing_plan_id') or '-'}",
         f"**柜型（实际）**：{current_ct}",
         f"**主控开头推荐**：{start_rec or '-'}",

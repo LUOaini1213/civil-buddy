@@ -235,11 +235,15 @@ def api_pipeline_trace(body: TraceRequest):
             if m.get("content"):
                 last = str(m["content"])
                 break
+        meta = upd.get("agent_meta") if isinstance(upd.get("agent_meta"), dict) else {}
         step: Dict[str, Any] = {
             "node": node,
             "title": title,
             "message": last[:800],
             "role": "agent",
+            "tools_used": meta.get("tools_used") or [],
+            "capability": meta.get("capability") or [],
+            "artifacts": meta.get("artifacts") or {},
         }
         if node == "box_scheme":
             step["boxes"] = len(state.get("boxes") or [])
@@ -266,6 +270,12 @@ def api_pipeline_trace(body: TraceRequest):
     book = state.get("booking") or plan.get("booking") or {}
     return {
         "ok": True,
+        "agent_definition": {
+            "style": "multi_agent_workflow",
+            "goal": state.get("goal") or "deliver_valid_pack_plan",
+            "capabilities": ["感知", "规划", "使用工具", "采取行动", "追求目标(任务域)"],
+            "note": "分角色流水线，非单体全能聊天 Agent；数值由 tools 计算",
+        },
         "note": "数字由 tools 计算；Agent 负责任务分工、闸门、结构/风险裁决与过程可解释",
         "steps": steps,
         "summary": {
