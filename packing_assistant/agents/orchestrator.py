@@ -70,17 +70,23 @@ def agent_orchestrator(state: PackingState) -> Dict[str, Any]:
         },
     }
 
+    goal_name = str(state.get("goal") or "deliver_valid_pack_plan")
+    goal_descs = {
+        "deliver_valid_pack_plan": "产出可解释的成箱/订柜/拼柜方案（可确认、可风险拦截）",
+        "minimize_containers": "在可装下且合规前提下尽量少柜（仍由 N0+3D 决定，非 LLM 报数）",
+        "safe_to_ship": "优先合规与结构安全，风险 REJECT 则不可出运",
+    }
     orch = {
         "agent_count": 9,
         "roster": AGENT_ROSTER,
         "intent": intent,
         "goals": goals,
         # 任务域目标（非无限自治）
-        "goal": "deliver_valid_pack_plan",
-        "goal_desc": "产出可解释的成箱/订柜/拼柜方案（可确认、可风险拦截）",
+        "goal": goal_name,
+        "goal_desc": goal_descs.get(goal_name, goal_descs["deliver_valid_pack_plan"]),
         "agent_style": "multi_agent_workflow",
         "dispatch": (
-            "主控选柜 → TeamA(材料→结构→装箱) → 用户确认 → "
+            "主控选柜 → TeamA(材料→结构→装箱) → 用户确认(HITL) → "
             "TeamB(规划→装载→评估→风险→可视化) → 主控复核柜型"
         ),
         "container_select_start": rec,
@@ -98,11 +104,12 @@ def agent_orchestrator(state: PackingState) -> Dict[str, Any]:
             "note": "轻箱/矮箱上二层；重箱与超长件仅底层",
         },
         "tools_policy": "数值由 tools 计算；LLM 仅润色，不改柜数/can_fit",
+        "loop": "感知清单与状态 → 规划订柜策略 → 调用成箱/3D/风险工具 → 生成方案与图 → 推进至可裁决结论",
     }
 
     updates: Dict[str, Any] = {
         "intent": intent,
-        "goal": "deliver_valid_pack_plan",
+        "goal": goal_name,
         "phase": "team_a_running",
         "orchestrator": orch,
         "container_type": chosen,
@@ -110,17 +117,22 @@ def agent_orchestrator(state: PackingState) -> Dict[str, Any]:
             "node": "orchestrator",
             "capability": ["感知", "规划", "追求目标"],
             "tools_used": ["container_select.recommend_container"],
-            "artifacts": {"container_type": chosen, "materials_in": len(mats)},
+            "artifacts": {
+                "container_type": chosen,
+                "materials_in": len(mats),
+                "goal": goal_name,
+            },
         },
         "messages": [
             {
                 "role": "assistant",
                 "content": (
-                    f"【主控·开头】9 智能体流水线启动 | goal=deliver_valid_pack_plan | "
+                    f"【主控·开头】9 智能体流水线启动 | goal={goal_name} | "
                     f"intent={intent} | 材料={len(mats)} 行 | "
                     f"推荐柜型={recommended}（采纳={adopt}，当前={chosen}）| "
                     f"理由：{'；'.join(rec.get('reasons') or [])[:120]} | "
                     f"策略：二层堆码优先 + 空间/重量双利用率 | "
+                    f"闭环：感知→规划→工具→行动→finalize | "
                     f"形态=多智能体工作流（非单体全能Agent）；tools 算数"
                 ),
             }

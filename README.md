@@ -126,6 +126,24 @@ data/external/         # 公开 3D-BPP 样例
 
 ## 快速开始
 
+### 启动器（推荐先点这里）
+
+Windows 双击仓库根目录：
+
+| 文件 | 作用 |
+|------|------|
+| **`启动.bat`** | 菜单：网关 / Agent 闭环 / 演示 A·B / 回归 / 产物 |
+| **`启动网关.bat`** | 直接起 FastAPI（:8000）+ 前端 |
+
+命令行：
+
+```bash
+python scripts/launcher.py           # 交互菜单
+python scripts/launcher.py --gateway # 前台网关
+python scripts/launcher.py --agent   # Agent 五条自检
+python scripts/launcher.py --site    # 演示 A 工地数字
+```
+
 ### 比赛演示主路径（优先 · 10 分钟）
 
 主案例：**VMU1 送工地** — 订柜用有效体积（N0），外廓只做 3D；**不写死柜数**。

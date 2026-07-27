@@ -5,6 +5,8 @@ FastAPI 网关：对接主控 Harness + 静态 Vue2 前端。
   pip install fastapi uvicorn
   set SKJOLBER_URL=http://127.0.0.1:8080
   uvicorn gateway.app:app --reload --port 8000
+
+无管理员：用户目录 JDK17 + Maven 起 skjolber 即可，见 scripts/start_skjolber_user.ps1
 """
 
 from __future__ import annotations
@@ -26,9 +28,21 @@ ROOT = Path(__file__).resolve().parents[1]
 if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
+# 加载仓库根 .env（含 SKJOLBER_URL，无需系统环境变量 / 管理员）
+try:
+    from dotenv import load_dotenv
+
+    load_dotenv(ROOT / ".env")
+except Exception:
+    pass
+# 默认指向本机 skjolber（服务未起时 health 会 fail，装载回退 Python 3D）
+if not (os.getenv("SKJOLBER_URL") or "").strip():
+    os.environ["SKJOLBER_URL"] = "http://127.0.0.1:8080"
+
 from packing_assistant.harness import (  # noqa: E402
     apply_user_confirmation,
     public_response,
+    run_agent_pipeline,
     run_pipeline,
     run_team_a,
     run_team_b,
@@ -144,16 +158,109 @@ def api_confirm(body: ConfirmRequest):
     return public_response(state)
 
 
+class PipelineRequest(BaseModel):
+    """单一 Agent 闭环入口：材料→…→风险→出图→裁决，落盘 + 可下载路径。"""
+
+    user_input: str = "Agent pipeline"
+    materials: Optional[List[Dict[str, Any]]] = None
+    container_type: str = "40HQ"
+    session_id: str = "pipeline"
+    max_containers: int = 0
+    # True=跳过确认闸门自动跑到 finalize；False=停在 HITL
+    enable_auto_confirm: bool = True
+    goal: str = Field(
+        default="deliver_valid_pack_plan",
+        description="deliver_valid_pack_plan | minimize_containers | safe_to_ship",
+    )
+    save_artifacts: bool = True
+    # graph=LangGraph 全图；steps=逐步 9 Agent 显式 trace（推荐答辩）
+    mode: str = "steps"
+
+
 @app.post("/api/demo")
 def api_demo(body: DemoRequest):
-    state = run_pipeline(
+    """兼容入口：全自动闭环 + 落盘（等同 /api/pipeline auto）。"""
+    state = run_agent_pipeline(
         body.user_input,
         container_type=body.container_type,
         enable_auto_confirm=True,
         max_containers=0,
+        session_id=body.session_id,
+        save_artifacts=True,
     )
     _SESSIONS[body.session_id] = state
-    return public_response(state)
+    resp = public_response(state)
+    resp["agent_loop"] = "感知→规划→工具→行动→finalize"
+    return resp
+
+
+@app.post("/api/pipeline")
+def api_pipeline(body: PipelineRequest):
+    """
+    **Agent 单一入口**：自动跑全程（可开关 confirm）→ finalize。
+
+    返回：goal_status、agent_steps（tool 轨迹）、artifact_paths（落盘可下载）。
+    """
+    if (body.mode or "steps").lower() == "graph":
+        state = run_pipeline(
+            body.user_input,
+            materials=body.materials,
+            container_type=body.container_type,
+            enable_auto_confirm=body.enable_auto_confirm,
+            max_containers=int(body.max_containers or 0),
+            goal=body.goal,
+            save_artifacts=body.save_artifacts,
+        )
+        steps = state.get("agent_steps") or []
+    else:
+        state = run_agent_pipeline(
+            body.user_input,
+            materials=body.materials,
+            container_type=body.container_type,
+            max_containers=int(body.max_containers or 0),
+            enable_auto_confirm=body.enable_auto_confirm,
+            goal=body.goal,
+            session_id=body.session_id,
+            save_artifacts=body.save_artifacts,
+        )
+        steps = state.get("agent_steps") or []
+
+    _SESSIONS[body.session_id] = state
+    plan = state.get("container_plan") or {}
+    book = state.get("booking") or plan.get("booking") or {}
+    paths = state.get("artifact_paths") or {}
+    return {
+        "ok": True,
+        "agent_definition": {
+            "style": "multi_agent_workflow",
+            "goal": state.get("goal") or body.goal,
+            "capabilities": ["感知环境", "推理与规划", "使用工具", "采取行动", "追求目标"],
+            "loop": "感知清单与状态 → 规划订柜策略 → 调用成箱/3D/风险工具 → 生成方案与图 → 推进至可裁决结论（可 HITL）",
+            "note": "分角色流水线；数值由 tools 计算，非 LLM 编造",
+        },
+        "run_id": state.get("run_id"),
+        "artifact_paths": paths,
+        "goal_status": state.get("goal_status") or {},
+        "perception": state.get("perception") or state.get("materials_summary") or {},
+        "planning_reasons": (state.get("plan") or {}).get("planning_reasons") or [],
+        "steps": steps,
+        "summary": {
+            "boxes": len(state.get("boxes") or []),
+            "n0": book.get("n0") or plan.get("n0"),
+            "containers_used": plan.get("containers_used"),
+            "can_fit": plan.get("can_fit"),
+            "booking_volume_utilization": plan.get("booking_volume_utilization"),
+            "outer_space_utilization": plan.get("outer_space_utilization")
+            or plan.get("space_utilization"),
+            "weight_utilization": plan.get("weight_utilization"),
+            "risk_decision": (state.get("risk_report") or {}).get("decision"),
+            "suggested_actions": (state.get("risk_report") or {}).get("suggested_actions")
+            or [],
+            "ship_ok": state.get("ship_ok"),
+            "phase": state.get("phase"),
+        },
+        "public": public_response(state),
+    }
 
 
 class TraceRequest(BaseModel):
@@ -164,110 +271,30 @@ class TraceRequest(BaseModel):
     container_type: str = "40HQ"
     session_id: str = "trace"
     max_containers: int = 0
+    goal: str = "deliver_valid_pack_plan"
+    enable_auto_confirm: bool = True
 
 
 @app.post("/api/pipeline/trace")
 def api_pipeline_trace(body: TraceRequest):
     """
-    本地逐步调用 9 Agent（不经 LangGraph），返回每步 message + 关键数字。
-    与 /api/demo 的区别：显式 steps[]，便于答辩展示「每个智能体的作用」。
+    兼容入口：等同 POST /api/pipeline mode=steps。
+    本地逐步调用 9 Agent，返回每步 message + tools_used + 落盘路径。
     """
-    from packing_assistant.harness import make_initial_state
-    from packing_assistant.agents import (
-        agent_box_scheme,
-        agent_evaluator,
-        agent_finalize,
-        agent_loader,
-        agent_material_parser,
-        agent_orchestrator,
-        agent_planner,
-        agent_present_team_a,
-        agent_risk_compliance,
-        agent_structure,
-        agent_visualizer,
-    )
-
-    agents = [
-        ("orchestrator", "主控", agent_orchestrator),
-        ("material_parser", "材料解析", agent_material_parser),
-        ("structure", "结构计算", agent_structure),
-        ("box_scheme", "装箱方案", agent_box_scheme),
-        ("present_team_a", "确认闸门", agent_present_team_a),
-        ("planner", "规划(N0)", agent_planner),
-        ("loader", "装载(3D)", agent_loader),
-        ("evaluator", "评估", agent_evaluator),
-        ("risk_compliance", "风险合规", agent_risk_compliance),
-        ("visualizer", "可视化", agent_visualizer),
-        ("finalize", "主控收口", agent_finalize),
-    ]
-    state = make_initial_state(
-        user_input=body.user_input,
+    state = run_agent_pipeline(
+        body.user_input,
         materials=body.materials,
         container_type=body.container_type,
-        enable_auto_confirm=True,
         max_containers=int(body.max_containers or 0),
+        enable_auto_confirm=body.enable_auto_confirm,
+        goal=body.goal,
         session_id=body.session_id,
+        save_artifacts=True,
     )
-    state["packing_options"] = {
-        "standard_boxes": True,
-        "mix_mode": True,
-        "max_box_net_kg": 2000,
-    }
-    steps: List[Dict[str, Any]] = []
-    for node, title, fn in agents:
-        upd = fn(state) or {}
-        for k, v in upd.items():
-            if k in ("messages", "traces", "errors", "validation_warnings") and isinstance(
-                v, list
-            ):
-                state[k] = list(state.get(k) or []) + v
-            else:
-                state[k] = v
-        if node == "present_team_a":
-            state = apply_user_confirmation(
-                state,
-                action="confirm",
-                container_type=body.container_type,
-                max_containers=int(body.max_containers or 0),
-            )
-        last = ""
-        for m in reversed(state.get("messages") or []):
-            if m.get("content"):
-                last = str(m["content"])
-                break
-        meta = upd.get("agent_meta") if isinstance(upd.get("agent_meta"), dict) else {}
-        step: Dict[str, Any] = {
-            "node": node,
-            "title": title,
-            "message": last[:800],
-            "role": "agent",
-            "tools_used": meta.get("tools_used") or [],
-            "capability": meta.get("capability") or [],
-            "artifacts": meta.get("artifacts") or {},
-        }
-        if node == "box_scheme":
-            step["boxes"] = len(state.get("boxes") or [])
-        if node == "planner":
-            book = (state.get("plan") or {}).get("booking") or {}
-            step["n0"] = book.get("n0")
-            step["binding"] = book.get("binding_constraint")
-        if node == "loader":
-            p = state.get("container_plan") or {}
-            step["containers_used"] = p.get("containers_used")
-            step["can_fit"] = p.get("can_fit")
-            step["booking_volume_utilization"] = p.get("booking_volume_utilization")
-            step["outer_space_utilization"] = p.get("outer_space_utilization") or p.get(
-                "space_utilization"
-            )
-        if node == "risk_compliance":
-            rr = state.get("risk_report") or {}
-            step["decision"] = rr.get("decision")
-            step["level"] = rr.get("level")
-        steps.append(step)
-
     _SESSIONS[body.session_id] = state
     plan = state.get("container_plan") or {}
     book = state.get("booking") or plan.get("booking") or {}
+    steps = state.get("agent_steps") or []
     return {
         "ok": True,
         "agent_definition": {
@@ -277,6 +304,9 @@ def api_pipeline_trace(body: TraceRequest):
             "note": "分角色流水线，非单体全能聊天 Agent；数值由 tools 计算",
         },
         "note": "数字由 tools 计算；Agent 负责任务分工、闸门、结构/风险裁决与过程可解释",
+        "run_id": state.get("run_id"),
+        "artifact_paths": state.get("artifact_paths") or {},
+        "goal_status": state.get("goal_status") or {},
         "steps": steps,
         "summary": {
             "boxes": len(state.get("boxes") or []),
