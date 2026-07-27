@@ -132,15 +132,42 @@ def agent_visualizer(state: PackingState) -> Dict[str, Any]:
 
     layout_for_count = plan.get("layout") or []
     n_c = len({int(it.get("container_no") or 1) for it in layout_for_count}) or 1
-    msg = f"三视角数据已生成（elements={len(top_el)}，柜数={n_c}"
-    if side_images.get("per_container"):
-        msg += f"，侧视图{len(side_images['per_container'])}张+总览"
-    msg += "）"
+
+    # 双率展示：订柜有效体积 vs 外廓摆柜（禁止把 outer 写成订柜/唯一装满度）
+    outer_u = float(
+        plan.get("outer_space_utilization") or plan.get("space_utilization") or 0
+    )
+    book_u = float(plan.get("booking_volume_utilization") or 0)
+    weight_u = float(plan.get("weight_utilization") or 0)
+    metrics_display = {
+        "outer_space_utilization": outer_u,
+        "booking_volume_utilization": book_u,
+        "weight_utilization": weight_u,
+        "labels": {
+            "outer_space_utilization": "外廓摆柜率（仅布局松紧，非订柜）",
+            "booking_volume_utilization": "订柜有效体积率（V_eff，非空心架实心）",
+            "weight_utilization": "重量利用率",
+        },
+        "caption": (
+            f"订柜有效体积率 {book_u:.0%}｜外廓摆柜率 {outer_u:.0%}｜重量 {weight_u:.0%}；"
+            f"外廓率≠订柜装满度，铁架常见偏低"
+        ),
+    }
+    # 挂到 views 元数据，便于前端/导出
+    for v in views.values():
+        v["metrics"] = metrics_display
+
+    msg = (
+        f"三视角数据已生成（elements={len(top_el)}，柜数={n_c}"
+        f"{'，侧视图'+str(len(side_images['per_container']))+'张+总览' if side_images.get('per_container') else ''}"
+        f"）｜{metrics_display['caption']}"
+    )
 
     return {
         "views": views,
         "image_data": image_data,
         "legend": legend,
+        "display_metrics": metrics_display,
         "messages": [
             {
                 "role": "assistant",
@@ -174,12 +201,24 @@ def _draw_side_png(plan: Dict[str, Any], boxes: List[Dict[str, Any]], ctype: str
             # 把分柜路径挂到 plan 便于 finalize/xlsx
             plan["side_images"] = multi
             return multi.get("primary_path") or multi.get("overview_path")
-        # 单柜：保持原侧视图
+        # 单柜：侧视图图注区分外廓 vs 订柜有效体积（勿写「订柜=外廓」）
+        outer_u = float(
+            plan.get("outer_space_utilization") or plan.get("space_utilization") or 0
+        )
+        book_u = float(plan.get("booking_volume_utilization") or 0)
+        weight_u = float(plan.get("weight_utilization") or 0)
+        caption = (
+            f"外廓摆柜{outer_u*100:.0f}%｜订柜有效体积{book_u*100:.0f}%｜重量{weight_u*100:.0f}%"
+            f"（外廓≠订柜）"
+        )
         old = {
             "柜型": ctype,
-            "结论": plan.get("message") or "",
-            "空间利用率": f"{float(plan.get('space_utilization') or 0)*100:.0f}%",
-            "重量利用率": f"{float(plan.get('weight_utilization') or 0)*100:.0f}%",
+            "结论": (plan.get("message") or "") + " | " + caption,
+            # 兼容旧字段：空间利用率=外廓摆柜率
+            "空间利用率": f"{outer_u*100:.0f}%",
+            "订柜有效体积率": f"{book_u*100:.0f}%",
+            "外廓摆柜率": f"{outer_u*100:.0f}%",
+            "重量利用率": f"{weight_u*100:.0f}%",
             "布局": [
                 {
                     "箱号": it.get("box_id"),

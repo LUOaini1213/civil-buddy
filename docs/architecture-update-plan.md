@@ -114,6 +114,7 @@ while N ≤ N_max:          # N_max 默认 N0+8，用户 cap 仅封顶
 | P0 | `tools/bin3d.py` | ✅ | outer 碰撞；贴端墙+铁架条带；**按 N 均分重量**防第一柜吃满挤出第 3 柜 |
 | P1 | 报告双口径 | ✅ | 订柜 N0（汇报）vs 3D 建议柜数（摆柜上界），禁止合成硬报 |
 | P1 | VMU1 site 成箱 | ✅ | 贴装货单 1.1m 为主混型 + 合箱加密；N0=2 且 3D 可 can_fit=2 |
+| P2 | crate_outer 门禁 / BoxModel 体积字段 / visualizer 双率 / 文档 η | ✅ | 见 `docs/CHANGELOG-P2.md` |
 | P1 | evaluator / risk / finalize | ✅ | 三指标 + VOLUME_SUSPICIOUS |
 | P1 | knowledge 40HQ | ✅ | COSCO PAYLOAD/CU.CAP |
 | P2 | material 过滤（目的地/已发） | ⏳ | 脚本侧已有 site-only；通用入主控待做 |

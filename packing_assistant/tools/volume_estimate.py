@@ -272,14 +272,15 @@ def estimate_containers(
     container_type: str = "40HQ",
     fill_ratio: float = 0.82,
     volume_mode: str = "pack_effective",
+    allow_crate_outer_debug: bool = False,
 ) -> Dict[str, Any]:
     """
     双约束估柜。
 
     volume_mode:
-      - pack_effective: 材料=件×膨胀；成箱=min(outer, content×k)（推荐订柜）
+      - pack_effective: 材料=件×膨胀；成箱=min(outer, content×k)（推荐订柜，默认）
       - piece_solid: 仅件体积（下界）
-      - crate_outer: 已成箱外廓（仅调试；勿作订柜）
+      - crate_outer: 已成箱外廓 —— **默认禁止**；须 allow_crate_outer_debug=True
     fill_ratio / η: 柜容积可用比例，默认 0.82（行业 80–85%）
     """
     spec = container_spec(container_type)
@@ -287,6 +288,26 @@ def estimate_containers(
     cont_m3 = spec["theory_m3"] or spec["inner_m3"]
     fill = min(max(float(fill_ratio), 0.50), 0.90)
     usable_m3 = cont_m3 * fill
+
+    mode_raw = (volume_mode or "pack_effective").strip()
+    mode = mode_raw or "pack_effective"
+    warnings: List[str] = []
+    redirected = False
+
+    # —— crate_outer 门禁：默认改写为 pack_effective，禁止静默污染订柜 ——
+    if mode == "crate_outer":
+        if not allow_crate_outer_debug:
+            warnings.append(
+                "volume_mode=crate_outer 已默认禁用（会用外廓虚高订柜）；"
+                "已改用 pack_effective。调试请显式 allow_crate_outer_debug=True"
+            )
+            mode = "pack_effective"
+            redirected = True
+        else:
+            warnings.append(
+                "DEBUG: volume_mode=crate_outer 且 allow_crate_outer_debug=True；"
+                "结果仅供几何对照，禁止当作正式订柜 N0"
+            )
 
     # 重量
     if gross_kg is None:
@@ -311,27 +332,34 @@ def estimate_containers(
 
     # 体积
     vol_detail: Dict[str, Any] = {}
-    if volume_mode == "crate_outer" and boxes:
+    volume_source = "pack_effective"
+    if mode == "crate_outer" and boxes and allow_crate_outer_debug:
         v = crate_outer_m3(boxes)
-        vol_detail = {"mode": "crate_outer", "volume_m3": v}
-    elif boxes and volume_mode in ("pack_effective", "boxes_booking", ""):
+        vol_detail = {"mode": "crate_outer", "volume_m3": v, "debug_only": True}
+        volume_source = "crate_outer_DEBUG"
+    elif boxes and mode in ("pack_effective", "boxes_booking", ""):
         bv = booking_volume_from_boxes(boxes)
         v = float(bv["booking_volume_m3"])
         vol_detail = bv
+        volume_source = str(bv.get("mode") or "pack_effective_min_outer_content")
     elif materials:
         pe = pack_effective_m3(materials)
-        if volume_mode == "piece_solid":
+        if mode == "piece_solid":
             v = pe["piece_solid_m3"]
+            volume_source = "piece_solid"
         else:
             v = pe["pack_effective_m3"]
-        vol_detail = {"mode": volume_mode, **pe}
+            volume_source = "pack_effective_materials"
+        vol_detail = {"mode": mode if mode != "crate_outer" else "pack_effective", **pe}
     elif boxes:
         bv = booking_volume_from_boxes(boxes)
         v = float(bv["booking_volume_m3"])
         vol_detail = bv
+        volume_source = str(bv.get("mode") or "pack_effective_min_outer_content")
     else:
         v = 0.0
-        vol_detail = {"mode": volume_mode, "volume_m3": 0.0}
+        vol_detail = {"mode": mode, "volume_m3": 0.0}
+        volume_source = mode
 
     n_volume = max(1, int(math.ceil(v / usable_m3 - 1e-9))) if v > 0 else 0
     n_final = max(n_weight, n_volume, 1 if (gross_kg > 0 or v > 0) else 0)
@@ -339,6 +367,10 @@ def estimate_containers(
     binding = "weight" if n_weight >= n_volume else "volume"
     if n_weight == n_volume:
         binding = "both"
+
+    warn_text = "; ".join(warnings) if warnings else None
+    if volume_source == "crate_outer_DEBUG" and not warn_text:
+        warn_text = "crate_outer 调试模式：勿作正式订柜"
 
     return {
         "container_type": container_type,
@@ -349,14 +381,19 @@ def estimate_containers(
         "gross_kg": round(gross_kg, 1),
         "volume_m3": round(v, 4),
         "volume_detail": vol_detail,
+        "volume_source": volume_source,
+        "volume_mode_requested": mode_raw,
+        "volume_mode_effective": (
+            "crate_outer"
+            if volume_source == "crate_outer_DEBUG"
+            else ("pack_effective" if redirected else mode)
+        ),
+        "crate_outer_redirected": redirected,
         "containers_by_weight": n_weight,
         "containers_by_volume": n_volume,
         "containers_needed": n_final,
         "binding_constraint": binding,
-        "formula": "max(ceil(G/payload), ceil(V_eff/(V_cont*fill)))",
-        "warning": (
-            None
-            if vol_detail.get("mode") != "crate_outer"
-            else "crate_outer 模式仅用于真实成箱；虚当量外廓会导致体积约束过紧"
-        ),
+        "formula": "max(ceil(G/payload), ceil(V_eff/(V_cont*η))); η=fill_ratio; V_eff≠outer",
+        "warning": warn_text,
+        "warnings": warnings,
     }
