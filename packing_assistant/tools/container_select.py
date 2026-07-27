@@ -28,16 +28,17 @@ PRACTICAL_CBM = {
 INNER_MM = {
     "20GP": {"L": 5898, "W": 2352, "H": 2385, "max_kg": 21000},
     "40GP": {"L": 12032, "W": 2352, "H": 2385, "max_kg": 26680},
-    "40HQ": {"L": 12032, "W": 2352, "H": 2698, "max_kg": 26480},
+    "40HQ": {"L": 12032, "W": 2352, "H": 2698, "max_kg": 28610},  # COSCO PAYLOAD
 }
 
 
 def _est_from_materials(materials: Sequence[Dict[str, Any]]) -> Dict[str, float]:
+    """材料阶段体积：件 AABB × 分货种膨胀（≤1.8），禁止 2.6× 虚高。"""
+    from packing_assistant.tools.volume_estimate import pack_effective_m3
+
     max_L = 0.0
     max_H = 0.0
     net = 0.0
-    # 粗估：件体积×1.35 作箱体外廓放大（合箱/壁厚）
-    piece_vol = 0.0
     for m in materials:
         L = float(m.get("length_mm") or m.get("L") or 0)
         W = float(m.get("width_mm") or m.get("W") or 0)
@@ -47,19 +48,18 @@ def _est_from_materials(materials: Sequence[Dict[str, Any]]) -> Dict[str, float]
         max_L = max(max_L, L)
         max_H = max(max_H, H)
         net += wt
-        piece_vol += (L * W * H * q) / 1e9
-    # 箱体外廓实心粗估（钢结构合箱/模块化外廓放大约 2.2~2.8 倍）
-    cargo_m3 = max(piece_vol * 2.6, piece_vol + 1.0)
-    # 有长件时再放大，避免误选 20GP 导致双柜
-    if max_L >= 3500:
-        cargo_m3 = max(cargo_m3, 16.0)
-    gross = net * 1.35  # 箱自重粗估
+    pe = pack_effective_m3(materials)
+    cargo_m3 = float(pe.get("pack_effective_m3") or 0)
+    # 长件只影响柜型选择，不再人为把体积抬到 16m³ 起步
+    gross = net * 1.15  # 箱皮略增，勿 1.35 过大
     return {
         "max_length_mm": max_L,
         "max_height_mm": max_H,
         "net_kg": net,
         "gross_kg_est": gross,
         "cargo_m3_est": cargo_m3,
+        "piece_solid_m3": pe.get("piece_solid_m3"),
+        "volume_inflation": pe.get("inflation_ratio"),
     }
 
 
