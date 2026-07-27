@@ -1,0 +1,624 @@
+{
+  "scope": "VMU1 剩余未发 · 仅送工地",
+  "source": "A:\\JOB\\2517SLTO\\Project\\6. Quality QAQC\\6.06 POR\\VMU\\Material_Summary_VMU送工地.xlsx",
+  "materials_file": "E:\\ai比赛\\output\\vmu1_site_only\\materials_vmu1_site_remaining.xlsx",
+  "materials_lines": 156,
+  "qty_units": 156,
+  "net_kg": 41588.0,
+  "by_group": {
+    "23—紧固件/螺丝": 48,
+    "19—胶条、垫块、胶皮": 5,
+    "28—杂项配件": 22,
+    "11—铝板": 5,
+    "14—不锈钢": 2,
+    "13—铁件": 74
+  },
+  "by_por": {
+    "SLTO-VMU-0001-BBF0007": 44,
+    "SLTO-VMU-0001-BBF0022": 4,
+    "SLTO-VMU-0001-BGK0015": 3,
+    "SLTO-VMU-0001-BGK0055": 2,
+    "SLTO-VMU-0001-BOM0016": 4,
+    "SLTO-VMU-0001-BOM0019": 18,
+    "SLTO-VMU-0001-FAC0011": 5,
+    "SLTO-VMU-0001-FSS0005": 2,
+    "SLTO-VMU-0001-FST0003": 67,
+    "SLTO-VMU-0001-FST0017": 4,
+    "SLTO-VMU-0001-FST0022": 3
+  },
+  "skipped": [
+    {
+      "por": "SLTO-VMU-0001-BBF0006",
+      "reason": "零量(已到=未到=0)",
+      "qty": 0
+    },
+    {
+      "por": "SLTO-VMU-0001-BOM0013",
+      "reason": "零量(已到=未到=0)",
+      "qty": 0
+    },
+    {
+      "por": "SLTO-VMU-0001-BSS0010",
+      "reason": "零量(已到=未到=0)",
+      "qty": 0
+    },
+    {
+      "por": "SLTO-VMU-0002-BBF0030",
+      "reason": "非VMU1",
+      "qty": 0.0
+    },
+    {
+      "por": "SLTO-VMU-0002-BBF0031",
+      "reason": "非VMU1",
+      "qty": 3799.0
+    },
+    {
+      "por": "SLTO-VMU-0002-BGK0037",
+      "reason": "非VMU1",
+      "qty": 300.0
+    },
+    {
+      "por": "SLTO-VMU-0002-BOM0035",
+      "reason": "非VMU1",
+      "qty": 0.0
+    },
+    {
+      "por": "SLTO-VMU-0002-BOM0039",
+      "reason": "非VMU1",
+      "qty": 40.0
+    },
+    {
+      "por": "SLTO-VMU-0002-BSS0033",
+      "reason": "非VMU1",
+      "qty": 0.0
+    },
+    {
+      "por": "SLTO-VMU-0002-FST0023",
+      "reason": "非VMU1",
+      "qty": 357.0
+    },
+    {
+      "por": "SLTO-VMU-0003-BBF0040",
+      "reason": "非VMU1",
+      "qty": 0.0
+    },
+    {
+      "por": "SLTO-VMU-0003-BBF0042",
+      "reason": "非VMU1",
+      "qty": 780.0
+    },
+    {
+      "por": "SLTO-VMU-0003-BOM0046",
+      "reason": "非VMU1",
+      "qty": 0.0
+    },
+    {
+      "por": "SLTO-VMU-0003-BSS0044",
+      "reason": "非VMU1",
+      "qty": 0.0
+    },
+    {
+      "por": "SLTO-VMU-0003-FST0026",
+      "reason": "非VMU1",
+      "qty": 244.0
+    },
+    {
+      "por": "SLTO-VMU-0004-BBF0048",
+      "reason": "非VMU1",
+      "qty": 0.0
+    },
+    {
+      "por": "SLTO-VMU-0004-BBF0049",
+      "reason": "非VMU1",
+      "qty": 100.0
+    },
+    {
+      "por": "SLTO-VMU-0004-BGK0057",
+      "reason": "非VMU1",
+      "qty": 50.0
+    },
+    {
+      "por": "SLTO-VMU-0004-BOM0056",
+      "reason": "非VMU1",
+      "qty": 180.0
+    },
+    {
+      "por": "SLTO-VMU-0004-BSS0051",
+      "reason": "非VMU1",
+      "qty": 0.0
+    }
+  ],
+  "dims_note": "Material_Summary 无逐件尺寸，按物料组/POR 实务估算，非正式提料尺寸",
+  "pack": {
+    "snapshot": {
+      "round": 1,
+      "max_containers": 16,
+      "boxes": 156,
+      "can_fit": true,
+      "containers_used": 15,
+      "space": 0.36,
+      "floor": 0.6513,
+      "weight": 0.1361,
+      "risk": "N/A_estimate",
+      "risk_level": "estimate",
+      "ship_ok": true,
+      "struct_fail": 0,
+      "engine": "python-laff-3d"
+    },
+    "steps": [
+      {
+        "node": "direct_bin3d",
+        "message": "当量箱 156 只直接 3D 装 40HQ×≤16 can_fit=True used=15"
+      }
+    ],
+    "final": "",
+    "team_a": {
+      "box_count": 156,
+      "note": "crate_equivalent_skip_rebox"
+    },
+    "boxes": [
+      {
+        "box_id": "CRATE-001",
+        "box_type": "当量箱",
+        "outer": {
+          "length": 600,
+          "width": 400,
+          "height": 350
+        },
+        "net": 25.0,
+        "gross": 105.0,
+        "struct": "当量跳过",
+        "content": [
+          "五金箱当量×200件/箱 | SLTO-VMU-0001-BBF0007#1"
+        ]
+      },
+      {
+        "box_id": "CRATE-002",
+        "box_type": "当量箱",
+        "outer": {
+          "length": 600,
+          "width": 400,
+          "height": 350
+        },
+        "net": 25.0,
+        "gross": 105.0,
+        "struct": "当量跳过",
+        "content": [
+          "五金箱当量×200件/箱 | SLTO-VMU-0001-BBF0007#2"
+        ]
+      },
+      {
+        "box_id": "CRATE-003",
+        "box_type": "当量箱",
+        "outer": {
+          "length": 600,
+          "width": 400,
+          "height": 350
+        },
+        "net": 25.0,
+        "gross": 105.0,
+        "struct": "当量跳过",
+        "content": [
+          "五金箱当量×200件/箱 | SLTO-VMU-0001-BBF0007#3"
+        ]
+      },
+      {
+        "box_id": "CRATE-004",
+        "box_type": "当量箱",
+        "outer": {
+          "length": 600,
+          "width": 400,
+          "height": 350
+        },
+        "net": 25.0,
+        "gross": 105.0,
+        "struct": "当量跳过",
+        "content": [
+          "五金箱当量×200件/箱 | SLTO-VMU-0001-BBF0007#4"
+        ]
+      },
+      {
+        "box_id": "CRATE-005",
+        "box_type": "当量箱",
+        "outer": {
+          "length": 600,
+          "width": 400,
+          "height": 350
+        },
+        "net": 25.0,
+        "gross": 105.0,
+        "struct": "当量跳过",
+        "content": [
+          "五金箱当量×200件/箱 | SLTO-VMU-0001-BBF0007#5"
+        ]
+      },
+      {
+        "box_id": "CRATE-006",
+        "box_type": "当量箱",
+        "outer": {
+          "length": 600,
+          "width": 400,
+          "height": 350
+        },
+        "net": 25.0,
+        "gross": 105.0,
+        "struct": "当量跳过",
+        "content": [
+          "五金箱当量×200件/箱 | SLTO-VMU-0001-BBF0007#6"
+        ]
+      },
+      {
+        "box_id": "CRATE-007",
+        "box_type": "当量箱",
+        "outer": {
+          "length": 600,
+          "width": 400,
+          "height": 350
+        },
+        "net": 25.0,
+        "gross": 105.0,
+        "struct": "当量跳过",
+        "content": [
+          "五金箱当量×200件/箱 | SLTO-VMU-0001-BBF0007#7"
+        ]
+      },
+      {
+        "box_id": "CRATE-008",
+        "box_type": "当量箱",
+        "outer": {
+          "length": 600,
+          "width": 400,
+          "height": 350
+        },
+        "net": 25.0,
+        "gross": 105.0,
+        "struct": "当量跳过",
+        "content": [
+          "五金箱当量×200件/箱 | SLTO-VMU-0001-BBF0007#8"
+        ]
+      },
+      {
+        "box_id": "CRATE-009",
+        "box_type": "当量箱",
+        "outer": {
+          "length": 600,
+          "width": 400,
+          "height": 350
+        },
+        "net": 25.0,
+        "gross": 105.0,
+        "struct": "当量跳过",
+        "content": [
+          "五金箱当量×200件/箱 | SLTO-VMU-0001-BBF0007#9"
+        ]
+      },
+      {
+        "box_id": "CRATE-010",
+        "box_type": "当量箱",
+        "outer": {
+          "length": 600,
+          "width": 400,
+          "height": 350
+        },
+        "net": 25.0,
+        "gross": 105.0,
+        "struct": "当量跳过",
+        "content": [
+          "五金箱当量×200件/箱 | SLTO-VMU-0001-BBF0007#10"
+        ]
+      },
+      {
+        "box_id": "CRATE-011",
+        "box_type": "当量箱",
+        "outer": {
+          "length": 600,
+          "width": 400,
+          "height": 350
+        },
+        "net": 25.0,
+        "gross": 105.0,
+        "struct": "当量跳过",
+        "content": [
+          "五金箱当量×200件/箱 | SLTO-VMU-0001-BBF0007#11"
+        ]
+      },
+      {
+        "box_id": "CRATE-012",
+        "box_type": "当量箱",
+        "outer": {
+          "length": 600,
+          "width": 400,
+          "height": 350
+        },
+        "net": 25.0,
+        "gross": 105.0,
+        "struct": "当量跳过",
+        "content": [
+          "五金箱当量×200件/箱 | SLTO-VMU-0001-BBF0007#12"
+        ]
+      },
+      {
+        "box_id": "CRATE-013",
+        "box_type": "当量箱",
+        "outer": {
+          "length": 600,
+          "width": 400,
+          "height": 350
+        },
+        "net": 25.0,
+        "gross": 105.0,
+        "struct": "当量跳过",
+        "content": [
+          "五金箱当量×200件/箱 | SLTO-VMU-0001-BBF0007#13"
+        ]
+      },
+      {
+        "box_id": "CRATE-014",
+        "box_type": "当量箱",
+        "outer": {
+          "length": 600,
+          "width": 400,
+          "height": 350
+        },
+        "net": 25.0,
+        "gross": 105.0,
+        "struct": "当量跳过",
+        "content": [
+          "五金箱当量×200件/箱 | SLTO-VMU-0001-BBF0007#14"
+        ]
+      },
+      {
+        "box_id": "CRATE-015",
+        "box_type": "当量箱",
+        "outer": {
+          "length": 600,
+          "width": 400,
+          "height": 350
+        },
+        "net": 25.0,
+        "gross": 105.0,
+        "struct": "当量跳过",
+        "content": [
+          "五金箱当量×200件/箱 | SLTO-VMU-0001-BBF0007#15"
+        ]
+      },
+      {
+        "box_id": "CRATE-016",
+        "box_type": "当量箱",
+        "outer": {
+          "length": 600,
+          "width": 400,
+          "height": 350
+        },
+        "net": 25.0,
+        "gross": 105.0,
+        "struct": "当量跳过",
+        "content": [
+          "五金箱当量×200件/箱 | SLTO-VMU-0001-BBF0007#16"
+        ]
+      },
+      {
+        "box_id": "CRATE-017",
+        "box_type": "当量箱",
+        "outer": {
+          "length": 600,
+          "width": 400,
+          "height": 350
+        },
+        "net": 25.0,
+        "gross": 105.0,
+        "struct": "当量跳过",
+        "content": [
+          "五金箱当量×200件/箱 | SLTO-VMU-0001-BBF0007#17"
+        ]
+      },
+      {
+        "box_id": "CRATE-018",
+        "box_type": "当量箱",
+        "outer": {
+          "length": 600,
+          "width": 400,
+          "height": 350
+        },
+        "net": 25.0,
+        "gross": 105.0,
+        "struct": "当量跳过",
+        "content": [
+          "五金箱当量×200件/箱 | SLTO-VMU-0001-BBF0007#18"
+        ]
+      },
+      {
+        "box_id": "CRATE-019",
+        "box_type": "当量箱",
+        "outer": {
+          "length": 600,
+          "width": 400,
+          "height": 350
+        },
+        "net": 25.0,
+        "gross": 105.0,
+        "struct": "当量跳过",
+        "content": [
+          "五金箱当量×200件/箱 | SLTO-VMU-0001-BBF0007#19"
+        ]
+      },
+      {
+        "box_id": "CRATE-020",
+        "box_type": "当量箱",
+        "outer": {
+          "length": 600,
+          "width": 400,
+          "height": 350
+        },
+        "net": 25.0,
+        "gross": 105.0,
+        "struct": "当量跳过",
+        "content": [
+          "五金箱当量×200件/箱 | SLTO-VMU-0001-BBF0007#20"
+        ]
+      },
+      {
+        "box_id": "CRATE-021",
+        "box_type": "当量箱",
+        "outer": {
+          "length": 600,
+          "width": 400,
+          "height": 350
+        },
+        "net": 25.0,
+        "gross": 105.0,
+        "struct": "当量跳过",
+        "content": [
+          "五金箱当量×200件/箱 | SLTO-VMU-0001-BBF0007#21"
+        ]
+      },
+      {
+        "box_id": "CRATE-022",
+        "box_type": "当量箱",
+        "outer": {
+          "length": 600,
+          "width": 400,
+          "height": 350
+        },
+        "net": 25.0,
+        "gross": 105.0,
+        "struct": "当量跳过",
+        "content": [
+          "五金箱当量×200件/箱 | SLTO-VMU-0001-BBF0007#22"
+        ]
+      },
+      {
+        "box_id": "CRATE-023",
+        "box_type": "当量箱",
+        "outer": {
+          "length": 600,
+          "width": 400,
+          "height": 350
+        },
+        "net": 25.0,
+        "gross": 105.0,
+        "struct": "当量跳过",
+        "content": [
+          "五金箱当量×200件/箱 | SLTO-VMU-0001-BBF0007#23"
+        ]
+      },
+      {
+        "box_id": "CRATE-024",
+        "box_type": "当量箱",
+        "outer": {
+          "length": 600,
+          "width": 400,
+          "height": 350
+        },
+        "net": 25.0,
+        "gross": 105.0,
+        "struct": "当量跳过",
+        "content": [
+          "五金箱当量×200件/箱 | SLTO-VMU-0001-BBF0007#24"
+        ]
+      },
+      {
+        "box_id": "CRATE-025",
+        "box_type": "当量箱",
+        "outer": {
+          "length": 600,
+          "width": 400,
+          "height": 350
+        },
+        "net": 25.0,
+        "gross": 105.0,
+        "struct": "当量跳过",
+        "content": [
+          "五金箱当量×200件/箱 | SLTO-VMU-0001-BBF0007#25"
+        ]
+      },
+      {
+        "box_id": "CRATE-026",
+        "box_type": "当量箱",
+        "outer": {
+          "length": 600,
+          "width": 400,
+          "height": 350
+        },
+        "net": 25.0,
+        "gross": 105.0,
+        "struct": "当量跳过",
+        "content": [
+          "五金箱当量×200件/箱 | SLTO-VMU-0001-BBF0007#26"
+        ]
+      },
+      {
+        "box_id": "CRATE-027",
+        "box_type": "当量箱",
+        "outer": {
+          "length": 600,
+          "width": 400,
+          "height": 350
+        },
+        "net": 25.0,
+        "gross": 105.0,
+        "struct": "当量跳过",
+        "content": [
+          "五金箱当量×200件/箱 | SLTO-VMU-0001-BBF0007#27"
+        ]
+      },
+      {
+        "box_id": "CRATE-028",
+        "box_type": "当量箱",
+        "outer": {
+          "length": 600,
+          "width": 400,
+          "height": 350
+        },
+        "net": 25.0,
+        "gross": 105.0,
+        "struct": "当量跳过",
+        "content": [
+          "五金箱当量×200件/箱 | SLTO-VMU-0001-BBF0007#28"
+        ]
+      },
+      {
+        "box_id": "CRATE-029",
+        "box_type": "当量箱",
+        "outer": {
+          "length": 600,
+          "width": 400,
+          "height": 350
+        },
+        "net": 25.0,
+        "gross": 105.0,
+        "struct": "当量跳过",
+        "content": [
+          "五金箱当量×200件/箱 | SLTO-VMU-0001-BBF0007#29"
+        ]
+      },
+      {
+        "box_id": "CRATE-030",
+        "box_type": "当量箱",
+        "outer": {
+          "length": 600,
+          "width": 400,
+          "height": 350
+        },
+        "net": 25.0,
+        "gross": 105.0,
+        "struct": "当量跳过",
+        "content": [
+          "五金箱当量×200件/箱 | SLTO-VMU-0001-BBF0007#30"
+        ]
+      }
+    ],
+    "container_plan": {
+      "can_fit": true,
+      "containers_used": 15,
+      "space_utilization": 0.36,
+      "floor_utilization_avg": 0.6513,
+      "weight_utilization": 0.1361,
+      "engine": "python-laff-3d",
+      "cargo_solid_volume_m3": 412.272,
+      "container_inner_volume_m3": 76.3514
+    }
+  },
+  "ms": 1286,
+  "initial_guess_containers": 14
+}
