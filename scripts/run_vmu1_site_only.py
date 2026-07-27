@@ -154,38 +154,38 @@ def to_materials(rows: List[Dict[str, Any]]) -> Tuple[List[Dict[str, Any]], List
         # —— 按 POR/物料组：件数 → 标准箱当量 + 当量外廓/单重 ——
         # 目标：与现场「若干件合一铁架/木箱」一致，而不是 1 件 1 箱
         if "BBF" in pu or "紧固件" in group or "螺丝" in group or "螺栓" in group:
-            per = 200
+            # 贴装货单：五金多箱合并，减少碎箱占底面
+            per = 400
             units = max(1, int(round(n / per)))
-            L, W, H, wt = 600.0, 400.0, 350.0, 25.0  # 五金木箱当量
+            L, W, H, wt = 800.0, 600.0, 500.0, 55.0  # 稍大木箱当量
             unit, suffix = "五金箱当量", f"×{per}件/箱"
         elif "BGK" in pu or "胶条" in group or "垫块" in group:
-            per = 40
-            units = max(1, int(round(n / per)))
-            L, W, H, wt = 800.0, 600.0, 500.0, 30.0
-            unit, suffix = "胶条垫块箱", f"×{per}/箱"
-        elif "FAC0011" in pu or ("铝板" in desc and "FAC" in pu):
-            # 铝板叠层装箱：约 25 片/铁架
-            per = 25
-            units = max(1, int(round(n / per)))
-            L, W, H, wt = 2200.0, 1200.0, 800.0, 25 * 18.0  # 整箱重
-            unit, suffix = "铝板架", f"×{per}片/架"
-        elif "FST0022" in pu or "垫片" in desc:
             per = 60
             units = max(1, int(round(n / per)))
-            L, W, H, wt = 1200.0, 800.0, 600.0, 60 * 2.5
+            L, W, H, wt = 800.0, 600.0, 500.0, 35.0
+            unit, suffix = "胶条垫块箱", f"×{per}/箱"
+        elif "FAC0011" in pu or ("铝板" in desc and "FAC" in pu):
+            # 铝板叠层：略加密，并可上二层（H=800）
+            per = 40
+            units = max(1, int(round(n / per)))
+            L, W, H, wt = 2200.0, 1200.0, 800.0, 40 * 18.0
+            unit, suffix = "铝板架", f"×{per}片/架"
+        elif "FST0022" in pu or "垫片" in desc:
+            per = 90
+            units = max(1, int(round(n / per)))
+            L, W, H, wt = 1200.0, 800.0, 600.0, 90 * 2.5
             unit, suffix = "钢垫片箱", f"×{per}/箱"
         elif "FST0017" in pu or "吊具" in desc:
             units = max(1, int(round(n)))
             L, W, H, wt = 2000.0, 800.0, 600.0, 45.0
             unit, suffix = "吊具", ""
         elif "FST" in pu or "铁件" in group:
-            # 结构铁件：对照 REDACTED-REF 装货单（1.1m/2m/4m/6m 铁架混装，非一律 4m×67 箱）
-            # 实务合箱更密：约 70–90 件/架；尺寸按现场装货单分布循环
-            per = 80
+            # 对照 REDACTED-REF 装货单：1.1m 为主、2m/4m 点缀；合箱更密贴近现场
+            per = 100
             units = max(1, int(round(n / per)))
-            # 装货单常见外廓（mm）与空架自重近似
-            # 装货单 1 柜偏 1.1m 架、2 柜才出现 2m/4m；估计时 1.1m 为主
+            # 装货单 1 柜大量 1.1m 架；2/4m 少量
             frame_cycle = [
+                (1100.0, 1100.0, 1750.0, 80.0),
                 (1100.0, 1100.0, 1750.0, 80.0),
                 (1100.0, 1100.0, 1750.0, 80.0),
                 (1100.0, 1100.0, 1750.0, 80.0),
@@ -194,8 +194,6 @@ def to_materials(rows: List[Dict[str, Any]]) -> Tuple[List[Dict[str, Any]], List
                 (4000.0, 1100.0, 1750.0, 250.0),
             ]
             unit, suffix = "铁件架", f"×{per}件/架 raw={int(n)}"
-            # 展开时按 cycle 赋尺寸；单架货重 ≈ per×均重（均重~15kg）+ 架自重
-            # 先占位，下面循环里覆写 L/W/H/wt
             L, W, H, frame_tare = frame_cycle[0]
             wt = per * 15.0 + frame_tare
         elif "FSS" in pu or "不锈钢" in group:
@@ -204,14 +202,14 @@ def to_materials(rows: List[Dict[str, Any]]) -> Tuple[List[Dict[str, Any]], List
             L, W, H, wt = 1500.0, 800.0, 600.0, max(n, 1) / max(units, 1) * 4.0
             unit, suffix = "不锈钢箱", f"×{per}/箱" if n >= 10 else ""
         elif "BOM0019" in pu or "瓦楞" in desc:
-            per = 40
+            per = 80
             units = max(1, int(round(n / per)))
-            L, W, H, wt = 2400.0, 1200.0, 600.0, 40 * 8.0
+            L, W, H, wt = 2400.0, 1200.0, 500.0, 80 * 8.0
             unit, suffix = "瓦楞板架", f"×{per}/架"
         elif "BOM0016" in pu or "木板" in desc:
-            per = 20
+            per = 30
             units = max(1, int(round(n / per)))
-            L, W, H, wt = 2400.0, 1200.0, 400.0, 20 * 18.0
+            L, W, H, wt = 2400.0, 1200.0, 400.0, 30 * 18.0
             unit, suffix = "木板架", f"×{per}/架"
         elif "BSS" in pu or "胶" in group:
             units = max(1, int(round(n / 12))) if n > 12 else max(1, int(round(n)))
@@ -235,6 +233,7 @@ def to_materials(rows: List[Dict[str, Any]]) -> Tuple[List[Dict[str, Any]], List
         n_units = max(1, int(units))
         is_steel_frame = unit == "铁件架"
         frame_cycle = [
+            (1100.0, 1100.0, 1750.0, 80.0),
             (1100.0, 1100.0, 1750.0, 80.0),
             (1100.0, 1100.0, 1750.0, 80.0),
             (1100.0, 1100.0, 1750.0, 80.0),
@@ -316,6 +315,10 @@ def run_pack(mats: List[Dict[str, Any]], container: str = "40HQ") -> Dict[str, A
         content_m3 = outer_m3 * fill
         longish = L >= 4000
         net_w = float(m.get("weight_kg") or 0)
+        name = str(m.get("name") or "")
+        # 矮货/板材可上二层（装货单常见：铁架底、板箱上）；1.1m 架 H=1750 仅底层
+        can_stack = (H <= 1200 and not longish) or ("铝板" in name) or ("瓦楞" in name) or ("木板" in name) or ("五金" in name)
+        prefer_bottom = longish or ("铁件架" in name) or net_w >= 1200
         boxes.append(
             {
                 "box_id": f"CRATE-{i:03d}",
@@ -326,10 +329,11 @@ def run_pack(mats: List[Dict[str, Any]], container: str = "40HQ") -> Dict[str, A
                 "crate_fill_ratio": fill,
                 "booking_volume_m3": round(min(outer_m3, content_m3 * 1.50), 6),
                 "net_weight_kg": net_w,
-                "gross_weight_kg": net_w + 80,
-                "stackable": H <= 1300 and not longish,
-                "prefer_bottom": longish or net_w >= 500,
+                "gross_weight_kg": net_w + 40,  # 箱皮粗估，勿过大抬高重量柜
+                "stackable": can_stack and not prefer_bottom,
+                "prefer_bottom": prefer_bottom,
                 "special_attributes": ["超长"] if longish else [],
+                "name": name,
                 "content": [
                     {
                         "name": m.get("name"),
@@ -375,9 +379,32 @@ def run_pack(mats: List[Dict[str, Any]], container: str = "40HQ") -> Dict[str, A
         n_max=min(40, max(n0 + 12, 8)),
         fill_ratio=0.82,
     )
+    # N0 柜时未装入明细（解释 2 vs 3，不作订柜改数）
+    gap_at_n0: Dict[str, Any] = {}
+    used_3d = int(plan.get("containers_used") or 0)
+    if used_3d > n0:
+        from packing_assistant.tools.bin3d import pack_boxes_api
+
+        trial = pack_boxes_api(boxes, container_type=container, max_containers=n0)
+        unp = list(trial.get("unpacked_box_ids") or [])
+        by_name: Dict[str, int] = {}
+        for bid in unp:
+            bx = next((b for b in boxes if b.get("box_id") == bid), None)
+            tag = str((bx or {}).get("name") or bid).split("|")[0].strip()[:28]
+            by_name[tag] = by_name.get(tag, 0) + 1
+        gap_at_n0 = {
+            "n0": n0,
+            "unpacked_count": len(unp),
+            "unpacked_by_type": by_name,
+            "note": "3D 在 N0 柜差这些箱；属成箱/摆柜上界，不改订柜 N0",
+        }
+        print("GAP_AT_N0", json.dumps(gap_at_n0, ensure_ascii=False))
+
     snap = {
         "round": 0,
         "n0": n0,
+        "booking_containers": n0,  # 订柜口径
+        "layout_containers": plan.get("containers_used"),  # 3D 摆柜口径
         "max_containers": plan.get("n_tried", [{}])[-1].get("n") if plan.get("n_tried") else n0,
         "boxes": len(boxes),
         "can_fit": plan.get("can_fit"),
@@ -387,6 +414,7 @@ def run_pack(mats: List[Dict[str, Any]], container: str = "40HQ") -> Dict[str, A
         "floor": plan.get("floor_utilization_avg"),
         "weight": plan.get("weight_utilization"),
         "n_tried": plan.get("n_tried"),
+        "gap_at_n0": gap_at_n0,
         "risk": "N/A_estimate",
         "risk_level": "estimate",
         "ship_ok": bool(plan.get("can_fit")),
@@ -544,9 +572,9 @@ def main() -> int:
     n_vol = int(booking.get("containers_by_volume") or 0)
     v_eff = booking.get("volume_m3")
     outer_sum = booking.get("crate_outer_m3")
-    prog_c = snap.get("containers_used")
+    prog_c = int(snap.get("layout_containers") or snap.get("containers_used") or 0)
     can_fit = snap.get("can_fit")
-    recommend = int(prog_c or n0)
+    gap = snap.get("gap_at_n0") or {}
 
     md = [
         "# VMU1 送工地装柜（柜型按 COSCO 40HQ 铭牌）",
@@ -561,40 +589,68 @@ def main() -> int:
         "| HIGH | 2.9 m | 内高约 2,698 mm |",
         "| **CU.CAP（容积）** | **76.4 m³** | **76.4** |",
         "",
-        "重量与体积**都是硬约束**（自主定柜，不写死 2 柜）：",
+        "重量与体积**都是硬约束**（自主定柜，**不写死柜数**）：",
         f"- 重量柜数 = ceil(货重 / {payload_kg:.0f})",
         f"- 体积柜数 = ceil(V_eff / (76.4 × η))，η=0.82，V_eff=Σ min(outer, content×k)",
-        "- N0 = **max(重量柜, 有效体积柜)**；3D 自 N0 递增至 can_fit",
-        "- **不要用虚大当量外廓当订柜分子**（outer 仅 3D 碰撞）",
+        "- **订柜 N0** = max(重量柜, 有效体积柜) → **给领导订舱/汇报**",
+        "- **3D 建议柜数** = 当量外廓摆柜 can_fit 用柜 → **工程上界，可与 N0 不同**",
+        "- 两数**不要合成一个硬报**；outer 摆柜率不作订柜依据",
         "",
         f"- **数据源**：`{SITE_XLSX.name}`",
         f"- **范围**：VMU1 送工地",
         "",
-        "## 结论（算法自主）",
+        "## 双口径结论（固定两行）",
         "",
-        f"| 项 | 值 |",
+        f"| 口径 | 值 | 对外说法 |",
+        f"|---|---|---|",
+        f"| **订柜 N0** | **{n0}**（重量柜 {n_wt} / 有效体积柜 {n_vol} / 绑定 {booking.get('binding_constraint')}） | **给领导订舱/汇报用这个** |",
+        f"| **3D 建议柜数** | **{prog_c}**（can_fit={can_fit}） | 当前成箱模型下的摆柜上界 |",
+        f"| REDACTED-REF 装货单对照 | 2 柜（约 19.8 t + 12.7 t） | 回归样例，非系统约束 |",
+        "",
+        f"| 明细 | 值 |",
         f"|---|---|",
-        f"| 建议柜型 | **40HQ（COSCO 铭牌级）** |",
-        f"| **算法推荐用柜** | **{recommend}**（can_fit={can_fit}） |",
-        f"| 自主 N0 | **{n0}**（重量柜 {n_wt} / 有效体积柜 {n_vol} / 绑定 {booking.get('binding_constraint')}） |",
+        f"| 建议柜型 | **40HQ** |",
         f"| V_eff 订柜体积 | {v_eff} m³（箱外廓合计 {outer_sum} m³，已打折） |",
         f"| 净重（当量） | {net:.1f} kg |",
-        f"| 外廓摆柜率 | {snap.get('space')} |",
+        f"| 外廓摆柜率（仅展示） | {snap.get('space')} |",
         f"| 订柜有效体积率 | {snap.get('booking_volume_util')} |",
         f"| 底面积 / 重量利用率 | {snap.get('floor')} / {snap.get('weight')} |",
         f"| 体积可疑 | {booking.get('volume_suspicious')} {booking.get('warning') or ''} |",
-        f"| **REDACTED-REF 装货单（人工对照）** | **2 柜**（约 19.8 t + 12.7 t，仅回归样例） |",
+        f"| 当量箱数 | {snap.get('boxes')} |",
         "",
-        f"> **订柜主结论：N0={n0}（重量+有效体积，自主，未写死 2）。**  ",
-        f"> 3D 当量箱几何 can_fit 用柜={prog_c}（外廓碰撞上界；铁架已按装货单 1.1/2/4m 混型，"
-        f"仍含五金/瓦楞等其它 POR）。  ",
-        f"> REDACTED-REF 人工装货单对照为 2 柜，作回归而非约束。",
+        f"> 按重量和有效包装体积，剩余工地货约 **{n0} 个 40HQ**；  ",
+        f"> 当前自动成箱模型做三维摆柜时约需 **{prog_c} 柜**"
+        + (
+            f"（N0 柜时差 {gap.get('unpacked_count')} 箱，见下）"
+            if gap.get("unpacked_count")
+            else ""
+        )
+        + "；  ",
+        f"> 与历史装货单 2 柜同量级；后续可通过贴近装货单的合箱把 3D 往 N0 收。",
         "",
+    ]
+    if gap.get("unpacked_by_type"):
+        md.extend(
+            [
+                "### N0 柜时未装入（摆柜差距，不改订柜）",
+                "",
+                "| 当量箱类型 | 件数 |",
+                "|---|---:|",
+            ]
+        )
+        for k, v in sorted(
+            (gap.get("unpacked_by_type") or {}).items(), key=lambda x: -x[1]
+        ):
+            md.append(f"| {k} | {v} |")
+        md.append("")
+    md.extend(
+        [
         "## 纳入 POR（VMU1·工地·有剩余量）",
         "",
         "| POR | 物料组 | 当量箱数 | 原料件数 |",
         "|---|---|---:|---:|",
-    ]
+        ]
+    )
     por_info = defaultdict(lambda: {"group": "", "qty": 0, "raw": 0.0})
     for m in mats:
         por_info[m["part_no"]]["group"] = m["spec"]
@@ -617,9 +673,10 @@ def main() -> int:
             "",
             "## 说明",
             "",
-            "1. 件数→当量箱：铁件约 30 件/架、铝板约 25 片/架、紧固件约 200 件/箱等（实务粗算）。",
-            "2. 若 **REDACTED-REF / FAC0011** 已部分发运，请用真实剩余件数替换后重跑，柜数会下降。",
-            "3. 正式订柜前建议对照提料单尺寸与已发货目录再校一版。",
+            "1. **订柜 N0 ≠ 3D 建议柜数**：前者给订舱，后者是当前当量外廓的摆柜上界。",
+            "2. 件数→当量箱：铁件约 100 件/架（1.1m 为主混型）、铝板约 40 片/架、紧固件约 400 件/箱（贴装货单加密）。",
+            "3. 若 **REDACTED-REF / FAC0011** 已部分发运，请用真实剩余件数替换后重跑。",
+            "4. 正式订柜前对照提料单尺寸与已发货装货单再校一版。",
             "",
             f"产物：`{outj}`  /  `{xlsx}`",
         ]
