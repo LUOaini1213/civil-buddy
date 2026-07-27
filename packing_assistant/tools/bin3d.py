@@ -28,7 +28,7 @@ def _container_inner() -> Dict[str, Dict[str, float]]:
     return {
         "20GP": {"L": 5898, "W": 2352, "H": 2385, "max_load_kg": 21000},
         "40GP": {"L": 12032, "W": 2352, "H": 2385, "max_load_kg": 26680},
-        "40HQ": {"L": 12032, "W": 2352, "H": 2698, "max_load_kg": 26480},
+        "40HQ": {"L": 12032, "W": 2352, "H": 2698, "max_load_kg": 28610},  # COSCO 铭牌 PAYLOAD
         "45HQ": {"L": 13556, "W": 2352, "H": 2698, "max_load_kg": 27700},
     }
 
