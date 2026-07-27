@@ -64,7 +64,8 @@ class ConfirmRequest(BaseModel):
     packing_plan_id: str = ""
     action: str = Field(..., description="confirm | revise | cancel")
     container_type: str = "40HQ"
-    max_containers: int = 1
+    # 0 = 自主定柜（N0 起 3D 递增），禁止把业务目标写死成 2
+    max_containers: int = 0
     adjust_note: str = ""
     confirmed_box_ids: List[str] = Field(default_factory=list)
 
@@ -149,9 +150,138 @@ def api_demo(body: DemoRequest):
         body.user_input,
         container_type=body.container_type,
         enable_auto_confirm=True,
+        max_containers=0,
     )
     _SESSIONS[body.session_id] = state
     return public_response(state)
+
+
+class TraceRequest(BaseModel):
+    """逐步返回各 Agent 摘要，用于证明 Agent 链路在跑。"""
+
+    user_input: str = "Agent API trace"
+    materials: Optional[List[Dict[str, Any]]] = None
+    container_type: str = "40HQ"
+    session_id: str = "trace"
+    max_containers: int = 0
+
+
+@app.post("/api/pipeline/trace")
+def api_pipeline_trace(body: TraceRequest):
+    """
+    本地逐步调用 9 Agent（不经 LangGraph），返回每步 message + 关键数字。
+    与 /api/demo 的区别：显式 steps[]，便于答辩展示「每个智能体的作用」。
+    """
+    from packing_assistant.harness import make_initial_state
+    from packing_assistant.agents import (
+        agent_box_scheme,
+        agent_evaluator,
+        agent_finalize,
+        agent_loader,
+        agent_material_parser,
+        agent_orchestrator,
+        agent_planner,
+        agent_present_team_a,
+        agent_risk_compliance,
+        agent_structure,
+        agent_visualizer,
+    )
+
+    agents = [
+        ("orchestrator", "主控", agent_orchestrator),
+        ("material_parser", "材料解析", agent_material_parser),
+        ("structure", "结构计算", agent_structure),
+        ("box_scheme", "装箱方案", agent_box_scheme),
+        ("present_team_a", "确认闸门", agent_present_team_a),
+        ("planner", "规划(N0)", agent_planner),
+        ("loader", "装载(3D)", agent_loader),
+        ("evaluator", "评估", agent_evaluator),
+        ("risk_compliance", "风险合规", agent_risk_compliance),
+        ("visualizer", "可视化", agent_visualizer),
+        ("finalize", "主控收口", agent_finalize),
+    ]
+    state = make_initial_state(
+        user_input=body.user_input,
+        materials=body.materials,
+        container_type=body.container_type,
+        enable_auto_confirm=True,
+        max_containers=int(body.max_containers or 0),
+        session_id=body.session_id,
+    )
+    state["packing_options"] = {
+        "standard_boxes": True,
+        "mix_mode": True,
+        "max_box_net_kg": 2000,
+    }
+    steps: List[Dict[str, Any]] = []
+    for node, title, fn in agents:
+        upd = fn(state) or {}
+        for k, v in upd.items():
+            if k in ("messages", "traces", "errors", "validation_warnings") and isinstance(
+                v, list
+            ):
+                state[k] = list(state.get(k) or []) + v
+            else:
+                state[k] = v
+        if node == "present_team_a":
+            state = apply_user_confirmation(
+                state,
+                action="confirm",
+                container_type=body.container_type,
+                max_containers=int(body.max_containers or 0),
+            )
+        last = ""
+        for m in reversed(state.get("messages") or []):
+            if m.get("content"):
+                last = str(m["content"])
+                break
+        step: Dict[str, Any] = {
+            "node": node,
+            "title": title,
+            "message": last[:800],
+            "role": "agent",
+        }
+        if node == "box_scheme":
+            step["boxes"] = len(state.get("boxes") or [])
+        if node == "planner":
+            book = (state.get("plan") or {}).get("booking") or {}
+            step["n0"] = book.get("n0")
+            step["binding"] = book.get("binding_constraint")
+        if node == "loader":
+            p = state.get("container_plan") or {}
+            step["containers_used"] = p.get("containers_used")
+            step["can_fit"] = p.get("can_fit")
+            step["booking_volume_utilization"] = p.get("booking_volume_utilization")
+            step["outer_space_utilization"] = p.get("outer_space_utilization") or p.get(
+                "space_utilization"
+            )
+        if node == "risk_compliance":
+            rr = state.get("risk_report") or {}
+            step["decision"] = rr.get("decision")
+            step["level"] = rr.get("level")
+        steps.append(step)
+
+    _SESSIONS[body.session_id] = state
+    plan = state.get("container_plan") or {}
+    book = state.get("booking") or plan.get("booking") or {}
+    return {
+        "ok": True,
+        "note": "数字由 tools 计算；Agent 负责任务分工、闸门、结构/风险裁决与过程可解释",
+        "steps": steps,
+        "summary": {
+            "boxes": len(state.get("boxes") or []),
+            "n0": book.get("n0") or plan.get("n0"),
+            "containers_used": plan.get("containers_used"),
+            "can_fit": plan.get("can_fit"),
+            "booking_volume_utilization": plan.get("booking_volume_utilization"),
+            "outer_space_utilization": plan.get("outer_space_utilization")
+            or plan.get("space_utilization"),
+            "weight_utilization": plan.get("weight_utilization"),
+            "risk_decision": (state.get("risk_report") or {}).get("decision"),
+            "phase": state.get("phase"),
+        },
+        "public": public_response(state),
+    }
 
 
 @app.get("/api/session/{session_id}")
