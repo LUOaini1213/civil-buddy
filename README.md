@@ -145,9 +145,10 @@ python scripts/run_precommit_tests.py --quick
 
 | 产物 | 路径 |
 |------|------|
-| 标准产物包 | `output/demo_package/latest/` |
-| 结论 MD | `…/VMU1_送工地_剩余装柜估算.md` |
-| 数字 JSON | `…/vmu1_site_only_pack.json` |
+| **评委标准包** | `python scripts/build_judge_package.py` → `output/judge_package/latest/INDEX.md` |
+| 演示产物包 | `output/demo_package/latest/` |
+| 错误 vs 正确口径 | [docs/wrong-vs-right-narrative.md](docs/wrong-vs-right-narrative.md) |
+| 完成态勾选 | [docs/completion-checklist.md](docs/completion-checklist.md) |
 | 周清单 | [docs/week1-demo-checklist.md](docs/week1-demo-checklist.md) |
 
 **创新点一句：** 多智能体成箱+拼柜；订柜用有效体积、外廓只做 3D；避免空心包装虚高柜数。
