@@ -1,5 +1,18 @@
 # Agent 有没有用？和订柜脚本差在哪
 
+## 比赛两层叙事（钉死）
+
+| 演示 | 命令 | 回答评委什么 |
+|------|------|----------------|
+| **A · 数字** | `python scripts/demo_vmu1_site.py` | 订舱准：N0≈2，虚高消除 |
+| **B · Agent+API** | `uvicorn gateway.app:app --port 8000` + `demo_nine_agents_trace.py --via-api` 或 `POST /api/pipeline/trace` | 多智能体闭环：成箱→确认→风险→出图 |
+
+- **讲智能体 / 闭环 → 必须秀 B（最好走 API）**  
+- **讲订舱数字 → A 就够**  
+- API **不是**算出更准的柜数，而是把 Agent 闭环变成**可调用作品形态**。
+
+---
+
 ## 先说清楚：你现在的感觉从哪来
 
 | 路径 | 是否过 9 Agent | 用途 |
