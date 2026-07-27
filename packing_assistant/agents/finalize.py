@@ -264,6 +264,57 @@ def agent_finalize(state: PackingState) -> Dict[str, Any]:
         status = "success"
         phase = "done"
 
+    # 目标声明与达成判断（评委可指着看）
+    goal_name = str(
+        state.get("goal")
+        or orch.get("goal")
+        or "deliver_valid_pack_plan"
+    )
+    goal_status = {
+        "goal": goal_name,
+        "achieved": bool(ship_ok and plan.get("can_fit")),
+        "ship_ok": ship_ok,
+        "can_fit": bool(plan.get("can_fit")),
+        "risk_decision": risk_decision or ("PASS" if ship_ok else "REJECT"),
+        "verdict": (
+            "建议订舱/可讨论出运"
+            if ship_ok
+            else f"不可出运：{reject_reason or risk_decision or '合规未通过'}"
+        ),
+        "n0": n0,
+        "containers_used": used_3d,
+        "criteria": {
+            "geometry_ok": bool(plan.get("can_fit")),
+            "compliance_ok": risk_decision != "REJECT" and not blockers,
+            "has_boxes": bool(boxes),
+        },
+    }
+
+    # 在 finalize 文案中显式目标块
+    goal_block = [
+        "",
+        "## 目标达成",
+        "",
+        f"- **goal**: `{goal_name}`",
+        f"- **是否达成**: {'是' if goal_status['achieved'] else '否'}",
+        f"- **裁决**: {goal_status['verdict']}",
+        f"- **几何 can_fit**: {goal_status['can_fit']} | **合规**: {goal_status['risk_decision']}",
+        "",
+    ]
+    # 插入到标题后
+    if final.startswith("# 拼柜方案结果"):
+        parts = final.split("\n", 2)
+        if len(parts) >= 2:
+            final = parts[0] + "\n" + "\n".join(goal_block) + (parts[2] if len(parts) > 2 else "")
+        else:
+            final = final + "\n" + "\n".join(goal_block)
+    else:
+        final = "\n".join(goal_block) + "\n" + final
+
+    suggested = list(risk_report.get("suggested_actions") or [])
+    if suggested and (need_revision or not ship_ok):
+        final += "\n\n## 建议行动\n\n" + "\n".join(f"- {a}" for a in suggested[:6])
+
     return {
         "phase": phase,
         "status": status,
@@ -271,5 +322,13 @@ def agent_finalize(state: PackingState) -> Dict[str, Any]:
         "final_response": final,
         "risks": risks,
         "ship_ok": ship_ok,
+        "goal": goal_name,
+        "goal_status": goal_status,
+        "agent_meta": {
+            "node": "finalize",
+            "capability": ["追求目标", "采取行动"],
+            "tools_used": ["container_select.compare_after_load"],
+            "artifacts": goal_status,
+        },
         "messages": [{"role": "assistant", "content": final}],
     }

@@ -19,6 +19,9 @@ class PackingState(TypedDict, total=False):
     final_response: str
     harness_meta: Dict[str, Any]
     orchestrator: Dict[str, Any]  # 主控：9 智能体名册、双利用率目标
+    goal: str  # deliver_valid_pack_plan | minimize_containers | safe_to_ship
+    goal_status: Dict[str, Any]
+    ship_ok: bool
 
     # —— 用户确认 ——
     user_action: Optional[str]  # confirm | revise | cancel | None
@@ -30,6 +33,7 @@ class PackingState(TypedDict, total=False):
     # —— 团队A ——
     materials: List[Dict[str, Any]]
     materials_summary: Dict[str, Any]
+    perception: Dict[str, Any]  # 跑前状态摘要（感知）
     structure_constraints: List[Dict[str, Any]]
     global_advice: Dict[str, Any]
     boxes: List[Dict[str, Any]]
@@ -55,3 +59,6 @@ class PackingState(TypedDict, total=False):
     validation_warnings: Annotated[List[str], operator.add]
     replan_round: int
     enable_auto_confirm: bool  # demo/eval 自动确认
+    agent_steps: List[Dict[str, Any]]  # 逐步 tool 轨迹
+    agent_meta: Dict[str, Any]  # 最近一步元数据
+    artifact_paths: Dict[str, Any]  # 落盘路径

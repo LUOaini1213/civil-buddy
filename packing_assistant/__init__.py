@@ -4,6 +4,7 @@ from packing_assistant.config import HARNESS_VERSION
 from packing_assistant.harness import (
     apply_user_confirmation,
     public_response,
+    run_agent_pipeline,
     run_pipeline,
     run_team_a,
     run_team_b,
@@ -16,6 +17,7 @@ __all__ = [
     "run_team_a",
     "run_team_b",
     "run_pipeline",
+    "run_agent_pipeline",
     "apply_user_confirmation",
     "public_response",
 ]

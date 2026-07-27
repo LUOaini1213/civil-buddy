@@ -5,7 +5,11 @@ from __future__ import annotations
 from typing import Any, Dict, List
 
 from packing_assistant.adapters import boxes_to_internal
-from packing_assistant.skjolber_client import is_skjolber_configured, pack_via_skjolber
+from packing_assistant.skjolber_client import (
+    health_check as skjolber_health,
+    is_skjolber_configured,
+    pack_via_skjolber,
+)
 from packing_assistant.state import PackingState
 from packing_assistant.tools.bin3d import pack_boxes_api
 from packing_assistant.tools.consolidation import run_consolidation
@@ -43,46 +47,64 @@ def agent_loader(state: PackingState) -> Dict[str, Any]:
 
     notes: List[str] = []
     container_plan: Dict[str, Any] | None = None
+    rid = str(state.get("run_id") or state.get("packing_plan_id") or "")
 
-    # 1) 自主定柜：N0 起递增 3D（主路径）
-    try:
-        from packing_assistant.tools.booking import pack_with_auto_containers
-
-        container_plan = pack_with_auto_containers(
-            boxes,
-            container_type=str(ctype),
-            n0=n0,
-            n_max=n_max,
-            priority_order=priority or None,
-            fill_ratio=0.82,
-        )
-        notes.append(
-            f"auto_N0={n0}->used={container_plan.get('containers_used')} "
-            f"booking_vol_util={container_plan.get('booking_volume_utilization')}"
-        )
-        notes.append(container_plan.get("engine") or "python-laff-3d")
-    except Exception as e:
-        notes.append(f"auto_booking失败: {e}")
-        container_plan = None
-
-    # 2) skjolber 可选覆盖（固定 max=最终 used 或 n0）
-    if container_plan is None and is_skjolber_configured():
+    # 0) skjolber 优先（需 SKJOLBER_URL + 服务健康；无管理员用户目录 JDK 可起）
+    skjolber_ok = False
+    if is_skjolber_configured():
         try:
-            mc = n0
-            container_plan = pack_via_skjolber(
-                boxes,
-                {
-                    **plan,
-                    "container_type": ctype,
-                    "max_containers": mc,
-                },
-                request_id=str(state.get("run_id") or state.get("packing_plan_id") or ""),
-            )
-            notes.append(container_plan.get("engine") or "skjolber")
+            skjolber_ok = bool(skjolber_health(timeout=1.5).get("ok"))
+        except Exception:
+            skjolber_ok = False
+    if skjolber_ok:
+        try:
+            for mc in range(n0, n_max + 1):
+                trial = pack_via_skjolber(
+                    boxes,
+                    {
+                        **plan,
+                        "container_type": ctype,
+                        "max_containers": mc,
+                        "priority_order": priority,
+                    },
+                    request_id=rid,
+                )
+                container_plan = trial
+                notes.append(
+                    f"skjolber try_N={mc} can_fit={trial.get('can_fit')} "
+                    f"engine={trial.get('engine')}"
+                )
+                if trial.get("can_fit"):
+                    break
+            if container_plan is not None:
+                notes.append(container_plan.get("engine") or "skjolber")
         except Exception as e:
-            notes.append(f"skjolber不可用: {e}")
+            notes.append(f"skjolber失败回退: {e}")
+            container_plan = None
 
-    # 3) 兜底
+    # 1) 自主定柜：N0 起递增 Python 3D（主路径 / skjolber 失败回退）
+    if container_plan is None:
+        try:
+            from packing_assistant.tools.booking import pack_with_auto_containers
+
+            container_plan = pack_with_auto_containers(
+                boxes,
+                container_type=str(ctype),
+                n0=n0,
+                n_max=n_max,
+                priority_order=priority or None,
+                fill_ratio=0.82,
+            )
+            notes.append(
+                f"auto_N0={n0}->used={container_plan.get('containers_used')} "
+                f"booking_vol_util={container_plan.get('booking_volume_utilization')}"
+            )
+            notes.append(container_plan.get("engine") or "python-laff-3d")
+        except Exception as e:
+            notes.append(f"auto_booking失败: {e}")
+            container_plan = None
+
+    # 2) 本机 3D 兜底
     if container_plan is None:
         try:
             container_plan = pack_boxes_api(
@@ -116,13 +138,34 @@ def agent_loader(state: PackingState) -> Dict[str, Any]:
     book_u = float(container_plan.get("booking_volume_utilization") or 0)
     n0_used = container_plan.get("n0") or n0
     eng = str(container_plan.get("engine") or "python-laff-3d")
-    tools_used = ["booking.pack_with_auto_containers", "bin3d.pack_boxes_api", f"engine:{eng}"]
+    used = int(container_plan.get("containers_used") or n0_used or 0)
+    # 显式重试轨迹：N0 失败则 N+1…直至 can_fit（写进 tools 与 message）
+    retry_steps: List[str] = []
+    if used > n0:
+        for k in range(n0, used + 1):
+            if k < used:
+                retry_steps.append(f"try_N={k}:can_fit=False→N+1")
+            else:
+                retry_steps.append(f"try_N={k}:can_fit={container_plan.get('can_fit')}")
+    elif not container_plan.get("can_fit"):
+        retry_steps.append(f"try_N={n0}..{n_max}:仍 can_fit=False（达搜索上限）")
+    else:
+        retry_steps.append(f"try_N={n0}:can_fit=True（一次通过）")
+
+    tools_used = [
+        "booking.pack_with_auto_containers",
+        "bin3d.pack_boxes_api",
+        f"engine:{eng}",
+    ]
+    if used > n0:
+        tools_used.append(f"retry:N0={n0}->used={used}")
+
     return {
         "container_plan": container_plan,
         "booking": booking_out,
         "agent_meta": {
             "node": "loader",
-            "capability": ["使用工具", "采取行动"],
+            "capability": ["使用工具", "采取行动", "追求目标"],
             "tools_used": tools_used,
             "artifacts": {
                 "can_fit": container_plan.get("can_fit"),
@@ -130,15 +173,17 @@ def agent_loader(state: PackingState) -> Dict[str, Any]:
                 "n0": n0_used,
                 "booking_volume_utilization": book_u,
                 "outer_space_utilization": outer_u,
+                "retry_steps": retry_steps,
             },
         },
         "messages": [
             {
                 "role": "assistant",
                 "content": (
-                    f"装载完成 engine={eng} "
+                    f"【行动·装载】engine={eng} "
                     f"can_fit={container_plan.get('can_fit')} "
-                    f"用柜={container_plan.get('containers_used')}(自N0={n0_used}递增) "
+                    f"用柜={used}(自N0={n0_used}递增) "
+                    f"重试轨迹: {' → '.join(retry_steps)} "
                     f"外廓摆柜率{outer_u:.0%} "
                     f"订柜有效体积率{book_u:.0%} "
                     f"货外廓{float(container_plan.get('cargo_solid_volume_m3') or 0):.2f}m³/"

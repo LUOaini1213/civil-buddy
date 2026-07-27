@@ -2,9 +2,12 @@ package com.project.packing.skjolber.service;
 
 import com.github.skjolber.packing.api.Box;
 import com.github.skjolber.packing.api.Container;
+import com.github.skjolber.packing.api.ContainerItem;
+import com.github.skjolber.packing.api.ContainerStackValue;
+import com.github.skjolber.packing.api.Packager;
+import com.github.skjolber.packing.api.PackagerResult;
 import com.github.skjolber.packing.api.StackPlacement;
 import com.github.skjolber.packing.api.StackableItem;
-import com.github.skjolber.packing.packer.Packager;
 import com.github.skjolber.packing.packer.bruteforce.BruteForcePackager;
 import com.github.skjolber.packing.packer.laff.LargestAreaFitFirstPackager;
 import com.github.skjolber.packing.packer.plain.PlainPackager;
@@ -32,8 +35,8 @@ import java.util.Set;
 import java.util.stream.Collectors;
 
 /**
- * skjolber 3.x 封装。
- * 若编译报 API 差异，请对照本地 core jar 微调 import/方法名。
+ * skjolber 3.0.x 封装（api.Packager + ResultBuilder）。
+ * 无管理员：用户目录 JDK17 + Maven 即可编译运行。
  */
 @Service
 public class SkjolberPackService {
@@ -45,7 +48,7 @@ public class SkjolberPackService {
         long t0 = System.currentTimeMillis();
         PlanDto plan = request.plan();
         String strategy = resolveStrategy(plan);
-        Packager<Container> packager = createPackager(strategy);
+        Packager<?> packager = createPackager(strategy);
 
         List<BoxDto> boxes = new ArrayList<>(request.boxes());
         sortBoxes(boxes, plan);
@@ -65,28 +68,48 @@ public class SkjolberPackService {
         int maxContainers = plan.maxContainers() == null || plan.maxContainers() < 1
                 ? 1 : plan.maxContainers();
 
-        List<Container> containers = new ArrayList<>();
-        Map<String, ContainerSpecDto> specByType = new HashMap<>();
+        long timeoutMs = plan.timeoutMs() != null && plan.timeoutMs() > 0
+                ? plan.timeoutMs()
+                : defaultTimeoutMs;
+
+        // 优先选用 preferred 柜型，次数 = maxContainers
+        List<ContainerItem> containerItems = new ArrayList<>();
         for (ContainerSpecDto spec : orderCatalog(catalog, preferredType)) {
-            specByType.put(spec.type(), spec);
-            for (int i = 0; i < maxContainers; i++) {
-                containers.add(toContainer(spec, i + 1));
+            int count = spec.type().equalsIgnoreCase(preferredType) ? maxContainers : 0;
+            if (count <= 0) {
+                continue;
             }
+            Container template = toContainer(spec, 1);
+            containerItems.addAll(
+                    ContainerItem.newListBuilder()
+                            .withContainer(template, count)
+                            .build()
+            );
+        }
+        // 若未命中 preferred，退回目录第一项
+        if (containerItems.isEmpty() && !catalog.isEmpty()) {
+            ContainerSpecDto spec = catalog.get(0);
+            preferredType = spec.type();
+            containerItems.addAll(
+                    ContainerItem.newListBuilder()
+                            .withContainer(toContainer(spec, 1), maxContainers)
+                            .build()
+            );
         }
 
         List<Container> matches;
         try {
-            // 3.x: pack(List<StackableItem>, List<Container>)
-            matches = packager.pack(products, containers);
-        } catch (Exception e1) {
-            try {
-                // 部分版本签名不同
-                matches = packager.pack(products, containers, System.currentTimeMillis() + defaultTimeoutMs);
-            } catch (Exception e2) {
-                long duration = System.currentTimeMillis() - t0;
-                return fail(request.requestId(), strategy, duration,
-                        "skjolber pack failed: " + e2.getMessage(), boxes);
-            }
+            PackagerResult result = packager.newResultBuilder()
+                    .withStackables(products)
+                    .withContainers(containerItems)
+                    .withMaxContainerCount(maxContainers)
+                    .withDeadline(System.currentTimeMillis() + timeoutMs)
+                    .build();
+            matches = result.getContainers() != null ? result.getContainers() : List.of();
+        } catch (Exception e) {
+            long duration = System.currentTimeMillis() - t0;
+            return fail(request.requestId(), strategy, duration,
+                    "skjolber pack failed: " + e.getMessage(), boxes);
         }
 
         long duration = System.currentTimeMillis() - t0;
@@ -114,12 +137,11 @@ public class SkjolberPackService {
         return "LARGEST_AREA_FIT_FIRST";
     }
 
-    @SuppressWarnings({"rawtypes", "unchecked"})
-    private Packager<Container> createPackager(String strategy) {
+    private Packager<?> createPackager(String strategy) {
         return switch (strategy) {
-            case "BRUTE_FORCE" -> (Packager) BruteForcePackager.newBuilder().build();
-            case "PLAIN" -> (Packager) PlainPackager.newBuilder().build();
-            default -> (Packager) LargestAreaFitFirstPackager.newBuilder().build();
+            case "BRUTE_FORCE" -> BruteForcePackager.newBuilder().build();
+            case "PLAIN" -> PlainPackager.newBuilder().build();
+            default -> LargestAreaFitFirstPackager.newBuilder().build();
         };
     }
 
@@ -173,11 +195,10 @@ public class SkjolberPackService {
         if (allowRotate) {
             builder.withRotate3D();
         } else {
-            // 仅允许水平面旋转（若 API 支持）；否则固定朝向
             try {
                 builder.withRotate2D();
             } catch (Throwable ignored) {
-                // keep fixed orientation
+                // fixed orientation
             }
         }
         return new StackableItem(builder.build(), 1);
@@ -185,6 +206,7 @@ public class SkjolberPackService {
 
     private Container toContainer(ContainerSpecDto spec, int index) {
         return Container.newBuilder()
+                .withId(spec.type() + "#" + index)
                 .withDescription(spec.type() + "#" + index)
                 .withSize(spec.lengthMm(), spec.widthMm(), spec.heightMm())
                 .withEmptyWeight((int) Math.round(Math.max(1, spec.emptyWeightKg())))
@@ -235,10 +257,33 @@ public class SkjolberPackService {
                 containerNo++;
                 containersUsed++;
                 String desc = match.getDescription() != null ? match.getDescription() : preferredType;
+                if (desc == null || desc.isBlank()) {
+                    desc = match.getId() != null ? match.getId() : preferredType;
+                }
                 usedType = desc.contains("#") ? desc.substring(0, desc.indexOf('#')) : desc;
-                containerVolume = (double) match.getLoadDx() * match.getLoadDy() * match.getLoadDz();
-                if (containerVolume <= 0) {
-                    containerVolume = (double) match.getDx() * match.getDy() * match.getDz();
+
+                int loadDx = 0, loadDy = 0, loadDz = 0;
+                ContainerStackValue csv = match.getStack().getContainerStackValue();
+                if (csv != null) {
+                    loadDx = csv.getLoadDx();
+                    loadDy = csv.getLoadDy();
+                    loadDz = csv.getLoadDz();
+                } else {
+                    ContainerStackValue[] vals = match.getStackValues();
+                    if (vals != null && vals.length > 0 && vals[0] != null) {
+                        loadDx = vals[0].getLoadDx();
+                        loadDy = vals[0].getLoadDy();
+                        loadDz = vals[0].getLoadDz();
+                        if (loadDx <= 0) {
+                            loadDx = vals[0].getDx();
+                            loadDy = vals[0].getDy();
+                            loadDz = vals[0].getDz();
+                        }
+                    }
+                }
+                containerVolume = (double) Math.max(loadDx, 0) * Math.max(loadDy, 0) * Math.max(loadDz, 0);
+                if (containerVolume <= 0 && match.getVolume() > 0) {
+                    containerVolume = match.getVolume();
                 }
                 maxLoad = match.getMaxLoadWeight();
 
@@ -281,7 +326,6 @@ public class SkjolberPackService {
                 .sorted()
                 .toList();
 
-        // fallback volume from catalog
         if (containerVolume <= 1) {
             for (ContainerSpecDto s : catalog) {
                 if (s.type().equalsIgnoreCase(usedType)) {

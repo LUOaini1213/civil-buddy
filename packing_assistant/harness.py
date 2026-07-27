@@ -1,5 +1,8 @@
 """
 主控门面：团队A → 用户确认 → 团队B。
+
+Agent 闭环入口：run_pipeline / run_agent_pipeline
+  感知→规划→工具→行动→finalize；可选落盘 output/runs/<run_id>/
 """
 
 from __future__ import annotations
@@ -9,6 +12,13 @@ from typing import Any, Dict, List, Optional
 from packing_assistant.config import DEFAULT_CONTAINER_TYPE, HarnessMeta, normalize_container_type
 from packing_assistant.graph import create_app, create_team_a_app, create_team_b_app
 from packing_assistant.trace import new_run_id, save_trace
+
+# 合法目标（输入可声明；finalize 对照是否达成）
+VALID_GOALS = (
+    "deliver_valid_pack_plan",
+    "minimize_containers",
+    "safe_to_ship",
+)
 
 
 def make_initial_state(
@@ -22,12 +32,17 @@ def make_initial_state(
     run_id: Optional[str] = None,
     adjust_note: str = "",
     max_containers: int = 0,
+    goal: str = "deliver_valid_pack_plan",
 ) -> Dict[str, Any]:
     """
     max_containers=0 表示不设业务目标柜数，由订柜 N0 + 3D 递增决定。
     仅当用户显式给正整数时才作为 3D 搜索封顶。
+    goal: deliver_valid_pack_plan | minimize_containers | safe_to_ship
     """
     rid = run_id or new_run_id()
+    g = (goal or "deliver_valid_pack_plan").strip()
+    if g not in VALID_GOALS:
+        g = "deliver_valid_pack_plan"
     return {
         "user_input": user_input or "",
         "session_id": session_id or rid,
@@ -35,6 +50,7 @@ def make_initial_state(
         "phase": "team_a_running",
         "status": "success",
         "intent": "full_process",
+        "goal": g,
         "packing_plan_id": "",
         "final_response": "",
         "harness_meta": HarnessMeta().to_dict(),
@@ -45,6 +61,7 @@ def make_initial_state(
         "confirmed_box_ids": [],
         "materials": list(materials or []),
         "materials_summary": {},
+        "perception": {},
         "structure_constraints": [],
         "global_advice": {},
         "boxes": list(boxes or []),
@@ -57,6 +74,7 @@ def make_initial_state(
         "evaluation": {},
         "risk_report": {},
         "risks": [],
+        "goal_status": {},
         "views": {},
         "image_data": {},
         "legend": [],
@@ -66,6 +84,7 @@ def make_initial_state(
         "validation_warnings": [],
         "replan_round": 0,
         "enable_auto_confirm": enable_auto_confirm,
+        "agent_steps": [],
     }
 
 
@@ -147,6 +166,8 @@ def run_pipeline(
     max_containers: int = 0,
     packing_options: Optional[Dict[str, Any]] = None,
     revision: Optional[Dict[str, Any]] = None,
+    goal: str = "deliver_valid_pack_plan",
+    save_artifacts: bool = True,
     **kwargs: Any,
 ) -> Dict[str, Any]:
     """
@@ -155,6 +176,7 @@ def run_pipeline(
     若 enable_auto_confirm=False，仅跑团队A并返回等待确认状态。
     packing_options / revision 可控制单箱净重上限与改箱模式。
     max_containers=0：自主定柜（N0+3D），不写死目标柜数。
+    save_artifacts=True：落盘 output/runs/<run_id>/（体现「采取行动」）。
     """
     # 兼容旧参数名
     user_input = raw_input or kwargs.get("user_input") or ""
@@ -164,13 +186,17 @@ def run_pipeline(
         mc = int(kwargs.get("max_containers") or 0)
     else:
         mc = int(max_containers or 0)
+    g = kwargs.get("goal") or goal
 
     if not enable_auto_confirm:
-        return run_team_a(
+        result = run_team_a(
             user_input,
             materials=materials,
             persist_trace=persist_trace,
         )
+        if save_artifacts:
+            result = _attach_artifacts(result)
+        return result
 
     app = create_app()
     initial = make_initial_state(
@@ -179,6 +205,7 @@ def run_pipeline(
         container_type=container_type,
         enable_auto_confirm=True,
         max_containers=mc,
+        goal=str(g or "deliver_valid_pack_plan"),
     )
     if packing_options:
         initial["packing_options"] = dict(packing_options)
@@ -187,7 +214,170 @@ def run_pipeline(
     result = app.invoke(initial)
     if persist_trace:
         result = {**result, "trace_path": save_trace(result)}
+    if save_artifacts:
+        result = _attach_artifacts(result)
     return result
+
+
+def run_agent_pipeline(
+    raw_input: str = "",
+    *,
+    materials: Optional[List[Dict[str, Any]]] = None,
+    container_type: str = DEFAULT_CONTAINER_TYPE,
+    max_containers: int = 0,
+    enable_auto_confirm: bool = True,
+    goal: str = "deliver_valid_pack_plan",
+    packing_options: Optional[Dict[str, Any]] = None,
+    session_id: str = "",
+    save_artifacts: bool = True,
+) -> Dict[str, Any]:
+    """
+    单一 Agent 闭环入口（逐步 9 智能体，显式 tool 轨迹）。
+
+    材料→结构→成箱→HITL→规划→装载→评估→风险→出图→finalize。
+    enable_auto_confirm=False 时停在确认闸门（HITL）。
+    返回 state 含 agent_steps[] 与 artifact_paths。
+    """
+    from packing_assistant.agents import (
+        agent_box_scheme,
+        agent_evaluator,
+        agent_finalize,
+        agent_loader,
+        agent_material_parser,
+        agent_orchestrator,
+        agent_planner,
+        agent_present_team_a,
+        agent_risk_compliance,
+        agent_structure,
+        agent_visualizer,
+    )
+
+    agents = [
+        ("orchestrator", "主控·感知/目标", agent_orchestrator),
+        ("material_parser", "材料解析·感知", agent_material_parser),
+        ("structure", "结构计算", agent_structure),
+        ("box_scheme", "装箱方案", agent_box_scheme),
+        ("present_team_a", "HITL确认闸门", agent_present_team_a),
+        ("planner", "规划(N0)", agent_planner),
+        ("loader", "装载(3D)", agent_loader),
+        ("evaluator", "评估", agent_evaluator),
+        ("risk_compliance", "风险合规", agent_risk_compliance),
+        ("visualizer", "可视化", agent_visualizer),
+        ("finalize", "主控收口·目标", agent_finalize),
+    ]
+
+    state = make_initial_state(
+        user_input=raw_input or "agent_pipeline",
+        materials=materials,
+        container_type=container_type,
+        enable_auto_confirm=enable_auto_confirm,
+        max_containers=int(max_containers or 0),
+        goal=goal,
+        session_id=session_id,
+    )
+    if packing_options:
+        state["packing_options"] = dict(packing_options)
+    else:
+        state["packing_options"] = {
+            "standard_boxes": True,
+            "mix_mode": True,
+            "max_box_net_kg": 2000,
+        }
+
+    steps: List[Dict[str, Any]] = []
+    for node, title, fn in agents:
+        # HITL：非 auto 时 present 后停止
+        if node == "planner" and not enable_auto_confirm:
+            if state.get("user_action") != "confirm":
+                steps.append(
+                    {
+                        "node": "hitl_wait",
+                        "title": "等待用户确认",
+                        "message": "phase=await_user_confirm；请 POST /api/confirm 后继续",
+                        "tools_used": ["hitl.confirm_gate"],
+                    }
+                )
+                break
+
+        upd = fn(state) or {}
+        for k, v in upd.items():
+            if k in ("messages", "traces", "errors", "validation_warnings") and isinstance(
+                v, list
+            ):
+                state[k] = list(state.get(k) or []) + v
+            else:
+                state[k] = v
+
+        if node == "present_team_a" and enable_auto_confirm:
+            state = apply_user_confirmation(
+                state,
+                action="confirm",
+                container_type=state.get("container_type") or container_type,
+                max_containers=int(max_containers or 0),
+            )
+
+        last = ""
+        for m in reversed(state.get("messages") or []):
+            if m.get("content"):
+                last = str(m["content"])
+                break
+        meta = upd.get("agent_meta") if isinstance(upd.get("agent_meta"), dict) else {}
+        step: Dict[str, Any] = {
+            "node": node,
+            "title": title,
+            "message": last[:900],
+            "role": "agent",
+            "tools_used": meta.get("tools_used") or [],
+            "capability": meta.get("capability") or [],
+            "artifacts": meta.get("artifacts") or {},
+        }
+        if node == "material_parser":
+            step["perception"] = state.get("perception") or state.get("materials_summary")
+        if node == "planner":
+            pl = state.get("plan") or {}
+            step["planning_reasons"] = pl.get("planning_reasons") or []
+            step["n0"] = pl.get("n0")
+            step["binding"] = (pl.get("booking") or {}).get("binding_constraint")
+        if node == "loader":
+            p = state.get("container_plan") or {}
+            step["containers_used"] = p.get("containers_used")
+            step["can_fit"] = p.get("can_fit")
+            step["retry_steps"] = (meta.get("artifacts") or {}).get("retry_steps")
+        if node == "risk_compliance":
+            rr = state.get("risk_report") or {}
+            step["decision"] = rr.get("decision")
+            step["suggested_actions"] = rr.get("suggested_actions") or []
+        if node == "finalize":
+            step["goal_status"] = state.get("goal_status") or {}
+            step["ship_ok"] = state.get("ship_ok")
+        steps.append(step)
+
+        if node == "present_team_a" and not enable_auto_confirm:
+            break
+
+    state["agent_steps"] = steps
+    if save_artifacts:
+        state = _attach_artifacts(state, steps=steps)
+    return state
+
+
+def _attach_artifacts(
+    state: Dict[str, Any],
+    *,
+    steps: Optional[List[Dict[str, Any]]] = None,
+) -> Dict[str, Any]:
+    """落盘 Run 产物并挂到 state.artifact_paths。"""
+    try:
+        from packing_assistant.run_artifacts import save_run_artifacts
+
+        paths = save_run_artifacts(state, steps=steps or state.get("agent_steps"))
+        out = dict(state)
+        out["artifact_paths"] = paths
+        return out
+    except Exception as e:
+        out = dict(state)
+        out["artifact_paths"] = {"error": str(e)}
+        return out
 
 
 def _needs_box_revision(state: Dict[str, Any]) -> bool:
@@ -316,6 +506,7 @@ def public_response(state: Dict[str, Any]) -> Dict[str, Any]:
         "materials": state.get("materials") or [],
         "boxes": state.get("boxes") or [],
         "summary": state.get("team_a_summary") or {},
+        "perception": state.get("perception") or state.get("materials_summary") or {},
         "structure_notes": state.get("structure_notes") or [],
         "user_prompt": state.get("user_prompt") or {},
         "plan": state.get("plan") or {},
@@ -323,10 +514,15 @@ def public_response(state: Dict[str, Any]) -> Dict[str, Any]:
         "evaluation": state.get("evaluation") or {},
         "risk_report": state.get("risk_report") or {},
         "risks": state.get("risks") or [],
+        "goal": state.get("goal"),
+        "goal_status": state.get("goal_status") or {},
+        "ship_ok": state.get("ship_ok"),
         "views": state.get("views") or {},
         "image_data": state.get("image_data") or {},
         "legend": state.get("legend") or [],
         "run_id": state.get("run_id"),
+        "artifact_paths": state.get("artifact_paths") or {},
+        "agent_steps": state.get("agent_steps") or [],
         "traces": state.get("traces") or [],
     }
 

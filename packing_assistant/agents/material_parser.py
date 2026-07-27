@@ -18,10 +18,26 @@ def agent_material_parser(state: PackingState) -> Dict[str, Any]:
     note = state.get("adjust_note") or ""
     if existing and note and _is_adjust_only(note) and _has_metrics_api(existing):
         summary = _summary(existing)
+        perception = _build_perception(existing, summary, source="retain", note=note)
         return {
             "materials": existing,
-            "materials_summary": summary,
-            "messages": [{"role": "system", "content": f"保留材料 {len(existing)} 条，应用调整指令。"}],
+            "materials_summary": {**summary, "categories": perception.get("categories")},
+            "perception": perception,
+            "agent_meta": {
+                "node": "material_parser",
+                "capability": ["感知环境"],
+                "tools_used": ["material_parser.retain"],
+                "artifacts": {"total_pieces": summary.get("total_pieces")},
+            },
+            "messages": [
+                {
+                    "role": "system",
+                    "content": (
+                        f"【感知】保留材料 {len(existing)} 条，应用调整指令。"
+                        f" {perception.get('summary_text')}"
+                    ),
+                }
+            ],
         }
 
     llm_note = ""
@@ -60,19 +76,39 @@ def agent_material_parser(state: PackingState) -> Dict[str, Any]:
         mats = _filter_remove(mats, note)
 
     summary = _summary(mats)
+    perception = _build_perception(mats, summary, source=source, note=note)
+    summary = {**summary, **{k: perception[k] for k in (
+        "categories", "filter_rules", "container_assumption", "longest_mm", "heaviest_unit_kg"
+    ) if k in perception}}
+    tools_used = ["material_parser.rule_parse" if source == "rule" else f"material_parser.{source}"]
+    if source == "llm":
+        tools_used.append("llm.chat_json_array")
+    msg = (
+        f"【感知】材料摘要({source}{llm_note})："
+        f"{summary.get('total_pieces')} 件 / {summary.get('total_weight_kg')} kg / "
+        f"{summary.get('material_line_count')} 行；"
+        f"分类 {perception.get('categories')}；"
+        f"过滤={perception.get('filter_rules')}；"
+        f"柜型假设={perception.get('container_assumption')}；"
+        f"最长={perception.get('longest_mm')}mm 最重单件={perception.get('heaviest_unit_kg')}kg"
+        f"｜tools={','.join(tools_used)}"
+    )
     return {
         "materials": mats,
         "materials_summary": summary,
+        "perception": perception,
         "phase": "team_a_running",
-        "messages": [
-            {
-                "role": "assistant",
-                "content": (
-                    f"材料解析完成({source}{llm_note})："
-                    f"{summary.get('total_pieces')} 件 / {summary.get('total_weight_kg')} kg"
-                ),
-            }
-        ],
+        "agent_meta": {
+            "node": "material_parser",
+            "capability": ["感知环境"],
+            "tools_used": tools_used,
+            "artifacts": {
+                "total_pieces": summary.get("total_pieces"),
+                "total_weight_kg": summary.get("total_weight_kg"),
+                "source": source,
+            },
+        },
+        "messages": [{"role": "assistant", "content": msg}],
     }
 
 
@@ -141,6 +177,56 @@ def _summary(materials: List[Dict[str, Any]]) -> Dict[str, Any]:
         "total_pieces": pieces,
         "total_weight_kg": round(weight, 2),
         "material_line_count": len(materials),
+    }
+
+
+def _build_perception(
+    materials: List[Dict[str, Any]],
+    summary: Dict[str, Any],
+    *,
+    source: str,
+    note: str = "",
+) -> Dict[str, Any]:
+    """跑前状态摘要：件数、总重、分类、过滤规则、柜型假设。"""
+    cats: Dict[str, int] = {}
+    longest = 0.0
+    heaviest = 0.0
+    for m in materials:
+        cat = str(m.get("category") or "普通件")
+        q = int(m.get("quantity") or m.get("数量") or 1)
+        cats[cat] = cats.get(cat, 0) + q
+        L = float(m.get("length_mm") or (m.get("外尺寸_mm") or {}).get("长") or 0)
+        unit = float(m.get("weight_kg") or m.get("单重_kg") or 0)
+        longest = max(longest, L)
+        heaviest = max(heaviest, unit)
+    filter_rules = [
+        "length_mm>=4000 → 超长件",
+        "单重>=200kg → 重件",
+        "其余 → 普通件",
+    ]
+    if note and ("去掉" in note or "删除" in note):
+        filter_rules.append(f"调整指令过滤: {note[:80]}")
+    # 柜型假设：超长倾向 40HQ/45；重货注意 PAYLOAD
+    if longest >= 12000:
+        ctn_assume = "45HQ 或开顶/框架柜（超长>12m 需复核）"
+    elif longest >= 5800 or heaviest >= 200:
+        ctn_assume = "40HQ（默认；超长/重件需底层与绑扎）"
+    else:
+        ctn_assume = "40HQ 或 40GP（主控将按重量/体积再推荐）"
+    return {
+        "total_pieces": summary.get("total_pieces"),
+        "total_weight_kg": summary.get("total_weight_kg"),
+        "material_line_count": summary.get("material_line_count"),
+        "categories": cats,
+        "filter_rules": filter_rules,
+        "container_assumption": ctn_assume,
+        "longest_mm": round(longest, 1),
+        "heaviest_unit_kg": round(heaviest, 2),
+        "source": source,
+        "summary_text": (
+            f"{summary.get('total_pieces')}件 / {summary.get('total_weight_kg')}kg / "
+            f"{summary.get('material_line_count')}行 | 分类{cats} | 柜型假设={ctn_assume}"
+        ),
     }
 
 

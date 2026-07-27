@@ -64,9 +64,21 @@ def agent_present_team_a(state: PackingState) -> Dict[str, Any]:
         "fail": ta.get("fail") or 0,
     }
 
+    # HITL 作为工具节点：环境反馈（确认/改方案/取消），非流程断裂
+    hitl_auto = bool(state.get("enable_auto_confirm"))
+    hitl_policy = {
+        "mode": "auto_confirm" if hitl_auto else "await_user",
+        "timeout_note": (
+            "demo/API 可 enable_auto_confirm 跳过闸门；正式路径等待用户 confirm/revise/cancel"
+        ),
+        "as_tool": "hitl.confirm_gate",
+        "feedback": "用户选择柜型与 action，作为下游 planner/loader 的环境输入",
+    }
+
     user_prompt = {
         "title": "请确认装箱方案并选择集装箱类型",
         "required_fields": ["action", "container_type"],
+        "hitl_policy": hitl_policy,
         "container_options": [
             {"value": "40HQ", "label": "40HQ 高柜", "recommended": "40HQ" in suggested},
             {"value": "40GP", "label": "40GP 平柜", "recommended": "40GP" in suggested},
@@ -91,15 +103,24 @@ def agent_present_team_a(state: PackingState) -> Dict[str, Any]:
 
     md = _render_markdown(plan_id, summary, materials, boxes, notes, suggested, reason)
 
-    # demo 自动确认
+    # demo 自动确认（HITL 工具：auto 模式 = 跳过等待）
     auto = bool(state.get("enable_auto_confirm"))
     phase = "await_user_confirm"
     user_action = state.get("user_action")
     status = "success"
     final = md
+    agent_meta = {
+        "node": "present_team_a",
+        "capability": ["感知环境", "使用工具"],
+        "tools_used": ["hitl.confirm_gate"],
+        "artifacts": {
+            "hitl_mode": hitl_policy["mode"],
+            "box_count": len(boxes),
+            "suggested_containers": suggested,
+        },
+    }
 
     if auto and not user_action:
-        user_action = "confirm"
         # container 可沿用 state 或建议
         ctype = state.get("container_type") or (suggested[0] if suggested else "40HQ")
         return {
@@ -112,8 +133,18 @@ def agent_present_team_a(state: PackingState) -> Dict[str, Any]:
             "structure_notes": notes,
             "user_action": "confirm",
             "container_type": ctype,
-            "final_response": f"【自动确认】柜型 {ctype}，进入拼柜…\n\n" + md[:500],
-            "messages": [{"role": "assistant", "content": f"团队A完成，自动确认 {ctype}"}],
+            "agent_meta": agent_meta,
+            "final_response": f"【HITL·自动确认】柜型 {ctype}，进入拼柜…\n\n" + md[:500],
+            "messages": [
+                {
+                    "role": "assistant",
+                    "content": (
+                        f"【HITL 工具节点】mode=auto_confirm 柜型={ctype}；"
+                        f"确认闸门作为环境反馈（非流程断裂），下游继续规划/装载"
+                        f"｜tools=hitl.confirm_gate"
+                    ),
+                }
+            ],
         }
 
     if not boxes:
@@ -130,6 +161,7 @@ def agent_present_team_a(state: PackingState) -> Dict[str, Any]:
         "display_markdown": md,
         "structure_notes": notes,
         "final_response": final,
+        "agent_meta": agent_meta,
         "stats": {
             "by_box_type": list(by_type.values()),
             "heaviest_box_id": heaviest_id,
@@ -140,7 +172,11 @@ def agent_present_team_a(state: PackingState) -> Dict[str, Any]:
         "messages": [
             {
                 "role": "assistant",
-                "content": "团队A完成：请确认柜型后进入拼柜（phase=await_user_confirm）",
+                "content": (
+                    "【HITL 工具节点】mode=await_user：请确认柜型后进入拼柜；"
+                    "超时策略=保持 await_user_confirm 直至 confirm/revise/cancel"
+                    "｜tools=hitl.confirm_gate"
+                ),
             }
         ],
     }

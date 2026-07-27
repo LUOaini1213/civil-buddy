@@ -425,6 +425,15 @@ def agent_risk_compliance(state: PackingState) -> Dict[str, Any]:
         reject_reason = ""
         need_revision = False
 
+    # REJECT 后建议行动（规则，不 LLM 瞎改数字）
+    suggested_actions = _suggested_actions(
+        decision=decision,
+        blockers=blockers,
+        items=items,
+        plan=plan,
+        reject_to=reject_to,
+    )
+
     risk_report = {
         "passed": passed,
         "compliance_score": score,
@@ -436,27 +445,83 @@ def agent_risk_compliance(state: PackingState) -> Dict[str, Any]:
         "items": items,
         "risks": risks,
         "blockers": blockers,
+        "suggested_actions": suggested_actions,
         "explanation": explanation,
         "principles": thr.get("loading_principles") or [],
         "cog": cog,
     }
 
+    tools_used = ["risk_rules.thresholds", "risk_compliance.cog_metrics"]
     msg = (
-        f"风险合规：level={level} score={score} passed={passed} "
+        f"【风险】level={level} score={score} passed={passed} "
         f"decision={decision} blockers={len(blockers)}"
     )
     if need_revision:
         msg += f" ⛔打回→{reject_to or '人工'}：{reject_reason}"
+    if suggested_actions:
+        msg += f" 建议：{'；'.join(suggested_actions[:4])}"
+    msg += f"｜tools={','.join(tools_used)}"
 
     updates: Dict[str, Any] = {
         "risk_report": risk_report,
         "risks": risks,
+        "agent_meta": {
+            "node": "risk_compliance",
+            "capability": ["使用工具", "追求目标"],
+            "tools_used": tools_used,
+            "artifacts": {
+                "decision": decision,
+                "level": level,
+                "blockers": len(blockers),
+                "suggested_actions": suggested_actions,
+            },
+        },
         "messages": [{"role": "assistant", "content": msg}],
     }
     if need_revision:
         updates["phase"] = "need_revision"
         updates["status"] = "rejected"
     return updates
+
+
+def _suggested_actions(
+    *,
+    decision: str,
+    blockers: List[str],
+    items: List[Dict[str, Any]],
+    plan: Dict[str, Any],
+    reject_to: str,
+) -> List[str]:
+    """规则建议：减载/换柜/加固/加柜，不改数字。"""
+    acts: List[str] = []
+    joined = " ".join(blockers) + " " + " ".join(str(i.get("message") or "") for i in items)
+    if decision == "PASS" and not blockers:
+        acts.append("规则侧可讨论出运；正式前完成 VGM 与人工复核")
+        return acts
+    if "结构" in joined or reject_to == "box_scheme":
+        acts.append("加固：按结构方案加垫木/钢骨或拆重件改箱型后重跑装箱")
+    if "超重" in joined or "重量利用率" in joined:
+        acts.append("减载：拆分超重箱或分票出运，使单柜 ≤ PAYLOAD")
+    if not plan.get("can_fit") or "未装入" in joined or "无法全部装下" in joined:
+        acts.append("加柜：接受 3D 递增后的用柜数，或合箱压外廓后再装")
+    if "重心" in joined or "偏心" in joined:
+        acts.append("配重/重排：左右对称摆放，重货靠近柜中线")
+    if "上层重货" in joined:
+        acts.append("堆码调整：重箱改底层，矮轻箱上二层")
+    if decision == "REJECT" and not acts:
+        acts.append("按阻断项整改后自 Team A 或确认闸门重跑")
+    if decision == "WARN" and not acts:
+        acts.append("可讨论出运，但须人工关注 WARN 项并做好绑扎记录")
+    if reject_to == "await_user_confirm":
+        acts.append("HITL：人工确认柜型/箱清单后重新进入拼柜")
+    # 去重保序
+    seen = set()
+    out: List[str] = []
+    for a in acts:
+        if a not in seen:
+            seen.add(a)
+            out.append(a)
+    return out[:6]
 
 
 def _cog_metrics(plan: Dict[str, Any]) -> Optional[Dict[str, float]]:
