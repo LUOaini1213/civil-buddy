@@ -350,8 +350,11 @@ def agent_risk_compliance(state: PackingState) -> Dict[str, Any]:
             # 只给最终事实，避免 LLM 被脏 notes 带偏
             facts = {
                 "can_fit": plan.get("can_fit"),
-                "space_utilization": plan.get("space_utilization"),
+                "outer_space_utilization": plan.get("outer_space_utilization")
+                or plan.get("space_utilization"),
+                "booking_volume_utilization": plan.get("booking_volume_utilization"),
                 "weight_utilization": plan.get("weight_utilization"),
+                "note": "外廓摆柜≠订柜有效体积；勿把 outer 当订柜分子",
                 "engine": plan.get("engine"),
                 "boxes": [
                     {
@@ -522,8 +525,13 @@ def _explain(passed, level, score, items, plan, thr, hard_block) -> str:
         head = "规则侧可讨论出运，正式前仍需 VGM 与人工复核。"
     else:
         head = "存在关注风险，建议优化后出运。"
+    outer_u = float(
+        plan.get("outer_space_utilization") or plan.get("space_utilization") or 0
+    )
+    book_u = float(plan.get("booking_volume_utilization") or 0)
     util = (
-        f"空间 {float(plan.get('space_utilization') or 0):.0%}，"
+        f"外廓摆柜 {outer_u:.0%}，"
+        f"订柜有效体积 {book_u:.0%}，"
         f"重量 {float(plan.get('weight_utilization') or 0):.0%}，"
         f"can_fit={plan.get('can_fit')}。"
     )

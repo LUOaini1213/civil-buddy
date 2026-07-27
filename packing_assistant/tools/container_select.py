@@ -77,14 +77,24 @@ def _est_from_boxes(boxes: Sequence[Dict[str, Any]]) -> Dict[str, float]:
         max_H = max(max_H, H)
         gross += float(b.get("gross_weight_kg") or 0)
         outer_m3 += L * W * H / 1e9
-    # 选型体积：优先订柜有效体积；几何是否挤仍看箱数/最长边
+    # 选型体积：优先订柜有效体积；禁止静默用全 outer 当分子
+    cargo_m3 = 0.0
+    volume_src = "unknown"
     try:
         from packing_assistant.tools.volume_estimate import booking_volume_from_boxes
 
         bv = booking_volume_from_boxes(boxes)
-        cargo_m3 = float(bv.get("booking_volume_m3") or outer_m3)
+        bv_m3 = bv.get("booking_volume_m3")
+        if bv_m3 is not None:
+            cargo_m3 = float(bv_m3)
+            volume_src = "booking_volume"
+        else:
+            # 无有效体积时用折扣外廓，而非实心 outer
+            cargo_m3 = outer_m3 * 0.45
+            volume_src = "outer_discount_0.45"
     except Exception:
-        cargo_m3 = outer_m3
+        cargo_m3 = outer_m3 * 0.45
+        volume_src = "outer_discount_0.45_on_error"
     return {
         "max_length_mm": max_L,
         "max_height_mm": max_H,
@@ -93,6 +103,7 @@ def _est_from_boxes(boxes: Sequence[Dict[str, Any]]) -> Dict[str, float]:
         "cargo_m3_est": cargo_m3,
         "outer_m3": outer_m3,
         "box_count": float(len(boxes)),
+        "volume_source": volume_src,
     }
 
 

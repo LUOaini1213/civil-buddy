@@ -97,13 +97,27 @@ def agent_loader(state: PackingState) -> Dict[str, Any]:
             container_plan = _local_1d(boxes, ctype)
             notes.append("local-1d-fallback")
 
+    # 全引擎统一补齐订柜/外廓指标（禁止评估侧用 outer 顶替 booking）
+    container_plan = _enrich_plan_metrics(
+        container_plan or {},
+        boxes=boxes,
+        booking=booking,
+        container_type=str(ctype),
+        n0=n0,
+    )
+    booking_out = container_plan.get("booking") or booking
+
     # 指标拆分文案
-    outer_u = float(container_plan.get("space_utilization") or 0)
+    outer_u = float(
+        container_plan.get("outer_space_utilization")
+        or container_plan.get("space_utilization")
+        or 0
+    )
     book_u = float(container_plan.get("booking_volume_utilization") or 0)
     n0_used = container_plan.get("n0") or n0
     return {
         "container_plan": container_plan,
-        "booking": container_plan.get("booking") or booking,
+        "booking": booking_out,
         "messages": [
             {
                 "role": "assistant",
@@ -122,6 +136,60 @@ def agent_loader(state: PackingState) -> Dict[str, Any]:
             }
         ],
     }
+
+
+def _enrich_plan_metrics(
+    plan: Dict[str, Any],
+    *,
+    boxes: List[Dict[str, Any]],
+    booking: Dict[str, Any],
+    container_type: str,
+    n0: int,
+) -> Dict[str, Any]:
+    """
+    为任意装载引擎结果补齐双指标：
+    - outer_space_utilization = 摆柜几何（space_utilization）
+    - booking_volume_utilization = V_eff / (用柜 × 可用容积)
+    禁止把 outer 当成订柜体积分子。
+    """
+    out = dict(plan or {})
+    book = dict(out.get("booking") or booking or {})
+    if not book and boxes:
+        try:
+            from packing_assistant.tools.booking import compute_booking
+
+            book = compute_booking(
+                boxes=boxes, container_type=container_type, fill_ratio=0.82
+            )
+        except Exception:
+            book = {}
+    if book:
+        out["booking"] = book
+    if out.get("n0") is None:
+        out["n0"] = int(book.get("n0") or n0 or 1)
+
+    outer_u = float(out.get("outer_space_utilization") or out.get("space_utilization") or 0)
+    out["outer_space_utilization"] = outer_u
+    # 兼容旧字段：space_utilization 仅表示外廓摆柜率
+    if out.get("space_utilization") is None:
+        out["space_utilization"] = outer_u
+
+    book_u = out.get("booking_volume_utilization")
+    if book_u is None or (isinstance(book_u, (int, float)) and float(book_u) <= 0):
+        used = int(out.get("containers_used") or 0) or int(out.get("n0") or n0 or 1)
+        usable_one = float(book.get("usable_m3_per_container") or 0)
+        if usable_one <= 0:
+            # 40HQ 默认 76.4×0.82
+            usable_one = 76.4 * 0.82
+        v_eff = float(book.get("volume_m3") or 0)
+        denom = usable_one * max(used, 1)
+        book_u = round(min(v_eff / denom, 9.99), 4) if denom > 0 and v_eff > 0 else 0.0
+        out["booking_volume_utilization"] = book_u
+        out["booking_volume_basis"] = "recomputed_from_booking_V_eff"
+    else:
+        out["booking_volume_utilization"] = float(book_u)
+        out.setdefault("booking_volume_basis", "engine_or_auto")
+    return out
 
 
 def _local_1d(boxes: List[Dict[str, Any]], ctype: str) -> Dict[str, Any]:

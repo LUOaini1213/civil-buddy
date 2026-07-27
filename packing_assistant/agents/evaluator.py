@@ -1,4 +1,4 @@
-"""Agent6 评估优化智能体 — 空间 + 重量双利用率评分。"""
+"""Agent6 评估优化智能体 — 订柜有效体积 + 外廓展示 + 重量 三指标评分。"""
 
 from __future__ import annotations
 
@@ -86,17 +86,49 @@ def agent_evaluator(state: PackingState) -> Dict[str, Any]:
         suggestions.append("audit_booking_volume")
 
     # —— 指标拆分评分 ——
-    # 订柜有效体积率优先；外廓率仅参考（钢结构常 40–60% 正常）
-    vol_metric = booking_vol_util if booking_vol_util > 0 else max(space, space_best * 0.95)
-    space_sub = _util_band_score(vol_metric, space_soft, space_good)
+    # 订柜有效体积率；**禁止**用 outer 顶替 booking（outer 仅展示/轻提示）
+    booking_known = booking_vol_util > 0
+    if not booking_known:
+        # 尝试从 booking 明细重算，仍不算 outer
+        try:
+            v_eff = float(booking.get("volume_m3") or 0)
+            usable = float(booking.get("usable_m3_per_container") or 0)
+            used_n = int(
+                plan.get("containers_used")
+                or booking.get("n0")
+                or booking.get("containers_needed")
+                or max_c
+                or 1
+            )
+            if v_eff > 0 and usable > 0 and used_n > 0:
+                booking_vol_util = round(min(v_eff / (usable * used_n), 9.99), 4)
+                booking_known = booking_vol_util > 0
+        except Exception:
+            pass
+
+    if booking_known:
+        vol_metric = booking_vol_util
+        booking_vol_sub = _util_band_score(vol_metric, space_soft, space_good)
+        volume_basis_score = "booking_volume"
+    else:
+        vol_metric = 0.0
+        booking_vol_sub = 50.0  # 未知：中性，不把 outer 当订柜分
+        volume_basis_score = "booking_unknown"
+        risks.append(
+            "订柜有效体积率缺失，体积子分按中性计分（不用外廓摆柜率顶替订柜）"
+        )
+        suggestions.append("enrich_booking_volume_utilization")
+
     floor_sub = _util_band_score(floor, 0.35, 0.70)
     weight_sub = _util_band_score(min(weight, 1.0), weight_soft, weight_good)
     # 重量 45% + 订柜有效体积 35% + 底面积 20%（外廓率不主导扣分）
-    util_composite = 0.35 * space_sub + 0.20 * floor_sub + 0.45 * weight_sub
+    util_composite = 0.35 * booking_vol_sub + 0.20 * floor_sub + 0.45 * weight_sub
+    # 兼容旧字段名：space_subscore 实际为订柜有效体积子分
+    space_sub = booking_vol_sub
 
     # 低利用率：仅当「订柜有效体积」与重量双低才重扣；外廓低单独轻提示
     if can_fit and not unpacked:
-        if booking_vol_util > 0 and booking_vol_util < space_soft and weight < weight_soft:
+        if booking_known and booking_vol_util < space_soft and weight < weight_soft:
             score -= 15
             risks.append(
                 f"订柜有效体积率 {booking_vol_util:.0%} 与重量 {weight:.0%} 双低，"
@@ -109,10 +141,10 @@ def agent_evaluator(state: PackingState) -> Dict[str, Any]:
                 f"外廓摆柜率 {outer_space:.0%} 偏低但重量已用 {weight:.0%}；"
                 f"钢结构/铁架常见，不等于货没装够"
             )
-        elif vol_metric < space_soft:
+        elif booking_known and vol_metric < space_soft:
             score -= 8
             risks.append(
-                f"有效体积利用率 {vol_metric:.0%} 低于软目标 {space_soft:.0%}"
+                f"订柜有效体积率 {vol_metric:.0%} 低于软目标 {space_soft:.0%}"
                 f"（外廓摆柜 {outer_space:.0%}，底面积 {floor:.0%}）"
             )
             suggestions.append("improve_floor_pack")
@@ -123,7 +155,7 @@ def agent_evaluator(state: PackingState) -> Dict[str, Any]:
             )
             suggestions.append("add_cargo_or_downsize_container")
 
-        if vol_metric >= space_good and weight >= weight_good:
+        if booking_known and vol_metric >= space_good and weight >= weight_good:
             score = min(100, score + 5)
 
     # 综合分：硬约束分与利用率分融合
@@ -174,16 +206,19 @@ def agent_evaluator(state: PackingState) -> Dict[str, Any]:
         "decision": decision,
         "structure_fail_box_ids": struct_fail_ids,
         "outer_space_utilization": outer_space,
-        "space_utilization": outer_space,  # 兼容旧字段=外廓摆柜率
+        "space_utilization": outer_space,  # 兼容旧字段=外廓摆柜率（非订柜）
         "booking_volume_utilization": booking_vol_util,
+        "booking_volume_known": booking_known,
         "space_best": space_best,
         "floor_utilization_avg": floor,
         "weight_utilization": weight,
-        "space_subscore": round(space_sub, 1),
+        "space_subscore": round(space_sub, 1),  # 兼容名=订柜有效体积子分
+        "booking_volume_subscore": round(booking_vol_sub, 1),
         "floor_subscore": round(floor_sub, 1),
         "weight_subscore": round(weight_sub, 1),
         "util_composite": round(util_composite, 1),
         "volume_basis": "booking_pack_effective+outer_display",
+        "volume_basis_score": volume_basis_score,
         "n0": booking.get("n0") or plan.get("n0"),
         "containers_by_weight": n_wt,
         "containers_by_volume": n_vol,
@@ -207,7 +242,8 @@ def agent_evaluator(state: PackingState) -> Dict[str, Any]:
                 "role": "assistant",
                 "content": (
                     f"评估：score={score} passed={passed} replan={need_replan} | "
-                    f"外廓摆柜{outer_space:.0%} 订柜有效体积{booking_vol_util:.0%} "
+                    f"外廓摆柜{outer_space:.0%} 订柜有效体积"
+                    f"{f'{booking_vol_util:.0%}' if booking_known else '未知'} "
                     f"底面积{floor:.0%} 重量{weight:.0%} 综合{util_composite:.0f}"
                     f"{' 体积可疑' if evaluation.get('volume_suspicious') else ''}"
                 ),
