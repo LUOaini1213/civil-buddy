@@ -695,8 +695,16 @@ def _build_box(
         * float(it["数量"])
         for it in items
     )
+    outer_vol = float(outer["长"]) * float(outer["宽"]) * float(outer["高"])
     inner_vol = max(inner["长"] * inner["宽"] * inner["高"], 1)
     fill_ratio = min(cargo_vol / inner_vol, 1.0)
+    fill_outer = min(cargo_vol / max(outer_vol, 1), 1.0)
+    # 订柜有效体积：min(outer, content×k)，低填充不把空心架当实心
+    k_eff = 1.35 if fill_outer < 0.20 else (1.50 if fill_outer < 0.35 else 1.60)
+    if cargo_vol <= 1e-6:
+        booking_vol = outer_vol * 0.45
+    else:
+        booking_vol = min(outer_vol, cargo_vol * k_eff)
 
     return {
         "箱号": box_no,
@@ -713,6 +721,9 @@ def _build_box(
         "结构结论": struct["结论"],
         "reinforcement": reinf,
         "crate_fill_ratio": round(fill_ratio, 4),
+        "content_m3": round(cargo_vol / 1e9, 6),
+        "outer_m3": round(outer_vol / 1e9, 6),
+        "booking_volume_m3": round(booking_vol / 1e9, 6),
         "customized_outer": customized,
         "dense_outer": bool(dense and not standard),
         "standard_outer": bool(standard),

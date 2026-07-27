@@ -13,7 +13,8 @@
   )
 
 COSCO 40HQ 默认：payload=28610 kg，container_m3=76.4
-fill_ratio 实务约 0.55–0.70（绑扎/不规则），不是 1.0。
+fill_ratio / η 实务约 0.80–0.85（行业可用容积），不是 1.0。
+成箱后订柜体积：min(outer_m3, content_m3 × k)，k≤1.5–1.8。
 """
 
 from __future__ import annotations
@@ -148,6 +149,93 @@ def crate_outer_m3(boxes: Sequence[Dict[str, Any]]) -> float:
     return round(total, 4)
 
 
+def box_content_m3(box: Dict[str, Any]) -> float:
+    """单箱内容件体积 m³。"""
+    if box.get("content_m3") is not None:
+        return _f(box.get("content_m3"))
+    if box.get("content_volume_m3") is not None:
+        return _f(box.get("content_volume_m3"))
+    total = 0.0
+    for c in box.get("content") or box.get("装载内容") or []:
+        dims = c.get("outer_size_mm") or c.get("外尺寸_mm") or {}
+        L = _f(dims.get("length") or dims.get("长"))
+        W = _f(dims.get("width") or dims.get("宽"))
+        H = _f(dims.get("height") or dims.get("高"))
+        q = max(_f(c.get("quantity") or c.get("数量") or 1), 1)
+        total += L * W * H * q / 1e9
+    return total
+
+
+def box_outer_m3(box: Dict[str, Any]) -> float:
+    if box.get("outer_m3") is not None:
+        return _f(box.get("outer_m3"))
+    o = box.get("outer_size_mm") or box.get("外尺寸_mm") or {}
+    L = _f(o.get("length") or o.get("长"))
+    W = _f(o.get("width") or o.get("宽"))
+    H = _f(o.get("height") or o.get("高"))
+    return L * W * H / 1e9
+
+
+def box_pack_effective_m3(box: Dict[str, Any], *, k_max: float = 1.60) -> float:
+    """
+    单箱订柜贡献体积 = min(outer_m3, content_m3 × k)
+    空心铁架 fill 低时不会把 outer 全算进订柜。
+    """
+    outer = box_outer_m3(box)
+    content = box_content_m3(box)
+    fill = _f(box.get("crate_fill_ratio"))
+    if fill <= 0 and outer > 1e-12:
+        fill = content / outer
+    # 低填充时 k 取小一些
+    if fill > 0 and fill < 0.20:
+        k = min(k_max, 1.35)
+    elif fill < 0.35:
+        k = min(k_max, 1.50)
+    else:
+        k = k_max
+    if content <= 1e-12:
+        # 无内容尺寸：对外廓打折，避免实心方块
+        return outer * 0.45
+    return min(outer, content * k) if outer > 0 else content * k
+
+
+def booking_volume_from_boxes(
+    boxes: Sequence[Dict[str, Any]],
+    *,
+    k_max: float = 1.60,
+) -> Dict[str, Any]:
+    """成箱后订柜有效体积 Σ min(outer, content×k)。"""
+    rows = []
+    v_eff = 0.0
+    v_outer = 0.0
+    v_content = 0.0
+    for b in boxes:
+        o = box_outer_m3(b)
+        c = box_content_m3(b)
+        e = box_pack_effective_m3(b, k_max=k_max)
+        v_outer += o
+        v_content += c
+        v_eff += e
+        rows.append(
+            {
+                "box_id": b.get("box_id") or b.get("箱号"),
+                "outer_m3": round(o, 4),
+                "content_m3": round(c, 4),
+                "booking_m3": round(e, 4),
+                "fill": round(c / o, 4) if o > 1e-12 else 0.0,
+            }
+        )
+    return {
+        "mode": "pack_effective_min_outer_content",
+        "booking_volume_m3": round(v_eff, 4),
+        "crate_outer_m3": round(v_outer, 4),
+        "content_solid_m3": round(v_content, 4),
+        "volume_m3": round(v_eff, 4),
+        "by_box": rows,
+        "note": "订柜体积=Σ min(outer, content×k)；3D 仍用 outer",
+    }
+
+
 def container_spec(container_type: str = "40HQ") -> Dict[str, float]:
     """从知识库读柜；失败则 COSCO 40HQ 铭牌默认。"""
     try:
@@ -182,22 +270,22 @@ def estimate_containers(
     net_kg: Optional[float] = None,
     gross_kg: Optional[float] = None,
     container_type: str = "40HQ",
-    fill_ratio: float = 0.62,
+    fill_ratio: float = 0.82,
     volume_mode: str = "pack_effective",
 ) -> Dict[str, Any]:
     """
     双约束估柜。
 
     volume_mode:
-      - pack_effective: 件体积×货种膨胀（推荐估柜）
+      - pack_effective: 材料=件×膨胀；成箱=min(outer, content×k)（推荐订柜）
       - piece_solid: 仅件体积（下界）
-      - crate_outer: 已成箱外廓（仅当 boxes 为真实成箱时用；勿喂虚当量）
-    fill_ratio: 柜容积实务可用比例，默认 0.62（绑扎/不规则）
+      - crate_outer: 已成箱外廓（仅调试；勿作订柜）
+    fill_ratio / η: 柜容积可用比例，默认 0.82（行业 80–85%）
     """
     spec = container_spec(container_type)
     payload = spec["payload_kg"]
     cont_m3 = spec["theory_m3"] or spec["inner_m3"]
-    fill = min(max(float(fill_ratio), 0.40), 0.85)
+    fill = min(max(float(fill_ratio), 0.50), 0.90)
     usable_m3 = cont_m3 * fill
 
     # 重量
@@ -212,7 +300,10 @@ def estimate_containers(
             )
             gross_kg = net * 1.12
         elif boxes:
-            gross_kg = sum(_f(b.get("gross_weight_kg") or b.get("net_weight_kg")) for b in boxes)
+            gross_kg = sum(
+                _f(b.get("gross_weight_kg") or b.get("毛重_kg") or b.get("net_weight_kg"))
+                for b in boxes
+            )
         else:
             gross_kg = 0.0
     gross_kg = float(gross_kg or 0)
@@ -223,6 +314,10 @@ def estimate_containers(
     if volume_mode == "crate_outer" and boxes:
         v = crate_outer_m3(boxes)
         vol_detail = {"mode": "crate_outer", "volume_m3": v}
+    elif boxes and volume_mode in ("pack_effective", "boxes_booking", ""):
+        bv = booking_volume_from_boxes(boxes)
+        v = float(bv["booking_volume_m3"])
+        vol_detail = bv
     elif materials:
         pe = pack_effective_m3(materials)
         if volume_mode == "piece_solid":
@@ -231,29 +326,9 @@ def estimate_containers(
             v = pe["pack_effective_m3"]
         vol_detail = {"mode": volume_mode, **pe}
     elif boxes:
-        # 有成箱时：件内容体积优先，外廓仅备注
-        content_v = 0.0
-        for b in boxes:
-            for c in b.get("content") or b.get("装载内容") or []:
-                dims = c.get("outer_size_mm") or c.get("外尺寸_mm") or {}
-                L = _f(dims.get("length") or dims.get("长"))
-                W = _f(dims.get("width") or dims.get("宽"))
-                H = _f(dims.get("height") or dims.get("高"))
-                q = max(_f(c.get("quantity") or c.get("数量") or 1), 1)
-                content_v += L * W * H * q / 1e9
-        outer_v = crate_outer_m3(boxes)
-        # 估柜用 content×1.35 与 outer 取较小者，避免虚外廓绑架
-        v_eff = content_v * 1.35 if content_v > 1e-6 else outer_v
-        if content_v > 1e-6:
-            v_eff = min(v_eff, outer_v) if outer_v > 0 else v_eff
-        v = v_eff
-        vol_detail = {
-            "mode": "boxes_content_capped",
-            "content_solid_m3": round(content_v, 4),
-            "crate_outer_m3": outer_v,
-            "volume_m3": round(v, 4),
-            "note": "估柜体积=min(内容×1.35, 外廓)，防止虚外廓过紧",
-        }
+        bv = booking_volume_from_boxes(boxes)
+        v = float(bv["booking_volume_m3"])
+        vol_detail = bv
     else:
         v = 0.0
         vol_detail = {"mode": volume_mode, "volume_m3": 0.0}

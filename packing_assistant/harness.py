@@ -21,8 +21,12 @@ def make_initial_state(
     enable_auto_confirm: bool = False,
     run_id: Optional[str] = None,
     adjust_note: str = "",
-    max_containers: int = 1,
+    max_containers: int = 0,
 ) -> Dict[str, Any]:
+    """
+    max_containers=0 表示不设业务目标柜数，由订柜 N0 + 3D 递增决定。
+    仅当用户显式给正整数时才作为 3D 搜索封顶。
+    """
     rid = run_id or new_run_id()
     return {
         "user_input": user_input or "",
@@ -36,7 +40,7 @@ def make_initial_state(
         "harness_meta": HarnessMeta().to_dict(),
         "user_action": None,
         "container_type": normalize_container_type(container_type),
-        "max_containers": int(max_containers or 1),
+        "max_containers": int(max_containers or 0),
         "adjust_note": adjust_note or "",
         "confirmed_box_ids": [],
         "materials": list(materials or []),
@@ -93,15 +97,23 @@ def apply_user_confirmation(
     *,
     action: str,
     container_type: str = "40HQ",
-    max_containers: int = 1,
+    max_containers: Optional[int] = None,
     adjust_note: str = "",
     confirmed_box_ids: Optional[List[str]] = None,
 ) -> Dict[str, Any]:
-    """写入用户确认结果。"""
+    """
+    写入用户确认结果。
+
+    max_containers:
+      - None：保留 state 原值（默认 0=自主定柜，不写死目标柜数）
+      - 正整数：仅作 3D 搜索封顶，不是「必须装成 N 柜」
+    """
     s = dict(state)
     s["user_action"] = action
     s["container_type"] = normalize_container_type(container_type)
-    s["max_containers"] = int(max_containers or 1)
+    if max_containers is not None:
+        s["max_containers"] = max(0, int(max_containers))
+    # else: 保留已有 max_containers（0=自主）
     s["adjust_note"] = adjust_note or ""
     s["confirmed_box_ids"] = list(confirmed_box_ids or [])
     return s
@@ -132,7 +144,7 @@ def run_pipeline(
     persist_trace: bool = False,
     enable_auto_reroute: bool = False,
     enable_auto_confirm: bool = True,
-    max_containers: int = 1,
+    max_containers: int = 0,
     packing_options: Optional[Dict[str, Any]] = None,
     revision: Optional[Dict[str, Any]] = None,
     **kwargs: Any,
@@ -142,12 +154,16 @@ def run_pipeline(
 
     若 enable_auto_confirm=False，仅跑团队A并返回等待确认状态。
     packing_options / revision 可控制单箱净重上限与改箱模式。
+    max_containers=0：自主定柜（N0+3D），不写死目标柜数。
     """
     # 兼容旧参数名
     user_input = raw_input or kwargs.get("user_input") or ""
     if user_instruction and not user_input:
         user_input = user_instruction
-    mc = int(kwargs.get("max_containers", max_containers) or max_containers or 1)
+    if "max_containers" in kwargs:
+        mc = int(kwargs.get("max_containers") or 0)
+    else:
+        mc = int(max_containers or 0)
 
     if not enable_auto_confirm:
         return run_team_a(

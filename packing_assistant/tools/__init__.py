@@ -10,7 +10,10 @@ from packing_assistant.tools.volume_estimate import (
     estimate_containers,
     pack_effective_m3,
     piece_solid_m3,
+    booking_volume_from_boxes,
+    box_pack_effective_m3,
 )
+from packing_assistant.tools.booking import compute_booking, pack_with_auto_containers
 
 __all__ = [
     "run_packing",
@@ -24,4 +27,8 @@ __all__ = [
     "estimate_containers",
     "pack_effective_m3",
     "piece_solid_m3",
+    "booking_volume_from_boxes",
+    "box_pack_effective_m3",
+    "compute_booking",
+    "pack_with_auto_containers",
 ]

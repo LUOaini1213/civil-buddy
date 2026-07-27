@@ -15,7 +15,23 @@ def agent_planner(state: PackingState) -> Dict[str, Any]:
         boxes = [b for b in boxes if b.get("box_id") in confirmed]
 
     ctype = state.get("container_type") or "40HQ"
-    max_c = int(state.get("max_containers") or 1)
+    # 自主定柜 N0（无业务目标柜数）；用户/state 给的 max 仅作 3D 搜索封顶，不是目标柜数
+    user_cap = int(state.get("max_containers") or 0)
+    booking: Dict[str, Any] = {}
+    try:
+        from packing_assistant.tools.booking import compute_booking
+
+        booking = compute_booking(boxes=boxes, container_type=str(ctype), fill_ratio=0.82)
+        n0 = int(booking.get("n0") or booking.get("containers_needed") or 1)
+    except Exception:
+        n0 = max(1, user_cap or 1)
+        booking = {"n0": n0, "error": "booking_failed"}
+    n0 = max(1, n0)
+    # 3D 搜索上限：有用户封顶则用 max(N0, cap)；否则 N0+8（至多 40），保证几何失败可自动加柜
+    if user_cap > 0:
+        max_c = max(n0, min(user_cap, 40))
+    else:
+        max_c = min(40, n0 + 8)
 
     # 优先级：超长/重货先装
     def sort_key(b: Dict[str, Any]):
@@ -42,12 +58,18 @@ def agent_planner(state: PackingState) -> Dict[str, Any]:
         rules.append("需加固箱注意垫木与绑扎")
 
     gross = sum(float(b.get("gross_weight_kg") or 0) for b in boxes)
-    if gross > 25000:
-        max_c = max(max_c, 2)
-        rules.append("总毛重偏高，允许最多双柜")
+    rules.append(
+        f"自主定柜 N0={booking.get('n0') or max_c}："
+        f"重量柜={booking.get('containers_by_weight', '?')} "
+        f"有效体积柜={booking.get('containers_by_volume', '?')} "
+        f"绑定={booking.get('binding_constraint', '?')} "
+        f"(V_eff={booking.get('volume_m3', '?')}m³, PAYLOAD={booking.get('payload_kg', '?')}kg)"
+    )
+    if booking.get("volume_suspicious") or booking.get("warning"):
+        rules.append(f"体积可疑: {booking.get('warning') or 'N_volume≥2×N_weight'}")
 
     # 双利用率 + 二层堆码
-    rules.append("目标：在可装下前提下尽量提高底面积与重量利用率")
+    rules.append("目标：可装下前提下提高底面积与重量利用率；订柜不写死目标柜数")
     rules.append("可并排铁架优先左右贴放，避免全部居中单列")
     stackable_ids = [
         b.get("box_id")
@@ -81,18 +103,21 @@ def agent_planner(state: PackingState) -> Dict[str, Any]:
         )
 
     plan = {
-        "strategy": "长度优先 + 重货下沉 + 并排占底 + 二层堆码",
+        "strategy": "自主定柜N0 + 长度优先 + 重货下沉 + 并排占底 + 二层堆码",
         "container_type": ctype,
         "max_containers": max_c,
+        "n0": int(booking.get("n0") or max_c),
         "priority_order": priority,
         "special_rules": rules,
         "stackable_box_ids": stackable_ids,
         "bottom_box_ids": bottom_ids,
         "prefer_two_layer": True,
+        "booking": booking,
         "utilization_goals": {
             "space": "maximize_floor_then_volume",
             "weight": "fill_payload_without_overload",
             "stacking": "two_layer",
+            "booking_volume": "pack_effective_not_hollow_outer",
         },
     }
 
@@ -102,14 +127,23 @@ def agent_planner(state: PackingState) -> Dict[str, Any]:
         plan["strategy"] = plan["strategy"] + " | 根据评估调整"
         plan["special_rules"] = rules + list(eval_.get("suggestions") or [])
 
+    n0 = plan["n0"]
     return {
         "plan": plan,
+        "booking": booking,
+        "max_containers": max_c,
         "phase": "team_b_running",
         "boxes": boxes if confirmed else state.get("boxes") or boxes,
         "messages": [
             {
                 "role": "assistant",
-                "content": f"规划完成：{ctype} ×≤{max_c}，优先序 {len(priority)} 箱",
+                "content": (
+                    f"规划完成：{ctype} 自主N0={n0} "
+                    f"(重量柜{booking.get('containers_by_weight')} / "
+                    f"有效体积柜{booking.get('containers_by_volume')} / "
+                    f"绑定{booking.get('binding_constraint')})，"
+                    f"优先序 {len(priority)} 箱；3D 将从 N0 递增至 can_fit"
+                ),
             }
         ],
     }
