@@ -1,5 +1,8 @@
 # 提交演示：A 数字 + B Agent/API（准必须）
 
+**口径钉死：** 15=系统错算（外廓虚高），2=业务真实；见 [wrong-vs-right-narrative.md](wrong-vs-right-narrative.md)。  
+**产物一键：** `python scripts/build_judge_package.py --refresh`
+
 ## 直接回答
 
 1. **9 Agent + API 有没有用？**  
