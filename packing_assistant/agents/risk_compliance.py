@@ -153,39 +153,54 @@ def agent_risk_compliance(state: PackingState) -> Dict[str, Any]:
     for uid in plan.get("unpacked_box_ids") or []:
         add("UNPACKED", "high", "未装入集装箱", "layout", uid, score=15, block=True)
 
-    # —— 空隙率 / 双利用率 ——
-    space = float(plan.get("space_utilization") or 0)
+    # —— 空隙率 / 指标拆分 ——
+    space = float(plan.get("outer_space_utilization") or plan.get("space_utilization") or 0)
     weight_u = float(plan.get("weight_utilization") or 0)
     floor_u = float(plan.get("floor_utilization_avg") or 0)
+    book_u = float(plan.get("booking_volume_utilization") or 0)
+    booking = plan.get("booking") or state.get("booking") or {}
     void_ratio = 1.0 - space
     vr = thr.get("void_ratio") or {}
     if vr.get("warn") is not None and void_ratio >= float(vr["warn"]) and space < 0.5:
         add(
             "VOID_HIGH",
             "low",
-            f"空隙率 {void_ratio:.0%}（大件稀疏常见），注意填充绑扎；底面积利用 {floor_u:.0%}",
+            f"外廓空隙率 {void_ratio:.0%}（大件/铁架常见），注意绑扎；底面积 {floor_u:.0%}",
             "layout",
             None,
             score=3,
             raw_value=void_ratio,
         )
-    # 实心外廓容积 + 重量双低：提高关注度
-    if plan.get("can_fit") and space < 0.25 and weight_u < 0.35:
+    # 体积分子可疑
+    n_vol = int(booking.get("containers_by_volume") or 0)
+    n_wt = int(booking.get("containers_by_weight") or 0)
+    if booking.get("volume_suspicious") or (n_vol >= max(2, 2 * max(n_wt, 1)) and n_vol > 0):
+        add(
+            "VOLUME_SUSPICIOUS",
+            "medium",
+            booking.get("warning")
+            or f"有效体积柜数 {n_vol} ≥ 2×重量柜数 {n_wt}，订柜体积分子可能偏虚",
+            "booking",
+            None,
+            score=6,
+            raw_value={"n_vol": n_vol, "n_wt": n_wt},
+        )
+    # 订柜有效体积 + 重量双低（不用外廓率单独重罚）
+    if plan.get("can_fit") and book_u > 0 and book_u < 0.25 and weight_u < 0.35:
         add(
             "UTIL_DUAL_LOW",
             "medium",
-            f"实心外廓容积 {space:.0%}（货{float(plan.get('cargo_solid_volume_m3') or 0):.1f}m³）"
-            f"与重量 {weight_u:.0%} 双低于软目标，柜资源浪费",
+            f"订柜有效体积率 {book_u:.0%} 与重量 {weight_u:.0%} 双低，可评估是否减柜",
             "layout",
             None,
-            score=8,
-            raw_value={"space": space, "weight": weight_u},
+            score=6,
+            raw_value={"booking_vol": book_u, "weight": weight_u},
         )
-    elif plan.get("can_fit") and weight_u >= 0.6 and space < 0.3:
+    elif plan.get("can_fit") and weight_u >= 0.55 and space < 0.35:
         add(
             "UTIL_WEIGHT_OK_SPACE_LOW",
             "low",
-            f"重量利用率 {weight_u:.0%} 尚可，实心外廓容积 {space:.0%} 偏低（重货常见）",
+            f"重量利用率 {weight_u:.0%} 尚可，外廓摆柜率 {space:.0%} 偏低（钢结构/铁架常见，≠少装）",
             "layout",
             None,
             score=2,

@@ -113,15 +113,28 @@ def agent_finalize(state: PackingState) -> Dict[str, Any]:
         f"**箱数**：{len(boxes)}",
         f"**能否装下（几何）**：{plan.get('can_fit')}",
         f"**能否出运（合规）**：{'是' if ship_ok else '否'}",
-        f"**用柜数**：{plan.get('containers_used')}",
-        f"**空间利用率（箱体外廓实心长方体）**：{space:.0%}"
-        f"（最满柜 {space_best:.0%}，底面积均 {floor:.0%}；"
-        f"货 {float(plan.get('cargo_solid_volume_m3') or 0):.2f} m³ / "
-        f"柜 {float(plan.get('container_inner_volume_m3') or 0):.1f} m³）",
+        f"**用柜数**：{plan.get('containers_used')}"
+        f"（自主N0={plan.get('n0') or (state.get('plan') or {}).get('n0') or '-'}）",
+        f"**外廓摆柜率**（仅布局松紧，铁架常见偏低）：{space:.0%}"
+        f"（最满柜 {space_best:.0%}，底面积均 {floor:.0%}）",
+        f"**订柜有效体积率**：{float(plan.get('booking_volume_utilization') or 0):.0%}"
+        f"（V_eff 基于 min(outer, content×k)，非空心架实心）",
         f"**重量利用率**：{weight:.0%}",
         f"**堆码**：{stack_note}；策略=优先二层（矮箱/铁笼上二层，超长仅底层）",
     ]
     )
+    booking = plan.get("booking") or state.get("booking") or (state.get("plan") or {}).get("booking") or {}
+    if booking:
+        lines.append(
+            f"**自主定柜**：N0={booking.get('n0') or booking.get('containers_needed')} "
+            f"重量柜={booking.get('containers_by_weight')} "
+            f"有效体积柜={booking.get('containers_by_volume')} "
+            f"绑定={booking.get('binding_constraint')} "
+            f"PAYLOAD={booking.get('payload_kg')}kg η={booking.get('fill_ratio')}"
+        )
+        if booking.get("volume_suspicious") or booking.get("warning"):
+            lines.append(f"**体积可疑 WARN**：{booking.get('warning') or 'N_volume≥2×N_weight'}")
+
     ta = state.get("team_a_summary") or {}
     opts = state.get("packing_options") or {}
     if ta.get("standard_boxes") or opts.get("standard_boxes", True):

@@ -1,4 +1,4 @@
-"""Agent5 装载执行：skjolber HTTP → 纯 Python 3D → 1D 兜底。"""
+"""Agent5 装载执行：自 N0 递增柜数至 can_fit；skjolber → python-laff-3d → 1D。"""
 
 from __future__ import annotations
 
@@ -16,7 +16,26 @@ def agent_loader(state: PackingState) -> Dict[str, Any]:
     plan = state.get("plan") or {}
     ctype = plan.get("container_type") or state.get("container_type") or "40HQ"
     priority = plan.get("priority_order") or []
-    max_c = int(state.get("max_containers") or plan.get("max_containers") or 1)
+    booking = plan.get("booking") or state.get("booking") or {}
+    n0 = int(
+        plan.get("n0")
+        or booking.get("n0")
+        or booking.get("containers_needed")
+        or 1
+    )
+    n0 = max(1, n0)
+    # 搜索上限：plan 已带 headroom；state.max_containers 仅作用户封顶（非目标柜数）
+    # 禁止把 n_max 压成 n0，否则几何失败无法自动加柜
+    plan_cap = int(plan.get("max_containers") or 0)
+    user_cap = int(state.get("max_containers") or 0)
+    n_max = plan_cap if plan_cap > 0 else min(40, n0 + 8)
+    if user_cap > 0:
+        # 用户封顶不得低于 N0，也不得把搜索窗口缩成单点（至少 N0..N0 若 cap==N0 则只试 N0）
+        n_max = max(n0, min(user_cap, 40)) if user_cap >= n0 else max(n0, n_max)
+    n_max = max(n0, min(n_max, 40))
+    # 若 cap 意外等于 n0 且无显式「只要一柜」意图，仍留 headroom（replan 前的安全垫）
+    if n_max == n0 and user_cap <= 0:
+        n_max = min(40, n0 + 8)
 
     if priority:
         order = {bid: i for i, bid in enumerate(priority)}
@@ -25,15 +44,37 @@ def agent_loader(state: PackingState) -> Dict[str, Any]:
     notes: List[str] = []
     container_plan: Dict[str, Any] | None = None
 
-    # 1) 真实 skjolber（若已配置且可达）
-    if is_skjolber_configured():
+    # 1) 自主定柜：N0 起递增 3D（主路径）
+    try:
+        from packing_assistant.tools.booking import pack_with_auto_containers
+
+        container_plan = pack_with_auto_containers(
+            boxes,
+            container_type=str(ctype),
+            n0=n0,
+            n_max=n_max,
+            priority_order=priority or None,
+            fill_ratio=0.82,
+        )
+        notes.append(
+            f"auto_N0={n0}->used={container_plan.get('containers_used')} "
+            f"booking_vol_util={container_plan.get('booking_volume_utilization')}"
+        )
+        notes.append(container_plan.get("engine") or "python-laff-3d")
+    except Exception as e:
+        notes.append(f"auto_booking失败: {e}")
+        container_plan = None
+
+    # 2) skjolber 可选覆盖（固定 max=最终 used 或 n0）
+    if container_plan is None and is_skjolber_configured():
         try:
+            mc = n0
             container_plan = pack_via_skjolber(
                 boxes,
                 {
                     **plan,
                     "container_type": ctype,
-                    "max_containers": max_c,
+                    "max_containers": mc,
                 },
                 request_id=str(state.get("run_id") or state.get("packing_plan_id") or ""),
             )
@@ -41,13 +82,13 @@ def agent_loader(state: PackingState) -> Dict[str, Any]:
         except Exception as e:
             notes.append(f"skjolber不可用: {e}")
 
-    # 2) 纯 Python 3D（无 Java 时的主路径）
+    # 3) 兜底
     if container_plan is None:
         try:
             container_plan = pack_boxes_api(
                 boxes,
                 container_type=ctype,
-                max_containers=max_c,
+                max_containers=n0,
                 priority_order=priority or None,
             )
             notes.append(container_plan.get("engine") or "python-laff-3d")
@@ -56,18 +97,24 @@ def agent_loader(state: PackingState) -> Dict[str, Any]:
             container_plan = _local_1d(boxes, ctype)
             notes.append("local-1d-fallback")
 
+    # 指标拆分文案
+    outer_u = float(container_plan.get("space_utilization") or 0)
+    book_u = float(container_plan.get("booking_volume_utilization") or 0)
+    n0_used = container_plan.get("n0") or n0
     return {
         "container_plan": container_plan,
+        "booking": container_plan.get("booking") or booking,
         "messages": [
             {
                 "role": "assistant",
                 "content": (
                     f"装载完成 engine={container_plan.get('engine')} "
                     f"can_fit={container_plan.get('can_fit')} "
-                    f"容积(实心外廓){float(container_plan.get('space_utilization') or 0):.0%} "
-                    f"货{float(container_plan.get('cargo_solid_volume_m3') or 0):.2f}m³/"
+                    f"用柜={container_plan.get('containers_used')}(自N0={n0_used}递增) "
+                    f"外廓摆柜率{outer_u:.0%} "
+                    f"订柜有效体积率{book_u:.0%} "
+                    f"货外廓{float(container_plan.get('cargo_solid_volume_m3') or 0):.2f}m³/"
                     f"柜{float(container_plan.get('container_inner_volume_m3') or 0):.1f}m³ "
-                    f"最满柜{float(container_plan.get('space_utilization_best_container') or 0):.0%} "
                     f"底面积{float(container_plan.get('floor_utilization_avg') or 0):.0%} "
                     f"重量{float(container_plan.get('weight_utilization') or 0):.0%} "
                     f"[{'; '.join(notes)}]"
@@ -119,9 +166,9 @@ def _local_1d(boxes: List[Dict[str, Any]], ctype: str) -> Dict[str, Any]:
         "containers_used": 1 if layout_api else 0,
         "space_utilization": round(_pct(raw.get("空间利用率") or "0%"), 4),
         "weight_utilization": round(_pct(raw.get("重量利用率") or "0%"), 4),
-        "can_fit": len(unpacked) == 0 and "放不下" not in str(raw.get("结论") or ""),
+        "can_fit": len(unpacked) == 0 and len(layout_api) > 0,
         "layout": layout_api,
         "unpacked_box_ids": unpacked,
         "message": raw.get("结论") or "",
-        "engine": "local-linear-1d-placeholder",
+        "engine": "local-1d",
     }

@@ -31,17 +31,23 @@ def agent_evaluator(state: PackingState) -> Dict[str, Any]:
     orch = state.get("orchestrator") or {}
     targets = ((orch.get("goals") or {}).get("targets") or {})
 
-    space = float(plan.get("space_utilization") or 0)
+    # outer_space_util：摆柜几何；booking_volume_util：订柜有效体积
+    outer_space = float(
+        plan.get("outer_space_utilization") or plan.get("space_utilization") or 0
+    )
+    space = outer_space
     space_best = float(plan.get("space_utilization_best_container") or space)
     floor = float(plan.get("floor_utilization_avg") or 0)
     weight = float(plan.get("weight_utilization") or 0)
+    booking_vol_util = float(plan.get("booking_volume_utilization") or 0)
+    booking = plan.get("booking") or state.get("booking") or (state.get("plan") or {}).get("booking") or {}
     can_fit = bool(plan.get("can_fit"))
     unpacked = list(plan.get("unpacked_box_ids") or [])
 
-    # 软目标（主控可覆盖）
-    space_soft = float(targets.get("space_soft_min") or 0.25)
+    # 软目标（主控可覆盖）— 外廓率对钢结构放宽
+    space_soft = float(targets.get("space_soft_min") or 0.20)
     weight_soft = float(targets.get("weight_soft_min") or 0.35)
-    space_good = float(targets.get("space_good") or 0.45)
+    space_good = float(targets.get("space_good") or 0.40)
     weight_good = float(targets.get("weight_good") or 0.60)
 
     risks: List[str] = []
@@ -66,33 +72,48 @@ def agent_evaluator(state: PackingState) -> Dict[str, Any]:
 
     if space > 0.98:
         score -= 5
-        risks.append("空间极满，绑扎要求高")
+        risks.append("外廓空间极满，绑扎要求高")
 
-    # —— 空间 / 重量 双利用率子分 ——
-    # 容积 = 铁箱/木箱外廓实心长方体体积利用率（与 bin3d volume_basis 一致）
-    # 底面积单独参考，不顶替容积
-    vol_metric = max(space, space_best * 0.95)
+    # 体积分子可疑（订柜侧）
+    n_vol = int(booking.get("containers_by_volume") or 0)
+    n_wt = int(booking.get("containers_by_weight") or 0)
+    if booking.get("volume_suspicious") or (n_vol >= max(2, 2 * max(n_wt, 1)) and n_vol > 0):
+        score -= 12
+        risks.append(
+            f"体积可疑：有效体积柜数 {n_vol} ≥ 2×重量柜数 {n_wt}，"
+            f"订柜分子可能偏虚（请查箱填充率/尺寸来源）"
+        )
+        suggestions.append("audit_booking_volume")
+
+    # —— 指标拆分评分 ——
+    # 订柜有效体积率优先；外廓率仅参考（钢结构常 40–60% 正常）
+    vol_metric = booking_vol_util if booking_vol_util > 0 else max(space, space_best * 0.95)
     space_sub = _util_band_score(vol_metric, space_soft, space_good)
     floor_sub = _util_band_score(floor, 0.35, 0.70)
     weight_sub = _util_band_score(min(weight, 1.0), weight_soft, weight_good)
-    # 双目标主分：容积 40% + 底面积 15% + 重量 45%
-    util_composite = 0.40 * space_sub + 0.15 * floor_sub + 0.45 * weight_sub
+    # 重量 45% + 订柜有效体积 35% + 底面积 20%（外廓率不主导扣分）
+    util_composite = 0.35 * space_sub + 0.20 * floor_sub + 0.45 * weight_sub
 
-    # 低利用率扣分与提示
+    # 低利用率：仅当「订柜有效体积」与重量双低才重扣；外廓低单独轻提示
     if can_fit and not unpacked:
-        if vol_metric < space_soft and weight < weight_soft:
-            score -= 18
+        if booking_vol_util > 0 and booking_vol_util < space_soft and weight < weight_soft:
+            score -= 15
             risks.append(
-                f"实心外廓容积 {space:.0%}（底面积 {floor:.0%}）与重量 {weight:.0%} 双低，"
-                f"建议合箱/并排装载或减少柜数"
+                f"订柜有效体积率 {booking_vol_util:.0%} 与重量 {weight:.0%} 双低，"
+                f"可评估是否可减柜（勿仅因外廓率低加柜）"
             )
             suggestions.append("tighter_pack")
-            suggestions.append("merge_boxes")
-        elif vol_metric < space_soft:
-            score -= 10
+        elif outer_space < 0.25 and weight >= weight_soft:
+            score -= 3
             risks.append(
-                f"实心外廓容积利用率 {space:.0%} 低于软目标 {space_soft:.0%}"
-                f"（底面积 {floor:.0%}）；大件稀疏时请确认并排是否占满柜宽"
+                f"外廓摆柜率 {outer_space:.0%} 偏低但重量已用 {weight:.0%}；"
+                f"钢结构/铁架常见，不等于货没装够"
+            )
+        elif vol_metric < space_soft:
+            score -= 8
+            risks.append(
+                f"有效体积利用率 {vol_metric:.0%} 低于软目标 {space_soft:.0%}"
+                f"（外廓摆柜 {outer_space:.0%}，底面积 {floor:.0%}）"
             )
             suggestions.append("improve_floor_pack")
         elif weight < weight_soft:
@@ -152,7 +173,9 @@ def agent_evaluator(state: PackingState) -> Dict[str, Any]:
         "score": score,
         "decision": decision,
         "structure_fail_box_ids": struct_fail_ids,
-        "space_utilization": space,
+        "outer_space_utilization": outer_space,
+        "space_utilization": outer_space,  # 兼容旧字段=外廓摆柜率
+        "booking_volume_utilization": booking_vol_util,
         "space_best": space_best,
         "floor_utilization_avg": floor,
         "weight_utilization": weight,
@@ -160,7 +183,12 @@ def agent_evaluator(state: PackingState) -> Dict[str, Any]:
         "floor_subscore": round(floor_sub, 1),
         "weight_subscore": round(weight_sub, 1),
         "util_composite": round(util_composite, 1),
-        "volume_basis": "solid_outer_aabb",
+        "volume_basis": "booking_pack_effective+outer_display",
+        "n0": booking.get("n0") or plan.get("n0"),
+        "containers_by_weight": n_wt,
+        "containers_by_volume": n_vol,
+        "binding_constraint": booking.get("binding_constraint"),
+        "volume_suspicious": bool(booking.get("volume_suspicious")),
         "targets": {
             "space_soft_min": space_soft,
             "weight_soft_min": weight_soft,
@@ -179,9 +207,9 @@ def agent_evaluator(state: PackingState) -> Dict[str, Any]:
                 "role": "assistant",
                 "content": (
                     f"评估：score={score} passed={passed} replan={need_replan} | "
-                    f"实心容积{space:.0%}(子分{space_sub:.0f}) "
-                    f"底面积{floor:.0%}(子分{floor_sub:.0f}) "
-                    f"重量{weight:.0%}(子分{weight_sub:.0f}) 综合{util_composite:.0f}"
+                    f"外廓摆柜{outer_space:.0%} 订柜有效体积{booking_vol_util:.0%} "
+                    f"底面积{floor:.0%} 重量{weight:.0%} 综合{util_composite:.0f}"
+                    f"{' 体积可疑' if evaluation.get('volume_suspicious') else ''}"
                 ),
             }
         ],

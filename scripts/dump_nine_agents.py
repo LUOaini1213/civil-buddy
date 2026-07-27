@@ -119,11 +119,11 @@ def main() -> int:
     ]
 
     state = make_initial_state(
-        user_input="容积按箱体外廓实心长方体；9步原文；标准箱+混装",
+        user_input="容积按箱体外廓实心长方体；9步原文；标准箱+混装；自主定柜",
         materials=materials,
         container_type="40HQ",
         enable_auto_confirm=True,
-        max_containers=2,
+        max_containers=0,  # 0=自主定柜，禁止写死目标柜数
         session_id="nine-solid-vol",
     )
     state["packing_options"] = {
@@ -142,9 +142,10 @@ def main() -> int:
                 state[k] = list(state.get(k) or []) + v
             else:
                 state[k] = v
-        if node == "present_team_a" and state.get("user_action") != "confirm":
+        if node == "present_team_a":
+            # 确认闸门：强制 40HQ + 自主定柜（不写死柜数）；覆盖 auto_confirm 的 20GP 误选
             state = apply_user_confirmation(
-                state, action="confirm", container_type="40HQ", max_containers=2
+                state, action="confirm", container_type="40HQ", max_containers=0
             )
 
         last_msg = ""
