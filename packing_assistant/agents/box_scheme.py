@@ -156,12 +156,19 @@ def agent_box_scheme(state: PackingState) -> Dict[str, Any]:
             "structure_notes": [
                 "当量箱直通：材料行=箱外廓，未再走标准箱库合箱（避免外廓虚高）"
             ],
+            "agent_meta": {
+                "node": "box_scheme",
+                "capability": ["使用工具", "采取行动"],
+                "tools_used": ["box_scheme.materials_to_passthrough_boxes"],
+                "artifacts": {"boxes": len(boxes), "mode": "crate_passthrough"},
+            },
             "messages": [
                 {
                     "role": "assistant",
                     "content": (
                         f"装箱完成：{len(boxes)} 箱 — 当量直通（crate_passthrough）"
                         f" 外廓{outer_sum:.2f}m³/有效内容{content_sum:.2f}m³ 填充均{avg_fill:.0%}"
+                        f"｜tools=passthrough（已生成 boxes[]，非口头建议）"
                     ),
                 }
             ],
@@ -260,6 +267,15 @@ def agent_box_scheme(state: PackingState) -> Dict[str, Any]:
     note = f"（{'；'.join(note_parts)}）" if note_parts else ""
     return {
         "boxes": boxes,
+        "agent_meta": {
+            "node": "box_scheme",
+            "capability": ["使用工具", "采取行动"],
+            "tools_used": ["packing.run_packing"],
+            "artifacts": {
+                "boxes": len(boxes),
+                "mode": summary.get("packing_mode") or "standard",
+            },
+        },
         "team_a_summary": {
             "box_count": len(boxes),
             "pass": summary.get("通过", 0),
@@ -282,7 +298,10 @@ def agent_box_scheme(state: PackingState) -> Dict[str, Any]:
         "messages": [
             {
                 "role": "assistant",
-                "content": f"装箱完成：{len(boxes)} 箱 — {summary.get('结论', '')}{note}",
+                "content": (
+                    f"装箱完成：{len(boxes)} 箱 — {summary.get('结论', '')}{note}"
+                    f"｜tools=packing.run_packing（已生成 boxes[]，属行动非建议）"
+                ),
             }
         ],
     }

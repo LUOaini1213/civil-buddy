@@ -128,12 +128,23 @@ def agent_planner(state: PackingState) -> Dict[str, Any]:
         plan["special_rules"] = rules + list(eval_.get("suggestions") or [])
 
     n0 = plan["n0"]
+    tools_used = ["booking.compute_booking", "volume_estimate.pack_effective"]
     return {
         "plan": plan,
         "booking": booking,
         "max_containers": max_c,
         "phase": "team_b_running",
         "boxes": boxes if confirmed else state.get("boxes") or boxes,
+        "agent_meta": {
+            "node": "planner",
+            "capability": ["规划", "使用工具"],
+            "tools_used": tools_used,
+            "artifacts": {
+                "n0": n0,
+                "binding": booking.get("binding_constraint"),
+                "box_count": len(priority),
+            },
+        },
         "messages": [
             {
                 "role": "assistant",
@@ -143,6 +154,7 @@ def agent_planner(state: PackingState) -> Dict[str, Any]:
                     f"有效体积柜{booking.get('containers_by_volume')} / "
                     f"绑定{booking.get('binding_constraint')})，"
                     f"优先序 {len(priority)} 箱；3D 将从 N0 递增至 can_fit"
+                    f"｜tools={','.join(tools_used)}（数值由工具算，非 LLM 编造）"
                 ),
             }
         ],
