@@ -159,6 +159,7 @@ python scripts/run_precommit_tests.py --quick
 |------|------|----------|
 | **A 数字** | `python scripts/demo_vmu1_site.py` | 订舱准吗？N0≈2，不虚高 |
 | **B Agent+API** | `powershell -File scripts/start_gateway.ps1` 另开终端：`python scripts/demo_nine_agents_trace.py --via-api` | 智能体闭环？确认闸门 / 风险 REJECT / steps |
+| **B+ 工地 Agent** | `python scripts/demo_vmu1_nine_passthrough.py` | 当量直通 9 Agent，N0≈2 与订舱同量级 |
 
 - 柜数由 **tools** 算；API 把 9 Agent **产品化**，不另算一套柜。  
 - 详解：[docs/agents-vs-tools.md](docs/agents-vs-tools.md) · 提交粘贴稿：[docs/submission-demo-A-B.md](docs/submission-demo-A-B.md)

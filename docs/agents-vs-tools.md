@@ -6,6 +6,7 @@
 |------|------|----------------|
 | **A · 数字** | `python scripts/demo_vmu1_site.py` | 订舱准：N0≈2，虚高消除 |
 | **B · Agent+API** | `uvicorn gateway.app:app --port 8000` + `demo_nine_agents_trace.py --via-api` 或 `POST /api/pipeline/trace` | 多智能体闭环：成箱→确认→风险→出图 |
+| **B+ · 工地 Agent 直通** | `python scripts/demo_vmu1_nine_passthrough.py` | 9 Agent 且 N0=2、3D=2（`crate_passthrough`） |
 
 - **讲智能体 / 闭环 → 必须秀 B（最好走 API）**  
 - **讲订舱数字 → A 就够**  
