@@ -179,11 +179,25 @@ def to_materials(rows: List[Dict[str, Any]]) -> Tuple[List[Dict[str, Any]], List
             L, W, H, wt = 2000.0, 800.0, 600.0, 45.0
             unit, suffix = "吊具", ""
         elif "FST" in pu or "铁件" in group:
-            # 结构铁件：约 30 件/4m 铁架（实务合箱，单架净重控制结构可过）
-            per = 30
+            # 结构铁件：对照 REDACTED-REF 装货单（1.1m/2m/4m/6m 铁架混装，非一律 4m×67 箱）
+            # 实务合箱更密：约 70–90 件/架；尺寸按现场装货单分布循环
+            per = 80
             units = max(1, int(round(n / per)))
-            L, W, H, wt = 4000.0, 1100.0, 1200.0, 30 * 15.0  # ~450kg/架
+            # 装货单常见外廓（mm）与空架自重近似
+            # 装货单 1 柜偏 1.1m 架、2 柜才出现 2m/4m；估计时 1.1m 为主
+            frame_cycle = [
+                (1100.0, 1100.0, 1750.0, 80.0),
+                (1100.0, 1100.0, 1750.0, 80.0),
+                (1100.0, 1100.0, 1750.0, 80.0),
+                (1100.0, 1100.0, 1750.0, 80.0),
+                (2000.0, 1100.0, 1750.0, 140.0),
+                (4000.0, 1100.0, 1750.0, 250.0),
+            ]
             unit, suffix = "铁件架", f"×{per}件/架 raw={int(n)}"
+            # 展开时按 cycle 赋尺寸；单架货重 ≈ per×均重（均重~15kg）+ 架自重
+            # 先占位，下面循环里覆写 L/W/H/wt
+            L, W, H, frame_tare = frame_cycle[0]
+            wt = per * 15.0 + frame_tare
         elif "FSS" in pu or "不锈钢" in group:
             per = 40
             units = max(1, int(round(n / per))) if n >= 10 else max(1, int(round(n)))
@@ -218,20 +232,38 @@ def to_materials(rows: List[Dict[str, Any]]) -> Tuple[List[Dict[str, Any]], List
                 L, W, H, wt, unit = prof
 
         # 每个当量箱单独一行 quantity=1，避免再被合箱算法并成超重/超跨
-        unit_wt = float(wt)
         n_units = max(1, int(units))
+        is_steel_frame = unit == "铁件架"
+        frame_cycle = [
+            (1100.0, 1100.0, 1750.0, 80.0),
+            (1100.0, 1100.0, 1750.0, 80.0),
+            (1100.0, 1100.0, 1750.0, 80.0),
+            (1100.0, 1100.0, 1750.0, 80.0),
+            (2000.0, 1100.0, 1750.0, 140.0),
+            (4000.0, 1100.0, 1750.0, 250.0),
+        ]
         for i in range(n_units):
             mid += 1
+            if is_steel_frame:
+                Lf, Wf, Hf, tare = frame_cycle[i % len(frame_cycle)]
+                unit_wt = float(per) * 15.0 + float(tare)
+                Li, Wi, Hi = Lf, Wf, Hf
+                frame_tag = {1100.0: "1.1米", 2000.0: "2米", 4000.0: "4米"}.get(Lf, "")
+                name = f"{frame_tag}铁件架{suffix} | {por or desc[:40]}#{i+1}"
+            else:
+                unit_wt = float(wt)
+                Li, Wi, Hi = float(L), float(W), float(H)
+                name = f"{unit}{suffix} | {por or desc[:40]}#{i+1}"
             mats.append(
                 {
                     "id": f"S{mid:03d}",
-                    "name": f"{unit}{suffix} | {por or desc[:40]}#{i+1}",
+                    "name": name,
                     "quantity": 1,
                     "weight_kg": round(unit_wt, 2),
                     "total_weight_kg": round(unit_wt, 2),
-                    "length_mm": float(L),
-                    "width_mm": float(W),
-                    "height_mm": float(H),
+                    "length_mm": float(Li),
+                    "width_mm": float(Wi),
+                    "height_mm": float(Hi),
                     "spec": group or "未分组",
                     "part_no": por,
                     "note": (
@@ -247,117 +279,188 @@ def to_materials(rows: List[Dict[str, Any]]) -> Tuple[List[Dict[str, Any]], List
     return mats, skipped
 
 
+def _crate_fill_hint(m: Dict[str, Any]) -> float:
+    """当量箱填充率：铁架空心低、五金箱高；用于订柜 pack_effective。"""
+    name = str(m.get("name") or "")
+    spec = str(m.get("spec") or "")
+    if "铁件架" in name or "铁件" in spec or "米铁" in name:
+        return 0.28  # 对照装货单：架内件密、外廓仍空心
+    if "铝板架" in name or "铝板" in spec:
+        return 0.35
+    if "瓦楞" in name or "木板" in name:
+        return 0.40
+    if "五金" in name or "紧固" in spec or "螺丝" in spec:
+        return 0.65
+    if "胶" in name or "垫" in name:
+        return 0.55
+    return 0.35
+
+
 def run_pack(mats: List[Dict[str, Any]], container: str = "40HQ") -> Dict[str, Any]:
     """
-    当量箱已是「成箱尺寸」，直接 3D 装柜估柜数（不再二次合箱/结构校核虚报）。
+    当量箱 → 自主定柜 N0=max(重量, pack_effective) → 3D 自 N0 递增 can_fit。
+    订柜体积用 min(outer, content×k)，禁止把空心架外廓当实心分子。
     """
-    from packing_assistant.tools.bin3d import pack_boxes_api
+    from packing_assistant.tools.booking import compute_booking, pack_with_auto_containers
 
     net = sum(float(m.get("total_weight_kg") or 0) for m in mats)
-    vol = sum(
-        float(m["length_mm"])
-        * float(m["width_mm"])
-        * float(m["height_mm"])
-        * float(m["quantity"])
-        / 1e9
-        for m in mats
-    )
-    guess = min(max(int(vol / 30) + 1, int(net / 22000) + 1, 1), 30)
 
-    # 材料行 → API boxes（1 行 = 1 当量箱）
+    # 材料行 → API boxes（1 行 = 1 当量箱）+ 订柜体积字段
     boxes = []
     for i, m in enumerate(mats, 1):
         L = int(round(float(m["length_mm"])))
         W = int(round(float(m["width_mm"])))
         H = int(round(float(m["height_mm"])))
+        outer_m3 = L * W * H / 1e9
+        fill = _crate_fill_hint(m)
+        content_m3 = outer_m3 * fill
         longish = L >= 4000
+        net_w = float(m.get("weight_kg") or 0)
         boxes.append(
             {
                 "box_id": f"CRATE-{i:03d}",
                 "box_type": "当量箱",
                 "outer_size_mm": {"length": L, "width": W, "height": H},
-                "net_weight_kg": float(m.get("weight_kg") or 0),
-                "gross_weight_kg": float(m.get("weight_kg") or 0) + 80,
+                "outer_m3": round(outer_m3, 6),
+                "content_m3": round(content_m3, 6),
+                "crate_fill_ratio": fill,
+                "booking_volume_m3": round(min(outer_m3, content_m3 * 1.50), 6),
+                "net_weight_kg": net_w,
+                "gross_weight_kg": net_w + 80,
                 "stackable": H <= 1300 and not longish,
-                "prefer_bottom": longish or float(m.get("weight_kg") or 0) >= 500,
+                "prefer_bottom": longish or net_w >= 500,
                 "special_attributes": ["超长"] if longish else [],
                 "content": [
                     {
                         "name": m.get("name"),
                         "quantity": 1,
                         "material_id": m.get("id"),
+                        "outer_size_mm": {
+                            "length": max(1, int(L * 0.9)),
+                            "width": max(1, int(W * 0.7)),
+                            "height": max(1, int(H * fill / 0.7)) if fill > 0 else max(1, H // 3),
+                        },
                     }
                 ],
             }
         )
 
     t0 = time.time()
-    best = None
-    mc = max(guess, 2)
-    for rnd in range(12):
-        plan = pack_boxes_api(boxes, container_type=container, max_containers=mc)
-        snap = {
-            "round": rnd,
-            "max_containers": mc,
-            "boxes": len(boxes),
-            "can_fit": plan.get("can_fit"),
-            "containers_used": plan.get("containers_used"),
-            "space": plan.get("space_utilization"),
-            "floor": plan.get("floor_utilization_avg"),
-            "weight": plan.get("weight_utilization"),
-            "risk": "N/A_estimate",
-            "risk_level": "estimate",
-            "ship_ok": bool(plan.get("can_fit")),
-            "struct_fail": 0,
-            "engine": plan.get("engine"),
-        }
-        print("SNAPSHOT", json.dumps(snap, ensure_ascii=False))
-        best = {
-            "snapshot": snap,
-            "steps": [
-                {
-                    "node": "direct_bin3d",
-                    "message": (
-                        f"当量箱 {len(boxes)} 只直接 3D 装 {container}×≤{mc} "
-                        f"can_fit={plan.get('can_fit')} used={plan.get('containers_used')}"
-                    ),
-                }
-            ],
-            "final": "",
-            "team_a": {"box_count": len(boxes), "note": "crate_equivalent_skip_rebox"},
-            "boxes": [
-                {
-                    "box_id": b["box_id"],
-                    "box_type": b["box_type"],
-                    "outer": b["outer_size_mm"],
-                    "net": b["net_weight_kg"],
-                    "gross": b["gross_weight_kg"],
-                    "struct": "当量跳过",
-                    "content": [c.get("name") for c in b.get("content") or []],
-                }
-                for b in boxes[:30]
-            ],
-            "container_plan": {
-                k: plan.get(k)
-                for k in (
-                    "can_fit",
-                    "containers_used",
-                    "space_utilization",
-                    "floor_utilization_avg",
-                    "weight_utilization",
-                    "engine",
-                    "cargo_solid_volume_m3",
-                    "container_inner_volume_m3",
-                )
+    booking = compute_booking(boxes=boxes, container_type=container, fill_ratio=0.82)
+    n0 = int(booking.get("n0") or booking.get("containers_needed") or 1)
+    print(
+        "BOOKING",
+        json.dumps(
+            {
+                "n0": n0,
+                "n_weight": booking.get("containers_by_weight"),
+                "n_volume": booking.get("containers_by_volume"),
+                "binding": booking.get("binding_constraint"),
+                "V_eff": booking.get("volume_m3"),
+                "outer_sum": (booking.get("volume_detail") or {}).get("crate_outer_m3"),
+                "gross_kg": booking.get("gross_kg"),
+                "payload": booking.get("payload_kg"),
+                "eta": booking.get("fill_ratio"),
+                "suspicious": booking.get("volume_suspicious"),
+                "warning": booking.get("warning"),
             },
-        }
-        if plan.get("can_fit"):
-            break
-        mc = min(mc + 2, 40)
-        print(f"cannot fit -> max_containers={mc}")
+            ensure_ascii=False,
+        ),
+    )
+
+    plan = pack_with_auto_containers(
+        boxes,
+        container_type=container,
+        n0=n0,
+        n_max=min(40, max(n0 + 12, 8)),
+        fill_ratio=0.82,
+    )
+    snap = {
+        "round": 0,
+        "n0": n0,
+        "max_containers": plan.get("n_tried", [{}])[-1].get("n") if plan.get("n_tried") else n0,
+        "boxes": len(boxes),
+        "can_fit": plan.get("can_fit"),
+        "containers_used": plan.get("containers_used"),
+        "space": plan.get("outer_space_utilization") or plan.get("space_utilization"),
+        "booking_volume_util": plan.get("booking_volume_utilization"),
+        "floor": plan.get("floor_utilization_avg"),
+        "weight": plan.get("weight_utilization"),
+        "n_tried": plan.get("n_tried"),
+        "risk": "N/A_estimate",
+        "risk_level": "estimate",
+        "ship_ok": bool(plan.get("can_fit")),
+        "struct_fail": 0,
+        "engine": plan.get("engine"),
+        "volume_suspicious": booking.get("volume_suspicious"),
+        "binding_constraint": booking.get("binding_constraint"),
+    }
+    print("SNAPSHOT", json.dumps(snap, ensure_ascii=False))
+    best = {
+        "snapshot": snap,
+        "booking": {
+            "n0": n0,
+            "containers_by_weight": booking.get("containers_by_weight"),
+            "containers_by_volume": booking.get("containers_by_volume"),
+            "binding_constraint": booking.get("binding_constraint"),
+            "volume_m3": booking.get("volume_m3"),
+            "crate_outer_m3": (booking.get("volume_detail") or {}).get("crate_outer_m3"),
+            "gross_kg": booking.get("gross_kg"),
+            "payload_kg": booking.get("payload_kg"),
+            "fill_ratio": booking.get("fill_ratio"),
+            "volume_suspicious": booking.get("volume_suspicious"),
+            "warning": booking.get("warning"),
+        },
+        "steps": [
+            {
+                "node": "booking+bin3d",
+                "message": (
+                    f"当量箱 {len(boxes)} 只 | N0={n0} "
+                    f"(重量柜{booking.get('containers_by_weight')}/"
+                    f"有效体积柜{booking.get('containers_by_volume')}/"
+                    f"绑定{booking.get('binding_constraint')}) "
+                    f"→ 3D used={plan.get('containers_used')} can_fit={plan.get('can_fit')} "
+                    f"V_eff={booking.get('volume_m3')}m³"
+                ),
+            }
+        ],
+        "final": "",
+        "team_a": {"box_count": len(boxes), "note": "crate_equivalent_booking_n0"},
+        "boxes": [
+            {
+                "box_id": b["box_id"],
+                "box_type": b["box_type"],
+                "outer": b["outer_size_mm"],
+                "net": b["net_weight_kg"],
+                "gross": b["gross_weight_kg"],
+                "content_m3": b.get("content_m3"),
+                "booking_volume_m3": b.get("booking_volume_m3"),
+                "struct": "当量跳过",
+                "content": [c.get("name") for c in b.get("content") or []],
+            }
+            for b in boxes[:30]
+        ],
+        "container_plan": {
+            k: plan.get(k)
+            for k in (
+                "can_fit",
+                "containers_used",
+                "space_utilization",
+                "outer_space_utilization",
+                "booking_volume_utilization",
+                "floor_utilization_avg",
+                "weight_utilization",
+                "engine",
+                "cargo_solid_volume_m3",
+                "container_inner_volume_m3",
+                "n0",
+                "n_tried",
+            )
+        },
+    }
 
     ms = int((time.time() - t0) * 1000)
-    return best or {}, ms, guess
+    return best or {}, ms, n0
 
 
 def main() -> int:
@@ -432,29 +535,18 @@ def main() -> int:
     print("WROTE", outj)
 
     snap = (best or {}).get("snapshot") or {}
-    # 双界估算（给领导订柜）
-    cargo_m3 = sum(
-        float(m["length_mm"])
-        * float(m["width_mm"])
-        * float(m["height_mm"])
-        * float(m["quantity"])
-        / 1e9
-        for m in mats
-    )
+    booking = (best or {}).get("booking") or {}
     # COSCO 40HQ 铭牌：PAYLOAD 28610 kg / CU.CAP 76.4 m3
-    payload_kg = 28610.0
+    payload_kg = float(booking.get("payload_kg") or 28610.0)
     cont_m3 = 76.4
-    wt_bound = max(1, int((net / payload_kg) + 0.999))  # ceil
-    # 体积：实务可用约 55–70%（绑扎/不规则），勿用虚大当量外廓当分子
-    vol_bound_65 = max(1, int((cargo_m3 / (cont_m3 * 0.65)) + 0.999))
-    vol_bound_55 = max(1, int((cargo_m3 / (cont_m3 * 0.55)) + 0.999))
+    n0 = int(booking.get("n0") or snap.get("n0") or guess)
+    n_wt = int(booking.get("containers_by_weight") or 0)
+    n_vol = int(booking.get("containers_by_volume") or 0)
+    v_eff = booking.get("volume_m3")
+    outer_sum = booking.get("crate_outer_m3")
     prog_c = snap.get("containers_used")
-    # 最终 = max(重量, 体积)；程序 3D 若用虚当量外廓会偏大，仅作上界参考
-    dual = max(wt_bound, vol_bound_65)
-    recommend = dual
-    if prog_c and int(prog_c) > dual * 1.5:
-        # 体积分子虚大时 3D 柜数会飞，不采纳为订柜结论
-        pass
+    can_fit = snap.get("can_fit")
+    recommend = int(prog_c or n0)
 
     md = [
         "# VMU1 送工地装柜（柜型按 COSCO 40HQ 铭牌）",
@@ -469,27 +561,34 @@ def main() -> int:
         "| HIGH | 2.9 m | 内高约 2,698 mm |",
         "| **CU.CAP（容积）** | **76.4 m³** | **76.4** |",
         "",
-        "重量与体积**都是硬约束**：",
+        "重量与体积**都是硬约束**（自主定柜，不写死 2 柜）：",
         f"- 重量柜数 = ceil(货重 / {payload_kg:.0f})",
-        f"- 体积柜数 = ceil(有效货体积 / (76.4 × 实务填充率))",
-        "- 最终柜数 = **max(重量柜数, 体积柜数)**",
-        "- 注意：有效货体积要用真实件+合理包装，**不要用虚大当量外廓**（否则体积约束过紧）",
+        f"- 体积柜数 = ceil(V_eff / (76.4 × η))，η=0.82，V_eff=Σ min(outer, content×k)",
+        "- N0 = **max(重量柜, 有效体积柜)**；3D 自 N0 递增至 can_fit",
+        "- **不要用虚大当量外廓当订柜分子**（outer 仅 3D 碰撞）",
         "",
-        f"- **数据源**：`{SITE_XLSX.name}` / 已发货装货单",
+        f"- **数据源**：`{SITE_XLSX.name}`",
         f"- **范围**：VMU1 送工地",
         "",
-        "## 结论",
+        "## 结论（算法自主）",
         "",
         f"| 项 | 值 |",
         f"|---|---|",
         f"| 建议柜型 | **40HQ（COSCO 铭牌级）** |",
-        f"| **REDACTED-REF 装货单** | **2 柜**（约 19.8 t + 12.7 t，均 < 28.61 t） |",
-        f"| 重量柜数（本表粗算净重） | {wt_bound} |",
-        f"| 体积柜数（当量体积@65%填充，仅参考） | {vol_bound_65} |",
-        f"| 体积柜数（@55%填充，仅参考） | {vol_bound_55} |",
-        f"| 程序 3D（若用当量外廓） | used={prog_c} can_fit={snap.get('can_fit')} |",
+        f"| **算法推荐用柜** | **{recommend}**（can_fit={can_fit}） |",
+        f"| 自主 N0 | **{n0}**（重量柜 {n_wt} / 有效体积柜 {n_vol} / 绑定 {booking.get('binding_constraint')}） |",
+        f"| V_eff 订柜体积 | {v_eff} m³（箱外廓合计 {outer_sum} m³，已打折） |",
+        f"| 净重（当量） | {net:.1f} kg |",
+        f"| 外廓摆柜率 | {snap.get('space')} |",
+        f"| 订柜有效体积率 | {snap.get('booking_volume_util')} |",
+        f"| 底面积 / 重量利用率 | {snap.get('floor')} / {snap.get('weight')} |",
+        f"| 体积可疑 | {booking.get('volume_suspicious')} {booking.get('warning') or ''} |",
+        f"| **REDACTED-REF 装货单（人工对照）** | **2 柜**（约 19.8 t + 12.7 t，仅回归样例） |",
         "",
-        f"> **答复：按你这柜（PAYLOAD 28.61 t / 76.4 m³），工地铁件装货单已是 2 柜；单柜货重须 ≤ 28.61 t。体积 76.4 m³ 足够装铁件，不要用虚大外廓把体积约束卡死。**",
+        f"> **订柜主结论：N0={n0}（重量+有效体积，自主，未写死 2）。**  ",
+        f"> 3D 当量箱几何 can_fit 用柜={prog_c}（外廓碰撞上界；铁架已按装货单 1.1/2/4m 混型，"
+        f"仍含五金/瓦楞等其它 POR）。  ",
+        f"> REDACTED-REF 人工装货单对照为 2 柜，作回归而非约束。",
         "",
         "## 纳入 POR（VMU1·工地·有剩余量）",
         "",

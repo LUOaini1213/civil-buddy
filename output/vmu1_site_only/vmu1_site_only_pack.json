@@ -2,16 +2,16 @@
   "scope": "VMU1 剩余未发 · 仅送工地",
   "source": "A:\\JOB\\REDACTED-JOB\\Project\\6. Quality QAQC\\6.06 POR\\VMU\\Material_Summary_VMU送工地.xlsx",
   "materials_file": "E:\\REDACTED-PATH\\output\\vmu1_site_only\\materials_vmu1_site_remaining.xlsx",
-  "materials_lines": 156,
-  "qty_units": 156,
-  "net_kg": 41588.0,
+  "materials_lines": 114,
+  "qty_units": 114,
+  "net_kg": 44358.0,
   "by_group": {
     "23—紧固件/螺丝": 48,
     "19—胶条、垫块、胶皮": 5,
     "28—杂项配件": 22,
     "11—铝板": 5,
     "14—不锈钢": 2,
-    "13—铁件": 74
+    "13—铁件": 32
   },
   "by_por": {
     "REDACTED-CODE-VMU-0001-BBF0007": 44,
@@ -22,7 +22,7 @@
     "REDACTED-CODE-VMU-0001-BOM0019": 18,
     "REDACTED-CODE-VMU-0001-FAC0011": 5,
     "REDACTED-CODE-VMU-0001-FSS0005": 2,
-    "REDACTED-CODE-VMU-0001-REDACTED-REF": 67,
+    "REDACTED-CODE-VMU-0001-REDACTED-REF": 25,
     "REDACTED-CODE-VMU-0001-FST0017": 4,
     "REDACTED-CODE-VMU-0001-FST0022": 3
   },
@@ -131,30 +131,61 @@
   "dims_note": "Material_Summary 无逐件尺寸，按物料组/POR 实务估算，非正式提料尺寸",
   "pack": {
     "snapshot": {
-      "round": 1,
-      "max_containers": 16,
-      "boxes": 156,
+      "round": 0,
+      "n0": 2,
+      "max_containers": 3,
+      "boxes": 114,
       "can_fit": true,
-      "containers_used": 15,
-      "space": 0.36,
-      "floor": 0.6513,
-      "weight": 0.1361,
+      "containers_used": 3,
+      "space": 0.6143,
+      "booking_volume_util": 0.3806,
+      "floor": 0.8176,
+      "weight": 0.6231,
+      "n_tried": [
+        {
+          "n": 2,
+          "can_fit": false,
+          "used": 2,
+          "unpacked": 14
+        },
+        {
+          "n": 3,
+          "can_fit": true,
+          "used": 3,
+          "unpacked": 0
+        }
+      ],
       "risk": "N/A_estimate",
       "risk_level": "estimate",
       "ship_ok": true,
       "struct_fail": 0,
-      "engine": "python-laff-3d"
+      "engine": "python-laff-3d",
+      "volume_suspicious": false,
+      "binding_constraint": "both"
+    },
+    "booking": {
+      "n0": 2,
+      "containers_by_weight": 2,
+      "containers_by_volume": 2,
+      "binding_constraint": "both",
+      "volume_m3": 71.5252,
+      "crate_outer_m3": 140.7095,
+      "gross_kg": 53478.0,
+      "payload_kg": 28610.0,
+      "fill_ratio": 0.82,
+      "volume_suspicious": false,
+      "warning": null
     },
     "steps": [
       {
-        "node": "direct_bin3d",
-        "message": "当量箱 156 只直接 3D 装 40HQ×≤16 can_fit=True used=15"
+        "node": "booking+bin3d",
+        "message": "当量箱 114 只 | N0=2 (重量柜2/有效体积柜2/绑定both) → 3D used=3 can_fit=True V_eff=71.5252m³"
       }
     ],
     "final": "",
     "team_a": {
-      "box_count": 156,
-      "note": "crate_equivalent_skip_rebox"
+      "box_count": 114,
+      "note": "crate_equivalent_booking_n0"
     },
     "boxes": [
       {
@@ -167,6 +198,8 @@
         },
         "net": 25.0,
         "gross": 105.0,
+        "content_m3": 0.0546,
+        "booking_volume_m3": 0.0819,
         "struct": "当量跳过",
         "content": [
           "五金箱当量×200件/箱 | REDACTED-CODE-VMU-0001-BBF0007#1"
@@ -182,6 +215,8 @@
         },
         "net": 25.0,
         "gross": 105.0,
+        "content_m3": 0.0546,
+        "booking_volume_m3": 0.0819,
         "struct": "当量跳过",
         "content": [
           "五金箱当量×200件/箱 | REDACTED-CODE-VMU-0001-BBF0007#2"
@@ -197,6 +232,8 @@
         },
         "net": 25.0,
         "gross": 105.0,
+        "content_m3": 0.0546,
+        "booking_volume_m3": 0.0819,
         "struct": "当量跳过",
         "content": [
           "五金箱当量×200件/箱 | REDACTED-CODE-VMU-0001-BBF0007#3"
@@ -212,6 +249,8 @@
         },
         "net": 25.0,
         "gross": 105.0,
+        "content_m3": 0.0546,
+        "booking_volume_m3": 0.0819,
         "struct": "当量跳过",
         "content": [
           "五金箱当量×200件/箱 | REDACTED-CODE-VMU-0001-BBF0007#4"
@@ -227,6 +266,8 @@
         },
         "net": 25.0,
         "gross": 105.0,
+        "content_m3": 0.0546,
+        "booking_volume_m3": 0.0819,
         "struct": "当量跳过",
         "content": [
           "五金箱当量×200件/箱 | REDACTED-CODE-VMU-0001-BBF0007#5"
@@ -242,6 +283,8 @@
         },
         "net": 25.0,
         "gross": 105.0,
+        "content_m3": 0.0546,
+        "booking_volume_m3": 0.0819,
         "struct": "当量跳过",
         "content": [
           "五金箱当量×200件/箱 | REDACTED-CODE-VMU-0001-BBF0007#6"
@@ -257,6 +300,8 @@
         },
         "net": 25.0,
         "gross": 105.0,
+        "content_m3": 0.0546,
+        "booking_volume_m3": 0.0819,
         "struct": "当量跳过",
         "content": [
           "五金箱当量×200件/箱 | REDACTED-CODE-VMU-0001-BBF0007#7"
@@ -272,6 +317,8 @@
         },
         "net": 25.0,
         "gross": 105.0,
+        "content_m3": 0.0546,
+        "booking_volume_m3": 0.0819,
         "struct": "当量跳过",
         "content": [
           "五金箱当量×200件/箱 | REDACTED-CODE-VMU-0001-BBF0007#8"
@@ -287,6 +334,8 @@
         },
         "net": 25.0,
         "gross": 105.0,
+        "content_m3": 0.0546,
+        "booking_volume_m3": 0.0819,
         "struct": "当量跳过",
         "content": [
           "五金箱当量×200件/箱 | REDACTED-CODE-VMU-0001-BBF0007#9"
@@ -302,6 +351,8 @@
         },
         "net": 25.0,
         "gross": 105.0,
+        "content_m3": 0.0546,
+        "booking_volume_m3": 0.0819,
         "struct": "当量跳过",
         "content": [
           "五金箱当量×200件/箱 | REDACTED-CODE-VMU-0001-BBF0007#10"
@@ -317,6 +368,8 @@
         },
         "net": 25.0,
         "gross": 105.0,
+        "content_m3": 0.0546,
+        "booking_volume_m3": 0.0819,
         "struct": "当量跳过",
         "content": [
           "五金箱当量×200件/箱 | REDACTED-CODE-VMU-0001-BBF0007#11"
@@ -332,6 +385,8 @@
         },
         "net": 25.0,
         "gross": 105.0,
+        "content_m3": 0.0546,
+        "booking_volume_m3": 0.0819,
         "struct": "当量跳过",
         "content": [
           "五金箱当量×200件/箱 | REDACTED-CODE-VMU-0001-BBF0007#12"
@@ -347,6 +402,8 @@
         },
         "net": 25.0,
         "gross": 105.0,
+        "content_m3": 0.0546,
+        "booking_volume_m3": 0.0819,
         "struct": "当量跳过",
         "content": [
           "五金箱当量×200件/箱 | REDACTED-CODE-VMU-0001-BBF0007#13"
@@ -362,6 +419,8 @@
         },
         "net": 25.0,
         "gross": 105.0,
+        "content_m3": 0.0546,
+        "booking_volume_m3": 0.0819,
         "struct": "当量跳过",
         "content": [
           "五金箱当量×200件/箱 | REDACTED-CODE-VMU-0001-BBF0007#14"
@@ -377,6 +436,8 @@
         },
         "net": 25.0,
         "gross": 105.0,
+        "content_m3": 0.0546,
+        "booking_volume_m3": 0.0819,
         "struct": "当量跳过",
         "content": [
           "五金箱当量×200件/箱 | REDACTED-CODE-VMU-0001-BBF0007#15"
@@ -392,6 +453,8 @@
         },
         "net": 25.0,
         "gross": 105.0,
+        "content_m3": 0.0546,
+        "booking_volume_m3": 0.0819,
         "struct": "当量跳过",
         "content": [
           "五金箱当量×200件/箱 | REDACTED-CODE-VMU-0001-BBF0007#16"
@@ -407,6 +470,8 @@
         },
         "net": 25.0,
         "gross": 105.0,
+        "content_m3": 0.0546,
+        "booking_volume_m3": 0.0819,
         "struct": "当量跳过",
         "content": [
           "五金箱当量×200件/箱 | REDACTED-CODE-VMU-0001-BBF0007#17"
@@ -422,6 +487,8 @@
         },
         "net": 25.0,
         "gross": 105.0,
+        "content_m3": 0.0546,
+        "booking_volume_m3": 0.0819,
         "struct": "当量跳过",
         "content": [
           "五金箱当量×200件/箱 | REDACTED-CODE-VMU-0001-BBF0007#18"
@@ -437,6 +504,8 @@
         },
         "net": 25.0,
         "gross": 105.0,
+        "content_m3": 0.0546,
+        "booking_volume_m3": 0.0819,
         "struct": "当量跳过",
         "content": [
           "五金箱当量×200件/箱 | REDACTED-CODE-VMU-0001-BBF0007#19"
@@ -452,6 +521,8 @@
         },
         "net": 25.0,
         "gross": 105.0,
+        "content_m3": 0.0546,
+        "booking_volume_m3": 0.0819,
         "struct": "当量跳过",
         "content": [
           "五金箱当量×200件/箱 | REDACTED-CODE-VMU-0001-BBF0007#20"
@@ -467,6 +538,8 @@
         },
         "net": 25.0,
         "gross": 105.0,
+        "content_m3": 0.0546,
+        "booking_volume_m3": 0.0819,
         "struct": "当量跳过",
         "content": [
           "五金箱当量×200件/箱 | REDACTED-CODE-VMU-0001-BBF0007#21"
@@ -482,6 +555,8 @@
         },
         "net": 25.0,
         "gross": 105.0,
+        "content_m3": 0.0546,
+        "booking_volume_m3": 0.0819,
         "struct": "当量跳过",
         "content": [
           "五金箱当量×200件/箱 | REDACTED-CODE-VMU-0001-BBF0007#22"
@@ -497,6 +572,8 @@
         },
         "net": 25.0,
         "gross": 105.0,
+        "content_m3": 0.0546,
+        "booking_volume_m3": 0.0819,
         "struct": "当量跳过",
         "content": [
           "五金箱当量×200件/箱 | REDACTED-CODE-VMU-0001-BBF0007#23"
@@ -512,6 +589,8 @@
         },
         "net": 25.0,
         "gross": 105.0,
+        "content_m3": 0.0546,
+        "booking_volume_m3": 0.0819,
         "struct": "当量跳过",
         "content": [
           "五金箱当量×200件/箱 | REDACTED-CODE-VMU-0001-BBF0007#24"
@@ -527,6 +606,8 @@
         },
         "net": 25.0,
         "gross": 105.0,
+        "content_m3": 0.0546,
+        "booking_volume_m3": 0.0819,
         "struct": "当量跳过",
         "content": [
           "五金箱当量×200件/箱 | REDACTED-CODE-VMU-0001-BBF0007#25"
@@ -542,6 +623,8 @@
         },
         "net": 25.0,
         "gross": 105.0,
+        "content_m3": 0.0546,
+        "booking_volume_m3": 0.0819,
         "struct": "当量跳过",
         "content": [
           "五金箱当量×200件/箱 | REDACTED-CODE-VMU-0001-BBF0007#26"
@@ -557,6 +640,8 @@
         },
         "net": 25.0,
         "gross": 105.0,
+        "content_m3": 0.0546,
+        "booking_volume_m3": 0.0819,
         "struct": "当量跳过",
         "content": [
           "五金箱当量×200件/箱 | REDACTED-CODE-VMU-0001-BBF0007#27"
@@ -572,6 +657,8 @@
         },
         "net": 25.0,
         "gross": 105.0,
+        "content_m3": 0.0546,
+        "booking_volume_m3": 0.0819,
         "struct": "当量跳过",
         "content": [
           "五金箱当量×200件/箱 | REDACTED-CODE-VMU-0001-BBF0007#28"
@@ -587,6 +674,8 @@
         },
         "net": 25.0,
         "gross": 105.0,
+        "content_m3": 0.0546,
+        "booking_volume_m3": 0.0819,
         "struct": "当量跳过",
         "content": [
           "五金箱当量×200件/箱 | REDACTED-CODE-VMU-0001-BBF0007#29"
@@ -602,6 +691,8 @@
         },
         "net": 25.0,
         "gross": 105.0,
+        "content_m3": 0.0546,
+        "booking_volume_m3": 0.0819,
         "struct": "当量跳过",
         "content": [
           "五金箱当量×200件/箱 | REDACTED-CODE-VMU-0001-BBF0007#30"
@@ -610,15 +701,32 @@
     ],
     "container_plan": {
       "can_fit": true,
-      "containers_used": 15,
-      "space_utilization": 0.36,
-      "floor_utilization_avg": 0.6513,
-      "weight_utilization": 0.1361,
+      "containers_used": 3,
+      "space_utilization": 0.6143,
+      "outer_space_utilization": 0.6143,
+      "booking_volume_utilization": 0.3806,
+      "floor_utilization_avg": 0.8176,
+      "weight_utilization": 0.6231,
       "engine": "python-laff-3d",
-      "cargo_solid_volume_m3": 412.272,
-      "container_inner_volume_m3": 76.3514
+      "cargo_solid_volume_m3": 140.7095,
+      "container_inner_volume_m3": 76.3514,
+      "n0": 2,
+      "n_tried": [
+        {
+          "n": 2,
+          "can_fit": false,
+          "used": 2,
+          "unpacked": 14
+        },
+        {
+          "n": 3,
+          "can_fit": true,
+          "used": 3,
+          "unpacked": 0
+        }
+      ]
     }
   },
-  "ms": 1200,
-  "initial_guess_containers": 14
+  "ms": 595,
+  "initial_guess_containers": 2
 }
