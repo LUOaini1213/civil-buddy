@@ -126,14 +126,38 @@ data/external/         # 公开 3D-BPP 样例
 
 ## 快速开始
 
+### 比赛演示主路径（优先 · 10 分钟）
+
+主案例：**VMU1 送工地** — 订柜用有效体积（N0），外廓只做 3D；**不写死柜数**。
+
+```bash
+pip install -r requirements.txt
+
+# ① 一键演示：工地 Excel → N0 / 3D / 结论包
+python scripts/demo_vmu1_site.py --with-shipped
+
+# ② 提交前必跑（booking 回归 + P2 门禁 + 工地案例）
+python scripts/run_precommit_tests.py
+
+# 仅算法、不跑 Excel
+python scripts/run_precommit_tests.py --quick
+```
+
+| 产物 | 路径 |
+|------|------|
+| 标准产物包 | `output/demo_package/latest/` |
+| 结论 MD | `…/VMU1_送工地_剩余装柜估算.md` |
+| 数字 JSON | `…/vmu1_site_only_pack.json` |
+| 周清单 | [docs/week1-demo-checklist.md](docs/week1-demo-checklist.md) |
+
+**创新点一句：** 多智能体成箱+拼柜；订柜用有效体积、外廓只做 3D；避免空心包装虚高柜数。
+
 ### 安全（必读）
 
 - **不要提交** `deepseek api.txt`、`.env`、任何 `*apiKey*`（已在 `.gitignore`）
 - 复制 `.env.example` → `.env`，填入自己的 LLM Key
 
 ```bash
-pip install -r requirements.txt
-
 # 全流程演示（主控自动选柜 + 自动确认）
 python main.py --demo --trace
 
