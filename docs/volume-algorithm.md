@@ -1,73 +1,124 @@
-# 体积算法怎么改
+# 体积算法与自主定柜（与代码对齐）
 
-## 问题
+## 原则
 
-原先估柜/选柜把「体积」算虚了：
+- **重量与体积都是硬约束**
+- **订柜分子不用箱外廓实心**（空心铁架会虚高柜数）
+- **outer 仅 3D 碰撞 / 外廓摆柜展示**
+- **禁止写死目标柜数**（如 `target_containers=2`）；2 柜仅作某票回归样例
 
-- 材料阶段：`件体积 × 2.6`（过大）
-- 或用 `4m×1.1m×1.2m` 当量架外廓 × 架数当分子  
-→ 体积约束**过紧**，柜数虚高（如 15 柜），而重量只需 2 柜。
-
-**重量与体积都是硬约束**，正确写法：
+## 订柜公式（代码默认）
 
 ```text
-柜数 = max(
-  ceil( 货重 / PAYLOAD ),                    # 如 28610 kg
-  ceil( 有效体积 / (柜容积 × 可用率) )         # 如 76.4 × 0.62
-)
+η = fill_ratio ≈ 0.82          # 柜容积可用率（行业 80–85%），非 1.0
+PAYLOAD = 柜铭牌，40HQ 默认 28610 kg
+V_cont  = 理论容积，40HQ 默认 76.4 m³
+usable  = V_cont × η
+
+# 材料阶段
+V_eff = Σ(件 AABB 体积 × 货种膨胀)，膨胀封顶 1.8
+
+# 成箱后
+V_eff = Σ min(outer_m3, content_m3 × k)   # k≤1.5–1.8，低填充更严
+        # 无 content 时打折 outer×0.45，不是全 outer
+
+N_weight = ceil(毛重 / PAYLOAD)
+N_volume = ceil(V_eff / usable)
+N0       = max(N_weight, N_volume)         # 自主定柜初值
+
+3D：从 N0 起用 outer 摆柜，失败则 N+1，直至 can_fit 或上限
 ```
+
+对应实现：
+
+| 符号 | 代码 |
+|------|------|
+| η | `estimate_containers(..., fill_ratio=0.82)` |
+| V_eff 材料 | `pack_effective_m3` |
+| V_eff 成箱 | `booking_volume_from_boxes` / `box_pack_effective_m3` |
+| N0 | `booking.compute_booking` → `n0` |
+| 3D 递增 | `pack_with_auto_containers` / `loader` |
 
 ## 三层体积（不要混用）
 
 | 层级 | 公式 | 用途 |
 |------|------|------|
-| **① 件实体** `piece_solid` | Σ(L×W×H×qty) | 下界；提料真实尺寸 |
-| **② 有效包装** `pack_effective` | Σ(件体积 × 货种膨胀) | **估柜体积分子（推荐）** |
-| **③ 成箱外廓** `crate_outer` | Σ(箱外 L×W×H) | **仅 3D 摆柜几何**；已成真实箱才用 |
+| **① 件实体** `piece_solid` | Σ(L×W×H×qty) | 分析下界 |
+| **② 有效包装** `pack_effective` | 件×货种膨胀；成箱 min(outer, content×k) | **订柜体积分子** |
+| **③ 成箱外廓** `crate_outer` / outer AABB | Σ 箱 L×W×H | **仅 3D 与外廓摆柜率展示** |
 
 ### 货种膨胀（封顶 1.8）
 
-| 货种 | 系数 | 说明 |
-|------|-----:|------|
-| steel 铁件/钢通 | 1.30 | 合箱间隙，勿 2.5+ |
-| aluminum_profile | 1.35 | |
-| aluminum_panel | 1.50 | 叠层防护 |
-| glass | 1.80 | 木箱偏大 |
-| hardware | 1.40 | 五金箱 |
-| general | 1.40 | 默认 |
+| 货种 | 系数 |
+|------|-----:|
+| steel | 1.30 |
+| aluminum_profile | 1.35 |
+| aluminum_panel | 1.50 |
+| glass | 1.80 |
+| hardware | 1.40 |
+| general | 1.40 |
 
-柜可用容积：`76.4 × fill_ratio`，`fill_ratio` 默认 **0.62**（绑扎/不规则），不是 100%。
+### `volume_mode` 门禁
+
+| mode | 默认 | 说明 |
+|------|------|------|
+| `pack_effective` | **默认** | 正式订柜 |
+| `piece_solid` | 可选 | 下界分析 |
+| `crate_outer` | **默认禁用** | 须 `allow_crate_outer_debug=True`；结果标 `volume_source=crate_outer_DEBUG`，不可静默当 N0 |
+
+误传 `volume_mode="crate_outer"` 且未开调试时：自动改回 `pack_effective`，并写 `crate_outer_redirected=True` + warning。
+
+## 指标拆分（评估 / 风险 / 出图）
+
+| 指标 | 含义 | 订柜？ |
+|------|------|--------|
+| `weight_utilization` | 重量利用率 | 是（硬） |
+| `booking_volume_utilization` | V_eff / (用柜×usable) | 是（硬） |
+| `outer_space_utilization` / 兼容 `space_utilization` | Σ 箱外廓 / 柜几何 | **否**，仅布局松紧 |
+
+- 评估：订柜有效体积子分 + 底面积 + 重量；**禁止** book_u 缺失时用 outer 顶替  
+- 出图：图注须同时标「订柜有效体积率」与「外廓摆柜率」，并注明外廓≠订柜  
 
 ## 代码入口
 
 ```python
-from packing_assistant.tools.volume_estimate import estimate_containers, pack_effective_m3
+from packing_assistant.tools.volume_estimate import estimate_containers
+from packing_assistant.tools.booking import compute_booking, pack_with_auto_containers
 
-# 材料清单估柜（推荐）
+# 材料估柜
 r = estimate_containers(
-    materials=mats,           # length_mm/width_mm/height_mm/quantity/weight
-    container_type="40HQ",    # PAYLOAD 28610 / 76.4 m3
-    fill_ratio=0.62,
+    materials=mats,
+    container_type="40HQ",
+    fill_ratio=0.82,
     volume_mode="pack_effective",
 )
-# r["containers_by_weight"]
-# r["containers_by_volume"]
-# r["containers_needed"] == max(上两者)
-# r["binding_constraint"]  # weight | volume | both
+# r["n0"] 语义 → containers_needed
+# r["volume_source"]、r["fill_ratio"]
+
+# 成箱后订柜 + 3D
+b = compute_booking(boxes=boxes, container_type="40HQ", fill_ratio=0.82)
+plan = pack_with_auto_containers(boxes, container_type="40HQ", n0=b["n0"])
+# plan["booking_volume_utilization"]  订柜有效体积率
+# plan["outer_space_utilization"]     外廓摆柜率
 ```
 
-摆柜后的 `space_utilization`（bin3d）仍是 **箱外廓÷柜**，用来看布局松紧；  
-**订柜数不要只用这个指标反推**（铁件会显得空）。
+## 回归预期（非写死柜数）
 
-## 改完后对照
+| 场景 | 期望 |
+|------|------|
+| ~32t 铁件材料 | 重量柜≈2，N0≈2（回归样例） |
+| 低填充大外廓 | V_eff≪outer，N0 不被抬到 10+ |
+| 误开 crate_outer 无 debug | 重定向 pack_effective，带 WARN |
 
-| 场景 | 重量柜数 | 体积柜数（pack_effective） | 结论 |
-|------|--------:|--------------------------:|------|
-| REDACTED-REF 约 32 t 铁件 | 2 | ~1–2（真实件尺寸） | **2 柜** |
-| 虚当量 4m 架 ×67 | 2 | 十几 | 错误分子，废弃 |
+```bash
+python scripts/test_booking_regression.py
+python scripts/test_p2_volume_gates.py
+```
 
-## 文件
+## 相关文件
 
-- `packing_assistant/tools/volume_estimate.py` — 新算法
-- `container_select.py` — 材料估体积改为 pack_effective
-- `bin3d.py` — 标明外廓利用率仅用于摆柜几何
+- `tools/volume_estimate.py` — 三层体积 + crate_outer 门禁  
+- `tools/booking.py` — N0 + auto 3D  
+- `tools/packing.py` / `adapters.py` / `schemas.py` — 箱体积字段  
+- `agents/loader.py` / `evaluator.py` / `visualizer.py` — 双率与评分  
+- `docs/architecture-update-plan.md` — 架构总览  

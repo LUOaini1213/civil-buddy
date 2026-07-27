@@ -123,10 +123,17 @@ def draw_layout(
 
     _setup_cjk_font()
     fig, ax = plt.subplots(figsize=(12, 3.5))
+    outer_label = (
+        container_plan.get("外廓摆柜率")
+        or container_plan.get("空间利用率")
+        or "-"
+    )
+    book_label = container_plan.get("订柜有效体积率") or "-"
     title = (
         f"{ctype} 拼柜布局 | {container_plan.get('结论', '')} | "
-        f"空间 {container_plan.get('空间利用率', '-')} / "
-        f"重量 {container_plan.get('重量利用率', '-')}"
+        f"外廓摆柜 {outer_label} / 订柜有效体积 {book_label} / "
+        f"重量 {container_plan.get('重量利用率', '-')} "
+        f"（外廓≠订柜）"
     )
     _draw_one_ax(ax, layout, max_len, title)
     fig.tight_layout()
@@ -188,10 +195,17 @@ def draw_layout_multi(
         return {"per_container": [], "overview_path": None, "primary_path": None}
 
     _setup_cjk_font()
-    space = float(plan.get("space_utilization") or 0)
+    outer_u = float(
+        plan.get("outer_space_utilization") or plan.get("space_utilization") or 0
+    )
+    book_u = float(plan.get("booking_volume_utilization") or 0)
     weight = float(plan.get("weight_utilization") or 0)
     can = plan.get("can_fit")
     msg = plan.get("message") or ("可装下" if can else "未完全装下")
+    dual = (
+        f"订柜有效体积{book_u*100:.0f}%｜外廓摆柜{outer_u*100:.0f}%｜重量{weight*100:.0f}%"
+        f"（外廓≠订柜）"
+    )
     per_stats = {
         int(p.get("container_no") or 0): p for p in (plan.get("per_container") or [])
     }
@@ -206,10 +220,11 @@ def draw_layout_multi(
         nbox = st.get("boxes") or len(items)
         sub = f"第{cno}柜/{len(groups)} | {nbox}箱"
         if vol is not None:
-            sub += f" | 容积{float(vol)*100:.0f}%"
+            # per-container volume_utilization 是外廓几何，禁止写成订柜
+            sub += f" | 外廓{float(vol)*100:.0f}%"
         if load is not None:
             sub += f" | {float(load):.0f}kg"
-        title = f"{ctype} {sub} | {msg}"
+        title = f"{ctype} {sub} | {dual}"
         path = os.path.join(output_dir, f"{prefix}_c{cno:02d}.png")
         fig, ax = plt.subplots(figsize=(12, 2.8))
         _draw_one_ax(ax, items, max_len, title)
@@ -240,7 +255,7 @@ def draw_layout_multi(
     for j in range(len(groups), len(axes_list)):
         axes_list[j].axis("off")
     fig.suptitle(
-        f"{ctype} 共{n}柜侧视总览 | {msg} | 总空间{space*100:.0f}% 总重量{weight*100:.0f}%",
+        f"{ctype} 共{n}柜侧视总览 | {msg} | {dual}",
         fontsize=12,
         y=1.01,
     )
