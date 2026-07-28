@@ -314,6 +314,22 @@
         <button class="secondary" @click="revise" :disabled="loading">调整重算</button>
         <button class="danger" @click="cancel" :disabled="loading">取消</button>
       </div>
+      <div style="margin-top:12px;padding:10px;background:#0f1419;border-radius:8px;border:1px solid #2a3a52;">
+        <div style="font-size:13px;color:#93c5fd;margin-bottom:6px;">自然语言改方案（材料 / 柜型 / 详设截面）</div>
+        <div class="row" style="align-items:stretch;">
+          <textarea v-model="nlInstruction" style="min-height:56px;flex:1;"
+            placeholder="例：去掉钢梁；柜型改成40GP；框架用槽钢16#，底板槽钢12#3根，γ=2.0，图纸ST-4M-001"></textarea>
+          <button @click="reviseNl" :disabled="loading || !nlInstruction.trim()" style="align-self:flex-end;">应用并重算</button>
+        </div>
+        <div class="status-bar" v-if="nlStatus">{{ nlStatus }}</div>
+        <div style="font-size:12px;color:#8b9bb4;margin-top:6px;">
+          结构：
+          <span class="badge" :class="designFactsOk ? 'ok' : 'warn'">
+            {{ designFactsOk ? '已加载详设' : '待详设（默认截面非正式）' }}
+          </span>
+          {{ (result.design_facts_status && result.design_facts_status.message) || '' }}
+        </div>
+      </div>
     </div>
 
     <!-- 拼柜结果 + 双体积口径 -->
@@ -506,9 +522,15 @@
           agentSteps: [],
           selectedAgent: 'ALL',
           viewKeys: ['top', 'side', 'front'],
+          nlInstruction: '',
+          nlStatus: '',
         };
       },
       computed: {
+        designFactsOk() {
+          const d = this.result.design_facts_status || {};
+          return !!d.has_detailed_facts;
+        },
         hasViews() {
           const v = this.result.views || {};
           return v.top || v.side || v.front;
@@ -779,20 +801,38 @@
         async revise() {
           const note = prompt('调整说明（如：去掉 钢梁）', '去掉 连接板');
           if (note == null) return;
+          this.nlInstruction = note;
+          await this.reviseNl();
+        },
+        async reviseNl() {
+          const instruction = (this.nlInstruction || '').trim();
+          if (!instruction) return;
           this.loading = true;
+          this.nlStatus = '解析并改方案中…';
+          this.statusText = '自然语言改方案…';
           try {
-            const r = await fetch(API + '/api/confirm', {
+            const r = await fetch(API + '/api/revise-nl', {
               method: 'POST',
               headers: { 'Content-Type': 'application/json' },
               body: JSON.stringify({
                 session_id: this.sessionId,
-                action: 'revise',
-                adjust_note: note,
+                instruction,
+                rerun_team_a: true,
               }),
             });
             const j = await r.json();
             this.applyResult(j);
-            this.statusText = '已重算团队A';
+            const logs = (j.nl_revision && j.nl_revision.logs) || [];
+            this.nlStatus = logs.length
+              ? '已应用：' + logs.join('；')
+              : (j.nl_revision && j.nl_revision.message) || '完成';
+            this.statusText = '改方案后团队A已重算 · 请查看结构结论是否仍待详设';
+            const rec = (this.containerOptions.find((o) => o.recommended) || {}).value;
+            if (j.container_type) this.containerType = j.container_type;
+            else if (rec) this.containerType = rec;
+          } catch (e) {
+            this.nlStatus = '失败: ' + e;
+            this.statusText = '改方案失败: ' + e;
           } finally {
             this.loading = false;
           }

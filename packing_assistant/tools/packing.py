@@ -473,6 +473,7 @@ def _build_box(
     container_type: str = "40HQ",
     dense: bool = False,
     standard: bool = False,
+    design_facts: Optional[Dict[str, Any]] = None,
     _upgrade_depth: int = 0,
     _tried_types: Optional[set] = None,
 ) -> Dict[str, Any]:
@@ -548,6 +549,7 @@ def _build_box(
         items=items,
         safety_factor=sf,
         box_id=box_no,
+        design_facts=design_facts,
     )
     try:
         from packing_assistant.tools.structure_calc import attach_calc_report_md
@@ -574,6 +576,11 @@ def _build_box(
         special.append("结构需加强")
     if struct["结论"] == "不通过":
         special.append("结构不通过")
+    if struct["结论"] == "待详设":
+        special.append("待详设")
+        special.append("结构需加强")
+    if struct.get("fidelity") == "detailed_design":
+        special.append("详设截面")
     if customized and not standard:
         special.append("定制外廓")
     if customized and standard:
@@ -607,6 +614,7 @@ def _build_box(
                 items=items,
                 safety_factor=sf,
                 box_id=box_no,
+                design_facts=design_facts,
             )
             if struct2.get("结论") != "不通过":
                 outer, inner, struct = outer2, inner2, struct2
@@ -661,6 +669,7 @@ def _build_box(
                 container_type=container_type,
                 dense=dense,
                 standard=standard,
+                design_facts=design_facts,
                 _upgrade_depth=_upgrade_depth + 1,
                 _tried_types=tried,
             )
@@ -699,8 +708,13 @@ def _build_box(
     inner_vol = max(inner["长"] * inner["宽"] * inner["高"], 1)
     fill_ratio = min(cargo_vol / inner_vol, 1.0)
     fill_outer = min(cargo_vol / max(outer_vol, 1), 1.0)
-    # 订柜有效体积：min(outer, content×k)，低填充不把空心架当实心
-    k_eff = 1.35 if fill_outer < 0.20 else (1.50 if fill_outer < 0.35 else 1.60)
+    # 订柜有效体积：与 volume_estimate.pack_k_for_fill 统一（按 fill_outer 选 k）
+    try:
+        from packing_assistant.tools.volume_estimate import pack_k_for_fill
+
+        k_eff = pack_k_for_fill(fill_outer, k_max=1.60)
+    except Exception:
+        k_eff = 1.35 if fill_outer < 0.20 else (1.50 if fill_outer < 0.35 else 1.60)
     if cargo_vol <= 1e-6:
         booking_vol = outer_vol * 0.45
     else:
@@ -721,6 +735,7 @@ def _build_box(
         "结构结论": struct["结论"],
         "reinforcement": reinf,
         "crate_fill_ratio": round(fill_ratio, 4),
+        "fill_outer_ratio": round(fill_outer, 4),
         "content_m3": round(cargo_vol / 1e9, 6),
         "outer_m3": round(outer_vol / 1e9, 6),
         "booking_volume_m3": round(booking_vol / 1e9, 6),
@@ -905,6 +920,7 @@ def run_packing(
     dense_mode: bool = False,
     standard_boxes: bool = True,
     mix_mode: bool = True,
+    design_facts: Optional[Dict[str, Any]] = None,
 ) -> Dict[str, Any]:
     """
     装箱算法入口（含结构计算）。
@@ -914,6 +930,7 @@ def run_packing(
     standard_boxes: True（默认）锁知识库标准箱外廓，不贴货定制
     mix_mode: True（默认）允许短件混入更长档标准箱填空
     dense_mode: True 时外廓贴货（与 standard 互斥，standard 优先）
+    design_facts: 详设结构事实（截面/γ/图纸）；无则结论「待详设」不可正式出运
     输出: {
       "箱子列表": [... 含 结构计算 ...],
       "结构汇总": {...}
@@ -926,6 +943,7 @@ def run_packing(
     standard = bool(standard_boxes)
     dense = bool(dense_mode) and not standard
     mix = bool(mix_mode)
+    d_facts = design_facts
     # 打回改箱：更严载荷，优先结构通过
     cap = float(max_box_net_kg or 3200.0)
     if revision_mode:
@@ -1024,20 +1042,31 @@ def run_packing(
         )
     bins_after_merge = len(bins)
 
+    force_bt = None
+    if isinstance(d_facts, dict):
+        force_bt = (d_facts.get("defaults") or {}).get("force_box_type")
     boxes: List[Dict[str, Any]] = []
     for i, b in enumerate(bins, start=1):
+        bname = force_bt or b["box_name"]
         boxes.append(
             _build_box(
                 f"BOX-{i:02d}",
-                b["box_name"],
+                bname,
                 b["items"],
                 container_type=ctype,
                 dense=dense,
                 standard=standard,
+                design_facts=d_facts,
             )
         )
 
     summary = _structure_summary(boxes)
+    try:
+        from packing_assistant.tools.design_facts import facts_status_summary
+
+        summary["design_facts_status"] = facts_status_summary(d_facts)
+    except Exception:
+        pass
     if standard and mix:
         mode = "standard_box_library+cross_length_mix"
     elif standard:

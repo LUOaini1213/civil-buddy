@@ -63,6 +63,17 @@ def materials_to_passthrough_boxes(materials: List[Dict[str, Any]]) -> List[Dict
         longish = L >= 4000
         bid = str(m.get("id") or f"CRATE-{i:03d}")
         name = str(m.get("name") or bid)
+        # 订柜体积与 volume_estimate 统一（按 fill_outer 选 k）
+        try:
+            from packing_assistant.tools.volume_estimate import pack_k_for_fill
+
+            k_pt = pack_k_for_fill(fill, k_max=1.60)
+        except Exception:
+            k_pt = 1.50
+        if content <= 1e-12:
+            booking_m3 = outer * 0.45
+        else:
+            booking_m3 = min(outer, content * k_pt)
         boxes.append(
             {
                 "box_id": bid if bid.startswith("CRATE") or bid.startswith("S") else f"PT-{i:03d}",
@@ -76,7 +87,8 @@ def materials_to_passthrough_boxes(materials: List[Dict[str, Any]]) -> List[Dict
                 "outer_m3": round(outer, 6),
                 "content_m3": round(content, 6),
                 "crate_fill_ratio": round(fill, 4),
-                "booking_volume_m3": round(min(outer, content * 1.50), 6),
+                "fill_outer_ratio": round(fill, 4),
+                "booking_volume_m3": round(booking_m3, 6),
                 "gross_weight_kg": round(gross, 2),
                 "net_weight_kg": round(net, 2),
                 "stackable": bool(H <= 1200 and not longish),
@@ -205,6 +217,12 @@ def agent_box_scheme(state: PackingState) -> Dict[str, Any]:
     )
     if standard_boxes:
         dense_mode = False
+    design_facts = state.get("design_facts") or packing_opts.get("design_facts")
+    # 自然语言强制箱型写入 defaults
+    if packing_opts.get("force_box_type"):
+        design_facts = dict(design_facts or {})
+        design_facts.setdefault("defaults", {})
+        design_facts["defaults"]["force_box_type"] = packing_opts["force_box_type"]
     result = run_packing(
         internal,
         container_type=str(ctype),
@@ -213,6 +231,7 @@ def agent_box_scheme(state: PackingState) -> Dict[str, Any]:
         dense_mode=dense_mode,
         standard_boxes=standard_boxes,
         mix_mode=mix_mode,
+        design_facts=design_facts if isinstance(design_facts, dict) else None,
     )
     boxes_raw = result.get("箱子列表") or []
     boxes = boxes_to_api(boxes_raw)

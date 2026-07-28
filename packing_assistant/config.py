@@ -7,10 +7,11 @@ from dataclasses import asdict, dataclass, field
 from typing import Any, Dict, List, Set
 
 
-HARNESS_VERSION = "0.3.0"
-PACKING_ALGO_VERSION = "structure-v1"
+HARNESS_VERSION = "0.4.0"
+PACKING_ALGO_VERSION = "structure-design-facts-v1"
 CONSOLIDATION_ALGO_VERSION = "linear-1d-v1"
 RISK_RULES_VERSION = "rules-v1"
+EVALUATOR_VERSION = "adaptive-weights-v1"
 
 # 允许节点调用的工具白名单
 TOOL_WHITELIST: Set[str] = {
@@ -38,7 +39,9 @@ class HarnessMeta:
     packing_algo: str = PACKING_ALGO_VERSION
     consolidation_algo: str = CONSOLIDATION_ALGO_VERSION
     risk_rules: str = RISK_RULES_VERSION
+    evaluator: str = EVALUATOR_VERSION
     validation_mode: str = VALIDATION_MODE
+    architecture: str = "总分总分总"
 
     def to_dict(self) -> Dict[str, Any]:
         return asdict(self)

@@ -42,6 +42,7 @@ if not (os.getenv("SKJOLBER_URL") or "").strip():
 from packing_assistant.harness import (  # noqa: E402
     apply_user_confirmation,
     public_response,
+    revise_plan_nl,
     run_agent_pipeline,
     run_pipeline,
     run_team_a,
@@ -71,6 +72,7 @@ class TeamARequest(BaseModel):
     session_id: str = "default"
     materials: Optional[List[Dict[str, Any]]] = None
     adjust_note: str = ""
+    design_facts: Optional[Dict[str, Any]] = None
 
 
 class ConfirmRequest(BaseModel):
@@ -82,6 +84,17 @@ class ConfirmRequest(BaseModel):
     max_containers: int = 0
     adjust_note: str = ""
     confirmed_box_ids: List[str] = Field(default_factory=list)
+
+
+class ReviseNlRequest(BaseModel):
+    """自然语言改方案（改材料/柜型/详设截面后重跑团队A）。"""
+
+    session_id: str = "default"
+    instruction: str = Field(
+        ...,
+        description="例如：去掉钢梁；柜型改成40GP；4米铁架框架用槽钢16#，底板槽钢12#3根，γ=2.0",
+    )
+    rerun_team_a: bool = True
 
 
 class DemoRequest(BaseModel):
@@ -115,9 +128,32 @@ def api_team_a(body: TeamARequest):
         materials=body.materials,
         session_id=body.session_id,
         adjust_note=body.adjust_note,
+        design_facts=body.design_facts,
     )
     _SESSIONS[body.session_id] = state
     return public_response(state)
+
+
+@app.post("/api/revise-nl")
+def api_revise_nl(body: ReviseNlRequest):
+    """
+    自然语言改方案：解析指令 → 更新材料/柜型/详设截面 → 重跑团队A。
+    例：框架用槽钢16#；去掉连接板；柜型40GP
+    """
+    state = _SESSIONS.get(body.session_id)
+    if not state:
+        # 允许无会话时从空状态开始
+        from packing_assistant.harness import make_initial_state
+
+        state = make_initial_state(session_id=body.session_id, enable_auto_confirm=False)
+    state = revise_plan_nl(
+        state, body.instruction, rerun_team_a=body.rerun_team_a
+    )
+    # revise_plan_nl 已重跑 team_a 时 session 更新
+    _SESSIONS[body.session_id] = state
+    resp = public_response(state)
+    resp["nl_revision"] = state.get("nl_revision") or {}
+    return resp
 
 
 @app.post("/api/confirm")
@@ -229,21 +265,24 @@ def api_pipeline(body: PipelineRequest):
     plan = state.get("container_plan") or {}
     book = state.get("booking") or plan.get("booking") or {}
     paths = state.get("artifact_paths") or {}
+    pub = public_response(state)
     return {
         "ok": True,
         "agent_definition": {
             "style": "multi_agent_workflow",
+            "architecture": "总分总分总",
             "goal": state.get("goal") or body.goal,
             "capabilities": ["感知环境", "推理与规划", "使用工具", "采取行动", "追求目标"],
-            "loop": "感知清单与状态 → 规划订柜策略 → 调用成箱/3D/风险工具 → 生成方案与图 → 推进至可裁决结论（可 HITL）",
+            "loop": "主控总→成箱分→HITL总→拼柜分→裁决总",
             "note": "分角色流水线；数值由 tools 计算，非 LLM 编造",
         },
         "run_id": state.get("run_id"),
         "artifact_paths": paths,
         "goal_status": state.get("goal_status") or {},
+        "volume_summary": pub.get("volume_summary") or {},
         "perception": state.get("perception") or state.get("materials_summary") or {},
         "planning_reasons": (state.get("plan") or {}).get("planning_reasons") or [],
-        "steps": steps,
+        "steps": steps or pub.get("agent_steps") or [],
         "summary": {
             "boxes": len(state.get("boxes") or []),
             "n0": book.get("n0") or plan.get("n0"),
@@ -259,7 +298,7 @@ def api_pipeline(body: PipelineRequest):
             "ship_ok": state.get("ship_ok"),
             "phase": state.get("phase"),
         },
-        "public": public_response(state),
+        "public": pub,
     }
 
 

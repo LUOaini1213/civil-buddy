@@ -176,23 +176,38 @@ def box_outer_m3(box: Dict[str, Any]) -> float:
     return L * W * H / 1e9
 
 
+def pack_k_for_fill(fill_outer: float, *, k_max: float = 1.60) -> float:
+    """统一 k 分档：按 content/outer（外廓填充率），与 packing._build_box 一致。"""
+    fo = float(fill_outer or 0)
+    if fo > 0 and fo < 0.20:
+        return min(k_max, 1.35)
+    if fo < 0.35:
+        return min(k_max, 1.50)
+    return float(k_max)
+
+
 def box_pack_effective_m3(box: Dict[str, Any], *, k_max: float = 1.60) -> float:
     """
     单箱订柜贡献体积 = min(outer_m3, content_m3 × k)
     空心铁架 fill 低时不会把 outer 全算进订柜。
+
+    k 一律按 fill_outer=content/outer 选档（不用 crate_fill_ratio=content/inner，
+    避免与 packing 成箱字段分叉）。
+    若箱上已有 booking_volume_m3 且与 outer/content 同量级，可作缓存信任。
     """
     outer = box_outer_m3(box)
     content = box_content_m3(box)
-    fill = _f(box.get("crate_fill_ratio"))
-    if fill <= 0 and outer > 1e-12:
-        fill = content / outer
-    # 低填充时 k 取小一些
-    if fill > 0 and fill < 0.20:
-        k = min(k_max, 1.35)
-    elif fill < 0.35:
-        k = min(k_max, 1.50)
-    else:
-        k = k_max
+    # 已写入且合理：优先用成箱时算好的订柜体积（同源公式）
+    cached = box.get("booking_volume_m3")
+    if cached is not None and outer > 1e-12:
+        c = _f(cached)
+        if 0 <= c <= outer * 1.001 + 1e-9:
+            return c
+    fill_outer = content / outer if outer > 1e-12 else 0.0
+    # 可选：显式 outer 填充率字段
+    if box.get("fill_outer_ratio") is not None:
+        fill_outer = _f(box.get("fill_outer_ratio"))
+    k = pack_k_for_fill(fill_outer, k_max=k_max)
     if content <= 1e-12:
         # 无内容尺寸：对外廓打折，避免实心方块
         return outer * 0.45

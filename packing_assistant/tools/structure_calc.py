@@ -459,11 +459,21 @@ def run_structure_calc(
     lift_point_count: Optional[int] = None,
     concentrated_max_piece_kg: Optional[float] = None,
     box_id: str = "",
+    design_facts: Optional[Dict[str, Any]] = None,
+    require_detailed: Optional[bool] = None,
 ) -> Dict[str, Any]:
     """
     单箱完整结构计算（半严格三件套 + 几何重量）。
-    输出同时保留中文兼容字段与新版结构化字段。
+
+    design_facts：详设结构事实（截面/γ/吊点/图纸号）。
+    有详设 → fidelity=detailed_design；无详设 → default_preset，且默认不可作正式出运依据。
     """
+    from packing_assistant.tools.design_facts import (
+        apply_section_overrides,
+        has_detailed_facts,
+        resolve_box_design,
+    )
+
     weights = calc_weights(items, tare_kg)
     envelope = cargo_envelope(
         items,
@@ -475,21 +485,51 @@ def run_structure_calc(
     if envelope.get("截面可装入") is False:
         geo = {**geo, "尺寸适配": False}
 
-    # 方案 C：steel_table → sectionproperties
+    # 预置截面 + 详设覆盖
+    design = resolve_box_design(
+        box_type=box_type, box_id=box_id or "", facts=design_facts or {}
+    )
+    if design.get("tare_kg") is not None:
+        tare_kg = float(design["tare_kg"])
+        weights = calc_weights(items, tare_kg)
+    if design.get("max_payload_kg") is not None:
+        max_payload_kg = float(design["max_payload_kg"])
+
     preset = get_box_default_sections(box_type)
+    preset = apply_section_overrides(preset, design)
+    design_errors = list(preset.get("design_errors") or [])
+    fidelity = str(design.get("fidelity") or "default_preset")
+    if design.get("frame_section") or design.get("bottom_beam_section"):
+        fidelity = "detailed_design"
+    detailed_ok = fidelity == "detailed_design" and not design_errors
+    if require_detailed is None:
+        require_detailed = bool((design_facts or {}).get("require_for_ship", True))
+
     gamma = float(preset.get("gamma") or 1.8)
+    if design.get("gamma"):
+        gamma = float(design["gamma"])
     if safety_factor and float(safety_factor) > gamma:
         gamma = float(safety_factor)
     if weights["毛重_kg"] > 2000:
         gamma = max(gamma, 2.2)
     strategy = preset.get("calc_strategy") or "semi_strict"
+    if detailed_ok:
+        strategy = "detailed_design_semi_strict"
 
     G_kg = weights["毛重_kg"]
     Fd = design_load_kg(G_kg, gamma)
 
     frame = preset.get("frame") or {}
     bottom = preset.get("bottom_beam") or {}
-    n_lift = int(lift_point_count or preset.get("lift_points_default") or 4)
+    n_lift = int(
+        lift_point_count
+        or design.get("lift_points")
+        or preset.get("lift_points_default")
+        or 4
+    )
+    n_columns = int(design.get("column_count") or 4)
+    k_col = float(design.get("k_factor_column") or 1.0)
+    defl_ratio = float(design.get("defl_ratio") or _DEFL_RATIO or 200)
     is_wood = (preset.get("material") or "") == "wood"
 
     # 最重单件
@@ -503,24 +543,31 @@ def run_structure_calc(
     if is_wood:
         is_steel = False
 
+    bearing_area = 0.0
+    pad = design.get("bearing_pad_mm")
+    if isinstance(pad, (list, tuple)) and len(pad) >= 2:
+        bearing_area = float(pad[0]) * float(pad[1])
+
     bottom_bending = check_bottom_bending(
         design_load_kg=Fd,
         box_length_mm=float(outer_mm.get("长") or 0),
         beam=bottom,
         is_steel=is_steel,
         gamma=gamma,
-        defl_ratio=float(_DEFL_RATIO or 200),
+        defl_ratio=defl_ratio,
     )
     frame_stability = check_frame_stability(
         design_load_kg=Fd,
         box_height_mm=float(outer_mm.get("高") or 0),
         frame=frame,
         is_steel=is_steel,
-        n_columns=4,
+        n_columns=n_columns,
+        k_factor=k_col,
     )
     local_bearing = check_local_bearing(
         design_load_kg=Fd,
         concentrated_piece_kg=float(max_piece or 0),
+        bearing_area_mm2=bearing_area,
         is_steel=is_steel,
     )
     lifting_points = check_lifting_points(
@@ -570,6 +617,22 @@ def run_structure_calc(
         passed = True
         need_reinf = False
 
+    # 无详设：不可当作正式结构通过（业务要求详设事实）
+    if require_detailed and not detailed_ok and conclusion == "通过":
+        conclusion = "待详设"
+        risk_level = "中"
+        passed = False
+        need_reinf = True
+        reinforcement_plan = [
+            "未提供详设结构事实（截面/图纸号/γ）。请上传 structure_design_facts 或用自然语言指定框架/底板截面后重算。"
+        ] + reinforcement_plan
+    if design_errors:
+        conclusion = "不通过"
+        risk_level = "高"
+        passed = False
+        need_reinf = True
+        reinforcement_plan = [f"详设截面解析失败：{e}" for e in design_errors] + reinforcement_plan
+
     # 强制半严格：4/6 米任一软项升为需加强已处理
     if strategy == "forced_semi_strict" and conclusion == "通过":
         # 仍输出全项，保持通过
@@ -607,16 +670,24 @@ def run_structure_calc(
     }
 
     summary = {
-        "passed": passed and conclusion != "不通过",
+        "passed": passed and conclusion not in ("不通过", "待详设"),
         "risk_level": risk_level,
         "reinforcement_required": need_reinf,
         "reinforcement_plan": reinforcement_plan,
+        "fidelity": fidelity,
+        "detailed_design": detailed_ok,
+        "drawing_no": design.get("drawing_no") or preset.get("drawing_no"),
         "final_conclusion": (
-            f"按默认截面与γ={gamma}校核{conclusion}"
+            (
+                f"按详设截面与γ={gamma}校核{conclusion}"
+                if detailed_ok
+                else f"按默认截面筛查γ={gamma}→{conclusion}（非正式详设）"
+            )
             + (f"；建议：{'；'.join(reinforcement_plan[:3])}" if reinforcement_plan else "")
         ),
         "calc_strategy": strategy,
         "checks": checks,
+        "design_errors": design_errors,
     }
 
     # 兼容旧字段
@@ -645,6 +716,9 @@ def run_structure_calc(
         "summary": summary,
         # —— 中文兼容（旧链路）——
         "结论": conclusion,
+        "fidelity": fidelity,
+        "detailed_design": detailed_ok,
+        "drawing_no": design.get("drawing_no") or preset.get("drawing_no"),
         "安全系数": gamma,
         "箱型": box_type,
         "是否铁架": is_steel_frame,

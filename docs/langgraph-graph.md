@@ -4,6 +4,16 @@
 状态：`PackingState`（`packing_assistant/state.py`）  
 节点包装：`instrument_node`（写 traces）
 
+**架构口诀：总分总分总**
+
+| 段 | 节点 | 含义 |
+|----|------|------|
+| ① 总 | orchestrator | 目标 / 选柜 / 调度 |
+| ② 分 | material → structure → box_scheme | 成箱分工 |
+| ③ 总 | present_team_a + user_confirm / hitl_wait | HITL 闸门 |
+| ④ 分 | planner → loader → eval → risk → visualizer | 拼柜分工（可 replan） |
+| ⑤ 总 | finalize | 出运裁决 |
+
 示意大图：[`diagrams/langgraph-create-app.jpg`](diagrams/langgraph-create-app.jpg)
 
 ---

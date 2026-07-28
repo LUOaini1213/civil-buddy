@@ -91,6 +91,16 @@ def agent_risk_compliance(state: PackingState) -> Dict[str, Any]:
                 score=18,
                 block=True,
             )
+        if b.get("structure_conclusion") == "待详设" or "待详设" in special:
+            add(
+                "STRUCTURE_AWAIT_DESIGN",
+                "high",
+                "未提供详设结构事实，不可作正式出运结构依据（请提交截面/图纸或用自然语言指定）",
+                "structure",
+                bid,
+                score=16,
+                block=True,
+            )
         g = float(b.get("gross_weight_kg") or 0)
         if g > 2000:
             add(

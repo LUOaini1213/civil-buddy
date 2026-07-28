@@ -89,10 +89,17 @@ def agent_structure(state: PackingState) -> Dict[str, Any]:
     if any(float(m.get("weight_kg") or 0) >= 200 for m in materials):
         notes.append("存在重件：底部托盘/横梁，重下轻上")
 
+    facts = state.get("design_facts") or {}
+    has_facts = bool(facts.get("box_types") or facts.get("boxes"))
     advice_global = {
-        "prefer_iron_box": prefer_iron or True,
+        "prefer_iron_box": bool(prefer_iron),
         "safety_factor": 2.0 if prefer_iron else 1.8,
-        "note": "成箱后由装箱智能体做半严格结构校核；本步仅输出约束与加固建议",
+        "note": (
+            "成箱后按详设截面校核"
+            if has_facts
+            else "成箱后无详设将标「待详设」；请加载 structure_design_facts 或自然语言指定截面"
+        ),
+        "design_facts_loaded": has_facts,
     }
 
     tools_used = [

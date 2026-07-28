@@ -61,12 +61,21 @@ def agent_orchestrator(state: PackingState) -> Dict[str, Any]:
             "note": "重货优先小柜；轻泡可 40GP/HQ；单箱高≤1.3m 建议二层堆。",
         },
         "targets": {
-            "space_soft_min": 0.25,
+            # 订柜有效体积软目标（非外廓）；命名保留 space_* 兼容
+            "space_soft_min": 0.20,
+            "booking_vol_soft_min": 0.20,
             "weight_soft_min": 0.35,
-            "space_good": 0.45,
+            "space_good": 0.40,
+            "booking_vol_good": 0.40,
             "weight_good": 0.60,
+            "floor_soft_min": 0.35,
+            "floor_good": 0.70,
             "lateral_cog_max": 0.05,
             "prefer_two_layer": True,
+            # 评估权重：不填则按 binding 自适应；也可显式指定
+            # "evaluation_weights": {"booking_volume": 0.35, "floor": 0.20, "weight": 0.45},
+            "penalize_extra_containers": True,
+            "extra_container_penalty": 4.0,
         },
     }
 

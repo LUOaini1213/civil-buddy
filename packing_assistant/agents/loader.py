@@ -104,15 +104,27 @@ def agent_loader(state: PackingState) -> Dict[str, Any]:
             notes.append(f"auto_booking失败: {e}")
             container_plan = None
 
-    # 2) 本机 3D 兜底
+    # 2) 本机 3D 兜底：与 auto 相同自 N0 递增至 can_fit（禁止只试 N0）
     if container_plan is None:
         try:
-            container_plan = pack_boxes_api(
-                boxes,
-                container_type=ctype,
-                max_containers=n0,
-                priority_order=priority or None,
-            )
+            last_fb: Dict[str, Any] | None = None
+            for mc in range(n0, n_max + 1):
+                trial = pack_boxes_api(
+                    boxes,
+                    container_type=ctype,
+                    max_containers=mc,
+                    priority_order=priority or None,
+                )
+                last_fb = trial
+                notes.append(
+                    f"fallback3d try_N={mc} can_fit={trial.get('can_fit')} "
+                    f"engine={trial.get('engine')}"
+                )
+                if trial.get("can_fit"):
+                    break
+            container_plan = last_fb
+            if container_plan is None:
+                raise RuntimeError("pack_boxes_api returned empty")
             notes.append(container_plan.get("engine") or "python-laff-3d")
         except Exception as e:
             notes.append(f"python3d失败: {e}")
