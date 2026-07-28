@@ -124,6 +124,41 @@ def instrument_node(node_name: str, fn: NodeFn) -> NodeFn:
             # 不覆盖节点自己写的 traces，而是追加
             extra_traces = list(result.get("traces") or [])
             result["traces"] = extra_traces + [event]
+
+            # 前端流程可视化：每步写入 agent_steps（State 用 operator.add 累加）
+            if "agent_steps" not in result:
+                meta = result.get("agent_meta") if isinstance(result.get("agent_meta"), dict) else {}
+                content = ""
+                for m in reversed(list(result.get("messages") or [])):
+                    if isinstance(m, dict) and m.get("content"):
+                        content = str(m["content"])
+                        break
+                titles = {
+                    "orchestrator": "主控·开头",
+                    "material_parser": "材料解析",
+                    "structure": "结构计算",
+                    "box_scheme": "装箱方案",
+                    "present_team_a": "HITL确认闸门",
+                    "planner": "规划(N0)",
+                    "loader": "装载(3D)",
+                    "evaluator": "评估",
+                    "risk_compliance": "风险合规",
+                    "visualizer": "可视化",
+                    "finalize": "主控收口",
+                }
+                result["agent_steps"] = [
+                    {
+                        "node": node_name,
+                        "title": titles.get(node_name, node_name),
+                        "message": content[:4000],
+                        "role": "agent",
+                        "tools_used": meta.get("tools_used") or [],
+                        "capability": meta.get("capability") or [],
+                        "artifacts": meta.get("artifacts") or {},
+                        "duration_ms": round(duration_ms, 2),
+                        "status": "ok",
+                    }
+                ]
             return result
         except Exception as e:
             duration_ms = (time.perf_counter() - t0) * 1000
@@ -144,6 +179,17 @@ def instrument_node(node_name: str, fn: NodeFn) -> NodeFn:
             return {
                 "errors": [err_msg, traceback.format_exc(limit=3)],
                 "traces": [event],
+                "agent_steps": [
+                    {
+                        "node": node_name,
+                        "title": node_name,
+                        "message": f"[失败] {e}",
+                        "role": "agent",
+                        "tools_used": [],
+                        "status": "error",
+                        "duration_ms": round(duration_ms, 2),
+                    }
+                ],
                 "messages": [
                     {
                         "role": "system",

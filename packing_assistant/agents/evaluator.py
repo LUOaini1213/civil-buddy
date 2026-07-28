@@ -235,8 +235,21 @@ def agent_evaluator(state: PackingState) -> Dict[str, Any]:
         "need_replan": need_replan,
     }
 
+    tools_used = ["evaluator.dual_util", "booking.volume_metrics"]
     updates: Dict[str, Any] = {
         "evaluation": evaluation,
+        "agent_meta": {
+            "node": "evaluator",
+            "capability": ["推理与规划", "使用工具"],
+            "tools_used": tools_used,
+            "artifacts": {
+                "score": score,
+                "decision": decision,
+                "booking_volume_utilization": booking_vol_util if booking_known else None,
+                "outer_space_utilization": outer_space,
+                "need_replan": need_replan,
+            },
+        },
         "messages": [
             {
                 "role": "assistant",
@@ -246,6 +259,7 @@ def agent_evaluator(state: PackingState) -> Dict[str, Any]:
                     f"{f'{booking_vol_util:.0%}' if booking_known else '未知'} "
                     f"底面积{floor:.0%} 重量{weight:.0%} 综合{util_composite:.0f}"
                     f"{' 体积可疑' if evaluation.get('volume_suspicious') else ''}"
+                    f"｜tools={','.join(tools_used)}（订柜分≠外廓分）"
                 ),
             }
         ],
