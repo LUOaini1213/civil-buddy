@@ -43,6 +43,13 @@ def make_initial_state(
     g = (goal or "deliver_valid_pack_plan").strip()
     if g not in VALID_GOALS:
         g = "deliver_valid_pack_plan"
+    # 详设结构事实（文件 + 可选注入）
+    try:
+        from packing_assistant.tools.design_facts import load_design_facts
+
+        _design_facts = load_design_facts()
+    except Exception:
+        _design_facts = {}
     return {
         "user_input": user_input or "",
         "session_id": session_id or rid,
@@ -51,6 +58,7 @@ def make_initial_state(
         "status": "success",
         "intent": "full_process",
         "goal": g,
+        "design_facts": _design_facts,
         "packing_plan_id": "",
         "final_response": "",
         "harness_meta": HarnessMeta().to_dict(),
@@ -95,6 +103,8 @@ def run_team_a(
     session_id: str = "",
     adjust_note: str = "",
     persist_trace: bool = False,
+    design_facts: Optional[Dict[str, Any]] = None,
+    packing_options: Optional[Dict[str, Any]] = None,
 ) -> Dict[str, Any]:
     """只跑团队A，停在 await_user_confirm。"""
     app = create_team_a_app()
@@ -105,10 +115,46 @@ def run_team_a(
         adjust_note=adjust_note,
         enable_auto_confirm=False,
     )
+    if design_facts:
+        from packing_assistant.tools.design_facts import merge_design_facts
+
+        state["design_facts"] = merge_design_facts(
+            state.get("design_facts") or {}, design_facts
+        )
+    if packing_options:
+        state["packing_options"] = {
+            **(state.get("packing_options") or {}),
+            **packing_options,
+        }
     result = app.invoke(state)
     if persist_trace:
         result = {**result, "trace_path": save_trace(result)}
     return result
+
+
+def revise_plan_nl(
+    state: Dict[str, Any],
+    instruction: str,
+    *,
+    rerun_team_a: bool = True,
+) -> Dict[str, Any]:
+    """
+    自然语言改方案：解析指令 → 更新 materials/design_facts/柜型 → 可选重跑团队A。
+    """
+    from packing_assistant.tools.nl_revision import revise_with_natural_language
+
+    s = revise_with_natural_language(dict(state), instruction)
+    if not rerun_team_a:
+        return s
+    # 重跑成箱（保留 design_facts / materials / packing_options）
+    return run_team_a(
+        s.get("user_input") or instruction,
+        materials=s.get("materials"),
+        session_id=str(s.get("session_id") or ""),
+        adjust_note=s.get("adjust_note") or instruction,
+        design_facts=s.get("design_facts"),
+        packing_options=s.get("packing_options"),
+    )
 
 
 def apply_user_confirmation(
@@ -135,6 +181,34 @@ def apply_user_confirmation(
     # else: 保留已有 max_containers（0=自主）
     s["adjust_note"] = adjust_note or ""
     s["confirmed_box_ids"] = list(confirmed_box_ids or [])
+    # 总分总分总 · 第③段「总」闸门：显式写入 agent_steps（HITL 环境反馈）
+    ctype = s["container_type"]
+    step = {
+        "node": "user_confirm" if action == "confirm" else f"user_{action}",
+        "title": "用户确认闸门" if action == "confirm" else f"用户·{action}",
+        "message": (
+            f"【HITL·总闸】action={action} 柜型={ctype} "
+            f"max_containers={s.get('max_containers', 0)} "
+            f"confirmed_boxes={len(s.get('confirmed_box_ids') or [])}；"
+            f"作为环境反馈进入团队B拼柜（非流程断裂）"
+            f"｜tools=hitl.confirm_gate"
+        ),
+        "role": "user",
+        "tools_used": ["hitl.confirm_gate"],
+        "capability": ["感知环境", "使用工具"],
+        "artifacts": {
+            "action": action,
+            "container_type": ctype,
+            "max_containers": s.get("max_containers"),
+        },
+        "status": "ok",
+    }
+    prev = list(s.get("agent_steps") or [])
+    prev.append(step)
+    s["agent_steps"] = prev
+    msgs = list(s.get("messages") or [])
+    msgs.append({"role": "user", "content": step["message"]})
+    s["messages"] = msgs
     return s
 
 
@@ -286,29 +360,21 @@ def run_agent_pipeline(
 
     steps: List[Dict[str, Any]] = []
     for node, title, fn in agents:
-        # HITL：非 auto 时 present 后停止
-        if node == "planner" and not enable_auto_confirm:
-            if state.get("user_action") != "confirm":
-                steps.append(
-                    {
-                        "node": "hitl_wait",
-                        "title": "等待用户确认",
-                        "message": "phase=await_user_confirm；请 POST /api/confirm 后继续",
-                        "tools_used": ["hitl.confirm_gate"],
-                    }
-                )
-                break
-
         upd = fn(state) or {}
         for k, v in upd.items():
-            if k in ("messages", "traces", "errors", "validation_warnings") and isinstance(
-                v, list
-            ):
+            if k in (
+                "messages",
+                "traces",
+                "errors",
+                "validation_warnings",
+                "agent_steps",
+            ) and isinstance(v, list):
                 state[k] = list(state.get(k) or []) + v
             else:
                 state[k] = v
 
         if node == "present_team_a" and enable_auto_confirm:
+            # ③ 总闸：auto 确认并写 user_confirm step
             state = apply_user_confirmation(
                 state,
                 action="confirm",
@@ -347,12 +413,36 @@ def run_agent_pipeline(
             rr = state.get("risk_report") or {}
             step["decision"] = rr.get("decision")
             step["suggested_actions"] = rr.get("suggested_actions") or []
+        if node == "visualizer":
+            step["artifacts"] = meta.get("artifacts") or step.get("artifacts") or {}
         if node == "finalize":
             step["goal_status"] = state.get("goal_status") or {}
             step["ship_ok"] = state.get("ship_ok")
         steps.append(step)
 
+        # 同步 apply_user_confirmation 注入的 user_confirm
+        if node == "present_team_a" and enable_auto_confirm:
+            for st in state.get("agent_steps") or []:
+                if isinstance(st, dict) and st.get("node") == "user_confirm":
+                    if not any(x.get("node") == "user_confirm" for x in steps):
+                        steps.append(st)
+                    break
+
+        # ③ 总闸：非 auto 时 present 后写 hitl_wait 再停（不再用 planner 前死代码）
         if node == "present_team_a" and not enable_auto_confirm:
+            wait = {
+                "node": "hitl_wait",
+                "title": "等待用户确认（总分总分总·第③段总闸）",
+                "message": (
+                    "phase=await_user_confirm；请 POST /api/confirm 后进入团队B；"
+                    "HITL 为环境反馈｜tools=hitl.confirm_gate"
+                ),
+                "tools_used": ["hitl.confirm_gate"],
+                "capability": ["感知环境"],
+                "status": "ok",
+            }
+            steps.append(wait)
+            state["agent_steps"] = list(state.get("agent_steps") or []) + [wait]
             break
 
     state["agent_steps"] = steps
@@ -561,7 +651,19 @@ def public_response(state: Dict[str, Any]) -> Dict[str, Any]:
         "agent_steps": steps,
         "messages": state.get("messages") or [],
         "traces": state.get("traces") or [],
+        "design_facts": state.get("design_facts") or {},
+        "design_facts_status": _design_facts_status(state),
+        "nl_revision": state.get("nl_revision") or {},
     }
+
+
+def _design_facts_status(state: Dict[str, Any]) -> Dict[str, Any]:
+    try:
+        from packing_assistant.tools.design_facts import facts_status_summary
+
+        return facts_status_summary(state.get("design_facts"))
+    except Exception:
+        return {"has_detailed_facts": False, "message": "design_facts 不可用"}
 
 
 def format_trace_report(state: Dict[str, Any]) -> str:

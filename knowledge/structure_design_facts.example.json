@@ -1,0 +1,53 @@
+{
+  "version": "1.0",
+  "project": "示例·详设结构事实",
+  "fidelity": "detailed_design",
+  "source": "设计院图纸/详设清单（人工录入）",
+  "require_for_ship": true,
+  "defaults": {
+    "gamma": 2.0,
+    "lift_points": 4,
+    "column_count": 4,
+    "k_factor_column": 0.7,
+    "bearing_pad_mm": [100, 100],
+    "defl_ratio": 200
+  },
+  "box_types": {
+    "4米铁架": {
+      "frame_section": "槽钢16#",
+      "bottom_beam_section": "槽钢14#",
+      "bottom_beam_count": 3,
+      "gamma": 2.0,
+      "lift_points": 4,
+      "column_count": 4,
+      "k_factor_column": 0.7,
+      "max_payload_kg": 3500,
+      "tare_kg": 180,
+      "drawing_no": "ST-4M-001",
+      "note": "详设焊口与斜撑见 ST-4M-001"
+    },
+    "2米铁架": {
+      "frame_section": "槽钢12#",
+      "bottom_beam_section": "槽钢10#",
+      "bottom_beam_count": 2,
+      "gamma": 1.8,
+      "drawing_no": "ST-2M-001"
+    },
+    "1.1米框": {
+      "frame_section": "方管40x40x3",
+      "bottom_beam_section": "方管40x40x3",
+      "bottom_beam_count": 2,
+      "gamma": 1.8,
+      "max_payload_kg": 1200
+    }
+  },
+  "boxes": {
+    "BX-001": {
+      "box_type": "4米铁架",
+      "frame_section": "槽钢16#",
+      "bottom_beam_section": "槽钢14#",
+      "bottom_beam_count": 3,
+      "drawing_no": "ST-4M-001-R1"
+    }
+  }
+}

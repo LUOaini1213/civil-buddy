@@ -22,6 +22,8 @@ class PackingState(TypedDict, total=False):
     goal: str  # deliver_valid_pack_plan | minimize_containers | safe_to_ship
     goal_status: Dict[str, Any]
     ship_ok: bool
+    design_facts: Dict[str, Any]  # 详设结构事实（截面/γ/图纸）
+    nl_revision: Dict[str, Any]  # 最近一次自然语言改方案
 
     # —— 用户确认 ——
     user_action: Optional[str]  # confirm | revise | cancel | None

@@ -44,6 +44,16 @@
       "i_cm": 5.52,
       "source": "steel_table"
     },
+    "槽钢16#": {
+      "name": "槽钢16#",
+      "type": "channel",
+      "A_cm2": 21.95,
+      "I_cm4": 866.2,
+      "W_cm3": 108.3,
+      "i_cm": 6.28,
+      "source": "steel_table",
+      "note": "近似表值，正式项目以国标型钢表覆盖"
+    },
     "方管40x40x3": {
       "name": "方管40x40x3",
       "type": "square_tube",

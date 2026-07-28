@@ -157,10 +157,14 @@ def agent_visualizer(state: PackingState) -> Dict[str, Any]:
     for v in views.values():
         v["metrics"] = metrics_display
 
+    tools_used = ["visualize.draw_layout", "views.build_tri_view"]
+    if side_images.get("per_container"):
+        tools_used.append("visualize.draw_layout_multi")
     msg = (
         f"三视角数据已生成（elements={len(top_el)}，柜数={n_c}"
         f"{'，侧视图'+str(len(side_images['per_container']))+'张+总览' if side_images.get('per_container') else ''}"
         f"）｜{metrics_display['caption']}"
+        f"｜tools={','.join(tools_used)}"
     )
 
     return {
@@ -168,6 +172,17 @@ def agent_visualizer(state: PackingState) -> Dict[str, Any]:
         "image_data": image_data,
         "legend": legend,
         "display_metrics": metrics_display,
+        "agent_meta": {
+            "node": "visualizer",
+            "capability": ["使用工具", "采取行动"],
+            "tools_used": tools_used,
+            "artifacts": {
+                "elements": len(top_el),
+                "containers": n_c,
+                "booking_volume_utilization": book_u,
+                "outer_space_utilization": outer_u,
+            },
+        },
         "messages": [
             {
                 "role": "assistant",
