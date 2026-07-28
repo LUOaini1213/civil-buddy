@@ -392,6 +392,7 @@ def estimate_containers(
         "containers_by_weight": n_weight,
         "containers_by_volume": n_volume,
         "containers_needed": n_final,
+        "n0": n_final,  # 别名：与 booking.compute_booking 一致
         "binding_constraint": binding,
         "formula": "max(ceil(G/payload), ceil(V_eff/(V_cont*η))); η=fill_ratio; V_eff≠outer",
         "warning": warn_text,

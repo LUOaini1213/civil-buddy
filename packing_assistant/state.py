@@ -59,6 +59,6 @@ class PackingState(TypedDict, total=False):
     validation_warnings: Annotated[List[str], operator.add]
     replan_round: int
     enable_auto_confirm: bool  # demo/eval 自动确认
-    agent_steps: List[Dict[str, Any]]  # 逐步 tool 轨迹
+    agent_steps: Annotated[List[Dict[str, Any]], operator.add]  # 逐步 tool 轨迹（节点累加）
     agent_meta: Dict[str, Any]  # 最近一步元数据
     artifact_paths: Dict[str, Any]  # 落盘路径

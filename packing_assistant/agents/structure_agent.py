@@ -95,16 +95,31 @@ def agent_structure(state: PackingState) -> Dict[str, Any]:
         "note": "成箱后由装箱智能体做半严格结构校核；本步仅输出约束与加固建议",
     }
 
+    tools_used = [
+        "packing.pick_box_type",
+        "knowledge.box_spec",
+        "knowledge.reinforcement_advice",
+    ]
     return {
         "structure_constraints": constraints,
         "global_advice": advice_global,
         "structure_notes": notes,
+        "agent_meta": {
+            "node": "structure",
+            "capability": ["使用工具", "推理与规划"],
+            "tools_used": tools_used,
+            "artifacts": {
+                "constraint_groups": len(constraints),
+                "prefer_iron": prefer_iron,
+            },
+        },
         "messages": [
             {
                 "role": "assistant",
                 "content": (
                     f"结构约束完成：{len(constraints)} 组推荐箱型约束"
                     f"（本步仅建议；半严格校核在装箱成箱后执行）"
+                    f"｜tools={','.join(tools_used)}"
                 ),
             }
         ],

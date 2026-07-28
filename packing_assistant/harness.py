@@ -495,7 +495,41 @@ def run_pipeline_with_revision(
 
 
 def public_response(state: Dict[str, Any]) -> Dict[str, Any]:
-    """对外 API 形状（主控输出）。"""
+    """对外 API 形状（主控输出）。含 agent_steps 供前端底部可视化。"""
+    steps = list(state.get("agent_steps") or [])
+    if not steps:
+        # 兜底：从 messages 合成可读步骤
+        for i, m in enumerate(state.get("messages") or []):
+            if not isinstance(m, dict):
+                continue
+            content = str(m.get("content") or "").strip()
+            if not content:
+                continue
+            steps.append(
+                {
+                    "node": f"message_{i}",
+                    "title": "输出" if m.get("role") == "assistant" else str(m.get("role") or "msg"),
+                    "message": content[:4000],
+                    "role": m.get("role") or "assistant",
+                    "tools_used": [],
+                }
+            )
+    plan = state.get("container_plan") or {}
+    booking = state.get("booking") or plan.get("booking") or (state.get("plan") or {}).get("booking") or {}
+    volume_summary = {
+        "formula": "N0=max(N_weight,N_volume); V_eff=pack_effective≠outer",
+        "n0": plan.get("n0") or booking.get("n0") or (state.get("plan") or {}).get("n0"),
+        "containers_used": plan.get("containers_used"),
+        "binding_constraint": booking.get("binding_constraint"),
+        "volume_m3_eff": booking.get("volume_m3") or plan.get("booking_volume_m3"),
+        "booking_volume_utilization": plan.get("booking_volume_utilization"),
+        "outer_space_utilization": plan.get("outer_space_utilization")
+        or plan.get("space_utilization"),
+        "weight_utilization": plan.get("weight_utilization"),
+        "fill_ratio_eta": booking.get("fill_ratio") or 0.82,
+        "volume_source": booking.get("volume_source") or booking.get("mode"),
+        "note": "订柜看 booking_volume；外廓 outer 仅 3D/展示",
+    }
     return {
         "intent": state.get("intent") or "full_process",
         "phase": state.get("phase"),
@@ -510,7 +544,9 @@ def public_response(state: Dict[str, Any]) -> Dict[str, Any]:
         "structure_notes": state.get("structure_notes") or [],
         "user_prompt": state.get("user_prompt") or {},
         "plan": state.get("plan") or {},
-        "container_plan": state.get("container_plan") or {},
+        "booking": booking,
+        "container_plan": plan,
+        "volume_summary": volume_summary,
         "evaluation": state.get("evaluation") or {},
         "risk_report": state.get("risk_report") or {},
         "risks": state.get("risks") or [],
@@ -522,7 +558,8 @@ def public_response(state: Dict[str, Any]) -> Dict[str, Any]:
         "legend": state.get("legend") or [],
         "run_id": state.get("run_id"),
         "artifact_paths": state.get("artifact_paths") or {},
-        "agent_steps": state.get("agent_steps") or [],
+        "agent_steps": steps,
+        "messages": state.get("messages") or [],
         "traces": state.get("traces") or [],
     }
 
