@@ -74,6 +74,17 @@
 | **KPI** | `workteam_kpi.py` · 覆盖率/非法工具/replan · `GET /api/kpi/{session}` |
 | **TMS** | `tms_booking.py` · preview/submit · stub 或 `PACKING_TMS_URL` |
 | **CI** | `.github/workflows/ci.yml` 对齐 `big_team_a_b` + workteams + TMS |
+
+## v0.6.2 · repo hygiene（同日）
+
+| 项 | 说明 |
+|----|------|
+| **根目录** | PDF/xlsx/png → `data/samples/`；bat → `scripts/win/` |
+| **output/** | 整目录 gitignore，仅保留 `.gitkeep`（约 -68k 行垃圾出仓） |
+| **docs** | `research/` · `archive/` · `docs/README.md` 索引 |
+| **scripts** | `scripts/README.md`；`scripts/dev/` 与 `_*.py` 不入仓 |
+| **README** | 仅 v0.6 架构叙事，去掉新旧混写 |
+| **commit** | `fd5e51f` chore: repo hygiene |
 | **P1 检查表** | `pre_ship_checklist.py` · `/api/checklist` |
 | **P1 3D 垫梁色** | scene3d `pad_beam` 红色 |
 | **P2 骨架** | VGM dry-run · evidence 索引 · 运价占位 · tip/slide 启发式 |
