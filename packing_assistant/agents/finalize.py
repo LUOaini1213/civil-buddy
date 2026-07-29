@@ -60,6 +60,20 @@ def agent_finalize(state: PackingState) -> Dict[str, Any]:
     reject_to = risk_report.get("reject_to") or ""
     reject_reason = risk_report.get("reject_reason") or ""
     ship_ok = bool(plan.get("can_fit")) and not need_revision and risk_decision != "REJECT"
+    # 可选：装前检查表强制
+    _cl: Dict[str, Any] = {}
+    try:
+        from packing_assistant.pre_ship_checklist import (
+            apply_checklist_to_ship_ok,
+            build_pre_ship_checklist,
+        )
+
+        _cl = build_pre_ship_checklist(
+            state, checked=(state.get("pre_ship_checked") or {})
+        )
+        ship_ok = apply_checklist_to_ship_ok(ship_ok, _cl)
+    except Exception:
+        _cl = {}
 
     # 二层堆码统计
     layout = plan.get("layout") or []
@@ -91,7 +105,7 @@ def agent_finalize(state: PackingState) -> Dict[str, Any]:
                 lines.append(f"- {b}")
         lines.append("")
         lines.append(
-            "> 装得下（can_fit）不等于可出运。存在结构/合规阻断时必须整改后重跑 Team A→确认→Team B。"
+            "> 装得下（can_fit）不等于可出运。存在结构/合规阻断时须整改后在**同一 Team 闭环**内重跑。"
         )
         lines.append("")
     else:
@@ -106,7 +120,7 @@ def agent_finalize(state: PackingState) -> Dict[str, Any]:
 
     lines.extend(
         [
-        f"**主控流水线**：{orch.get('agent_count') or 9} 智能体（多智能体工作流，含主控首尾选柜）",
+        f"**主控流水线**：单 Team 有界闭环（内环≤3 / 出运外环≤2）",
         f"**任务目标**：{orch.get('goal') or state.get('goal') or 'deliver_valid_pack_plan'}"
         f"（{orch.get('goal_desc') or '可解释成箱/订柜/拼柜方案'}）",
         f"**Agent 形态**：分工编排 + 工具执行 + 可选 HITL；"
@@ -315,6 +329,160 @@ def agent_finalize(state: PackingState) -> Dict[str, Any]:
     if suggested and (need_revision or not ship_ok):
         final += "\n\n## 建议行动\n\n" + "\n".join(f"- {a}" for a in suggested[:6])
 
+    # —— 8 条 Agent 工件：PackingPlan / HITL门 / 步骤工单 / VGM草稿 / plan_diff / 绑扎工单 ——
+    packing_plan = {}
+    hitl_gates = {}
+    load_sequence = {}
+    vgm_draft = {}
+    plan_diff = {}
+    secure_work_order = {}
+    por_manifest = {}
+    try:
+        from packing_assistant.tools.secure_work_order import build_secure_work_order
+
+        secure_work_order = build_secure_work_order(plan, boxes)
+    except Exception:
+        secure_work_order = {}
+    try:
+        from packing_assistant.tools.por_manifest import build_por_manifest
+
+        por_manifest = build_por_manifest(
+            plan, boxes, materials=state.get("materials") or []
+        )
+    except Exception:
+        por_manifest = {}
+    try:
+        from packing_assistant.packing_plan import build_packing_plan
+
+        packing_plan = build_packing_plan(
+            {
+                **state,
+                "container_plan": plan,
+                "evaluation": evaluation,
+                "risk_report": risk_report,
+                "secure_work_order": secure_work_order,
+                "por_manifest": por_manifest,
+            },
+            previous=state.get("packing_plan") if isinstance(state.get("packing_plan"), dict) else None,
+        )
+    except Exception:
+        packing_plan = {}
+    try:
+        from packing_assistant.hitl_gates import evaluate_hitl_gates
+
+        hitl_gates = evaluate_hitl_gates(
+            {**state, "container_plan": plan, "risk_report": risk_report, "packing_plan": packing_plan}
+        )
+    except Exception:
+        hitl_gates = {}
+    try:
+        from packing_assistant.tools.load_sequence import build_load_sequence
+
+        load_sequence = build_load_sequence(plan, boxes)
+    except Exception:
+        load_sequence = {}
+    try:
+        from packing_assistant.tools.vgm_draft import draft_vgm_method2
+
+        vgm_draft = draft_vgm_method2(plan, boxes)
+    except Exception:
+        vgm_draft = {}
+    try:
+        from packing_assistant.tools.plan_diff import diff_packing_plans
+
+        prev_pp = state.get("packing_plan") if isinstance(state.get("packing_plan"), dict) else None
+        if prev_pp and packing_plan:
+            plan_diff = diff_packing_plans(prev_pp, packing_plan)
+    except Exception:
+        plan_diff = {}
+
+    if secure_work_order.get("items"):
+        final += (
+            f"\n\n## 绑扎/空隙工单（WARN，不拦出运）\n\n"
+            f"{secure_work_order.get('summary')}\n"
+        )
+        for it in (secure_work_order.get("items") or [])[:8]:
+            final += (
+                f"- [{it.get('severity')}] {it.get('type')} "
+                f"柜{it.get('container_no') or '-'} {it.get('box_id') or ''}: "
+                f"{it.get('action')}\n"
+            )
+    if por_manifest.get("by_part"):
+        final += f"\n\n## POR 装柜单\n\n{por_manifest.get('summary')}\n"
+        for p in (por_manifest.get("by_part") or [])[:10]:
+            final += (
+                f"- {p.get('part_no')}: {p.get('total_kg')}kg / "
+                f"{p.get('n_boxes')}箱 → 柜{p.get('containers')}\n"
+            )
+    # 装前检查表 + 轻量稳性 + 运价占位
+    pre_ship_checklist = _cl if isinstance(_cl, dict) else {}
+    if not pre_ship_checklist:
+        try:
+            from packing_assistant.pre_ship_checklist import build_pre_ship_checklist
+
+            pre_ship_checklist = build_pre_ship_checklist(
+                state, checked=(state.get("pre_ship_checked") or {})
+            )
+        except Exception:
+            pre_ship_checklist = {}
+    stability = {}
+    freight = {}
+    try:
+        from packing_assistant.p2_stubs import estimate_freight_stub, tip_slide_score
+
+        stability = tip_slide_score(plan, boxes)
+        freight = estimate_freight_stub(plan)
+    except Exception:
+        pass
+    if pre_ship_checklist.get("items"):
+        final += (
+            f"\n\n## 装前检查表\n\n{pre_ship_checklist.get('summary')}\n"
+            f"（require_for_final={pre_ship_checklist.get('require_for_final_ship_ok')}）\n"
+        )
+    if stability.get("risk_score") is not None:
+        final += (
+            f"\n\n## 稳性启发式\n\n"
+            f"tip/slide 风险分 **{stability.get('risk_score')}** "
+            f"（{stability.get('level')}，非 FEM）\n"
+        )
+    if freight.get("total") is not None:
+        final += (
+            f"\n\n## 运价占位\n\n"
+            f"约 **{freight.get('total')} {freight.get('currency')}** "
+            f"（{freight.get('containers')}×40HQ，非真价）\n"
+        )
+    if load_sequence.get("steps"):
+        final += (
+            f"\n\n## 装柜工单\n\n"
+            f"{load_sequence.get('message')}\n"
+            f"- 首步: {(load_sequence['steps'][0].get('instruction') if load_sequence['steps'] else '-')}\n"
+            f"- 末步: {(load_sequence['steps'][-1].get('instruction') if load_sequence['steps'] else '-')}\n"
+        )
+    if vgm_draft.get("status"):
+        tot = vgm_draft.get("totals") or {}
+        final += (
+            f"\n\n## VGM 草稿 (Method 2)\n\n"
+            f"- 状态: **{vgm_draft.get('status')}**（禁止自动申报）\n"
+            f"- 货重合计 {tot.get('cargo_kg')} kg + 包装估算 {tot.get('packaging_kg')} kg "
+            f"+ 垫料 {tot.get('dunnage_kg')} kg；单柜 VGM 见 per_container\n"
+            f"- {vgm_draft.get('disclaimer', '')}\n"
+        )
+    if packing_plan:
+        final += (
+            f"\n\n## PackingPlan\n\n"
+            f"- schema={packing_plan.get('schema')} v{packing_plan.get('version')} "
+            f"id={packing_plan.get('plan_id')}\n"
+            f"- mid50={((packing_plan.get('cog') or {}).get('mass_in_mid50_ratio'))} "
+            f"stacked={((packing_plan.get('stacking') or {}).get('stacked_placements'))}\n"
+        )
+    if hitl_gates.get("gates"):
+        final += (
+            f"\n\n## HITL 门禁\n\n"
+            f"- require_hitl={hitl_gates.get('require_hitl')} "
+            f"can_auto={hitl_gates.get('can_auto_confirm')}\n"
+            f"- {hitl_gates.get('summary')}\n"
+        )
+
     return {
         "phase": phase,
         "status": status,
@@ -324,6 +492,17 @@ def agent_finalize(state: PackingState) -> Dict[str, Any]:
         "ship_ok": ship_ok,
         "goal": goal_name,
         "goal_status": goal_status,
+        "packing_plan": packing_plan,
+        "packing_plan_id": packing_plan.get("plan_id") if packing_plan else state.get("packing_plan_id"),
+        "hitl_gates": hitl_gates,
+        "load_sequence": load_sequence,
+        "vgm_draft": vgm_draft,
+        "plan_diff": plan_diff,
+        "secure_work_order": secure_work_order,
+        "por_manifest": por_manifest,
+        "pre_ship_checklist": pre_ship_checklist,
+        "stability_tip_slide": stability,
+        "freight_estimate": freight,
         "agent_meta": {
             "node": "finalize",
             "capability": ["追求目标", "采取行动"],

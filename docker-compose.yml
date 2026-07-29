@@ -1,0 +1,25 @@
+# packing-agent Team Mode
+# usage: docker compose up --build
+# open:  http://localhost:8000
+services:
+  gateway:
+    build: .
+    image: packing-agent:0.5.0
+    ports:
+      - "8000:8000"
+    environment:
+      - SKJOLBER_URL=${SKJOLBER_URL:-}
+      - PACKING_OTEL=${PACKING_OTEL:-0}
+      - PACKING_LANGFUSE=${PACKING_LANGFUSE:-0}
+      - PACKING_OUTPUT_DIR=/app/output
+      - PACKING_TRACE_DIR=/app/output/traces
+    volumes:
+      - packing_output:/app/output
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/api/health', timeout=3)"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+
+volumes:
+  packing_output:

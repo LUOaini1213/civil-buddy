@@ -23,6 +23,11 @@ def agent_risk_compliance(state: PackingState) -> Dict[str, Any]:
     evaluation = state.get("evaluation") or {}
     constraints = state.get("structure_constraints") or []
     thr = risk_thresholds()
+    packing_opts = dict(state.get("packing_options") or {})
+    export_strict = bool(
+        packing_opts.get("export_strict")
+        or (plan.get("stacking") or {}).get("export_strict")
+    )
 
     items: List[Dict[str, Any]] = []
     risks: List[str] = []
@@ -218,7 +223,7 @@ def agent_risk_compliance(state: PackingState) -> Dict[str, Any]:
         )
 
     # —— 重心偏心率（CTU/行业：左右偏心宜 ≤5%；前后宜在 40–60% 柜深）——
-    cog = _cog_metrics(plan)
+    cog = _cog_metrics(plan, boxes)
     if cog:
         # 左右：偏心率 = |cy - W/2| / (W/2)
         lat_ecc = cog["lateral_eccentricity"]
@@ -277,6 +282,126 @@ def agent_risk_compliance(state: PackingState) -> Dict[str, Any]:
                 score=14 if sev == "high" else 8,
                 raw_value=long_pos,
                 block=(sev == "high"),
+            )
+
+        # CTU 60/50：质量在柜长中段 50% 带的占比；仅极端阻断
+        mid50 = cog.get("mass_in_mid50_ratio")
+        mid50_ok = cog.get("mid50_ok")
+        if mid50 is not None:
+            mid50_f = float(mid50)
+            if mid50_f < 0.40:
+                add(
+                    "COG_MID50",
+                    "high",
+                    f"中段50%质量占比 {mid50_f:.0%}（CTU 60/50 宜≥60%，<40% 阻断）",
+                    "layout",
+                    None,
+                    score=16,
+                    raw_value=mid50_f,
+                    block=True,
+                )
+            elif mid50_ok is False or mid50_f < 0.60:
+                # 出运严模式：<60% 即阻断；日常仅 medium
+                add(
+                    "COG_MID50",
+                    "high" if export_strict else "medium",
+                    f"中段50%质量占比 {mid50_f:.0%}（CTU 60/50 宜≥60%"
+                    f"{'，出运模式阻断' if export_strict else '，建议重货移向柜中段'}）",
+                    "layout",
+                    None,
+                    score=14 if export_strict else 8,
+                    raw_value=mid50_f,
+                    block=bool(export_strict),
+                )
+
+        # 垂直重心：>0.55 警告；>0.70 或 export_strict 且>0.60 阻断
+        height_ratio = cog.get("height_ratio")
+        vertical_ok = cog.get("vertical_ok")
+        if height_ratio is not None:
+            hr = float(height_ratio)
+            if hr > 0.70 or (export_strict and hr > 0.60):
+                add(
+                    "COG_HEIGHT",
+                    "high",
+                    f"重心高度比 {hr:.0%}（宜≤55% 舱高，过高阻断）",
+                    "layout",
+                    None,
+                    score=16,
+                    raw_value=hr,
+                    block=True,
+                )
+            elif vertical_ok is False or hr > 0.55:
+                add(
+                    "COG_HEIGHT",
+                    "medium" if hr <= 0.70 else "high",
+                    f"重心高度比 {hr:.0%}（宜≤55% 舱高，过高不利稳性）",
+                    "layout",
+                    None,
+                    score=10 if hr <= 0.70 else 14,
+                    raw_value=hr,
+                )
+
+    # —— CTU 水平空隙 ~15cm + 集中载荷 + 可叠未叠 ——
+    lq = plan.get("layout_quality")
+    if not isinstance(lq, dict):
+        try:
+            from packing_assistant.tools.layout_quality import analyze_layout_quality
+
+            lq = analyze_layout_quality(plan, boxes, void_limit_mm=150.0)
+        except Exception:
+            lq = {}
+    if lq:
+        max_gap = float(lq.get("max_horizontal_gap_mm") or 0)
+        n_over = int(lq.get("gaps_over_limit") or 0)
+        # 空隙：日常仅 warning（中段堆码两端空档常见）；出运严模式 + 中等空隙才阻断
+        if n_over > 0 or max_gap > 150:
+            # 超大空档(>1m)多为分堆，提示加固；150–400mm 才是典型 rattling 空隙
+            rattling = 150 < max_gap <= 800
+            sev = "medium"
+            do_block = False
+            if export_strict and rattling:
+                sev = "high"
+                do_block = max_gap > 200
+            elif max_gap > 800:
+                sev = "medium"  # 分堆：加固/填缝建议，不硬杀叠高方案
+            add(
+                "VOID_GAP_15CM",
+                sev,
+                f"同层水平空隙最大 {max_gap:.0f}mm（CTU 宜≤150mm 否则须加固/填缝），超限条数 {n_over}",
+                "layout",
+                None,
+                score=10 if export_strict else 5,
+                raw_value={"max_gap_mm": max_gap, "over": n_over, "rattling": rattling},
+                block=do_block,
+            )
+        for fl in (lq.get("concentrated_load_flags") or [])[:8]:
+            code = str(fl.get("code") or "CONCENTRATED_LOAD")
+            # 0.25P 垫梁：WARN 分，不 block（ship_ok 不拦）
+            add(
+                code if code.startswith("PAD_") else "CONCENTRATED_LOAD",
+                "medium",
+                f"{fl.get('box_id')}: 毛重 {fl.get('weight_kg')}kg"
+                + (
+                    f" ({float(fl.get('payload_fraction') or 0):.0%}P)"
+                    if fl.get("payload_fraction")
+                    else f" / 底面 {fl.get('footprint_m2')}m²"
+                )
+                + f" — {fl.get('hint')}",
+                "layout",
+                fl.get("box_id"),
+                score=7 if code == "PAD_BEAM_025P" else 6,
+                raw_value=fl,
+                block=False,
+            )
+        if lq.get("stackable_floor_only"):
+            add(
+                "STACKABLE_FLOOR_ONLY",
+                "low" if not export_strict else "medium",
+                f"可叠箱约 {lq.get('stackable_count')} 件但均未上二层，检查 prefer_stack/限高",
+                "layout",
+                None,
+                score=4 if not export_strict else 8,
+                raw_value=lq.get("stackable_count"),
             )
 
     # —— 重货在上 ——
@@ -403,21 +528,38 @@ def agent_risk_compliance(state: PackingState) -> Dict[str, Any]:
     # - 无 blockers 但分数低/等级 medium → WARN（可讨论出运，须人工关注）
     # - 通过 → PASS
     struct_blocks = [b for b in blockers if "结构" in b]
+    cog_blocks = [
+        b
+        for b in blockers
+        if any(k in str(b) for k in ("重心", "中段50%", "偏心", "COG", "60/50"))
+    ]
+    # 可自动闭环重排（非仅人工）：结构→box_scheme；装不下/重心→planner
+    auto_replanable = False
     if hard_block and struct_blocks:
         decision = "REJECT"
         reject_to = "box_scheme"  # 回团队A改箱/拆件
         reject_reason = "成箱结构不通过，打回装箱方案智能体拆箱或改箱型加固"
         need_revision = True
-    elif hard_block:
+        auto_replanable = True
+    elif hard_block and cog_blocks:
         decision = "REJECT"
-        reject_to = "await_user_confirm"
-        reject_reason = "存在合规阻断项，打回人工确认/调整后重跑"
+        reject_to = "planner"
+        reject_reason = "重心/60/50 不合规，打回规划·装载重排"
         need_revision = True
+        auto_replanable = True
+    elif hard_block:
+        # 其它硬阻断：优先尝试 planner 闭环，仍失败再人工
+        decision = "REJECT"
+        reject_to = "planner"
+        reject_reason = "存在合规阻断项，先自动重排；仍失败则人工确认"
+        need_revision = True
+        auto_replanable = True
     elif not plan.get("can_fit"):
         decision = "REJECT"
         reject_to = "planner"
         reject_reason = "未能全部装入集装箱，打回规划/加柜"
         need_revision = True
+        auto_replanable = True
     elif not passed:
         # 无硬阻断：装得下但评分偏低 → 警告，不打回装箱
         decision = "WARN"
@@ -429,6 +571,33 @@ def agent_risk_compliance(state: PackingState) -> Dict[str, Any]:
         reject_to = ""
         reject_reason = ""
         need_revision = False
+        # 重心软问题：仅 mid50<40% 或未做过出运重排时自动打回一次；≥40% 停损可出运
+        ship_r = int(state.get("ship_replan_round") or 0)
+        mid_v = None
+        try:
+            mid_v = float(cog.get("mass_in_mid50_ratio")) if cog and cog.get("mass_in_mid50_ratio") is not None else None
+        except Exception:
+            mid_v = None
+        bal = str((cog or {}).get("balance") or "")
+        if mid_v is not None and mid_v < 0.40:
+            auto_replanable = True
+            reject_to = "planner"
+            need_revision = True
+            decision = "REJECT"
+            reject_reason = "mid50 低于出运硬线 40%，自动重排"
+        elif mid_v is not None and mid_v < 0.55 and ship_r < 1:
+            auto_replanable = True
+            reject_to = "planner"
+            need_revision = True
+            decision = "REJECT"
+            reject_reason = "mid50 未达 55%，自动重排一轮（之后停损）"
+        elif bal == "block" and (mid_v is None or mid_v < 0.40):
+            auto_replanable = True
+            reject_to = "planner"
+            need_revision = True
+            decision = "REJECT"
+            reject_reason = "重心 balance=block，自动重排"
+        # else: 保持 WARN，可讨论出运（停损）
     else:
         decision = "PASS"
         reject_to = ""
@@ -443,6 +612,10 @@ def agent_risk_compliance(state: PackingState) -> Dict[str, Any]:
         plan=plan,
         reject_to=reject_to,
     )
+
+    # 与 finalize 对齐：几何装下 + 决策非 REJECT → 可讨论/可出运
+    # WARN 也算 ship_ok（须绑扎复核，但不自动打回）
+    ship_ok = bool(plan.get("can_fit")) and decision in ("PASS", "WARN") and not hard_block
 
     risk_report = {
         "passed": passed,
@@ -459,15 +632,31 @@ def agent_risk_compliance(state: PackingState) -> Dict[str, Any]:
         "explanation": explanation,
         "principles": thr.get("loading_principles") or [],
         "cog": cog,
+        "layout_quality": lq if isinstance(lq, dict) else {},
+        "export_strict": export_strict,
+        "auto_replanable": bool(auto_replanable),
+        "ship_ok": ship_ok,
+        # 指标别名：前端/出图脚本常读 floor_utilization
+        "metrics": {
+            "outer_space_utilization": plan.get("outer_space_utilization")
+            or plan.get("space_utilization"),
+            "booking_volume_utilization": plan.get("booking_volume_utilization"),
+            "floor_utilization": plan.get("floor_utilization_avg")
+            or plan.get("floor_utilization"),
+            "weight_utilization": plan.get("weight_utilization"),
+            "containers_used": plan.get("containers_used"),
+            "can_fit": plan.get("can_fit"),
+        },
     }
 
-    tools_used = ["risk_rules.thresholds", "risk_compliance.cog_metrics"]
+    tools_used = ["risk_rules.thresholds", "risk_compliance.cog_metrics", "layout_quality"]
     msg = (
         f"【风险】level={level} score={score} passed={passed} "
         f"decision={decision} blockers={len(blockers)}"
     )
     if need_revision:
-        msg += f" ⛔打回→{reject_to or '人工'}：{reject_reason}"
+        loop_hint = "（将自动闭环重排）" if auto_replanable else ""
+        msg += f" ⛔打回→{reject_to or '人工'}{loop_hint}：{reject_reason}"
     if suggested_actions:
         msg += f" 建议：{'；'.join(suggested_actions[:4])}"
     msg += f"｜tools={','.join(tools_used)}"
@@ -475,6 +664,7 @@ def agent_risk_compliance(state: PackingState) -> Dict[str, Any]:
     updates: Dict[str, Any] = {
         "risk_report": risk_report,
         "risks": risks,
+        "ship_ok": ship_ok,
         "agent_meta": {
             "node": "risk_compliance",
             "capability": ["使用工具", "追求目标"],
@@ -482,15 +672,22 @@ def agent_risk_compliance(state: PackingState) -> Dict[str, Any]:
             "artifacts": {
                 "decision": decision,
                 "level": level,
+                "ship_ok": ship_ok,
                 "blockers": len(blockers),
                 "suggested_actions": suggested_actions,
+                "auto_replanable": auto_replanable,
+                "reject_to": reject_to,
             },
         },
         "messages": [{"role": "assistant", "content": msg}],
     }
-    if need_revision:
+    # 可自动重排时不立刻锁死 phase=need_revision（留给 harness 闭环）
+    if need_revision and not auto_replanable:
         updates["phase"] = "need_revision"
         updates["status"] = "rejected"
+    elif need_revision and auto_replanable:
+        updates["phase"] = "team_b_running"
+        updates["status"] = "running"
     return updates
 
 
@@ -514,8 +711,10 @@ def _suggested_actions(
         acts.append("减载：拆分超重箱或分票出运，使单柜 ≤ PAYLOAD")
     if not plan.get("can_fit") or "未装入" in joined or "无法全部装下" in joined:
         acts.append("加柜：接受 3D 递增后的用柜数，或合箱压外廓后再装")
-    if "重心" in joined or "偏心" in joined:
-        acts.append("配重/重排：左右对称摆放，重货靠近柜中线")
+    if "重心" in joined or "偏心" in joined or "中段50%" in joined:
+        acts.append("配重/重排：左右对称摆放，重货靠近柜中线/中段50%")
+    if "高度比" in joined:
+        acts.append("降重心：重箱底层、限层叠高，避免上层堆满轻货抬高 COG")
     if "上层重货" in joined:
         acts.append("堆码调整：重箱改底层，矮轻箱上二层")
     if decision == "REJECT" and not acts:
@@ -534,63 +733,85 @@ def _suggested_actions(
     return out[:6]
 
 
-def _cog_metrics(plan: Dict[str, Any]) -> Optional[Dict[str, float]]:
-    """按柜内尺寸 + 体积/质量代理计算重心。"""
-    layout = plan.get("layout") or []
-    if not layout:
-        return None
-    ctype = plan.get("container_type") or "40HQ"
-    spec = CONTAINER_SPECS.get(ctype) or CONTAINER_SPECS.get("40HQ") or {}
-    L = float(spec.get("长_m") or 12.032) * 1000
-    W = float(spec.get("宽_m") or 2.352) * 1000
-    H = float(spec.get("高_m") or 2.698) * 1000
+def _cog_metrics(
+    plan: Dict[str, Any],
+    boxes: Optional[List[Dict[str, Any]]] = None,
+) -> Optional[Dict[str, float]]:
+    """按柜内尺寸 + 毛重优先/体积代理计算重心（主柜）。"""
+    try:
+        from packing_assistant.tools.cog import compute_cog_bundle
 
-    mx = my = mz = 0.0
-    m_tot = 0.0
-    for p in layout:
-        pos, size = p.get("position") or {}, p.get("size") or {}
-        dx = max(float(size.get("dx") or 1), 1)
-        dy = max(float(size.get("dy") or 1), 1)
-        dz = max(float(size.get("dz") or 1), 1)
-        # 体积代理质量
-        m = dx * dy * dz
-        cx = float(pos.get("x") or 0) + dx / 2
-        cy = float(pos.get("y") or 0) + dy / 2
-        cz = float(pos.get("z") or 0) + dz / 2
-        mx += m * cx
-        my += m * cy
-        mz += m * cz
-        m_tot += m
-    if m_tot <= 0:
+        bundle = compute_cog_bundle(plan, boxes)
+        if not bundle:
+            return None
+        primary = bundle.get("primary") or {}
+        # 兼容旧字段 + 扩展
+        return {
+            "gx_mm": primary.get("gx_mm"),
+            "gy_mm": primary.get("gy_mm"),
+            "gz_mm": primary.get("gz_mm"),
+            "lateral_eccentricity": primary.get("lateral_eccentricity"),
+            "longitudinal_position": primary.get("longitudinal_position"),
+            "height_ratio": primary.get("height_ratio"),
+            "mass_in_mid50_ratio": primary.get("mass_in_mid50_ratio"),
+            "mid50_ok": primary.get("mid50_ok"),
+            "vertical_ok": primary.get("vertical_ok"),
+            "mass_basis": primary.get("mass_basis"),
+            "balance": primary.get("balance"),
+            "labels": primary.get("labels"),
+            "thresholds": primary.get("thresholds"),
+            "per_container": bundle.get("per_container") or [],
+            "caption": bundle.get("caption"),
+        }
+    except Exception:
         return None
-    gx, gy, gz = mx / m_tot, my / m_tot, mz / m_tot
-    # 偏心率：相对中心半宽
-    lat_ecc = abs(gy - W / 2) / (W / 2) if W > 0 else 0
-    long_pos = gx / L if L > 0 else 0.5
-    height_ratio = gz / H if H > 0 else 0
-    return {
-        "gx_mm": round(gx, 1),
-        "gy_mm": round(gy, 1),
-        "gz_mm": round(gz, 1),
-        "lateral_eccentricity": round(lat_ecc, 4),
-        "longitudinal_position": round(long_pos, 4),
-        "height_ratio": round(height_ratio, 4),
-    }
 
 
 def _heavy_on_top_ratio(plan: Dict[str, Any], boxes: List[Dict[str, Any]]) -> Optional[float]:
+    """重压轻占比：上层箱毛重 > 1.25× 支撑箱均重 的上层质量 / 总质量。
+
+    注意：等重正常叠层不算「重货在上」（旧实现把任意 z>0 都当重货会误杀叠高）。
+    """
     layout = plan.get("layout") or []
     if not layout:
         return None
     wmap = {b.get("box_id"): float(b.get("gross_weight_kg") or 0) for b in boxes}
-    total = sum(wmap.get(p.get("box_id"), 1.0) for p in layout) or 1.0
-    top_w = 0.0
+    total = sum(wmap.get(p.get("box_id"), 0.0) for p in layout) or 1.0
+    # 建顶面索引
+    supports_at: Dict[Tuple[int, int], List[Dict[str, Any]]] = {}
     for p in layout:
-        z = float((p.get("position") or {}).get("z") or 0)
-        layer = int(p.get("layer") or 1)
-        if z > 100 or layer > 1:
-            top_w += wmap.get(p.get("box_id"), 1.0)
-    return top_w / total
+        pos = p.get("position") or {}
+        size = p.get("size") or {}
+        z = int(pos.get("z") or 0)
+        dz = int(size.get("dz") or 0)
+        top = z + dz
+        supports_at.setdefault(top, []).append(p)
+
+    bad_w = 0.0
+    for p in layout:
+        pos = p.get("position") or {}
+        size = p.get("size") or {}
+        z = int(pos.get("z") or 0)
+        if z <= 0:
+            continue
+        uw = wmap.get(p.get("box_id"), 0.0)
+        if uw <= 0:
+            continue
+        px, py = float(pos.get("x") or 0), float(pos.get("y") or 0)
+        dx, dy = float(size.get("dx") or 0), float(size.get("dy") or 0)
+        under = []
+        for s in supports_at.get(z, []):
+            sp, ss = s.get("position") or {}, s.get("size") or {}
+            sx, sy = float(sp.get("x") or 0), float(sp.get("y") or 0)
+            sdx, sdy = float(ss.get("dx") or 0), float(ss.get("dy") or 0)
+            if not (px + dx <= sx or sx + sdx <= px or py + dy <= sy or sy + sdy <= py):
+                under.append(wmap.get(s.get("box_id"), 0.0))
+        if not under:
+            continue
+        avg_u = sum(under) / len(under)
+        if avg_u > 0 and uw > avg_u * 1.25:
+            bad_w += uw
+    return bad_w / total
 
 
 def _explain(passed, level, score, items, plan, thr, hard_block) -> str:

@@ -231,14 +231,39 @@ def agent_evaluator(state: PackingState) -> Dict[str, Any]:
         score = 0.7 * score + 0.3 * util_composite
 
     need_replan = False
-    if (not can_fit or unpacked) and max_c < 8:
+    # 装不下：允许加到 40 柜搜索（80t 等重货票 N0 可能>8）
+    if (not can_fit or unpacked) and max_c < 40:
         need_replan = True
         suggestions.append(f"建议 max_containers>={max_c + 1}")
 
     round_ = int(state.get("replan_round") or 0)
-    if need_replan and round_ >= 2:
+    ship_r = int(state.get("ship_replan_round") or 0)
+    packing_opts = dict(state.get("packing_options") or {})
+
+    # 半柜空洞：能装下但过空 → 触发 replan_critic 软 densify（只一轮）
+    if (
+        can_fit
+        and not unpacked
+        and not packing_opts.get("_hollow_densify_done")
+        and ship_r < 1
+        and outer_space < 0.30
+        and booking_vol_for_score < 0.25
+        and weight < 0.45
+    ):
+        need_replan = True
+        suggestions.append("hollow_densify")
+        risks.append(
+            f"半柜空洞：外廓{outer_space:.0%}/订舱体积{booking_vol_util:.0%}/重量{weight:.0%}，"
+            f"将自动密装叠高一轮"
+        )
+
+    if need_replan and round_ >= 3 and ship_r >= 2:
         need_replan = False
         risks.append("已达自动重规划上限，请人工调整箱子或柜型")
+    export_strict = bool(
+        packing_opts.get("export_strict")
+        or (plan.get("stacking") or {}).get("export_strict")
+    )
 
     struct_fail_ids = [
         str(b.get("box_id") or "")
@@ -266,6 +291,111 @@ def agent_evaluator(state: PackingState) -> Dict[str, Any]:
         suggestions.append("provide_structure_design_facts")
         suggestions.append("nl_revise_sections")
 
+    # —— 软加分：有堆叠且多数箱可叠（不改订柜体积双口径规则）——
+    stacking = plan.get("stacking") or {}
+    stacked_n = int(stacking.get("stacked_placements") or 0)
+    stackable_boxes = sum(
+        1
+        for b in boxes
+        if b.get("stackable") is not False
+        and "不可叠" not in (b.get("special_attributes") or [])
+        and not b.get("prefer_bottom")
+    )
+    n_boxes = len(boxes) or 0
+    stack_bonus = 0.0
+    if can_fit and stacked_n > 0 and n_boxes > 0:
+        # 许多可叠箱 + 实际叠放 → 小幅软加分
+        stackable_ratio = stackable_boxes / n_boxes
+        if stackable_ratio >= 0.5 and stacked_n >= 2:
+            stack_bonus = min(4.0, 1.5 + stacked_n * 0.25)
+            score = min(100.0, score + stack_bonus)
+            suggestions.append("stacking_utilized")
+
+    # —— 软扣分 + 自动 replan：用最差柜 mid50 ——
+    bundle = plan.get("cog_bundle") or {}
+    cog = (
+        plan.get("cog")
+        or bundle.get("worst")
+        or bundle.get("primary")
+        or ((state.get("risk_report") or {}).get("cog") or {})
+    )
+    cog_pen = 0.0
+    mid50_f = None
+    if isinstance(cog, dict) and cog:
+        if bundle.get("worst_mid50") is not None:
+            mid50_f = float(bundle["worst_mid50"])
+        elif cog.get("mass_in_mid50_ratio") is not None:
+            mid50_f = float(cog.get("mass_in_mid50_ratio"))
+        hr = cog.get("height_ratio")
+        if mid50_f is not None:
+            if mid50_f < 0.50:
+                pen = 5.0 if mid50_f < 0.40 else 3.0
+                cog_pen += pen
+                risks.append(
+                    f"最差柜中段50%质量 {mid50_f:.0%} 偏低（CTU 60/50 宜≥60%），软扣 {pen:.0f}"
+                )
+                suggestions.append("rebalance_longitudinal_mass")
+            elif mid50_f < 0.60:
+                cog_pen += 1.5
+                risks.append(
+                    f"最差柜 mid50={mid50_f:.0%} 略低于 60%，自动重排中段"
+                )
+        if hr is not None:
+            hr_f = float(hr)
+            if hr_f > 0.55:
+                pen = 4.0 if hr_f > 0.70 else 2.0
+                cog_pen += pen
+                risks.append(
+                    f"重心高度比 {hr_f:.0%} 偏高（宜≤55%），稳性软扣 {pen:.0f}"
+                )
+                suggestions.append("lower_cog_height")
+        if cog_pen > 0:
+            score -= min(cog_pen, 8.0)
+        # 出运停损：可装下时
+        # - mid50 < 0.40：硬 replan（与 risk block 对齐）
+        # - 0.40 ≤ mid50 < 0.55：最多 1 轮软 replan
+        # - mid50 ≥ 0.55：不再因 mid50 空转 replan（ship 可过，理想 60% 仅 WARN）
+        SHIP_HARD = 0.40
+        SHIP_SOFT = 0.55
+        if can_fit and mid50_f is not None:
+            if mid50_f < SHIP_HARD:
+                if round_ < 3 or ship_r < 2:
+                    need_replan = True
+                    suggestions.append("auto_cog_rebalance_hard")
+            elif mid50_f < SHIP_SOFT:
+                if round_ < 1 and ship_r < 1:
+                    need_replan = True
+                    suggestions.append("auto_cog_rebalance_soft_once")
+                else:
+                    suggestions.append("mid50_soft_warn_stop")
+                    risks.append(
+                        f"最差柜 mid50={mid50_f:.0%} 已过出运硬线(40%)，"
+                        f"未达理想60%，停止空转 replan（可讨论出运）"
+                    )
+            # ≥0.55：不因 mid50 设 need_replan
+
+    # 可叠却全铺底：软扣分 + 可选 replan
+    lq = plan.get("layout_quality") or {}
+    stacking = plan.get("stacking") or stacking
+    if lq.get("stackable_floor_only") or (
+        int(stacking.get("stacked_placements") or 0) == 0
+        and stackable_boxes >= max(4, int(n_boxes * 0.5))
+        and packing_opts.get("prefer_stack", True)
+    ):
+        score -= 3.0 if not export_strict else 6.0
+        risks.append("多数箱可叠但未形成二层，利用率/侧视可能偏「挤」")
+        suggestions.append("enable_prefer_stack_or_raise_height")
+        if export_strict and round_ < 2 and can_fit and not need_replan:
+            need_replan = True
+
+    # 空隙超 15cm：软扣
+    max_gap = float(lq.get("max_horizontal_gap_mm") or 0)
+    if max_gap > 150:
+        pen = 3.0 if max_gap < 300 else 6.0
+        score -= pen
+        risks.append(f"同层最大水平空隙 {max_gap:.0f}mm（CTU 宜≤150mm）")
+        suggestions.append("fill_or_lash_voids")
+
     passed = (
         can_fit
         and weight <= 1.0
@@ -273,6 +403,11 @@ def agent_evaluator(state: PackingState) -> Dict[str, Any]:
         and not struct_fail_ids
         and not struct_pending_ids
     )
+    if export_strict and isinstance(cog, dict) and cog:
+        if float(cog.get("mass_in_mid50_ratio") or 1) < 0.60:
+            passed = False
+        if float(cog.get("height_ratio") or 0) > 0.60:
+            passed = False
     score = max(0, min(100, round(score, 1)))
 
     if (struct_fail_ids or struct_pending_ids) and can_fit:
@@ -368,9 +503,13 @@ def agent_evaluator(state: PackingState) -> Dict[str, Any]:
         "risks": risks,
         "suggestions": suggestions,
         "need_replan": need_replan,
+        "stack_bonus": round(stack_bonus, 1),
+        "cog_penalty": round(min(cog_pen, 8.0), 1) if cog_pen else 0.0,
+        "stacked_placements": stacked_n,
         "note": (
             "评分：硬约束(装下/超重/结构) + 软分(订柜有效体积/重量/底面积)；"
-            "外廓摆柜率不进订舱主分。space_subscore 为废弃别名=booking_volume_subscore。"
+            "外廓摆柜率不进订舱主分；堆叠/重心为轻量软加减分。"
+            "space_subscore 为废弃别名=booking_volume_subscore。"
         ),
     }
 

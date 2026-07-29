@@ -21,6 +21,65 @@ def agent_loader(state: PackingState) -> Dict[str, Any]:
     ctype = plan.get("container_type") or state.get("container_type") or "40HQ"
     priority = plan.get("priority_order") or []
     booking = plan.get("booking") or state.get("booking") or {}
+    packing_opts = dict(state.get("packing_options") or {})
+    # P0/P1 3D 堆码默认：可叠优先叠高 + 绑扎间隙 + 支撑比
+    packing_opts.setdefault("prefer_stack", True)
+    packing_opts.setdefault(
+        "clearance_mm",
+        packing_opts.get("lashing_gap_mm", packing_opts.get("gap_mm", 30)),
+    )
+    packing_opts.setdefault("support_ratio_min", 0.55)
+    packing_opts.setdefault("max_stack_layers", 3)
+    packing_opts.setdefault("prefer_bottom_weight_kg", 2000)
+    packing_opts.setdefault("multi_start", True)
+    packing_opts.setdefault("cog_aware", True)
+    packing_opts.setdefault("corner_support", True)
+    packing_opts.setdefault("export_strict", False)  # 出运时 state 可设 True
+    # 一箱一柜：5 箱 → 5 集装箱（不拼柜优化）
+    if _want_one_box_per_container(state, packing_opts, boxes):
+        container_plan = _plan_one_box_per_container(boxes, ctype, booking)
+        n0 = max(1, len(boxes))
+        container_plan = _enrich_plan_metrics(
+            container_plan,
+            boxes=boxes,
+            booking=booking,
+            container_type=str(ctype),
+            n0=n0,
+        )
+        used = int(container_plan.get("containers_used") or n0)
+        tools_used = ["loader.one_box_per_container", f"engine:{container_plan.get('engine')}"]
+        return {
+            "container_plan": container_plan,
+            "booking": container_plan.get("booking") or booking,
+            "agent_meta": {
+                "node": "loader",
+                "capability": ["使用工具", "采取行动"],
+                "tools_used": tools_used,
+                "artifacts": {
+                    "can_fit": True,
+                    "containers_used": used,
+                    "n0": n0,
+                    "mode": "one_box_per_container",
+                    "booking_volume_utilization": container_plan.get(
+                        "booking_volume_utilization"
+                    ),
+                    "outer_space_utilization": container_plan.get(
+                        "outer_space_utilization"
+                    ),
+                },
+            },
+            "messages": [
+                {
+                    "role": "assistant",
+                    "content": (
+                        f"【行动·装载】模式=一箱一柜 boxes={len(boxes)} → 集装箱={used} "
+                        f"can_fit=True engine={container_plan.get('engine')} "
+                        f"｜tools={','.join(tools_used)}"
+                    ),
+                }
+            ],
+        }
+
     n0 = int(
         plan.get("n0")
         or booking.get("n0")
@@ -94,6 +153,7 @@ def agent_loader(state: PackingState) -> Dict[str, Any]:
                 n_max=n_max,
                 priority_order=priority or None,
                 fill_ratio=0.82,
+                packing_options=packing_opts or None,
             )
             notes.append(
                 f"auto_N0={n0}->used={container_plan.get('containers_used')} "
@@ -114,6 +174,7 @@ def agent_loader(state: PackingState) -> Dict[str, Any]:
                     container_type=ctype,
                     max_containers=mc,
                     priority_order=priority or None,
+                    packing_options=packing_opts or None,
                 )
                 last_fb = trial
                 notes.append(
@@ -172,6 +233,17 @@ def agent_loader(state: PackingState) -> Dict[str, Any]:
     if used > n0:
         tools_used.append(f"retry:N0={n0}->used={used}")
 
+    # 指标别名：floor_utilization ← floor_utilization_avg（前端/脚本统一读）
+    if container_plan.get("floor_utilization") is None and container_plan.get(
+        "floor_utilization_avg"
+    ) is not None:
+        container_plan["floor_utilization"] = container_plan["floor_utilization_avg"]
+    floor_u = float(
+        container_plan.get("floor_utilization")
+        or container_plan.get("floor_utilization_avg")
+        or 0
+    )
+
     return {
         "container_plan": container_plan,
         "booking": booking_out,
@@ -185,6 +257,8 @@ def agent_loader(state: PackingState) -> Dict[str, Any]:
                 "n0": n0_used,
                 "booking_volume_utilization": book_u,
                 "outer_space_utilization": outer_u,
+                "floor_utilization": floor_u,
+                "weight_utilization": container_plan.get("weight_utilization"),
                 "retry_steps": retry_steps,
             },
         },
@@ -207,6 +281,87 @@ def agent_loader(state: PackingState) -> Dict[str, Any]:
                 ),
             }
         ],
+    }
+
+
+def _want_one_box_per_container(
+    state: PackingState,
+    opts: Dict[str, Any],
+    boxes: List[Dict[str, Any]],
+) -> bool:
+    if not boxes:
+        return False
+    if opts.get("one_box_per_container") or opts.get("one_crate_per_container"):
+        return True
+    if opts.get("force_containers") is not None:
+        try:
+            return int(opts.get("force_containers")) == len(boxes)
+        except Exception:
+            pass
+    # 用户目标：尽量少拼柜 / 分柜出运
+    goal = str(state.get("goal") or "")
+    if goal in ("one_box_per_container", "split_all_boxes"):
+        return True
+    text = " ".join(
+        [
+            str(state.get("user_input") or ""),
+            str(state.get("adjust_note") or ""),
+            str((state.get("nl_revision") or {}).get("instruction") or ""),
+        ]
+    )
+    keys = (
+        "一箱一柜",
+        "一箱一集装箱",
+        "每箱一柜",
+        "分柜出运",
+        "不拼柜",
+        "one_box_per_container",
+        "1 box 1 container",
+    )
+    return any(k in text for k in keys)
+
+
+def _plan_one_box_per_container(
+    boxes: List[Dict[str, Any]],
+    container_type: str,
+    booking: Dict[str, Any],
+) -> Dict[str, Any]:
+    """每箱独占一个集装箱：layout.container_no = 1..N。"""
+    layout: List[Dict[str, Any]] = []
+    unpacked: List[str] = []
+    for i, b in enumerate(boxes):
+        bid = str(b.get("box_id") or f"B{i+1}")
+        outer = b.get("outer_size_mm") or {}
+        try:
+            dx = int(round(float(outer.get("length") or 1)))
+            dy = int(round(float(outer.get("width") or 1)))
+            dz = int(round(float(outer.get("height") or 1)))
+        except Exception:
+            unpacked.append(bid)
+            continue
+        layout.append(
+            {
+                "box_id": bid,
+                "container_no": i + 1,
+                "position": {"x": 0, "y": 0, "z": 0},
+                "size": {"dx": dx, "dy": dy, "dz": dz},
+                "layer": 1,
+                "gross_weight_kg": b.get("gross_weight_kg"),
+            }
+        )
+    n = len(layout)
+    return {
+        "container_type": container_type,
+        "containers_used": n,
+        "n0": n,
+        "can_fit": n > 0 and not unpacked,
+        "layout": layout,
+        "unpacked_box_ids": unpacked,
+        "engine": "one_box_per_container",
+        "message": f"一箱一柜：{n} 箱 → {n} 集装箱",
+        "mode": "one_box_per_container",
+        "booking": dict(booking or {}),
+        "volume_basis": "solid_outer_aabb",
     }
 
 

@@ -1,0 +1,101 @@
+name: ci-smoke
+
+on:
+  push:
+    branches: [main, master]
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  smoke:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Install deps
+        run: |
+          python -m pip install -U pip
+          pip install fastapi "uvicorn[standard]" python-dotenv openpyxl pydantic
+          if [ -f requirements.txt ]; then pip install -r requirements.txt || true; fi
+      - name: Import package
+        run: python -c "from packing_assistant.config import HARNESS_VERSION; from packing_assistant.harness import iter_agent_pipeline; print(HARNESS_VERSION)"
+      - name: Frontend static checks
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          t = Path("frontend/index.html").read_text(encoding="utf-8")
+          need = [
+              "大 Team", "org-chart", "/api/pipeline/stream", "consumeSse", "hitl_summary",
+              "draw3d", "TEAM_ROSTER", "/api/whatif", "What-if", "订柜 N0", "3D 用柜",
+              "perCabinCog", "secureWorkOrder", "big_team_a_b",
+          ]
+          miss = [k for k in need if k not in t]
+          assert not miss, miss
+          print("frontend OK")
+          PY
+      - name: Pipeline unit smoke
+        run: |
+          python - <<'PY'
+          from packing_assistant.harness import run_agent_pipeline
+          st = run_agent_pipeline(
+              "CI 钢梁 6000x200x300 400kg x1",
+              enable_auto_confirm=True,
+              session_id="ci-smoke",
+              save_artifacts=True,
+          )
+          assert st.get("agent_steps"), "no steps"
+          assert st.get("team_mode") == "big_team_a_b", st.get("team_mode")
+          paths = st.get("artifact_paths") or {}
+          print("phase", st.get("phase"), "team_mode", st.get("team_mode"), "steps", len(st["agent_steps"]), "paths", list(paths)[:6])
+          PY
+      - name: Workteams shadow eval (steps vs llm) + KPI
+        run: python scripts/eval_workteams_cli.py --tiny-only
+      - name: TMS booking stub
+        run: |
+          python - <<'PY'
+          from packing_assistant.harness import run_agent_pipeline
+          from packing_assistant.tms_booking import submit_booking, attach_booking_to_state
+          st = run_agent_pipeline(
+              "TMS stub 钢架",
+              materials=[{
+                  "id": "m1", "part_no": "FST", "length_mm": 3000, "width_mm": 200,
+                  "height_mm": 200, "total_weight_kg": 200, "qty": 1,
+              }],
+              enable_auto_confirm=True,
+              session_id="ci-tms",
+              save_artifacts=False,
+          )
+          r = submit_booking(st)
+          assert r.get("ok"), r
+          assert r.get("booking_id") or (r.get("booking_summary") or {}).get("booking_id")
+          st2 = attach_booking_to_state(st, r)
+          assert st2.get("tms_booking", {}).get("booking_id")
+          print("TMS", st2["tms_booking"])
+          PY
+      - name: Agent auto + whatif + continue
+        run: |
+          python scripts/test_agent_auto_mode.py
+          python scripts/test_whatif_accept.py
+          python scripts/test_continue_improve.py
+      - name: Eval harness tiny/20t (no t80 file)
+        run: python scripts/eval_harness_cli.py
+      - name: P0 P1 P2 full chain
+        run: python scripts/test_p0_p1_p2_full.py
+      - name: Frontend whatif/profile strings
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          t = Path("frontend/index.html").read_text(encoding="utf-8")
+          for k in ["/api/whatif/apply", "/api/profiles", "POR 装柜单", "应用为当前方案"]:
+              assert k in t, k
+          print("frontend continue OK")
+          PY
+      - name: P0 cog t80 (if materials present)
+        run: |
+          if [ -f test/sim_materials/t80_random_mixed_s20260729/materials.json ]; then
+            python scripts/test_p0_cog_t80.py
+          else
+            echo "skip t80 materials not in repo"
+          fi

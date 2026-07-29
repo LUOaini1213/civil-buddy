@@ -1,4 +1,4 @@
-"""智能装箱与拼柜 — 最终架构 Harness（团队A + 用户确认 + 团队B）。"""
+"""智能装箱与拼柜 — 大 Team ⊃ 小 Team A 成箱 + 小 Team B 拼柜；NL 通用 Agent。"""
 
 from packing_assistant.config import HARNESS_VERSION
 from packing_assistant.harness import (

@@ -87,6 +87,7 @@ def pack_with_auto_containers(
     n_max: int = 40,
     priority_order: Optional[List[str]] = None,
     fill_ratio: float = 0.82,
+    packing_options: Optional[Dict[str, Any]] = None,
 ) -> Dict[str, Any]:
     """
     从 N0 起递增 max_containers 直到 can_fit 或达 n_max。
@@ -107,6 +108,7 @@ def pack_with_auto_containers(
             container_type=container_type,
             max_containers=n,
             priority_order=priority_order,
+            packing_options=packing_options,
         )
         tried.append(
             {

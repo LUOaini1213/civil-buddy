@@ -138,6 +138,27 @@ def save_run_artifacts(
     # agent steps / tool trajectory
     traj = steps or state.get("agent_steps") or []
     paths["trace"] = _write_json(d / "agent_trace.json", traj)
+    # 流式 JSONL（若 pipeline 已写则保留；否则从 steps 合成一份）
+    jsonl_path = d / "trace.jsonl"
+    if not jsonl_path.exists() and traj:
+        with jsonl_path.open("w", encoding="utf-8") as f:
+            for i, st in enumerate(traj):
+                f.write(
+                    json.dumps(
+                        {
+                            "type": "agent_end",
+                            "seq": i + 1,
+                            "run_id": rid,
+                            "node": st.get("node"),
+                            "step": st,
+                        },
+                        ensure_ascii=False,
+                        default=str,
+                    )
+                    + "\n"
+                )
+    if jsonl_path.exists():
+        paths["trace_jsonl"] = str(jsonl_path)
 
     # 总览
     index = {
@@ -150,6 +171,7 @@ def save_run_artifacts(
         "risk_decision": risk.get("decision"),
         "paths": paths,
         "agent_style": "multi_agent_workflow",
+        "harness_version": (state.get("harness_meta") or {}).get("harness_version"),
         "note": "数值由 tools 计算；本目录为 Agent 闭环行动落盘结果",
     }
     paths["index"] = _write_json(d / "index.json", index)
@@ -171,9 +193,10 @@ def save_run_artifacts(
 | risk.md / risk.json | 风险 |
 | finalize.md | 裁决文案 |
 | agent_trace.json | 逐步 tool 轨迹 |
+| trace.jsonl | 流式事件（可回放） |
 | views/ | 三视图 |
 
-感知→规划→工具→行动→目标：见 agent_trace.json 与 index.json。
+感知→规划→工具→行动→目标：见 agent_trace.json / trace.jsonl 与 index.json。
 """,
         encoding="utf-8",
     )

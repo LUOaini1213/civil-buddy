@@ -3,200 +3,611 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>装箱拼柜 · Agent 可视化</title>
+  <title>装箱拼柜 · Team Mode</title>
   <script src="https://cdn.jsdelivr.net/npm/vue@2.7.16/dist/vue.min.js"></script>
   <style>
+    :root {
+      --bg: #0b0f14;
+      --bg-elev: #121820;
+      --bg-soft: #161d27;
+      --border: #243041;
+      --border-soft: #1c2533;
+      --text: #e8eef7;
+      --muted: #8b98ab;
+      --faint: #5c6b80;
+      --accent: #5b8def;
+      --accent-soft: rgba(91, 141, 239, 0.14);
+      --ok: #3ecf8e;
+      --ok-bg: rgba(62, 207, 142, 0.12);
+      --warn: #e6b84d;
+      --warn-bg: rgba(230, 184, 77, 0.12);
+      --err: #f07178;
+      --err-bg: rgba(240, 113, 120, 0.12);
+      --side-w: 280px;
+      --top-h: 56px;
+      --radius: 12px;
+      --radius-sm: 8px;
+      --font: "Segoe UI", "PingFang SC", "Microsoft YaHei", system-ui, sans-serif;
+      --mono: ui-monospace, "Cascadia Code", Consolas, monospace;
+    }
     * { box-sizing: border-box; }
+    html, body { height: 100%; }
     body {
       margin: 0;
-      font-family: "Segoe UI", "Microsoft YaHei", sans-serif;
-      background: #0f1419;
-      color: #e7ecf3;
+      font-family: var(--font);
+      background: var(--bg);
+      color: var(--text);
+      overflow: hidden;
     }
-    .app { max-width: 1280px; margin: 0 auto; padding: 16px 20px 48px; }
-    h1 { font-size: 1.35rem; margin: 0 0 4px; }
-    h2 { margin: 0 0 10px; font-size: 1.05rem; }
-    .sub { color: #8b9bb4; font-size: 0.9rem; margin-bottom: 16px; }
-    .panel {
-      background: #1a2332;
-      border: 1px solid #2a3a52;
-      border-radius: 10px;
-      padding: 14px 16px;
-      margin-bottom: 14px;
-    }
-    .row { display: flex; gap: 12px; flex-wrap: wrap; align-items: flex-start; }
-    textarea {
-      width: 100%;
-      min-height: 90px;
-      background: #0f1419;
-      border: 1px solid #2a3a52;
-      color: #e7ecf3;
-      border-radius: 8px;
-      padding: 10px;
-      font-size: 14px;
-    }
+    button, input, select, textarea { font-family: inherit; }
     button {
-      background: #3b82f6;
-      color: #fff;
       border: none;
       border-radius: 8px;
       padding: 8px 14px;
+      font-size: 13px;
       cursor: pointer;
+      background: var(--accent);
+      color: #fff;
+      transition: opacity .15s, background .15s;
+    }
+    button:hover:not(:disabled) { opacity: .92; }
+    button:disabled { opacity: .45; cursor: not-allowed; }
+    button.ghost {
+      background: transparent;
+      color: var(--text);
+      border: 1px solid var(--border);
+    }
+    button.ghost:hover:not(:disabled) { background: var(--bg-soft); opacity: 1; }
+    button.soft { background: var(--bg-soft); color: var(--text); border: 1px solid var(--border); }
+    button.danger { background: #b33a42; }
+    button.primary-lg { padding: 10px 16px; font-weight: 600; }
+    textarea, input, select {
+      background: var(--bg);
+      border: 1px solid var(--border);
+      color: var(--text);
+      border-radius: 8px;
+      padding: 8px 10px;
+      font-size: 13px;
+      outline: none;
+    }
+    textarea:focus, input:focus, select:focus { border-color: var(--accent); }
+    textarea { resize: vertical; width: 100%; }
+
+    /* —— App shell —— */
+    .shell {
+      display: grid;
+      grid-template-rows: var(--top-h) 1fr;
+      height: 100vh;
+      width: 100vw;
+    }
+    .topbar {
+      display: flex;
+      align-items: center;
+      gap: 14px;
+      padding: 0 16px;
+      border-bottom: 1px solid var(--border-soft);
+      background: rgba(18, 24, 32, 0.92);
+      backdrop-filter: blur(10px);
+      z-index: 20;
+    }
+    .brand {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      min-width: 200px;
+    }
+    .brand-mark {
+      width: 28px; height: 28px;
+      border-radius: 8px;
+      background: linear-gradient(135deg, #5b8def, #7c5cfc);
+      display: grid; place-items: center;
+      font-size: 13px; font-weight: 700; color: #fff;
+    }
+    .brand h1 {
+      margin: 0;
       font-size: 14px;
+      font-weight: 650;
+      letter-spacing: .2px;
     }
-    button:disabled { opacity: 0.5; cursor: not-allowed; }
-    button.secondary { background: #334155; }
-    button.danger { background: #b91c1c; }
-    select, input {
-      background: #0f1419;
-      border: 1px solid #2a3a52;
-      color: #e7ecf3;
-      border-radius: 6px;
-      padding: 6px 10px;
+    .brand .tag {
+      font-size: 11px;
+      color: var(--muted);
+      margin-top: 1px;
     }
-    .badge {
-      display: inline-block;
-      padding: 2px 8px;
+    .top-status {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 6px;
+      flex: 1;
+      min-width: 0;
+    }
+    .top-actions {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      flex-shrink: 0;
+    }
+    .pill {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      padding: 3px 9px;
       border-radius: 999px;
-      font-size: 12px;
-      background: #243247;
-      margin-right: 6px;
+      font-size: 11.5px;
+      background: var(--bg-soft);
+      border: 1px solid var(--border);
+      color: var(--muted);
+      white-space: nowrap;
     }
-    .badge.ok { background: #14532d; }
-    .badge.warn { background: #713f12; }
-    .badge.err { background: #7f1d1d; }
-    table { width: 100%; border-collapse: collapse; font-size: 13px; }
-    th, td { border-bottom: 1px solid #2a3a52; padding: 6px 8px; text-align: left; }
-    th { color: #8b9bb4; font-weight: 600; }
+    .pill.ok { color: var(--ok); background: var(--ok-bg); border-color: transparent; }
+    .pill.warn { color: var(--warn); background: var(--warn-bg); border-color: transparent; }
+    .pill.err { color: var(--err); background: var(--err-bg); border-color: transparent; }
+    .pill .dot {
+      width: 6px; height: 6px; border-radius: 50%;
+      background: currentColor;
+    }
+
+    .body {
+      display: grid;
+      grid-template-columns: var(--side-w) 1fr;
+      min-height: 0;
+    }
+
+    /* —— Left: team mode —— */
+    .sidebar {
+      border-right: 1px solid var(--border-soft);
+      background: var(--bg-elev);
+      display: flex;
+      flex-direction: column;
+      min-height: 0;
+    }
+    .side-head {
+      padding: 14px 14px 8px;
+    }
+    .side-head .label {
+      font-size: 11px;
+      letter-spacing: .08em;
+      text-transform: uppercase;
+      color: var(--faint);
+      font-weight: 600;
+    }
+    .side-head h2 {
+      margin: 4px 0 0;
+      font-size: 15px;
+      font-weight: 650;
+    }
+    .side-head p {
+      margin: 4px 0 0;
+      font-size: 12px;
+      color: var(--muted);
+      line-height: 1.4;
+    }
+    .pipeline-mini {
+      display: flex;
+      gap: 4px;
+      padding: 0 14px 12px;
+      flex-wrap: wrap;
+    }
+    .phase-chip {
+      font-size: 10px;
+      padding: 3px 7px;
+      border-radius: 6px;
+      background: var(--bg);
+      border: 1px solid var(--border);
+      color: var(--muted);
+    }
+    .phase-chip.on {
+      border-color: var(--accent);
+      color: #c9dbff;
+      background: var(--accent-soft);
+    }
+    /* 三层组织图：大 Team ⊃ A + B */
+    .org-chart {
+      margin: 0 12px 12px;
+      padding: 10px;
+      border-radius: 12px;
+      border: 1px solid var(--border);
+      background: linear-gradient(180deg, rgba(91,141,239,0.08), transparent 70%);
+    }
+    .org-chart .org-title {
+      font-size: 11px;
+      font-weight: 700;
+      color: #9ec1ff;
+      margin-bottom: 8px;
+      letter-spacing: 0.02em;
+    }
+    .org-layer-big {
+      border: 1px dashed rgba(91,141,239,0.55);
+      border-radius: 10px;
+      padding: 8px;
+      background: rgba(91,141,239,0.06);
+    }
+    .org-layer-big > .org-label {
+      font-size: 10px;
+      color: #5b8def;
+      font-weight: 700;
+      margin-bottom: 6px;
+    }
+    .org-big-nodes {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 4px;
+      margin-bottom: 8px;
+    }
+    .org-chip {
+      font-size: 10px;
+      padding: 2px 6px;
+      border-radius: 999px;
+      border: 1px solid var(--border);
+      color: var(--muted);
+      background: var(--bg);
+      cursor: pointer;
+    }
+    .org-chip.on { border-color: var(--accent); color: #dbe8ff; background: var(--accent-soft); }
+    .org-chip.done { border-color: #3ecf8e55; color: #8fe0b8; }
+    .org-chip.run { border-color: #e6b84d; color: #f0d48a; box-shadow: 0 0 0 1px #e6b84d33; }
+    .org-children {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 6px;
+    }
+    .org-team-box {
+      border-radius: 8px;
+      padding: 6px;
+      border: 1px solid var(--border);
+      background: rgba(0,0,0,0.15);
+      min-height: 72px;
+    }
+    .org-team-box.team-a { border-color: #3ecf8e66; }
+    .org-team-box.team-b { border-color: #7c5cfc66; }
+    .org-team-box .org-label {
+      font-size: 10px;
+      font-weight: 700;
+      margin-bottom: 4px;
+    }
+    .org-team-box.team-a .org-label { color: #3ecf8e; }
+    .org-team-box.team-b .org-label { color: #a78bfa; }
+    .org-hitl-row {
+      margin-top: 6px;
+      text-align: center;
+    }
+    .org-hitl-row .org-chip {
+      border-color: #e6b84d88;
+      color: #f0d48a;
+    }
+    .roster {
+      flex: 1;
+      overflow: auto;
+      padding: 4px 8px 12px;
+      min-height: 0;
+    }
+    .team-group {
+      margin-bottom: 10px;
+    }
+    .team-group .g-title {
+      font-size: 11px;
+      color: var(--faint);
+      padding: 6px 8px 4px;
+      font-weight: 600;
+    }
+    .member {
+      display: grid;
+      grid-template-columns: 36px 1fr auto;
+      gap: 10px;
+      align-items: center;
+      width: 100%;
+      text-align: left;
+      padding: 8px 8px;
+      border-radius: 10px;
+      border: 1px solid transparent;
+      background: transparent;
+      color: var(--text);
+      cursor: pointer;
+      margin-bottom: 2px;
+    }
+    .member:hover { background: var(--bg-soft); }
+    .member.active {
+      background: var(--accent-soft);
+      border-color: rgba(91, 141, 239, 0.35);
+    }
+    .member.done .avatar { box-shadow: 0 0 0 2px var(--ok-bg); }
+    .member.err .avatar { box-shadow: 0 0 0 2px var(--err-bg); }
+    .member.running .avatar {
+      animation: pulse 1.2s ease-in-out infinite;
+    }
+    @keyframes pulse {
+      0%, 100% { opacity: 1; }
+      50% { opacity: .55; }
+    }
+    .avatar {
+      width: 36px; height: 36px;
+      border-radius: 10px;
+      display: grid; place-items: center;
+      font-size: 12px;
+      font-weight: 700;
+      color: #fff;
+    }
+    .member .meta { min-width: 0; }
+    .member .name {
+      font-size: 13px;
+      font-weight: 600;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+    .member .role {
+      font-size: 11px;
+      color: var(--muted);
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+    .st-dot {
+      width: 8px; height: 8px;
+      border-radius: 50%;
+      background: var(--faint);
+      flex-shrink: 0;
+    }
+    .st-dot.idle { background: #3a4556; }
+    .st-dot.done { background: var(--ok); }
+    .st-dot.running { background: var(--accent); }
+    .st-dot.err { background: var(--err); }
+    .st-dot.wait { background: var(--warn); }
+
+    .side-composer {
+      border-top: 1px solid var(--border-soft);
+      padding: 12px;
+      background: var(--bg-elev);
+    }
+    .side-composer textarea {
+      min-height: 72px;
+      max-height: 140px;
+      margin-bottom: 8px;
+      background: var(--bg);
+    }
+    .composer-row {
+      display: flex;
+      gap: 6px;
+      flex-wrap: wrap;
+    }
+    .composer-row button { flex: 1; min-width: 0; font-size: 12px; padding: 8px 10px; }
+    .status-line {
+      margin-top: 8px;
+      font-size: 11.5px;
+      color: var(--muted);
+      line-height: 1.4;
+      max-height: 40px;
+      overflow: hidden;
+    }
+
+    /* —— Main workspace —— */
+    .main {
+      display: flex;
+      flex-direction: column;
+      min-width: 0;
+      min-height: 0;
+      background:
+        radial-gradient(1200px 400px at 80% -10%, rgba(91,141,239,.08), transparent 50%),
+        var(--bg);
+    }
+    .tabs {
+      display: flex;
+      gap: 2px;
+      padding: 10px 16px 0;
+      border-bottom: 1px solid var(--border-soft);
+      overflow-x: auto;
+    }
+    .tab {
+      appearance: none;
+      background: transparent;
+      color: var(--muted);
+      border: none;
+      border-bottom: 2px solid transparent;
+      border-radius: 0;
+      padding: 10px 14px;
+      font-size: 13px;
+      font-weight: 500;
+      white-space: nowrap;
+    }
+    .tab:hover { color: var(--text); opacity: 1; background: transparent; }
+    .tab.active {
+      color: var(--text);
+      border-bottom-color: var(--accent);
+      background: transparent;
+    }
+    .tab .n {
+      display: inline-block;
+      margin-left: 6px;
+      font-size: 11px;
+      padding: 1px 6px;
+      border-radius: 999px;
+      background: var(--bg-soft);
+      color: var(--muted);
+    }
+    .tab.active .n { background: var(--accent-soft); color: #c9dbff; }
+
+    .workspace {
+      flex: 1;
+      overflow: auto;
+      padding: 16px 18px 28px;
+      min-height: 0;
+    }
+
+    .empty-hero {
+      max-width: 520px;
+      margin: 48px auto;
+      text-align: center;
+      color: var(--muted);
+    }
+    .empty-hero h3 {
+      margin: 0 0 8px;
+      color: var(--text);
+      font-size: 18px;
+    }
+    .empty-hero p { font-size: 13px; line-height: 1.55; margin: 0 0 16px; }
+    .empty-hero .actions { display: flex; gap: 8px; justify-content: center; flex-wrap: wrap; }
+
+    .section {
+      background: var(--bg-elev);
+      border: 1px solid var(--border-soft);
+      border-radius: var(--radius);
+      padding: 14px 16px;
+      margin-bottom: 14px;
+    }
+    .section-h {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 10px;
+      margin-bottom: 12px;
+    }
+    .section-h h3 {
+      margin: 0;
+      font-size: 14px;
+      font-weight: 650;
+    }
+    .section-h .sub { font-size: 12px; color: var(--muted); }
+
+    .metrics {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+      gap: 10px;
+    }
+    .metric {
+      background: var(--bg-soft);
+      border: 1px solid var(--border-soft);
+      border-radius: var(--radius-sm);
+      padding: 12px;
+    }
+    .metric .k {
+      font-size: 11px;
+      color: var(--muted);
+      margin-bottom: 6px;
+    }
+    .metric .v {
+      font-size: 20px;
+      font-weight: 700;
+      letter-spacing: -.02em;
+    }
+    .metric .h {
+      font-size: 11px;
+      color: var(--faint);
+      margin-top: 4px;
+      line-height: 1.35;
+    }
+
+    .split-2 {
+      display: grid;
+      grid-template-columns: 1.2fr 1fr;
+      gap: 14px;
+    }
+    @media (max-width: 1100px) {
+      .split-2 { grid-template-columns: 1fr; }
+      .body { grid-template-columns: 240px 1fr; }
+    }
+    @media (max-width: 820px) {
+      .body { grid-template-columns: 1fr; }
+      .sidebar { display: none; }
+      .sidebar.mobile-open {
+        display: flex;
+        position: fixed;
+        inset: var(--top-h) 0 0 0;
+        z-index: 30;
+        width: min(100%, 320px);
+      }
+    }
+
+    table.data {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 12.5px;
+    }
+    table.data th, table.data td {
+      text-align: left;
+      padding: 8px 10px;
+      border-bottom: 1px solid var(--border-soft);
+    }
+    table.data th {
+      color: var(--muted);
+      font-weight: 600;
+      font-size: 11px;
+      letter-spacing: .03em;
+    }
+    table.data tr:hover td { background: rgba(255,255,255,.02); }
+
+    .row { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
+    .md {
+      white-space: pre-wrap;
+      font-size: 13px;
+      line-height: 1.55;
+      color: #c9d4e3;
+      max-height: 360px;
+      overflow: auto;
+    }
     .views {
       display: grid;
-      grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
+      grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
       gap: 12px;
     }
     .view-card {
-      background: #0f1419;
-      border: 1px solid #2a3a52;
-      border-radius: 8px;
+      background: var(--bg);
+      border: 1px solid var(--border-soft);
+      border-radius: var(--radius-sm);
       padding: 8px;
     }
-    .view-card h3 {
+    .view-card h4 {
       margin: 0 0 8px;
-      font-size: 14px;
-      color: #93c5fd;
+      font-size: 12px;
+      color: #9ec0ff;
+      font-weight: 600;
     }
     canvas {
       width: 100%;
       height: auto;
       display: block;
-      background: #111827;
+      background: #0a1018;
       border-radius: 6px;
     }
-    .risks li { margin: 4px 0; color: #fcd34d; }
-    .md {
-      white-space: pre-wrap;
-      font-size: 13px;
-      line-height: 1.5;
-      color: #cbd5e1;
-      max-height: 280px;
-      overflow: auto;
+    .legend {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+      margin-top: 8px;
     }
-    .status-bar { font-size: 13px; color: #8b9bb4; margin-top: 8px; }
-    .legend { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 8px; }
     .legend span {
       display: inline-flex;
       align-items: center;
       gap: 6px;
       font-size: 12px;
-      color: #94a3b8;
+      color: var(--muted);
     }
     .swatch {
-      width: 12px; height: 12px; border-radius: 2px; display: inline-block;
+      width: 10px; height: 10px; border-radius: 2px;
     }
 
-    /* —— Agent 流程可视化（页底） —— */
-    .agent-console {
-      border: 1px solid #3b82f6;
-      box-shadow: 0 0 0 1px rgba(59, 130, 246, 0.15);
-    }
-    .agent-console h2 {
-      display: flex;
-      align-items: center;
-      justify-content: space-between;
-      gap: 12px;
-      flex-wrap: wrap;
-    }
-    .agent-console .hint {
-      font-size: 12px;
-      font-weight: normal;
-      color: #8b9bb4;
-    }
-    .flow-strip {
-      display: flex;
-      flex-wrap: wrap;
-      gap: 6px;
-      align-items: center;
-      margin-bottom: 12px;
-      padding: 10px;
-      background: #0f1419;
-      border-radius: 8px;
-      border: 1px solid #2a3a52;
-    }
-    .flow-chip {
-      display: inline-flex;
-      align-items: center;
-      gap: 6px;
-      padding: 6px 12px;
-      border-radius: 999px;
-      border: 1px solid #2a3a52;
-      background: #1e293b;
-      color: #cbd5e1;
-      font-size: 12px;
-      cursor: pointer;
-      transition: background 0.15s, border-color 0.15s;
-    }
-    .flow-chip:hover { border-color: #60a5fa; }
-    .flow-chip.active {
-      background: #1d4ed8;
-      border-color: #3b82f6;
-      color: #fff;
-    }
-    .flow-chip .idx {
-      width: 18px; height: 18px;
-      border-radius: 50%;
-      background: #0f172a;
-      display: inline-flex;
-      align-items: center;
-      justify-content: center;
-      font-size: 10px;
-      font-weight: 700;
-    }
-    .flow-chip.active .idx { background: #1e3a8a; }
-    .flow-chip.err { border-color: #b91c1c; }
-    .flow-arrow { color: #475569; font-size: 12px; user-select: none; }
+    /* Agent feed */
     .agent-toolbar {
       display: flex;
       flex-wrap: wrap;
       gap: 8px;
       align-items: center;
-      margin-bottom: 10px;
+      margin-bottom: 12px;
     }
-    .agent-toolbar label { font-size: 13px; color: #94a3b8; }
-    .agent-list {
-      max-height: 420px;
-      overflow: auto;
+    .agent-feed {
       display: flex;
       flex-direction: column;
       gap: 10px;
     }
     .agent-card {
-      background: #0f1419;
-      border: 1px solid #2a3a52;
-      border-radius: 8px;
+      background: var(--bg);
+      border: 1px solid var(--border-soft);
+      border-radius: var(--radius);
       padding: 12px 14px;
+      transition: border-color .15s;
     }
     .agent-card.highlight {
-      border-color: #3b82f6;
-      background: #111827;
+      border-color: rgba(91, 141, 239, .5);
+      box-shadow: 0 0 0 1px var(--accent-soft);
     }
     .agent-card-head {
       display: flex;
@@ -206,16 +617,16 @@
       margin-bottom: 8px;
     }
     .agent-card-head .title {
-      font-weight: 600;
-      color: #93c5fd;
-      font-size: 14px;
+      font-weight: 650;
+      font-size: 13.5px;
+      color: #c9dbff;
     }
-    .agent-card .body {
+    .agent-card .body-text {
       white-space: pre-wrap;
       font-size: 13px;
       line-height: 1.55;
-      color: #e2e8f0;
-      max-height: 320px;
+      color: #d7e0ec;
+      max-height: 280px;
       overflow: auto;
     }
     .tool-tag {
@@ -223,289 +634,1091 @@
       font-size: 11px;
       padding: 2px 7px;
       border-radius: 4px;
-      background: #312e81;
-      color: #c7d2fe;
+      background: rgba(124, 92, 252, .15);
+      color: #cfc2ff;
       margin: 2px 4px 2px 0;
-      font-family: ui-monospace, Consolas, monospace;
+      font-family: var(--mono);
     }
-    .artifact-line {
+    .meta-line {
       font-size: 12px;
-      color: #94a3b8;
+      color: var(--muted);
       margin-top: 6px;
-      font-family: ui-monospace, Consolas, monospace;
+      font-family: var(--mono);
     }
-    .empty-agent {
-      color: #64748b;
-      font-size: 13px;
-      padding: 20px;
-      text-align: center;
+    .risks { margin: 0; padding-left: 18px; }
+    .risks li { margin: 4px 0; color: #f0d48a; font-size: 13px; }
+
+    .hitl-bar {
+      display: flex;
+      flex-direction: column;
+      gap: 12px;
+      padding: 14px;
+      border-radius: var(--radius);
+      background: linear-gradient(135deg, rgba(91,141,239,.14), rgba(124,92,252,.08));
+      border: 1px solid rgba(91,141,239,.28);
+      margin-bottom: 14px;
     }
-    .sticky-note {
+    .hitl-bar .hitl-top {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 10px;
+      align-items: center;
+      justify-content: space-between;
+    }
+    .hitl-bar strong { font-size: 14px; }
+    .hitl-cards {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(120px, 1fr));
+      gap: 8px;
+    }
+    .hitl-card {
+      background: var(--bg);
+      border: 1px solid var(--border-soft);
+      border-radius: 8px;
+      padding: 10px;
+    }
+    .hitl-card .t { font-size: 11px; color: var(--muted); }
+    .hitl-card .v { font-size: 18px; font-weight: 700; margin-top: 4px; }
+    .hitl-card .h { font-size: 11px; color: var(--faint); margin-top: 4px; line-height: 1.35; }
+    .hitl-card.warn { border-color: rgba(230,184,77,.4); }
+    .workspace-split {
+      display: grid;
+      grid-template-columns: 1fr 320px;
+      gap: 0;
+      flex: 1;
+      min-height: 0;
+    }
+    @media (max-width: 1100px) {
+      .workspace-split { grid-template-columns: 1fr; }
+      .agent-drawer { display: none !important; }
+    }
+    .agent-drawer {
+      border-left: 1px solid var(--border-soft);
+      background: var(--bg-elev);
+      padding: 12px;
+      overflow: auto;
+      min-height: 0;
+    }
+    .agent-drawer h3 { margin: 0 0 8px; font-size: 13px; }
+    .drawer-empty { font-size: 12px; color: var(--muted); line-height: 1.5; }
+    .live-pulse { color: var(--accent); font-size: 11px; }
+    .progress-track {
+      height: 3px;
+      background: var(--border-soft);
+      width: 100%;
+      position: absolute;
+      left: 0; right: 0; bottom: 0;
+    }
+    .progress-fill {
+      height: 100%;
+      background: linear-gradient(90deg, #5b8def, #7c5cfc);
+      transition: width .25s ease;
+    }
+    .topbar { position: relative; }
+    .nl-box textarea { min-height: 56px; }
+
+    .flow-strip {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 6px;
+      align-items: center;
+      margin-bottom: 12px;
+    }
+    .flow-chip {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      padding: 5px 10px;
+      border-radius: 999px;
+      border: 1px solid var(--border);
+      background: var(--bg-soft);
+      color: var(--muted);
       font-size: 12px;
-      color: #64748b;
-      margin-top: 8px;
+      cursor: pointer;
+    }
+    .flow-chip:hover { border-color: var(--accent); color: var(--text); }
+    .flow-chip.active {
+      background: var(--accent-soft);
+      border-color: var(--accent);
+      color: #dce8ff;
+    }
+    .flow-chip .idx {
+      width: 16px; height: 16px;
+      border-radius: 50%;
+      background: var(--bg);
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 10px;
+      font-weight: 700;
+    }
+    .foot-note {
+      font-size: 11.5px;
+      color: var(--faint);
+      margin-top: 12px;
     }
   </style>
 </head>
 <body>
-  <div id="app" class="app">
-    <h1>智能装箱与拼柜</h1>
-    <div class="sub">
-      团队A 装箱 → 用户确认 → 团队B 拼柜 · 页底可查看全部 Agent 输出
-      <span class="badge" :class="skjolberOk ? 'ok' : 'warn'">
-        skjolber: {{ skjolberLabel }}
-      </span>
-      <span class="badge">phase: {{ result.phase || '-' }}</span>
-      <span class="badge" v-if="agentSteps.length">agents: {{ agentSteps.length }}</span>
-    </div>
-
-    <div class="panel">
-      <div class="row" style="margin-bottom: 8px;">
-        <button @click="runTeamA" :disabled="loading">1. 生成装箱方案</button>
-        <button class="secondary" @click="runDemo" :disabled="loading">一键演示（自动确认）</button>
-        <button class="secondary" @click="runPipelineTrace" :disabled="loading">Agent 全流程轨迹</button>
-        <button class="secondary" @click="runPdf" :disabled="loading">跑 test PDF 样例</button>
-        <button class="secondary" @click="refreshHealth">检查服务</button>
-        <a class="secondary" href="/api/test-shipments/report" target="_blank"
-           style="padding:8px 14px;border-radius:8px;background:#334155;color:#fff;text-decoration:none;font-size:14px">跑批报表</a>
-      </div>
-      <textarea v-model="userInput" placeholder="粘贴材料清单，或留空使用演示数据"></textarea>
-      <div class="status-bar">{{ statusText }}</div>
-    </div>
-
-    <!-- 团队A 确认区 -->
-    <div class="panel" v-if="result.boxes && result.boxes.length">
-      <h2>装箱方案（团队A）</h2>
-      <table>
-        <thead>
-          <tr>
-            <th>箱号</th><th>箱型</th><th>外尺寸 mm</th><th>毛重 kg</th><th>属性</th><th>内容</th>
-          </tr>
-        </thead>
-        <tbody>
-          <tr v-for="b in result.boxes" :key="b.box_id">
-            <td>{{ b.box_id }}</td>
-            <td>{{ b.box_type }}</td>
-            <td>
-              {{ b.outer_size_mm && b.outer_size_mm.length }}×
-              {{ b.outer_size_mm && b.outer_size_mm.width }}×
-              {{ b.outer_size_mm && b.outer_size_mm.height }}
-            </td>
-            <td>{{ b.gross_weight_kg }}</td>
-            <td>{{ (b.special_attributes || []).join(', ') }}</td>
-            <td>
-              <span v-for="c in (b.content||[])" :key="(c.material_id||'') + (c.name||'')">
-                {{ c.name }}×{{ c.quantity }}
-              </span>
-            </td>
-          </tr>
-        </tbody>
-      </table>
-
-      <div class="row" style="margin-top: 12px; align-items: center;" v-if="result.phase === 'await_user_confirm'">
-        <label>集装箱类型
-          <select v-model="containerType">
-            <option v-for="opt in containerOptions" :key="opt.value" :value="opt.value">
-              {{ opt.label }}{{ opt.recommended ? '（推荐）' : '' }}
-            </option>
-          </select>
-        </label>
-        <button @click="confirmPack" :disabled="loading">2. 确认并拼柜</button>
-        <button class="secondary" @click="revise" :disabled="loading">调整重算</button>
-        <button class="danger" @click="cancel" :disabled="loading">取消</button>
-      </div>
-      <div style="margin-top:12px;padding:10px;background:#0f1419;border-radius:8px;border:1px solid #2a3a52;">
-        <div style="font-size:13px;color:#93c5fd;margin-bottom:6px;">自然语言改方案（材料 / 柜型 / 详设截面）</div>
-        <div class="row" style="align-items:stretch;">
-          <textarea v-model="nlInstruction" style="min-height:56px;flex:1;"
-            placeholder="例：去掉钢梁；柜型改成40GP；框架用槽钢16#，底板槽钢12#3根，γ=2.0，图纸ST-4M-001"></textarea>
-          <button @click="reviseNl" :disabled="loading || !nlInstruction.trim()" style="align-self:flex-end;">应用并重算</button>
-        </div>
-        <div class="status-bar" v-if="nlStatus">{{ nlStatus }}</div>
-        <div style="font-size:12px;color:#8b9bb4;margin-top:6px;">
-          结构：
-          <span class="badge" :class="designFactsOk ? 'ok' : 'warn'">
-            {{ designFactsOk ? '已加载详设' : '待详设（默认截面非正式）' }}
-          </span>
-          {{ (result.design_facts_status && result.design_facts_status.message) || '' }}
-        </div>
-      </div>
-    </div>
-
-    <!-- 拼柜结果 + 双体积口径 -->
-    <div class="panel" v-if="result.container_plan && (result.container_plan.layout || result.container_plan.can_fit != null)">
-      <h2>拼柜结果（团队B）</h2>
-      <div>
-        <span class="badge" :class="result.container_plan.can_fit ? 'ok' : 'err'">
-          can_fit={{ result.container_plan.can_fit }}
-        </span>
-        <span class="badge">柜型 {{ result.container_plan.container_type }}</span>
-        <span class="badge">重量 {{ pct(volMetrics.weight) }}</span>
-        <span class="badge">引擎 {{ result.container_plan.engine || '-' }}</span>
-        <span class="badge" v-if="result.goal_status && result.goal_status.verdict">
-          目标: {{ result.goal_status.verdict }}
-        </span>
-      </div>
-      <div style="margin-top:10px;padding:10px;background:#0f1419;border-radius:8px;border:1px solid #2a3a52;font-size:13px;line-height:1.6;">
-        <div style="color:#93c5fd;font-weight:600;margin-bottom:6px;">体积 / 订柜双口径（勿混）</div>
+  <div id="app" class="shell">
+    <!-- Top bar -->
+    <header class="topbar">
+      <div class="brand">
+        <div class="brand-mark">P</div>
         <div>
-          <span class="badge ok">订柜 N0 = {{ volMetrics.n0 != null ? volMetrics.n0 : '-' }}</span>
-          <span class="badge">3D 用柜 = {{ volMetrics.used != null ? volMetrics.used : '-' }}</span>
-          <span class="badge" v-if="volMetrics.binding">绑定 {{ volMetrics.binding }}</span>
-        </div>
-        <div style="margin-top:6px;color:#cbd5e1;">
-          <strong>订柜有效体积率</strong>
-          <span class="badge ok">{{ pct(volMetrics.bookingVol) }}</span>
-          <span style="color:#8b9bb4;">= V_eff / (用柜×柜可用容积)；V_eff=min(outer, content×k)，非空心架实心</span>
-        </div>
-        <div style="margin-top:4px;color:#cbd5e1;">
-          <strong>外廓摆柜率</strong>
-          <span class="badge warn">{{ pct(volMetrics.outerVol) }}</span>
-          <span style="color:#8b9bb4;">= Σ箱外廓 / 柜几何；仅布局松紧，<b>不作订舱分子</b></span>
-        </div>
-        <div style="margin-top:4px;color:#94a3b8;font-size:12px;" v-if="volMetrics.note">
-          {{ volMetrics.note }}
+          <h1>装箱拼柜 · Team Mode</h1>
+          <div class="tag">总分总分总 · 9 Agents + HITL</div>
         </div>
       </div>
-      <div class="legend" v-if="result.legend && result.legend.length">
-        <span v-for="L in result.legend" :key="L.box_id">
-          <i class="swatch" :style="{background: L.color}"></i>
-          {{ L.box_id }} {{ L.box_type }}
+      <div class="top-status">
+        <span class="pill" :class="skjolberOk ? 'ok' : 'warn'">
+          <span class="dot"></span> skjolber {{ skjolberOk ? 'UP' : '本地回退' }}
+        </span>
+        <span class="pill" v-if="result.phase">phase {{ result.phase }}</span>
+        <span class="pill" v-if="agentSteps.length">{{ agentSteps.length }} steps</span>
+        <span class="pill warn" v-if="pendingCheckpoints.length"
+              style="cursor:pointer" @click="mainTab='history'; loadPendingCheckpoints()"
+              title="磁盘上未确认的 HITL">
+          HITL 待恢复 {{ pendingCheckpoints.length }}
+        </span>
+        <span class="pill" :class="wsStatus === 'live' ? 'ok' : (wsStatus === 'err' ? 'err' : '')"
+              :title="'WebSocket ' + wsStatus">
+          ws {{ wsStatus }}
+        </span>
+        <span class="pill" v-if="result.container_plan && result.container_plan.can_fit != null"
+              :class="result.container_plan.can_fit ? 'ok' : 'err'">
+          can_fit {{ result.container_plan.can_fit }}
+        </span>
+        <span class="pill" v-if="result.risk_report && result.risk_report.decision"
+              :class="riskPillClass">
+          risk {{ result.risk_report.decision }}
         </span>
       </div>
-    </div>
-
-    <!-- 三视角 -->
-    <div class="panel" v-if="hasViews">
-      <h2>三视角布局（views）</h2>
-      <div class="views">
-        <div class="view-card" v-for="key in viewKeys" :key="key">
-          <h3>{{ viewTitle(key) }}</h3>
-          <canvas :ref="'cv_' + key" width="640" height="360"></canvas>
-        </div>
-      </div>
-    </div>
-
-    <!-- 风险 -->
-    <div class="panel" v-if="(result.risks && result.risks.length) || result.risk_report">
-      <h2>风险合规</h2>
-      <div v-if="result.risk_report">
-        <span class="badge" :class="result.risk_report.passed ? 'ok' : 'warn'">
-          score={{ result.risk_report.compliance_score }}
-          level={{ result.risk_report.level }}
-          decision={{ result.risk_report.decision }}
+      <div class="top-actions">
+        <span class="pill" v-if="loading || streamProgress.total">
+          {{ streamProgress.done }}/{{ streamProgress.total || '—' }} agents
         </span>
-        <p style="color:#94a3b8;font-size:13px;">{{ result.risk_report.explanation }}</p>
+        <button class="soft" @click="refreshHealth" :disabled="loading" title="健康检查">刷新</button>
+        <button class="ghost" @click="runPipelineTrace" :disabled="loading">全流程</button>
+        <button class="soft" @click="runDemoSteel" :disabled="loading" title="少量钢件·利用率偏低属正常">
+          钢件轻量
+        </button>
+        <button class="primary-lg" @click="runDemo" :disabled="loading" title="30×密实模块≈24t，高利用率">
+          {{ loading ? '运行中…' : '满载演示' }}
+        </button>
       </div>
-      <ul class="risks">
-        <li v-for="(r,i) in (result.risks||[])" :key="i">{{ r }}</li>
-      </ul>
-    </div>
-
-    <div class="panel" v-if="result.final_response">
-      <h2>汇总（finalize）</h2>
-      <div class="md">{{ result.final_response }}</div>
-    </div>
-
-    <!-- ========== 页底：全部 AI / Agent 输出 ========== -->
-    <div class="panel agent-console" id="agent-console" ref="agentConsole">
-      <h2>
-        <span>Agent 过程输出</span>
-        <span class="hint">感知 → 规划 → 工具 → 行动 → 目标 · 点选 Agent 筛选</span>
-      </h2>
-
-      <div v-if="!agentSteps.length" class="empty-agent">
-        运行「一键演示」或「Agent 全流程轨迹」后，此处显示每个智能体的完整输出。
+      <div class="progress-track" v-if="loading || streamProgress.done">
+        <div class="progress-fill" :style="{ width: streamProgress.pct + '%' }"></div>
       </div>
+    </header>
 
-      <template v-else>
-        <!-- 流程条：可点选 -->
-        <div class="flow-strip">
-          <button
-            type="button"
-            class="flow-chip"
-            :class="{ active: selectedAgent === 'ALL' }"
-            @click="selectedAgent = 'ALL'"
-          >
-            <span class="idx">*</span> 全部 ({{ agentSteps.length }})
-          </button>
-          <template v-for="(s, i) in agentSteps">
-            <span class="flow-arrow" :key="'a'+i" v-if="i > 0">→</span>
+    <div class="body">
+      <!-- Left: 三层组织图 + roster -->
+      <aside class="sidebar">
+        <div class="side-head">
+          <div class="label">大 Team ⊃ A + B</div>
+          <h2>智能体组织</h2>
+          <p>NL 通用 Agent · 点选成员 · tools 算数</p>
+        </div>
+
+        <div class="org-chart" title="大 Team 包两个小 Team">
+          <div class="org-title">三层组织 · {{ result.team_mode || 'big_team_a_b' }}</div>
+          <div class="org-layer-big">
+            <div class="org-label">大 Team · 编排 / 闸门 / critic / 收口</div>
+            <div class="org-big-nodes">
+              <span
+                class="org-chip"
+                v-for="m in orgBigMembers"
+                :key="m.id"
+                :class="orgChipClass(m.id)"
+                @click="selectAgent(m.id)"
+              >{{ m.short }} {{ m.name }}</span>
+            </div>
+            <div class="org-children">
+              <div class="org-team-box team-a">
+                <div class="org-label">小 Team A · 成箱</div>
+                <div class="org-big-nodes">
+                  <span
+                    class="org-chip"
+                    v-for="m in orgAMembers"
+                    :key="m.id"
+                    :class="orgChipClass(m.id)"
+                    @click="selectAgent(m.id)"
+                  >{{ m.short }}</span>
+                </div>
+              </div>
+              <div class="org-team-box team-b">
+                <div class="org-label">小 Team B · 拼柜</div>
+                <div class="org-big-nodes">
+                  <span
+                    class="org-chip"
+                    v-for="m in orgBMembers"
+                    :key="m.id"
+                    :class="orgChipClass(m.id)"
+                    @click="selectAgent(m.id)"
+                  >{{ m.short }}</span>
+                </div>
+              </div>
+            </div>
+            <div class="org-hitl-row">
+              <span
+                class="org-chip"
+                :class="orgChipClass('hitl_wait')"
+                @click="selectAgent('hitl_wait')"
+              >★ HITL 闸门</span>
+            </div>
+          </div>
+        </div>
+
+        <div class="pipeline-mini">
+          <span class="phase-chip" :class="{ on: phaseOn('big') }">大Team</span>
+          <span class="phase-chip" :class="{ on: phaseOn('A') }">小TeamA</span>
+          <span class="phase-chip" :class="{ on: phaseOn('HITL') }">HITL</span>
+          <span class="phase-chip" :class="{ on: phaseOn('B') }">小TeamB</span>
+        </div>
+
+        <div class="roster">
+          <div class="team-group" v-for="g in rosterGroups" :key="g.key">
+            <div class="g-title">{{ g.title }}</div>
             <button
               type="button"
-              class="flow-chip"
-              :class="{ active: selectedAgent === s.node, err: s.status === 'error' }"
-              :key="'c'+i+s.node"
-              @click="selectAgent(s.node)"
-              :title="s.title || s.node"
+              class="member"
+              v-for="m in g.members"
+              :key="m.id"
+              :class="[memberStatus(m.id), { active: selectedAgent === m.id }]"
+              @click="selectAgent(m.id)"
             >
-              <span class="idx">{{ i + 1 }}</span>
-              {{ shortTitle(s) }}
+              <div class="avatar" :style="{ background: m.color }">{{ m.short }}</div>
+              <div class="meta">
+                <div class="name">{{ m.name }}</div>
+                <div class="role">{{ m.role }}</div>
+              </div>
+              <span class="st-dot" :class="memberStatus(m.id)" :title="memberStatus(m.id)"></span>
             </button>
+          </div>
+
+          <div class="team-group" v-if="extraStepNodes.length">
+            <div class="g-title">其它步骤</div>
+            <button
+              type="button"
+              class="member"
+              v-for="n in extraStepNodes"
+              :key="n"
+              :class="[memberStatus(n), { active: selectedAgent === n }]"
+              @click="selectAgent(n)"
+            >
+              <div class="avatar" style="background:#475569">+</div>
+              <div class="meta">
+                <div class="name">{{ n }}</div>
+                <div class="role">运行时步骤</div>
+              </div>
+              <span class="st-dot" :class="memberStatus(n)"></span>
+            </button>
+          </div>
+        </div>
+
+        <div class="side-composer">
+          <textarea
+            v-model="userInput"
+            placeholder="材料清单；留空点「满载」=30×密实模块高利用率；钢件叙事点顶栏「钢件轻量」"
+          ></textarea>
+          <div class="composer-row">
+            <button @click="runTeamA" :disabled="loading">生成方案</button>
+            <button class="soft" @click="runDemo" :disabled="loading" title="30模块≈24t">满载</button>
+            <button class="ghost" @click="runPdf" :disabled="loading">PDF</button>
+          </div>
+          <div class="status-line">{{ statusText }}</div>
+        </div>
+      </aside>
+
+      <!-- Main -->
+      <main class="main">
+        <nav class="tabs">
+          <button type="button" class="tab" :class="{ active: mainTab === 'overview' }" @click="mainTab = 'overview'">
+            总览
+          </button>
+          <button type="button" class="tab" :class="{ active: mainTab === 'boxes' }" @click="mainTab = 'boxes'">
+            装箱方案 <span class="n" v-if="(result.boxes||[]).length">{{ result.boxes.length }}</span>
+          </button>
+          <button type="button" class="tab" :class="{ active: mainTab === 'visual' }" @click="mainTab = 'visual'">
+            可视化
+          </button>
+          <button type="button" class="tab" :class="{ active: mainTab === 'risk' }" @click="mainTab = 'risk'">
+            风险
+          </button>
+          <button type="button" class="tab" :class="{ active: mainTab === 'agents' }" @click="mainTab = 'agents'">
+            Agent 输出 <span class="n" v-if="agentSteps.length">{{ filteredSteps.length }}/{{ agentSteps.length }}</span>
+          </button>
+          <button type="button" class="tab" :class="{ active: mainTab === 'history' }" @click="mainTab = 'history'; loadRuns()">
+            历史
+          </button>
+        </nav>
+
+        <div class="workspace-split">
+        <div class="workspace" ref="workspace">
+          <!-- Empty -->
+          <div class="empty-hero" v-if="!hasAnyResult && mainTab === 'overview'">
+            <h3>组建团队，开始装柜</h3>
+            <p>
+              左侧是 9 智能体 + HITL 团队。运行后可点选成员，在「Agent 输出」里看规划、工具与结论。
+              计算由代码完成，不是聊天编造柜数。
+            </p>
+            <div class="actions">
+              <button class="primary-lg" @click="runDemo" :disabled="loading">一键演示</button>
+              <button class="soft" @click="runPipelineTrace" :disabled="loading">全流程轨迹</button>
+              <button class="ghost" @click="runTeamA" :disabled="loading">仅团队 A</button>
+            </div>
+          </div>
+
+          <!-- ===== 总览 ===== -->
+          <template v-if="mainTab === 'overview' && hasAnyResult">
+            <div class="hitl-bar" v-if="result.phase === 'await_user_confirm' || (result.hitl_summary && result.hitl_summary.n_boxes)">
+              <div class="hitl-top">
+                <div>
+                  <strong>★ HITL 确认闸门</strong>
+                  <div style="font-size:12px;color:var(--muted);margin-top:4px;max-width:560px;">
+                    {{ (result.hitl_summary && result.hitl_summary.message) || '请确认柜型后进入团队 B 拼柜' }}
+                  </div>
+                </div>
+                <div class="row">
+                  <label style="font-size:13px;color:var(--muted)">
+                    柜型
+                    <select v-model="containerType" style="margin-left:6px">
+                      <option v-for="opt in containerOptions" :key="opt.value" :value="opt.value">
+                        {{ opt.label }}{{ opt.recommended ? '（推荐）' : '' }}
+                      </option>
+                    </select>
+                  </label>
+                  <button @click="confirmPack" :disabled="loading">确认并拼柜 · resume</button>
+                  <button class="soft" @click="mainTab = 'boxes'" :disabled="loading">改方案</button>
+                  <button class="danger" @click="cancel" :disabled="loading">取消</button>
+                </div>
+              </div>
+              <div class="hitl-cards" v-if="hitlCards.length">
+                <div class="hitl-card" v-for="c in hitlCards" :key="c.id" :class="c.level">
+                  <div class="t">{{ c.title }}</div>
+                  <div class="v">{{ c.value }}</div>
+                  <div class="h">{{ c.hint }}</div>
+                </div>
+              </div>
+              <div style="overflow:auto" v-if="hitlPreview.length">
+                <table class="data">
+                  <thead><tr><th>箱号</th><th>箱型</th><th>外廓</th><th>毛重</th><th>结构</th></tr></thead>
+                  <tbody>
+                    <tr v-for="b in hitlPreview" :key="b.box_id">
+                      <td>{{ b.box_id }}</td><td>{{ b.box_type }}</td><td>{{ b.outer }}</td>
+                      <td>{{ b.gross_weight_kg }}</td><td>{{ b.structure }}</td>
+                    </tr>
+                  </tbody>
+                </table>
+              </div>
+            </div>
+
+            <div class="section" v-if="engineAbSummary">
+              <div class="section-h">
+                <h3>引擎 A/B</h3>
+                <button class="ghost" type="button" @click="loadEngineAb" :disabled="loading">刷新</button>
+              </div>
+              <div class="metrics">
+                <div class="metric" v-for="row in engineAbSummary" :key="row.name">
+                  <div class="k">{{ row.name }}</div>
+                  <div class="v" style="font-size:14px">laff {{ row.laff }} · skj {{ row.skj }}</div>
+                  <div class="h">{{ row.note }}</div>
+                </div>
+              </div>
+            </div>
+
+            <div class="section">
+              <div class="section-h">
+                <h3>运行摘要</h3>
+                <span class="sub">{{ result.phase || '-' }} · session {{ sessionId }} · v{{ harnessVersion || '—' }} · {{ result.team_mode || 'big_team_a_b' }} · {{ (result.intent_spec && result.intent_spec.scheme_id) || (result.agent_style || '') }}</span>
+              </div>
+              <p class="foot-note" style="margin:0 0 8px">
+                <strong>双口径：</strong>订舱报 <em>N0</em>；工程装载看 <em>3D 用柜</em>——二者可不相同，勿混为一谈。
+              </p>
+              <div class="metrics">
+                <div class="metric">
+                  <div class="k">箱数</div>
+                  <div class="v">{{ (result.boxes || []).length || 0 }}</div>
+                  <div class="h">标准箱合箱结果</div>
+                </div>
+                <div class="metric">
+                  <div class="k">订柜 N0</div>
+                  <div class="v">{{ volMetrics.n0 != null ? volMetrics.n0 : '—' }}</div>
+                  <div class="h">订舱/汇报用 · max(重量,有效体积)</div>
+                </div>
+                <div class="metric">
+                  <div class="k">3D 用柜</div>
+                  <div class="v">{{ volMetrics.used != null ? volMetrics.used : '—' }}</div>
+                  <div class="h">装载引擎实际柜数 · 可≥N0</div>
+                </div>
+                <div class="metric">
+                  <div class="k">订柜有效体积率</div>
+                  <div class="v" style="color:var(--ok)">{{ pct(volMetrics.bookingVol) }}</div>
+                  <div class="h">V_eff / 柜可用 · 非空心实心</div>
+                </div>
+                <div class="metric">
+                  <div class="k">外廓摆柜率</div>
+                  <div class="v" style="color:var(--warn)">{{ pct(volMetrics.outerVol) }}</div>
+                  <div class="h">仅布局松紧 · 不作订舱</div>
+                </div>
+                <div class="metric">
+                  <div class="k">重量利用率</div>
+                  <div class="v">{{ pct(volMetrics.weight) }}</div>
+                  <div class="h">引擎 {{ (result.container_plan && result.container_plan.engine) || '—' }}</div>
+                </div>
+              </div>
+            </div>
+
+            <div class="section">
+              <div class="section-h">
+                <h3>What-if 情景</h3>
+                <span class="sub">OptiGuide 式 · 求解器重算 · plan_diff</span>
+              </div>
+              <div class="row" style="flex-wrap:wrap;gap:8px;margin-bottom:8px">
+                <select v-model="packProfile" style="min-width:160px;padding:6px 8px" @change="onProfileHint">
+                  <option v-for="p in packProfiles" :key="p.id" :value="p.id">{{ p.label || p.id }}</option>
+                </select>
+                <select v-model="whatifScenario" style="min-width:200px;padding:6px 8px">
+                  <option v-for="s in whatifScenarios" :key="s.id" :value="s.id">{{ s.label || s.id }}</option>
+                </select>
+                <input v-model.number="whatifMaxC" type="number" min="0" placeholder="max柜(可选)"
+                       style="width:110px;padding:6px 8px" />
+                <button type="button" class="primary" :disabled="whatifLoading || !sessionId" @click="runWhatIf">
+                  {{ whatifLoading ? '计算中…' : '跑 What-if' }}
+                </button>
+                <button type="button" class="ghost" :disabled="!whatifResult || !whatifResult.result_session_id" @click="applyWhatIf">
+                  应用为当前方案
+                </button>
+                <button type="button" class="ghost" @click="loadWhatIfScenarios(); loadProfiles()">刷新</button>
+              </div>
+              <p class="foot-note" v-if="!sessionId">先跑一遍流水线拿到 session，再做 What-if</p>
+              <p class="foot-note" v-if="profileHint">{{ profileHint }}</p>
+              <div v-if="whatifResult && whatifResult.ok" style="font-size:12px;line-height:1.55">
+                <p style="margin:0 0 6px"><strong>{{ whatifResult.scenario_label || whatifResult.scenario }}</strong>
+                  · 材料 {{ whatifResult.materials_before }}→{{ whatifResult.materials_after }}
+                  · max_c={{ whatifResult.max_containers }}
+                  <span v-if="whatifResult.result_session_id"> · {{ whatifResult.result_session_id }}</span>
+                </p>
+                <div class="metrics" style="margin-bottom:8px">
+                  <div class="metric">
+                    <div class="k">N0</div>
+                    <div class="v" style="font-size:16px">{{ (whatifResult.before||{}).n0 }} → {{ (whatifResult.after||{}).n0 }}</div>
+                  </div>
+                  <div class="metric">
+                    <div class="k">3D 用柜</div>
+                    <div class="v" style="font-size:16px">{{ (whatifResult.before||{}).containers_used }} → {{ (whatifResult.after||{}).containers_used }}</div>
+                  </div>
+                  <div class="metric">
+                    <div class="k">mid50</div>
+                    <div class="v" style="font-size:16px">{{ pct((whatifResult.before||{}).worst_mid50) }} → {{ pct((whatifResult.after||{}).worst_mid50) }}</div>
+                  </div>
+                  <div class="metric">
+                    <div class="k">ship_ok</div>
+                    <div class="v" style="font-size:16px">{{ (whatifResult.before||{}).ship_ok }} → {{ (whatifResult.after||{}).ship_ok }}</div>
+                  </div>
+                </div>
+                <pre style="white-space:pre-wrap;background:var(--panel2,#111);padding:8px;border-radius:6px;margin:0;max-height:180px;overflow:auto">{{ (whatifResult.plan_diff||{}).narrative || '—' }}</pre>
+              </div>
+              <p class="foot-note" v-if="whatifError" style="color:var(--err,#f07178)">{{ whatifError }}</p>
+            </div>
+
+            <div class="section" v-if="porManifest.by_part && porManifest.by_part.length">
+              <div class="section-h">
+                <h3>POR 装柜单</h3>
+                <span class="pill">{{ porManifest.summary || (porManifest.n_containers + ' 柜') }}</span>
+              </div>
+              <div style="overflow-x:auto;max-height:200px">
+                <table class="mini-table" style="width:100%;font-size:12px;border-collapse:collapse">
+                  <thead>
+                    <tr style="text-align:left;color:var(--muted)">
+                      <th style="padding:4px 6px">料号</th>
+                      <th style="padding:4px 6px">重量kg</th>
+                      <th style="padding:4px 6px">箱数</th>
+                      <th style="padding:4px 6px">柜号</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    <tr v-for="(p,i) in porManifest.by_part.slice(0,20)" :key="'por'+i">
+                      <td style="padding:4px 6px">{{ p.part_no }}</td>
+                      <td style="padding:4px 6px">{{ p.total_kg }}</td>
+                      <td style="padding:4px 6px">{{ p.n_boxes }}</td>
+                      <td style="padding:4px 6px">{{ (p.containers||[]).join(',') }}</td>
+                    </tr>
+                  </tbody>
+                </table>
+              </div>
+            </div>
+
+            <div class="split-2">
+              <div class="section" v-if="cogPrimary">
+                <div class="section-h">
+                  <h3>重心 COG</h3>
+                  <span class="pill" :class="cogBalanceClass">{{ cogPrimary.balance || '-' }}</span>
+                </div>
+                <div class="metrics">
+                  <div class="metric">
+                    <div class="k">左右偏心</div>
+                    <div class="v" :style="{ color: latEccColor, fontSize: '18px' }">{{ pct(cogPrimary.lateral_eccentricity) }}</div>
+                    <div class="h">宜 ≤5%</div>
+                  </div>
+                  <div class="metric">
+                    <div class="k">前后位置</div>
+                    <div class="v" :style="{ color: longPosColor, fontSize: '18px' }">{{ pct(cogPrimary.longitudinal_position) }}</div>
+                    <div class="h">宜 40%–60%</div>
+                  </div>
+                  <div class="metric">
+                    <div class="k">高度比</div>
+                    <div class="v" style="font-size:18px">{{ pct(cogPrimary.height_ratio) }}</div>
+                    <div class="h">宜 ≤55%</div>
+                  </div>
+                  <div class="metric">
+                    <div class="k">中段50%质量</div>
+                    <div class="v" :style="{ color: mid50Color, fontSize: '18px' }">{{ pct(cogPrimary.mass_in_mid50_ratio) }}</div>
+                    <div class="h">CTU 60/50 宜≥60%</div>
+                  </div>
+                </div>
+                <p class="foot-note" v-if="cogCaption">{{ cogCaption }}</p>
+              </div>
+
+              <div class="section" v-if="stackingInfo">
+                <div class="section-h">
+                  <h3>堆码 / 空隙</h3>
+                  <span class="pill" :class="stackPillClass">{{ stackingInfo.stacked_placements || 0 }} 件上二层+</span>
+                </div>
+                <div class="metrics">
+                  <div class="metric">
+                    <div class="k">叠放件数</div>
+                    <div class="v" style="font-size:18px">{{ stackingInfo.stacked_placements || 0 }}</div>
+                    <div class="h">max_z {{ stackingInfo.max_z_mm || 0 }}mm</div>
+                  </div>
+                  <div class="metric">
+                    <div class="k">限层 / 间隙</div>
+                    <div class="v" style="font-size:18px">{{ stackingInfo.max_stack_layers || '—' }} / {{ stackingInfo.clearance_mm || 0 }}mm</div>
+                    <div class="h">支撑比 {{ stackingInfo.support_ratio_min != null ? stackingInfo.support_ratio_min : '—' }}</div>
+                  </div>
+                  <div class="metric" v-if="layoutQuality">
+                    <div class="k">最大水平空隙</div>
+                    <div class="v" :style="{ color: voidGapColor, fontSize: '18px' }">{{ Math.round(layoutQuality.max_horizontal_gap_mm || 0) }}mm</div>
+                    <div class="h">CTU 宜≤150mm · 超限 {{ layoutQuality.gaps_over_limit || 0 }}</div>
+                  </div>
+                  <div class="metric" v-if="stackingInfo.multi_start_winner">
+                    <div class="k">multi-start</div>
+                    <div class="v" style="font-size:16px">{{ stackingInfo.multi_start_winner }}</div>
+                    <div class="h">n={{ stackingInfo.multi_start_n || '—' }} · CoG选优</div>
+                  </div>
+                </div>
+              </div>
+
+              <div class="section" v-if="perCabinCog.length">
+                <div class="section-h">
+                  <h3>分柜 mid50</h3>
+                  <span class="pill">worst {{ pct(worstMid50) }}</span>
+                </div>
+                <div style="overflow-x:auto">
+                  <table class="mini-table" style="width:100%;font-size:12px;border-collapse:collapse">
+                    <thead>
+                      <tr style="text-align:left;color:var(--muted)">
+                        <th style="padding:4px 6px">柜</th>
+                        <th style="padding:4px 6px">mid50</th>
+                        <th style="padding:4px 6px">横偏</th>
+                        <th style="padding:4px 6px">前后</th>
+                        <th style="padding:4px 6px">平衡</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      <tr v-for="c in perCabinCog" :key="'c'+c.container_no"
+                          :style="{ background: mid50RowBg(c.mass_in_mid50_ratio) }">
+                        <td style="padding:4px 6px">#{{ c.container_no }}</td>
+                        <td style="padding:4px 6px;font-weight:600" :style="{ color: mid50Tone(c.mass_in_mid50_ratio) }">{{ pct(c.mass_in_mid50_ratio) }}</td>
+                        <td style="padding:4px 6px">{{ pct(c.lateral_eccentricity) }}</td>
+                        <td style="padding:4px 6px">{{ pct(c.longitudinal_position) }}</td>
+                        <td style="padding:4px 6px">{{ c.balance || '—' }}</td>
+                      </tr>
+                    </tbody>
+                  </table>
+                </div>
+                <p class="foot-note">绿≥60% · 黄 40–60% · 红&lt;40%（CTU 60/50）</p>
+              </div>
+
+              <div class="section" v-if="rPipeline.length">
+                <div class="section-h">
+                  <h3>CoG 修理管线 R0–R4</h3>
+                  <span class="pill">before→after</span>
+                </div>
+                <div class="flow-strip" style="flex-wrap:wrap;gap:6px">
+                  <div v-for="(r, i) in rPipeline" :key="'r'+i"
+                       class="flow-chip" style="cursor:default;opacity:1"
+                       :style="{ borderColor: r.applied ? 'var(--ok, #3d8)' : 'var(--muted)' }">
+                    <span class="idx">{{ r.step }}</span>
+                    <span v-if="r.applied" style="color:var(--ok,#3d8)">✓</span>
+                    <span v-else style="color:var(--muted)">–</span>
+                    <span v-if="r.mid50_before != null || r.mid50_after != null" style="font-size:11px;margin-left:4px">
+                      {{ pct(r.mid50_before) }}→{{ pct(r.mid50_after) }}
+                    </span>
+                    <span v-if="r.lat_before != null" style="font-size:11px;margin-left:4px">
+                      lat {{ pct(r.lat_before) }}→{{ pct(r.lat_after) }}
+                    </span>
+                  </div>
+                </div>
+                <p class="foot-note">R0校验 · R1平移/镜像 · R2条带 · R4 swap/滑入 · R3局部 · LNS最差柜 · LAT横偏</p>
+              </div>
+
+              <div class="section" v-if="secureWorkOrder.items && secureWorkOrder.items.length">
+                <div class="section-h">
+                  <h3>绑扎 / 空隙工单</h3>
+                  <span class="pill" :class="secureSevClass">{{ secureWorkOrder.severity || 'WARN' }} · 不拦出运</span>
+                </div>
+                <p class="foot-note" style="margin-bottom:8px">{{ secureWorkOrder.summary }}</p>
+                <ul style="margin:0;padding-left:18px;font-size:12px;line-height:1.55;color:var(--text)">
+                  <li v-for="it in secureWorkOrder.items.slice(0, 12)" :key="'sec'+it.seq">
+                    <strong>[{{ it.severity }}]</strong>
+                    {{ it.type }}
+                    <span v-if="it.container_no">柜{{ it.container_no }}</span>
+                    <span v-if="it.box_id">{{ it.box_id }}</span>
+                    — {{ it.action }}
+                    <span style="color:var(--muted)" v-if="it.material">（{{ it.material }}）</span>
+                  </li>
+                </ul>
+              </div>
+
+              <div class="section" v-if="result.risk_report">
+                <div class="section-h">
+                  <h3>风险裁决</h3>
+                  <span class="pill" :class="riskPillClass">{{ result.risk_report.decision }}</span>
+                </div>
+                <p style="margin:0 0 8px;font-size:13px;color:var(--muted);line-height:1.5;">
+                  {{ result.risk_report.explanation }}
+                </p>
+                <div class="row">
+                  <span class="pill">score {{ result.risk_report.compliance_score }}</span>
+                  <span class="pill">level {{ result.risk_report.level }}</span>
+                </div>
+              </div>
+            </div>
+
+            <div class="section" v-if="result.final_response">
+              <div class="section-h"><h3>收口汇总</h3></div>
+              <div class="md">{{ result.final_response }}</div>
+            </div>
+
+            <div class="section">
+              <div class="section-h">
+                <h3>团队时间线</h3>
+                <button class="ghost" type="button" @click="mainTab = 'agents'; selectedAgent = 'ALL'">查看全部</button>
+              </div>
+              <div class="flow-strip">
+                <button type="button" class="flow-chip" :class="{ active: selectedAgent === 'ALL' }"
+                        @click="selectAgent('ALL')">全部</button>
+                <button
+                  type="button"
+                  class="flow-chip"
+                  v-for="(s, i) in agentSteps"
+                  :key="'tl'+i+s.node"
+                  :class="{ active: selectedAgent === s.node }"
+                  @click="selectAgent(s.node)"
+                >
+                  <span class="idx">{{ i + 1 }}</span>
+                  {{ shortTitle(s) }}
+                </button>
+              </div>
+              <p class="foot-note">点击芯片或左侧成员 → 进入 Agent 输出并筛选</p>
+            </div>
+          </template>
+
+          <!-- ===== 装箱 ===== -->
+          <template v-if="mainTab === 'boxes'">
+            <div class="section" v-if="result.boxes && result.boxes.length">
+              <div class="section-h">
+                <h3>装箱方案（团队 A）</h3>
+                <span class="pill" :class="designFactsOk ? 'ok' : 'warn'">
+                  {{ designFactsOk ? '已加载详设' : '待详设' }}
+                </span>
+              </div>
+              <div style="overflow:auto">
+                <table class="data">
+                  <thead>
+                    <tr>
+                      <th>箱号</th><th>箱型</th><th>外尺寸 mm</th><th>毛重 kg</th><th>结构</th><th>属性</th><th>内容</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    <tr v-for="b in result.boxes" :key="b.box_id">
+                      <td>{{ b.box_id }}</td>
+                      <td>{{ b.box_type }}</td>
+                      <td>
+                        {{ b.outer_size_mm && b.outer_size_mm.length }}×
+                        {{ b.outer_size_mm && b.outer_size_mm.width }}×
+                        {{ b.outer_size_mm && b.outer_size_mm.height }}
+                      </td>
+                      <td>{{ b.gross_weight_kg }}</td>
+                      <td>{{ b.structure_conclusion || '—' }}</td>
+                      <td>{{ (b.special_attributes || []).join(', ') }}</td>
+                      <td>
+                        <span v-for="c in (b.content||[])" :key="(c.material_id||'')+(c.name||'')">
+                          {{ c.name }}×{{ c.quantity }}
+                        </span>
+                      </td>
+                    </tr>
+                  </tbody>
+                </table>
+              </div>
+
+              <div class="hitl-bar" style="margin-top:14px;margin-bottom:0" v-if="result.phase === 'await_user_confirm'">
+                <strong>确认后进入拼柜</strong>
+                <select v-model="containerType">
+                  <option v-for="opt in containerOptions" :key="opt.value" :value="opt.value">
+                    {{ opt.label }}{{ opt.recommended ? '（推荐）' : '' }}
+                  </option>
+                </select>
+                <button @click="confirmPack" :disabled="loading">确认并拼柜</button>
+                <button class="danger" @click="cancel" :disabled="loading">取消</button>
+              </div>
+            </div>
+            <div class="section nl-box" v-if="result.boxes && result.boxes.length">
+              <div class="section-h"><h3>自然语言改方案</h3></div>
+              <div class="row" style="align-items:stretch">
+                <textarea v-model="nlInstruction" style="flex:1;min-height:56px"
+                  placeholder="例：去掉钢梁；柜型改 40GP；框架槽钢16#，γ=2.0"></textarea>
+                <button @click="reviseNl" :disabled="loading || !nlInstruction.trim()">应用</button>
+              </div>
+              <div class="status-line" v-if="nlStatus">{{ nlStatus }}</div>
+            </div>
+            <div class="empty-hero" v-if="!(result.boxes && result.boxes.length)">
+              <h3>尚无装箱方案</h3>
+              <p>先运行「生成方案」或「一键演示」。</p>
+              <div class="actions">
+                <button @click="runTeamA" :disabled="loading">生成方案</button>
+              </div>
+            </div>
+          </template>
+
+          <!-- ===== 可视化 ===== -->
+          <template v-if="mainTab === 'visual'">
+            <div class="section" v-if="result.container_plan && (result.container_plan.layout || result.container_plan.can_fit != null)">
+              <div class="section-h">
+                <h3>拼柜结果</h3>
+                <div class="row">
+                  <span class="pill" :class="result.container_plan.can_fit ? 'ok' : 'err'">
+                    can_fit {{ result.container_plan.can_fit }}
+                  </span>
+                  <span class="pill">{{ result.container_plan.container_type }}</span>
+                  <span class="pill">{{ result.container_plan.engine || '-' }}</span>
+                </div>
+              </div>
+              <div class="metrics" style="margin-bottom:12px">
+                <div class="metric">
+                  <div class="k">订柜有效体积率</div>
+                  <div class="v" style="font-size:18px;color:var(--ok)">{{ pct(volMetrics.bookingVol) }}</div>
+                </div>
+                <div class="metric">
+                  <div class="k">外廓摆柜率</div>
+                  <div class="v" style="font-size:18px;color:var(--warn)">{{ pct(volMetrics.outerVol) }}</div>
+                </div>
+                <div class="metric">
+                  <div class="k">重量</div>
+                  <div class="v" style="font-size:18px">{{ pct(volMetrics.weight) }}</div>
+                </div>
+              </div>
+              <div class="legend" v-if="result.legend && result.legend.length">
+                <span v-for="L in result.legend" :key="L.box_id">
+                  <i class="swatch" :style="{ background: L.color }"></i>
+                  {{ L.box_id }} {{ L.box_type }}
+                </span>
+              </div>
+            </div>
+
+            <div class="section" v-if="hasViews">
+              <div class="section-h">
+                <h3>三视角 · COG</h3>
+                <div class="row">
+                  <span class="sub">默认单柜绘制 · 红点=重心 · 矮货侧视会扁属比例问题已拉高画布</span>
+                  <label style="font-size:12px;color:var(--muted)" v-if="viewContainerOptions.length > 1">
+                    柜号
+                    <select v-model.number="viewContainerNo" @change="onViewContainerChange" style="margin-left:6px">
+                      <option v-for="n in viewContainerOptions" :key="n" :value="n">#{{ n }}</option>
+                    </select>
+                  </label>
+                </div>
+              </div>
+              <div class="views">
+                <div class="view-card" v-for="key in viewKeys" :key="key">
+                  <h4>
+                    {{ viewTitle(key) }}
+                    <span style="color:#94a3b8;font-weight:400">· 柜#{{ viewContainerNo }}</span>
+                    <span v-if="viewHasCog(key)" style="color:#f87171">· COG</span>
+                  </h4>
+                  <canvas
+                    :ref="'cv_' + key"
+                    :width="viewCanvasSize(key).w"
+                    :height="viewCanvasSize(key).h"
+                  ></canvas>
+                </div>
+              </div>
+            </div>
+
+            <div class="section" v-if="hasScene3d">
+              <div class="section-h">
+                <h3>等轴测 3D</h3>
+                <span class="sub">拖拽旋转 · 滚轮缩放</span>
+              </div>
+              <canvas
+                ref="cv3d"
+                width="960"
+                height="480"
+                @mousedown="on3dDown"
+                @mousemove="on3dMove"
+                @mouseup="on3dUp"
+                @mouseleave="on3dUp"
+                @wheel.prevent="on3dWheel"
+              ></canvas>
+            </div>
+
+            <div class="empty-hero" v-if="!hasViews && !hasScene3d">
+              <h3>暂无布局图</h3>
+              <p>完成拼柜后显示三视角与 3D。</p>
+            </div>
+          </template>
+
+          <!-- ===== 风险 ===== -->
+          <template v-if="mainTab === 'risk'">
+            <div class="section" v-if="result.risk_report || (result.risks && result.risks.length)">
+              <div class="section-h">
+                <h3>风险合规</h3>
+                <span class="pill" :class="riskPillClass" v-if="result.risk_report">
+                  {{ result.risk_report.decision }} · {{ result.risk_report.level }}
+                </span>
+              </div>
+              <p style="font-size:13px;color:var(--muted);line-height:1.5;margin:0 0 10px"
+                 v-if="result.risk_report">
+                {{ result.risk_report.explanation }}
+              </p>
+              <ul class="risks">
+                <li v-for="(r, i) in (result.risks || [])" :key="i">{{ r }}</li>
+              </ul>
+              <div v-if="result.risk_report && result.risk_report.suggested_actions && result.risk_report.suggested_actions.length"
+                   style="margin-top:12px">
+                <div class="section-h"><h3 style="font-size:13px">建议动作</h3></div>
+                <ul class="risks" style="color:#a5b4c8">
+                  <li v-for="(a, i) in result.risk_report.suggested_actions" :key="'sa'+i">{{ a }}</li>
+                </ul>
+              </div>
+            </div>
+            <div class="empty-hero" v-else>
+              <h3>暂无风险报告</h3>
+              <p>团队 B 评估与风险智能体运行后显示。</p>
+            </div>
+          </template>
+
+          <!-- ===== Agents ===== -->
+          <template v-if="mainTab === 'history'">
+            <div class="section" v-if="pendingCheckpoints.length">
+              <div class="section-h">
+                <h3>HITL 待恢复（磁盘 checkpoint）</h3>
+                <button class="ghost" type="button" @click="loadPendingCheckpoints">刷新</button>
+              </div>
+              <p class="foot-note" style="margin-bottom:10px">
+                进程重启后仍可 resume · schema packing.checkpoint.v1
+              </p>
+              <table class="data">
+                <thead>
+                  <tr><th>thread</th><th>run</th><th>箱</th><th>柜型</th><th>saved</th><th></th></tr>
+                </thead>
+                <tbody>
+                  <tr v-for="c in pendingCheckpoints" :key="c.thread_id + (c.run_id||'')">
+                    <td style="font-family:var(--mono);font-size:11px">{{ c.thread_id }}</td>
+                    <td style="font-family:var(--mono);font-size:11px">{{ c.run_id }}</td>
+                    <td>{{ c.n_boxes }}</td>
+                    <td>{{ c.container_type || '—' }}</td>
+                    <td>{{ c.saved_at || '—' }}</td>
+                    <td>
+                      <button type="button" @click="restoreCheckpoint(c.thread_id)">恢复并确认</button>
+                      <button class="ghost" type="button" @click="loadCheckpointPreview(c.thread_id)">预览</button>
+                    </td>
+                  </tr>
+                </tbody>
+              </table>
+              <p class="status-line" v-if="checkpointBanner">{{ checkpointBanner }}</p>
+            </div>
+            <div class="section">
+              <div class="section-h">
+                <h3>运行历史</h3>
+                <div class="row">
+                  <button class="ghost" type="button" @click="loadRuns(); loadPendingCheckpoints()">刷新</button>
+                  <button class="soft" type="button" @click="compareSelectedRuns" :disabled="compareIds.length < 2">对比选中</button>
+                </div>
+              </div>
+              <table class="data" v-if="runsList.length">
+                <thead>
+                  <tr><th></th><th>run_id</th><th>time</th><th>can_fit</th><th>risk</th><th>N0</th><th></th></tr>
+                </thead>
+                <tbody>
+                  <tr v-for="r in runsList" :key="r.run_id">
+                    <td><input type="checkbox" :value="r.run_id" v-model="compareIds" /></td>
+                    <td style="font-family:var(--mono);font-size:11px">{{ r.run_id }}</td>
+                    <td>{{ r.mtime || r.generated_at || '—' }}</td>
+                    <td>{{ r.can_fit }}</td>
+                    <td>{{ r.risk_decision }}</td>
+                    <td>{{ r.n0 }}</td>
+                    <td>
+                      <button class="ghost" type="button" @click="openRunTrace(r.run_id)">trace</button>
+                      <button class="soft" type="button" @click="replayRun(r.run_id)">回放</button>
+                    </td>
+                  </tr>
+                </tbody>
+              </table>
+              <p class="foot-note" v-else>暂无历史；跑演示后自动落盘 output/runs/</p>
+              <pre class="md" v-if="compareResult" style="margin-top:12px">{{ compareResult }}</pre>
+              <pre class="md" v-if="tracePreview" style="margin-top:12px;max-height:240px">{{ tracePreview }}</pre>
+            </div>
+          </template>
+
+          <template v-if="mainTab === 'agents'">
+            <div class="section" id="agent-console" ref="agentConsole">
+              <div class="section-h">
+                <div>
+                  <h3>Agent 过程输出</h3>
+                  <div class="sub" style="margin-top:4px">
+                    {{ selectedAgent === 'ALL' ? '全部成员' : ('聚焦 · ' + selectedAgentLabel) }}
+                  </div>
+                </div>
+                <div class="row">
+                  <button class="ghost" type="button" @click="selectedAgent = 'ALL'">全部</button>
+                  <span class="pill">{{ filteredSteps.length }} 条</span>
+                </div>
+              </div>
+
+              <div v-if="!agentSteps.length" class="empty-hero" style="margin:24px auto">
+                <h3>还没有 Agent 轨迹</h3>
+                <p>运行演示或全流程后，左侧成员会点亮，可在此筛选查看。</p>
+              </div>
+
+              <template v-else>
+                <div class="agent-toolbar">
+                  <label style="font-size:12px;color:var(--muted)">
+                    筛选
+                    <select v-model="selectedAgent" style="margin-left:6px">
+                      <option value="ALL">全部输出</option>
+                      <option v-for="opt in agentSelectOptions" :key="opt.node" :value="opt.node">
+                        {{ opt.label }}
+                      </option>
+                    </select>
+                  </label>
+                </div>
+
+                <div class="flow-strip">
+                  <button type="button" class="flow-chip" :class="{ active: selectedAgent === 'ALL' }"
+                          @click="selectedAgent = 'ALL'">
+                    <span class="idx">*</span> 全部
+                  </button>
+                  <button
+                    type="button"
+                    class="flow-chip"
+                    v-for="(s, i) in agentSteps"
+                    :key="'af'+i+s.node"
+                    :class="{ active: selectedAgent === s.node }"
+                    @click="selectAgent(s.node)"
+                  >
+                    <span class="idx">{{ i + 1 }}</span>
+                    {{ shortTitle(s) }}
+                  </button>
+                </div>
+
+                <div class="agent-feed">
+                  <div
+                    class="agent-card"
+                    v-for="(s, i) in filteredSteps"
+                    :key="(s.node || '') + '-' + i"
+                    :class="{ highlight: selectedAgent !== 'ALL' && selectedAgent === s.node }"
+                    :id="'agent-step-' + (s.node || i)"
+                  >
+                    <div class="agent-card-head">
+                      <span class="title">{{ s.title || s.node || ('步骤' + (i + 1)) }}</span>
+                      <span class="pill">{{ s.node }}</span>
+                      <span class="pill" v-if="s.duration_ms != null">{{ s.duration_ms }} ms</span>
+                      <span class="pill" :class="s.status === 'error' ? 'err' : 'ok'" v-if="s.status">{{ s.status }}</span>
+                      <span class="pill" v-for="c in (s.capability || [])" :key="c">{{ c }}</span>
+                    </div>
+                    <div v-if="s.tools_used && s.tools_used.length">
+                      <span class="tool-tag" v-for="t in s.tools_used" :key="t">{{ t }}</span>
+                    </div>
+                    <div class="body-text">{{ s.message || '（无文本输出）' }}</div>
+                    <div class="meta-line" v-if="s.artifacts && Object.keys(s.artifacts).length">
+                      artifacts: {{ formatArtifacts(s.artifacts) }}
+                    </div>
+                    <div class="meta-line" v-if="s.planning_reasons && s.planning_reasons.length">
+                      规划: {{ s.planning_reasons.join(' | ') }}
+                    </div>
+                    <div class="meta-line" v-if="s.suggested_actions && s.suggested_actions.length">
+                      建议: {{ s.suggested_actions.join('；') }}
+                    </div>
+                    <div class="meta-line" v-if="s.n0 != null">N0={{ s.n0 }} binding={{ s.binding }}</div>
+                    <div class="meta-line" v-if="s.can_fit != null">
+                      can_fit={{ s.can_fit }} used={{ s.containers_used }}
+                    </div>
+                    <div class="meta-line" v-if="s.decision">decision={{ s.decision }}</div>
+                  </div>
+                </div>
+                <p class="foot-note">数值由 tools 计算；此处为可观察分工，非聊天编造柜数。</p>
+              </template>
+            </div>
           </template>
         </div>
 
-        <div class="agent-toolbar">
-          <label>
-            查看 Agent
-            <select v-model="selectedAgent">
-              <option value="ALL">全部输出</option>
-              <option v-for="opt in agentSelectOptions" :key="opt.node" :value="opt.node">
-                {{ opt.label }}
-              </option>
-            </select>
-          </label>
-          <button class="secondary" type="button" @click="selectedAgent = 'ALL'">显示全部</button>
-          <button class="secondary" type="button" @click="scrollAgentConsole">滚到此处</button>
-          <span class="badge">{{ filteredSteps.length }} 条</span>
-        </div>
-
-        <div class="agent-list">
-          <div
-            class="agent-card"
-            v-for="(s, i) in filteredSteps"
-            :key="(s.node || '') + '-' + i"
-            :class="{ highlight: selectedAgent !== 'ALL' && selectedAgent === s.node }"
-            :id="'agent-step-' + (s.node || i)"
-          >
-            <div class="agent-card-head">
-              <span class="title">{{ s.title || s.node || ('步骤' + (i + 1)) }}</span>
-              <span class="badge">{{ s.node }}</span>
-              <span class="badge" v-if="s.duration_ms != null">{{ s.duration_ms }} ms</span>
-              <span class="badge" :class="s.status === 'error' ? 'err' : 'ok'" v-if="s.status">
-                {{ s.status }}
-              </span>
-              <span class="badge" v-for="c in (s.capability || [])" :key="c">{{ c }}</span>
+        <!-- 右侧 Agent 详情抽屉 -->
+        <aside class="agent-drawer" v-if="selectedAgent !== 'ALL' || liveNode">
+          <h3>
+            {{ selectedAgentLabel }}
+            <span class="live-pulse" v-if="liveNode"> · live {{ liveNode }}</span>
+          </h3>
+          <div v-if="drawerStep">
+            <div class="row" style="margin-bottom:8px">
+              <span class="pill" :class="drawerStep.status === 'error' ? 'err' : 'ok'">{{ drawerStep.status || 'ok' }}</span>
+              <span class="pill" v-if="drawerStep.duration_ms != null">{{ drawerStep.duration_ms }} ms</span>
             </div>
-            <div v-if="s.tools_used && s.tools_used.length">
-              <span class="tool-tag" v-for="t in s.tools_used" :key="t">{{ t }}</span>
+            <div v-if="drawerStep.tools_used && drawerStep.tools_used.length" style="margin-bottom:8px">
+              <span class="tool-tag" v-for="t in drawerStep.tools_used" :key="t">{{ t }}</span>
             </div>
-            <div class="body">{{ s.message || '（无文本输出）' }}</div>
-            <div class="artifact-line" v-if="s.artifacts && Object.keys(s.artifacts).length">
-              artifacts: {{ formatArtifacts(s.artifacts) }}
+            <div v-if="drawerLiveTools.length" style="margin-bottom:8px;font-size:11px;color:var(--muted)">
+              <div v-for="(tl, i) in drawerLiveTools" :key="i" style="margin:2px 0">
+                🔧 {{ tl.tool }}
+                <span v-if="tl.duration_ms != null"> · {{ tl.duration_ms }}ms</span>
+                <span v-if="tl.status === 'running'" class="live-pulse"> · run</span>
+              </div>
             </div>
-            <div class="artifact-line" v-if="s.planning_reasons && s.planning_reasons.length">
-              规划理由: {{ s.planning_reasons.join(' | ') }}
-            </div>
-            <div class="artifact-line" v-if="s.suggested_actions && s.suggested_actions.length">
-              建议: {{ s.suggested_actions.join('；') }}
-            </div>
-            <div class="artifact-line" v-if="s.n0 != null">N0={{ s.n0 }} binding={{ s.binding }}</div>
-            <div class="artifact-line" v-if="s.can_fit != null">
-              can_fit={{ s.can_fit }} used={{ s.containers_used }}
-            </div>
-            <div class="artifact-line" v-if="s.decision">decision={{ s.decision }}</div>
+            <div class="body-text" style="font-size:12.5px;max-height:50vh;overflow:auto;white-space:pre-wrap">{{ drawerStep.message }}</div>
+            <div class="meta-line" v-if="drawerStep.artifacts">{{ formatArtifacts(drawerStep.artifacts) }}</div>
           </div>
+          <div class="drawer-empty" v-else>
+            点选左侧成员查看该 Agent 最近输出；运行中此处显示 live 节点。
+          </div>
+        </aside>
         </div>
-        <div class="sticky-note">
-          数值由 tools 计算；上表为 Agent 分工与过程可观察输出，非聊天编造柜数。
-        </div>
-      </template>
+      </main>
     </div>
   </div>
 
   <script>
     const API = '';
+
+    const TEAM_ROSTER = [
+      { id: 'intent', name: '意图解析', short: '意', role: 'NL → IntentSpec', team: 'big', color: '#5b8def' },
+      { id: 'orchestrator', name: '主控编排', short: '主', role: '选柜 · 调度 · 目标', team: 'big', color: '#5b8def' },
+      { id: 'llm_scheduler', name: 'LLM调度', short: 'LLM', role: '多轮 tool-call', team: 'big', color: '#4fc3f7' },
+      { id: 'replan_critic', name: '有界批评', short: '批', role: '只改 options/路由', team: 'big', color: '#5b8def' },
+      { id: 'finalize', name: '收口', short: '收', role: '目标裁决 · 交付', team: 'big', color: '#5b8def' },
+      { id: 'material_parser', name: '材料解析', short: '材', role: '清单标准化 mm/kg', team: 'A', color: '#3ecf8e' },
+      { id: 'structure', name: '结构计算', short: '构', role: '箱型约束 · 详设校核', team: 'A', color: '#3ecf8e' },
+      { id: 'box_scheme', name: '装箱方案', short: '箱', role: '成箱 / 直通架', team: 'A', color: '#3ecf8e' },
+      { id: 'present_team_a', name: '成箱展示', short: '呈', role: '小TeamA 输出', team: 'A', color: '#2dd4a0' },
+      { id: 'user_confirm', name: '用户确认', short: '人', role: 'HITL 柜型闸门', team: 'HITL', color: '#e6b84d' },
+      { id: 'hitl_wait', name: '等待确认', short: '等', role: '大Team 闸门挂起', team: 'HITL', color: '#d4a017' },
+      { id: 'planner', name: '规划', short: '规', role: 'N0 · 装载策略', team: 'B', color: '#7c5cfc' },
+      { id: 'loader', name: '装载执行', short: '装', role: '3D · CoG 工具', team: 'B', color: '#7c5cfc' },
+      { id: 'evaluator', name: '评估优化', short: '评', role: '利用率 · replan', team: 'B', color: '#7c5cfc' },
+      { id: 'risk_compliance', name: '风险合规', short: '险', role: '出运门禁', team: 'B', color: '#7c5cfc' },
+      { id: 'visualizer', name: '可视化', short: '视', role: '三视角 · COG · 3D', team: 'B', color: '#7c5cfc' },
+    ];
 
     new Vue({
       el: '#app',
@@ -515,25 +1728,285 @@
           sessionId: 'web-' + Date.now(),
           containerType: '40HQ',
           loading: false,
-          statusText: '就绪',
+          statusText: '就绪 · 可一键演示或生成方案',
           skjolberOk: false,
           skjolberLabel: 'unknown',
           result: {},
           agentSteps: [],
           selectedAgent: 'ALL',
+          mainTab: 'overview',
           viewKeys: ['top', 'side', 'front'],
           nlInstruction: '',
           nlStatus: '',
+          rot3d: { yaw: 0.55, pitch: 0.45, scale: 1, drag: false, lx: 0, ly: 0 },
+          roster: TEAM_ROSTER,
+          liveStatus: {},
+          liveNode: '',
+          harnessVersion: '',
+          engineAbSummary: null,
+          runsList: [],
+          compareIds: [],
+          compareResult: '',
+          tracePreview: '',
+          autoFollowVisual: true,
+          streamProgress: { done: 0, total: 11, pct: 0 },
+          liveToolLines: [],
+          pendingCheckpoints: [],
+          checkpointBanner: '',
+          ws: null,
+          wsStatus: 'off',
+          sseActive: false,
+          seenEventKeys: {},
+          viewContainerNo: 1,
+          whatifScenarios: [
+            { id: 'lock_containers', label: '锁定预算柜数' },
+            { id: 'plus_one_container', label: '允许多 1 柜' },
+            { id: 'minus_one_container', label: '尝试少 1 柜' },
+            { id: 'strict_mid50', label: '严格 mid50≥55%' },
+            { id: 'iron_only', label: '仅铁件/架' },
+            { id: 'no_long', label: '排除超长≥6m' },
+            { id: 'dense_passthrough', label: '密装直通' },
+            { id: 'prefer_min_cabin', label: '优先少柜' },
+          ],
+          whatifScenario: 'minus_one_container',
+          whatifMaxC: null,
+          whatifLoading: false,
+          whatifResult: null,
+          whatifError: '',
+          packProfiles: [
+            { id: 'balanced', label: '均衡（默认）', description: '' },
+            { id: 'strict_mid50', label: '严格中段', description: '' },
+            { id: 'min_cabin', label: '最少柜', description: '' },
+            { id: 'export_careful', label: '出运谨慎', description: '' },
+            { id: 'crate_passthrough', label: '当量直通', description: '' },
+          ],
+          packProfile: 'balanced',
+          profileHint: '',
         };
       },
       computed: {
+        porManifest() {
+          return (
+            (this.result && this.result.por_manifest)
+            || (this.packingPlan || {}).por_manifest
+            || {}
+          );
+        },
+        viewContainerOptions() {
+          const meta = (this.result.views || {})._meta || {};
+          if (meta.containers && meta.containers.length) return meta.containers;
+          const s = this.result.scene3d || {};
+          if (s.containers && s.containers.length) return s.containers;
+          const layout = ((this.result.container_plan || {}).layout) || [];
+          const nos = [...new Set(layout.map((it) => Number(it.container_no || 1)))].sort((a, b) => a - b);
+          return nos.length ? nos : [1];
+        },
+        hitlCards() {
+          const h = this.result.hitl_summary || {};
+          return h.cards || [];
+        },
+        hitlPreview() {
+          const h = this.result.hitl_summary || {};
+          return h.boxes_preview || [];
+        },
+        drawerStep() {
+          const id = this.selectedAgent !== 'ALL' ? this.selectedAgent : this.liveNode;
+          if (!id) return null;
+          const steps = this.agentSteps.filter((s) => s.node === id);
+          if (steps.length) return steps[steps.length - 1];
+          if (this.liveStatus[id] === 'running') {
+            return { node: id, message: '运行中…', status: 'running', tools_used: [] };
+          }
+          return null;
+        },
+        drawerLiveTools() {
+          const id = this.selectedAgent !== 'ALL' ? this.selectedAgent : this.liveNode;
+          if (!id) return [];
+          return this.liveToolLines.filter((t) => t.node === id).slice(-8);
+        },
+        rosterGroups() {
+          const order = [
+            { key: 'big', title: '大 Team · 编排/闸门/critic/收口' },
+            { key: 'A', title: '小 Team A · 成箱' },
+            { key: 'HITL', title: '★ HITL 闸门' },
+            { key: 'B', title: '小 Team B · 拼柜' },
+          ];
+          return order.map((g) => ({
+            ...g,
+            members: this.roster.filter((m) => m.team === g.key),
+          }));
+        },
+        orgBigMembers() {
+          return this.roster.filter((m) => m.team === 'big');
+        },
+        orgAMembers() {
+          return this.roster.filter((m) => m.team === 'A');
+        },
+        orgBMembers() {
+          return this.roster.filter((m) => m.team === 'B');
+        },
+        knownIds() {
+          return new Set(this.roster.map((m) => m.id));
+        },
+        extraStepNodes() {
+          const seen = new Set();
+          const out = [];
+          this.agentSteps.forEach((s) => {
+            const n = s.node;
+            if (!n || this.knownIds.has(n) || seen.has(n)) return;
+            // skip pure message_* noise unless no known steps
+            if (String(n).startsWith('message_')) return;
+            seen.add(n);
+            out.push(n);
+          });
+          return out;
+        },
+        selectedAgentLabel() {
+          if (this.selectedAgent === 'ALL') return '全部';
+          const m = this.roster.find((x) => x.id === this.selectedAgent);
+          return m ? m.name : this.selectedAgent;
+        },
         designFactsOk() {
           const d = this.result.design_facts_status || {};
           return !!d.has_detailed_facts;
         },
         hasViews() {
           const v = this.result.views || {};
-          return v.top || v.side || v.front;
+          return !!(v.top || v.side || v.front);
+        },
+        hasScene3d() {
+          const s = this.result.scene3d || {};
+          return !!(s.container && (s.boxes || []).length);
+        },
+        hasAnyResult() {
+          return !!(
+            (this.result.boxes && this.result.boxes.length) ||
+            this.agentSteps.length ||
+            this.result.container_plan ||
+            this.result.final_response ||
+            this.result.phase
+          );
+        },
+        cogPrimary() {
+          const c = this.result.cog || {};
+          if (c.primary && (c.primary.gx_mm != null || c.primary.mass_in_mid50_ratio != null)) {
+            return c.primary;
+          }
+          if (c.gx_mm != null || c.mass_in_mid50_ratio != null || c.lateral_eccentricity != null) {
+            return c;
+          }
+          const plan = this.result.container_plan || {};
+          if (plan.cog && (plan.cog.gx_mm != null || plan.cog.mass_in_mid50_ratio != null)) {
+            return plan.cog;
+          }
+          const rr = (this.result.risk_report || {}).cog;
+          if (rr && (rr.gx_mm != null || rr.mass_in_mid50_ratio != null)) return rr;
+          return null;
+        },
+        cogCaption() {
+          const c = this.result.cog || {};
+          return c.caption || (this.cogPrimary && this.cogPrimary.labels
+            ? Object.values(this.cogPrimary.labels).join('｜')
+            : '');
+        },
+        cogBalanceClass() {
+          const b = (this.cogPrimary && this.cogPrimary.balance) || '';
+          if (b === 'ok') return 'ok';
+          if (b === 'block') return 'err';
+          if (b) return 'warn';
+          return '';
+        },
+        latEccColor() {
+          const v = Number((this.cogPrimary || {}).lateral_eccentricity || 0);
+          if (v >= 0.15) return '#f07178';
+          if (v >= 0.05) return '#e6b84d';
+          return '#3ecf8e';
+        },
+        longPosColor() {
+          const v = Number((this.cogPrimary || {}).longitudinal_position || 0.5);
+          if (v < 0.25 || v > 0.75) return '#f07178';
+          if (v < 0.40 || v > 0.60) return '#e6b84d';
+          return '#3ecf8e';
+        },
+        mid50Color() {
+          const v = Number((this.cogPrimary || {}).mass_in_mid50_ratio || 0);
+          if (v >= 0.60) return '#3ecf8e';
+          if (v >= 0.45) return '#e6b84d';
+          return '#f07178';
+        },
+        packingPlan() {
+          return (this.result && this.result.packing_plan) || {};
+        },
+        perCabinCog() {
+          const pp = this.packingPlan || {};
+          let rows = pp.per_cabin_cog || (this.result && this.result.per_cabin_cog) || [];
+          if ((!rows || !rows.length) && this.result && this.result.cog_bundle) {
+            rows = (this.result.cog_bundle.per_container || []).map((c) => ({
+              container_no: c.container_no,
+              mass_in_mid50_ratio: c.mass_in_mid50_ratio,
+              lateral_eccentricity: c.lateral_eccentricity,
+              longitudinal_position: c.longitudinal_position,
+              balance: c.balance,
+            }));
+          }
+          return Array.isArray(rows) ? rows : [];
+        },
+        worstMid50() {
+          const p = (this.result && this.result.container_plan) || {};
+          const pp = this.packingPlan || {};
+          return (
+            (this.result && this.result.worst_mid50)
+            || p.worst_mid50
+            || (pp.metrics || {}).worst_mid50
+            || (pp.cog || {}).worst_mid50
+            || (this.cogPrimary || {}).mass_in_mid50_ratio
+          );
+        },
+        rPipeline() {
+          const pp = this.packingPlan || {};
+          return Array.isArray(pp.r_pipeline)
+            ? pp.r_pipeline
+            : ((this.result && this.result.r_pipeline) || []);
+        },
+        secureWorkOrder() {
+          return (
+            (this.result && this.result.secure_work_order)
+            || (this.packingPlan || {}).secure_work_order
+            || {}
+          );
+        },
+        secureSevClass() {
+          const s = (this.secureWorkOrder || {}).severity;
+          if (s === 'high') return 'err';
+          if (s === 'medium') return 'warn';
+          return 'ok';
+        },
+        stackingInfo() {
+          const p = this.result.container_plan || {};
+          return p.stacking || this.result.stacking || null;
+        },
+        layoutQuality() {
+          const p = this.result.container_plan || {};
+          return p.layout_quality
+            || (this.result.risk_report || {}).layout_quality
+            || null;
+        },
+        stackPillClass() {
+          const n = Number((this.stackingInfo || {}).stacked_placements || 0);
+          return n > 0 ? 'ok' : 'warn';
+        },
+        voidGapColor() {
+          const v = Number((this.layoutQuality || {}).max_horizontal_gap_mm || 0);
+          if (v > 300) return '#f07178';
+          if (v > 150) return '#e6b84d';
+          return '#3ecf8e';
+        },
+        riskPillClass() {
+          const d = (this.result.risk_report || {}).decision || '';
+          if (d === 'PASS') return 'ok';
+          if (d === 'REJECT') return 'err';
+          if (d) return 'warn';
+          return '';
         },
         containerOptions() {
           return (this.result.user_prompt && this.result.user_prompt.container_options) || [
@@ -581,23 +2054,402 @@
       },
       mounted() {
         this.refreshHealth();
+        this.loadRuns();
+        this.loadPendingCheckpoints();
+        this.loadWhatIfScenarios();
+        this.loadProfiles();
+        // ?session=xxx 自动加载磁盘/会话结果（演示用）
+        try {
+          const q = new URLSearchParams(window.location.search || '');
+          const sid = q.get('session') || q.get('sid');
+          if (sid) {
+            this.sessionId = sid;
+            this.loadSessionById(sid);
+          }
+        } catch (e) { /* */ }
+        this.connectSessionWs(this.sessionId);
+      },
+      beforeDestroy() {
+        this.disconnectSessionWs();
       },
       watch: {
         result: {
           deep: true,
           handler() {
-            this.$nextTick(() => this.drawAllViews());
+            const meta = (this.result.views || {})._meta || {};
+            if (meta.default_container_no != null) {
+              this.viewContainerNo = meta.default_container_no;
+            } else if (this.viewContainerOptions.length) {
+              this.viewContainerNo = this.viewContainerOptions[0];
+            }
+            this.$nextTick(() => {
+              this.onViewContainerChange();
+            });
           },
+        },
+        mainTab(tab) {
+          if (tab === 'visual') {
+            this.$nextTick(() => {
+              this.drawAllViews();
+              this.draw3d();
+            });
+          }
         },
       },
       methods: {
+        phaseOn(key) {
+          const p = this.result.phase || '';
+          if (key === 'big' || key === '总' || key === '终') {
+            return ['intent', 'orchestrator', 'llm_scheduler', 'replan_critic', 'finalize']
+              .some((id) => this.stepHas(id)) || p === 'team_a_running' || p === 'done';
+          }
+          if (key === 'A') {
+            return ['material_parser', 'structure', 'box_scheme', 'present_team_a']
+              .some((id) => this.stepHas(id)) || p === 'await_user_confirm';
+          }
+          if (key === 'HITL') {
+            return p === 'await_user_confirm' || this.stepHas('user_confirm') || this.stepHas('hitl_wait');
+          }
+          if (key === 'B') {
+            return ['planner', 'loader', 'evaluator', 'risk_compliance', 'visualizer']
+              .some((id) => this.stepHas(id));
+          }
+          return false;
+        },
+        orgChipClass(id) {
+          const st = this.memberStatus(id);
+          return {
+            on: this.selectedAgent === id,
+            run: st === 'running' || st === 'wait',
+            done: st === 'done',
+          };
+        },
+        stepHas(id) {
+          return this.agentSteps.some((s) => s.node === id || String(s.node || '').includes(id));
+        },
+        async loadWhatIfScenarios() {
+          try {
+            const r = await fetch(API + '/api/whatif/scenarios');
+            const j = await r.json();
+            if (j.ok && j.scenarios && j.scenarios.length) {
+              this.whatifScenarios = j.scenarios;
+            }
+          } catch (e) { /* keep defaults */ }
+        },
+        async loadProfiles() {
+          try {
+            const r = await fetch(API + '/api/profiles');
+            const j = await r.json();
+            if (j.ok && j.profiles && j.profiles.length) {
+              this.packProfiles = j.profiles;
+            }
+          } catch (e) { /* */ }
+        },
+        onProfileHint() {
+          const p = (this.packProfiles || []).find((x) => x.id === this.packProfile);
+          this.profileHint = p ? (p.description || p.label || '') : '';
+        },
+        async runWhatIf() {
+          this.whatifLoading = true;
+          this.whatifError = '';
+          this.whatifResult = null;
+          try {
+            const body = {
+              session_id: this.sessionId,
+              scenario: this.whatifScenario,
+              profile: this.packProfile || '',
+              user_input: '前端 What-if ' + this.whatifScenario,
+            };
+            if (this.whatifMaxC != null && this.whatifMaxC > 0) {
+              body.max_containers = this.whatifMaxC;
+            }
+            const r = await fetch(API + '/api/whatif', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify(body),
+            });
+            const j = await r.json();
+            if (!r.ok || j.ok === false) {
+              throw new Error((j && (j.detail || j.error)) || ('HTTP ' + r.status));
+            }
+            this.whatifResult = j;
+            this.statusText = 'What-if 完成 · ' + (j.scenario_label || j.scenario);
+          } catch (e) {
+            this.whatifError = String(e.message || e);
+          } finally {
+            this.whatifLoading = false;
+          }
+        },
+        async applyWhatIf() {
+          if (!this.whatifResult || !this.whatifResult.result_session_id) return;
+          try {
+            const r = await fetch(API + '/api/whatif/apply', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({
+                session_id: this.sessionId,
+                whatif_session_id: this.whatifResult.result_session_id,
+              }),
+            });
+            const j = await r.json();
+            if (!r.ok || !j.ok) throw new Error((j && j.detail) || 'apply failed');
+            if (j.public) {
+              this.result = j.public;
+              this.agentSteps = j.public.agent_steps || this.agentSteps;
+            }
+            this.statusText = '已应用 What-if 为当前方案';
+          } catch (e) {
+            this.whatifError = String(e.message || e);
+          }
+        },
+        memberStatus(id) {
+          if (this.liveStatus[id] === 'running') return 'running';
+          if (this.liveStatus[id] === 'error') return 'err';
+          if (this.liveStatus[id] === 'wait') return 'wait';
+          const steps = this.agentSteps.filter((s) => s.node === id);
+          if (!steps.length) {
+            if ((id === 'user_confirm' || id === 'hitl_wait') && this.result.phase === 'await_user_confirm') {
+              return 'wait';
+            }
+            return 'idle';
+          }
+          if (steps.some((s) => s.status === 'error')) return 'err';
+          return 'done';
+        },
+        isLikelyNext(id) {
+          return this.liveNode === id;
+        },
+        async consumeSse(url, body) {
+          this.sseActive = true;
+          try {
+            const res = await fetch(API + url, {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json', Accept: 'text/event-stream' },
+              body: JSON.stringify(body),
+            });
+            if (!res.ok || !res.body) throw new Error('SSE HTTP ' + res.status);
+            const reader = res.body.getReader();
+            const dec = new TextDecoder();
+            let buf = '';
+            let lastPublic = null;
+            while (true) {
+              const { value, done } = await reader.read();
+              if (done) break;
+              buf += dec.decode(value, { stream: true });
+              const parts = buf.split('\n\n');
+              buf = parts.pop() || '';
+              for (const chunk of parts) {
+                const line = chunk.split('\n').find((l) => l.startsWith('data:'));
+                if (!line) continue;
+                let ev;
+                try {
+                  ev = JSON.parse(line.slice(5).trim());
+                } catch (e) {
+                  continue;
+                }
+                this.onStreamEvent(ev);
+                if (ev.type === 'done' && ev.public) lastPublic = ev;
+              }
+            }
+            return lastPublic;
+          } finally {
+            this.sseActive = false;
+          }
+        },
+        bumpProgress() {
+          const done = Object.keys(this.liveStatus).filter(
+            (k) => this.liveStatus[k] === 'done' || this.liveStatus[k] === 'error'
+          ).length;
+          const total = this.streamProgress.total || 11;
+          this.streamProgress = {
+            done,
+            total,
+            pct: Math.min(100, Math.round((done / total) * 100)),
+          };
+        },
+        onStreamEvent(ev) {
+          if (!ev || !ev.type) return;
+          // 幂等：seq+type+node 去重（SSE 与晚到 WS 重叠时）
+          const key = [ev.run_id || '', ev.seq || '', ev.type, ev.node || ''].join('|');
+          if (ev.seq != null && this.seenEventKeys[key]) return;
+          if (ev.seq != null) {
+            this.$set(this.seenEventKeys, key, 1);
+          }
+          if (ev.type === 'run_start' || ev.type === 'replay_start') {
+            this.seenEventKeys = {};
+            this.liveStatus = {};
+            if (ev.type === 'run_start') this.agentSteps = [];
+            this.liveNode = '';
+            this.liveToolLines = [];
+            this.streamProgress = { done: 0, total: 11, pct: 0 };
+          }
+          if (ev.type === 'agent_start' && ev.node) {
+            this.$set(this.liveStatus, ev.node, 'running');
+            this.liveNode = ev.node;
+            this.selectedAgent = ev.node;
+          }
+          if (ev.type === 'tool_start' && ev.tool) {
+            this.liveToolLines = this.liveToolLines.concat([{
+              tool: ev.tool, node: ev.node, status: 'running', duration_ms: null,
+            }]).slice(-40);
+          }
+          if (ev.type === 'tool_end' && ev.tool) {
+            // 更新同 node+tool 最近一条 running，否则追加
+            let found = false;
+            for (let i = this.liveToolLines.length - 1; i >= 0; i--) {
+              const row = this.liveToolLines[i];
+              if (row.tool === ev.tool && row.node === ev.node && row.status === 'running') {
+                this.$set(this.liveToolLines, i, {
+                  tool: ev.tool,
+                  node: ev.node,
+                  status: ev.status || 'ok',
+                  duration_ms: ev.duration_ms,
+                });
+                found = true;
+                break;
+              }
+            }
+            if (!found) {
+              this.liveToolLines = this.liveToolLines.concat([{
+                tool: ev.tool,
+                node: ev.node,
+                status: ev.status || 'ok',
+                duration_ms: ev.duration_ms,
+              }]).slice(-40);
+            }
+          }
+          if (ev.type === 'replan') {
+            this.statusText = (ev.message || 'replan') + ' · round ' + (ev.replan_round || '?');
+          }
+          if (ev.type === 'agent_end' && ev.node) {
+            this.$set(this.liveStatus, ev.node, ev.status === 'error' ? 'error' : 'done');
+            if (ev.step) {
+              this.agentSteps = this.agentSteps.concat([ev.step]);
+            }
+            this.bumpProgress();
+            if (ev.node === 'visualizer' && this.autoFollowVisual && !ev.replay) {
+              this.mainTab = 'visual';
+            }
+          }
+          if (ev.type === 'hitl') {
+            this.$set(this.liveStatus, 'hitl_wait', 'wait');
+            this.$set(this.liveStatus, 'user_confirm', 'wait');
+            this.liveNode = 'hitl_wait';
+            if (ev.session_id) this.sessionId = ev.session_id;
+            if (ev.hitl_summary) {
+              this.result = Object.assign({}, this.result, {
+                phase: 'await_user_confirm',
+                hitl_summary: ev.hitl_summary,
+                run_id: ev.run_id || this.result.run_id,
+                session_id: ev.session_id || this.sessionId,
+              });
+            }
+            this.mainTab = 'overview';
+          }
+          if (ev.type === 'done' || ev.type === 'replay_done') {
+            this.liveNode = '';
+            this.streamProgress.pct = 100;
+            if (ev.public) {
+              this.result = Object.assign({}, this.result, ev.public, {
+                agent_steps: (ev.public.agent_steps && ev.public.agent_steps.length)
+                  ? ev.public.agent_steps
+                  : this.agentSteps,
+              });
+              if (ev.public.agent_steps && ev.public.agent_steps.length) {
+                this.agentSteps = ev.public.agent_steps;
+              }
+              this.harnessVersion = ev.public.harness_version || this.harnessVersion;
+            }
+            if (this.autoFollowVisual && (this.hasViews || this.hasScene3d) && ev.type === 'done') {
+              this.mainTab = 'visual';
+            }
+          }
+        },
+        async replayRun(runId) {
+          if (!runId) return;
+          this.loading = true;
+          this.statusText = '回放 ' + runId + '…';
+          this.mainTab = 'agents';
+          try {
+            const res = await fetch(API + '/api/runs/' + encodeURIComponent(runId) + '/replay?delay_ms=40');
+            if (!res.ok || !res.body) throw new Error('replay HTTP ' + res.status);
+            const reader = res.body.getReader();
+            const dec = new TextDecoder();
+            let buf = '';
+            while (true) {
+              const { value, done } = await reader.read();
+              if (done) break;
+              buf += dec.decode(value, { stream: true });
+              const parts = buf.split('\n\n');
+              buf = parts.pop() || '';
+              for (const chunk of parts) {
+                const line = chunk.split('\n').find((l) => l.startsWith('data:'));
+                if (!line) continue;
+                try {
+                  this.onStreamEvent(JSON.parse(line.slice(5).trim()));
+                } catch (e) { /* skip */ }
+              }
+            }
+            this.statusText = '回放完成 ' + runId;
+          } catch (e) {
+            this.statusText = '回放失败: ' + e;
+          } finally {
+            this.loading = false;
+          }
+        },
         pct(v) {
-          if (v == null) return '-';
+          if (v == null) return '—';
           return (Number(v) * 100).toFixed(0) + '%';
+        },
+        mid50Tone(v) {
+          const x = Number(v || 0);
+          if (x >= 0.60) return '#3ecf8e';
+          if (x >= 0.40) return '#e6b84d';
+          return '#f07178';
+        },
+        mid50RowBg(v) {
+          const x = Number(v || 0);
+          if (x >= 0.60) return 'rgba(62,207,142,0.08)';
+          if (x >= 0.40) return 'rgba(230,184,77,0.08)';
+          return 'rgba(240,113,120,0.10)';
+        },
+        fmtNum(v) {
+          if (v == null || Number.isNaN(Number(v))) return '—';
+          return Math.round(Number(v));
         },
         viewTitle(key) {
           const v = (this.result.views || {})[key];
           return (v && v.name) || key;
+        },
+        viewHasCog(key) {
+          const v = (this.result.views || {})[key];
+          return !!(v && v.cog && (v.cog.gx_mm != null || v.cog.gy_mm != null));
+        },
+        viewCanvasSize(key) {
+          // 侧视/正视加高，避免长高比把箱子压成一条线
+          if (key === 'side') return { w: 720, h: 420 };
+          if (key === 'front') return { w: 480, h: 480 };
+          return { w: 640, h: 360 };
+        },
+        elementsForView(key) {
+          const view = (this.result.views || {})[key] || {};
+          const all = view.elements_all || view.elements || [];
+          const cno = Number(this.viewContainerNo || 1);
+          const filtered = all.filter((e) => Number(e.container_no || 1) === cno);
+          return filtered.length ? filtered : (view.elements || []);
+        },
+        onViewContainerChange() {
+          // 同步 3D 过滤
+          const s = this.result.scene3d;
+          if (s && s.boxes_all) {
+            const cno = Number(this.viewContainerNo || 1);
+            this.$set(this.result.scene3d, 'boxes', s.boxes_all.filter((b) => Number(b.container_no || 1) === cno));
+            this.$set(this.result.scene3d, 'filter_container_no', cno);
+          }
+          this.$nextTick(() => {
+            this.drawAllViews();
+            this.draw3d();
+          });
         },
         shortTitle(s) {
           const t = s.title || s.node || '?';
@@ -605,14 +2457,18 @@
         },
         selectAgent(node) {
           this.selectedAgent = node;
+          this.mainTab = 'agents';
           this.$nextTick(() => {
             const el = document.getElementById('agent-step-' + node);
             if (el) el.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
           });
         },
         scrollAgentConsole() {
-          const el = this.$refs.agentConsole;
-          if (el) el.scrollIntoView({ behavior: 'smooth', block: 'start' });
+          this.mainTab = 'agents';
+          this.$nextTick(() => {
+            const el = this.$refs.agentConsole;
+            if (el) el.scrollIntoView({ behavior: 'smooth', block: 'start' });
+          });
         },
         formatArtifacts(obj) {
           try {
@@ -622,7 +2478,6 @@
           }
         },
         applyAgentSteps(payload) {
-          // 兼容 public 直出 / pipeline 包一层
           const body = payload.public || payload;
           let steps = body.agent_steps || payload.steps || [];
           if ((!steps || !steps.length) && body.messages && body.messages.length) {
@@ -637,11 +2492,11 @@
               }));
           }
           this.agentSteps = Array.isArray(steps) ? steps : [];
-          this.selectedAgent = 'ALL';
-          this.$nextTick(() => this.scrollAgentConsole());
+          if (this.selectedAgent !== 'ALL' && !this.agentSteps.some((s) => s.node === this.selectedAgent)) {
+            this.selectedAgent = 'ALL';
+          }
         },
         applyResult(payload) {
-          // pipeline 返回 { public, steps }；其它接口直接 public 形状
           if (payload && payload.public) {
             this.result = Object.assign({}, payload.public, {
               goal_status: payload.goal_status || payload.public.goal_status,
@@ -651,6 +2506,9 @@
             this.result = payload || {};
           }
           this.applyAgentSteps(payload);
+          if (this.hasAnyResult && this.mainTab === 'overview') {
+            /* stay on overview after run */
+          }
         },
         async refreshHealth() {
           try {
@@ -660,6 +2518,7 @@
             this.skjolberLabel = this.skjolberOk
               ? 'UP ' + (j.skjolber_url || '')
               : (j.skjolber && j.skjolber.reason) || '未连接（将用本地回退）';
+            this.harnessVersion = j.harness_version || '';
           } catch (e) {
             this.skjolberOk = false;
             this.skjolberLabel = '网关不可达';
@@ -667,7 +2526,8 @@
         },
         async runTeamA() {
           this.loading = true;
-          this.statusText = '团队A 运行中…';
+          this.statusText = '团队 A 运行中…';
+          this.mainTab = 'overview';
           try {
             const r = await fetch(API + '/api/team-a', {
               method: 'POST',
@@ -679,7 +2539,8 @@
             });
             const j = await r.json();
             this.applyResult(j);
-            this.statusText = '团队A 完成，请确认柜型 · 下方可看 Agent 输出';
+            this.statusText = '团队 A 完成 · 请确认柜型';
+            this.mainTab = 'boxes';
             const rec = (this.containerOptions.find((o) => o.recommended) || {}).value;
             if (rec) this.containerType = rec;
           } catch (e) {
@@ -690,56 +2551,298 @@
         },
         async runDemo() {
           this.loading = true;
-          this.statusText = '一键演示（Agent 闭环）运行中…';
+          this.statusText = 'SSE 流式演示…';
+          this.mainTab = 'overview';
+          this.liveStatus = {};
+          this.connectSessionWs(this.sessionId);
           try {
-            const r = await fetch(API + '/api/demo', {
-              method: 'POST',
-              headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({
-                user_input: this.userInput || '演示材料清单',
-                container_type: this.containerType,
-                session_id: this.sessionId,
-              }),
+            const last = await this.consumeSse('/api/pipeline/stream', {
+              user_input: this.userInput || '高利用率演示物料',
+              container_type: this.containerType,
+              session_id: this.sessionId,
+              enable_auto_confirm: true,
+              max_containers: 0,
+              mode: 'steps',
+              save_artifacts: true,
+              preset: 'high_util',
             });
-            const j = await r.json();
-            this.applyResult(j);
-            this.statusText = '演示完成 phase=' + (this.result.phase || '') + ' · 已滚到 Agent 输出';
+            if (last && last.public) {
+              this.applyResult({ public: last.public, steps: last.public.agent_steps });
+            }
+            const vs = (this.result.volume_summary) || {};
+            this.statusText =
+              '满载演示完成 · 订舱体积 ' + this.pct(vs.booking_volume_utilization) +
+              ' · 外廓 ' + this.pct(vs.outer_space_utilization) +
+              ' · 重量 ' + this.pct(vs.weight_utilization) +
+              ' · steps=' + this.agentSteps.length;
+            this.loadEngineAb();
+            this.loadRuns();
+          } catch (e) {
+            // 回退非流式
+            try {
+              const r = await fetch(API + '/api/demo', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                  user_input: this.userInput || '高利用率演示物料',
+                  container_type: this.containerType,
+                  session_id: this.sessionId,
+                  preset: 'high_util',
+                }),
+              });
+              const j = await r.json();
+              this.applyResult(j);
+              this.statusText = '满载演示完成(非SSE) phase=' + (this.result.phase || '');
+            } catch (e2) {
+              this.statusText = '失败: ' + e2;
+            }
+          } finally {
+            this.loading = false;
+            this.liveNode = '';
+          }
+        },
+        async runDemoSteel() {
+          this.loading = true;
+          this.statusText = '钢件轻量演示（利用率可能偏低）…';
+          this.mainTab = 'overview';
+          this.liveStatus = {};
+          this.connectSessionWs(this.sessionId);
+          try {
+            const last = await this.consumeSse('/api/pipeline/stream', {
+              user_input: '钢件轻量结构叙事',
+              container_type: this.containerType,
+              session_id: this.sessionId,
+              enable_auto_confirm: true,
+              max_containers: 0,
+              mode: 'steps',
+              save_artifacts: true,
+              preset: 'steel_light',
+            });
+            if (last && last.public) {
+              this.applyResult({ public: last.public, steps: last.public.agent_steps });
+            }
+            this.statusText = '钢件演示完成 phase=' + (this.result.phase || '');
           } catch (e) {
             this.statusText = '失败: ' + e;
           } finally {
             this.loading = false;
+            this.liveNode = '';
           }
         },
         async runPipelineTrace() {
           this.loading = true;
-          this.statusText = 'Agent 全流程轨迹运行中…';
+          this.statusText = 'SSE 全流程…';
+          this.mainTab = 'agents';
+          this.liveStatus = {};
           try {
-            const r = await fetch(API + '/api/pipeline', {
-              method: 'POST',
-              headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({
-                user_input: this.userInput || 'Agent pipeline',
-                container_type: this.containerType,
-                session_id: this.sessionId,
-                enable_auto_confirm: true,
-                max_containers: 0,
-                mode: 'steps',
-              }),
+            const last = await this.consumeSse('/api/pipeline/stream', {
+              user_input: this.userInput || 'Agent pipeline',
+              container_type: this.containerType,
+              session_id: this.sessionId,
+              enable_auto_confirm: true,
+              max_containers: 0,
+              mode: 'steps',
+              save_artifacts: true,
             });
-            const j = await r.json();
-            this.applyResult(j);
-            this.statusText =
-              '轨迹完成 steps=' + this.agentSteps.length +
-              ' risk=' + ((j.summary && j.summary.risk_decision) || '-');
+            if (last && last.public) {
+              this.applyResult({ public: last.public, steps: last.public.agent_steps || last.steps });
+            }
+            this.statusText = '轨迹完成 steps=' + this.agentSteps.length;
+            this.loadRuns();
           } catch (e) {
             this.statusText = '失败: ' + e;
+          } finally {
+            this.loading = false;
+            this.liveNode = '';
+          }
+        },
+        async loadEngineAb() {
+          try {
+            const r = await fetch(API + '/api/engine-ab');
+            const j = await r.json();
+            if (!j.ok || !j.report) {
+              this.engineAbSummary = null;
+              return;
+            }
+            this.engineAbSummary = (j.report.cases || []).map((c) => {
+              const l = c.python_laff_3d || {};
+              const s = c.skjolber || {};
+              return {
+                name: c.name,
+                laff: l.space_utilization != null ? (l.space_utilization * 100).toFixed(0) + '%' : '—',
+                skj: s.ok ? ((s.space_utilization || 0) * 100).toFixed(0) + '%' : 'n/a',
+                note: (c.diff && c.diff.note) || '',
+              };
+            });
+          } catch (e) {
+            this.engineAbSummary = null;
+          }
+        },
+        async loadRuns() {
+          try {
+            const r = await fetch(API + '/api/runs?limit=20');
+            const j = await r.json();
+            this.runsList = j.runs || [];
+          } catch (e) {
+            this.runsList = [];
+          }
+        },
+        async openRunTrace(runId) {
+          try {
+            const r = await fetch(API + '/api/runs/' + encodeURIComponent(runId) + '?include_trace=true');
+            const j = await r.json();
+            const tr = (j.trace || []).slice(-12);
+            this.tracePreview = JSON.stringify(tr, null, 2);
+          } catch (e) {
+            this.tracePreview = String(e);
+          }
+        },
+        async compareSelectedRuns() {
+          if (this.compareIds.length < 2) return;
+          const a = this.compareIds[0];
+          const b = this.compareIds[1];
+          try {
+            const r = await fetch(
+              API + '/api/runs/compare?a=' + encodeURIComponent(a) + '&b=' + encodeURIComponent(b)
+            );
+            const j = await r.json();
+            this.compareResult = JSON.stringify(j.diff || j, null, 2);
+          } catch (e) {
+            this.compareResult = String(e);
+          }
+        },
+        async loadPendingCheckpoints() {
+          try {
+            const r = await fetch(API + '/api/checkpoints?pending_hitl=true&limit=20');
+            const j = await r.json();
+            this.pendingCheckpoints = j.checkpoints || [];
+          } catch (e) {
+            this.pendingCheckpoints = [];
+          }
+        },
+        async loadSessionById(sid) {
+          this.statusText = '加载会话 ' + sid + '…';
+          try {
+            const r = await fetch(API + '/api/session/' + encodeURIComponent(sid));
+            if (!r.ok) throw new Error('HTTP ' + r.status);
+            const j = await r.json();
+            this.applyResult(j);
+            this.sessionId = sid;
+            const vs = this.result.volume_summary || {};
+            this.statusText =
+              '已加载 ' + sid +
+              ' · 订舱 ' + this.pct(vs.booking_volume_utilization) +
+              ' · 外廓 ' + this.pct(vs.outer_space_utilization) +
+              ' · 重量 ' + this.pct(vs.weight_utilization);
+            if (this.hasViews || this.hasScene3d) this.mainTab = 'visual';
+            else this.mainTab = 'overview';
+          } catch (e) {
+            this.statusText = '加载会话失败: ' + e;
+          }
+        },
+        wsUrl(sessionId) {
+          const proto = location.protocol === 'https:' ? 'wss:' : 'ws:';
+          const host = location.host || '127.0.0.1:8000';
+          return proto + '//' + host + '/ws/session/' + encodeURIComponent(sessionId || this.sessionId);
+        },
+        disconnectSessionWs() {
+          if (this.ws) {
+            try { this.ws.close(); } catch (e) { /* */ }
+            this.ws = null;
+          }
+          this.wsStatus = 'off';
+        },
+        connectSessionWs(sessionId) {
+          const sid = sessionId || this.sessionId;
+          if (!sid || typeof WebSocket === 'undefined') return;
+          this.disconnectSessionWs();
+          try {
+            const ws = new WebSocket(this.wsUrl(sid));
+            this.ws = ws;
+            this.wsStatus = 'connecting';
+            ws.onopen = () => { this.wsStatus = 'live'; };
+            ws.onclose = () => { this.wsStatus = 'off'; };
+            ws.onerror = () => { this.wsStatus = 'err'; };
+            ws.onmessage = (msg) => {
+              try {
+                const ev = JSON.parse(msg.data);
+                if (ev.type === 'ws_ping' || ev.type === 'ws_subscribed') return;
+                // 本 tab 正在 SSE 消费时跳过，避免双倍写入 steps
+                if (this.sseActive) return;
+                this.onStreamEvent(ev);
+              } catch (e) { /* */ }
+            };
+          } catch (e) {
+            this.wsStatus = 'err';
+          }
+        },
+        async loadCheckpointPreview(threadId) {
+          try {
+            const r = await fetch(
+              API + '/api/checkpoints/' + encodeURIComponent(threadId) + '?include_state=true'
+            );
+            const j = await r.json();
+            if (j.public) {
+              this.applyResult(j.public);
+              this.sessionId = threadId;
+              this.mainTab = 'overview';
+              this.checkpointBanner = '已预览 checkpoint ' + threadId + ' · 请确认柜型后 resume';
+              this.statusText = this.checkpointBanner;
+            } else {
+              this.checkpointBanner = JSON.stringify(j.checkpoint || j, null, 2);
+            }
+          } catch (e) {
+            this.checkpointBanner = '预览失败: ' + e;
+          }
+        },
+        async restoreCheckpoint(threadId) {
+          this.loading = true;
+          this.checkpointBanner = '从磁盘恢复 ' + threadId + '…';
+          try {
+            // 先拉 public 到前端
+            const r0 = await fetch(
+              API + '/api/checkpoints/' + encodeURIComponent(threadId) + '?include_state=true'
+            );
+            const j0 = await r0.json();
+            if (j0.public) {
+              this.applyResult(j0.public);
+              this.sessionId = threadId;
+              const rec = (this.containerOptions.find((o) => o.recommended) || {}).value;
+              if (rec) this.containerType = rec;
+              else if (j0.public.container_type) this.containerType = j0.public.container_type;
+            }
+            // resume team B
+            const r = await fetch(
+              API + '/api/checkpoints/' + encodeURIComponent(threadId) + '/resume',
+              {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                  session_id: threadId,
+                  action: 'confirm',
+                  container_type: this.containerType || '40HQ',
+                  max_containers: 0,
+                }),
+              }
+            );
+            const j = await r.json();
+            if (j.detail) throw new Error(j.detail);
+            this.applyResult(j);
+            this.sessionId = threadId;
+            this.checkpointBanner = 'resume 完成 phase=' + (this.result.phase || '');
+            this.statusText = this.checkpointBanner;
+            this.mainTab = this.hasViews || this.hasScene3d ? 'visual' : 'overview';
+            this.loadPendingCheckpoints();
+          } catch (e) {
+            this.checkpointBanner = 'resume 失败: ' + e;
+            this.statusText = this.checkpointBanner;
           } finally {
             this.loading = false;
           }
         },
         async runPdf() {
           this.loading = true;
-          this.statusText = '解析 test PDF 并跑全流程…';
+          this.statusText = '解析 test PDF…';
           try {
             const r = await fetch(API + '/api/run-pdf', {
               method: 'POST',
@@ -754,8 +2857,8 @@
               this.statusText = '失败: ' + (j.detail || JSON.stringify(j));
             } else {
               this.applyResult(j);
-              this.statusText =
-                'PDF ' + (j.pdf_file || '') + ' phase=' + (this.result.phase || '');
+              this.statusText = 'PDF ' + (j.pdf_file || '') + ' phase=' + (this.result.phase || '');
+              this.mainTab = 'overview';
             }
           } catch (e) {
             this.statusText = '失败: ' + e;
@@ -765,9 +2868,8 @@
         },
         async confirmPack() {
           this.loading = true;
-          this.statusText = '团队B 拼柜中…';
+          this.statusText = '团队 B 拼柜中…';
           try {
-            // 保留团队A 已有 steps，拼柜后追加
             const prev = this.agentSteps.slice();
             const r = await fetch(API + '/api/confirm', {
               method: 'POST',
@@ -783,15 +2885,17 @@
             const j = await r.json();
             this.result = j;
             const next = j.agent_steps || [];
-            // 会话 state 若已含 A+B 全量 steps 则直接用；否则拼接
             if (next.length >= prev.length) {
               this.agentSteps = next;
             } else {
               this.agentSteps = prev.concat(next);
             }
-            this.selectedAgent = 'ALL';
-            this.$nextTick(() => this.scrollAgentConsole());
-            this.statusText = '拼柜完成 · 下方可切换查看各 Agent';
+            this.statusText = '拼柜完成 · 可点选团队 B 成员查看';
+            this.mainTab = this.hasViews || this.hasScene3d ? 'visual' : 'overview';
+            this.$nextTick(() => {
+              this.drawAllViews();
+              this.draw3d();
+            });
           } catch (e) {
             this.statusText = '失败: ' + e;
           } finally {
@@ -826,7 +2930,8 @@
             this.nlStatus = logs.length
               ? '已应用：' + logs.join('；')
               : (j.nl_revision && j.nl_revision.message) || '完成';
-            this.statusText = '改方案后团队A已重算 · 请查看结构结论是否仍待详设';
+            this.statusText = '改方案后团队 A 已重算';
+            this.mainTab = 'boxes';
             const rec = (this.containerOptions.find((o) => o.recommended) || {}).value;
             if (j.container_type) this.containerType = j.container_type;
             else if (rec) this.containerType = rec;
@@ -853,19 +2958,22 @@
         },
         drawView(key) {
           const view = (this.result.views || {})[key];
-          if (!view) return;
+          if (!view || key === '_meta') return;
           const ref = this.$refs['cv_' + key];
           const canvas = Array.isArray(ref) ? ref[0] : ref;
           if (!canvas) return;
+          const sz = this.viewCanvasSize(key);
+          if (canvas.width !== sz.w) canvas.width = sz.w;
+          if (canvas.height !== sz.h) canvas.height = sz.h;
           const ctx = canvas.getContext('2d');
           const W = canvas.width;
           const H = canvas.height;
           ctx.clearRect(0, 0, W, H);
-          ctx.fillStyle = '#111827';
+          ctx.fillStyle = '#0a1018';
           ctx.fillRect(0, 0, W, H);
 
           const cont = view.container || {};
-          const elements = view.elements || [];
+          const elements = this.elementsForView(key);
 
           let maxA = 1, maxB = 1;
           if (key === 'top') {
@@ -879,17 +2987,81 @@
             maxB = cont.height_mm || 2700;
           }
 
-          const pad = 36;
-          const scale = Math.min((W - pad * 2) / maxA, (H - pad * 2) / maxB);
+          // 侧视/正视：给高度方向更多像素，减少「压扁挤在一起」
+          const padX = 44;
+          const padY = key === 'top' ? 36 : 48;
+          let scaleX = (W - padX * 2) / maxA;
+          let scaleY = (H - padY * 2) / maxB;
+          let scale = Math.min(scaleX, scaleY);
+          if (key === 'side' || key === 'front') {
+            // 高度至少用掉画布 55%，避免矮货贴底一条线
+            const minScaleY = ((H - padY * 2) * 0.55) / maxB;
+            if (scale < minScaleY) {
+              scale = Math.min(scaleX, minScaleY);
+            }
+          }
+          const boxW = maxA * scale;
+          const boxH = maxB * scale;
+          const ox = (W - boxW) / 2;
+          const oy = (H - boxH) / 2;
 
-          ctx.strokeStyle = '#64748b';
+          ctx.strokeStyle = '#5c6b80';
           ctx.lineWidth = 2;
-          ctx.strokeRect(pad, pad, maxA * scale, maxB * scale);
+          ctx.strokeRect(ox, oy, boxW, boxH);
 
-          ctx.fillStyle = '#64748b';
+          // 底边强调（侧/正视地面）
+          if (key !== 'top') {
+            ctx.strokeStyle = '#94a3b8';
+            ctx.lineWidth = 1.5;
+            ctx.beginPath();
+            ctx.moveTo(ox, oy + boxH);
+            ctx.lineTo(ox + boxW, oy + boxH);
+            ctx.stroke();
+          }
+
+          const cl = view.center_lines || {};
+          ctx.save();
+          ctx.setLineDash([6, 5]);
+          ctx.strokeStyle = '#334155';
+          ctx.lineWidth = 1;
+          if (key === 'top') {
+            if (cl.lateral_mid_mm != null) {
+              const yy = oy + (maxB - cl.lateral_mid_mm) * scale;
+              ctx.beginPath();
+              ctx.moveTo(ox, yy);
+              ctx.lineTo(ox + boxW, yy);
+              ctx.stroke();
+            }
+            if (cl.longitudinal_mid_mm != null) {
+              const xx = ox + cl.longitudinal_mid_mm * scale;
+              ctx.beginPath();
+              ctx.moveTo(xx, oy);
+              ctx.lineTo(xx, oy + boxH);
+              ctx.stroke();
+            }
+          } else if (key === 'side' && cl.longitudinal_mid_mm != null) {
+            const xx = ox + cl.longitudinal_mid_mm * scale;
+            ctx.beginPath();
+            ctx.moveTo(xx, oy);
+            ctx.lineTo(xx, oy + boxH);
+            ctx.stroke();
+          } else if (key === 'front' && cl.lateral_mid_mm != null) {
+            const xx = ox + cl.lateral_mid_mm * scale;
+            ctx.beginPath();
+            ctx.moveTo(xx, oy);
+            ctx.lineTo(xx, oy + boxH);
+            ctx.stroke();
+          }
+          ctx.restore();
+
+          ctx.fillStyle = '#5c6b80';
           ctx.font = '11px sans-serif';
-          ctx.fillText(key === 'front' ? '宽→' : '长→', pad, 16);
-          ctx.fillText(key === 'top' ? '宽↑' : '高↑', 4, pad + 10);
+          ctx.fillText(
+            (key === 'front' ? '宽→' : '长→') + '  柜#' + this.viewContainerNo + ' · ' + elements.length + '箱',
+            ox,
+            Math.max(14, oy - 8)
+          );
+          ctx.fillText(key === 'top' ? '宽↑' : '高↑', 6, oy + 12);
 
           for (const el of elements) {
             let a = 0, b = 0, da = 0, db = 0;
@@ -900,23 +3072,207 @@
             } else {
               a = el.y || 0; b = el.z || 0; da = el.depth || 0; db = el.height || 0;
             }
-            const x = pad + a * scale;
-            const y = pad + (maxB - b - db) * scale;
-            const w = Math.max(da * scale, 1);
-            const h = Math.max(db * scale, 1);
+            const x = ox + a * scale;
+            const y = oy + (maxB - b - db) * scale;
+            // 侧/正视矮箱：最小像素高度，避免「挤成一条线」
+            let w = Math.max(da * scale, 2);
+            let h = Math.max(db * scale, key === 'top' ? 2 : 6);
             ctx.fillStyle = el.color || '#4C78A8';
             ctx.globalAlpha = 0.88;
-            ctx.fillRect(x, y, w, h);
+            ctx.fillRect(x, y - (h - Math.max(db * scale, 1)), w, h);
             ctx.globalAlpha = 1;
             ctx.strokeStyle = '#e2e8f0';
             ctx.lineWidth = 1;
-            ctx.strokeRect(x, y, w, h);
-            if (w > 28 && h > 14) {
+            ctx.strokeRect(x, y - (h - Math.max(db * scale, 1)), w, h);
+            if (w > 36 && h > 12) {
               ctx.fillStyle = '#fff';
-              ctx.font = 'bold 11px sans-serif';
-              ctx.fillText(el.label || el.box_id || '', x + 4, y + 14);
+              ctx.font = 'bold 10px sans-serif';
+              ctx.fillText(el.label || el.box_id || '', x + 3, y - (h - Math.max(db * scale, 1)) + 12);
             }
           }
+
+          const cog = view.cog || {};
+          let ca = null, cb = null;
+          if (key === 'top' && cog.gx_mm != null && cog.gy_mm != null) {
+            ca = cog.gx_mm; cb = cog.gy_mm;
+          } else if (key === 'side' && cog.gx_mm != null && cog.gz_mm != null) {
+            ca = cog.gx_mm; cb = cog.gz_mm;
+          } else if (key === 'front' && cog.gy_mm != null && cog.gz_mm != null) {
+            ca = cog.gy_mm; cb = cog.gz_mm;
+          }
+          if (ca != null && cb != null) {
+            const cx = ox + ca * scale;
+            const cy = oy + (maxB - cb) * scale;
+            ctx.beginPath();
+            ctx.arc(cx, cy, 7, 0, Math.PI * 2);
+            ctx.fillStyle = cog.color || '#ef4444';
+            ctx.fill();
+            ctx.strokeStyle = '#fff';
+            ctx.lineWidth = 1.5;
+            ctx.stroke();
+            ctx.fillStyle = '#fca5a5';
+            ctx.font = 'bold 11px sans-serif';
+            ctx.fillText(cog.label || 'COG', cx + 10, cy + 4);
+          }
+        },
+        on3dDown(e) {
+          this.rot3d.drag = true;
+          this.rot3d.lx = e.clientX;
+          this.rot3d.ly = e.clientY;
+        },
+        on3dMove(e) {
+          if (!this.rot3d.drag) return;
+          const dx = e.clientX - this.rot3d.lx;
+          const dy = e.clientY - this.rot3d.ly;
+          this.rot3d.lx = e.clientX;
+          this.rot3d.ly = e.clientY;
+          this.rot3d.yaw += dx * 0.01;
+          this.rot3d.pitch = Math.max(-0.2, Math.min(1.2, this.rot3d.pitch + dy * 0.01));
+          this.draw3d();
+        },
+        on3dUp() {
+          this.rot3d.drag = false;
+        },
+        on3dWheel(e) {
+          const d = e.deltaY > 0 ? 0.9 : 1.1;
+          this.rot3d.scale = Math.max(0.4, Math.min(2.5, this.rot3d.scale * d));
+          this.draw3d();
+        },
+        draw3d() {
+          if (!this.hasScene3d) return;
+          const canvas = this.$refs.cv3d;
+          if (!canvas) return;
+          const ctx = canvas.getContext('2d');
+          const W = canvas.width;
+          const H = canvas.height;
+          const scene = this.result.scene3d || {};
+          const cont = scene.container || {};
+          const L = cont.length_mm || 12000;
+          const Ww = cont.width_mm || 2400;
+          const Hh = cont.height_mm || 2700;
+          const boxes = scene.boxes || [];
+          const cog = scene.cog;
+
+          ctx.clearRect(0, 0, W, H);
+          ctx.fillStyle = '#070b12';
+          ctx.fillRect(0, 0, W, H);
+
+          const yaw = this.rot3d.yaw;
+          const pitch = this.rot3d.pitch;
+          const cy = Math.cos(yaw), sy = Math.sin(yaw);
+          const cp = Math.cos(pitch), sp = Math.sin(pitch);
+
+          const ox = L / 2, oy = Ww / 2, oz = Hh / 2;
+          const project = (x, y, z) => {
+            const X = x - ox, Y = y - oy, Z = z - oz;
+            const x1 = X * cy - Y * sy;
+            const y1 = X * sy + Y * cy;
+            const z1 = Z;
+            const y2 = y1 * cp - z1 * sp;
+            const z2 = y1 * sp + z1 * cp;
+            const s = 0.028 * this.rot3d.scale;
+            return {
+              u: W * 0.5 + x1 * s,
+              v: H * 0.62 - z2 * s - y2 * s * 0.15,
+              depth: y2 + z2 * 0.2,
+            };
+          };
+
+          const corners = [
+            [0, 0, 0], [L, 0, 0], [L, Ww, 0], [0, Ww, 0],
+            [0, 0, Hh], [L, 0, Hh], [L, Ww, Hh], [0, Ww, Hh],
+          ].map((p) => project(p[0], p[1], p[2]));
+          const edges = [
+            [0, 1], [1, 2], [2, 3], [3, 0],
+            [4, 5], [5, 6], [6, 7], [7, 4],
+            [0, 4], [1, 5], [2, 6], [3, 7],
+          ];
+          ctx.strokeStyle = '#5c6b80';
+          ctx.lineWidth = 1.5;
+          for (const [a, b] of edges) {
+            ctx.beginPath();
+            ctx.moveTo(corners[a].u, corners[a].v);
+            ctx.lineTo(corners[b].u, corners[b].v);
+            ctx.stroke();
+          }
+
+          ctx.save();
+          ctx.setLineDash([5, 4]);
+          ctx.strokeStyle = '#334155';
+          const midL = [
+            project(L / 2, 0, 0),
+            project(L / 2, Ww, 0),
+            project(L / 2, Ww, Hh),
+            project(L / 2, 0, Hh),
+          ];
+          ctx.beginPath();
+          ctx.moveTo(midL[0].u, midL[0].v);
+          midL.slice(1).forEach((p) => ctx.lineTo(p.u, p.v));
+          ctx.closePath();
+          ctx.stroke();
+          ctx.restore();
+
+          const solids = boxes.map((b) => {
+            const pos = b.position || {};
+            const size = b.size || {};
+            const x0 = Number(pos.x || 0);
+            const y0 = Number(pos.y || 0);
+            const z0 = Number(pos.z || 0);
+            const dx = Number(size.dx || 1);
+            const dy = Number(size.dy || 1);
+            const dz = Number(size.dz || 1);
+            const pts = [
+              [x0, y0, z0], [x0 + dx, y0, z0], [x0 + dx, y0 + dy, z0], [x0, y0 + dy, z0],
+              [x0, y0, z0 + dz], [x0 + dx, y0, z0 + dz], [x0 + dx, y0 + dy, z0 + dz], [x0, y0 + dy, z0 + dz],
+            ].map((p) => project(p[0], p[1], p[2]));
+            const depth = pts.reduce((s, p) => s + p.depth, 0) / pts.length;
+            return { pts, depth, color: b.color || '#4C78A8', id: b.box_id };
+          });
+          solids.sort((a, b) => a.depth - b.depth);
+
+          const faces = [
+            [0, 1, 2, 3], [4, 5, 6, 7],
+            [0, 1, 5, 4], [1, 2, 6, 5], [2, 3, 7, 6], [3, 0, 4, 7],
+          ];
+          for (const s of solids) {
+            for (const f of faces) {
+              const p0 = s.pts[f[0]], p1 = s.pts[f[1]], p2 = s.pts[f[2]], p3 = s.pts[f[3]];
+              ctx.beginPath();
+              ctx.moveTo(p0.u, p0.v);
+              ctx.lineTo(p1.u, p1.v);
+              ctx.lineTo(p2.u, p2.v);
+              ctx.lineTo(p3.u, p3.v);
+              ctx.closePath();
+              ctx.fillStyle = s.color;
+              ctx.globalAlpha = 0.55;
+              ctx.fill();
+              ctx.globalAlpha = 1;
+              ctx.strokeStyle = 'rgba(226,232,240,0.45)';
+              ctx.lineWidth = 1;
+              ctx.stroke();
+            }
+          }
+
+          if (cog && cog.gx_mm != null) {
+            const p = project(Number(cog.gx_mm), Number(cog.gy_mm), Number(cog.gz_mm));
+            ctx.beginPath();
+            ctx.arc(p.u, p.v, 8, 0, Math.PI * 2);
+            ctx.fillStyle = cog.color || '#ef4444';
+            ctx.fill();
+            ctx.strokeStyle = '#fff';
+            ctx.lineWidth = 2;
+            ctx.stroke();
+            ctx.fillStyle = '#fecaca';
+            ctx.font = 'bold 13px sans-serif';
+            ctx.fillText('COG', p.u + 12, p.v + 4);
+          }
+
+          ctx.fillStyle = '#5c6b80';
+          ctx.font = '12px sans-serif';
+          ctx.fillText(
+            '柜 ' + (scene.container_type || '') + ' · #' + (scene.filter_container_no || 1) + ' · 箱 ' + boxes.length,
+            12, 20
+          );
         },
       },
     });

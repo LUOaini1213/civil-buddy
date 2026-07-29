@@ -1,11 +1,13 @@
 """
-最终架构 LangGraph 编排：
+LangGraph 子图（分段 resume 用）：
 
-团队A: 材料解析 → 结构计算 → 装箱方案 → 展示/等待确认
-团队B: 规划 → 装载 → 评估(可回规划) → 风险合规 → 可视化 → 汇总
+大 Team 产品主路径在 teams.big_team / agent_loop；
+本模块保留旧 A/B 子图，供:
+  - run_team_a → HITL → run_team_b（/api/team-a + /api/confirm）
+  - graph_resume.load_resume_state（磁盘 + Sqlite checkpoint）
 
-用户确认闸门：phase=await_user_confirm 时图结束；
-确认后以 user_action=confirm 从 team_b 子图继续（harness 调用）。
+小 Team A: 材料 → 结构 → 成箱 → present（无 confirm 则 END）
+小 Team B: 规划 → 装载 → 评估(可回规划) → 风险 → 可视化 → finalize
 """
 
 from __future__ import annotations
@@ -171,3 +173,28 @@ def create_app_with_memory():
         return create_app(checkpointer=MemorySaver())
     except Exception:
         return create_app()
+
+
+def create_app_with_sqlite():
+    """持久化 Sqlite checkpointer（断进程可 get_state resume）。"""
+    try:
+        from packing_assistant.lg_checkpoint import get_checkpointer
+
+        cp = get_checkpointer()
+        if cp is not None:
+            return create_app(checkpointer=cp)
+    except Exception:
+        pass
+    return create_app_with_memory()
+
+
+def create_team_a_app_durable():
+    from packing_assistant.lg_checkpoint import get_checkpointer
+
+    return create_team_a_app(checkpointer=get_checkpointer())
+
+
+def create_team_b_app_durable():
+    from packing_assistant.lg_checkpoint import get_checkpointer
+
+    return create_team_b_app(checkpointer=get_checkpointer())

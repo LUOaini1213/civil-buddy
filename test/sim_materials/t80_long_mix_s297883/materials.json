@@ -1,0 +1,30 @@
+{
+  "case_id": "t80_long_mix_s297883",
+  "story": "超长+短件+重块 ~80t seed=297883",
+  "seed": 297883,
+  "target_net_t": 80.0,
+  "net_kg": 80000.0,
+  "net_t": 80.0,
+  "n_lines": 1,
+  "expect": {
+    "containers_by_weight_min": 4,
+    "net_t_approx": 80.0,
+    "note": "40HQ payload≈28.6t 时约需 3+ 柜（重量界）"
+  },
+  "materials": [
+    {
+      "id": "T80-0012",
+      "name": "超长杆件-12",
+      "spec": "超长铁件",
+      "quantity": 1,
+      "weight_kg": 80000.0,
+      "total_weight_kg": 80000.0,
+      "length_mm": 6250.0,
+      "width_mm": 200.0,
+      "height_mm": 160.0,
+      "part_no": "SIM-T80-LONG-297883",
+      "note": "sim:t80 long_mix seed=297883",
+      "category": "重件"
+    }
+  ]
+}

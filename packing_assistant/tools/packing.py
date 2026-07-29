@@ -720,6 +720,23 @@ def _build_box(
     else:
         booking_vol = min(outer_vol, cargo_vol * k_eff)
 
+    # 二层堆码：矮箱/非超长可叠；超长仅底层；dense 矮箱可多层
+    stackable = bool(
+        outer["高"] <= (1500 if dense else 1300)
+        and content_max_L < 4000
+        and "超长" not in special
+        and struct["结论"] != "不通过"
+    )
+    prefer_bottom = bool(content_max_L >= 4000 or weights["毛重_kg"] >= 2000)
+    # max_stack_layers：本箱作为「塔」的层数上限；不可叠则为 1
+    # prefer_bottom 仍可承重，不把层数砍成 1（否则压不住上层）
+    if not stackable or content_max_L >= 4000 or "超长" in special:
+        max_stack_layers = 1
+    elif dense and outer["高"] <= 900:
+        max_stack_layers = 3
+    else:
+        max_stack_layers = 2
+
     return {
         "箱号": box_no,
         "箱型": display_type,
@@ -744,15 +761,9 @@ def _build_box(
         "standard_outer": bool(standard),
         "base_box_type": box_name,
         "content_max_length_mm": round(content_max_L, 1),
-        # 二层堆码：矮箱/非超长可上二层；超长仅底层
-        # dense 矮箱可多层堆（bin3d 按剩余高度放置）
-        "stackable": bool(
-            outer["高"] <= (1500 if dense else 1300)
-            and content_max_L < 4000
-            and "超长" not in special
-            and struct["结论"] != "不通过"
-        ),
-        "prefer_bottom": bool(content_max_L >= 4000 or weights["毛重_kg"] >= 800),
+        "stackable": stackable,
+        "prefer_bottom": prefer_bottom,
+        "max_stack_layers": max_stack_layers,
         # 新版结构化摘要（API 友好）
         "structure_detail": {
             "safety_factor_gamma": struct.get("safety_factor_gamma"),

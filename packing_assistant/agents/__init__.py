@@ -1,4 +1,4 @@
-"""业务智能体：主控 + 团队A + 团队B（共 9 智能体）。"""
+"""业务智能体：大 Team 主控/收口 + 小 Team A 成箱 + 小 Team B 拼柜。"""
 
 from packing_assistant.agents.orchestrator import agent_orchestrator
 from packing_assistant.agents.material_parser import agent_material_parser
