@@ -40,7 +40,14 @@ def _setup_cjk_font() -> None:
             continue
 
 
-def _draw_one_ax(ax, items: List[Dict[str, Any]], max_len: float, title: str) -> None:
+def _draw_one_ax(
+    ax,
+    items: List[Dict[str, Any]],
+    max_len: float,
+    title: str,
+    *,
+    annotations: Optional[List[Dict[str, Any]]] = None,
+) -> None:
     from matplotlib.patches import FancyBboxPatch, Rectangle
 
     ax.add_patch(
@@ -53,11 +60,17 @@ def _draw_one_ax(ax, items: List[Dict[str, Any]], max_len: float, title: str) ->
             linewidth=2,
         )
     )
+    pad_ids = set()
+    for a in annotations or []:
+        if a.get("type") == "pad_beam" and a.get("box_id"):
+            pad_ids.add(str(a.get("box_id")))
+
     for i, item in enumerate(items):
         start = float(item.get("起始位置_m") or item.get("x_m") or 0)
         length = float(item.get("长度_m") or item.get("dx_m") or 0.5)
         box_id = item.get("箱号") or item.get("box_id") or ""
         face = _COLOR_CYCLE[i % len(_COLOR_CYCLE)]
+        is_pad = str(box_id) in pad_ids
         ax.add_patch(
             FancyBboxPatch(
                 (start, 0.15),
@@ -65,8 +78,8 @@ def _draw_one_ax(ax, items: List[Dict[str, Any]], max_len: float, title: str) ->
                 0.7,
                 boxstyle="round,pad=0.02,rounding_size=0.05",
                 facecolor=face,
-                edgecolor="white",
-                linewidth=1.2,
+                edgecolor="#c0392b" if is_pad else "white",
+                linewidth=2.2 if is_pad else 1.2,
                 alpha=0.9,
             )
         )
@@ -80,6 +93,44 @@ def _draw_one_ax(ax, items: List[Dict[str, Any]], max_len: float, title: str) ->
             color="white",
             fontweight="bold",
         )
+        if is_pad:
+            ax.text(
+                start + length / 2,
+                0.95,
+                "垫梁",
+                ha="center",
+                va="bottom",
+                fontsize=7,
+                color="#c0392b",
+                fontweight="bold",
+            )
+
+    # 空隙：在柜底画橙色竖线/区间
+    for a in annotations or []:
+        if a.get("type") != "void_fill":
+            continue
+        gap_mm = float(a.get("gap_mm") or 0)
+        if gap_mm <= 0:
+            continue
+        # 优先用 layout 算出的真实 x_m
+        if a.get("x_m") is not None:
+            x0 = float(a.get("x_m"))
+        elif a.get("x_mm") is not None:
+            x0 = float(a.get("x_mm")) / 1000.0
+        else:
+            x0 = max_len * 0.35
+        w = min(max_len * 0.25, max(0.12, gap_mm / 1000.0))
+        ax.axvspan(x0, min(max_len, x0 + w), ymin=0.05, ymax=0.12, color="#e67e22", alpha=0.85)
+        ax.text(
+            x0 + w / 2,
+            0.02,
+            f"空隙{gap_mm:.0f}mm",
+            ha="center",
+            va="bottom",
+            fontsize=6,
+            color="#d35400",
+        )
+
     ax.set_xlim(-0.2, max_len + 0.5)
     ax.set_ylim(-0.15, 1.35)
     ax.set_xlabel("柜长方向 (m)")
@@ -87,6 +138,46 @@ def _draw_one_ax(ax, items: List[Dict[str, Any]], max_len: float, title: str) ->
     ax.set_title(title, fontsize=10)
     ax.set_aspect("equal", adjustable="box")
     ax.grid(axis="x", linestyle="--", alpha=0.4)
+
+
+def _annotations_for_container(
+    plan: Dict[str, Any], cno: int
+) -> List[Dict[str, Any]]:
+    """从 secure_work_order / layout 提取本柜标注。"""
+    swo = plan.get("secure_work_order") or {}
+    items = list(swo.get("items") or [])
+    if not items:
+        for key in ("void_fills", "pad_beams"):
+            for row in swo.get(key) or []:
+                items.append(row)
+    out: List[Dict[str, Any]] = []
+    layout = plan.get("layout") or []
+    pos_by_id: Dict[str, float] = {}
+    for it in layout:
+        if int(it.get("container_no") or 1) != cno:
+            continue
+        bid = str(it.get("box_id") or "")
+        pos = it.get("position") or {}
+        if bid:
+            pos_by_id[bid] = float(pos.get("x") or 0) / 1000.0
+    for row in items:
+        rc = row.get("container_no")
+        if rc is not None and int(rc) != cno:
+            continue
+        r = dict(row)
+        bid = str(r.get("box_id") or "")
+        if bid and bid in pos_by_id:
+            r["x_m"] = pos_by_id[bid]
+        # void 无柜号时各柜都淡标一次
+        if r.get("type") == "void_fill" or r.get("type") == "pad_beam" or r.get("type") in (
+            "void_fill",
+            "pad_beam",
+            "strapping",
+        ):
+            if rc is None and r.get("type") == "void_fill" and cno != 1:
+                continue
+            out.append(r)
+    return out
 
 
 def draw_layout(
@@ -224,14 +315,25 @@ def draw_layout_multi(
             sub += f" | 外廓{float(vol)*100:.0f}%"
         if load is not None:
             sub += f" | {float(load):.0f}kg"
+        anns = _annotations_for_container(plan, cno)
+        n_ann = len(anns)
+        if n_ann:
+            sub += f" | 工单标{n_ann}"
         title = f"{ctype} {sub} | {dual}"
         path = os.path.join(output_dir, f"{prefix}_c{cno:02d}.png")
         fig, ax = plt.subplots(figsize=(12, 2.8))
-        _draw_one_ax(ax, items, max_len, title)
+        _draw_one_ax(ax, items, max_len, title, annotations=anns)
         fig.tight_layout()
         fig.savefig(path, dpi=140, bbox_inches="tight")
         plt.close(fig)
-        per_out.append({"container_no": cno, "path": path, "boxes": len(items)})
+        per_out.append(
+            {
+                "container_no": cno,
+                "path": path,
+                "boxes": len(items),
+                "annotations": n_ann,
+            }
+        )
         paths.append(path)
 
     # 总览：最多 16 柜一页网格

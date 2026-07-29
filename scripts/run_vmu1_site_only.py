@@ -202,10 +202,13 @@ def to_materials(rows: List[Dict[str, Any]]) -> Tuple[List[Dict[str, Any]], List
             L, W, H, wt = 1500.0, 800.0, 600.0, max(n, 1) / max(units, 1) * 4.0
             unit, suffix = "不锈钢箱", f"×{per}/箱" if n >= 10 else ""
         elif "BOM0019" in pu or "瓦楞" in desc:
-            per = 80
+            # 密装：半柜宽+可叠高，减少架数，便于龙申 1 柜与铁件拼满
+            # 旧：80件/架 × 2400×1200×500 → 9 架常挤出第 2 柜
+            # 新：140件/架 × 2200×1100×1100 → ~5 架，双排+可上二层
+            per = 140
             units = max(1, int(round(n / per)))
-            L, W, H, wt = 2400.0, 1200.0, 500.0, 80 * 8.0
-            unit, suffix = "瓦楞板架", f"×{per}/架"
+            L, W, H, wt = 2200.0, 1100.0, 1100.0, 140 * 8.0
+            unit, suffix = "瓦楞板架密装", f"×{per}/架"
         elif "BOM0016" in pu or "木板" in desc:
             per = 30
             units = max(1, int(round(n / per)))

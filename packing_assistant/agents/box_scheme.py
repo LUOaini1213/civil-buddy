@@ -11,22 +11,78 @@ from packing_assistant.tools.packing import run_packing
 
 def _crate_passthrough_enabled(materials: List[Dict[str, Any]], opts: Dict[str, Any]) -> bool:
     """
-    工地当量箱直通：材料行本身已是「一箱一当量」，禁止再标准箱库二次放大外廓。
+    工地/工厂当量箱直通：材料行本身已是「一箱一当量」，禁止再标准箱库二次放大外廓。
     开启方式：
-      - packing_options.crate_passthrough = True
-      - 或 materials 多数带 note: dims=crate_equiv_est / crate=
+      - packing_options.crate_passthrough / materials_are_crates = True
+      - 或 materials 多数带 note: dims=crate_equiv_est / crate= / stack
+      - 或 ≥50% 名称含 铁件架/叠层架/长料架/当量
+      - 或 ≥70% 行已是「柜级外廓」(qty=1, L≥800, W≥400, H≥300) — 成品箱勿再塞 4m 标准铁架
+    显式 standard_boxes=True 且 crate_passthrough 未开 → 不自动直通。
     """
+    if opts.get("crate_passthrough") is False or opts.get("materials_are_crates") is False:
+        return False
     if opts.get("crate_passthrough") or opts.get("materials_are_crates"):
         return True
+    # 用户明确要标准箱库时不自动直通
+    if opts.get("standard_boxes") is True and not opts.get("dense_mode"):
+        # 仍允许 note 强信号触发直通（工地当量 xlsx）
+        pass
     if not materials:
         return False
     hits = 0
+    crate_sized = 0
     for m in materials:
         note = str(m.get("note") or m.get("备注") or "")
         name = str(m.get("name") or "")
-        if "crate_equiv" in note or "crate=" in note or "当量" in name or "铁件架" in name:
+        if (
+            "crate_equiv" in note
+            or "crate=" in note
+            or "factory_stack" in note
+            or "factory_long" in note
+            or "dense_bom" in note
+            or "当量" in name
+            or "铁件架" in name
+            or "叠层架" in name
+            or "长料架" in name
+            or "密装" in name
+        ):
             hits += 1
-    return hits >= max(1, int(0.5 * len(materials)))
+        try:
+            L = float(m.get("length_mm") or m.get("L") or 0)
+            W = float(m.get("width_mm") or m.get("W") or 0)
+            H = float(m.get("height_mm") or m.get("H") or 0)
+            q = int(m.get("quantity") or 1)
+        except Exception:
+            L = W = H = 0.0
+            q = 1
+        if q == 1 and L >= 800 and W >= 400 and H >= 300:
+            crate_sized += 1
+    n = len(materials)
+    if hits >= max(1, int(0.5 * n)):
+        return True
+    if crate_sized >= max(2, int(0.7 * n)):
+        return True
+    return False
+
+
+def _should_force_dense_sheets(materials: List[Dict[str, Any]], opts: Dict[str, Any]) -> bool:
+    """薄板/片料占多数时强制 dense，避免标准箱库撑成 4m/6m 空心铁架。"""
+    if opts.get("dense_mode") or opts.get("force_dense_sheets") is False:
+        return bool(opts.get("dense_mode"))
+    if opts.get("crate_passthrough") or opts.get("materials_are_crates"):
+        return False
+    if not materials:
+        return False
+    thin = 0
+    for m in materials:
+        try:
+            H = float(m.get("height_mm") or m.get("H") or 0)
+            L = float(m.get("length_mm") or m.get("L") or 0)
+        except Exception:
+            continue
+        if 0 < H <= 80 and L >= 600:
+            thin += 1
+    return thin >= max(2, int(0.55 * len(materials)))
 
 
 def _fill_hint(m: Dict[str, Any]) -> float:
@@ -91,8 +147,13 @@ def materials_to_passthrough_boxes(materials: List[Dict[str, Any]]) -> List[Dict
                 "booking_volume_m3": round(booking_m3, 6),
                 "gross_weight_kg": round(gross, 2),
                 "net_weight_kg": round(net, 2),
-                "stackable": bool(H <= 1200 and not longish),
-                "prefer_bottom": bool(longish or "铁" in name or net >= 800),
+                # P0：短箱默认可叠；prefer_bottom 仅超长/重铁架（阈值抬高，避免 ≥800kg 全铺底）
+                "stackable": bool(H <= 1300 and not longish),
+                "prefer_bottom": bool(
+                    longish
+                    or ("铁架" in name or "铁笼" in name)
+                    or net >= 2000
+                ),
                 "special_attributes": (["超长", "当量直通"] if longish else ["当量直通"]),
                 "structure_conclusion": "通过",
                 "content": [
@@ -215,6 +276,12 @@ def agent_box_scheme(state: PackingState) -> Dict[str, Any]:
         or packing_opts.get("dense")
         or rev.get("dense_mode")
     )
+    # Agent 自动：薄板主材 → dense + 关标准箱，避免 3mm 铝板被合成 4/6m 空心铁架
+    force_dense_sheets = _should_force_dense_sheets(materials, packing_opts)
+    if force_dense_sheets:
+        dense_mode = True
+        standard_boxes = False
+        mix_mode = True
     if standard_boxes:
         dense_mode = False
     design_facts = state.get("design_facts") or packing_opts.get("design_facts")
@@ -274,7 +341,8 @@ def agent_box_scheme(state: PackingState) -> Dict[str, Any]:
         )
     elif dense_mode or summary.get("dense_mode"):
         note_parts.append(
-            f"密装外廓 dense "
+            f"密装外廓 dense"
+            f"{'(薄板自动)' if force_dense_sheets else ''} "
             f"箱外廓{summary.get('boxes_outer_volume_m3', '?')}m³/"
             f"货件{summary.get('cargo_item_volume_m3', '?')}m³ "
             f"箱内填充均{float(summary.get('avg_crate_fill') or 0):.0%}"

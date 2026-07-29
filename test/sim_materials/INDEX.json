@@ -231,6 +231,181 @@
         "gross_kg": 11.2,
         "volume_m3": 0.007
       }
+    },
+    "t30_steel_tubes_s1": {
+      "story": "钢通重量主导 ~30t",
+      "n_lines": 231,
+      "net_kg": 30030.0,
+      "json": "test/sim_materials/t30_steel_tubes_s1/materials.json",
+      "xlsx": "test/sim_materials/t30_steel_tubes_s1/materials.xlsx",
+      "expect": {
+        "net_t_approx": 30.0
+      }
+    },
+    "t30_heavy_modules_s2": {
+      "story": "密实模块 ~30t（dense 友好）",
+      "n_lines": 36,
+      "net_kg": 30600.0,
+      "json": "test/sim_materials/t30_heavy_modules_s2/materials.json",
+      "xlsx": "test/sim_materials/t30_heavy_modules_s2/materials.xlsx",
+      "expect": {
+        "net_t_approx": 30.0
+      }
+    },
+    "t30_plates_beams_s3": {
+      "story": "长梁+板垛混装 ~30t",
+      "n_lines": 72,
+      "net_kg": 30424.0,
+      "json": "test/sim_materials/t30_plates_beams_s3/materials.json",
+      "xlsx": "test/sim_materials/t30_plates_beams_s3/materials.xlsx",
+      "expect": {
+        "net_t_approx": 30.0
+      }
+    },
+    "t30_mixed_short_s4": {
+      "story": "短件堆量 ~30t",
+      "n_lines": 250,
+      "net_kg": 30000.0,
+      "json": "test/sim_materials/t30_mixed_short_s4/materials.json",
+      "xlsx": "test/sim_materials/t30_mixed_short_s4/materials.xlsx",
+      "expect": {
+        "net_t_approx": 30.0
+      }
+    },
+    "t30_pallet_like_s5": {
+      "story": "托盘整包 ~30t",
+      "n_lines": 28,
+      "net_kg": 30800.0,
+      "json": "test/sim_materials/t30_pallet_like_s5/materials.json",
+      "xlsx": "test/sim_materials/t30_pallet_like_s5/materials.xlsx",
+      "expect": {
+        "net_t_approx": 30.0
+      }
+    },
+    "t30_oversized_mix_s6": {
+      "story": "超长+重块混装 ~30t",
+      "n_lines": 45,
+      "net_kg": 30282.0,
+      "json": "test/sim_materials/t30_oversized_mix_s6/materials.json",
+      "xlsx": "test/sim_materials/t30_oversized_mix_s6/materials.xlsx",
+      "expect": {
+        "net_t_approx": 30.0
+      }
+    },
+    "t80_random_mixed_s297832": {
+      "story": "随机混装 ~80t seed=297832",
+      "n_lines": 353,
+      "net_kg": 80000.0,
+      "net_t": 80.0,
+      "seed": 297832,
+      "json": "test/sim_materials/t80_random_mixed_s297832/materials.json",
+      "xlsx": "test/sim_materials/t80_random_mixed_s297832/materials.xlsx",
+      "expect": {
+        "net_t_approx": 80.0
+      }
+    },
+    "t80_steel_heavy_s297849": {
+      "story": "钢通主导 ~80t seed=297849",
+      "n_lines": 500,
+      "net_kg": 79800.2,
+      "net_t": 79.8,
+      "seed": 297849,
+      "json": "test/sim_materials/t80_steel_heavy_s297849/materials.json",
+      "xlsx": "test/sim_materials/t80_steel_heavy_s297849/materials.xlsx",
+      "expect": {
+        "net_t_approx": 80.0
+      }
+    },
+    "t80_modules_plates_s297866": {
+      "story": "模块+板垛 ~80t seed=297866",
+      "n_lines": 112,
+      "net_kg": 80000.0,
+      "net_t": 80.0,
+      "seed": 297866,
+      "json": "test/sim_materials/t80_modules_plates_s297866/materials.json",
+      "xlsx": "test/sim_materials/t80_modules_plates_s297866/materials.xlsx",
+      "expect": {
+        "net_t_approx": 80.0
+      }
+    },
+    "t80_long_mix_s297883": {
+      "story": "超长+短件+重块 ~80t seed=297883",
+      "n_lines": 1,
+      "net_kg": 80000.0,
+      "net_t": 80.0,
+      "seed": 297883,
+      "json": "test/sim_materials/t80_long_mix_s297883/materials.json",
+      "xlsx": "test/sim_materials/t80_long_mix_s297883/materials.xlsx",
+      "expect": {
+        "net_t_approx": 80.0
+      }
+    },
+    "t80_random_mixed_s20260729": {
+      "story": "随机混装 ~80t seed=20260729",
+      "n_lines": 333,
+      "net_kg": 80000.0,
+      "net_t": 80.0,
+      "seed": 20260729,
+      "json": "test/sim_materials/t80_random_mixed_s20260729/materials.json",
+      "xlsx": "test/sim_materials/t80_random_mixed_s20260729/materials.xlsx",
+      "expect": {
+        "net_t_approx": 80.0
+      }
+    },
+    "t80_steel_heavy_s20260746": {
+      "story": "钢通主导 ~80t seed=20260746",
+      "n_lines": 572,
+      "net_kg": 79955.3,
+      "net_t": 79.955,
+      "seed": 20260746,
+      "json": "test/sim_materials/t80_steel_heavy_s20260746/materials.json",
+      "xlsx": "test/sim_materials/t80_steel_heavy_s20260746/materials.xlsx",
+      "expect": {
+        "net_t_approx": 80.0
+      }
+    },
+    "t80_modules_plates_s20260763": {
+      "story": "模块+板垛 ~80t seed=20260763",
+      "n_lines": 107,
+      "net_kg": 80000.0,
+      "net_t": 80.0,
+      "seed": 20260763,
+      "json": "test/sim_materials/t80_modules_plates_s20260763/materials.json",
+      "xlsx": "test/sim_materials/t80_modules_plates_s20260763/materials.xlsx",
+      "expect": {
+        "net_t_approx": 80.0
+      }
+    },
+    "t80_long_mix_s20260780": {
+      "story": "超长+短件+重块 ~80t seed=20260780",
+      "n_lines": 358,
+      "net_kg": 79357.1,
+      "net_t": 79.357,
+      "seed": 20260780,
+      "json": "test/sim_materials/t80_long_mix_s20260780/materials.json",
+      "xlsx": "test/sim_materials/t80_long_mix_s20260780/materials.xlsx",
+      "expect": {
+        "net_t_approx": 80.0
+      }
+    },
+    "t80_random_mixed_s20260760": {
+      "story": "随机混装 ~80t seed=20260760",
+      "n_lines": 278,
+      "net_kg": 59655.8,
+      "net_t": 59.656,
+      "seed": 20260760,
+      "json": "test/sim_materials/t80_random_mixed_s20260760/materials.json",
+      "xlsx": "test/sim_materials/t80_random_mixed_s20260760/materials.xlsx",
+      "expect": {
+        "net_t_approx": 60.0
+      }
     }
+  },
+  "t80_latest": {
+    "base_seed": 20260760,
+    "cases": [
+      "t80_random_mixed_s20260760"
+    ],
+    "generated_at": "2026-07-29T07:12:00.523468+00:00"
   }
 }

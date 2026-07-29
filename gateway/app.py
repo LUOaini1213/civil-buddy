@@ -17,9 +17,12 @@ import sys
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 
-from fastapi import FastAPI, HTTPException
+import asyncio
+import queue as queue_mod
+
+from fastapi import FastAPI, HTTPException, WebSocket, WebSocketDisconnect
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import FileResponse
+from fastapi.responses import FileResponse, StreamingResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
 
@@ -39,8 +42,10 @@ except Exception:
 if not (os.getenv("SKJOLBER_URL") or "").strip():
     os.environ["SKJOLBER_URL"] = "http://127.0.0.1:8080"
 
+from packing_assistant.config import HARNESS_VERSION  # noqa: E402
 from packing_assistant.harness import (  # noqa: E402
     apply_user_confirmation,
+    iter_agent_pipeline,
     public_response,
     revise_plan_nl,
     run_agent_pipeline,
@@ -48,12 +53,52 @@ from packing_assistant.harness import (  # noqa: E402
     run_team_a,
     run_team_b,
 )
+from packing_assistant.session_store import (  # noqa: E402
+    delete_checkpoint,
+    list_checkpoints,
+    load_checkpoint_meta,
+    load_session,
+    mark_checkpoint,
+    save_session,
+)
 from packing_assistant.skjolber_client import health_check  # noqa: E402
+from packing_assistant.trace_events import list_runs, read_trace_jsonl  # noqa: E402
 
-# 简易会话缓存（生产请换 Redis）
+# RAM cache + file-backed checkpoint（output/runs/<run_id>/session_state.json）
 _SESSIONS: Dict[str, Dict[str, Any]] = {}
 
-app = FastAPI(title="Packing Multi-Agent Gateway", version="1.0.0")
+
+def _store_session(session_id: str, state: Dict[str, Any]) -> None:
+    """Write RAM + disk so /api/confirm survives process restart."""
+    sid = str(session_id or state.get("session_id") or "default")
+    _SESSIONS[sid] = state
+    rid = str(state.get("run_id") or "")
+    if rid and rid != sid:
+        _SESSIONS[rid] = state
+    try:
+        save_session(sid, state)
+    except Exception:
+        pass
+
+
+def _get_session(session_id: str) -> Optional[Dict[str, Any]]:
+    sid = str(session_id or "")
+    state = _SESSIONS.get(sid)
+    if state is not None:
+        return state
+    try:
+        state = load_session(sid)
+    except Exception:
+        state = None
+    if state is not None:
+        _SESSIONS[sid] = state
+        rid = str(state.get("run_id") or "")
+        if rid:
+            _SESSIONS[rid] = state
+    return state
+
+
+app = FastAPI(title="Packing Multi-Agent Gateway", version=HARNESS_VERSION)
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],
@@ -73,6 +118,8 @@ class TeamARequest(BaseModel):
     materials: Optional[List[Dict[str, Any]]] = None
     adjust_note: str = ""
     design_facts: Optional[Dict[str, Any]] = None
+    preset: str = ""
+    packing_options: Optional[Dict[str, Any]] = None
 
 
 class ConfirmRequest(BaseModel):
@@ -101,6 +148,9 @@ class DemoRequest(BaseModel):
     user_input: str = "演示材料清单"
     container_type: str = "40HQ"
     session_id: str = "demo"
+    # high_util | steel_light | default | "" 自动
+    preset: str = "high_util"
+    materials: Optional[List[Dict[str, Any]]] = None
 
 
 @app.get("/")
@@ -116,22 +166,245 @@ def api_health():
     sk = health_check()
     return {
         "gateway": "UP",
+        "harness_version": HARNESS_VERSION,
+        "architecture": "big_team_wraps_a_b",
+        "agent_style": "nl_general_agent_with_tools",
+        "features": {
+            "sse_stream": True,
+            "websocket": True,
+            "ws_path": "/ws/session/{session_id}",
+            "trace_jsonl": True,
+            "trace_replay": True,
+            "hitl_summary": True,
+            "hitl_durable_checkpoint": True,
+            "langgraph_sqlite_checkpoint": True,
+            "stream_replan": True,
+            "tool_events": True,
+            "otel_export": True,
+            "otel_optional": True,
+            "stream_schema": "packing.stream.v1",
+            "intent_spec": True,
+            "big_team_a_b": True,
+            "llm_toolcall": True,
+            "graph_ab_resume": True,
+        },
+        "otel": _otel_status_safe(),
+        "langgraph_checkpoint": _lg_status_safe(),
         "skjolber_url": os.getenv("SKJOLBER_URL") or "",
         "skjolber": sk,
     }
 
 
+@app.get("/api/architecture")
+def api_architecture():
+    """大 Team ⊃ A/B 架构元数据 + 名册。"""
+    from packing_assistant.teams.roster import AGENT_ROSTER, TEAM_ARCHITECTURE
+
+    return {
+        "ok": True,
+        "harness_version": HARNESS_VERSION,
+        "architecture": TEAM_ARCHITECTURE,
+        "roster": AGENT_ROSTER,
+    }
+
+
+@app.get("/api/tools")
+def api_tools(team: str = ""):
+    """通用 Agent 工具注册表（按 big/A/B 过滤）。"""
+    from packing_assistant.tool_registry import list_tools, tools_for_agent_prompt
+
+    t = (team or "").strip() or None
+    if t in ("big_team", "main"):
+        t = "big"
+    return {
+        "ok": True,
+        "tools": list_tools(team=t),
+        "prompt_summary": tools_for_agent_prompt() if not t else None,
+    }
+
+
+@app.post("/api/eval/workteams")
+def api_eval_workteams(body: dict = None):
+    """steps vs llm_toolcall 影子评测 + 路由/选工具 KPI。"""
+    from packing_assistant.eval_harness import case_tiny
+    from packing_assistant.eval_workteams import run_workteam_shadow_eval
+
+    body = body or {}
+    tiny_only = bool(body.get("tiny_only", True))
+    cases = [case_tiny] if tiny_only else None
+    report = run_workteam_shadow_eval(
+        cases=cases,
+        out_path=None,
+        session_prefix=str(body.get("session_prefix") or "api-wt"),
+    )
+    return {"ok": bool(report.get("ok")), "report": report}
+
+
+@app.get("/api/kpi/{session_id}")
+def api_kpi_session(session_id: str):
+    """从 session 抽取 workteam 路由/选工具 KPI。"""
+    from packing_assistant.workteam_kpi import compute_kpis
+
+    st = _get_session(session_id)
+    if not st:
+        from packing_assistant.session_store import load_session
+
+        st = load_session(session_id)
+    if not st:
+        raise HTTPException(404, f"session {session_id} not found")
+    return {"ok": True, "session_id": session_id, "kpi": compute_kpis(st)}
+
+
+@app.post("/api/tms/booking/preview")
+def api_tms_booking_preview(body: dict):
+    """从 session 构建订舱请求（不提交）。"""
+    from packing_assistant.tms_booking import submit_booking
+
+    sid = str(body.get("session_id") or "")
+    st = _get_session(sid) if sid else None
+    if not st and sid:
+        from packing_assistant.session_store import load_session
+
+        st = load_session(sid)
+    if not st and body.get("state"):
+        st = body["state"]
+    if not st:
+        raise HTTPException(400, "需要 session_id 或 state")
+    return submit_booking(st, dry_run=True)
+
+
+@app.post("/api/tms/booking/submit")
+def api_tms_booking_submit(body: dict):
+    """提交订舱到 TMS（默认 stub；PACKING_TMS_MODE=http 走外部）。"""
+    from packing_assistant.tms_booking import attach_booking_to_state, submit_booking
+
+    sid = str(body.get("session_id") or "")
+    st = _get_session(sid) if sid else None
+    if not st and sid:
+        from packing_assistant.session_store import load_session
+
+        st = load_session(sid)
+    if not st and body.get("state"):
+        st = body["state"]
+    if not st:
+        raise HTTPException(400, "需要 session_id 或 state")
+    result = submit_booking(
+        st,
+        mode=body.get("mode"),
+        dry_run=bool(body.get("dry_run")),
+    )
+    if result.get("ok") and not body.get("dry_run") and sid:
+        st2 = attach_booking_to_state(st, result)
+        _store_session(sid, st2)
+        try:
+            from packing_assistant.session_store import save_session
+
+            save_session(sid, st2)
+        except Exception:
+            pass
+        result["session_updated"] = True
+    return result
+
+
+@app.get("/api/tms/bookings")
+def api_tms_bookings(limit: int = 20):
+    """列出本地 stub 订舱记录。"""
+    from packing_assistant.tms_booking import list_stub_bookings, tms_mode
+
+    return {
+        "ok": True,
+        "mode": tms_mode(),
+        "bookings": list_stub_bookings(limit=limit),
+    }
+
+
+@app.post("/api/intent")
+def api_intent(body: dict):
+    """仅解析 NL → IntentSpec（不跑装载）。"""
+    from packing_assistant.intent_spec import intent_from_api
+
+    spec = intent_from_api(
+        user_input=str(body.get("user_input") or body.get("nl_query") or ""),
+        materials=body.get("materials"),
+        packing_options=body.get("packing_options"),
+        max_containers=int(body.get("max_containers") or 0),
+        goal=str(body.get("goal") or "deliver_valid_pack_plan"),
+        container_type=str(body.get("container_type") or ""),
+        source=str(body.get("source") or "api"),
+    )
+    return {"ok": True, "intent_spec": spec.to_dict()}
+
+
+def _otel_status_safe() -> Dict[str, Any]:
+    try:
+        from packing_assistant.otel_hooks import otel_status
+
+        return otel_status()
+    except Exception as e:
+        return {"error": str(e)}
+
+
+def _lg_status_safe() -> Dict[str, Any]:
+    try:
+        from packing_assistant.lg_checkpoint import (
+            checkpoint_db_path,
+            checkpoint_enabled,
+            get_checkpointer,
+        )
+
+        cp = get_checkpointer()
+        return {
+            "enabled": checkpoint_enabled(),
+            "backend": type(cp).__name__ if cp else None,
+            "path": str(checkpoint_db_path()),
+        }
+    except Exception as e:
+        return {"error": str(e)}
+
+
+def _apply_preset(
+    *,
+    preset: str = "",
+    user_input: str = "",
+    materials: Optional[List[Dict[str, Any]]] = None,
+    packing_options: Optional[Dict[str, Any]] = None,
+) -> tuple:
+    """合并演示预设物料 / packing_options。"""
+    from packing_assistant.demo_presets import resolve_preset
+
+    pm, po, key = resolve_preset(preset, user_input=user_input)
+    mats = materials if materials else pm
+    opts = packing_options if packing_options else po
+    text = user_input
+    if key and (not text or text in ("演示材料清单", "Agent pipeline", "demo")):
+        from packing_assistant.demo_presets import PRESETS
+
+        text = PRESETS.get(key, {}).get("user_input") or text
+    return mats, opts, key, text
+
+
 @app.post("/api/team-a")
 def api_team_a(body: TeamARequest):
-    state = run_team_a(
-        body.user_input,
+    mats, opts, key, text = _apply_preset(
+        preset=body.preset or "",
+        user_input=body.user_input,
         materials=body.materials,
+        packing_options=body.packing_options,
+    )
+    state = run_team_a(
+        text,
+        materials=mats,
         session_id=body.session_id,
         adjust_note=body.adjust_note,
         design_facts=body.design_facts,
+        packing_options=opts,
     )
-    _SESSIONS[body.session_id] = state
-    return public_response(state)
+    _store_session(body.session_id, state)
+    resp = public_response(state)
+    resp["run_id"] = state.get("run_id")
+    resp["session_id"] = body.session_id
+    resp["preset"] = key
+    return resp
 
 
 @app.post("/api/revise-nl")
@@ -140,7 +413,7 @@ def api_revise_nl(body: ReviseNlRequest):
     自然语言改方案：解析指令 → 更新材料/柜型/详设截面 → 重跑团队A。
     例：框架用槽钢16#；去掉连接板；柜型40GP
     """
-    state = _SESSIONS.get(body.session_id)
+    state = _get_session(body.session_id)
     if not state:
         # 允许无会话时从空状态开始
         from packing_assistant.harness import make_initial_state
@@ -150,7 +423,7 @@ def api_revise_nl(body: ReviseNlRequest):
         state, body.instruction, rerun_team_a=body.rerun_team_a
     )
     # revise_plan_nl 已重跑 team_a 时 session 更新
-    _SESSIONS[body.session_id] = state
+    _store_session(body.session_id, state)
     resp = public_response(state)
     resp["nl_revision"] = state.get("nl_revision") or {}
     return resp
@@ -158,14 +431,24 @@ def api_revise_nl(body: ReviseNlRequest):
 
 @app.post("/api/confirm")
 def api_confirm(body: ConfirmRequest):
-    state = _SESSIONS.get(body.session_id)
+    # RAM miss → disk checkpoint（进程重启 / 多 worker 轻量恢复）
+    state = _get_session(body.session_id)
+    if not state and body.packing_plan_id:
+        state = _get_session(body.packing_plan_id)
     if not state:
-        raise HTTPException(400, "session 不存在，请先调用 /api/team-a")
+        raise HTTPException(
+            400,
+            "session 不存在（内存与磁盘均无）。请先 /api/team-a 或 /api/pipeline/stream HITL",
+        )
 
     if body.action == "cancel":
         state = {**state, "phase": "cancelled", "user_action": "cancel",
                  "final_response": "已取消", "status": "success"}
-        _SESSIONS[body.session_id] = state
+        _store_session(body.session_id, state)
+        try:
+            mark_checkpoint(body.session_id, status="cancelled")
+        except Exception:
+            pass
         return public_response(state)
 
     if body.action == "revise":
@@ -175,27 +458,76 @@ def api_confirm(body: ConfirmRequest):
             session_id=body.session_id,
             adjust_note=body.adjust_note or "用户调整",
         )
-        _SESSIONS[body.session_id] = state
+        _store_session(body.session_id, state)
         return public_response(state)
 
     if body.action != "confirm":
         raise HTTPException(400, "action 必须是 confirm | revise | cancel")
 
-    state = apply_user_confirmation(
+    # resume 标记（interrupt → 小 Team B 子图）
+    try:
+        mark_checkpoint(body.session_id, status="resumed")
+    except Exception:
+        pass
+    from packing_assistant.graph_resume import resume_team_b_segment
+
+    state = resume_team_b_segment(
         state,
-        action="confirm",
+        session_id=body.session_id,
         container_type=body.container_type,
         max_containers=body.max_containers,
-        adjust_note=body.adjust_note,
+        adjust_note=body.adjust_note or "",
         confirmed_box_ids=body.confirmed_box_ids,
     )
-    state = run_team_b(state)
-    _SESSIONS[body.session_id] = state
-    return public_response(state)
+    if "hitl_summary" in state:
+        state = {**state, "hitl_summary": {}}
+    state = {**state, "phase": state.get("phase") or "done"}
+    _store_session(body.session_id, state)
+    try:
+        mark_checkpoint(body.session_id, status="done")
+    except Exception:
+        pass
+    resp = public_response(state)
+    resp["checkpoint"] = load_checkpoint_meta(body.session_id) or {}
+    resp["resumed_from_disk"] = True
+    resp["graph_segment"] = state.get("graph_segment")
+    resp["resume_from"] = state.get("resume_from")
+    return resp
+
+
+@app.get("/api/resume/{session_id}")
+def api_resume_status(session_id: str):
+    """查询 A/B 分段 resume 是否可用（磁盘 / LangGraph）。"""
+    from packing_assistant.graph_resume import describe_resume
+
+    return describe_resume(session_id)
+
+
+@app.post("/api/resume/{session_id}/team-b")
+def api_resume_team_b(session_id: str, body: ConfirmRequest):
+    """显式从 HITL resume 小 Team B（等同 confirm，可仅带 session）。"""
+    from packing_assistant.graph_resume import load_resume_state, resume_team_b_segment
+
+    st = _get_session(session_id) or load_resume_state(session_id)
+    if not st:
+        raise HTTPException(404, f"session {session_id} 不可 resume")
+    state = resume_team_b_segment(
+        st,
+        session_id=session_id,
+        container_type=body.container_type or st.get("container_type") or "40HQ",
+        max_containers=body.max_containers,
+        adjust_note=body.adjust_note or "",
+        confirmed_box_ids=body.confirmed_box_ids,
+    )
+    _store_session(session_id, state)
+    resp = public_response(state)
+    resp["resume_from"] = state.get("resume_from")
+    resp["graph_segment"] = state.get("graph_segment")
+    return resp
 
 
 class PipelineRequest(BaseModel):
-    """单一 Agent 闭环入口：材料→…→风险→出图→裁决，落盘 + 可下载路径。"""
+    """大 Team 入口：NL→IntentSpec→小TeamA成箱→HITL→小TeamB拼柜→收口。"""
 
     user_input: str = "Agent pipeline"
     materials: Optional[List[Dict[str, Any]]] = None
@@ -209,25 +541,322 @@ class PipelineRequest(BaseModel):
         description="deliver_valid_pack_plan | minimize_containers | safe_to_ship",
     )
     save_artifacts: bool = True
-    # graph=LangGraph 全图；steps=逐步 9 Agent 显式 trace（推荐答辩）
+    # steps=固定节点；llm_toolcall=LLM多轮工具；auto=有Key则LLM；graph=LangGraph全图
     mode: str = "steps"
+    agent_mode: str = Field(
+        default="",
+        description="覆盖 mode：steps | llm_toolcall | auto（空则用 mode）",
+    )
+    max_llm_rounds: int = 12
+    preset: str = "high_util"
+    packing_options: Optional[Dict[str, Any]] = None
+
+
+class WhatIfRequest(BaseModel):
+    """OptiGuide 式 what-if：NL/约束 → 重跑大 Team 闭环。"""
+
+    session_id: str = "pipeline"
+    scenario: str = Field(
+        default="",
+        description="空则靠 nl_query 解析；或 lock_containers|plus_one|minus_one|strict_mid50|iron_only|no_long|...",
+    )
+    nl_query: str = Field(
+        default="",
+        description="自然语言：如「锁 2 柜」「去掉超长」「只要铁件」",
+    )
+    max_containers: Optional[int] = Field(
+        default=None,
+        description="预算柜数；lock/minus/plus 场景使用",
+    )
+    profile: str = Field(
+        default="",
+        description="可选偏好档：balanced|strict_mid50|min_cabin|export_careful|crate_passthrough",
+    )
+    user_input: str = ""
+    materials: Optional[List[Dict[str, Any]]] = None
+    packing_options: Optional[Dict[str, Any]] = None
+    container_type: str = "40HQ"
+    store_result: bool = True
+
+
+class WhatIfApplyRequest(BaseModel):
+    """把 what-if 结果会话提升为主 session（result 替换 baseline）。"""
+
+    session_id: str = "pipeline"
+    whatif_session_id: str = Field(..., description="形如 {session}-whatif-{scenario}")
+
+
+class ProfilePipelineRequest(BaseModel):
+    """带偏好档的 pipeline 快捷入口。"""
+
+    user_input: str = "Profile pipeline"
+    materials: Optional[List[Dict[str, Any]]] = None
+    container_type: str = "40HQ"
+    session_id: str = "pipeline"
+    max_containers: int = 0
+    profile: str = "balanced"
+    packing_options: Optional[Dict[str, Any]] = None
+    preset: str = ""
+    enable_auto_confirm: bool = True
+
+
+@app.get("/api/profiles")
+def api_profiles():
+    from packing_assistant.packing_profiles import list_profiles
+
+    return {"ok": True, "profiles": list_profiles()}
+
+
+@app.get("/api/whatif/scenarios")
+def api_whatif_scenarios():
+    from packing_assistant.whatif import list_whatif_scenarios
+
+    return {"ok": True, "scenarios": list_whatif_scenarios()}
+
+
+@app.post("/api/whatif")
+def api_whatif(body: WhatIfRequest):
+    """
+    What-if：在 baseline state 上改 max_containers / 过滤材料 / packing_options，
+    重跑 run_agent_pipeline，返回 before/after + plan_diff。
+    """
+    from packing_assistant.session_store import load_session, save_session
+    from packing_assistant.whatif import run_whatif
+
+    base = _SESSIONS.get(body.session_id) or _load_session(body.session_id)
+    if not base or not (base.get("materials") or body.materials):
+        # 无 baseline：用 materials 先跑一版再 what-if
+        if not body.materials:
+            raise HTTPException(
+                400,
+                "需要已有 session（先 /api/pipeline）或提供 materials",
+            )
+        base = run_agent_pipeline(
+            body.user_input or "whatif baseline",
+            materials=body.materials,
+            container_type=body.container_type,
+            enable_auto_confirm=True,
+            session_id=f"{body.session_id}-base",
+            packing_options=body.packing_options,
+        )
+        _store_session(f"{body.session_id}-base", base)
+
+    # 合并偏好档
+    if body.profile:
+        from packing_assistant.packing_profiles import apply_profile
+
+        base = dict(base)
+        base["packing_options"] = apply_profile(
+            base.get("packing_options") or body.packing_options,
+            body.profile,
+        )
+
+    result = run_whatif(
+        base,
+        scenario=body.scenario or "",
+        max_containers=body.max_containers,
+        user_input=body.user_input or body.nl_query,
+        nl_query=body.nl_query or body.user_input,
+        profile=body.profile or "",
+        session_id=body.session_id,
+    )
+    if not result.get("ok"):
+        raise HTTPException(400, result.get("error") or "whatif failed")
+
+    after = result.get("state") or {}
+    if body.store_result and after:
+        wid = f"{body.session_id}-whatif-{body.scenario}"
+        _store_session(wid, after)
+        try:
+            save_session(wid, after)
+        except Exception:
+            pass
+        result["result_session_id"] = wid
+
+    out = {k: v for k, v in result.items() if k != "state"}
+    out["ok"] = True
+    return out
+
+
+@app.post("/api/whatif/apply")
+def api_whatif_apply(body: WhatIfApplyRequest):
+    """把 what-if 结果写回主 session，便于前端直接展示为当前方案。"""
+    from packing_assistant.session_store import save_session
+
+    src = _SESSIONS.get(body.whatif_session_id) or _load_session(body.whatif_session_id)
+    if not src:
+        raise HTTPException(404, f"whatif session 不存在: {body.whatif_session_id}")
+    _store_session(body.session_id, src)
+    try:
+        save_session(body.session_id, src)
+    except Exception:
+        pass
+    pub = public_response(src)
+    return {
+        "ok": True,
+        "session_id": body.session_id,
+        "applied_from": body.whatif_session_id,
+        "public": pub,
+        "summary": {
+            "containers_used": (src.get("container_plan") or {}).get("containers_used"),
+            "can_fit": (src.get("container_plan") or {}).get("can_fit"),
+            "ship_ok": src.get("ship_ok"),
+            "worst_mid50": (src.get("container_plan") or {}).get("worst_mid50"),
+        },
+    }
+
+
+@app.post("/api/pipeline/profile")
+def api_pipeline_profile(body: ProfilePipelineRequest):
+    """按偏好档跑单 Team 闭环。"""
+    from packing_assistant.packing_profiles import apply_profile
+
+    mats, opts, key, text = _apply_preset(
+        preset=body.preset or "",
+        user_input=body.user_input,
+        materials=body.materials,
+        packing_options=body.packing_options,
+    )
+    opts = apply_profile(opts, body.profile or "balanced")
+    state = run_agent_pipeline(
+        text,
+        materials=mats,
+        container_type=body.container_type,
+        max_containers=int(body.max_containers or 0),
+        enable_auto_confirm=body.enable_auto_confirm,
+        session_id=body.session_id,
+        packing_options=opts,
+    )
+    _store_session(body.session_id, state)
+    pub = public_response(state)
+    return {
+        "ok": True,
+        "profile": body.profile,
+        "session_id": body.session_id,
+        "public": pub,
+        "summary": {
+            "n0": (state.get("container_plan") or {}).get("n0"),
+            "containers_used": (state.get("container_plan") or {}).get("containers_used"),
+            "can_fit": (state.get("container_plan") or {}).get("can_fit"),
+            "ship_ok": state.get("ship_ok"),
+            "team_mode": state.get("team_mode"),
+            "profile_id": opts.get("profile_id"),
+        },
+    }
+
+
+@app.get("/api/business-presets")
+def api_business_presets():
+    from packing_assistant.business_presets import list_business_presets
+
+    return {"ok": True, "presets": list_business_presets()}
+
+
+@app.post("/api/export/shipment")
+def api_export_shipment(body: dict):
+    """导出 POR+绑扎 xlsx。body: {session_id}"""
+    from packing_assistant.export_pack import export_shipment_xlsx
+
+    sid = str((body or {}).get("session_id") or "pipeline")
+    st = _SESSIONS.get(sid) or _load_session(sid)
+    if not st:
+        raise HTTPException(404, "session 不存在")
+    meta = export_shipment_xlsx(st)
+    return {"ok": True, **meta}
+
+
+@app.post("/api/checklist")
+def api_checklist(body: dict):
+    """更新装前检查表勾选。body: {session_id, checked: {id: bool}}"""
+    from packing_assistant.pre_ship_checklist import build_pre_ship_checklist
+    from packing_assistant.session_store import save_session
+
+    sid = str((body or {}).get("session_id") or "pipeline")
+    st = _SESSIONS.get(sid) or _load_session(sid)
+    if not st:
+        raise HTTPException(404, "session 不存在")
+    checked = (body or {}).get("checked") or {}
+    st["pre_ship_checked"] = checked
+    cl = build_pre_ship_checklist(st, checked=checked)
+    st["pre_ship_checklist"] = cl
+    _store_session(sid, st)
+    try:
+        save_session(sid, st)
+    except Exception:
+        pass
+    return {"ok": True, "checklist": cl}
+
+
+@app.post("/api/eval/run")
+def api_eval_run():
+    """跑合成 tiny/20t 黄金评测（不依赖 t80 大文件）。"""
+    from packing_assistant.eval_harness import run_eval_suite
+    from pathlib import Path
+
+    summary = run_eval_suite(out_path=Path("output/eval_harness_last.json"))
+    return {"ok": summary.get("ok"), **summary}
+
+
+@app.post("/api/p2/vgm-submit")
+def api_p2_vgm(body: dict):
+    from packing_assistant.p2_stubs import draft_vgm_submit
+
+    sid = str((body or {}).get("session_id") or "")
+    st = (_SESSIONS.get(sid) or _load_session(sid) or {}) if sid else {}
+    return {"ok": True, **draft_vgm_submit(st, dry_run=True)}
+
+
+@app.post("/api/p2/evidence")
+def api_p2_evidence(body: dict):
+    from packing_assistant.p2_stubs import build_evidence_pack
+
+    sid = str((body or {}).get("session_id") or "pipeline")
+    st = _SESSIONS.get(sid) or _load_session(sid)
+    if not st:
+        raise HTTPException(404, "session 不存在")
+    return {"ok": True, **build_evidence_pack(st)}
 
 
 @app.post("/api/demo")
 def api_demo(body: DemoRequest):
-    """兼容入口：全自动闭环 + 落盘（等同 /api/pipeline auto）。"""
+    """兼容入口：全自动闭环 + 落盘（等同 /api/pipeline auto）。默认 high_util 满载物料。"""
+    mats, opts, key, text = _apply_preset(
+        preset=body.preset or "high_util",
+        user_input=body.user_input,
+        materials=body.materials,
+    )
     state = run_agent_pipeline(
-        body.user_input,
+        text,
+        materials=mats,
         container_type=body.container_type,
         enable_auto_confirm=True,
         max_containers=0,
         session_id=body.session_id,
         save_artifacts=True,
+        packing_options=opts,
     )
-    _SESSIONS[body.session_id] = state
+    _store_session(body.session_id, state)
     resp = public_response(state)
     resp["agent_loop"] = "感知→规划→工具→行动→finalize"
+    resp["preset"] = key or body.preset
     return resp
+
+
+@app.get("/api/demo-presets")
+def api_demo_presets():
+    from packing_assistant.demo_presets import list_presets
+
+    return {"ok": True, "presets": list_presets()}
+
+
+def _pipeline_agent_mode(body: PipelineRequest) -> str:
+    am = (body.agent_mode or "").strip()
+    if am:
+        return am
+    m = (body.mode or "steps").strip().lower()
+    if m in ("llm", "llm_toolcall", "toolcall", "agent", "auto"):
+        return m
+    return "steps"
 
 
 @app.post("/api/pipeline")
@@ -235,33 +864,45 @@ def api_pipeline(body: PipelineRequest):
     """
     **Agent 单一入口**：自动跑全程（可开关 confirm）→ finalize。
 
-    返回：goal_status、agent_steps（tool 轨迹）、artifact_paths（落盘可下载）。
+    mode/agent_mode: steps | llm_toolcall | auto | graph
     """
+    mats, opts, key, text = _apply_preset(
+        preset=body.preset or "",
+        user_input=body.user_input,
+        materials=body.materials,
+        packing_options=body.packing_options,
+    )
     if (body.mode or "steps").lower() == "graph":
         state = run_pipeline(
-            body.user_input,
-            materials=body.materials,
+            text,
+            materials=mats,
             container_type=body.container_type,
             enable_auto_confirm=body.enable_auto_confirm,
             max_containers=int(body.max_containers or 0),
             goal=body.goal,
             save_artifacts=body.save_artifacts,
+            packing_options=opts,
         )
         steps = state.get("agent_steps") or []
+        used_mode = "graph"
     else:
+        used_mode = _pipeline_agent_mode(body)
         state = run_agent_pipeline(
-            body.user_input,
-            materials=body.materials,
+            text,
+            materials=mats,
             container_type=body.container_type,
             max_containers=int(body.max_containers or 0),
             enable_auto_confirm=body.enable_auto_confirm,
             goal=body.goal,
             session_id=body.session_id,
             save_artifacts=body.save_artifacts,
+            packing_options=opts,
+            agent_mode=used_mode,
+            max_llm_rounds=int(body.max_llm_rounds or 12),
         )
         steps = state.get("agent_steps") or []
 
-    _SESSIONS[body.session_id] = state
+    _store_session(body.session_id, state)
     plan = state.get("container_plan") or {}
     book = state.get("booking") or plan.get("booking") or {}
     paths = state.get("artifact_paths") or {}
@@ -269,12 +910,19 @@ def api_pipeline(body: PipelineRequest):
     return {
         "ok": True,
         "agent_definition": {
-            "style": "multi_agent_workflow",
-            "architecture": "总分总分总",
+            "style": state.get("agent_style")
+            or (
+                "llm_toolcall"
+                if used_mode in ("llm_toolcall", "llm", "auto")
+                else "nl_general_agent_with_tools"
+            ),
+            "architecture": "big_team_wraps_a_b",
             "goal": state.get("goal") or body.goal,
             "capabilities": ["感知环境", "推理与规划", "使用工具", "采取行动", "追求目标"],
-            "loop": "主控总→成箱分→HITL总→拼柜分→裁决总",
-            "note": "分角色流水线；数值由 tools 计算，非 LLM 编造",
+            "loop": "大Team：Intent/LLM调度 → 小TeamA成箱 → HITL → 小TeamB拼柜 → critic → 收口",
+            "team_mode": "big_team_a_b",
+            "agent_mode": used_mode,
+            "note": "数值由 tools 计算；LLM 只选工具不写坐标；What-if 见 POST /api/whatif",
         },
         "run_id": state.get("run_id"),
         "artifact_paths": paths,
@@ -297,9 +945,324 @@ def api_pipeline(body: PipelineRequest):
             or [],
             "ship_ok": state.get("ship_ok"),
             "phase": state.get("phase"),
+            "agent_mode": used_mode,
         },
         "public": pub,
     }
+
+
+@app.post("/api/pipeline/stream")
+def api_pipeline_stream(body: PipelineRequest):
+    """
+    SSE 流式 pipeline：逐 Agent 推送 agent_start / agent_end / hitl / done。
+    前端可用 fetch + ReadableStream 解析 `data: {...}\\n\\n`。
+    """
+    mats, opts, _key, text = _apply_preset(
+        preset=body.preset or "",
+        user_input=body.user_input,
+        materials=body.materials,
+        packing_options=body.packing_options,
+    )
+
+    def gen():
+        final_state = None
+        for ev in iter_agent_pipeline(
+            text,
+            materials=mats,
+            container_type=body.container_type,
+            max_containers=int(body.max_containers or 0),
+            enable_auto_confirm=body.enable_auto_confirm,
+            goal=body.goal,
+            session_id=body.session_id,
+            save_artifacts=body.save_artifacts,
+            packing_options=opts,
+            agent_mode=_pipeline_agent_mode(body),
+            max_llm_rounds=int(body.max_llm_rounds or 12),
+        ):
+            # SSE 不传完整 state（体积大）；hitl/done 落盘以便 resume
+            out = {k: v for k, v in ev.items() if k != "state"}
+            if ev.get("type") == "done":
+                final_state = ev.get("state")
+                if final_state is not None:
+                    _store_session(body.session_id, final_state)
+            elif ev.get("type") == "hitl":
+                # harness 已 save_session；再刷 RAM（state 在后续 done 才完整 yield）
+                # 若事件带 run_id，保证 session 索引可查
+                rid = str(ev.get("run_id") or "")
+                if rid:
+                    disk = _get_session(rid) or _get_session(body.session_id)
+                    if disk is not None:
+                        _store_session(body.session_id, disk)
+            yield f"data: {json.dumps(out, ensure_ascii=False, default=str)}\n\n"
+        if final_state is None:
+            yield f"data: {json.dumps({'type': 'error', 'message': 'empty pipeline'}, ensure_ascii=False)}\n\n"
+
+    return StreamingResponse(
+        gen(),
+        media_type="text/event-stream",
+        headers={
+            "Cache-Control": "no-cache",
+            "Connection": "keep-alive",
+            "X-Accel-Buffering": "no",
+        },
+    )
+
+
+@app.websocket("/ws/session/{session_id}")
+async def ws_session(websocket: WebSocket, session_id: str):
+    """多 tab 订阅同一 session 的 agent 事件流（与 SSE 同源 HUB）。"""
+    from packing_assistant.ws_hub import HUB
+
+    await websocket.accept()
+    q = HUB.subscribe(session_id)
+    try:
+        await websocket.send_json(
+            {
+                "type": "ws_subscribed",
+                "session_id": session_id,
+                "subscribers": HUB.subscriber_count(session_id),
+                "schema": "packing.stream.v1",
+            }
+        )
+        while True:
+            # 非阻塞取事件 + 心跳
+            try:
+                ev = await asyncio.get_event_loop().run_in_executor(
+                    None, lambda: q.get(timeout=15.0)
+                )
+                await websocket.send_json(ev)
+            except queue_mod.Empty:
+                try:
+                    await websocket.send_json({"type": "ws_ping", "session_id": session_id})
+                except Exception:
+                    break
+    except WebSocketDisconnect:
+        pass
+    except Exception:
+        pass
+    finally:
+        HUB.unsubscribe(session_id, q)
+
+
+@app.websocket("/ws/runs/{run_id}")
+async def ws_run(websocket: WebSocket, run_id: str):
+    """按 run_id 订阅（别名频道）。"""
+    await ws_session(websocket, run_id)
+
+
+@app.get("/api/lg/threads")
+def api_lg_threads(limit: int = 30):
+    from packing_assistant.lg_checkpoint import list_thread_ids
+
+    return {"ok": True, "threads": list_thread_ids(limit=limit)}
+
+
+@app.get("/api/lg/threads/{thread_id}")
+def api_lg_thread_state(thread_id: str):
+    """从 LangGraph Sqlite checkpointer 读取线程最新 state。"""
+    from packing_assistant.graph import create_team_a_app_durable
+    from packing_assistant.lg_checkpoint import get_thread_state
+
+    app = create_team_a_app_durable()
+    values = get_thread_state(thread_id, app)
+    if not values:
+        # 尝试文件 session 兜底
+        values = load_session(thread_id)
+    if not values:
+        raise HTTPException(404, f"no langgraph/file state for thread={thread_id}")
+    return {
+        "ok": True,
+        "thread_id": thread_id,
+        "phase": values.get("phase"),
+        "public": public_response(values),
+        "source": "langgraph_or_file",
+    }
+
+
+@app.get("/api/checkpoints")
+def api_list_checkpoints(pending_hitl: bool = False, limit: int = 40):
+    """HITL / 会话 checkpoint 列表（文件持久化）。pending_hitl=true 仅未确认。"""
+    items = list_checkpoints(limit=limit, pending_hitl_only=pending_hitl)
+    return {
+        "ok": True,
+        "schema": "packing.checkpoint.v1",
+        "pending_hitl_only": pending_hitl,
+        "count": len(items),
+        "checkpoints": items,
+    }
+
+
+@app.get("/api/checkpoints/{thread_id}")
+def api_get_checkpoint(thread_id: str, include_state: bool = False):
+    """读取某 thread 的 interrupt 元数据；可选完整 state。"""
+    meta = load_checkpoint_meta(thread_id)
+    state = load_session(thread_id) if include_state else None
+    if meta is None and state is None:
+        raise HTTPException(404, f"checkpoint not found: {thread_id}")
+    out: Dict[str, Any] = {
+        "ok": True,
+        "thread_id": thread_id,
+        "checkpoint": meta or {},
+    }
+    if include_state and state is not None:
+        # 不回传超大 traces 时可裁剪
+        out["public"] = public_response(state)
+        out["phase"] = state.get("phase")
+        out["run_id"] = state.get("run_id")
+    return out
+
+
+@app.post("/api/checkpoints/{thread_id}/resume")
+def api_resume_checkpoint(thread_id: str, body: ConfirmRequest):
+    """
+    LangGraph 风格 resume：从磁盘 checkpoint 恢复后 confirm/revise/cancel。
+    body.session_id 可省略，默认用 path 中的 thread_id。
+    """
+    body.session_id = body.session_id or thread_id
+    if not body.session_id or body.session_id == "default":
+        body.session_id = thread_id
+    # 强制从磁盘再拉一次，证明 durable
+    disk = load_session(thread_id) or load_session(body.session_id)
+    if not disk:
+        raise HTTPException(404, f"no durable checkpoint for thread={thread_id}")
+    _SESSIONS[thread_id] = disk
+    _SESSIONS[body.session_id] = disk
+    return api_confirm(body)
+
+
+@app.delete("/api/checkpoints/{thread_id}")
+def api_delete_checkpoint(thread_id: str):
+    ok = delete_checkpoint(thread_id)
+    if not ok:
+        raise HTTPException(404, f"checkpoint index not found: {thread_id}")
+    _SESSIONS.pop(thread_id, None)
+    return {"ok": True, "thread_id": thread_id, "deleted_index": True}
+
+
+@app.get("/api/session/{session_id}")
+def api_get_session(session_id: str):
+    """恢复会话：RAM → 磁盘 checkpoint → public 形状。"""
+    state = _get_session(session_id)
+    if not state:
+        raise HTTPException(404, f"session not found: {session_id}")
+    resp = public_response(state)
+    resp["checkpoint"] = state.get("_checkpoint") or load_checkpoint_meta(session_id) or {}
+    resp["from_disk"] = session_id not in _SESSIONS or True
+    return resp
+
+
+@app.get("/api/runs")
+def api_list_runs(limit: int = 30):
+    """会话/运行历史：扫描 output/runs。"""
+    return {"ok": True, "harness_version": HARNESS_VERSION, "runs": list_runs(limit=limit)}
+
+
+@app.get("/api/runs/compare")
+def api_compare_runs(a: str, b: str):
+    """对比两次 run 的摘要指标（须在 {run_id} 路由之前注册）。"""
+    from packing_assistant.trace_events import RUNS_DIR
+
+    def load_idx(rid: str) -> Dict[str, Any]:
+        p = RUNS_DIR / rid / "index.json"
+        if not p.exists():
+            return {"run_id": rid, "error": "missing"}
+        try:
+            return json.loads(p.read_text(encoding="utf-8"))
+        except Exception as e:
+            return {"run_id": rid, "error": str(e)}
+
+    ia, ib = load_idx(a), load_idx(b)
+    keys = ("n0", "containers_used", "can_fit", "risk_decision")
+    diff = {}
+    for k in keys:
+        diff[k] = {"a": ia.get(k), "b": ib.get(k), "same": ia.get(k) == ib.get(k)}
+    return {"ok": True, "a": ia, "b": ib, "diff": diff}
+
+
+@app.get("/api/runs/{run_id}")
+def api_get_run(run_id: str, include_trace: bool = True):
+    from packing_assistant.trace_events import RUNS_DIR
+
+    d = RUNS_DIR / run_id
+    if not d.is_dir():
+        raise HTTPException(404, f"run not found: {run_id}")
+    idx = {}
+    p = d / "index.json"
+    if p.exists():
+        try:
+            idx = json.loads(p.read_text(encoding="utf-8"))
+        except Exception:
+            idx = {}
+    out: Dict[str, Any] = {
+        "ok": True,
+        "run_id": run_id,
+        "run_dir": str(d),
+        "index": idx,
+    }
+    if include_trace:
+        out["trace"] = read_trace_jsonl(run_id, limit=2000)
+    return out
+
+
+@app.get("/api/runs/{run_id}/replay")
+def api_replay_run(run_id: str, delay_ms: int = 0):
+    """
+    将 trace.jsonl 以 SSE 回放（agents-observe 式 time-travel）。
+    delay_ms>0 时逐步放慢，便于前端演示。
+    """
+    import time as _time
+
+    events = read_trace_jsonl(run_id, limit=5000)
+    if not events:
+        raise HTTPException(404, f"no trace.jsonl for run {run_id}")
+
+    def gen():
+        yield f"data: {json.dumps({'type': 'replay_start', 'run_id': run_id, 'n': len(events), 'schema': 'packing.stream.v1'}, ensure_ascii=False)}\n\n"
+        for ev in events:
+            payload = dict(ev)
+            payload["replay"] = True
+            yield f"data: {json.dumps(payload, ensure_ascii=False, default=str)}\n\n"
+            if delay_ms > 0:
+                _time.sleep(min(delay_ms, 2000) / 1000.0)
+        yield f"data: {json.dumps({'type': 'replay_done', 'run_id': run_id}, ensure_ascii=False)}\n\n"
+
+    return StreamingResponse(
+        gen(),
+        media_type="text/event-stream",
+        headers={
+            "Cache-Control": "no-cache",
+            "Connection": "keep-alive",
+            "X-Accel-Buffering": "no",
+        },
+    )
+
+
+@app.get("/api/engine-ab")
+def api_engine_ab(cases: str = "case_a_small_cartons_20gp,case_b_long_frames_40hq"):
+    """轻量引擎 A/B（python-laff vs skjolber）。"""
+    import subprocess
+    import sys
+    from pathlib import Path
+
+    out_path = ROOT / "output" / "engine_ab_report.json"
+    cmd = [
+        sys.executable,
+        str(ROOT / "scripts" / "compare_pack_engines.py"),
+        "--cases",
+        cases,
+        "--out",
+        str(out_path),
+    ]
+    try:
+        subprocess.run(cmd, cwd=str(ROOT), timeout=120, check=False)
+    except Exception as e:
+        return {"ok": False, "error": str(e)}
+    if out_path.exists():
+        try:
+            return {"ok": True, "report": json.loads(out_path.read_text(encoding="utf-8"))}
+        except Exception as e:
+            return {"ok": False, "error": str(e)}
+    return {"ok": False, "error": "report not written"}
 
 
 class TraceRequest(BaseModel):
@@ -330,7 +1293,7 @@ def api_pipeline_trace(body: TraceRequest):
         session_id=body.session_id,
         save_artifacts=True,
     )
-    _SESSIONS[body.session_id] = state
+    _store_session(body.session_id, state)
     plan = state.get("container_plan") or {}
     book = state.get("booking") or plan.get("booking") or {}
     steps = state.get("agent_steps") or []
@@ -361,14 +1324,6 @@ def api_pipeline_trace(body: TraceRequest):
         },
         "public": public_response(state),
     }
-
-
-@app.get("/api/session/{session_id}")
-def api_session(session_id: str):
-    state = _SESSIONS.get(session_id)
-    if not state:
-        raise HTTPException(404, "session not found")
-    return public_response(state)
 
 
 @app.get("/api/test-shipments")
@@ -459,7 +1414,7 @@ def api_run_pdf(body: PdfRunRequest):
             if plan.get("can_fit"):
                 break
 
-    _SESSIONS[body.session_id] = state
+    _store_session(body.session_id, state)
     resp = public_response(state)
     resp["pdf_file"] = path.name
     resp["container_no"] = ctn

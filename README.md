@@ -1,23 +1,30 @@
 # 智能装箱与拼柜 · 多智能体 Harness
 
-**版本 Harness v0.4.0** · 架构：**总分总分总**  
+**版本 Harness v0.6.2**（2026-07-29）  
+架构：**大 Team ⊃ 小 Team A 成箱 + 小 Team B 拼柜** · NL 通用 Agent · 多工具  
 仓库：https://github.com/LUOaini1213/packing-agent  
-变更说明：[docs/CHANGELOG-v0.4.md](docs/CHANGELOG-v0.4.md)
+变更说明：[docs/CHANGELOG-v0.5.md](docs/CHANGELOG-v0.5.md) · [架构](docs/ARCHITECTURE.md) · [v0.4](docs/CHANGELOG-v0.4.md)
 
 面向 **REDACTED-PROJECT** 钢结构件：
 
-**材料清单 → 铁箱/木箱（结构计算·详设事实）→ 集装箱拼柜装载 → 风险合规 → 三视图**
+**NL/材料清单 → IntentSpec → 成箱（A）→ HITL → 拼柜（B）→ 风险合规 → 三视图 → 订舱草稿**
 
-| v0.4 要点 | 说明 |
+| v0.6 要点 | 说明 |
 |-----------|------|
-| 详设结构 | `structure_design_facts`；无详设→待详设阻断 |
-| 自然语言改方案 | `POST /api/revise-nl` + 网页 |
-| 评估 | binding 自适应权重 · metrics_table · outer 不进订舱分 |
-| 多轮测试 | `python scripts/run_multi_round_tests.py --suite full --rounds 2` |
+| **大 Team ⊃ A/B** | 编排/闸门/critic/收口 + 成箱专业组 + 拼柜专业组 |
+| **IntentSpec** | NL 通用入口；龙申/工厂等仅为示例 |
+| **LLM tool-call** | `agent_mode=llm_toolcall`（无 Key 时 policy fallback） |
+| **影子评测** | `python scripts/eval_workteams_cli.py` · steps vs llm KPI |
+| **TMS 订舱** | `POST /api/tms/booking/submit`（stub / HTTP） |
+| **三层组织图** | 前端左侧大 Team 包 A/B + HITL |
+| **A/B resume** | `/api/team-a` → `/api/confirm` · graph checkpoint |
+| CoG / 双利用率 | R0–R4 · N0 订舱 vs 3D 外廓 |
+| Docker / CI | `docker compose up --build` · `.github/workflows/ci.yml` |
+| 可观测 | SSE · WS · trace.jsonl · OTEL · runs 对比 |
 
 ---
 
-## 整体架构（9 智能体 + 用户确认 · 总分总分总）
+## 整体架构（大 Team ⊃ A/B · NL Agent）
 
 ```text
 用户输入（材料清单 / PDF / Excel）
@@ -284,6 +291,7 @@ python scripts/gen_sim_materials.py --run-booking
 | [docs/team-a-user-output-template.md](docs/team-a-user-output-template.md) | 团队 A 用户输出模板 |
 | [docs/api-spec.md](docs/api-spec.md) | JSON 接口定稿 |
 | [docs/phase2-agent2-packer-api.md](docs/phase2-agent2-packer-api.md) | skjolber 封装参考 |
+| [docs/competitive-landscape.md](docs/competitive-landscape.md) | 同类/竞品对照与定位 |
 | [PROJECT_SUMMARY.md](PROJECT_SUMMARY.md) | 打包与目录速览 |
 | [knowledge/README.md](knowledge/README.md) | 知识库说明 |
 | [test/excel/README.md](test/excel/README.md) | 钢结构 Excel 测试集 |

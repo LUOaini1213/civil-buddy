@@ -231,30 +231,34 @@ def _build_perception(
 
 
 def _demo_materials() -> List[Dict[str, Any]]:
-    raw = [
-        {
-            "名称": "H型钢柱",
-            "规格": "H400×200",
-            "数量": 4,
-            "单重_kg": 85,
-            "外尺寸_mm": {"长": 3800, "宽": 400, "高": 200},
-        },
-        {
-            "名称": "钢梁",
-            "规格": "H350×175",
-            "数量": 6,
-            "单重_kg": 55,
-            "外尺寸_mm": {"长": 4200, "宽": 350, "高": 175},
-        },
-        {
-            "名称": "连接板组件",
-            "规格": "套件",
-            "数量": 20,
-            "单重_kg": 12,
-            "外尺寸_mm": {"长": 800, "宽": 600, "高": 400},
-        },
-    ]
-    return [material_internal_to_api(m, i) for i, m in enumerate(raw, 1)]
+    """默认演示：高利用率密实模块（避免「空柜感」）。
+
+    钢件轻量叙事请用 preset=steel_light 或文案含「钢件轻量」。
+    """
+    try:
+        from packing_assistant.demo_presets import materials_high_util
+
+        return materials_high_util()
+    except Exception:
+        from packing_assistant.adapters import material_internal_to_api
+
+        raw = [
+            {
+                "名称": "H型钢柱",
+                "规格": "H400×200",
+                "数量": 4,
+                "单重_kg": 85,
+                "外尺寸_mm": {"长": 3800, "宽": 400, "高": 200},
+            },
+            {
+                "名称": "钢梁",
+                "规格": "H350×175",
+                "数量": 6,
+                "单重_kg": 55,
+                "外尺寸_mm": {"长": 4200, "宽": 350, "高": 175},
+            },
+        ]
+        return [material_internal_to_api(m, i) for i, m in enumerate(raw, 1)]
 
 
 def _rule_parse(raw: str) -> List[Dict[str, Any]]:

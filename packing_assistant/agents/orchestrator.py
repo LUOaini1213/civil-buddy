@@ -7,18 +7,24 @@ from typing import Any, Dict, List
 from packing_assistant.state import PackingState
 from packing_assistant.tools.container_select import recommend_container
 
-# 完整 9 智能体顺序（主控 + A3 + B5）
-AGENT_ROSTER: List[Dict[str, str]] = [
-    {"id": "orchestrator", "name": "主控智能体", "team": "主控"},
-    {"id": "material_parser", "name": "材料解析智能体", "team": "A"},
-    {"id": "structure", "name": "结构计算智能体", "team": "A"},
-    {"id": "box_scheme", "name": "装箱方案智能体", "team": "A"},
-    {"id": "planner", "name": "规划智能体", "team": "B"},
-    {"id": "loader", "name": "装载执行智能体", "team": "B"},
-    {"id": "evaluator", "name": "评估优化智能体", "team": "B"},
-    {"id": "risk_compliance", "name": "风险合规智能体", "team": "B"},
-    {"id": "visualizer", "name": "可视化智能体", "team": "B"},
-]
+# 大 Team ⊃ 小 Team A/B（与 teams.roster 对齐）
+try:
+    from packing_assistant.teams.roster import AGENT_ROSTER as _ROSTER
+
+    AGENT_ROSTER: List[Dict[str, str]] = list(_ROSTER)
+except Exception:
+    AGENT_ROSTER = [
+        {"id": "orchestrator", "name": "主控编排", "team": "big"},
+        {"id": "material_parser", "name": "材料解析", "team": "A"},
+        {"id": "structure", "name": "结构计算", "team": "A"},
+        {"id": "box_scheme", "name": "装箱方案", "team": "A"},
+        {"id": "planner", "name": "规划", "team": "B"},
+        {"id": "loader", "name": "装载", "team": "B"},
+        {"id": "evaluator", "name": "评估", "team": "B"},
+        {"id": "risk_compliance", "name": "风险合规", "team": "B"},
+        {"id": "visualizer", "name": "可视化", "team": "B"},
+        {"id": "finalize", "name": "收口", "team": "big"},
+    ]
 
 
 def agent_orchestrator(state: PackingState) -> Dict[str, Any]:
@@ -85,18 +91,25 @@ def agent_orchestrator(state: PackingState) -> Dict[str, Any]:
         "minimize_containers": "在可装下且合规前提下尽量少柜（仍由 N0+3D 决定，非 LLM 报数）",
         "safe_to_ship": "优先合规与结构安全，风险 REJECT 则不可出运",
     }
+    ispec = state.get("intent_spec") or {}
     orch = {
-        "agent_count": 9,
+        "agent_count": len(AGENT_ROSTER),
         "roster": AGENT_ROSTER,
         "intent": intent,
+        "intent_spec_summary": {
+            "scheme_id": ispec.get("scheme_id"),
+            "cargo_mode": ispec.get("cargo_mode"),
+            "container_budget": ispec.get("container_budget"),
+            "source": ispec.get("source"),
+        },
         "goals": goals,
-        # 任务域目标（非无限自治）
         "goal": goal_name,
         "goal_desc": goal_descs.get(goal_name, goal_descs["deliver_valid_pack_plan"]),
-        "agent_style": "multi_agent_workflow",
+        "agent_style": "nl_general_agent_with_tools",
+        "architecture": "big_team_wraps_a_b",
         "dispatch": (
-            "主控选柜 → TeamA(材料→结构→装箱) → 用户确认(HITL) → "
-            "TeamB(规划→装载→评估→风险→可视化) → 主控复核柜型"
+            "大Team(NL→IntentSpec+编排) → 小TeamA(材料→结构→成箱) → HITL闸 → "
+            "小TeamB(规划→装载→评估→风险→可视化) → 大Team(有界critic+收口)"
         ),
         "container_select_start": rec,
         "container_type_chosen": chosen,
@@ -112,8 +125,8 @@ def agent_orchestrator(state: PackingState) -> Dict[str, Any]:
             "no_stack_if": ["内容物超长", "超长", "结构不通过"],
             "note": "轻箱/矮箱上二层；重箱与超长件仅底层",
         },
-        "tools_policy": "数值由 tools 计算；LLM 仅润色，不改柜数/can_fit",
-        "loop": "感知清单与状态 → 规划订柜策略 → 调用成箱/3D/风险工具 → 生成方案与图 → 推进至可裁决结论",
+        "tools_policy": "数值由 tools 计算；NL/LLM 只解释意图与调度，不写 xyz/柜数拍脑袋",
+        "loop": "NL意图 → 小TeamA成箱 → HITL → 小TeamB拼柜(有界重试) → 收口",
     }
 
     updates: Dict[str, Any] = {
@@ -136,13 +149,11 @@ def agent_orchestrator(state: PackingState) -> Dict[str, Any]:
             {
                 "role": "assistant",
                 "content": (
-                    f"【主控·开头】9 智能体流水线启动 | goal={goal_name} | "
-                    f"intent={intent} | 材料={len(mats)} 行 | "
-                    f"推荐柜型={recommended}（采纳={adopt}，当前={chosen}）| "
-                    f"理由：{'；'.join(rec.get('reasons') or [])[:120]} | "
-                    f"策略：二层堆码优先 + 空间/重量双利用率 | "
-                    f"闭环：感知→规划→工具→行动→finalize | "
-                    f"形态=多智能体工作流（非单体全能Agent）；tools 算数"
+                    f"【大Team·主控】NL通用Agent | arch=big⊃A+B | goal={goal_name} | "
+                    f"intent={intent} | scheme={ispec.get('scheme_id') or '-'} | "
+                    f"材料={len(mats)} 行 | 推荐柜型={recommended}（采纳={adopt}，当前={chosen}）| "
+                    f"理由：{'；'.join(rec.get('reasons') or [])[:100]} | "
+                    f"调度：A成箱→HITL→B拼柜→critic有界→收口 | tools算数"
                 ),
             }
         ],

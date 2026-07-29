@@ -1,0 +1,5 @@
+# 可选：真 OTEL + LangGraph Sqlite checkpoint
+langgraph-checkpoint-sqlite>=2.0.0
+opentelemetry-api>=1.20.0
+opentelemetry-sdk>=1.20.0
+opentelemetry-exporter-otlp-proto-http>=1.20.0

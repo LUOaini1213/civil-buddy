@@ -131,6 +131,7 @@ def box_internal_to_api(b: Dict[str, Any]) -> Dict[str, Any]:
         "content_max_length_mm": b.get("content_max_length_mm"),
         "stackable": bool(b.get("stackable")),
         "prefer_bottom": bool(b.get("prefer_bottom")),
+        "max_stack_layers": b.get("max_stack_layers"),
     }
 
 
@@ -188,6 +189,7 @@ def box_api_to_internal(b: Dict[str, Any]) -> Dict[str, Any]:
         "booking_volume_m3": b.get("booking_volume_m3"),
         "stackable": bool(b.get("stackable")),
         "prefer_bottom": bool(b.get("prefer_bottom")),
+        "max_stack_layers": b.get("max_stack_layers"),
     }
 
 

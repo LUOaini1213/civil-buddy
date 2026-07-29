@@ -1,8 +1,8 @@
 """
-主控门面：团队A → 用户确认 → 团队B。
+主控门面：大 Team（编排+HITL+critic+收口）⊃ 小 Team A 成箱 + 小 Team B 拼柜。
 
-Agent 闭环入口：run_pipeline / run_agent_pipeline
-  感知→规划→工具→行动→finalize；可选落盘 output/runs/<run_id>/
+通用 Agent：NL → IntentSpec → 多工具；入口 run_pipeline / run_agent_pipeline。
+可选落盘 output/runs/<run_id>/。
 """
 
 from __future__ import annotations
@@ -91,8 +91,12 @@ def make_initial_state(
         "errors": [],
         "validation_warnings": [],
         "replan_round": 0,
+        "ship_replan_round": 0,
         "enable_auto_confirm": enable_auto_confirm,
         "agent_steps": [],
+        "team_mode": "big_team_a_b",
+        "intent_spec": {},
+        "team_architecture": {},
     }
 
 
@@ -107,7 +111,10 @@ def run_team_a(
     packing_options: Optional[Dict[str, Any]] = None,
 ) -> Dict[str, Any]:
     """只跑团队A，停在 await_user_confirm。"""
-    app = create_team_a_app()
+    from packing_assistant.graph import create_team_a_app_durable
+    from packing_assistant.lg_checkpoint import invoke_with_checkpoint
+
+    app = create_team_a_app_durable()
     state = make_initial_state(
         user_input=user_input,
         materials=materials,
@@ -126,9 +133,25 @@ def run_team_a(
             **(state.get("packing_options") or {}),
             **packing_options,
         }
-    result = app.invoke(state)
+    tid = str(session_id or state.get("session_id") or state.get("run_id") or "team_a")
+    result = invoke_with_checkpoint(app, state, tid)
+    if (result.get("phase") or "") == "await_user_confirm":
+        try:
+            from packing_assistant.hitl_summary import build_hitl_summary
+
+            result = {**result, "hitl_summary": build_hitl_summary(result)}
+        except Exception:
+            pass
+    # 双写：LangGraph sqlite + 文件 session（API resume）
+    try:
+        from packing_assistant.session_store import save_session
+
+        save_session(tid, result)
+    except Exception:
+        pass
     if persist_trace:
         result = {**result, "trace_path": save_trace(result)}
+    result = {**result, "_lg_thread_id": tid, "_lg_checkpoint": True}
     return result
 
 
@@ -221,10 +244,27 @@ def run_team_b(state: Dict[str, Any], *, persist_trace: bool = False) -> Dict[st
             "final_response": "未确认，不能进入拼柜。请 action=confirm 并选择柜型。",
             "phase": state.get("phase") or "await_user_confirm",
         }
-    app = create_team_b_app()
-    result = app.invoke(state)
+    from packing_assistant.graph import create_team_b_app_durable
+    from packing_assistant.lg_checkpoint import invoke_with_checkpoint
+
+    app = create_team_b_app_durable()
+    tid = str(
+        state.get("session_id")
+        or state.get("_lg_thread_id")
+        or state.get("run_id")
+        or "team_b"
+    )
+    # team B 用独立 namespace 后缀，避免与 team A 节点名冲突混淆
+    result = invoke_with_checkpoint(app, state, f"{tid}:team_b")
+    try:
+        from packing_assistant.session_store import save_session
+
+        save_session(str(state.get("session_id") or tid), result)
+    except Exception:
+        pass
     if persist_trace:
         result = {**result, "trace_path": save_trace(result)}
+    result = {**result, "_lg_thread_id": tid, "_lg_checkpoint": True}
     return result
 
 
@@ -304,151 +344,129 @@ def run_agent_pipeline(
     packing_options: Optional[Dict[str, Any]] = None,
     session_id: str = "",
     save_artifacts: bool = True,
+    on_event: Optional[Any] = None,
+    agent_mode: str = "steps",
+    max_llm_rounds: int = 12,
 ) -> Dict[str, Any]:
     """
-    单一 Agent 闭环入口（逐步 9 智能体，显式 tool 轨迹）。
+    大 Team 主入口。
 
-    材料→结构→成箱→HITL→规划→装载→评估→风险→出图→finalize。
-    enable_auto_confirm=False 时停在确认闸门（HITL）。
-    返回 state 含 agent_steps[] 与 artifact_paths。
+    agent_mode:
+      - steps: 固定专业节点调度（默认，IntentSpec + A→HITL→B）
+      - llm_toolcall: LLM 多轮 tool-call（无 Key 时自动 policy fallback）
+      - auto: 有 LLM Key 则 llm_toolcall，否则 steps
     """
-    from packing_assistant.agents import (
-        agent_box_scheme,
-        agent_evaluator,
-        agent_finalize,
-        agent_loader,
-        agent_material_parser,
-        agent_orchestrator,
-        agent_planner,
-        agent_present_team_a,
-        agent_risk_compliance,
-        agent_structure,
-        agent_visualizer,
-    )
+    mode = _resolve_agent_mode(agent_mode)
+    if mode == "llm_toolcall":
+        from packing_assistant.agent_loop import run_llm_agent_loop
 
-    agents = [
-        ("orchestrator", "主控·感知/目标", agent_orchestrator),
-        ("material_parser", "材料解析·感知", agent_material_parser),
-        ("structure", "结构计算", agent_structure),
-        ("box_scheme", "装箱方案", agent_box_scheme),
-        ("present_team_a", "HITL确认闸门", agent_present_team_a),
-        ("planner", "规划(N0)", agent_planner),
-        ("loader", "装载(3D)", agent_loader),
-        ("evaluator", "评估", agent_evaluator),
-        ("risk_compliance", "风险合规", agent_risk_compliance),
-        ("visualizer", "可视化", agent_visualizer),
-        ("finalize", "主控收口·目标", agent_finalize),
-    ]
+        return run_llm_agent_loop(
+            raw_input,
+            materials=materials,
+            container_type=container_type,
+            max_containers=max_containers,
+            enable_auto_confirm=enable_auto_confirm,
+            goal=goal,
+            packing_options=packing_options,
+            session_id=session_id,
+            save_artifacts=save_artifacts,
+            max_rounds=max_llm_rounds,
+            on_event=on_event,
+            force_llm=True,
+        )
 
-    state = make_initial_state(
-        user_input=raw_input or "agent_pipeline",
+    from packing_assistant.teams.big_team import run_big_team
+
+    return run_big_team(
+        raw_input,
         materials=materials,
         container_type=container_type,
+        max_containers=max_containers,
         enable_auto_confirm=enable_auto_confirm,
-        max_containers=int(max_containers or 0),
         goal=goal,
+        packing_options=packing_options,
         session_id=session_id,
+        save_artifacts=save_artifacts,
+        on_event=on_event,
     )
-    if packing_options:
-        state["packing_options"] = dict(packing_options)
-    else:
-        state["packing_options"] = {
-            "standard_boxes": True,
-            "mix_mode": True,
-            "max_box_net_kg": 2000,
-        }
 
-    steps: List[Dict[str, Any]] = []
-    for node, title, fn in agents:
-        upd = fn(state) or {}
-        for k, v in upd.items():
-            if k in (
-                "messages",
-                "traces",
-                "errors",
-                "validation_warnings",
-                "agent_steps",
-            ) and isinstance(v, list):
-                state[k] = list(state.get(k) or []) + v
-            else:
-                state[k] = v
 
-        if node == "present_team_a" and enable_auto_confirm:
-            # ③ 总闸：auto 确认并写 user_confirm step
-            state = apply_user_confirmation(
-                state,
-                action="confirm",
-                container_type=state.get("container_type") or container_type,
-                max_containers=int(max_containers or 0),
-            )
+def iter_agent_pipeline(
+    raw_input: str = "",
+    *,
+    materials: Optional[List[Dict[str, Any]]] = None,
+    container_type: str = DEFAULT_CONTAINER_TYPE,
+    max_containers: int = 0,
+    enable_auto_confirm: bool = True,
+    goal: str = "deliver_valid_pack_plan",
+    packing_options: Optional[Dict[str, Any]] = None,
+    session_id: str = "",
+    save_artifacts: bool = True,
+    on_event: Optional[Any] = None,
+    agent_mode: str = "steps",
+    max_llm_rounds: int = 12,
+):
+    """逐步 yield 事件。agent_mode 同 run_agent_pipeline。"""
+    mode = _resolve_agent_mode(agent_mode)
+    if mode == "llm_toolcall":
+        from packing_assistant.agent_loop import iter_llm_agent_loop
 
-        last = ""
-        for m in reversed(state.get("messages") or []):
-            if m.get("content"):
-                last = str(m["content"])
-                break
-        meta = upd.get("agent_meta") if isinstance(upd.get("agent_meta"), dict) else {}
-        step: Dict[str, Any] = {
-            "node": node,
-            "title": title,
-            "message": last[:900],
-            "role": "agent",
-            "tools_used": meta.get("tools_used") or [],
-            "capability": meta.get("capability") or [],
-            "artifacts": meta.get("artifacts") or {},
-        }
-        if node == "material_parser":
-            step["perception"] = state.get("perception") or state.get("materials_summary")
-        if node == "planner":
-            pl = state.get("plan") or {}
-            step["planning_reasons"] = pl.get("planning_reasons") or []
-            step["n0"] = pl.get("n0")
-            step["binding"] = (pl.get("booking") or {}).get("binding_constraint")
-        if node == "loader":
-            p = state.get("container_plan") or {}
-            step["containers_used"] = p.get("containers_used")
-            step["can_fit"] = p.get("can_fit")
-            step["retry_steps"] = (meta.get("artifacts") or {}).get("retry_steps")
-        if node == "risk_compliance":
-            rr = state.get("risk_report") or {}
-            step["decision"] = rr.get("decision")
-            step["suggested_actions"] = rr.get("suggested_actions") or []
-        if node == "visualizer":
-            step["artifacts"] = meta.get("artifacts") or step.get("artifacts") or {}
-        if node == "finalize":
-            step["goal_status"] = state.get("goal_status") or {}
-            step["ship_ok"] = state.get("ship_ok")
-        steps.append(step)
+        yield from iter_llm_agent_loop(
+            raw_input,
+            materials=materials,
+            container_type=container_type,
+            max_containers=max_containers,
+            enable_auto_confirm=enable_auto_confirm,
+            goal=goal,
+            packing_options=packing_options,
+            session_id=session_id,
+            save_artifacts=save_artifacts,
+            max_rounds=max_llm_rounds,
+            on_event=on_event,
+            force_llm=True,
+        )
+        return
 
-        # 同步 apply_user_confirmation 注入的 user_confirm
-        if node == "present_team_a" and enable_auto_confirm:
-            for st in state.get("agent_steps") or []:
-                if isinstance(st, dict) and st.get("node") == "user_confirm":
-                    if not any(x.get("node") == "user_confirm" for x in steps):
-                        steps.append(st)
-                    break
+    from packing_assistant.teams.big_team import iter_big_team_run
 
-        # ③ 总闸：非 auto 时 present 后写 hitl_wait 再停（不再用 planner 前死代码）
-        if node == "present_team_a" and not enable_auto_confirm:
-            wait = {
-                "node": "hitl_wait",
-                "title": "等待用户确认（总分总分总·第③段总闸）",
-                "message": (
-                    "phase=await_user_confirm；请 POST /api/confirm 后进入团队B；"
-                    "HITL 为环境反馈｜tools=hitl.confirm_gate"
-                ),
-                "tools_used": ["hitl.confirm_gate"],
-                "capability": ["感知环境"],
-                "status": "ok",
-            }
-            steps.append(wait)
-            state["agent_steps"] = list(state.get("agent_steps") or []) + [wait]
-            break
+    yield from iter_big_team_run(
+        raw_input,
+        materials=materials,
+        container_type=container_type,
+        max_containers=max_containers,
+        enable_auto_confirm=enable_auto_confirm,
+        goal=goal,
+        packing_options=packing_options,
+        session_id=session_id,
+        save_artifacts=save_artifacts,
+        on_event=on_event,
+    )
 
-    state["agent_steps"] = steps
-    if save_artifacts:
-        state = _attach_artifacts(state, steps=steps)
-    return state
+
+def _resolve_agent_mode(agent_mode: str) -> str:
+    """steps | llm_toolcall；auto 看 Key / env。"""
+    m = (agent_mode or "steps").strip().lower()
+    if m in ("llm", "llm_toolcall", "toolcall", "agent"):
+        return "llm_toolcall"
+    if m == "auto":
+        try:
+            from packing_assistant.agent_loop import llm_agent_enabled
+            from packing_assistant.llm import llm_available
+
+            if llm_available() or llm_agent_enabled():
+                return "llm_toolcall"
+        except Exception:
+            pass
+        return "steps"
+    try:
+        from packing_assistant.agent_loop import llm_agent_enabled
+
+        if llm_agent_enabled() and m == "steps":
+            # env 强制开 LLM 路径
+            return "llm_toolcall"
+    except Exception:
+        pass
+    return "steps"
 
 
 def _attach_artifacts(
@@ -620,12 +638,47 @@ def public_response(state: Dict[str, Any]) -> Dict[str, Any]:
         "volume_source": booking.get("volume_source") or booking.get("mode"),
         "note": "订柜看 booking_volume；外廓 outer 仅 3D/展示",
     }
+    # PackingPlan 工件（若 finalize 未写则补建）
+    packing_plan = state.get("packing_plan")
+    if not packing_plan:
+        try:
+            from packing_assistant.packing_plan import build_packing_plan
+
+            packing_plan = build_packing_plan(state)
+        except Exception:
+            packing_plan = {}
+    hitl_gates = state.get("hitl_gates")
+    if not hitl_gates:
+        try:
+            from packing_assistant.hitl_gates import evaluate_hitl_gates
+
+            hitl_gates = evaluate_hitl_gates(state)
+        except Exception:
+            hitl_gates = {}
     return {
         "intent": state.get("intent") or "full_process",
         "phase": state.get("phase"),
         "status": state.get("status"),
         "session_id": state.get("session_id"),
-        "packing_plan_id": state.get("packing_plan_id"),
+        "packing_plan_id": state.get("packing_plan_id")
+        or (packing_plan or {}).get("plan_id"),
+        "packing_plan": packing_plan or {},
+        "hitl_gates": hitl_gates or {},
+        "load_sequence": state.get("load_sequence") or {},
+        "vgm_draft": state.get("vgm_draft") or {},
+        "plan_diff": state.get("plan_diff") or {},
+        "secure_work_order": state.get("secure_work_order")
+        or (packing_plan or {}).get("secure_work_order")
+        or {},
+        "por_manifest": state.get("por_manifest")
+        or (packing_plan or {}).get("por_manifest")
+        or {},
+        "per_cabin_cog": (packing_plan or {}).get("per_cabin_cog")
+        or list(((plan.get("cog_bundle") or {}).get("per_container") or [])),
+        "r_pipeline": (packing_plan or {}).get("r_pipeline") or [],
+        "profile_id": (state.get("packing_options") or {}).get("profile_id")
+        or (packing_plan or {}).get("profile_id"),
+        "replan_proposal": state.get("replan_proposal") or {},
         "final_response": state.get("final_response") or "",
         "materials": state.get("materials") or [],
         "boxes": state.get("boxes") or [],
@@ -643,9 +696,32 @@ def public_response(state: Dict[str, Any]) -> Dict[str, Any]:
         "goal": state.get("goal"),
         "goal_status": state.get("goal_status") or {},
         "ship_ok": state.get("ship_ok"),
+        "team_mode": state.get("team_mode") or "big_team_a_b",
+        "agent_style": state.get("agent_style") or "",
+        "intent_spec": state.get("intent_spec") or {},
+        "team_architecture": state.get("team_architecture") or {},
+        "graph_segment": state.get("graph_segment"),
+        "tms_booking": state.get("tms_booking") or {},
+        "team_loop_round": state.get("team_loop_round"),
+        "replan_round": state.get("replan_round"),
+        "ship_replan_round": state.get("ship_replan_round"),
         "views": state.get("views") or {},
+        "scene3d": state.get("scene3d") or {},
+        "cog": (
+            (plan.get("cog") if isinstance(plan.get("cog"), dict) else None)
+            or ((plan.get("cog_bundle") or {}).get("worst") if isinstance(plan.get("cog_bundle"), dict) else None)
+            or ((plan.get("cog_bundle") or {}).get("primary") if isinstance(plan.get("cog_bundle"), dict) else None)
+            or state.get("cog")
+            or (state.get("risk_report") or {}).get("cog")
+            or (packing_plan or {}).get("cog")
+            or {}
+        ),
+        "cog_bundle": plan.get("cog_bundle") or state.get("cog_bundle") or {},
+        "worst_mid50": plan.get("worst_mid50")
+        or ((plan.get("cog_bundle") or {}).get("worst_mid50")),
         "image_data": state.get("image_data") or {},
         "legend": state.get("legend") or [],
+        "display_metrics": state.get("display_metrics") or {},
         "run_id": state.get("run_id"),
         "artifact_paths": state.get("artifact_paths") or {},
         "agent_steps": steps,
@@ -654,7 +730,22 @@ def public_response(state: Dict[str, Any]) -> Dict[str, Any]:
         "design_facts": state.get("design_facts") or {},
         "design_facts_status": _design_facts_status(state),
         "nl_revision": state.get("nl_revision") or {},
+        "hitl_summary": state.get("hitl_summary")
+        or _maybe_hitl_summary(state),
+        "harness_version": (state.get("harness_meta") or {}).get("harness_version")
+        or "",
     }
+
+
+def _maybe_hitl_summary(state: Dict[str, Any]) -> Dict[str, Any]:
+    if (state.get("phase") or "") != "await_user_confirm":
+        return {}
+    try:
+        from packing_assistant.hitl_summary import build_hitl_summary
+
+        return build_hitl_summary(state)
+    except Exception:
+        return {}
 
 
 def _design_facts_status(state: Dict[str, Any]) -> Dict[str, Any]:
