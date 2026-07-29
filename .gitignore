@@ -7,6 +7,9 @@ deepseek_api.txt
 deepseek-api.txt
 *apiKey*
 *apikey*
+*api-key*
+*-apiKey*
+*.csv
 *.pem
 *.key
 credentials*
@@ -31,17 +34,19 @@ venv/
 Thumbs.db
 Desktop.ini
 
-# --- runtime outputs (regenerable) ---
-output/traces/
-output/**/*.png
-output/**/side_*.png
-output/**/layout_*.png
-# keep small json reports if useful, ignore huge dumps
-output/e2e_deepseek_report.json
+# --- runtime outputs (全部本地可再生成，不入仓) ---
+/output/**
+!/output/.gitkeep
 
-# --- local logs ---
+# --- local / temp ---
 *.log
 *.tmp
+*.bak
+*.bak-*
+frontend/*.bak*
+scripts/_*.py
+scripts/dev/
+scripts/__pycache__/
 
 # --- Java build (optional skjolber) ---
 skjolber-service/target/
@@ -51,3 +56,9 @@ skjolber-service/target/
 
 # --- session / tool caches ---
 .grok/
+.langgraph_api/
+*.db
+!**/schema*.sql
+
+# --- large local samples (optional; prefer data/samples tracked thin copies) ---
+# data/samples/ 内小样例可提交；超大原始件请放本地
