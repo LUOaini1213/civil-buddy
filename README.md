@@ -1,6 +1,6 @@
 # 智能装箱与拼柜 · packing-agent
 
-**Harness v0.6.2**（2026-07-29）  
+**Harness v0.6.3**（2026-07-30 · 比赛收尾）  
 架构：**大 Team ⊃ 小 Team A（成箱）+ 小 Team B（拼柜）**  
 NL 通用 Agent · 多工具求解 · 有界 critic · HITL  
 
@@ -23,6 +23,17 @@ NL / 物料表
 
 数值由 **tools** 计算；LLM 只解释意图 / 调度工具，**不写 xyz**。  
 业务场景名（如某次「1 柜 / 2 柜」）仅为示例，不是固定线路。
+
+**主路径（对外只讲这一条）**
+
+| 路径 | 用途 |
+|------|------|
+| **`agent_mode=steps`（默认）** | 生产 / 答辩 / 基线：大 Team 固定专业节点调度 |
+| `llm_toolcall` | 实验 / 影子评测（有 Key 时 LLM 选工具） |
+| `graph` / team-a→confirm | HITL 分段 resume，不是第二条产品 |
+
+作战图与基线：[docs/competition-phase-plan.md](docs/competition-phase-plan.md) ·  
+`python scripts/run_phase0_baseline.py --quick`
 
 详设：[docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) · 变更：[docs/CHANGELOG-v0.5.md](docs/CHANGELOG-v0.5.md) · 文档索引：[docs/README.md](docs/README.md)
 

@@ -75,6 +75,19 @@
 | **TMS** | `tms_booking.py` · preview/submit · stub 或 `PACKING_TMS_URL` |
 | **CI** | `.github/workflows/ci.yml` 对齐 `big_team_a_b` + workteams + TMS |
 
+## v0.6.3 · 比赛收尾 slice（comp）
+
+| 项 | 说明 |
+|----|------|
+| **标准铁架默认** | 重钢走标准箱库；`validate_boxes_against_kb` 命中率 |
+| **超货载** | `cargo_feasibility` + mass_split + critic→box_scheme |
+| **锚点** | `t80_long_mix_s297883` 重生；`test_anchor_t80_long_mix.py` |
+| **Reflect 轨迹** | agent_steps plan/act/observe/reflect |
+| **HITL** | 标准箱架卡片；`test_hitl_resume_competition.py` 3 case 磁盘续跑 |
+| **booking 单测** | `test_booking_volume_metrics.py` 双口径 |
+| **Phase0** | 权重+30 case 基线；`competition_smoke.ps1` / 评委脚本 |
+| **tag** | 建议 `v0.6.3-comp` |
+
 ## v0.6.2 · repo hygiene（同日）
 
 | 项 | 说明 |

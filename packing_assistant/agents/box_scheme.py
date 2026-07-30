@@ -23,10 +23,13 @@ def _crate_passthrough_enabled(materials: List[Dict[str, Any]], opts: Dict[str, 
         return False
     if opts.get("crate_passthrough") or opts.get("materials_are_crates"):
         return True
-    # 用户明确要标准箱库时不自动直通
-    if opts.get("standard_boxes") is True and not opts.get("dense_mode"):
-        # 仍允许 note 强信号触发直通（工地当量 xlsx）
-        pass
+    # 用户明确要标准箱库时：仅当量 note 强信号才直通，禁止仅凭铁件名自动直通
+    force_standard = (
+        opts.get("standard_boxes") is True
+        and not opts.get("dense_mode")
+        and not opts.get("crate_passthrough")
+        and not opts.get("materials_are_crates")
+    )
     if not materials:
         return False
     hits = 0
@@ -58,6 +61,21 @@ def _crate_passthrough_enabled(materials: List[Dict[str, Any]], opts: Dict[str, 
         if q == 1 and L >= 800 and W >= 400 and H >= 300:
             crate_sized += 1
     n = len(materials)
+    # 标准箱优先：只有 note 当量信号才直通（忽略「铁件」尺寸启发式）
+    if force_standard:
+        note_only = 0
+        for m in materials:
+            note = str(m.get("note") or m.get("备注") or "")
+            name = str(m.get("name") or "")
+            if (
+                "crate_equiv" in note
+                or "crate=" in note
+                or "当量" in name
+                or "铁件架" in name
+                or "叠层架" in name
+            ):
+                note_only += 1
+        return note_only >= max(1, int(0.5 * n))
     if hits >= max(1, int(0.5 * n)):
         return True
     if crate_sized >= max(2, int(0.7 * n)):
@@ -290,6 +308,25 @@ def agent_box_scheme(state: PackingState) -> Dict[str, Any]:
         design_facts = dict(design_facts or {})
         design_facts.setdefault("defaults", {})
         design_facts["defaults"]["force_box_type"] = packing_opts["force_box_type"]
+    # 成箱前：若物料单件已超货载，压低 max_box_net_kg 触发质量拆分
+    try:
+        from packing_assistant.tools.cargo_feasibility import check_cargo_feasibility
+
+        pre_feas = check_cargo_feasibility(
+            materials=materials,
+            container_type=str(ctype),
+        )
+        if not pre_feas.get("ok"):
+            rec = float(pre_feas.get("max_box_net_kg_recommend") or 2500)
+            max_net = min(max_net, rec)
+            note_parts_pre = list(pre_feas.get("blockers") or [])[:2]
+            revision_mode = True
+        else:
+            note_parts_pre = []
+    except Exception:
+        pre_feas = {"ok": True}
+        note_parts_pre = []
+
     result = run_packing(
         internal,
         container_type=str(ctype),
@@ -302,6 +339,17 @@ def agent_box_scheme(state: PackingState) -> Dict[str, Any]:
     )
     boxes_raw = result.get("箱子列表") or []
     boxes = boxes_to_api(boxes_raw)
+
+    try:
+        from packing_assistant.tools.cargo_feasibility import check_cargo_feasibility
+
+        post_feas = check_cargo_feasibility(
+            boxes=boxes,
+            materials=materials,
+            container_type=str(ctype),
+        )
+    except Exception:
+        post_feas = pre_feas if isinstance(pre_feas, dict) else {"ok": True}
 
     # 用约束补充加固文案
     reinforce_types = {
@@ -351,16 +399,65 @@ def agent_box_scheme(state: PackingState) -> Dict[str, Any]:
         note_parts.append(
             f"改箱 max_net={max_net:.0f}kg 拆分后料行={summary.get('item_chunks_after_split', '?')}"
         )
+    if note_parts_pre:
+        note_parts.append("可行性:" + "；".join(note_parts_pre))
+    if isinstance(post_feas, dict) and not post_feas.get("ok", True):
+        note_parts.append(
+            "成箱后仍超货载:"
+            + "；".join((post_feas.get("blockers") or [])[:2])
+        )
+    # 标准箱库命中校验（passthrough 合法例外）
+    try:
+        from packing_assistant.knowledge import validate_boxes_against_kb
+
+        std_audit = validate_boxes_against_kb(
+            boxes, allow_passthrough=True
+        )
+    except Exception:
+        std_audit = {"ok": True, "hit_rate": 1.0, "by_type": {}, "n_unknown": 0}
+    if std_audit.get("n_unknown"):
+        note_parts.append(
+            f"标准箱命中{float(std_audit.get('hit_rate') or 0):.0%}"
+            f" 未知{std_audit.get('n_unknown')}"
+        )
     note = f"（{'；'.join(note_parts)}）" if note_parts else ""
+    # plan/act/observe/reflect 供比赛轨迹
+    reflect = {
+        "plan": f"成箱策略 standard={standard_boxes} dense={dense_mode} max_net={max_net:.0f}kg",
+        "act": f"run_packing → {len(boxes)} 箱",
+        "observe": (
+            f"结构{summary.get('结论', '')} feas="
+            f"{(post_feas or {}).get('ok')} 标准箱命中"
+            f"{float(std_audit.get('hit_rate') or 0):.0%}"
+        ),
+        "reflect": (
+            "继续拼柜"
+            if (post_feas or {}).get("ok", True) and std_audit.get("ok", True)
+            else "需拆箱/改标准箱或人工确认"
+        ),
+    }
     return {
         "boxes": boxes,
+        "cargo_feasibility": post_feas if isinstance(post_feas, dict) else {},
+        "standard_box_audit": std_audit,
         "agent_meta": {
             "node": "box_scheme",
             "capability": ["使用工具", "采取行动"],
-            "tools_used": ["packing.run_packing"],
+            "tools_used": [
+                "packing.run_packing",
+                "cargo_feasibility.check",
+                "knowledge.validate_boxes",
+            ],
+            "plan": reflect["plan"],
+            "act": reflect["act"],
+            "observe": reflect["observe"],
+            "reflect": reflect["reflect"],
             "artifacts": {
                 "boxes": len(boxes),
                 "mode": summary.get("packing_mode") or "standard",
+                "feas_ok": (post_feas or {}).get("ok"),
+                "standard_hit_rate": std_audit.get("hit_rate"),
+                "box_type_counts": std_audit.get("by_type"),
             },
         },
         "team_a_summary": {
@@ -380,15 +477,26 @@ def agent_box_scheme(state: PackingState) -> Dict[str, Any]:
             "boxes_outer_volume_m3": summary.get("boxes_outer_volume_m3"),
             "cargo_item_volume_m3": summary.get("cargo_item_volume_m3"),
             "avg_crate_fill": summary.get("avg_crate_fill"),
-            "standard_box_type_counts": summary.get("standard_box_type_counts"),
+            "standard_box_type_counts": summary.get("standard_box_type_counts")
+            or std_audit.get("by_type"),
+            "standard_box_hit_rate": std_audit.get("hit_rate"),
         },
         "messages": [
             {
                 "role": "assistant",
                 "content": (
                     f"装箱完成：{len(boxes)} 箱 — {summary.get('结论', '')}{note}"
-                    f"｜tools=packing.run_packing（已生成 boxes[]，属行动非建议）"
+                    f"｜tools=packing+feas+标准箱校验"
+                    f"｜reflect={reflect['reflect']}"
                 ),
             }
         ],
+        "validation_warnings": (
+            [
+                f"标准箱库未命中 {u.get('box_id')}:{u.get('box_type')}"
+                for u in (std_audit.get("unknown") or [])[:5]
+            ]
+            if std_audit.get("n_unknown")
+            else []
+        ),
     }

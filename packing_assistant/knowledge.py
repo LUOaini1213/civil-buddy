@@ -57,6 +57,61 @@ def get_box_spec(name: str) -> Optional[Dict[str, Any]]:
     return spec
 
 
+def validate_boxes_against_kb(
+    boxes: List[Dict[str, Any]],
+    *,
+    allow_passthrough: bool = True,
+) -> Dict[str, Any]:
+    """
+    校验成箱结果是否落在标准箱库。
+    返回 hit_rate、unknown 列表、by_type 计数。
+    """
+    total = 0
+    hit = 0
+    unknown: List[Dict[str, str]] = []
+    by_type: Dict[str, int] = {}
+    passthrough_n = 0
+    for b in boxes or []:
+        if not isinstance(b, dict):
+            continue
+        total += 1
+        base = str(b.get("base_box_type") or "")
+        btype = str(b.get("box_type") or "")
+        if allow_passthrough and (
+            base == "crate_passthrough" or "当量" in btype or "passthrough" in base
+        ):
+            passthrough_n += 1
+            by_type["crate_passthrough"] = by_type.get("crate_passthrough", 0) + 1
+            hit += 1  # 直通视为合法例外
+            continue
+        key = resolve_box_type_key(btype) or resolve_box_type_key(base)
+        if key:
+            hit += 1
+            by_type[key] = by_type.get(key, 0) + 1
+        else:
+            unknown.append(
+                {
+                    "box_id": str(b.get("box_id") or b.get("id") or "?"),
+                    "box_type": btype,
+                    "base_box_type": base,
+                }
+            )
+            label = btype or base or "unknown"
+            by_type[label] = by_type.get(label, 0) + 1
+    rate = (hit / total) if total else 1.0
+    return {
+        "n_boxes": total,
+        "n_hit": hit,
+        "n_unknown": len(unknown),
+        "n_passthrough": passthrough_n,
+        "hit_rate": round(rate, 4),
+        "by_type": by_type,
+        "unknown": unknown[:20],
+        "ok": rate >= 0.90 or total == 0,
+        "threshold": 0.90,
+    }
+
+
 def standard_box_types_for_packing() -> Dict[str, Dict[str, Any]]:
     """转为 packing.py 使用的 STANDARD_BOX_TYPES 形态。"""
     out: Dict[str, Dict[str, Any]] = {}

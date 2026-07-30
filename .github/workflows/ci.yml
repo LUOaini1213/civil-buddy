@@ -50,6 +50,16 @@ jobs:
           paths = st.get("artifact_paths") or {}
           print("phase", st.get("phase"), "team_mode", st.get("team_mode"), "steps", len(st["agent_steps"]), "paths", list(paths)[:6])
           PY
+      - name: Phase0 baseline quick (agency scorecard)
+        run: python scripts/run_phase0_baseline.py --quick
+      - name: Anchor tools + over-payload replan (skip long pipeline)
+        run: python scripts/test_anchor_t80_long_mix.py
+        env:
+          ANCHOR_SKIP_PIPELINE: "1"
+      - name: Booking dual-volume metrics
+        run: python scripts/test_booking_volume_metrics.py
+      - name: HITL disk resume (3 cases)
+        run: python scripts/test_hitl_resume_competition.py
       - name: Workteams shadow eval (steps vs llm) + KPI
         run: python scripts/eval_workteams_cli.py --tiny-only
       - name: TMS booking stub

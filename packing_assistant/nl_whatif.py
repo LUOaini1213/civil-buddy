@@ -285,15 +285,16 @@ def packing_options_for_cargo(
     if mode == "heavy_steel":
         opts.update(
             {
-                "crate_passthrough": True,
-                "standard_boxes": False,
+                # 比赛/工程默认：走标准铁架箱库合箱，不当量直通（除非物料 note 标明 crate）
+                "crate_passthrough": False,
+                "standard_boxes": True,
                 "prefer_stack": True,
                 "cog_rebalance": True,
                 "lns_worst": True,
                 "lateral_repair": True,
                 "r4_target_mid50": 0.55,
                 "prefer_bottom_weight_kg": 800,
-                "scheme_reason": "重钢/铁件为主→当量直通+中段配重+LNS",
+                "scheme_reason": "重钢/铁件为主→标准铁架箱库+中段配重+LNS",
             }
         )
     elif mode == "long_aluminum":

@@ -1,0 +1,19 @@
+{
+  "case_id": "over_payload_monster",
+  "story": "永久回归：单件 80t 超货载，必须 feasibility + 拆箱/路由，禁止只加柜",
+  "materials": [
+    {
+      "id": "MONSTER-1",
+      "name": "超重不可分单件",
+      "spec": "测试用",
+      "quantity": 1,
+      "weight_kg": 80000,
+      "total_weight_kg": 80000,
+      "length_mm": 6000,
+      "width_mm": 200,
+      "height_mm": 200,
+      "part_no": "MONSTER-80T",
+      "note": "phase0 over_payload regression"
+    }
+  ]
+}

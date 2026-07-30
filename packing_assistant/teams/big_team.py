@@ -179,6 +179,20 @@ def iter_big_team_run(
                 last = str(m["content"])
                 break
         meta = upd.get("agent_meta") if isinstance(upd.get("agent_meta"), dict) else {}
+        # Plan→Act→Observe→Reflect（比赛可解释轨迹）
+        plan_s = str(meta.get("plan") or "")[:120]
+        act_s = str(meta.get("act") or "")[:120]
+        obs_s = str(meta.get("observe") or "")[:120]
+        ref_s = str(meta.get("reflect") or "")[:120]
+        if not plan_s:
+            plan_s = f"执行节点 {node}"
+        if not act_s:
+            tools = meta.get("tools_used") or []
+            act_s = f"调用 {','.join(tools[:4])}" if tools else f"运行 {node}"
+        if not obs_s:
+            obs_s = (last[:120] if last else f"status={'error' if err else 'ok'}")
+        if not ref_s:
+            ref_s = "继续下一节点" if not err else "记录错误并继续/收口"
         step: Dict[str, Any] = {
             "node": node,
             "title": title,
@@ -190,6 +204,10 @@ def iter_big_team_run(
             "artifacts": meta.get("artifacts") or {},
             "duration_ms": ms,
             "status": "error" if err else "ok",
+            "plan": plan_s,
+            "act": act_s,
+            "observe": obs_s,
+            "reflect": ref_s,
         }
         if err:
             step["error"] = err
@@ -199,20 +217,43 @@ def iter_big_team_run(
             pl = state.get("plan") or {}
             step["planning_reasons"] = pl.get("planning_reasons") or []
             step["n0"] = pl.get("n0")
+            step["plan"] = plan_s or f"N0规划 n0={pl.get('n0')}"
+            step["observe"] = obs_s or f"binding={(pl.get('booking') or {}).get('binding_constraint')}"
         if node == "loader":
             p = state.get("container_plan") or {}
             step["containers_used"] = p.get("containers_used")
             step["can_fit"] = p.get("can_fit")
+            step["observe"] = (
+                f"can_fit={p.get('can_fit')} used={p.get('containers_used')}"
+            )
+            step["reflect"] = (
+                "可进入评估" if p.get("can_fit") else "需 replan/拆箱"
+            )
         if node == "risk_compliance":
             rr = state.get("risk_report") or {}
             step["decision"] = rr.get("decision")
+            step["observe"] = f"risk={rr.get('decision')}"
+            step["reflect"] = (
+                "可出运讨论" if rr.get("decision") != "REJECT" else "打回/阻断"
+            )
         if node == "finalize":
             step["goal_status"] = state.get("goal_status") or {}
             step["ship_ok"] = state.get("ship_ok")
+            step["reflect"] = f"ship_ok={state.get('ship_ok')}"
         if node == "evaluator":
             evl = state.get("evaluation") or {}
             step["need_replan"] = evl.get("need_replan")
             step["replan_round"] = state.get("replan_round")
+            step["observe"] = (
+                f"decision={evl.get('decision')} need_replan={evl.get('need_replan')}"
+            )
+            step["reflect"] = (
+                "触发 critic" if evl.get("need_replan") else "进入风险合规"
+            )
+        if node == "box_scheme":
+            step["observe"] = obs_s or str(
+                (meta.get("artifacts") or {}).get("standard_hit_rate")
+            )
         return step
 
     prev_node: Optional[str] = None

@@ -84,8 +84,43 @@ def agent_finalize(state: PackingState) -> Dict[str, Any]:
         else "无布局"
     )
 
+    # 比赛用：大 Team 决策摘要（标准箱 / replan / feas）
+    ta = state.get("team_a_summary") or {}
+    std_audit = state.get("standard_box_audit") or {}
+    feas = state.get("cargo_feasibility") or {}
+    prop = state.get("replan_proposal") or {}
+    decision_summary = {
+        "container_type": current_ct,
+        "can_fit": plan.get("can_fit"),
+        "containers_used": plan.get("containers_used"),
+        "n0": plan.get("n0") or (state.get("plan") or {}).get("n0"),
+        "ship_ok": ship_ok,
+        "risk_decision": risk_decision,
+        "replan_round": state.get("replan_round"),
+        "ship_replan_round": state.get("ship_replan_round"),
+        "last_replan_route": prop.get("route"),
+        "failure_class": prop.get("failure_class"),
+        "n_boxes": len(boxes),
+        "standard_box_hit_rate": std_audit.get("hit_rate")
+        or ta.get("standard_box_hit_rate"),
+        "box_type_counts": std_audit.get("by_type")
+        or ta.get("standard_box_type_counts"),
+        "feas_ok": feas.get("ok"),
+        "team_mode": state.get("team_mode") or "big_team_a_b",
+    }
+
     lines = [
         "# 拼柜方案结果",
+        "",
+        "## 大 Team 决策摘要",
+        "",
+        f"- **组织**：大 Team ⊃ A 成箱 + B 拼柜 · mode=`{decision_summary['team_mode']}`",
+        f"- **柜型/柜数**：{current_ct} · used={decision_summary.get('containers_used')} · N0={decision_summary.get('n0')}",
+        f"- **can_fit / ship_ok**：{decision_summary.get('can_fit')} / **{ship_ok}**",
+        f"- **风险**：{risk_decision or '—'} · replan_r={decision_summary.get('replan_round')} ship_r={decision_summary.get('ship_replan_round')}",
+        f"- **标准箱命中**：{decision_summary.get('standard_box_hit_rate')}",
+        f"- **可行性门禁**：feas_ok={decision_summary.get('feas_ok')}",
+        f"- **箱型分布**：{decision_summary.get('box_type_counts')}",
         "",
     ]
     if need_revision or not ship_ok:
@@ -171,7 +206,6 @@ def agent_finalize(state: PackingState) -> Dict[str, Any]:
                 f"不是又一次体积虚高；订舱仍以 N0 为准，工程可备注精细合箱争取贴近 N0。"
             )
 
-    ta = state.get("team_a_summary") or {}
     opts = state.get("packing_options") or {}
     if ta.get("standard_boxes") or opts.get("standard_boxes", True):
         mix_on = ta.get("mix_mode") if ta.get("mix_mode") is not None else opts.get("mix_mode", True)
@@ -492,6 +526,7 @@ def agent_finalize(state: PackingState) -> Dict[str, Any]:
         "ship_ok": ship_ok,
         "goal": goal_name,
         "goal_status": goal_status,
+        "decision_summary": decision_summary,
         "packing_plan": packing_plan,
         "packing_plan_id": packing_plan.get("plan_id") if packing_plan else state.get("packing_plan_id"),
         "hitl_gates": hitl_gates,
@@ -507,7 +542,14 @@ def agent_finalize(state: PackingState) -> Dict[str, Any]:
             "node": "finalize",
             "capability": ["追求目标", "采取行动"],
             "tools_used": ["container_select.compare_after_load"],
-            "artifacts": goal_status,
+            "plan": "汇总柜型复核与出运裁决",
+            "act": "生成 final_response + packing_plan 工件",
+            "observe": (
+                f"ship_ok={ship_ok} can_fit={plan.get('can_fit')} "
+                f"std_hit={decision_summary.get('standard_box_hit_rate')}"
+            ),
+            "reflect": "可讨论订舱" if ship_ok else "不可出运/需整改",
+            "artifacts": {**goal_status, "decision_summary": decision_summary},
         },
         "messages": [{"role": "assistant", "content": final}],
     }
