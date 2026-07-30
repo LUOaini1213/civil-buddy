@@ -655,6 +655,13 @@ def public_response(state: Dict[str, Any]) -> Dict[str, Any]:
             hitl_gates = evaluate_hitl_gates(state)
         except Exception:
             hitl_gates = {}
+    # 一眼裁决：前端大红条用，不必开 PDF
+    try:
+        from packing_assistant.verdict import build_verdict
+
+        verdict = build_verdict(state)
+    except Exception:
+        verdict = {"level": "warn", "title": "裁决生成失败", "summary": "", "issues": [], "show_banner": False}
     return {
         "intent": state.get("intent") or "full_process",
         "phase": state.get("phase"),
@@ -696,6 +703,9 @@ def public_response(state: Dict[str, Any]) -> Dict[str, Any]:
         "goal": state.get("goal"),
         "goal_status": state.get("goal_status") or {},
         "ship_ok": state.get("ship_ok"),
+        "verdict": verdict,
+        "decision_summary": state.get("decision_summary")
+        or (verdict if isinstance(verdict, dict) else {}),
         "team_mode": state.get("team_mode") or "big_team_a_b",
         "agent_style": state.get("agent_style") or "",
         "intent_spec": state.get("intent_spec") or {},

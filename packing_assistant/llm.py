@@ -57,13 +57,16 @@ def chat(
         from langchain_openai import ChatOpenAI
         from langchain_core.messages import HumanMessage, SystemMessage
 
+        # 短超时：避免 UI/pipeline 被远端 API 挂死（默认 8s，可用 LLM_TIMEOUT 覆盖）
+        _to = float(os.getenv("LLM_TIMEOUT") or 8)
         llm = ChatOpenAI(
             model=cfg["model"],
             api_key=cfg["api_key"],
             base_url=cfg["base_url"],
             temperature=temperature,
             max_tokens=max_tokens,
-            timeout=60,
+            timeout=_to,
+            max_retries=0,
         )
         resp = llm.invoke(
             [SystemMessage(content=system), HumanMessage(content=user)]

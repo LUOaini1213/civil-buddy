@@ -10,6 +10,15 @@ import os
 from datetime import datetime
 from typing import Any, Dict, List, Optional, Tuple
 
+# uvicorn 工作线程禁止弹 GUI；必须在 import pyplot 前设 Agg
+os.environ.setdefault("MPLBACKEND", "Agg")
+try:
+    import matplotlib
+
+    matplotlib.use("Agg")
+except Exception:
+    pass
+
 from packing_assistant.tools.consolidation import CONTAINER_SPECS
 
 _COLOR_CYCLE = [

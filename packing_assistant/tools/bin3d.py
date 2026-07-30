@@ -1517,10 +1517,13 @@ def pack_boxes_api(
             from packing_assistant.tools.cog_lns import apply_lns_worst_container
             from packing_assistant.tools.cog_lateral import apply_lateral_repair
 
-            tgt = float(base_opts.get("r4_target_mid50") or base_opts.get("mid50_target") or 0.55)
-            force_cog = bool(base_opts.get("cog_rebalance") or base_opts.get("r1_force"))
+            tgt = float(base_opts.get("r4_target_mid50") or base_opts.get("mid50_target") or 0.60)
+            force_cog = bool(
+                base_opts.get("cog_rebalance", True) or base_opts.get("r1_force")
+            )
 
             # R0/R1 → R2 → R4 → R3 → LNS最差柜 → 横偏修理 → R0/R1 收口
+            # 默认 force_cog=True：装完必须抬 mid50，避免 CoG=block
             do_r01 = bool(base_opts.get("r0_r1", True) or base_opts.get("r1_shift", True))
             if do_r01:
                 p = apply_r0_r1(
@@ -1538,7 +1541,7 @@ def pack_boxes_api(
                 )
             do_r4 = bool(base_opts.get("r4_repair", True) or force_cog)
             if do_r4:
-                p = apply_r4_repair(p, boxes, target_mid50=tgt, force=force_cog)
+                p = apply_r4_repair(p, boxes, target_mid50=tgt, force=True)
             do_r3 = bool(base_opts.get("r3_repack", True) or force_cog)
             if do_r3:
                 p = apply_r3_partial_repack(p, boxes, target_mid50=tgt)
@@ -1554,10 +1557,32 @@ def pack_boxes_api(
                 )
             if do_r01:
                 p = apply_r0_r1(p, boxes, force=False)
+            # 收口再强制 R4 一次，确保 mid50 目标
+            if do_r4:
+                p = apply_r4_repair(p, boxes, target_mid50=tgt, force=True)
             p = _attach_layout_quality(p, boxes)
             p = _attach_plan_cog(p, boxes, container_type)
-        except Exception:
-            pass
+        except Exception as _cog_ex:
+            # 不整段吞掉：至少尝试 R4 + 重算 CoG
+            try:
+                from packing_assistant.tools.cog_repair import apply_r4_repair as _r4
+
+                p = _r4(
+                    p,
+                    boxes,
+                    target_mid50=float(
+                        base_opts.get("r4_target_mid50")
+                        or base_opts.get("mid50_target")
+                        or 0.60
+                    ),
+                    force=True,
+                )
+                p = _attach_plan_cog(p, boxes, container_type)
+                st_err = dict(p.get("stacking") or {})
+                st_err["cog_pipeline_error"] = f"{type(_cog_ex).__name__}: {_cog_ex}"
+                p["stacking"] = st_err
+            except Exception:
+                pass
         st0 = dict(p.get("stacking") or {})
         st0["candidate_tag"] = tag
         p = {**p, "stacking": st0}

@@ -1,0 +1,2355 @@
+{
+  "version": 1,
+  "chunks": [
+    {
+      "path": "01_rules/booking_constraints/container_budget.md",
+      "heading": "(preamble)",
+      "chars": 13
+    },
+    {
+      "path": "01_rules/booking_constraints/container_budget.md",
+      "heading": "## 规则",
+      "chars": 124
+    },
+    {
+      "path": "01_rules/booking_constraints/container_budget.md",
+      "heading": "## 条件 / 动作 / 后果",
+      "chars": 103
+    },
+    {
+      "path": "01_rules/booking_constraints/container_budget.md",
+      "heading": "## 轨迹",
+      "chars": 29
+    },
+    {
+      "path": "01_rules/compliance/vgm_and_ship.md",
+      "heading": "(preamble)",
+      "chars": 13
+    },
+    {
+      "path": "01_rules/compliance/vgm_and_ship.md",
+      "heading": "## 规则",
+      "chars": 109
+    },
+    {
+      "path": "01_rules/compliance/vgm_and_ship.md",
+      "heading": "## 代码",
+      "chars": 55
+    },
+    {
+      "path": "01_rules/ctu_loading/load_bearing.md",
+      "heading": "(preamble)",
+      "chars": 24
+    },
+    {
+      "path": "01_rules/ctu_loading/load_bearing.md",
+      "heading": "## 规则",
+      "chars": 82
+    },
+    {
+      "path": "01_rules/ctu_loading/load_bearing.md",
+      "heading": "## 代码",
+      "chars": 82
+    },
+    {
+      "path": "01_rules/ctu_loading/safety_redlines.md",
+      "heading": "(preamble)",
+      "chars": 90
+    },
+    {
+      "path": "01_rules/ctu_loading/safety_redlines.md",
+      "heading": "## 红线：超货载",
+      "chars": 240
+    },
+    {
+      "path": "01_rules/ctu_loading/safety_redlines.md",
+      "heading": "## 红线：重心",
+      "chars": 154
+    },
+    {
+      "path": "01_rules/ctu_loading/safety_redlines.md",
+      "heading": "## 红线：结构不通过",
+      "chars": 110
+    },
+    {
+      "path": "01_rules/ctu_loading/safety_redlines.md",
+      "heading": "## 红线：未 can_fit 当出运",
+      "chars": 56
+    },
+    {
+      "path": "01_rules/ctu_loading/safety_redlines.md",
+      "heading": "## 红线：LLM 写坐标",
+      "chars": 118
+    },
+    {
+      "path": "01_rules/ctu_loading/safety_redlines.md",
+      "heading": "## 例外",
+      "chars": 50
+    },
+    {
+      "path": "01_rules/ctu_loading/stacking_limits.md",
+      "heading": "(preamble)",
+      "chars": 23
+    },
+    {
+      "path": "01_rules/ctu_loading/stacking_limits.md",
+      "heading": "## 规则",
+      "chars": 92
+    },
+    {
+      "path": "01_rules/ctu_loading/stacking_limits.md",
+      "heading": "## 条件 / 动作 / 后果",
+      "chars": 98
+    },
+    {
+      "path": "01_rules/ctu_loading/stacking_limits.md",
+      "heading": "## 代码",
+      "chars": 54
+    },
+    {
+      "path": "01_rules/ctu_loading/void_space.md",
+      "heading": "(preamble)",
+      "chars": 24
+    },
+    {
+      "path": "01_rules/ctu_loading/void_space.md",
+      "heading": "## 规则：水平空隙",
+      "chars": 124
+    },
+    {
+      "path": "01_rules/ctu_loading/void_space.md",
+      "heading": "## 规则：门端防倾",
+      "chars": 27
+    },
+    {
+      "path": "01_rules/ctu_loading/void_space.md",
+      "heading": "## 规则：刚性货更严",
+      "chars": 42
+    },
+    {
+      "path": "01_rules/ctu_loading/void_space.md",
+      "heading": "## 与代码",
+      "chars": 67
+    },
+    {
+      "path": "01_rules/volume_weight/calculation_rules.md",
+      "heading": "(preamble)",
+      "chars": 12
+    },
+    {
+      "path": "01_rules/volume_weight/calculation_rules.md",
+      "heading": "## 重量",
+      "chars": 126
+    },
+    {
+      "path": "01_rules/volume_weight/calculation_rules.md",
+      "heading": "## 体积（订舱）",
+      "chars": 70
+    },
+    {
+      "path": "01_rules/volume_weight/calculation_rules.md",
+      "heading": "## 体积（3D）",
+      "chars": 45
+    },
+    {
+      "path": "01_rules/volume_weight/calculation_rules.md",
+      "heading": "## 与双口径",
+      "chars": 63
+    },
+    {
+      "path": "01_rules/volume_weight/calculation_rules.md",
+      "heading": "## 代码",
+      "chars": 65
+    },
+    {
+      "path": "01_rules/volume_weight/dual_caliber.md",
+      "heading": "(preamble)",
+      "chars": 9
+    },
+    {
+      "path": "01_rules/volume_weight/dual_caliber.md",
+      "heading": "## 订舱口径（booking）",
+      "chars": 177
+    },
+    {
+      "path": "01_rules/volume_weight/dual_caliber.md",
+      "heading": "## 3D/展示口径（outer）",
+      "chars": 93
+    },
+    {
+      "path": "01_rules/volume_weight/dual_caliber.md",
+      "heading": "## 禁止混淆",
+      "chars": 183
+    },
+    {
+      "path": "01_rules/volume_weight/dual_caliber.md",
+      "heading": "## 条件 / 动作 / 后果",
+      "chars": 73
+    },
+    {
+      "path": "01_rules/volume_weight/dual_caliber.md",
+      "heading": "## 代码与测试",
+      "chars": 100
+    },
+    {
+      "path": "02_tools/bin3d_pack.md",
+      "heading": "(preamble)",
+      "chars": 17
+    },
+    {
+      "path": "02_tools/bin3d_pack.md",
+      "heading": "## 功能",
+      "chars": 38
+    },
+    {
+      "path": "02_tools/bin3d_pack.md",
+      "heading": "## 代码入口",
+      "chars": 34
+    },
+    {
+      "path": "02_tools/bin3d_pack.md",
+      "heading": "## 红线",
+      "chars": 39
+    },
+    {
+      "path": "02_tools/bin3d_pack.md",
+      "heading": "## 失败",
+      "chars": 75
+    },
+    {
+      "path": "02_tools/booking_n0.md",
+      "heading": "(preamble)",
+      "chars": 29
+    },
+    {
+      "path": "02_tools/booking_n0.md",
+      "heading": "## 功能",
+      "chars": 13
+    },
+    {
+      "path": "02_tools/booking_n0.md",
+      "heading": "## 代码入口",
+      "chars": 85
+    },
+    {
+      "path": "02_tools/booking_n0.md",
+      "heading": "## 参数（示意）",
+      "chars": 73
+    },
+    {
+      "path": "02_tools/booking_n0.md",
+      "heading": "## 何时调用",
+      "chars": 56
+    },
+    {
+      "path": "02_tools/booking_n0.md",
+      "heading": "## errors",
+      "chars": 122
+    },
+    {
+      "path": "02_tools/booking_n0.md",
+      "heading": "## never",
+      "chars": 76
+    },
+    {
+      "path": "02_tools/booking_n0.md",
+      "heading": "## 相关",
+      "chars": 96
+    },
+    {
+      "path": "02_tools/box_scheme.md",
+      "heading": "(preamble)",
+      "chars": 26
+    },
+    {
+      "path": "02_tools/box_scheme.md",
+      "heading": "## 功能",
+      "chars": 18
+    },
+    {
+      "path": "02_tools/box_scheme.md",
+      "heading": "## 代码入口",
+      "chars": 89
+    },
+    {
+      "path": "02_tools/box_scheme.md",
+      "heading": "## 参数（示意）",
+      "chars": 73
+    },
+    {
+      "path": "02_tools/box_scheme.md",
+      "heading": "## 何时调用",
+      "chars": 53
+    },
+    {
+      "path": "02_tools/box_scheme.md",
+      "heading": "## errors",
+      "chars": 122
+    },
+    {
+      "path": "02_tools/box_scheme.md",
+      "heading": "## never",
+      "chars": 76
+    },
+    {
+      "path": "02_tools/box_scheme.md",
+      "heading": "## 相关",
+      "chars": 96
+    },
+    {
+      "path": "02_tools/cargo_feasibility.md",
+      "heading": "(preamble)",
+      "chars": 24
+    },
+    {
+      "path": "02_tools/cargo_feasibility.md",
+      "heading": "## 功能",
+      "chars": 43
+    },
+    {
+      "path": "02_tools/cargo_feasibility.md",
+      "heading": "## 代码",
+      "chars": 77
+    },
+    {
+      "path": "02_tools/cargo_feasibility.md",
+      "heading": "## 参数",
+      "chars": 73
+    },
+    {
+      "path": "02_tools/cargo_feasibility.md",
+      "heading": "## 返回要点",
+      "chars": 64
+    },
+    {
+      "path": "02_tools/cargo_feasibility.md",
+      "heading": "## errors",
+      "chars": 116
+    },
+    {
+      "path": "02_tools/cargo_feasibility.md",
+      "heading": "## never",
+      "chars": 56
+    },
+    {
+      "path": "02_tools/cargo_feasibility.md",
+      "heading": "## 轨迹",
+      "chars": 12
+    },
+    {
+      "path": "02_tools/cog_lateral.md",
+      "heading": "(preamble)",
+      "chars": 29
+    },
+    {
+      "path": "02_tools/cog_lateral.md",
+      "heading": "## 功能",
+      "chars": 8
+    },
+    {
+      "path": "02_tools/cog_lateral.md",
+      "heading": "## 代码入口",
+      "chars": 90
+    },
+    {
+      "path": "02_tools/cog_lateral.md",
+      "heading": "## 参数（示意）",
+      "chars": 73
+    },
+    {
+      "path": "02_tools/cog_lateral.md",
+      "heading": "## 何时调用",
+      "chars": 55
+    },
+    {
+      "path": "02_tools/cog_lateral.md",
+      "heading": "## errors",
+      "chars": 122
+    },
+    {
+      "path": "02_tools/cog_lateral.md",
+      "heading": "## never",
+      "chars": 76
+    },
+    {
+      "path": "02_tools/cog_lateral.md",
+      "heading": "## 相关",
+      "chars": 96
+    },
+    {
+      "path": "02_tools/cog_lns.md",
+      "heading": "(preamble)",
+      "chars": 27
+    },
+    {
+      "path": "02_tools/cog_lns.md",
+      "heading": "## 功能",
+      "chars": 13
+    },
+    {
+      "path": "02_tools/cog_lns.md",
+      "heading": "## 代码入口",
+      "chars": 82
+    },
+    {
+      "path": "02_tools/cog_lns.md",
+      "heading": "## 参数（示意）",
+      "chars": 73
+    },
+    {
+      "path": "02_tools/cog_lns.md",
+      "heading": "## 何时调用",
+      "chars": 57
+    },
+    {
+      "path": "02_tools/cog_lns.md",
+      "heading": "## errors",
+      "chars": 122
+    },
+    {
+      "path": "02_tools/cog_lns.md",
+      "heading": "## never",
+      "chars": 76
+    },
+    {
+      "path": "02_tools/cog_lns.md",
+      "heading": "## 相关",
+      "chars": 96
+    },
+    {
+      "path": "02_tools/cog_primary.md",
+      "heading": "(preamble)",
+      "chars": 27
+    },
+    {
+      "path": "02_tools/cog_primary.md",
+      "heading": "## 功能",
+      "chars": 13
+    },
+    {
+      "path": "02_tools/cog_primary.md",
+      "heading": "## 代码入口",
+      "chars": 82
+    },
+    {
+      "path": "02_tools/cog_primary.md",
+      "heading": "## 参数（示意）",
+      "chars": 73
+    },
+    {
+      "path": "02_tools/cog_primary.md",
+      "heading": "## 何时调用",
+      "chars": 53
+    },
+    {
+      "path": "02_tools/cog_primary.md",
+      "heading": "## errors",
+      "chars": 122
+    },
+    {
+      "path": "02_tools/cog_primary.md",
+      "heading": "## never",
+      "chars": 76
+    },
+    {
+      "path": "02_tools/cog_primary.md",
+      "heading": "## 相关",
+      "chars": 96
+    },
+    {
+      "path": "02_tools/cog_repair.md",
+      "heading": "(preamble)",
+      "chars": 28
+    },
+    {
+      "path": "02_tools/cog_repair.md",
+      "heading": "## 功能",
+      "chars": 12
+    },
+    {
+      "path": "02_tools/cog_repair.md",
+      "heading": "## 代码入口",
+      "chars": 88
+    },
+    {
+      "path": "02_tools/cog_repair.md",
+      "heading": "## 参数（示意）",
+      "chars": 73
+    },
+    {
+      "path": "02_tools/cog_repair.md",
+      "heading": "## 何时调用",
+      "chars": 55
+    },
+    {
+      "path": "02_tools/cog_repair.md",
+      "heading": "## errors",
+      "chars": 122
+    },
+    {
+      "path": "02_tools/cog_repair.md",
+      "heading": "## never",
+      "chars": 76
+    },
+    {
+      "path": "02_tools/cog_repair.md",
+      "heading": "## 相关",
+      "chars": 96
+    },
+    {
+      "path": "02_tools/cog_shift.md",
+      "heading": "(preamble)",
+      "chars": 25
+    },
+    {
+      "path": "02_tools/cog_shift.md",
+      "heading": "## 功能",
+      "chars": 9
+    },
+    {
+      "path": "02_tools/cog_shift.md",
+      "heading": "## 代码入口",
+      "chars": 86
+    },
+    {
+      "path": "02_tools/cog_shift.md",
+      "heading": "## 参数（示意）",
+      "chars": 73
+    },
+    {
+      "path": "02_tools/cog_shift.md",
+      "heading": "## 何时调用",
+      "chars": 53
+    },
+    {
+      "path": "02_tools/cog_shift.md",
+      "heading": "## errors",
+      "chars": 122
+    },
+    {
+      "path": "02_tools/cog_shift.md",
+      "heading": "## never",
+      "chars": 76
+    },
+    {
+      "path": "02_tools/cog_shift.md",
+      "heading": "## 相关",
+      "chars": 96
+    },
+    {
+      "path": "02_tools/cog_slab.md",
+      "heading": "(preamble)",
+      "chars": 23
+    },
+    {
+      "path": "02_tools/cog_slab.md",
+      "heading": "## 功能",
+      "chars": 8
+    },
+    {
+      "path": "02_tools/cog_slab.md",
+      "heading": "## 代码入口",
+      "chars": 84
+    },
+    {
+      "path": "02_tools/cog_slab.md",
+      "heading": "## 参数（示意）",
+      "chars": 73
+    },
+    {
+      "path": "02_tools/cog_slab.md",
+      "heading": "## 何时调用",
+      "chars": 52
+    },
+    {
+      "path": "02_tools/cog_slab.md",
+      "heading": "## errors",
+      "chars": 122
+    },
+    {
+      "path": "02_tools/cog_slab.md",
+      "heading": "## never",
+      "chars": 76
+    },
+    {
+      "path": "02_tools/cog_slab.md",
+      "heading": "## 相关",
+      "chars": 96
+    },
+    {
+      "path": "02_tools/container_select.md",
+      "heading": "(preamble)",
+      "chars": 32
+    },
+    {
+      "path": "02_tools/container_select.md",
+      "heading": "## 功能",
+      "chars": 11
+    },
+    {
+      "path": "02_tools/container_select.md",
+      "heading": "## 代码入口",
+      "chars": 102
+    },
+    {
+      "path": "02_tools/container_select.md",
+      "heading": "## 参数（示意）",
+      "chars": 73
+    },
+    {
+      "path": "02_tools/container_select.md",
+      "heading": "## 何时调用",
+      "chars": 46
+    },
+    {
+      "path": "02_tools/container_select.md",
+      "heading": "## errors",
+      "chars": 122
+    },
+    {
+      "path": "02_tools/container_select.md",
+      "heading": "## never",
+      "chars": 67
+    },
+    {
+      "path": "02_tools/container_select.md",
+      "heading": "## 相关",
+      "chars": 96
+    },
+    {
+      "path": "02_tools/design_facts.md",
+      "heading": "(preamble)",
+      "chars": 28
+    },
+    {
+      "path": "02_tools/design_facts.md",
+      "heading": "## 功能",
+      "chars": 13
+    },
+    {
+      "path": "02_tools/design_facts.md",
+      "heading": "## 代码入口",
+      "chars": 92
+    },
+    {
+      "path": "02_tools/design_facts.md",
+      "heading": "## 参数（示意）",
+      "chars": 73
+    },
+    {
+      "path": "02_tools/design_facts.md",
+      "heading": "## 何时调用",
+      "chars": 53
+    },
+    {
+      "path": "02_tools/design_facts.md",
+      "heading": "## errors",
+      "chars": 122
+    },
+    {
+      "path": "02_tools/design_facts.md",
+      "heading": "## never",
+      "chars": 76
+    },
+    {
+      "path": "02_tools/design_facts.md",
+      "heading": "## 相关",
+      "chars": 96
+    },
+    {
+      "path": "02_tools/evaluate_plan.md",
+      "heading": "(preamble)",
+      "chars": 29
+    },
+    {
+      "path": "02_tools/evaluate_plan.md",
+      "heading": "## 功能",
+      "chars": 22
+    },
+    {
+      "path": "02_tools/evaluate_plan.md",
+      "heading": "## 代码入口",
+      "chars": 91
+    },
+    {
+      "path": "02_tools/evaluate_plan.md",
+      "heading": "## 参数（示意）",
+      "chars": 73
+    },
+    {
+      "path": "02_tools/evaluate_plan.md",
+      "heading": "## 何时调用",
+      "chars": 53
+    },
+    {
+      "path": "02_tools/evaluate_plan.md",
+      "heading": "## errors",
+      "chars": 122
+    },
+    {
+      "path": "02_tools/evaluate_plan.md",
+      "heading": "## never",
+      "chars": 76
+    },
+    {
+      "path": "02_tools/evaluate_plan.md",
+      "heading": "## 相关",
+      "chars": 96
+    },
+    {
+      "path": "02_tools/export_shipment.md",
+      "heading": "(preamble)",
+      "chars": 32
+    },
+    {
+      "path": "02_tools/export_shipment.md",
+      "heading": "## 功能",
+      "chars": 10
+    },
+    {
+      "path": "02_tools/export_shipment.md",
+      "heading": "## 代码入口",
+      "chars": 90
+    },
+    {
+      "path": "02_tools/export_shipment.md",
+      "heading": "## 参数（示意）",
+      "chars": 73
+    },
+    {
+      "path": "02_tools/export_shipment.md",
+      "heading": "## 何时调用",
+      "chars": 56
+    },
+    {
+      "path": "02_tools/export_shipment.md",
+      "heading": "## errors",
+      "chars": 122
+    },
+    {
+      "path": "02_tools/export_shipment.md",
+      "heading": "## never",
+      "chars": 76
+    },
+    {
+      "path": "02_tools/export_shipment.md",
+      "heading": "## 相关",
+      "chars": 96
+    },
+    {
+      "path": "02_tools/get_booking.md",
+      "heading": "(preamble)",
+      "chars": 36
+    },
+    {
+      "path": "02_tools/get_booking.md",
+      "heading": "## 功能",
+      "chars": 51
+    },
+    {
+      "path": "02_tools/get_booking.md",
+      "heading": "## 代码入口",
+      "chars": 53
+    },
+    {
+      "path": "02_tools/get_booking.md",
+      "heading": "## 参数",
+      "chars": 141
+    },
+    {
+      "path": "02_tools/get_booking.md",
+      "heading": "## 输出要点",
+      "chars": 161
+    },
+    {
+      "path": "02_tools/get_booking.md",
+      "heading": "## 何时调用",
+      "chars": 49
+    },
+    {
+      "path": "02_tools/get_booking.md",
+      "heading": "## 常见错误",
+      "chars": 103
+    },
+    {
+      "path": "02_tools/get_container_info.md",
+      "heading": "(preamble)",
+      "chars": 44
+    },
+    {
+      "path": "02_tools/get_container_info.md",
+      "heading": "## 功能",
+      "chars": 36
+    },
+    {
+      "path": "02_tools/get_container_info.md",
+      "heading": "## 代码入口",
+      "chars": 71
+    },
+    {
+      "path": "02_tools/get_container_info.md",
+      "heading": "## 何时调用",
+      "chars": 40
+    },
+    {
+      "path": "02_tools/hitl_confirm.md",
+      "heading": "(preamble)",
+      "chars": 29
+    },
+    {
+      "path": "02_tools/hitl_confirm.md",
+      "heading": "## 功能",
+      "chars": 11
+    },
+    {
+      "path": "02_tools/hitl_confirm.md",
+      "heading": "## 代码入口",
+      "chars": 86
+    },
+    {
+      "path": "02_tools/hitl_confirm.md",
+      "heading": "## 参数（示意）",
+      "chars": 73
+    },
+    {
+      "path": "02_tools/hitl_confirm.md",
+      "heading": "## 何时调用",
+      "chars": 48
+    },
+    {
+      "path": "02_tools/hitl_confirm.md",
+      "heading": "## errors",
+      "chars": 122
+    },
+    {
+      "path": "02_tools/hitl_confirm.md",
+      "heading": "## never",
+      "chars": 68
+    },
+    {
+      "path": "02_tools/hitl_confirm.md",
+      "heading": "## 相关",
+      "chars": 96
+    },
+    {
+      "path": "02_tools/intent_interpret.md",
+      "heading": "(preamble)",
+      "chars": 32
+    },
+    {
+      "path": "02_tools/intent_interpret.md",
+      "heading": "## 功能",
+      "chars": 19
+    },
+    {
+      "path": "02_tools/intent_interpret.md",
+      "heading": "## 代码入口",
+      "chars": 91
+    },
+    {
+      "path": "02_tools/intent_interpret.md",
+      "heading": "## 参数（示意）",
+      "chars": 73
+    },
+    {
+      "path": "02_tools/intent_interpret.md",
+      "heading": "## 何时调用",
+      "chars": 52
+    },
+    {
+      "path": "02_tools/intent_interpret.md",
+      "heading": "## errors",
+      "chars": 122
+    },
+    {
+      "path": "02_tools/intent_interpret.md",
+      "heading": "## never",
+      "chars": 73
+    },
+    {
+      "path": "02_tools/intent_interpret.md",
+      "heading": "## 相关",
+      "chars": 96
+    },
+    {
+      "path": "02_tools/knowledge_search.md",
+      "heading": "(preamble)",
+      "chars": 33
+    },
+    {
+      "path": "02_tools/knowledge_search.md",
+      "heading": "## 功能",
+      "chars": 50
+    },
+    {
+      "path": "02_tools/knowledge_search.md",
+      "heading": "## 代码入口",
+      "chars": 102
+    },
+    {
+      "path": "02_tools/knowledge_search.md",
+      "heading": "## 参数（示意）",
+      "chars": 73
+    },
+    {
+      "path": "02_tools/knowledge_search.md",
+      "heading": "## 何时调用",
+      "chars": 62
+    },
+    {
+      "path": "02_tools/knowledge_search.md",
+      "heading": "## errors",
+      "chars": 122
+    },
+    {
+      "path": "02_tools/knowledge_search.md",
+      "heading": "## never",
+      "chars": 82
+    },
+    {
+      "path": "02_tools/knowledge_search.md",
+      "heading": "## 相关",
+      "chars": 96
+    },
+    {
+      "path": "02_tools/kpi_extract.md",
+      "heading": "(preamble)",
+      "chars": 31
+    },
+    {
+      "path": "02_tools/kpi_extract.md",
+      "heading": "## 功能",
+      "chars": 27
+    },
+    {
+      "path": "02_tools/kpi_extract.md",
+      "heading": "## 代码入口",
+      "chars": 87
+    },
+    {
+      "path": "02_tools/kpi_extract.md",
+      "heading": "## 参数（示意）",
+      "chars": 73
+    },
+    {
+      "path": "02_tools/kpi_extract.md",
+      "heading": "## 何时调用",
+      "chars": 59
+    },
+    {
+      "path": "02_tools/kpi_extract.md",
+      "heading": "## errors",
+      "chars": 122
+    },
+    {
+      "path": "02_tools/kpi_extract.md",
+      "heading": "## never",
+      "chars": 76
+    },
+    {
+      "path": "02_tools/kpi_extract.md",
+      "heading": "## 相关",
+      "chars": 96
+    },
+    {
+      "path": "02_tools/layout_quality.md",
+      "heading": "(preamble)",
+      "chars": 30
+    },
+    {
+      "path": "02_tools/layout_quality.md",
+      "heading": "## 功能",
+      "chars": 11
+    },
+    {
+      "path": "02_tools/layout_quality.md",
+      "heading": "## 代码入口",
+      "chars": 96
+    },
+    {
+      "path": "02_tools/layout_quality.md",
+      "heading": "## 参数（示意）",
+      "chars": 73
+    },
+    {
+      "path": "02_tools/layout_quality.md",
+      "heading": "## 何时调用",
+      "chars": 53
+    },
+    {
+      "path": "02_tools/layout_quality.md",
+      "heading": "## errors",
+      "chars": 122
+    },
+    {
+      "path": "02_tools/layout_quality.md",
+      "heading": "## never",
+      "chars": 76
+    },
+    {
+      "path": "02_tools/layout_quality.md",
+      "heading": "## 相关",
+      "chars": 96
+    },
+    {
+      "path": "02_tools/list_cargo.md",
+      "heading": "(preamble)",
+      "chars": 35
+    },
+    {
+      "path": "02_tools/list_cargo.md",
+      "heading": "## 功能",
+      "chars": 27
+    },
+    {
+      "path": "02_tools/list_cargo.md",
+      "heading": "## 代码入口",
+      "chars": 43
+    },
+    {
+      "path": "02_tools/list_cargo.md",
+      "heading": "## 何时调用",
+      "chars": 28
+    },
+    {
+      "path": "02_tools/list_cargo.md",
+      "heading": "## 红线",
+      "chars": 43
+    },
+    {
+      "path": "02_tools/load_checkpoint.md",
+      "heading": "(preamble)",
+      "chars": 42
+    },
+    {
+      "path": "02_tools/load_checkpoint.md",
+      "heading": "## 功能",
+      "chars": 41
+    },
+    {
+      "path": "02_tools/load_checkpoint.md",
+      "heading": "## 代码入口",
+      "chars": 109
+    },
+    {
+      "path": "02_tools/load_checkpoint.md",
+      "heading": "## 何时调用",
+      "chars": 38
+    },
+    {
+      "path": "02_tools/load_checkpoint.md",
+      "heading": "## 错误",
+      "chars": 86
+    },
+    {
+      "path": "02_tools/load_sequence.md",
+      "heading": "(preamble)",
+      "chars": 29
+    },
+    {
+      "path": "02_tools/load_sequence.md",
+      "heading": "## 功能",
+      "chars": 9
+    },
+    {
+      "path": "02_tools/load_sequence.md",
+      "heading": "## 代码入口",
+      "chars": 94
+    },
+    {
+      "path": "02_tools/load_sequence.md",
+      "heading": "## 参数（示意）",
+      "chars": 73
+    },
+    {
+      "path": "02_tools/load_sequence.md",
+      "heading": "## 何时调用",
+      "chars": 53
+    },
+    {
+      "path": "02_tools/load_sequence.md",
+      "heading": "## errors",
+      "chars": 122
+    },
+    {
+      "path": "02_tools/load_sequence.md",
+      "heading": "## never",
+      "chars": 76
+    },
+    {
+      "path": "02_tools/load_sequence.md",
+      "heading": "## 相关",
+      "chars": 96
+    },
+    {
+      "path": "02_tools/material_parse.md",
+      "heading": "(preamble)",
+      "chars": 30
+    },
+    {
+      "path": "02_tools/material_parse.md",
+      "heading": "## 功能",
+      "chars": 17
+    },
+    {
+      "path": "02_tools/material_parse.md",
+      "heading": "## 代码入口",
+      "chars": 98
+    },
+    {
+      "path": "02_tools/material_parse.md",
+      "heading": "## 参数（示意）",
+      "chars": 73
+    },
+    {
+      "path": "02_tools/material_parse.md",
+      "heading": "## 何时调用",
+      "chars": 48
+    },
+    {
+      "path": "02_tools/material_parse.md",
+      "heading": "## errors",
+      "chars": 122
+    },
+    {
+      "path": "02_tools/material_parse.md",
+      "heading": "## never",
+      "chars": 71
+    },
+    {
+      "path": "02_tools/material_parse.md",
+      "heading": "## 相关",
+      "chars": 96
+    },
+    {
+      "path": "02_tools/packing_run.md",
+      "heading": "(preamble)",
+      "chars": 27
+    },
+    {
+      "path": "02_tools/packing_run.md",
+      "heading": "## 功能",
+      "chars": 11
+    },
+    {
+      "path": "02_tools/packing_run.md",
+      "heading": "## 代码入口",
+      "chars": 86
+    },
+    {
+      "path": "02_tools/packing_run.md",
+      "heading": "## 参数（示意）",
+      "chars": 73
+    },
+    {
+      "path": "02_tools/packing_run.md",
+      "heading": "## 何时调用",
+      "chars": 53
+    },
+    {
+      "path": "02_tools/packing_run.md",
+      "heading": "## errors",
+      "chars": 122
+    },
+    {
+      "path": "02_tools/packing_run.md",
+      "heading": "## never",
+      "chars": 76
+    },
+    {
+      "path": "02_tools/packing_run.md",
+      "heading": "## 相关",
+      "chars": 96
+    },
+    {
+      "path": "02_tools/plan_diff.md",
+      "heading": "(preamble)",
+      "chars": 28
+    },
+    {
+      "path": "02_tools/plan_diff.md",
+      "heading": "## 功能",
+      "chars": 10
+    },
+    {
+      "path": "02_tools/plan_diff.md",
+      "heading": "## 代码入口",
+      "chars": 88
+    },
+    {
+      "path": "02_tools/plan_diff.md",
+      "heading": "## 参数（示意）",
+      "chars": 73
+    },
+    {
+      "path": "02_tools/plan_diff.md",
+      "heading": "## 何时调用",
+      "chars": 58
+    },
+    {
+      "path": "02_tools/plan_diff.md",
+      "heading": "## errors",
+      "chars": 122
+    },
+    {
+      "path": "02_tools/plan_diff.md",
+      "heading": "## never",
+      "chars": 76
+    },
+    {
+      "path": "02_tools/plan_diff.md",
+      "heading": "## 相关",
+      "chars": 96
+    },
+    {
+      "path": "02_tools/por_manifest.md",
+      "heading": "(preamble)",
+      "chars": 30
+    },
+    {
+      "path": "02_tools/por_manifest.md",
+      "heading": "## 功能",
+      "chars": 11
+    },
+    {
+      "path": "02_tools/por_manifest.md",
+      "heading": "## 代码入口",
+      "chars": 92
+    },
+    {
+      "path": "02_tools/por_manifest.md",
+      "heading": "## 参数（示意）",
+      "chars": 73
+    },
+    {
+      "path": "02_tools/por_manifest.md",
+      "heading": "## 何时调用",
+      "chars": 55
+    },
+    {
+      "path": "02_tools/por_manifest.md",
+      "heading": "## errors",
+      "chars": 122
+    },
+    {
+      "path": "02_tools/por_manifest.md",
+      "heading": "## never",
+      "chars": 76
+    },
+    {
+      "path": "02_tools/por_manifest.md",
+      "heading": "## 相关",
+      "chars": 96
+    },
+    {
+      "path": "02_tools/replan_critic.md",
+      "heading": "(preamble)",
+      "chars": 31
+    },
+    {
+      "path": "02_tools/replan_critic.md",
+      "heading": "## 功能",
+      "chars": 27
+    },
+    {
+      "path": "02_tools/replan_critic.md",
+      "heading": "## 代码入口",
+      "chars": 97
+    },
+    {
+      "path": "02_tools/replan_critic.md",
+      "heading": "## 参数（示意）",
+      "chars": 73
+    },
+    {
+      "path": "02_tools/replan_critic.md",
+      "heading": "## 何时调用",
+      "chars": 52
+    },
+    {
+      "path": "02_tools/replan_critic.md",
+      "heading": "## errors",
+      "chars": 122
+    },
+    {
+      "path": "02_tools/replan_critic.md",
+      "heading": "## never",
+      "chars": 71
+    },
+    {
+      "path": "02_tools/replan_critic.md",
+      "heading": "## 相关",
+      "chars": 96
+    },
+    {
+      "path": "02_tools/risk_rules.md",
+      "heading": "(preamble)",
+      "chars": 26
+    },
+    {
+      "path": "02_tools/risk_rules.md",
+      "heading": "## 功能",
+      "chars": 8
+    },
+    {
+      "path": "02_tools/risk_rules.md",
+      "heading": "## 代码入口",
+      "chars": 88
+    },
+    {
+      "path": "02_tools/risk_rules.md",
+      "heading": "## 参数（示意）",
+      "chars": 73
+    },
+    {
+      "path": "02_tools/risk_rules.md",
+      "heading": "## 何时调用",
+      "chars": 53
+    },
+    {
+      "path": "02_tools/risk_rules.md",
+      "heading": "## errors",
+      "chars": 122
+    },
+    {
+      "path": "02_tools/risk_rules.md",
+      "heading": "## never",
+      "chars": 76
+    },
+    {
+      "path": "02_tools/risk_rules.md",
+      "heading": "## 相关",
+      "chars": 96
+    },
+    {
+      "path": "02_tools/run_packing.md",
+      "heading": "(preamble)",
+      "chars": 35
+    },
+    {
+      "path": "02_tools/run_packing.md",
+      "heading": "## 功能",
+      "chars": 58
+    },
+    {
+      "path": "02_tools/run_packing.md",
+      "heading": "## 代码入口",
+      "chars": 82
+    },
+    {
+      "path": "02_tools/run_packing.md",
+      "heading": "## 参数（示意）",
+      "chars": 110
+    },
+    {
+      "path": "02_tools/run_packing.md",
+      "heading": "## 何时调用",
+      "chars": 36
+    },
+    {
+      "path": "02_tools/run_packing.md",
+      "heading": "## 默认",
+      "chars": 64
+    },
+    {
+      "path": "02_tools/run_packing.md",
+      "heading": "## 校验",
+      "chars": 50
+    },
+    {
+      "path": "02_tools/run_packing.md",
+      "heading": "## errors",
+      "chars": 85
+    },
+    {
+      "path": "02_tools/run_packing.md",
+      "heading": "## never",
+      "chars": 47
+    },
+    {
+      "path": "02_tools/save_checkpoint.md",
+      "heading": "(preamble)",
+      "chars": 37
+    },
+    {
+      "path": "02_tools/save_checkpoint.md",
+      "heading": "## 功能",
+      "chars": 54
+    },
+    {
+      "path": "02_tools/save_checkpoint.md",
+      "heading": "## 代码入口",
+      "chars": 50
+    },
+    {
+      "path": "02_tools/save_checkpoint.md",
+      "heading": "## 何时调用",
+      "chars": 46
+    },
+    {
+      "path": "02_tools/save_checkpoint.md",
+      "heading": "## 输出",
+      "chars": 55
+    },
+    {
+      "path": "02_tools/search_knowledge.md",
+      "heading": "(preamble)",
+      "chars": 28
+    },
+    {
+      "path": "02_tools/search_knowledge.md",
+      "heading": "## 功能",
+      "chars": 160
+    },
+    {
+      "path": "02_tools/search_knowledge.md",
+      "heading": "## 代码入口",
+      "chars": 186
+    },
+    {
+      "path": "02_tools/search_knowledge.md",
+      "heading": "## 参数（示意）",
+      "chars": 494
+    },
+    {
+      "path": "02_tools/search_knowledge.md",
+      "heading": "## Agent 窄接",
+      "chars": 293
+    },
+    {
+      "path": "02_tools/search_knowledge.md",
+      "heading": "## 返回",
+      "chars": 347
+    },
+    {
+      "path": "02_tools/search_knowledge.md",
+      "heading": "## 何时调用",
+      "chars": 127
+    },
+    {
+      "path": "02_tools/search_knowledge.md",
+      "heading": "## 错误 / 边界",
+      "chars": 125
+    },
+    {
+      "path": "02_tools/search_knowledge.md",
+      "heading": "## never",
+      "chars": 108
+    },
+    {
+      "path": "02_tools/search_knowledge.md",
+      "heading": "## 回归",
+      "chars": 97
+    },
+    {
+      "path": "02_tools/secure_work_order.md",
+      "heading": "(preamble)",
+      "chars": 33
+    },
+    {
+      "path": "02_tools/secure_work_order.md",
+      "heading": "## 功能",
+      "chars": 8
+    },
+    {
+      "path": "02_tools/secure_work_order.md",
+      "heading": "## 代码入口",
+      "chars": 102
+    },
+    {
+      "path": "02_tools/secure_work_order.md",
+      "heading": "## 参数（示意）",
+      "chars": 73
+    },
+    {
+      "path": "02_tools/secure_work_order.md",
+      "heading": "## 何时调用",
+      "chars": 53
+    },
+    {
+      "path": "02_tools/secure_work_order.md",
+      "heading": "## errors",
+      "chars": 122
+    },
+    {
+      "path": "02_tools/secure_work_order.md",
+      "heading": "## never",
+      "chars": 76
+    },
+    {
+      "path": "02_tools/secure_work_order.md",
+      "heading": "## 相关",
+      "chars": 96
+    },
+    {
+      "path": "02_tools/stacking_checker.md",
+      "heading": "(preamble)",
+      "chars": 29
+    },
+    {
+      "path": "02_tools/stacking_checker.md",
+      "heading": "## 功能",
+      "chars": 40
+    },
+    {
+      "path": "02_tools/stacking_checker.md",
+      "heading": "## 代码入口",
+      "chars": 62
+    },
+    {
+      "path": "02_tools/stacking_checker.md",
+      "heading": "## 何时调用",
+      "chars": 37
+    },
+    {
+      "path": "02_tools/stacking_checker.md",
+      "heading": "## 参数（packing_options）",
+      "chars": 89
+    },
+    {
+      "path": "02_tools/structure_calc.md",
+      "heading": "(preamble)",
+      "chars": 30
+    },
+    {
+      "path": "02_tools/structure_calc.md",
+      "heading": "## 功能",
+      "chars": 11
+    },
+    {
+      "path": "02_tools/structure_calc.md",
+      "heading": "## 代码入口",
+      "chars": 96
+    },
+    {
+      "path": "02_tools/structure_calc.md",
+      "heading": "## 参数（示意）",
+      "chars": 73
+    },
+    {
+      "path": "02_tools/structure_calc.md",
+      "heading": "## 何时调用",
+      "chars": 53
+    },
+    {
+      "path": "02_tools/structure_calc.md",
+      "heading": "## errors",
+      "chars": 122
+    },
+    {
+      "path": "02_tools/structure_calc.md",
+      "heading": "## never",
+      "chars": 76
+    },
+    {
+      "path": "02_tools/structure_calc.md",
+      "heading": "## 相关",
+      "chars": 96
+    },
+    {
+      "path": "02_tools/tms_booking.md",
+      "heading": "(preamble)",
+      "chars": 28
+    },
+    {
+      "path": "02_tools/tms_booking.md",
+      "heading": "## 功能",
+      "chars": 26
+    },
+    {
+      "path": "02_tools/tms_booking.md",
+      "heading": "## 代码入口",
+      "chars": 86
+    },
+    {
+      "path": "02_tools/tms_booking.md",
+      "heading": "## 参数（示意）",
+      "chars": 73
+    },
+    {
+      "path": "02_tools/tms_booking.md",
+      "heading": "## 何时调用",
+      "chars": 51
+    },
+    {
+      "path": "02_tools/tms_booking.md",
+      "heading": "## errors",
+      "chars": 122
+    },
+    {
+      "path": "02_tools/tms_booking.md",
+      "heading": "## never",
+      "chars": 71
+    },
+    {
+      "path": "02_tools/tms_booking.md",
+      "heading": "## 相关",
+      "chars": 96
+    },
+    {
+      "path": "02_tools/vgm_draft.md",
+      "heading": "(preamble)",
+      "chars": 27
+    },
+    {
+      "path": "02_tools/vgm_draft.md",
+      "heading": "## 功能",
+      "chars": 9
+    },
+    {
+      "path": "02_tools/vgm_draft.md",
+      "heading": "## 代码入口",
+      "chars": 86
+    },
+    {
+      "path": "02_tools/vgm_draft.md",
+      "heading": "## 参数（示意）",
+      "chars": 73
+    },
+    {
+      "path": "02_tools/vgm_draft.md",
+      "heading": "## 何时调用",
+      "chars": 55
+    },
+    {
+      "path": "02_tools/vgm_draft.md",
+      "heading": "## errors",
+      "chars": 122
+    },
+    {
+      "path": "02_tools/vgm_draft.md",
+      "heading": "## never",
+      "chars": 76
+    },
+    {
+      "path": "02_tools/vgm_draft.md",
+      "heading": "## 相关",
+      "chars": 96
+    },
+    {
+      "path": "02_tools/visualize_layout.md",
+      "heading": "(preamble)",
+      "chars": 31
+    },
+    {
+      "path": "02_tools/visualize_layout.md",
+      "heading": "## 功能",
+      "chars": 10
+    },
+    {
+      "path": "02_tools/visualize_layout.md",
+      "heading": "## 代码入口",
+      "chars": 93
+    },
+    {
+      "path": "02_tools/visualize_layout.md",
+      "heading": "## 参数（示意）",
+      "chars": 73
+    },
+    {
+      "path": "02_tools/visualize_layout.md",
+      "heading": "## 何时调用",
+      "chars": 52
+    },
+    {
+      "path": "02_tools/visualize_layout.md",
+      "heading": "## errors",
+      "chars": 122
+    },
+    {
+      "path": "02_tools/visualize_layout.md",
+      "heading": "## never",
+      "chars": 76
+    },
+    {
+      "path": "02_tools/visualize_layout.md",
+      "heading": "## 相关",
+      "chars": 96
+    },
+    {
+      "path": "02_tools/volume_calculator.md",
+      "heading": "(preamble)",
+      "chars": 24
+    },
+    {
+      "path": "02_tools/volume_calculator.md",
+      "heading": "## 功能",
+      "chars": 27
+    },
+    {
+      "path": "02_tools/volume_calculator.md",
+      "heading": "## 代码入口",
+      "chars": 57
+    },
+    {
+      "path": "02_tools/volume_calculator.md",
+      "heading": "## 何时调用",
+      "chars": 23
+    },
+    {
+      "path": "02_tools/volume_calculator.md",
+      "heading": "## 注意",
+      "chars": 89
+    },
+    {
+      "path": "03_trajectories/failure_recovery/constraint_violation_fix.md",
+      "heading": "(preamble)",
+      "chars": 14
+    },
+    {
+      "path": "03_trajectories/failure_recovery/constraint_violation_fix.md",
+      "heading": "## 观察",
+      "chars": 43
+    },
+    {
+      "path": "03_trajectories/failure_recovery/constraint_violation_fix.md",
+      "heading": "## 恢复",
+      "chars": 106
+    },
+    {
+      "path": "03_trajectories/failure_recovery/constraint_violation_fix.md",
+      "heading": "## 反思",
+      "chars": 23
+    },
+    {
+      "path": "03_trajectories/failure_recovery/T3_over_payload_box_scheme.md",
+      "heading": "(preamble)",
+      "chars": 25
+    },
+    {
+      "path": "03_trajectories/failure_recovery/T3_over_payload_box_scheme.md",
+      "heading": "## 目标",
+      "chars": 64
+    },
+    {
+      "path": "03_trajectories/failure_recovery/T3_over_payload_box_scheme.md",
+      "heading": "## Step 1",
+      "chars": 128
+    },
+    {
+      "path": "03_trajectories/failure_recovery/T3_over_payload_box_scheme.md",
+      "heading": "## Step 2",
+      "chars": 141
+    },
+    {
+      "path": "03_trajectories/failure_recovery/T3_over_payload_box_scheme.md",
+      "heading": "## Step 3",
+      "chars": 223
+    },
+    {
+      "path": "03_trajectories/failure_recovery/T3_over_payload_box_scheme.md",
+      "heading": "## Step 4",
+      "chars": 156
+    },
+    {
+      "path": "03_trajectories/failure_recovery/T3_over_payload_box_scheme.md",
+      "heading": "## Step 5",
+      "chars": 91
+    },
+    {
+      "path": "03_trajectories/failure_recovery/T3_over_payload_box_scheme.md",
+      "heading": "## Final",
+      "chars": 229
+    },
+    {
+      "path": "03_trajectories/failure_recovery/T7_structure_fail_replan.md",
+      "heading": "(preamble)",
+      "chars": 24
+    },
+    {
+      "path": "03_trajectories/failure_recovery/T7_structure_fail_replan.md",
+      "heading": "## 目标",
+      "chars": 24
+    },
+    {
+      "path": "03_trajectories/failure_recovery/T7_structure_fail_replan.md",
+      "heading": "## Step 1",
+      "chars": 118
+    },
+    {
+      "path": "03_trajectories/failure_recovery/T7_structure_fail_replan.md",
+      "heading": "## Step 2",
+      "chars": 149
+    },
+    {
+      "path": "03_trajectories/failure_recovery/T7_structure_fail_replan.md",
+      "heading": "## Step 3",
+      "chars": 155
+    },
+    {
+      "path": "03_trajectories/failure_recovery/T7_structure_fail_replan.md",
+      "heading": "## Step 4",
+      "chars": 117
+    },
+    {
+      "path": "03_trajectories/failure_recovery/T7_structure_fail_replan.md",
+      "heading": "## Step 5",
+      "chars": 98
+    },
+    {
+      "path": "03_trajectories/failure_recovery/T7_structure_fail_replan.md",
+      "heading": "## Final",
+      "chars": 74
+    },
+    {
+      "path": "03_trajectories/failure_recovery/T8_feasibility_block.md",
+      "heading": "(preamble)",
+      "chars": 33
+    },
+    {
+      "path": "03_trajectories/failure_recovery/T8_feasibility_block.md",
+      "heading": "## 目标",
+      "chars": 51
+    },
+    {
+      "path": "03_trajectories/failure_recovery/T8_feasibility_block.md",
+      "heading": "## Step 1",
+      "chars": 128
+    },
+    {
+      "path": "03_trajectories/failure_recovery/T8_feasibility_block.md",
+      "heading": "## Step 2",
+      "chars": 142
+    },
+    {
+      "path": "03_trajectories/failure_recovery/T8_feasibility_block.md",
+      "heading": "## Step 3",
+      "chars": 137
+    },
+    {
+      "path": "03_trajectories/failure_recovery/T8_feasibility_block.md",
+      "heading": "## Step 4",
+      "chars": 143
+    },
+    {
+      "path": "03_trajectories/failure_recovery/T8_feasibility_block.md",
+      "heading": "## Final",
+      "chars": 122
+    },
+    {
+      "path": "03_trajectories/failure_recovery/tool_error_replan.md",
+      "heading": "(preamble)",
+      "chars": 23
+    },
+    {
+      "path": "03_trajectories/failure_recovery/tool_error_replan.md",
+      "heading": "## 目标",
+      "chars": 30
+    },
+    {
+      "path": "03_trajectories/failure_recovery/tool_error_replan.md",
+      "heading": "## 错误观察",
+      "chars": 66
+    },
+    {
+      "path": "03_trajectories/failure_recovery/tool_error_replan.md",
+      "heading": "## 恢复规划",
+      "chars": 130
+    },
+    {
+      "path": "03_trajectories/failure_recovery/tool_error_replan.md",
+      "heading": "## 结果",
+      "chars": 83
+    },
+    {
+      "path": "03_trajectories/README.md",
+      "heading": "",
+      "chars": 623
+    },
+    {
+      "path": "03_trajectories/success/complex_stacking_02.md",
+      "heading": "(preamble)",
+      "chars": 16
+    },
+    {
+      "path": "03_trajectories/success/complex_stacking_02.md",
+      "heading": "## 目标",
+      "chars": 25
+    },
+    {
+      "path": "03_trajectories/success/complex_stacking_02.md",
+      "heading": "## 规划",
+      "chars": 47
+    },
+    {
+      "path": "03_trajectories/success/complex_stacking_02.md",
+      "heading": "## 工具",
+      "chars": 60
+    },
+    {
+      "path": "03_trajectories/success/complex_stacking_02.md",
+      "heading": "## 观察",
+      "chars": 21
+    },
+    {
+      "path": "03_trajectories/success/complex_stacking_02.md",
+      "heading": "## 反思",
+      "chars": 53
+    },
+    {
+      "path": "03_trajectories/success/long_horizon_booking_01.md",
+      "heading": "(preamble)",
+      "chars": 22
+    },
+    {
+      "path": "03_trajectories/success/long_horizon_booking_01.md",
+      "heading": "## 目标",
+      "chars": 29
+    },
+    {
+      "path": "03_trajectories/success/long_horizon_booking_01.md",
+      "heading": "## 规划",
+      "chars": 125
+    },
+    {
+      "path": "03_trajectories/success/long_horizon_booking_01.md",
+      "heading": "## 工具调用",
+      "chars": 189
+    },
+    {
+      "path": "03_trajectories/success/long_horizon_booking_01.md",
+      "heading": "## 观察",
+      "chars": 46
+    },
+    {
+      "path": "03_trajectories/success/long_horizon_booking_01.md",
+      "heading": "## 反思",
+      "chars": 26
+    },
+    {
+      "path": "03_trajectories/success/long_horizon_booking_01.md",
+      "heading": "## 结果",
+      "chars": 24
+    },
+    {
+      "path": "03_trajectories/success/multi_agent_collab_03.md",
+      "heading": "(preamble)",
+      "chars": 31
+    },
+    {
+      "path": "03_trajectories/success/multi_agent_collab_03.md",
+      "heading": "## 目标",
+      "chars": 20
+    },
+    {
+      "path": "03_trajectories/success/multi_agent_collab_03.md",
+      "heading": "## 规划",
+      "chars": 83
+    },
+    {
+      "path": "03_trajectories/success/multi_agent_collab_03.md",
+      "heading": "## 工具",
+      "chars": 69
+    },
+    {
+      "path": "03_trajectories/success/multi_agent_collab_03.md",
+      "heading": "## 观察",
+      "chars": 87
+    },
+    {
+      "path": "03_trajectories/success/multi_agent_collab_03.md",
+      "heading": "## 结果",
+      "chars": 47
+    },
+    {
+      "path": "03_trajectories/success/T1_short_standard_box.md",
+      "heading": "(preamble)",
+      "chars": 17
+    },
+    {
+      "path": "03_trajectories/success/T1_short_standard_box.md",
+      "heading": "## 目标",
+      "chars": 45
+    },
+    {
+      "path": "03_trajectories/success/T1_short_standard_box.md",
+      "heading": "## Step 1",
+      "chars": 154
+    },
+    {
+      "path": "03_trajectories/success/T1_short_standard_box.md",
+      "heading": "## Step 2",
+      "chars": 169
+    },
+    {
+      "path": "03_trajectories/success/T1_short_standard_box.md",
+      "heading": "## Step 3",
+      "chars": 128
+    },
+    {
+      "path": "03_trajectories/success/T1_short_standard_box.md",
+      "heading": "## Step 4",
+      "chars": 180
+    },
+    {
+      "path": "03_trajectories/success/T1_short_standard_box.md",
+      "heading": "## Final",
+      "chars": 139
+    },
+    {
+      "path": "03_trajectories/success/T2_t80_long_mix_anchor.md",
+      "heading": "(preamble)",
+      "chars": 20
+    },
+    {
+      "path": "03_trajectories/success/T2_t80_long_mix_anchor.md",
+      "heading": "## 目标",
+      "chars": 55
+    },
+    {
+      "path": "03_trajectories/success/T2_t80_long_mix_anchor.md",
+      "heading": "## Step 1",
+      "chars": 163
+    },
+    {
+      "path": "03_trajectories/success/T2_t80_long_mix_anchor.md",
+      "heading": "## Step 2",
+      "chars": 187
+    },
+    {
+      "path": "03_trajectories/success/T2_t80_long_mix_anchor.md",
+      "heading": "## Step 3",
+      "chars": 97
+    },
+    {
+      "path": "03_trajectories/success/T2_t80_long_mix_anchor.md",
+      "heading": "## Step 4",
+      "chars": 152
+    },
+    {
+      "path": "03_trajectories/success/T2_t80_long_mix_anchor.md",
+      "heading": "## Step 5",
+      "chars": 130
+    },
+    {
+      "path": "03_trajectories/success/T2_t80_long_mix_anchor.md",
+      "heading": "## Final",
+      "chars": 146
+    },
+    {
+      "path": "03_trajectories/success/T4_hitl_resume_ab.md",
+      "heading": "(preamble)",
+      "chars": 26
+    },
+    {
+      "path": "03_trajectories/success/T4_hitl_resume_ab.md",
+      "heading": "## 目标",
+      "chars": 35
+    },
+    {
+      "path": "03_trajectories/success/T4_hitl_resume_ab.md",
+      "heading": "## Step 1",
+      "chars": 158
+    },
+    {
+      "path": "03_trajectories/success/T4_hitl_resume_ab.md",
+      "heading": "## Step 2",
+      "chars": 144
+    },
+    {
+      "path": "03_trajectories/success/T4_hitl_resume_ab.md",
+      "heading": "## Step 3",
+      "chars": 154
+    },
+    {
+      "path": "03_trajectories/success/T4_hitl_resume_ab.md",
+      "heading": "## Step 4",
+      "chars": 108
+    },
+    {
+      "path": "03_trajectories/success/T4_hitl_resume_ab.md",
+      "heading": "## Step 5",
+      "chars": 135
+    },
+    {
+      "path": "03_trajectories/success/T4_hitl_resume_ab.md",
+      "heading": "## Final",
+      "chars": 123
+    },
+    {
+      "path": "03_trajectories/success/T5_container_budget_lock.md",
+      "heading": "(preamble)",
+      "chars": 24
+    },
+    {
+      "path": "03_trajectories/success/T5_container_budget_lock.md",
+      "heading": "## 目标",
+      "chars": 62
+    },
+    {
+      "path": "03_trajectories/success/T5_container_budget_lock.md",
+      "heading": "## Step 1",
+      "chars": 156
+    },
+    {
+      "path": "03_trajectories/success/T5_container_budget_lock.md",
+      "heading": "## Step 2",
+      "chars": 101
+    },
+    {
+      "path": "03_trajectories/success/T5_container_budget_lock.md",
+      "heading": "## Step 3",
+      "chars": 143
+    },
+    {
+      "path": "03_trajectories/success/T5_container_budget_lock.md",
+      "heading": "## Step 4",
+      "chars": 177
+    },
+    {
+      "path": "03_trajectories/success/T5_container_budget_lock.md",
+      "heading": "## Final",
+      "chars": 153
+    },
+    {
+      "path": "03_trajectories/success/T6_dual_caliber_booking.md",
+      "heading": "(preamble)",
+      "chars": 19
+    },
+    {
+      "path": "03_trajectories/success/T6_dual_caliber_booking.md",
+      "heading": "## 目标",
+      "chars": 27
+    },
+    {
+      "path": "03_trajectories/success/T6_dual_caliber_booking.md",
+      "heading": "## Step 1",
+      "chars": 161
+    },
+    {
+      "path": "03_trajectories/success/T6_dual_caliber_booking.md",
+      "heading": "## Step 2",
+      "chars": 129
+    },
+    {
+      "path": "03_trajectories/success/T6_dual_caliber_booking.md",
+      "heading": "## Step 3",
+      "chars": 140
+    },
+    {
+      "path": "03_trajectories/success/T6_dual_caliber_booking.md",
+      "heading": "## Step 4",
+      "chars": 149
+    },
+    {
+      "path": "03_trajectories/success/T6_dual_caliber_booking.md",
+      "heading": "## Final",
+      "chars": 192
+    },
+    {
+      "path": "04_strategies/booking_workflow.md",
+      "heading": "",
+      "chars": 146
+    },
+    {
+      "path": "04_strategies/cargo_handling.md",
+      "heading": "",
+      "chars": 109
+    },
+    {
+      "path": "04_strategies/packing_heuristics.md",
+      "heading": "(preamble)",
+      "chars": 355
+    },
+    {
+      "path": "04_strategies/packing_heuristics.md",
+      "heading": "## 代码默认",
+      "chars": 79
+    },
+    {
+      "path": "04_strategies/risk_awareness.md",
+      "heading": "",
+      "chars": 115
+    },
+    {
+      "path": "05_multi_agent/collaboration_examples.md",
+      "heading": "(preamble)",
+      "chars": 13
+    },
+    {
+      "path": "05_multi_agent/collaboration_examples.md",
+      "heading": "## 例 1：标准短票",
+      "chars": 79
+    },
+    {
+      "path": "05_multi_agent/collaboration_examples.md",
+      "heading": "## 例 2：超货载",
+      "chars": 99
+    },
+    {
+      "path": "05_multi_agent/collaboration_examples.md",
+      "heading": "## 例 3：HITL 跨进程",
+      "chars": 74
+    },
+    {
+      "path": "05_multi_agent/escalation_rules.md",
+      "heading": "(preamble)",
+      "chars": 445
+    },
+    {
+      "path": "05_multi_agent/escalation_rules.md",
+      "heading": "## 与轨迹",
+      "chars": 62
+    },
+    {
+      "path": "05_multi_agent/illegal_tools.md",
+      "heading": "",
+      "chars": 595
+    },
+    {
+      "path": "05_multi_agent/roles_definition.md",
+      "heading": "(preamble)",
+      "chars": 107
+    },
+    {
+      "path": "05_multi_agent/roles_definition.md",
+      "heading": "## 大 Team（Supervisor）",
+      "chars": 382
+    },
+    {
+      "path": "05_multi_agent/roles_definition.md",
+      "heading": "## 小 Team A（成箱）",
+      "chars": 311
+    },
+    {
+      "path": "05_multi_agent/roles_definition.md",
+      "heading": "## 小 Team B（拼柜）",
+      "chars": 328
+    },
+    {
+      "path": "05_multi_agent/roles_definition.md",
+      "heading": "## replan_critic",
+      "chars": 204
+    },
+    {
+      "path": "05_multi_agent/roles_definition.md",
+      "heading": "## 默认调度",
+      "chars": 97
+    },
+    {
+      "path": "05_multi_agent/roles_definition.md",
+      "heading": "## 知识库窄接",
+      "chars": 176
+    },
+    {
+      "path": "05_multi_agent/sequence_happy_path.md",
+      "heading": "(preamble)",
+      "chars": 342
+    },
+    {
+      "path": "05_multi_agent/sequence_happy_path.md",
+      "heading": "## HITL 分支",
+      "chars": 132
+    },
+    {
+      "path": "05_multi_agent/sequence_happy_path.md",
+      "heading": "## 失败环（有界）",
+      "chars": 142
+    },
+    {
+      "path": "05_multi_agent/sequence_happy_path.md",
+      "heading": "## 与代码",
+      "chars": 93
+    },
+    {
+      "path": "05_multi_agent/summary_protocol.md",
+      "heading": "(preamble)",
+      "chars": 326
+    },
+    {
+      "path": "05_multi_agent/summary_protocol.md",
+      "heading": "## failure_class 枚举",
+      "chars": 317
+    },
+    {
+      "path": "06_competition/constraints.md",
+      "heading": "",
+      "chars": 353
+    },
+    {
+      "path": "06_competition/example_tasks.md",
+      "heading": "(preamble)",
+      "chars": 678
+    },
+    {
+      "path": "06_competition/example_tasks.md",
+      "heading": "## phase0 目录",
+      "chars": 128
+    },
+    {
+      "path": "06_competition/example_tasks.md",
+      "heading": "## 评委双证据",
+      "chars": 48
+    },
+    {
+      "path": "06_competition/scoring_criteria.md",
+      "heading": "(preamble)",
+      "chars": 394
+    },
+    {
+      "path": "06_competition/scoring_criteria.md",
+      "heading": "## 赢线",
+      "chars": 45
+    },
+    {
+      "path": "06_competition/scoring_criteria.md",
+      "heading": "## 基线命令",
+      "chars": 53
+    },
+    {
+      "path": "06_competition/scoring_criteria.md",
+      "heading": "## 与知识库",
+      "chars": 86
+    },
+    {
+      "path": "07_domain_knowledge/cargo_types.md",
+      "heading": "",
+      "chars": 141
+    },
+    {
+      "path": "07_domain_knowledge/common_terms.md",
+      "heading": "",
+      "chars": 225
+    },
+    {
+      "path": "07_domain_knowledge/container_types.md",
+      "heading": "",
+      "chars": 207
+    },
+    {
+      "path": "README.md",
+      "heading": "(preamble)",
+      "chars": 168
+    },
+    {
+      "path": "README.md",
+      "heading": "## 目录",
+      "chars": 499
+    },
+    {
+      "path": "README.md",
+      "heading": "## 元数据（每篇 YAML frontmatter）",
+      "chars": 333
+    },
+    {
+      "path": "README.md",
+      "heading": "## 切分（Chunking）",
+      "chars": 172
+    },
+    {
+      "path": "README.md",
+      "heading": "## 与 MySQL / 运行时的分工",
+      "chars": 376
+    },
+    {
+      "path": "README.md",
+      "heading": "## Anti-patterns（禁止）",
+      "chars": 234
+    },
+    {
+      "path": "README.md",
+      "heading": "## 代码入口映射",
+      "chars": 418
+    }
+  ]
+}

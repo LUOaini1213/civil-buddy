@@ -89,6 +89,20 @@ def agent_finalize(state: PackingState) -> Dict[str, Any]:
     std_audit = state.get("standard_box_audit") or {}
     feas = state.get("cargo_feasibility") or {}
     prop = state.get("replan_proposal") or {}
+    # 收口知识引用（双口径 / 红线 / 评分）；不改 ship_ok 判定
+    kb_evidence: list = []
+    try:
+        from packing_assistant.kb_bindings import brief_evidence
+
+        q = (
+            "双口径 ship_ok 出运"
+            if ship_ok
+            else f"红线 不可出运 {risk_decision} {prop.get('failure_class') or ''}"
+        )
+        kb_evidence = brief_evidence("finalize", q, max_snips=3)
+    except Exception:
+        kb_evidence = []
+
     decision_summary = {
         "container_type": current_ct,
         "can_fit": plan.get("can_fit"),
@@ -107,6 +121,7 @@ def agent_finalize(state: PackingState) -> Dict[str, Any]:
         or ta.get("standard_box_type_counts"),
         "feas_ok": feas.get("ok"),
         "team_mode": state.get("team_mode") or "big_team_a_b",
+        "kb_evidence": kb_evidence,
     }
 
     lines = [
@@ -123,6 +138,14 @@ def agent_finalize(state: PackingState) -> Dict[str, Any]:
         f"- **箱型分布**：{decision_summary.get('box_type_counts')}",
         "",
     ]
+    if kb_evidence:
+        lines.append("## 知识库依据（窄接 finalize）")
+        lines.append("")
+        for ev in kb_evidence[:3]:
+            lines.append(
+                f"- `{ev.get('path')}` — {ev.get('title')}: {ev.get('snippet')}"
+            )
+        lines.append("")
     if need_revision or not ship_ok:
         lines.extend(
             [
@@ -274,10 +297,20 @@ def agent_finalize(state: PackingState) -> Dict[str, Any]:
 
     final = "\n".join(lines)
 
+    # 默认关闭 LLM 润色：UI/网关路径上 DeepSeek 慢或挂起会表现为「整页卡住」。
+    # 需要润色时设 PACKING_FINALIZE_LLM=1。
     try:
+        import os
+
         from packing_assistant.llm import chat, llm_available, llm_config
 
-        if llm_available():
+        _want_llm = (os.getenv("PACKING_FINALIZE_LLM") or "").strip().lower() in (
+            "1",
+            "true",
+            "yes",
+            "on",
+        )
+        if _want_llm and llm_available():
             polished = chat(
                 system=(
                     "你是货运装箱顾问。根据结构化结果写简洁专业的中文汇总，"
@@ -311,6 +344,30 @@ def agent_finalize(state: PackingState) -> Dict[str, Any]:
     else:
         status = "success"
         phase = "done"
+
+    # 显式裁决（前端横幅 / 状态栏，不依赖 PDF）
+    try:
+        from packing_assistant.verdict import build_verdict
+
+        _pre = {
+            **state,
+            "ship_ok": ship_ok,
+            "phase": phase,
+            "status": status,
+            "container_plan": plan,
+            "risk_report": risk_report,
+            "decision_summary": decision_summary,
+        }
+        verdict = build_verdict(_pre)
+    except Exception:
+        verdict = {
+            "level": "block" if not ship_ok else "ok",
+            "title": "⛔ 不可出运" if not ship_ok else "✅ 可讨论出运",
+            "summary": reject_reason or risk_decision or "",
+            "headline": f"ship_ok={ship_ok} can_fit={plan.get('can_fit')}",
+            "issues": blockers[:5] if not ship_ok else [],
+            "show_banner": True,
+        }
 
     # 目标声明与达成判断（评委可指着看）
     goal_name = str(
@@ -522,11 +579,13 @@ def agent_finalize(state: PackingState) -> Dict[str, Any]:
         "status": status,
         "orchestrator": orch,
         "final_response": final,
+        "decision_summary": decision_summary,
+        "verdict": verdict,
+        "kb_evidence": kb_evidence,
         "risks": risks,
         "ship_ok": ship_ok,
         "goal": goal_name,
         "goal_status": goal_status,
-        "decision_summary": decision_summary,
         "packing_plan": packing_plan,
         "packing_plan_id": packing_plan.get("plan_id") if packing_plan else state.get("packing_plan_id"),
         "hitl_gates": hitl_gates,

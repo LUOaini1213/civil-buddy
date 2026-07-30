@@ -38,9 +38,11 @@ try:
     load_dotenv(ROOT / ".env")
 except Exception:
     pass
-# 默认指向本机 skjolber（服务未起时 health 会 fail，装载回退 Python 3D）
-if not (os.getenv("SKJOLBER_URL") or "").strip():
-    os.environ["SKJOLBER_URL"] = "http://127.0.0.1:8080"
+# 默认：不强制挂死 skjolber。未起 Java 服务时只走 Python 3D，避免探活拖死单线程网关。
+# 需要 skjolber 时在 .env 设 SKJOLBER_URL，并确保 8080 已起；或设 PACKING_SKIP_SKJOLBER=0 且 URL 可达。
+if (os.getenv("PACKING_SKIP_SKJOLBER") or "").strip() == "":
+    # 未显式配置时：若 URL 指向本机 8080 且我们偏好稳 UI，默认 skip（可用 PACKING_SKIP_SKJOLBER=0 打开）
+    os.environ.setdefault("PACKING_SKIP_SKJOLBER", "1")
 
 from packing_assistant.config import HARNESS_VERSION  # noqa: E402
 from packing_assistant.harness import (  # noqa: E402
@@ -157,13 +159,21 @@ class DemoRequest(BaseModel):
 def index():
     index_html = FRONTEND_DIR / "index.html"
     if index_html.exists():
-        return FileResponse(index_html)
+        # 禁止浏览器缓存旧 index（否则修卡死/解锁按钮不生效）
+        return FileResponse(
+            index_html,
+            headers={
+                "Cache-Control": "no-store, no-cache, must-revalidate, max-age=0",
+                "Pragma": "no-cache",
+            },
+        )
     return {"message": "frontend/index.html missing", "docs": "/docs"}
 
 
 @app.get("/api/health")
 def api_health():
-    sk = health_check()
+    # 短超时 + 缓存，避免每次刷新 health 卡住整个单线程网关
+    sk = health_check(timeout=0.25, use_cache=True)
     return {
         "gateway": "UP",
         "harness_version": HARNESS_VERSION,
@@ -197,15 +207,48 @@ def api_health():
 
 @app.get("/api/architecture")
 def api_architecture():
-    """大 Team ⊃ A/B 架构元数据 + 名册。"""
+    """大 Team ⊃ A/B 架构元数据 + 名册 + Agent 知识绑定摘要。"""
     from packing_assistant.teams.roster import AGENT_ROSTER, TEAM_ARCHITECTURE
+
+    kb_bindings = {}
+    try:
+        from packing_assistant.kb_bindings import bindings_summary
+
+        kb_bindings = bindings_summary()
+    except Exception as e:
+        kb_bindings = {"ok": False, "error": str(e)}
 
     return {
         "ok": True,
         "harness_version": HARNESS_VERSION,
         "architecture": TEAM_ARCHITECTURE,
         "roster": AGENT_ROSTER,
+        "kb_bindings": kb_bindings,
     }
+
+
+@app.get("/api/kb/bindings")
+def api_kb_bindings():
+    """Agent → knowledge_base 窄接表。"""
+    from packing_assistant.kb_bindings import bindings_summary, get_binding, list_agent_ids
+
+    agents = {aid: get_binding(aid) for aid in list_agent_ids()}
+    return {"ok": True, "summary": bindings_summary(), "agents": agents}
+
+
+@app.post("/api/kb/search")
+def api_kb_search(body: dict = None):
+    """按 agent_id 窄接检索 knowledge_base。"""
+    from packing_assistant.kb_bindings import search_for_agent
+    from packing_assistant.tools.search_knowledge import search_knowledge
+
+    body = body or {}
+    q = str(body.get("q") or body.get("query") or "")
+    agent_id = str(body.get("agent_id") or "").strip()
+    limit = int(body.get("limit") or 5)
+    if agent_id:
+        return search_for_agent(agent_id, q, limit=limit)
+    return search_knowledge(q, limit=limit)
 
 
 @app.get("/api/tools")

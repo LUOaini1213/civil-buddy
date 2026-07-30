@@ -1,0 +1,575 @@
+# 知识库索引（scripts/gen_kb_index.py 生成）
+version: 2
+root: knowledge_base
+generated: 2026-07-30
+priority_order:
+  - 01_rules
+  - 02_tools
+  - 05_multi_agent
+  - 06_competition
+  - 03_trajectories
+  - 04_strategies
+  - 07_domain_knowledge
+chunking:
+  rules: split_on_h2
+  tools: one_file_one_chunk_preferred
+  trajectories: goal_steps_final
+mysql_division:
+  knowledge_base: "rules, tool docs, trajectories, strategies (retrieval)"
+  knowledge_json: "numeric box type specs"
+  mysql_or_session: "runs, checkpoints, bookings, scores, material rows"
+  output_local: "artifacts, not for git"
+documents:
+  - path: 01_rules/booking_constraints/container_budget.md
+    title: 柜数预算 / 锁柜
+    category: rules
+    priority: high
+    type: rule
+    tags: [container_budget, lock, max_containers, NL]
+    status: active
+  - path: 01_rules/compliance/vgm_and_ship.md
+    title: VGM 与出运合规
+    category: rules
+    priority: high
+    type: rule
+    tags: [VGM, ship, compliance]
+    status: active
+  - path: 01_rules/ctu_loading/load_bearing.md
+    title: 承重与柜底
+    category: rules
+    priority: high
+    type: rule
+    tags: [load_bearing, payload, floor, CTU]
+    status: active
+  - path: 01_rules/ctu_loading/safety_redlines.md
+    title: 安全红线
+    category: rules
+    priority: high
+    type: rule
+    tags: [redline, CoG, CTU, mid50, xyz, payload]
+    status: active
+  - path: 01_rules/ctu_loading/stacking_limits.md
+    title: 叠装限制
+    category: rules
+    priority: high
+    type: rule
+    tags: [stack, stacking, crush, CTU]
+    status: active
+  - path: 01_rules/ctu_loading/void_space.md
+    title: 空隙与塞实
+    category: rules
+    priority: high
+    type: rule
+    tags: [void, 15cm, dunnage, CTU]
+    status: active
+  - path: 01_rules/volume_weight/calculation_rules.md
+    title: 体积重量计算规则
+    category: rules
+    priority: high
+    type: rule
+    tags: [volume, weight, calculation, N0, payload]
+    status: active
+  - path: 01_rules/volume_weight/dual_caliber.md
+    title: 双口径说明
+    category: rules
+    priority: high
+    type: rule
+    tags: [dual_caliber, booking_volume, outer_util, N0]
+    status: active
+  - path: 02_tools/bin3d_pack.md
+    title: 工具：bin3d.pack
+    category: tools
+    priority: high
+    type: tool_doc
+    tags: [3D, can_fit, CoG]
+    status: active
+  - path: 02_tools/booking_n0.md
+    title: 工具：订柜当量 N0 (`booking.n0`)
+    category: tools
+    priority: high
+    type: tool_doc
+    tags: [booking.n0, B, catalog]
+    status: active
+  - path: 02_tools/box_scheme.md
+    title: 工具：装箱方案 (`box.scheme`)
+    category: tools
+    priority: high
+    type: tool_doc
+    tags: [box.scheme, A, catalog]
+    status: active
+  - path: 02_tools/cargo_feasibility.md
+    title: 工具：cargo_feasibility
+    category: tools
+    priority: high
+    type: tool_doc
+    tags: [feasibility, payload, over_payload, split]
+    status: active
+  - path: 02_tools/cog_lateral.md
+    title: 工具：横向偏心修复 (`cog.lateral`)
+    category: tools
+    priority: high
+    type: tool_doc
+    tags: [cog.lateral, B, catalog]
+    status: active
+  - path: 02_tools/cog_lns.md
+    title: 工具：LNS 重心修补 (`cog.lns`)
+    category: tools
+    priority: high
+    type: tool_doc
+    tags: [cog.lns, B, catalog]
+    status: active
+  - path: 02_tools/cog_primary.md
+    title: 工具：重心主检 (`cog.primary`)
+    category: tools
+    priority: high
+    type: tool_doc
+    tags: [cog.primary, B, catalog]
+    status: active
+  - path: 02_tools/cog_repair.md
+    title: 工具：重心综合修复 (`cog.repair`)
+    category: tools
+    priority: high
+    type: tool_doc
+    tags: [cog.repair, B, catalog]
+    status: active
+  - path: 02_tools/cog_shift.md
+    title: 工具：重心平移 (`cog.shift`)
+    category: tools
+    priority: high
+    type: tool_doc
+    tags: [cog.shift, B, catalog]
+    status: active
+  - path: 02_tools/cog_slab.md
+    title: 工具：配重板 (`cog.slab`)
+    category: tools
+    priority: high
+    type: tool_doc
+    tags: [cog.slab, B, catalog]
+    status: active
+  - path: 02_tools/container_select.md
+    title: 工具：柜型推荐 (`container.select`)
+    category: tools
+    priority: high
+    type: tool_doc
+    tags: [container.select, big, catalog]
+    status: active
+  - path: 02_tools/design_facts.md
+    title: 工具：详设事实 (`design.facts`)
+    category: tools
+    priority: high
+    type: tool_doc
+    tags: [design.facts, A, catalog]
+    status: active
+  - path: 02_tools/evaluate_plan.md
+    title: 工具：方案评估 (`evaluate.plan`)
+    category: tools
+    priority: high
+    type: tool_doc
+    tags: [evaluate.plan, B, catalog]
+    status: active
+  - path: 02_tools/export_shipment.md
+    title: 工具：出运包导出 (`export.shipment`)
+    category: tools
+    priority: high
+    type: tool_doc
+    tags: [export.shipment, big, catalog]
+    status: active
+  - path: 02_tools/get_booking.md
+    title: 工具：get_booking / compute_booking
+    category: tools
+    priority: high
+    type: tool_doc
+    tags: [booking, N0, volume]
+    status: active
+  - path: 02_tools/get_container_info.md
+    title: 工具：get_container_info / container_select
+    category: tools
+    priority: high
+    type: tool_doc
+    tags: [container, 40HQ, payload]
+    status: active
+  - path: 02_tools/hitl_confirm.md
+    title: 工具：人工确认闸 (`hitl.confirm`)
+    category: tools
+    priority: high
+    type: tool_doc
+    tags: [hitl.confirm, big, catalog]
+    status: active
+  - path: 02_tools/intent_interpret.md
+    title: 工具：意图解析 (`intent.interpret`)
+    category: tools
+    priority: high
+    type: tool_doc
+    tags: [intent.interpret, big, catalog]
+    status: active
+  - path: 02_tools/knowledge_search.md
+    title: 工具：知识库检索 (`knowledge.search`)
+    category: tools
+    priority: high
+    type: tool_doc
+    tags: [knowledge.search, big, catalog]
+    status: active
+  - path: 02_tools/kpi_extract.md
+    title: 工具：路由选工具KPI (`kpi.extract`)
+    category: tools
+    priority: high
+    type: tool_doc
+    tags: [kpi.extract, big, catalog]
+    status: active
+  - path: 02_tools/layout_quality.md
+    title: 工具：布局质量 (`layout.quality`)
+    category: tools
+    priority: high
+    type: tool_doc
+    tags: [layout.quality, B, catalog]
+    status: active
+  - path: 02_tools/list_cargo.md
+    title: 工具：list_cargo / material_parser
+    category: tools
+    priority: high
+    type: tool_doc
+    tags: [materials, parse]
+    status: active
+  - path: 02_tools/load_checkpoint.md
+    title: 工具：load_checkpoint / load_resume_state
+    category: tools
+    priority: high
+    type: tool_doc
+    tags: [HITL, resume]
+    status: active
+  - path: 02_tools/load_sequence.md
+    title: 工具：装货顺序 (`load.sequence`)
+    category: tools
+    priority: high
+    type: tool_doc
+    tags: [load.sequence, B, catalog]
+    status: active
+  - path: 02_tools/material_parse.md
+    title: 工具：材料解析 (`material.parse`)
+    category: tools
+    priority: high
+    type: tool_doc
+    tags: [material.parse, A, catalog]
+    status: active
+  - path: 02_tools/packing_run.md
+    title: 工具：装载编排 (`packing.run`)
+    category: tools
+    priority: high
+    type: tool_doc
+    tags: [packing.run, B, catalog]
+    status: active
+  - path: 02_tools/plan_diff.md
+    title: 工具：方案 diff (`plan.diff`)
+    category: tools
+    priority: high
+    type: tool_doc
+    tags: [plan.diff, big, catalog]
+    status: active
+  - path: 02_tools/por_manifest.md
+    title: 工具：POR 清单 (`por.manifest`)
+    category: tools
+    priority: high
+    type: tool_doc
+    tags: [por.manifest, B, catalog]
+    status: active
+  - path: 02_tools/replan_critic.md
+    title: 工具：有界重排批评 (`replan.critic`)
+    category: tools
+    priority: high
+    type: tool_doc
+    tags: [replan.critic, big, catalog]
+    status: active
+  - path: 02_tools/risk_rules.md
+    title: 工具：风险合规 (`risk.rules`)
+    category: tools
+    priority: high
+    type: tool_doc
+    tags: [risk.rules, B, catalog]
+    status: active
+  - path: 02_tools/run_packing.md
+    title: 工具：run_packing / box.scheme（成箱）
+    category: tools
+    priority: high
+    type: tool_doc
+    tags: [standard_box, box_scheme, mass_split, run_packing]
+    status: active
+  - path: 02_tools/save_checkpoint.md
+    title: 工具：save_checkpoint / save_session
+    category: tools
+    priority: high
+    type: tool_doc
+    tags: [HITL, session, checkpoint]
+    status: active
+  - path: 02_tools/search_knowledge.md
+    title: 工具：search_knowledge（已实现）
+    category: tools
+    priority: high
+    type: tool_doc
+    tags: [RAG, knowledge_base, search, knowledge.search]
+    status: active
+  - path: 02_tools/secure_work_order.md
+    title: 工具：绑扎工单 (`secure.work_order`)
+    category: tools
+    priority: high
+    type: tool_doc
+    tags: [secure.work_order, B, catalog]
+    status: active
+  - path: 02_tools/stacking_checker.md
+    title: 工具：stacking_checker（装载策略）
+    category: tools
+    priority: high
+    type: tool_doc
+    tags: [stack, stackable, layers]
+    status: active
+  - path: 02_tools/structure_calc.md
+    title: 工具：结构计算 (`structure.calc`)
+    category: tools
+    priority: high
+    type: tool_doc
+    tags: [structure.calc, A, catalog]
+    status: active
+  - path: 02_tools/tms_booking.md
+    title: 工具：TMS订舱 (`tms.booking`)
+    category: tools
+    priority: high
+    type: tool_doc
+    tags: [tms.booking, big, catalog]
+    status: active
+  - path: 02_tools/vgm_draft.md
+    title: 工具：VGM 草稿 (`vgm.draft`)
+    category: tools
+    priority: high
+    type: tool_doc
+    tags: [vgm.draft, B, catalog]
+    status: active
+  - path: 02_tools/visualize_layout.md
+    title: 工具：可视化 (`visualize.layout`)
+    category: tools
+    priority: high
+    type: tool_doc
+    tags: [visualize.layout, B, catalog]
+    status: active
+  - path: 02_tools/volume_calculator.md
+    title: 工具：volume_calculator
+    category: tools
+    priority: high
+    type: tool_doc
+    tags: [volume, pack_effective, dual_caliber]
+    status: active
+  - path: 03_trajectories/failure_recovery/constraint_violation_fix.md
+    title: 失败恢复：锁柜装不下
+    category: trajectories
+    priority: high
+    type: trajectory
+    tags: [lock_budget, dense, replan]
+    status: active
+  - path: 03_trajectories/failure_recovery/T3_over_payload_box_scheme.md
+    title: 失败恢复 T3：超货载 → 拆箱而非只加柜
+    category: trajectories
+    priority: high
+    type: trajectory
+    tags: [T3, over_payload, replan, box_scheme, no_empty_containers]
+    status: active
+  - path: 03_trajectories/failure_recovery/T7_structure_fail_replan.md
+    title: 失败恢复 T7：结构不通过 → 打回成箱
+    category: trajectories
+    priority: high
+    type: trajectory
+    tags: [T7, structure, replan, box_scheme]
+    status: active
+  - path: 03_trajectories/failure_recovery/T8_feasibility_block.md
+    title: 失败恢复 T8：feasibility 拦截 / 工具错误
+    category: trajectories
+    priority: high
+    type: trajectory
+    tags: [T8, feasibility, tool_error, block]
+    status: active
+  - path: 03_trajectories/failure_recovery/tool_error_replan.md
+    title: 失败恢复：超货载 → 拆箱而非加柜空转
+    category: trajectories
+    priority: high
+    type: trajectory
+    tags: [over_payload, replan, box_scheme]
+    status: active
+  - path: 03_trajectories/README.md
+    title: 轨迹索引（可 few-shot）
+    category: trajectories
+    priority: medium
+    type: trajectory
+    tags: [index, T1, T2, T3, T4, T5, T6, T7, T8]
+    status: active
+  - path: 03_trajectories/success/complex_stacking_02.md
+    title: 成功轨迹：叠装 + 重心
+    category: trajectories
+    priority: medium
+    type: trajectory
+    tags: [stack, prefer_stack, CoG]
+    status: active
+  - path: 03_trajectories/success/long_horizon_booking_01.md
+    title: 成功轨迹：标准铁架 + 全流程出方案
+    category: trajectories
+    priority: medium
+    type: trajectory
+    tags: [long_horizon, standard_box, can_fit]
+    status: active
+  - path: 03_trajectories/success/multi_agent_collab_03.md
+    title: 成功轨迹：大 Team ⊃ A/B + HITL 续跑
+    category: trajectories
+    priority: medium
+    type: trajectory
+    tags: [multi_agent, HITL, big_team]
+    status: active
+  - path: 03_trajectories/success/T1_short_standard_box.md
+    title: 成功轨迹 T1：短票标准箱
+    category: trajectories
+    priority: high
+    type: trajectory
+    tags: [T1, standard_box, short, can_fit]
+    status: active
+  - path: 03_trajectories/success/T2_t80_long_mix_anchor.md
+    title: 成功轨迹 T2：t80 长票锚点
+    category: trajectories
+    priority: high
+    type: trajectory
+    tags: [T2, t80, anchor, long_horizon]
+    status: active
+  - path: 03_trajectories/success/T4_hitl_resume_ab.md
+    title: 成功轨迹 T4：HITL A→磁盘→B 续跑
+    category: trajectories
+    priority: high
+    type: trajectory
+    tags: [T4, HITL, resume, multi_agent, checkpoint]
+    status: active
+  - path: 03_trajectories/success/T5_container_budget_lock.md
+    title: 成功轨迹 T5：NL 锁柜 / 柜数预算
+    category: trajectories
+    priority: high
+    type: trajectory
+    tags: [T5, container_budget, NL, lock]
+    status: active
+  - path: 03_trajectories/success/T6_dual_caliber_booking.md
+    title: 成功轨迹 T6：双口径订舱话术
+    category: trajectories
+    priority: high
+    type: trajectory
+    tags: [T6, dual_caliber, booking, volume]
+    status: active
+  - path: 04_strategies/booking_workflow.md
+    title: 订舱工作流策略
+    category: strategies
+    priority: medium
+    type: strategy
+    tags: [booking, N0, TMS]
+    status: active
+  - path: 04_strategies/cargo_handling.md
+    title: 货件处理策略
+    category: strategies
+    priority: medium
+    type: strategy
+    tags: [cargo, handling, stack]
+    status: active
+  - path: 04_strategies/packing_heuristics.md
+    title: 装箱启发式
+    category: strategies
+    priority: medium
+    type: strategy
+    tags: [heuristic, standard_box, dense, max_box_net_kg]
+    status: active
+  - path: 04_strategies/risk_awareness.md
+    title: 风险意识策略
+    category: strategies
+    priority: medium
+    type: strategy
+    tags: [risk, CoG, VGM]
+    status: active
+  - path: 05_multi_agent/collaboration_examples.md
+    title: 协作示例（摘要级）
+    category: multi_agent
+    priority: medium
+    type: protocol
+    tags: [collab, examples]
+    status: active
+  - path: 05_multi_agent/escalation_rules.md
+    title: 升级规则
+    category: multi_agent
+    priority: high
+    type: protocol
+    tags: [escalation, HITL, stop, replan]
+    status: active
+  - path: 05_multi_agent/illegal_tools.md
+    title: 非法工具 / 非法行为（叙事红线）
+    category: multi_agent
+    priority: high
+    type: protocol
+    tags: [illegal, xyz, narrative, redline]
+    status: active
+  - path: 05_multi_agent/roles_definition.md
+    title: 角色定义（绑定 Harness ≥0.6.3）
+    category: multi_agent
+    priority: high
+    type: protocol
+    tags: [big_team, team_a, team_b, I/O, illegal]
+    status: active
+  - path: 05_multi_agent/sequence_happy_path.md
+    title: 主路径序列（Happy Path）
+    category: multi_agent
+    priority: high
+    type: protocol
+    tags: [sequence, HITL, happy_path]
+    status: active
+  - path: 05_multi_agent/summary_protocol.md
+    title: 子 Team 回传摘要协议
+    category: multi_agent
+    priority: high
+    type: protocol
+    tags: [summary, supervisor, failure_class]
+    status: active
+  - path: 06_competition/constraints.md
+    title: 比赛约束（Agent 叙事）
+    category: competition
+    priority: high
+    type: scoring
+    tags: [constraints, steps, llm_toolcall, HITL]
+    status: active
+  - path: 06_competition/example_tasks.md
+    title: 示例任务（镜像 phase0 任务族）
+    category: competition
+    priority: high
+    type: scoring
+    tags: [tasks, phase0, demo, t80]
+    status: active
+  - path: 06_competition/scoring_criteria.md
+    title: 评分标准（内部代理 · 无官方表时）
+    category: competition
+    priority: high
+    type: scoring
+    tags: [phase0, weights, success_criteria]
+    status: active
+  - path: 07_domain_knowledge/cargo_types.md
+    title: 货类常识
+    category: domain
+    priority: low
+    type: domain
+    tags: [cargo, steel, plate, module]
+    status: active
+  - path: 07_domain_knowledge/common_terms.md
+    title: 术语表
+    category: domain
+    priority: low
+    type: domain
+    tags: [glossary, N0, can_fit, HITL]
+    status: active
+  - path: 07_domain_knowledge/container_types.md
+    title: 集装箱柜型常识
+    category: domain
+    priority: low
+    type: domain
+    tags: [container, 40HQ, 20GP, 柜型]
+    status: active
+  - path: README.md
+    title: Agent 知识库（检索 / 规范 / 范例）
+    category: domain
+    priority: high
+    type: protocol
+    tags: [README, division, anti-patterns]
+    status: active
