@@ -69,6 +69,11 @@ LLM_TOOL_SPECS: List[Dict[str, str]] = [
         "desc": "有界批评：只改 options/路由，不写坐标",
     },
     {
+        "id": "knowledge.search",
+        "team": "big",
+        "desc": "按 agent 窄接检索 knowledge_base（规则/协议/轨迹）；不返回坐标",
+    },
+    {
         "id": "finalize.run",
         "team": "big",
         "desc": "大Team收口；调用后应 finish",
@@ -163,6 +168,9 @@ def _system_prompt() -> str:
 4. enable_auto_confirm=false 且 phase=await_user_confirm 时调用 finish。
 5. 已 finalize 或 ship 结束则 finish。
 6. replan 内环≤3、出运外环≤2；到上限仍失败则 finalize 后 finish。
+7. 需要规则依据/解释时用 knowledge.search；args 建议含 agent_id
+   （orchestrator|replan_critic|risk_compliance|planner|box_scheme|finalize 等）；
+   loader 不靠检索写坐标。
 
 可用工具:
 {tools}
@@ -395,6 +403,27 @@ def _dispatch(
             state["replan_round"] = 0
         meta["artifacts"] = {"proposal": prop}
 
+    elif tool == "knowledge.search":
+        from packing_assistant.kb_bindings import search_for_agent
+        from packing_assistant.tools.search_knowledge import search_knowledge
+
+        # args 由调用方写入 state["_llm_tool_args"] 或 meta 前置；此处从 state 取
+        args = dict(state.get("_llm_tool_args") or {})
+        agent_id = str(args.get("agent_id") or "orchestrator")
+        q = str(args.get("q") or args.get("query") or state.get("goal") or "装柜规则")
+        lim = int(args.get("limit") or 4)
+        if agent_id:
+            res = search_for_agent(agent_id, q, limit=lim)
+        else:
+            res = search_knowledge(q, limit=lim)
+        state.setdefault("kb_hits", []).append(res)
+        state["kb_last"] = res
+        meta["artifacts"] = {
+            "agent_id": agent_id,
+            "n_hits": res.get("n_hits"),
+            "paths": [h.get("path") for h in (res.get("hits") or [])[:5]],
+        }
+
     elif tool == "finalize.run":
         from packing_assistant.agents import agent_finalize
 
@@ -554,6 +583,8 @@ def iter_llm_agent_loop(
 
         tool = str(action.get("tool") or "finish")
         reason = str(action.get("reason") or "")
+        args = action.get("args") if isinstance(action.get("args"), dict) else {}
+        state["_llm_tool_args"] = dict(args or {})
         yield emit(
             {
                 "type": "agent_start",
@@ -579,6 +610,7 @@ def iter_llm_agent_loop(
         state, meta = _dispatch(
             tool, state, enable_auto_confirm=enable_auto_confirm
         )
+        state.pop("_llm_tool_args", None)
         called.add(tool)
         last_tool = tool
         if tool == "replan.critic":

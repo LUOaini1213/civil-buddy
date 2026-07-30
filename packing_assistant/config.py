@@ -7,7 +7,7 @@ from dataclasses import asdict, dataclass, field
 from typing import Any, Dict, List, Set
 
 
-HARNESS_VERSION = "0.6.3"
+HARNESS_VERSION = "0.6.4"
 PACKING_ALGO_VERSION = "structure-design-facts-v1"
 CONSOLIDATION_ALGO_VERSION = "linear-1d-v1"
 RISK_RULES_VERSION = "rules-v1"

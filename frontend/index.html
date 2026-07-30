@@ -52,6 +52,7 @@
     }
     button:hover:not(:disabled) { opacity: .92; }
     button:disabled { opacity: .45; cursor: not-allowed; }
+    button.busy { opacity: .55; cursor: progress; }
     button.ghost {
       background: transparent;
       color: var(--text);
@@ -142,6 +143,34 @@
     .pill.ok { color: var(--ok); background: var(--ok-bg); border-color: transparent; }
     .pill.warn { color: var(--warn); background: var(--warn-bg); border-color: transparent; }
     .pill.err { color: var(--err); background: var(--err-bg); border-color: transparent; }
+    .verdict-banner {
+      border-radius: 10px;
+      padding: 12px 14px;
+      margin: 0 0 14px;
+      border: 1px solid var(--border);
+      font-size: 13px;
+      line-height: 1.5;
+    }
+    .verdict-banner.block {
+      background: rgba(240, 113, 120, 0.12);
+      border-color: rgba(240, 113, 120, 0.45);
+      color: #fecaca;
+    }
+    .verdict-banner.warn {
+      background: rgba(230, 184, 77, 0.12);
+      border-color: rgba(230, 184, 77, 0.4);
+      color: #fde68a;
+    }
+    .verdict-banner.ok {
+      background: rgba(62, 207, 142, 0.1);
+      border-color: rgba(62, 207, 142, 0.35);
+      color: #a7f3d0;
+    }
+    .verdict-banner .vt { font-weight: 700; font-size: 15px; margin-bottom: 4px; }
+    .verdict-banner .vs { color: inherit; opacity: 0.95; }
+    .verdict-banner ul { margin: 6px 0 0; padding-left: 18px; }
+    .verdict-banner .va { margin-top: 8px; font-size: 12px; opacity: 0.9; }
+    .verdict-banner .row-acts { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 10px; }
     .pill .dot {
       width: 6px; height: 6px; border-radius: 50%;
       background: currentColor;
@@ -793,22 +822,37 @@
               :class="riskPillClass">
           risk {{ result.risk_report.decision }}
         </span>
+        <span class="pill" v-if="verdict && verdict.level"
+              :class="verdict.level === 'ok' ? 'ok' : (verdict.level === 'block' ? 'err' : 'warn')"
+              :title="verdict.summary || ''">
+          {{ verdict.level === 'block' ? '⛔阻断' : (verdict.level === 'warn' ? '⚠预警' : '✓可用') }}
+        </span>
+        <span class="pill err" v-if="result.ship_ok === false">ship_ok 否</span>
+        <span class="pill err" v-if="cogPrimary && cogPrimary.balance === 'block'">CoG block</span>
       </div>
       <div class="top-actions">
         <span class="pill" v-if="loading || streamProgress.total">
           {{ streamProgress.done }}/{{ streamProgress.total || '—' }} agents
         </span>
-        <button class="soft" @click="refreshHealth" :disabled="loading" title="健康检查">刷新</button>
-        <button class="ghost" @click="runPipelineTrace" :disabled="loading">全流程</button>
-        <button class="soft" @click="runDemoSteel" :disabled="loading" title="少量钢件·利用率偏低属正常">
+        <button class="soft" @click="refreshHealth" title="健康检查">刷新</button>
+        <button class="ghost" @click="runPipelineTrace" :class="{ busy: loading }">全流程</button>
+        <button class="soft" @click="runDemoSteel" :class="{ busy: loading }" title="少量钢件·利用率偏低属正常">
           钢件轻量
         </button>
-        <button class="primary-lg" @click="runDemo" :disabled="loading" title="30×密实模块≈24t，高利用率">
+        <button class="primary-lg" @click="runDemo" :class="{ busy: loading }" title="30×密实模块≈24t，高利用率">
           {{ loading ? '运行中…' : '满载演示' }}
         </button>
       </div>
       <div class="progress-track" v-if="loading || streamProgress.done">
         <div class="progress-fill" :style="{ width: streamProgress.pct + '%' }"></div>
+      </div>
+      <div
+        v-if="loading"
+        class="pill"
+        style="position:fixed;left:50%;bottom:18px;transform:translateX(-50%);z-index:50;background:#1e3a5f;color:#e8eef7;padding:10px 16px;box-shadow:0 8px 24px rgba(0,0,0,.35);display:flex;gap:10px;align-items:center"
+      >
+        <span>⏳ {{ statusText || '运行中…' }} · 连点会提示，不是死机</span>
+        <button type="button" class="soft" style="pointer-events:auto" @click="forceUnlock">强制解锁</button>
       </div>
     </header>
 
@@ -923,9 +967,9 @@
             placeholder="材料清单；留空点「满载」=30×密实模块高利用率；钢件叙事点顶栏「钢件轻量」"
           ></textarea>
           <div class="composer-row">
-            <button @click="runTeamA" :disabled="loading">生成方案</button>
-            <button class="soft" @click="runDemo" :disabled="loading" title="30模块≈24t">满载</button>
-            <button class="ghost" @click="runPdf" :disabled="loading">PDF</button>
+            <button @click="runTeamA" :class="{ busy: loading }">生成方案</button>
+            <button class="soft" @click="runDemo" :class="{ busy: loading }" title="30模块≈24t">满载</button>
+            <button class="ghost" @click="runPdf" :class="{ busy: loading }">PDF</button>
           </div>
           <div class="status-line">{{ statusText }}</div>
         </div>
@@ -964,14 +1008,41 @@
               计算由代码完成，不是聊天编造柜数。
             </p>
             <div class="actions">
-              <button class="primary-lg" @click="runDemo" :disabled="loading">一键演示</button>
-              <button class="soft" @click="runPipelineTrace" :disabled="loading">全流程轨迹</button>
-              <button class="ghost" @click="runTeamA" :disabled="loading">仅团队 A</button>
+              <button class="primary-lg" @click="runDemo" :class="{ busy: loading }">一键演示</button>
+              <button class="soft" @click="runPipelineTrace" :class="{ busy: loading }">全流程轨迹</button>
+              <button class="ghost" @click="runTeamA" :class="{ busy: loading }">仅团队 A</button>
             </div>
           </div>
 
           <!-- ===== 总览 ===== -->
           <template v-if="mainTab === 'overview' && hasAnyResult">
+            <!-- 一眼裁决：不必开 PDF -->
+            <div
+              class="verdict-banner"
+              v-if="verdict && verdict.show_banner !== false && (verdict.title || verdict.summary)"
+              :class="verdict.level || 'warn'"
+            >
+              <div class="vt">{{ verdict.title || '裁决' }}</div>
+              <div class="vs">{{ verdict.summary || verdict.headline }}</div>
+              <ul v-if="verdict.issues && verdict.issues.length > 1">
+                <li v-for="(iss, i) in verdict.issues" :key="'vi'+i">{{ iss }}</li>
+              </ul>
+              <div class="va" v-if="verdict.actions && verdict.actions.length">
+                <strong>建议：</strong>{{ verdict.actions.join('；') }}
+              </div>
+              <div class="row-acts">
+                <button type="button" class="soft" @click="mainTab = 'risk'" v-if="(verdict.level === 'block' || verdict.level === 'warn')">
+                  查看风险详情
+                </button>
+                <button type="button" class="ghost" @click="scrollToCog" v-if="cogPrimary">
+                  查看重心 COG
+                </button>
+                <span class="pill" :class="verdict.level === 'ok' ? 'ok' : (verdict.level === 'block' ? 'err' : 'warn')">
+                  {{ verdict.headline || verdict.level }}
+                </span>
+              </div>
+            </div>
+
             <div class="hitl-bar" v-if="result.phase === 'await_user_confirm' || (result.hitl_summary && result.hitl_summary.n_boxes)">
               <div class="hitl-top">
                 <div>
@@ -989,9 +1060,9 @@
                       </option>
                     </select>
                   </label>
-                  <button @click="confirmPack" :disabled="loading">确认并拼柜 · resume</button>
-                  <button class="soft" @click="mainTab = 'boxes'" :disabled="loading">改方案</button>
-                  <button class="danger" @click="cancel" :disabled="loading">取消</button>
+                  <button @click="confirmPack" :class="{ busy: loading }">确认并拼柜 · resume</button>
+                  <button class="soft" @click="mainTab = 'boxes'">改方案</button>
+                  <button class="danger" @click="cancel">取消</button>
                 </div>
               </div>
               <div class="hitl-cards" v-if="hitlCards.length">
@@ -1371,8 +1442,8 @@
                     {{ opt.label }}{{ opt.recommended ? '（推荐）' : '' }}
                   </option>
                 </select>
-                <button @click="confirmPack" :disabled="loading">确认并拼柜</button>
-                <button class="danger" @click="cancel" :disabled="loading">取消</button>
+                <button @click="confirmPack" :class="{ busy: loading }">确认并拼柜</button>
+                <button class="danger" @click="cancel">取消</button>
               </div>
             </div>
             <div class="section nl-box" v-if="result.boxes && result.boxes.length">
@@ -1380,7 +1451,7 @@
               <div class="row" style="align-items:stretch">
                 <textarea v-model="nlInstruction" style="flex:1;min-height:56px"
                   placeholder="例：去掉钢梁；柜型改 40GP；框架槽钢16#，γ=2.0"></textarea>
-                <button @click="reviseNl" :disabled="loading || !nlInstruction.trim()">应用</button>
+                <button @click="reviseNl" :disabled="!nlInstruction.trim()" :class="{ busy: loading }">应用</button>
               </div>
               <div class="status-line" v-if="nlStatus">{{ nlStatus }}</div>
             </div>
@@ -1388,7 +1459,7 @@
               <h3>尚无装箱方案</h3>
               <p>先运行「生成方案」或「一键演示」。</p>
               <div class="actions">
-                <button @click="runTeamA" :disabled="loading">生成方案</button>
+                <button @click="runTeamA" :class="{ busy: loading }">生成方案</button>
               </div>
             </div>
           </template>
@@ -1728,6 +1799,7 @@
           sessionId: 'web-' + Date.now(),
           containerType: '40HQ',
           loading: false,
+          loadingStartedAt: 0,
           statusText: '就绪 · 可一键演示或生成方案',
           skjolberOk: false,
           skjolberLabel: 'unknown',
@@ -2008,6 +2080,12 @@
           if (d) return 'warn';
           return '';
         },
+        verdict() {
+          const v = (this.result && this.result.verdict) || null;
+          if (v && (v.title || v.summary || v.level)) return v;
+          // 客户端兜底：API 未带 verdict 时本地拼
+          return this.buildClientVerdict(this.result || {});
+        },
         containerOptions() {
           return (this.result.user_prompt && this.result.user_prompt.container_options) || [
             { value: '40HQ', label: '40HQ', recommended: true },
@@ -2082,16 +2160,24 @@
             } else if (this.viewContainerOptions.length) {
               this.viewContainerNo = this.viewContainerOptions[0];
             }
-            this.$nextTick(() => {
-              this.onViewContainerChange();
-            });
+            // 仅在可视化页、且不在 SSE 狂刷时绘制，避免主线程假死
+            if (this.mainTab === 'visual' && !this.sseActive && !this.loading) {
+              if (this._drawTimer) clearTimeout(this._drawTimer);
+              this._drawTimer = setTimeout(() => {
+                this.$nextTick(() => {
+                  try { this.onViewContainerChange(); } catch (e) { console.warn(e); }
+                });
+              }, 80);
+            }
           },
         },
         mainTab(tab) {
           if (tab === 'visual') {
             this.$nextTick(() => {
-              this.drawAllViews();
-              this.draw3d();
+              try {
+                this.drawAllViews();
+                this.draw3d();
+              } catch (e) { console.warn(e); }
             });
           }
         },
@@ -2501,13 +2587,151 @@
             this.result = Object.assign({}, payload.public, {
               goal_status: payload.goal_status || payload.public.goal_status,
               agent_steps: payload.steps || payload.public.agent_steps,
+              verdict: payload.verdict || payload.public.verdict,
             });
           } else {
             this.result = payload || {};
           }
+          if (!this.result.verdict) {
+            this.result.verdict = this.buildClientVerdict(this.result);
+          }
           this.applyAgentSteps(payload);
+          this.pushVerdictToStatus();
           if (this.hasAnyResult && this.mainTab === 'overview') {
             /* stay on overview after run */
+          }
+          // 硬阻断时停在总览大红条，并可选跳风险
+          const lv = (this.result.verdict || {}).level;
+          if (lv === 'block' && this.mainTab === 'visual') {
+            this.mainTab = 'overview';
+          }
+        },
+        buildClientVerdict(res) {
+          if (!res || typeof res !== 'object') return null;
+          const plan = res.container_plan || {};
+          const risk = res.risk_report || {};
+          let cog = res.cog || plan.cog || {};
+          if (cog.primary && cog.mass_in_mid50_ratio == null) cog = cog.primary;
+          const canFit = plan.can_fit;
+          const shipOk = res.ship_ok;
+          const bal = String(cog.balance || '');
+          let mid = cog.mass_in_mid50_ratio;
+          if (mid == null) mid = res.worst_mid50 != null ? res.worst_mid50 : plan.worst_mid50;
+          mid = mid != null ? Number(mid) : null;
+          const riskDec = String(risk.decision || '').toUpperCase();
+          const issues = [];
+          let level = 'ok';
+          const bump = (lv) => {
+            const o = { ok: 0, warn: 1, block: 2 };
+            if ((o[lv] || 0) > (o[level] || 0)) level = lv;
+          };
+          if (canFit === false) { issues.push('几何装不下 can_fit=False'); bump('block'); }
+          if (bal === 'block' || (mid != null && mid < 0.4)) {
+            issues.push('重心阻断 CoG=' + (bal || 'block') + ' mid50=' + (mid != null ? Math.round(mid * 100) + '%' : '—'));
+            bump('block');
+          } else if (bal === 'warn' || bal === 'warn_high' || (mid != null && mid < 0.6)) {
+            issues.push('重心预警 mid50=' + (mid != null ? Math.round(mid * 100) + '%' : '—'));
+            bump('warn');
+          }
+          if (riskDec === 'REJECT') { issues.push('风险 REJECT'); bump('block'); }
+          else if (riskDec && riskDec !== 'PASS' && riskDec !== 'OK') { issues.push('风险 ' + riskDec); bump('warn'); }
+          if (shipOk === false) { issues.push('不可出运 ship_ok=False'); bump('block'); }
+          if (!plan || (!plan.can_fit && plan.can_fit !== false && !res.phase)) {
+            return { level: 'warn', title: '尚未出结果', summary: '请先运行演示或生成方案', show_banner: false, issues: [] };
+          }
+          const title = level === 'block' ? '⛔ 不可出运 / 硬阻断'
+            : (level === 'warn' ? '⚠️ 可装但有预警' : '✅ 方案可用（建议人工复核）');
+          const summary = issues.length ? issues.join('；') : '可讨论出运：未见硬阻断（正式前仍需 VGM/人工）';
+          const headline = [
+            canFit != null ? ('can_fit=' + (canFit ? '是' : '否')) : null,
+            shipOk != null ? ('ship_ok=' + (shipOk ? '是' : '否')) : null,
+            mid != null ? ('mid50=' + Math.round(mid * 100) + '%') : null,
+            bal ? ('CoG=' + bal) : null,
+            riskDec ? ('risk=' + riskDec) : null,
+          ].filter(Boolean).join(' · ');
+          return {
+            level, title, summary, headline, issues,
+            actions: level === 'block' ? ['看总览红条与风险页', '整改后重跑拼柜'] : [],
+            show_banner: true,
+            ship_ok: shipOk, can_fit: canFit, cog_balance: bal, worst_mid50: mid,
+            risk_decision: riskDec || null,
+          };
+        },
+        pushVerdictToStatus() {
+          const v = this.verdict;
+          if (!v || !v.headline) return;
+          const prefix = v.level === 'block' ? '【阻断】' : (v.level === 'warn' ? '【预警】' : '【通过】');
+          this.statusText = prefix + ' ' + (v.headline || v.summary || '');
+        },
+        scrollToCog() {
+          this.mainTab = 'overview';
+          this.$nextTick(() => {
+            const el = this.$el && this.$el.querySelector
+              ? this.$el.querySelector('.section h3')
+              : null;
+            // 简单滚到工作区顶部红条已可见
+            const ws = this.$refs.workspace;
+            if (ws) ws.scrollTop = 0;
+          });
+        },
+        /** 连点保护：loading 时再点只提示，避免“点了没反应” */
+        beginWork(label) {
+          if (this.loading) {
+            const sec = this.loadingStartedAt
+              ? Math.round((Date.now() - this.loadingStartedAt) / 1000)
+              : 0;
+            this.statusText =
+              '上一步仍在运行（' + sec + 's）· ' + (label || '请稍候') +
+              ' · 完成后按钮会亮起';
+            return false;
+          }
+          this.loading = true;
+          this.loadingStartedAt = Date.now();
+          // 防卡死：120s 强制解锁
+          const started = this.loadingStartedAt;
+          setTimeout(() => {
+            if (this.loading && this.loadingStartedAt === started) {
+              this.loading = false;
+              this.statusText = '等待超时已解锁按钮 · 请看上方状态或刷新重试';
+            }
+          }, 120000);
+          return true;
+        },
+        endWork() {
+          this.loading = false;
+          this.loadingStartedAt = 0;
+        },
+        forceUnlock() {
+          this.loading = false;
+          this.loadingStartedAt = 0;
+          this.sseActive = false;
+          this.liveNode = '';
+          this.statusText = '已强制解锁 · 可再点生成/演示（若后台仍在跑，结果稍后可能覆盖）';
+        },
+        async fetchJson(url, body, timeoutMs) {
+          const ms = timeoutMs || 90000;
+          const ctrl = typeof AbortController !== 'undefined' ? new AbortController() : null;
+          const timer = ctrl ? setTimeout(() => ctrl.abort(), ms) : null;
+          try {
+            const r = await fetch(API + url, {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify(body || {}),
+              signal: ctrl ? ctrl.signal : undefined,
+            });
+            let j = {};
+            try {
+              j = await r.json();
+            } catch (e) {
+              j = {};
+            }
+            if (!r.ok) {
+              const detail = (j && (j.detail || j.error || j.message)) || ('HTTP ' + r.status);
+              throw new Error(typeof detail === 'string' ? detail : JSON.stringify(detail));
+            }
+            return j;
+          } finally {
+            if (timer) clearTimeout(timer);
           }
         },
         async refreshHealth() {
@@ -2525,117 +2749,114 @@
           }
         },
         async runTeamA() {
-          this.loading = true;
+          if (!this.beginWork('生成方案')) return;
           this.statusText = '团队 A 运行中…';
           this.mainTab = 'overview';
           try {
-            const r = await fetch(API + '/api/team-a', {
-              method: 'POST',
-              headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({
-                user_input: this.userInput || '演示材料清单',
-                session_id: this.sessionId,
-              }),
-            });
-            const j = await r.json();
+            const j = await this.fetchJson('/api/team-a', {
+              user_input: this.userInput || '演示材料清单',
+              session_id: this.sessionId,
+            }, 60000);
             this.applyResult(j);
-            this.statusText = '团队 A 完成 · 请确认柜型';
+            this.statusText = '团队 A 完成 · 请到「成箱」页确认并拼柜';
             this.mainTab = 'boxes';
             const rec = (this.containerOptions.find((o) => o.recommended) || {}).value;
             if (rec) this.containerType = rec;
           } catch (e) {
             this.statusText = '失败: ' + e;
           } finally {
-            this.loading = false;
+            this.endWork();
           }
         },
         async runDemo() {
-          this.loading = true;
-          this.statusText = 'SSE 流式演示…';
+          // 主路径：非 SSE 一次请求（避免流式期间页面假死 / loading 挂起）
+          if (!this.beginWork('满载演示')) return;
+          this.statusText = '满载演示计算中（约 5–15 秒，请勿连点）…';
           this.mainTab = 'overview';
           this.liveStatus = {};
-          this.connectSessionWs(this.sessionId);
+          const tick = setInterval(() => {
+            if (!this.loading) return;
+            const sec = this.loadingStartedAt
+              ? Math.round((Date.now() - this.loadingStartedAt) / 1000)
+              : 0;
+            this.statusText = '满载演示计算中… 已 ' + sec + 's';
+          }, 500);
           try {
-            const last = await this.consumeSse('/api/pipeline/stream', {
+            const j = await this.fetchJson('/api/demo', {
               user_input: this.userInput || '高利用率演示物料',
               container_type: this.containerType,
               session_id: this.sessionId,
-              enable_auto_confirm: true,
-              max_containers: 0,
-              mode: 'steps',
-              save_artifacts: true,
               preset: 'high_util',
-            });
-            if (last && last.public) {
-              this.applyResult({ public: last.public, steps: last.public.agent_steps });
-            }
+            }, 90000);
+            this.applyResult(j);
             const vs = (this.result.volume_summary) || {};
-            this.statusText =
-              '满载演示完成 · 订舱体积 ' + this.pct(vs.booking_volume_utilization) +
-              ' · 外廓 ' + this.pct(vs.outer_space_utilization) +
-              ' · 重量 ' + this.pct(vs.weight_utilization) +
-              ' · steps=' + this.agentSteps.length;
-            this.loadEngineAb();
+            const lv = (this.verdict && this.verdict.level) || '';
+            this.pushVerdictToStatus();
+            if (lv !== 'block') {
+              this.statusText =
+                (this.statusText || '') +
+                ' · 订舱 ' + this.pct(vs.booking_volume_utilization) +
+                ' · 外廓 ' + this.pct(vs.outer_space_utilization);
+            }
+            // 阻断留总览红条；通过再进可视化
+            this.mainTab = lv === 'block'
+              ? 'overview'
+              : (this.hasViews || this.hasScene3d ? 'visual' : 'overview');
+            this.$nextTick(() => {
+              try {
+                if (this.mainTab === 'visual') {
+                  this.drawAllViews();
+                  this.draw3d();
+                }
+                const ws = this.$refs.workspace;
+                if (ws) ws.scrollTop = 0;
+              } catch (e) {}
+            });
             this.loadRuns();
           } catch (e) {
-            // 回退非流式
-            try {
-              const r = await fetch(API + '/api/demo', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({
-                  user_input: this.userInput || '高利用率演示物料',
-                  container_type: this.containerType,
-                  session_id: this.sessionId,
-                  preset: 'high_util',
-                }),
-              });
-              const j = await r.json();
-              this.applyResult(j);
-              this.statusText = '满载演示完成(非SSE) phase=' + (this.result.phase || '');
-            } catch (e2) {
-              this.statusText = '失败: ' + e2;
-            }
+            this.statusText = '满载失败: ' + e + ' · 可点强制解锁后重试';
           } finally {
-            this.loading = false;
+            clearInterval(tick);
+            this.endWork();
             this.liveNode = '';
           }
         },
         async runDemoSteel() {
-          this.loading = true;
-          this.statusText = '钢件轻量演示（利用率可能偏低）…';
+          if (!this.beginWork('钢件演示')) return;
+          this.statusText = '钢件轻量演示计算中…';
           this.mainTab = 'overview';
-          this.liveStatus = {};
-          this.connectSessionWs(this.sessionId);
           try {
-            const last = await this.consumeSse('/api/pipeline/stream', {
+            const j = await this.fetchJson('/api/demo', {
               user_input: '钢件轻量结构叙事',
               container_type: this.containerType,
               session_id: this.sessionId,
-              enable_auto_confirm: true,
-              max_containers: 0,
-              mode: 'steps',
-              save_artifacts: true,
               preset: 'steel_light',
-            });
-            if (last && last.public) {
-              this.applyResult({ public: last.public, steps: last.public.agent_steps });
-            }
+            }, 90000);
+            this.applyResult(j);
             this.statusText = '钢件演示完成 phase=' + (this.result.phase || '');
+            this.mainTab = this.hasViews || this.hasScene3d ? 'visual' : 'overview';
           } catch (e) {
             this.statusText = '失败: ' + e;
           } finally {
-            this.loading = false;
+            this.endWork();
             this.liveNode = '';
           }
         },
         async runPipelineTrace() {
-          this.loading = true;
-          this.statusText = 'SSE 全流程…';
+          // 全流程也改非 SSE，保证可完成；需要流式时再开
+          if (!this.beginWork('全流程')) return;
+          this.statusText = '全流程计算中…';
           this.mainTab = 'agents';
           this.liveStatus = {};
+          const tick = setInterval(() => {
+            if (!this.loading) return;
+            const sec = this.loadingStartedAt
+              ? Math.round((Date.now() - this.loadingStartedAt) / 1000)
+              : 0;
+            this.statusText = '全流程计算中… 已 ' + sec + 's';
+          }, 500);
           try {
-            const last = await this.consumeSse('/api/pipeline/stream', {
+            const j = await this.fetchJson('/api/pipeline', {
               user_input: this.userInput || 'Agent pipeline',
               container_type: this.containerType,
               session_id: this.sessionId,
@@ -2643,16 +2864,15 @@
               max_containers: 0,
               mode: 'steps',
               save_artifacts: true,
-            });
-            if (last && last.public) {
-              this.applyResult({ public: last.public, steps: last.public.agent_steps || last.steps });
-            }
-            this.statusText = '轨迹完成 steps=' + this.agentSteps.length;
+            }, 90000);
+            this.applyResult(j);
+            this.statusText = '轨迹完成 steps=' + this.agentSteps.length + ' phase=' + (this.result.phase || '');
             this.loadRuns();
           } catch (e) {
             this.statusText = '失败: ' + e;
           } finally {
-            this.loading = false;
+            clearInterval(tick);
+            this.endWork();
             this.liveNode = '';
           }
         },
@@ -2867,39 +3087,48 @@
           }
         },
         async confirmPack() {
-          this.loading = true;
-          this.statusText = '团队 B 拼柜中…';
+          if (!this.beginWork('确认拼柜')) return;
+          this.statusText = '团队 B 拼柜中（本地 3D，通常数秒）…';
           try {
             const prev = this.agentSteps.slice();
-            const r = await fetch(API + '/api/confirm', {
-              method: 'POST',
-              headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({
-                session_id: this.sessionId,
-                packing_plan_id: this.result.packing_plan_id || '',
-                action: 'confirm',
-                container_type: this.containerType,
-                max_containers: 0,
-              }),
-            });
-            const j = await r.json();
-            this.result = j;
-            const next = j.agent_steps || [];
+            const j = await this.fetchJson('/api/confirm', {
+              session_id: this.sessionId,
+              packing_plan_id: this.result.packing_plan_id || '',
+              action: 'confirm',
+              container_type: this.containerType,
+              max_containers: 0,
+            }, 90000);
+            this.applyResult(j);
+            const next = (j.agent_steps || (j.public && j.public.agent_steps) || []);
             if (next.length >= prev.length) {
               this.agentSteps = next;
-            } else {
+            } else if (next.length) {
               this.agentSteps = prev.concat(next);
             }
-            this.statusText = '拼柜完成 · 可点选团队 B 成员查看';
-            this.mainTab = this.hasViews || this.hasScene3d ? 'visual' : 'overview';
+            // 有硬阻断：停在总览看红条，不要直接跳可视化「看起来没事」
+            const lv = (this.verdict && this.verdict.level) || '';
+            if (lv === 'block') {
+              this.mainTab = 'overview';
+            } else {
+              this.mainTab = this.hasViews || this.hasScene3d ? 'visual' : 'overview';
+            }
+            this.pushVerdictToStatus();
             this.$nextTick(() => {
-              this.drawAllViews();
-              this.draw3d();
+              try {
+                if (this.mainTab === 'visual') {
+                  this.drawAllViews();
+                  this.draw3d();
+                }
+                const ws = this.$refs.workspace;
+                if (ws && lv === 'block') ws.scrollTop = 0;
+              } catch (drawErr) {
+                console.warn('draw views failed', drawErr);
+              }
             });
           } catch (e) {
-            this.statusText = '失败: ' + e;
+            this.statusText = '拼柜失败: ' + e;
           } finally {
-            this.loading = false;
+            this.endWork();
           }
         },
         async revise() {
@@ -2911,20 +3140,15 @@
         async reviseNl() {
           const instruction = (this.nlInstruction || '').trim();
           if (!instruction) return;
-          this.loading = true;
+          if (!this.beginWork('NL 改方案')) return;
           this.nlStatus = '解析并改方案中…';
           this.statusText = '自然语言改方案…';
           try {
-            const r = await fetch(API + '/api/revise-nl', {
-              method: 'POST',
-              headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({
-                session_id: this.sessionId,
-                instruction,
-                rerun_team_a: true,
-              }),
-            });
-            const j = await r.json();
+            const j = await this.fetchJson('/api/revise-nl', {
+              session_id: this.sessionId,
+              instruction,
+              rerun_team_a: true,
+            }, 60000);
             this.applyResult(j);
             const logs = (j.nl_revision && j.nl_revision.logs) || [];
             this.nlStatus = logs.length
@@ -2933,13 +3157,13 @@
             this.statusText = '改方案后团队 A 已重算';
             this.mainTab = 'boxes';
             const rec = (this.containerOptions.find((o) => o.recommended) || {}).value;
-            if (j.container_type) this.containerType = j.container_type;
+            if (j.container_type) this.containerType = j.containerType || j.container_type;
             else if (rec) this.containerType = rec;
           } catch (e) {
             this.nlStatus = '失败: ' + e;
             this.statusText = '改方案失败: ' + e;
           } finally {
-            this.loading = false;
+            this.endWork();
           }
         },
         async cancel() {

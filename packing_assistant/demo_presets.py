@@ -66,6 +66,11 @@ def packing_options_high_util() -> Dict[str, Any]:
         "dense_mode": True,
         "max_box_net_kg": 2000,
         "mix_mode": False,
+        # 满载演示也要 CTU 中段质量，避免 CoG=block
+        "cog_rebalance": True,
+        "r4_repair": True,
+        "r4_target_mid50": 0.60,
+        "multi_start": True,
     }
 
 

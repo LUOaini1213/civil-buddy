@@ -1,0 +1,120 @@
+{
+  "version": "kb-rag-v1",
+  "description": "search_knowledge Recall@3 金标；expect_paths 任一命中 top3 即算命中",
+  "items": [
+    {
+      "id": "g01",
+      "q": "重心 mid50 红线",
+      "expect_paths": ["01_rules/ctu_loading/safety_redlines.md"]
+    },
+    {
+      "id": "g02",
+      "q": "禁止 LLM 写坐标",
+      "expect_paths": ["01_rules/ctu_loading/safety_redlines.md"]
+    },
+    {
+      "id": "g03",
+      "q": "空隙 15cm 塞实",
+      "expect_paths": ["01_rules/ctu_loading/void_space.md"]
+    },
+    {
+      "id": "g04",
+      "q": "双口径 订舱体积 outer",
+      "expect_paths": ["01_rules/volume_weight/dual_caliber.md"]
+    },
+    {
+      "id": "g05",
+      "q": "booking_volume_utilization N0",
+      "expect_paths": ["01_rules/volume_weight/dual_caliber.md", "01_rules/volume_weight/calculation_rules.md"]
+    },
+    {
+      "id": "g06",
+      "q": "柜数预算 锁柜",
+      "expect_paths": ["01_rules/booking_constraints/container_budget.md"]
+    },
+    {
+      "id": "g07",
+      "q": "VGM 出运",
+      "expect_paths": ["01_rules/compliance/vgm_and_ship.md"]
+    },
+    {
+      "id": "g08",
+      "q": "叠装限制 承重",
+      "expect_paths": ["01_rules/ctu_loading/stacking_limits.md", "01_rules/ctu_loading/load_bearing.md"]
+    },
+    {
+      "id": "g09",
+      "q": "超货载 can_fit 禁止出运",
+      "expect_paths": ["01_rules/ctu_loading/safety_redlines.md"]
+    },
+    {
+      "id": "g10",
+      "q": "search_knowledge 如何检索",
+      "expect_paths": ["02_tools/search_knowledge.md"]
+    },
+    {
+      "id": "g11",
+      "q": "run_packing 成箱 标准箱",
+      "expect_paths": ["02_tools/run_packing.md"]
+    },
+    {
+      "id": "g12",
+      "q": "cargo_feasibility 拆箱",
+      "expect_paths": ["02_tools/cargo_feasibility.md", "03_trajectories/failure_recovery/tool_error_replan.md"]
+    },
+    {
+      "id": "g13",
+      "q": "HITL 续跑 team A team B",
+      "expect_paths": ["03_trajectories/success/multi_agent_collab_03.md", "05_multi_agent/escalation_rules.md"]
+    },
+    {
+      "id": "g14",
+      "q": "大 Team 小 Team 角色",
+      "expect_paths": ["05_multi_agent/roles_definition.md"]
+    },
+    {
+      "id": "g15",
+      "q": "子 Team 回传摘要 禁止全量 layout",
+      "expect_paths": ["05_multi_agent/summary_protocol.md"]
+    },
+    {
+      "id": "g16",
+      "q": "replan 升级 stop 人工",
+      "expect_paths": ["05_multi_agent/escalation_rules.md"]
+    },
+    {
+      "id": "g17",
+      "q": "phase0 评分权重 task_success",
+      "expect_paths": ["06_competition/scoring_criteria.md"]
+    },
+    {
+      "id": "g18",
+      "q": "t80_long_mix 锚点任务",
+      "expect_paths": ["06_competition/example_tasks.md", "03_trajectories/success/long_horizon_booking_01.md"]
+    },
+    {
+      "id": "g19",
+      "q": "标准铁架启发式 dense 薄板",
+      "expect_paths": ["04_strategies/packing_heuristics.md"]
+    },
+    {
+      "id": "g20",
+      "q": "为何不能只加柜超货载",
+      "expect_paths": [
+        "03_trajectories/failure_recovery/tool_error_replan.md",
+        "01_rules/ctu_loading/safety_redlines.md",
+        "02_tools/cargo_feasibility.md"
+      ]
+    },
+    {
+      "id": "g21",
+      "q": "体积重量计算规则",
+      "expect_paths": ["01_rules/volume_weight/calculation_rules.md"]
+    },
+    {
+      "id": "g22",
+      "q": "集装箱柜型常识",
+      "expect_paths": ["07_domain_knowledge/container_types.md"]
+    }
+  ]
+}

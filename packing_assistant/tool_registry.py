@@ -83,6 +83,14 @@ TOOL_CATALOG: List[ToolSpec] = [
         "packing_assistant.workteam_kpi",
         "从 state 抽取 workteam KPI",
     ),
+    ToolSpec(
+        "knowledge.search",
+        "知识库检索",
+        "big",
+        "packing_assistant.tools.search_knowledge",
+        "在 knowledge_base 检索规则/工具说明/轨迹（关键词+frontmatter）",
+        "不返回3D坐标；数值箱型仍走 JSON",
+    ),
     # —— 小 Team A 成箱 ——
     ToolSpec(
         "material.parse",

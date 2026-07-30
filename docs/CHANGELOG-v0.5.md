@@ -1,4 +1,21 @@
-# CHANGELOG · v0.5.0
+# CHANGELOG · v0.5.0+
+
+## v0.6.4 · Agent 知识库（可检索 + 窄接 + 分卡）
+
+| 项 | 说明 |
+|----|------|
+| `knowledge_base/` | 01–07 规则/工具/轨迹 T1–T8/多Agent/比赛 |
+| `knowledge.search` | 关键词检索，不返回坐标 |
+| `agent_kb_bindings.yaml` | 9 Agent + 附属角色路径 allowlist |
+| `verdict` | 总览裁决横幅（不必开 PDF） |
+| CoG R4 | 默认 mid50≥60%，刚性平移+swap+slide |
+| 回归 | `test_search_knowledge` · `test_kb_bindings` · `test_mid50_cog` · scorecard |
+
+**Harness**：→ **0.6.4**
+
+---
+
+# 历史 · v0.5.0
 
 **Harness**：0.4.0 → **0.5.0**  
 主题：像真 Agent 产品（流式 + 可回放 + HITL 密度）+ 可交付 OSS 壳

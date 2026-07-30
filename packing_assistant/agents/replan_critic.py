@@ -286,6 +286,16 @@ def agent_replan_critic(state: Dict[str, Any]) -> Dict[str, Any]:
     if route == "planner" and (risk_dec == "REJECT" or not plan.get("can_fit")):
         new_ship = ship_r + 1
 
+    # 知识库证据（窄接 replan_critic；不改变路由决策，仅 explainability）
+    kb_evidence: List[Dict[str, str]] = []
+    try:
+        from packing_assistant.kb_bindings import brief_evidence
+
+        q = f"{failure_class} {route} " + " ".join(reasons[:2])
+        kb_evidence = brief_evidence("replan_critic", q, max_snips=3)
+    except Exception:
+        kb_evidence = []
+
     proposal = {
         "stop": False,
         "route": route,
@@ -298,6 +308,7 @@ def agent_replan_critic(state: Dict[str, Any]) -> Dict[str, Any]:
         "round": new_round,
         "ship_replan_round": new_ship,
         "auto_closed_loop": True,
+        "kb_evidence": kb_evidence,
     }
     msg = f"route={route} class={failure_class}；" + "；".join(reasons)
     return {
@@ -306,6 +317,7 @@ def agent_replan_critic(state: Dict[str, Any]) -> Dict[str, Any]:
         "replan_round": new_round,
         "ship_replan_round": new_ship,
         "replan_proposal": proposal,
+        "kb_evidence": kb_evidence,
         "cargo_feasibility": feas if isinstance(feas, dict) else {},
         "phase": "team_b_running",
         "status": "running",

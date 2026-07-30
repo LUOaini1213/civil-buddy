@@ -1,0 +1,229 @@
+# Agent → 知识库窄接表（Harness ≥0.6.3）
+# 代码加载：packing_assistant.kb_bindings
+# 原则：rules > strategies；坐标永不从 KB 来；loader 默认不检索
+version: 1
+harness: ">=0.6.3"
+default:
+  allow_search: true
+  limit: 4
+  deny_coordinates: true
+  # 未列出的 agent 仅允许读 illegal + summary 摘要
+  fallback_path_prefixes:
+    - 05_multi_agent/illegal_tools.md
+    - 05_multi_agent/summary_protocol.md
+
+agents:
+  # —— 经典 9 Agent ——
+  orchestrator:
+    name: 主控编排
+    team: big
+    allow_search: true
+    inject_mode: on_demand
+    categories: [multi_agent, competition, tools]
+    path_prefixes:
+      - 05_multi_agent/
+      - 06_competition/
+      - 02_tools/intent_interpret.md
+      - 02_tools/hitl_confirm.md
+      - 02_tools/knowledge_search.md
+      - 02_tools/search_knowledge.md
+      - 01_rules/ctu_loading/safety_redlines.md
+    tags: [HITL, big_team, scoring, redline]
+    trajectories: [T4, T5]
+    note: 编排/协议/比赛约束；不灌箱型毫米表
+
+  material_parser:
+    name: 材料解析
+    team: A
+    allow_search: true
+    inject_mode: on_demand
+    categories: [tools, domain, strategies]
+    path_prefixes:
+      - 02_tools/material_parse.md
+      - 07_domain_knowledge/
+      - 04_strategies/cargo_handling.md
+      - 05_multi_agent/illegal_tools.md
+    tags: [cargo, material, need_more_info]
+    trajectories: []
+    note: 不得编造尺寸重量
+
+  structure:
+    name: 结构计算
+    team: A
+    allow_search: true
+    inject_mode: on_demand
+    categories: [rules, tools, trajectories]
+    path_prefixes:
+      - 02_tools/structure_calc.md
+      - 01_rules/ctu_loading/load_bearing.md
+      - 01_rules/ctu_loading/stacking_limits.md
+      - 01_rules/ctu_loading/safety_redlines.md
+      - 03_trajectories/failure_recovery/T7_structure_fail_replan.md
+    tags: [structure, load_bearing, stack]
+    trajectories: [T7]
+    note: 结构不通过不得进柜
+
+  box_scheme:
+    name: 装箱方案
+    team: A
+    allow_search: true
+    inject_mode: on_demand
+    categories: [tools, strategies, rules, trajectories]
+    path_prefixes:
+      - 02_tools/run_packing.md
+      - 02_tools/box_scheme.md
+      - 02_tools/cargo_feasibility.md
+      - 04_strategies/packing_heuristics.md
+      - 01_rules/ctu_loading/safety_redlines.md
+      - 01_rules/ctu_loading/load_bearing.md
+      - 03_trajectories/success/T1_short_standard_box.md
+      - 03_trajectories/failure_recovery/T3_over_payload_box_scheme.md
+    tags: [standard_box, mass_split, over_payload, feasibility]
+    trajectories: [T1, T3]
+    numeric_kb: packing_knowledge_base.json
+    note: 数值箱库以 JSON 为准（代码已接）
+
+  planner:
+    name: 规划N0
+    team: B
+    allow_search: true
+    inject_mode: on_demand
+    categories: [rules, tools, strategies, trajectories]
+    path_prefixes:
+      - 01_rules/volume_weight/
+      - 01_rules/booking_constraints/
+      - 02_tools/booking_n0.md
+      - 02_tools/volume_calculator.md
+      - 02_tools/get_booking.md
+      - 02_tools/container_select.md
+      - 04_strategies/booking_workflow.md
+      - 03_trajectories/success/T5_container_budget_lock.md
+      - 03_trajectories/success/T6_dual_caliber_booking.md
+    tags: [dual_caliber, N0, container_budget, booking]
+    trajectories: [T5, T6]
+
+  loader:
+    name: 装载3D
+    team: B
+    allow_search: false
+    inject_mode: never
+    categories: [tools, rules]
+    path_prefixes:
+      - 02_tools/bin3d_pack.md
+      - 02_tools/packing_run.md
+      - 05_multi_agent/illegal_tools.md
+      - 01_rules/ctu_loading/safety_redlines.md
+    tags: [bin3d, xyz, illegal]
+    trajectories: [T1, T2]
+    note: 默认不检索；坐标只来自 bin3d/loader tools
+
+  evaluator:
+    name: 评估优化
+    team: B
+    allow_search: true
+    inject_mode: on_demand
+    categories: [rules, tools, competition, trajectories]
+    path_prefixes:
+      - 01_rules/volume_weight/dual_caliber.md
+      - 02_tools/evaluate_plan.md
+      - 02_tools/layout_quality.md
+      - 06_competition/scoring_criteria.md
+      - 03_trajectories/success/T6_dual_caliber_booking.md
+    tags: [dual_caliber, evaluate, scoring]
+    trajectories: [T6]
+
+  risk_compliance:
+    name: 风险合规
+    team: B
+    allow_search: true
+    inject_mode: on_demand
+    categories: [rules, tools, strategies, trajectories]
+    path_prefixes:
+      - 01_rules/ctu_loading/
+      - 01_rules/compliance/
+      - 02_tools/risk_rules.md
+      - 02_tools/cog_
+      - 02_tools/vgm_draft.md
+      - 04_strategies/risk_awareness.md
+      - 03_trajectories/failure_recovery/
+    tags: [CTU, CoG, VGM, mid50, redline]
+    trajectories: [T3, T7, T8]
+
+  visualizer:
+    name: 可视化
+    team: B
+    allow_search: true
+    inject_mode: never
+    categories: [tools, domain]
+    path_prefixes:
+      - 02_tools/visualize_layout.md
+      - 07_domain_knowledge/common_terms.md
+      - 01_rules/volume_weight/dual_caliber.md
+    tags: [visualize, outer, glossary]
+    trajectories: []
+    note: 只对齐图例/口径用语，不改布局
+
+  # —— 流水线附属 ——
+  present_team_a:
+    name: 成箱展示HITL
+    team: A
+    allow_search: true
+    inject_mode: on_demand
+    categories: [multi_agent, trajectories]
+    path_prefixes:
+      - 05_multi_agent/escalation_rules.md
+      - 05_multi_agent/summary_protocol.md
+      - 03_trajectories/success/T4_hitl_resume_ab.md
+      - 02_tools/hitl_confirm.md
+    tags: [HITL, summary]
+    trajectories: [T4]
+
+  replan_critic:
+    name: 有界批评
+    team: big
+    allow_search: true
+    inject_mode: always_brief
+    categories: [rules, multi_agent, trajectories, tools]
+    path_prefixes:
+      - 01_rules/ctu_loading/safety_redlines.md
+      - 05_multi_agent/escalation_rules.md
+      - 05_multi_agent/illegal_tools.md
+      - 05_multi_agent/roles_definition.md
+      - 02_tools/replan_critic.md
+      - 02_tools/cargo_feasibility.md
+      - 03_trajectories/failure_recovery/
+    tags: [replan, over_payload, escalation, box_scheme]
+    trajectories: [T3, T7, T8]
+    note: 只改 options/路由；检索只作理由 evidence
+
+  finalize:
+    name: 主控收口
+    team: big
+    allow_search: true
+    inject_mode: always_brief
+    categories: [rules, competition, tools, multi_agent]
+    path_prefixes:
+      - 01_rules/volume_weight/dual_caliber.md
+      - 01_rules/ctu_loading/safety_redlines.md
+      - 01_rules/compliance/vgm_and_ship.md
+      - 06_competition/scoring_criteria.md
+      - 02_tools/export_shipment.md
+      - 02_tools/tms_booking.md
+      - 02_tools/vgm_draft.md
+      - 05_multi_agent/summary_protocol.md
+    tags: [ship, dual_caliber, VGM, scoring]
+    trajectories: [T6]
+    note: 出运话术与双口径引用
+
+  intent:
+    name: 意图解析
+    team: big
+    allow_search: true
+    inject_mode: on_demand
+    categories: [tools, rules, competition]
+    path_prefixes:
+      - 02_tools/intent_interpret.md
+      - 01_rules/booking_constraints/container_budget.md
+      - 06_competition/constraints.md
+    tags: [IntentSpec, container_budget, NL]
+    trajectories: [T5]

@@ -33,6 +33,14 @@ def agent_loader(state: PackingState) -> Dict[str, Any]:
     packing_opts.setdefault("prefer_bottom_weight_kg", 2000)
     packing_opts.setdefault("multi_start", True)
     packing_opts.setdefault("cog_aware", True)
+    # CTU 60/50：默认强制中段质量再平衡（消 mid50 block）
+    packing_opts.setdefault("cog_rebalance", True)
+    packing_opts.setdefault("r4_repair", True)
+    packing_opts.setdefault("r4_target_mid50", 0.60)
+    packing_opts.setdefault("r0_r1", True)
+    packing_opts.setdefault("r2_slab", True)
+    packing_opts.setdefault("lns_worst", True)
+    packing_opts.setdefault("lateral_repair", True)
     packing_opts.setdefault("corner_support", True)
     packing_opts.setdefault("export_strict", False)  # 出运时 state 可设 True
     # 一箱一柜：5 箱 → 5 集装箱（不拼柜优化）
@@ -112,7 +120,7 @@ def agent_loader(state: PackingState) -> Dict[str, Any]:
     skjolber_ok = False
     if is_skjolber_configured():
         try:
-            skjolber_ok = bool(skjolber_health(timeout=1.5).get("ok"))
+            skjolber_ok = bool(skjolber_health(timeout=0.5).get("ok"))
         except Exception:
             skjolber_ok = False
     if skjolber_ok:

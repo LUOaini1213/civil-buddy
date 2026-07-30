@@ -179,6 +179,65 @@ def _try_slide_to_mid(
     return best
 
 
+def _rigid_shift_to_max_mid50(
+    items: List[Dict[str, Any]],
+    L: float,
+    W: float,
+    H: float,
+    wmap: Dict[str, float],
+) -> Tuple[List[Dict[str, Any]], float]:
+    """整坨货沿柜长刚性平移，最大化 mid50（门端堆满导致两端质量出带时很有效）。"""
+    if not items:
+        return items, 0.0
+    work0 = [deepcopy(it) for it in items]
+    mid0 = _mid50_of(work0, L, wmap)
+    xs = []
+    rights = []
+    for it in work0:
+        x, y, z, dx, dy, dz = _rect(it)
+        xs.append(x)
+        rights.append(x + dx)
+    min_x = min(xs)
+    max_r = max(rights)
+    span = max_r - min_x
+    if span <= 1 or span > L + 1e-3:
+        return work0, 0.0
+
+    best = work0
+    best_mid = mid0
+    max_left = max(0.0, L - span)
+    # 采样：居中优先 + 均匀网格
+    samples = [max_left * 0.5]
+    step = max(25.0, max_left / 48.0) if max_left > 0 else 25.0
+    t = 0.0
+    while t <= max_left + 1e-6:
+        samples.append(t)
+        t += step
+    samples = sorted(set(int(round(s)) for s in samples))
+
+    for left in samples:
+        delta = float(left) - min_x
+        if abs(delta) < 1e-6:
+            continue
+        trial: List[Dict[str, Any]] = []
+        ok = True
+        for it in work0:
+            x, y, z, dx, dy, dz = _rect(it)
+            cand = deepcopy(it)
+            cand["position"] = {"x": int(round(x + delta)), "y": int(y), "z": int(z)}
+            if not _fits_container(cand, L, W, H):
+                ok = False
+                break
+            trial.append(cand)
+        if not ok:
+            continue
+        m = _mid50_of(trial, L, wmap)
+        if m > best_mid + 1e-5:
+            best_mid = m
+            best = trial
+    return best, float(best_mid - mid0)
+
+
 def repair_container_r4(
     items: List[Dict[str, Any]],
     *,
@@ -187,16 +246,26 @@ def repair_container_r4(
     H: float,
     wmap: Dict[str, float],
     max_swaps: int = 40,
-    max_slides: int = 30,
+    max_slides: int = 40,
+    target_mid50: float = 0.60,
 ) -> Tuple[List[Dict[str, Any]], Dict[str, Any]]:
-    """单柜 R4 修理；返回新 items + 统计。"""
+    """单柜 R4 修理；返回新 items + 统计。目标 mid50 默认 0.60（CTU 60/50）。"""
     work = [deepcopy(it) for it in items]
     mid0 = _mid50_of(work, L, wmap)
-    if mid0 >= 0.60:
-        return work, {"swaps": 0, "slides": 0, "mid50_before": mid0, "mid50_after": mid0, "skipped": True}
+    tgt = float(target_mid50 or 0.60)
+    if mid0 >= tgt:
+        return work, {
+            "swaps": 0,
+            "slides": 0,
+            "rigid_shift": 0,
+            "mid50_before": mid0,
+            "mid50_after": mid0,
+            "skipped": True,
+        }
 
     swaps = 0
     slides = 0
+    rigid = 0
     meta_swaps: List[Dict[str, Any]] = []
 
     def refresh_lists():
@@ -213,10 +282,16 @@ def repair_container_r4(
         lights_in.sort(key=lambda t: t[0])  # 最轻的在中段
         return heavies_out, lights_in
 
+    # —— Phase 0: 整坨沿柜长平移，先抬 mid50 ——
+    shifted, d_mid = _rigid_shift_to_max_mid50(work, L, W, H, wmap)
+    if d_mid > 1e-5:
+        work = shifted
+        rigid = 1
+
     # —— Phase A: swaps ——
     for _ in range(max_swaps):
         mid_now = _mid50_of(work, L, wmap)
-        if mid_now >= 0.60:
+        if mid_now >= tgt:
             break
         heavies_out, lights_in = refresh_lists()
         if not heavies_out or not lights_in:
@@ -265,7 +340,7 @@ def repair_container_r4(
     # —— Phase B: slides ——
     for _ in range(max_slides):
         mid_now = _mid50_of(work, L, wmap)
-        if mid_now >= 0.60:
+        if mid_now >= tgt:
             break
         heavies_out, _ = refresh_lists()
         if not heavies_out:
@@ -291,12 +366,21 @@ def repair_container_r4(
         if not improved:
             break
 
+    # —— Phase C: 再刚性平移一次（swap/slide 后跨度可能变化）——
+    if _mid50_of(work, L, wmap) < tgt:
+        shifted2, d2 = _rigid_shift_to_max_mid50(work, L, W, H, wmap)
+        if d2 > 1e-5:
+            work = shifted2
+            rigid += 1
+
     mid1 = _mid50_of(work, L, wmap)
     return work, {
         "swaps": swaps,
         "slides": slides,
+        "rigid_shift": rigid,
         "mid50_before": round(mid0, 4),
         "mid50_after": round(mid1, 4),
+        "target_mid50": tgt,
         "swap_log": meta_swaps[:8],
         "skipped": False,
     }
@@ -306,11 +390,12 @@ def apply_r4_repair(
     plan: Dict[str, Any],
     boxes: Optional[Sequence[Dict[str, Any]]] = None,
     *,
-    target_mid50: float = 0.55,
+    target_mid50: float = 0.60,
     force: bool = False,
 ) -> Dict[str, Any]:
     """
-    对 mid50 < target 的柜做 R4；整体 mid50 不恶化才接受。
+    对 mid50 < target 的柜做 R4（刚性平移 + 重轻交换 + 滑入中段）。
+    默认目标 0.60（CTU 60/50）；整体 mid50 不恶化才接受。
     """
     from packing_assistant.tools.cog import compute_cog_bundle, container_inner_mm
 
@@ -322,12 +407,14 @@ def apply_r4_repair(
     dims = container_inner_mm(ctype)
     L, W, H = float(dims["L"]), float(dims["W"]), float(dims["H"])
     wmap = _wm(boxes)
+    tgt = float(target_mid50 or 0.60)
 
     mid_before = plan.get("worst_mid50")
     if mid_before is None:
         b0 = compute_cog_bundle(plan, boxes=boxes)
         mid_before = (b0 or {}).get("worst_mid50", 1.0)
-    if not force and mid_before is not None and float(mid_before) >= target_mid50:
+    # force 时仍跑（可再抬）；否则已达标跳过
+    if not force and mid_before is not None and float(mid_before) >= tgt:
         return plan
 
     nos = sorted({int(it.get("container_no") or 1) for it in layout})
@@ -337,11 +424,13 @@ def apply_r4_repair(
     for cno in nos:
         items = [it for it in layout if int(it.get("container_no") or 1) == cno]
         m_c = _mid50_of(items, L, wmap)
-        if m_c >= target_mid50 and not force:
+        if m_c >= tgt and not force:
             new_layout.extend(items)
             per_stats.append({"container_no": cno, "skipped": True, "mid50": m_c})
             continue
-        repaired, st = repair_container_r4(items, L=L, W=W, H=H, wmap=wmap)
+        repaired, st = repair_container_r4(
+            items, L=L, W=W, H=H, wmap=wmap, target_mid50=tgt
+        )
         # 保持 container_no
         for it in repaired:
             it["container_no"] = cno
@@ -352,8 +441,8 @@ def apply_r4_repair(
     out = dict(plan)
     out["layout"] = new_layout
     out["r4_repair"] = {
-        "method": "heavy_light_swap_and_mid_slide",
-        "target_mid50": target_mid50,
+        "method": "rigid_shift_swap_slide_mid",
+        "target_mid50": tgt,
         "per_container": per_stats,
     }
     try:
