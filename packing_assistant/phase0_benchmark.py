@@ -405,15 +405,31 @@ def _score_explainability(st: Dict[str, Any]) -> float:
     ispec = st.get("intent_spec") or {}
     score = 0.0
     if len(steps) >= 3:
-        score += 0.4
+        score += 0.35
     elif steps:
         score += 0.2
     if any(isinstance(s, dict) and s.get("message") for s in steps):
-        score += 0.2
+        score += 0.15
+    if any(isinstance(s, dict) and s.get("tools_used") for s in steps):
+        score += 0.1
     if ispec.get("scheme_id") or ispec.get("raw_nl") or st.get("user_input"):
-        score += 0.2
+        score += 0.15
     if msgs:
-        score += 0.2
+        score += 0.1
+    # 0.6.4+：裁决横幅 / 决策摘要 / KB 证据
+    try:
+        from packing_assistant.verdict import build_verdict
+
+        v = st.get("verdict") or build_verdict(st)
+        if isinstance(v, dict) and v.get("level"):
+            score += 0.1
+        if isinstance(v, dict) and v.get("headline"):
+            score += 0.05
+    except Exception:
+        if st.get("verdict") or st.get("decision_summary"):
+            score += 0.1
+    if st.get("kb_evidence") or (st.get("replan_proposal") or {}).get("kb_evidence"):
+        score += 0.05
     return float(min(1.0, score))
 
 

@@ -27,8 +27,18 @@ def agent_planner(state: PackingState) -> Dict[str, Any]:
         n0 = max(1, user_cap or 1)
         booking = {"n0": n0, "error": "booking_failed"}
     n0 = max(1, n0)
-    # 3D 搜索上限：有用户封顶则用 max(N0, cap)；否则 N0+8（至多 40），保证几何失败可自动加柜
-    if user_cap > 0:
+    opts = dict(state.get("packing_options") or {})
+    hard_lock = bool(
+        opts.get("lock_max_containers")
+        or opts.get("meeting_cap")
+        or opts.get("fixed_container_budget")
+        or opts.get("container_budget")
+    )
+    budget_opt = int(opts.get("container_budget") or 0)
+    # 3D 搜索上限：硬锁柜时严格 cap（可 can_fit=False）；软封顶仍 max(N0,cap)
+    if hard_lock and (user_cap > 0 or budget_opt > 0):
+        max_c = max(1, min(user_cap or budget_opt, budget_opt or user_cap, 40))
+    elif user_cap > 0:
         max_c = max(n0, min(user_cap, 40))
     else:
         max_c = min(40, n0 + 8)
@@ -118,7 +128,11 @@ def agent_planner(state: PackingState) -> Dict[str, Any]:
             if str(binding).upper() in ("VOLUME", "体积", "V")
             else f"按 {binding} 决定订柜下界"
         ),
-        f"3D 搜索窗口 N0={n0_val}..{max_c}：几何 can_fit 失败则自动 N+1 加柜（非写死目标柜数）",
+        (
+            f"3D 硬锁柜 max={max_c}：不突破预算，装不下则 can_fit=False"
+            if hard_lock
+            else f"3D 搜索窗口 N0={n0_val}..{max_c}：几何 can_fit 失败则自动 N+1 加柜（非写死目标柜数）"
+        ),
         f"装载策略：长度优先 + 重货下沉 + 并排占底"
         + (" + 二层堆码" if stackable_ids else "（无可上二层箱）"),
     ]
@@ -126,7 +140,11 @@ def agent_planner(state: PackingState) -> Dict[str, Any]:
         planning_reasons.append(
             f"体积可疑 WARN：{booking.get('warning') or 'N_volume≥2×N_weight'}，订舱仍以 N0 为准"
         )
-    if user_cap > 0:
+    if hard_lock:
+        planning_reasons.append(
+            f"锁柜预算 max_containers={max_c}（lock/budget，禁止擅自加柜）"
+        )
+    elif user_cap > 0:
         planning_reasons.append(f"用户 3D 封顶 max_containers={user_cap}（非业务目标柜数）")
     planning_reasons = planning_reasons[:5]
 

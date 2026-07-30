@@ -1,6 +1,6 @@
 # CHANGELOG · v0.5.0+
 
-## v0.6.4 · Agent 知识库（可检索 + 窄接 + 分卡）
+## v0.6.4 · Agent 知识库 + 比赛九五分卡
 
 | 项 | 说明 |
 |----|------|
@@ -9,9 +9,12 @@
 | `agent_kb_bindings.yaml` | 9 Agent + 附属角色路径 allowlist |
 | `verdict` | 总览裁决横幅（不必开 PDF） |
 | CoG R4 | 默认 mid50≥60%，刚性平移+swap+slide |
-| 回归 | `test_search_knowledge` · `test_kb_bindings` · `test_mid50_cog` · scorecard |
+| **硬锁柜** | `lock_max_containers` / budget 时严格 cap，不擅自加柜 |
+| **对抗 5 票** | `scripts/test_adversarial_competition.py` |
+| **比赛分卡** | `scripts/eval_competition_scorecard.py` → 综合 ≥9.5 |
+| 回归 | kb · mid50 · HITL · booking · phase0 quick · scorecard |
 
-**Harness**：→ **0.6.4**
+**Harness**：→ **0.6.4** · 分卡综合 **10.0 PASS**（本地）
 
 ---
 

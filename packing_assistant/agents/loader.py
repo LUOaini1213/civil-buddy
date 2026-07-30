@@ -96,16 +96,29 @@ def agent_loader(state: PackingState) -> Dict[str, Any]:
     )
     n0 = max(1, n0)
     # 搜索上限：plan 已带 headroom；state.max_containers 仅作用户封顶（非目标柜数）
-    # 禁止把 n_max 压成 n0，否则几何失败无法自动加柜
+    # 硬锁柜（lock/budget/meeting_cap）：严格 cap，可 can_fit=False，禁止为 N0 擅自加柜
     plan_cap = int(plan.get("max_containers") or 0)
     user_cap = int(state.get("max_containers") or 0)
+    hard_lock = bool(
+        packing_opts.get("lock_max_containers")
+        or packing_opts.get("meeting_cap")
+        or packing_opts.get("fixed_container_budget")
+        or packing_opts.get("container_budget")
+    )
+    budget_opt = int(packing_opts.get("container_budget") or 0)
     n_max = plan_cap if plan_cap > 0 else min(40, n0 + 8)
-    if user_cap > 0:
-        # 用户封顶不得低于 N0，也不得把搜索窗口缩成单点（至少 N0..N0 若 cap==N0 则只试 N0）
+    if hard_lock and (user_cap > 0 or budget_opt > 0 or plan_cap > 0):
+        cap = user_cap or budget_opt or plan_cap
+        n_max = max(1, min(int(cap), 40))
+        n0 = min(n0, n_max)  # 搜索从 min(N0,cap) 起，不突破 cap
+    elif user_cap > 0:
+        # 软封顶：不得低于 N0 时仍至少试到 N0；cap>=N0 则 cap 为上界
         n_max = max(n0, min(user_cap, 40)) if user_cap >= n0 else max(n0, n_max)
-    n_max = max(n0, min(n_max, 40))
+        n_max = max(n0, min(n_max, 40))
+    else:
+        n_max = max(n0, min(n_max, 40))
     # 若 cap 意外等于 n0 且无显式「只要一柜」意图，仍留 headroom（replan 前的安全垫）
-    if n_max == n0 and user_cap <= 0:
+    if n_max == n0 and user_cap <= 0 and not hard_lock:
         n_max = min(40, n0 + 8)
 
     if priority:
