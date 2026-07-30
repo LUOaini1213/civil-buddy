@@ -405,6 +405,18 @@ def write_case(
     d = OUT_SIM / case_id
     d.mkdir(parents=True, exist_ok=True)
     mats = _force_near_target(mats, float(target_t) * 1000.0)
+    # 夹具守卫：禁止「单行≈整票吨位」脏数据（曾导致 t80_long_mix_s297883 1×80t）
+    payload_limit = 26000.0  # 约 40GP/40HQ 货载量级
+    max_line = max((float(m.get("total_weight_kg") or 0) for m in mats), default=0.0)
+    if max_line > payload_limit * 1.05:
+        raise ValueError(
+            f"{case_id}: max line weight {max_line:.0f}kg > payload~{payload_limit:.0f}kg "
+            f"(n_lines={len(mats)}); refuse to write corrupt fixture"
+        )
+    if len(mats) < 5 and float(target_t) >= 20:
+        raise ValueError(
+            f"{case_id}: too few lines ({len(mats)}) for target {target_t}t"
+        )
     net = _net(mats)
     payload = {
         "case_id": case_id,

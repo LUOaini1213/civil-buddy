@@ -30,12 +30,14 @@ NL → IntentSpec → 大Team.orchestrator
 
 入口：`run_agent_pipeline` / `iter_agent_pipeline`
 
-| agent_mode | 路径 |
-|------------|------|
-| `steps`（默认） | `teams.big_team` 固定专业节点 |
-| `llm_toolcall` | `agent_loop` LLM 多轮 tool-call（无 Key → policy fallback） |
-| `auto` | 有 LLM Key 则 tool-call，否则 steps |
-| `graph` | LangGraph 全图（gateway mode=graph） |
+| agent_mode | 路径 | 对外叙事 |
+|------------|------|----------|
+| **`steps`（默认 · 主路径）** | `teams.big_team` 固定专业节点 | **生产 / 答辩 / Phase0 基线只讲这条** |
+| `llm_toolcall` | `agent_loop` LLM 多轮 tool-call（无 Key → policy fallback） | 影子评测 / 加分 demo |
+| `auto` | 有 LLM Key 则 tool-call，否则 steps | 可选 |
+| `graph` | LangGraph 全图（gateway mode=graph） | HITL 分段，非第二产品 |
+
+Agency 作战图：[competition-phase-plan.md](./competition-phase-plan.md)
 
 分段 resume（旧 A/B 子图）:
 

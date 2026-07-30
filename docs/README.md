@@ -5,6 +5,8 @@
 | 文档 | 说明 |
 |------|------|
 | [ARCHITECTURE.md](./ARCHITECTURE.md) | **当前架构**：大 Team ⊃ A 成箱 + B 拼柜 · IntentSpec · API |
+| [competition-phase-plan.md](./competition-phase-plan.md) | **比赛/Agency Phase 0–4** 对齐与验收 |
+| [competition-demo-script.md](./competition-demo-script.md) | **3 分钟评委演示脚本** |
 | [CHANGELOG-v0.5.md](./CHANGELOG-v0.5.md) | v0.5–v0.6 变更（含 0.6.2） |
 | [CHANGELOG-v0.4.md](./CHANGELOG-v0.4.md) | v0.4 历史 |
 | [skills/README.md](./skills/README.md) | Skills 契约表 |

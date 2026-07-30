@@ -1,0 +1,24 @@
+{
+  "version": "phase0-v1",
+  "hypothesis": "未公布赛方细则时的可辩护默认权重；有官方表则只改 weights",
+  "win_threshold": {
+    "total_score": 0.75,
+    "task_success": 0.80
+  },
+  "weights": {
+    "task_success": 0.30,
+    "long_horizon": 0.15,
+    "tool_quality": 0.20,
+    "multi_agent": 0.15,
+    "efficiency": 0.10,
+    "explainability": 0.10
+  },
+  "notes": [
+    "task_success: can_fit + 锁柜/柜数约束 + 无硬崩溃",
+    "long_horizon: 完整走通 bootstrap→装载→收口",
+    "tool_quality: 工具轨迹 + illegal=0 + 软体积自洽",
+    "multi_agent: A 与 B 节点均出现（大Team⊃A/B）",
+    "efficiency: 步数与耗时相对上限",
+    "explainability: agent_steps / intent_spec / messages"
+  ]
+}

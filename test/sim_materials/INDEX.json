@@ -330,14 +330,16 @@
     },
     "t80_long_mix_s297883": {
       "story": "超长+短件+重块 ~80t seed=297883",
-      "n_lines": 1,
-      "net_kg": 80000.0,
-      "net_t": 80.0,
+      "n_lines": 349,
+      "net_kg": 79300.1,
+      "net_t": 79.3,
       "seed": 297883,
       "json": "test/sim_materials/t80_long_mix_s297883/materials.json",
       "xlsx": "test/sim_materials/t80_long_mix_s297883/materials.xlsx",
       "expect": {
-        "net_t_approx": 80.0
+        "containers_by_weight_min": 4,
+        "net_t_approx": 80.0,
+        "note": "40HQ payload≈28.6t 时约需 3+ 柜（重量界）"
       }
     },
     "t80_random_mixed_s20260729": {

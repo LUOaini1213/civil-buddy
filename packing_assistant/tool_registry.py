@@ -107,6 +107,14 @@ TOOL_CATALOG: List[ToolSpec] = [
         "成箱 / 直通架 / 标准箱",
     ),
     ToolSpec(
+        "cargo.feasibility",
+        "货载可行性",
+        "A",
+        "packing_assistant.tools.cargo_feasibility",
+        "单件/单箱是否超 payload；建议拆箱",
+        "超限禁止只加柜空转",
+    ),
+    ToolSpec(
         "design.facts",
         "详设事实",
         "A",

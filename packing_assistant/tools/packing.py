@@ -865,6 +865,28 @@ def _explode_items_by_net_cap(
         total = float(it.get("总重_kg") or unit * qty)
         if unit <= 0 and qty > 0:
             unit = total / qty
+        # 单件净重已超 cap（qty=1 的怪兽件）：按质量切成多虚拟件，避免无法按件数拆
+        if unit > cap + 1e-6:
+            import math
+
+            n_parts = max(2, int(math.ceil(unit / cap - 1e-9)))
+            piece = unit / n_parts
+            base_name = str(it.get("名称") or "材料")
+            base_id = str(it.get("加工件编号") or it.get("id") or "M")
+            for part in range(1, n_parts + 1):
+                chunk = dict(it)
+                chunk["数量"] = 1
+                chunk["单重_kg"] = round(piece, 3)
+                chunk["总重_kg"] = round(piece, 3)
+                chunk["名称"] = f"{base_name}(重拆{part}/{n_parts})"
+                chunk["加工件编号"] = f"{base_id}-W{part}"
+                chunk["id"] = chunk["加工件编号"]
+                chunk["备注"] = (
+                    str(it.get("备注") or "")
+                    + f";mass_split unit={unit:.0f}>{cap:.0f}kg n={n_parts}"
+                ).strip(";")
+                out.append(chunk)
+            continue
         max_qty = _max_qty_for_crate(it, cap)
         if max_qty >= qty and total <= cap + 1e-6:
             row = dict(it)

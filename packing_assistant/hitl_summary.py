@@ -44,6 +44,32 @@ def build_hitl_summary(state: Dict[str, Any]) -> Dict[str, Any]:
     n0 = plan.get("n0") or booking.get("n0")
     binding = booking.get("binding_constraint") or plan.get("binding_constraint")
 
+    # 标准箱型分布（评委可见）
+    type_counts: Dict[str, int] = {}
+    for b in boxes:
+        t = str(b.get("box_type") or b.get("base_box_type") or "未知")
+        type_counts[t] = type_counts.get(t, 0) + 1
+    audit = state.get("standard_box_audit") or {}
+    if audit.get("by_type"):
+        type_counts = dict(audit.get("by_type") or type_counts)
+    type_hint = " · ".join(
+        f"{k}×{v}" for k, v in sorted(type_counts.items(), key=lambda x: -x[1])[:6]
+    ) or "—"
+    hit_rate = audit.get("hit_rate")
+    if hit_rate is None and boxes:
+        try:
+            from packing_assistant.knowledge import validate_boxes_against_kb
+
+            audit = validate_boxes_against_kb(boxes)
+            hit_rate = audit.get("hit_rate")
+            type_counts = dict(audit.get("by_type") or type_counts)
+            type_hint = " · ".join(
+                f"{k}×{v}"
+                for k, v in sorted(type_counts.items(), key=lambda x: -x[1])[:6]
+            )
+        except Exception:
+            hit_rate = None
+
     cards = [
         {
             "id": "boxes",
@@ -52,10 +78,23 @@ def build_hitl_summary(state: Dict[str, Any]) -> Dict[str, Any]:
             "hint": f"材料 {len(mats)} 条 · 毛重合计 {total_gross:.0f} kg",
         },
         {
+            "id": "standard_frames",
+            "title": "标准箱架",
+            "value": (
+                f"{float(hit_rate):.0%}" if hit_rate is not None else str(len(type_counts))
+            ),
+            "hint": f"分布 {type_hint}",
+            "level": (
+                "ok"
+                if hit_rate is None or float(hit_rate) >= 0.90
+                else "warn"
+            ),
+        },
+        {
             "id": "container",
             "title": "推荐柜型",
             "value": str(ctype),
-            "hint": "确认后进入团队 B 拼柜",
+            "hint": "确认后进入小 Team B 拼柜",
         },
         {
             "id": "n0",
@@ -94,6 +133,8 @@ def build_hitl_summary(state: Dict[str, Any]) -> Dict[str, Any]:
         "n_boxes": len(boxes),
         "n_materials": len(mats),
         "total_gross_kg": round(total_gross, 1),
+        "box_type_distribution": type_counts,
+        "standard_box_hit_rate": hit_rate,
         "n0": n0,
         "binding": binding,
         "structure_await_design": await_design,

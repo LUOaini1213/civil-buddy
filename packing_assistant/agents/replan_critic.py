@@ -32,6 +32,7 @@ def agent_replan_critic(state: Dict[str, Any]) -> Dict[str, Any]:
     reasons: List[str] = []
     delta: Dict[str, Any] = {}
     route = "planner"
+    failure_class = "generic"
     max_c = int(
         state.get("max_containers")
         or plan.get("containers_used")
@@ -49,6 +50,54 @@ def agent_replan_critic(state: Dict[str, Any]) -> Dict[str, Any]:
     reject_to = str(risk.get("reject_to") or "")
     struct_fail = list(evaluation.get("structure_fail_box_ids") or [])
     struct_txt = any("结构" in str(b) for b in blockers) or bool(struct_fail)
+
+    # —— 超货载单箱/单件：禁止只加柜空转 → 打回成箱拆分 ——
+    try:
+        from packing_assistant.tools.cargo_feasibility import check_cargo_feasibility
+
+        feas = check_cargo_feasibility(
+            boxes=state.get("boxes") or [],
+            materials=state.get("materials") or [],
+            container_type=str(state.get("container_type") or "40HQ"),
+        )
+    except Exception:
+        feas = {"ok": True}
+    state_feas = state.get("cargo_feasibility") or {}
+    if isinstance(state_feas, dict) and state_feas.get("ok") is False:
+        feas = state_feas
+
+    over_payload = (not feas.get("ok", True)) or bool(
+        feas.get("over_payload_boxes") or feas.get("over_payload_materials")
+    )
+    if over_payload or (
+        not plan.get("can_fit")
+        and _any_box_over_payload(state.get("boxes") or [], state.get("container_type"))
+    ):
+        failure_class = str(feas.get("failure_class") or "over_payload_box")
+        route = "box_scheme"
+        rec = float(feas.get("max_box_net_kg_recommend") or 2500)
+        # 压低单箱净重上限（禁止再抬到 5000）
+        cur_cap = float(opts.get("max_box_net_kg") or 3200)
+        delta["max_box_net_kg"] = min(cur_cap, rec, 2800.0)
+        delta["dense_mode"] = True
+        delta["standard_boxes"] = bool(opts.get("standard_boxes", True))
+        delta["crate_passthrough"] = False  # 避免当量直通吞成巨箱
+        delta["prefer_stack"] = True
+        delta["multi_start"] = True
+        reasons.append(
+            "单箱/单件超货载 → box_scheme 拆箱 "
+            f"max_box_net_kg={delta['max_box_net_kg']:.0f} "
+            f"({';'.join((feas.get('blockers') or [])[:2])})"
+        )
+        # 已多轮仍超载 → 停空转
+        if ship_r >= 1 and round_ >= 1:
+            return _stop(
+                max_c,
+                reasons
+                + [
+                    "超货载拆箱后仍未恢复，停止加柜空转；请改物料或人工拆件"
+                ],
+            )
 
     cog = (pp.get("cog") if isinstance(pp, dict) else None) or plan.get("cog") or risk.get("cog") or {}
     if isinstance(cog, dict) and cog.get("primary"):
@@ -107,8 +156,9 @@ def agent_replan_critic(state: Dict[str, Any]) -> Dict[str, Any]:
     )
     budget_cap = int(opts.get("container_budget") or state.get("max_containers") or 0)
 
-    if not plan.get("can_fit") or plan.get("unpacked_box_ids"):
-        route = "planner" if route != "box_scheme" else route
+    if (not plan.get("can_fit") or plan.get("unpacked_box_ids")) and route != "box_scheme":
+        failure_class = failure_class if failure_class != "generic" else "unpacked"
+        route = "planner"
         delta["prefer_stack"] = True
         delta["multi_start"] = True
         delta["cog_aware"] = True
@@ -239,6 +289,8 @@ def agent_replan_critic(state: Dict[str, Any]) -> Dict[str, Any]:
     proposal = {
         "stop": False,
         "route": route,
+        "route_reason": reasons[0] if reasons else "replan",
+        "failure_class": failure_class,
         "reasons": reasons,
         "packing_options_delta": delta,
         "packing_options_next": new_opts,
@@ -247,27 +299,28 @@ def agent_replan_critic(state: Dict[str, Any]) -> Dict[str, Any]:
         "ship_replan_round": new_ship,
         "auto_closed_loop": True,
     }
-    msg = f"route={route}；" + "；".join(reasons)
+    msg = f"route={route} class={failure_class}；" + "；".join(reasons)
     return {
         "packing_options": new_opts,
         "max_containers": max_c,
         "replan_round": new_round,
         "ship_replan_round": new_ship,
         "replan_proposal": proposal,
+        "cargo_feasibility": feas if isinstance(feas, dict) else {},
         "phase": "team_b_running",
         "status": "running",
         "messages": [
             {
                 "role": "assistant",
-                "content": f"【replan_critic·单Team闭环】{msg}",
+                "content": f"【replan_critic·大Team闭环】{msg}",
                 "agent": "replan_critic",
             }
         ],
         "agent_meta": {
             "node": "replan_critic",
             "capability": ["规划", "使用工具", "追求目标"],
-            "tools_used": ["replan_critic.closed_loop"],
-            "team_mode": "single_closed_loop",
+            "tools_used": ["replan_critic.closed_loop", "cargo_feasibility.check"],
+            "team_mode": "big_team_a_b",
             "artifacts": proposal,
         },
     }
@@ -287,11 +340,28 @@ def apply_replan_if_needed(state: Dict[str, Any]) -> Dict[str, Any]:
     return agent_replan_critic(state)
 
 
+def _any_box_over_payload(
+    boxes: List[Dict[str, Any]], container_type: Any
+) -> bool:
+    try:
+        from packing_assistant.tools.cargo_feasibility import check_cargo_feasibility
+
+        r = check_cargo_feasibility(
+            boxes=boxes or [],
+            container_type=str(container_type or "40HQ"),
+        )
+        return not bool(r.get("ok", True))
+    except Exception:
+        return False
+
+
 def _stop(max_c: int, reasons: List[str]) -> Dict[str, Any]:
     return {
         "replan_proposal": {
             "stop": True,
             "route": "stop",
+            "route_reason": reasons[0] if reasons else "stop",
+            "failure_class": "stop",
             "reasons": reasons,
             "packing_options_delta": {},
             "max_containers": max_c,
