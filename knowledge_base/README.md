@@ -6,12 +6,12 @@ type: protocol
 tags: [README, division, anti-patterns]
 source: internal
 updated: "2026-07-30"
-harness: ">=0.6.3"
+harness: ">=0.6.4"
 status: active
 ---
 # Agent 知识库（检索 / 规范 / 范例）
 
-面向 **packing-agent**（Harness ≥0.6.3）比赛与运行时的 **可检索文档层**。  
+面向 **packing-agent**（Harness **0.6.4** · 13 agents）比赛与运行时的 **可检索文档层**。  
 与代码内 `knowledge/packing_knowledge_base.json`（箱型数值库）互补：**本目录是规则与说明；JSON 是可执行箱规格。**
 
 ## 目录

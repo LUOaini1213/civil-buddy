@@ -1,6 +1,6 @@
 # 架构：大 Team ⊃ 小 Team A + 小 Team B（NL 通用 Agent）
 
-> 版本：harness ≥ 0.6.0  
+> 版本：harness **0.6.4** · 名册 **13** agents（大 Team ⊃ A/B）
 > 龙申 1 柜 / 工厂 2 柜等 **只是例子**，不是固定业务线。
 
 ## 组织

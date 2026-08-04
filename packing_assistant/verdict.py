@@ -105,6 +105,35 @@ def build_verdict(state: Dict[str, Any]) -> Dict[str, Any]:
         actions.append("整改阻断项后再 finalize / 导出 PDF")
         raise_to("block")
 
+    # 缺尺寸 / 材料不完整（评委可见拒装）
+    if state.get("materials_incomplete") or any(
+        "missing_dims" in str(e).lower() or "缺尺寸" in str(e)
+        for e in (state.get("errors") or [])
+    ):
+        if not any("缺尺寸" in x for x in issues):
+            issues.append("材料缺尺寸（L/W/H=0）— 已阻断成箱，禁止编造外廓出运")
+        actions.append("补全物料长宽高后重跑 Team A")
+        raise_to("block")
+    for e in list(state.get("errors") or [])[:4]:
+        es = str(e)
+        if es and not any(es[:40] in x for x in issues):
+            issues.append(f"错误：{es[:160]}")
+            raise_to("block" if ship_ok is False else "warn")
+
+    # 双口径快照（演示话术）
+    book_u = plan.get("booking_volume_utilization")
+    outer_u = plan.get("outer_space_utilization") or plan.get("space_utilization")
+    try:
+        if book_u is not None and outer_u is not None:
+            bu, ou = float(book_u), float(outer_u)
+            if ou > 0.35 and bu + 1e-6 < ou * 0.55:
+                # 空心架常见：订舱≪外廓 — 标为信息，不升 block
+                issues.append(
+                    f"双口径：订舱利用率 {bu:.0%} ≪ 外廓摆柜 {ou:.0%}（防虚高）"
+                )
+    except (TypeError, ValueError):
+        pass
+
     # 软项：空隙等
     lq = plan.get("layout_quality") or risk.get("layout_quality") or {}
     gap = lq.get("max_horizontal_gap_mm")
@@ -145,6 +174,13 @@ def build_verdict(state: Dict[str, Any]) -> Dict[str, Any]:
         headline_parts.append(f"CoG={balance}")
     if risk_dec:
         headline_parts.append(f"risk={risk_dec}")
+    try:
+        if book_u is not None:
+            headline_parts.append(f"订舱={float(book_u):.0%}")
+        if outer_u is not None:
+            headline_parts.append(f"外廓={float(outer_u):.0%}")
+    except (TypeError, ValueError, NameError):
+        pass
     headline = " · ".join(headline_parts) if headline_parts else summary[:80]
 
     return {
@@ -164,7 +200,17 @@ def build_verdict(state: Dict[str, Any]) -> Dict[str, Any]:
         "lateral_eccentricity": lat,
         "longitudinal_position": long_pos,
         "height_ratio": height_r,
-        "show_banner": bool(plan or risk or state.get("phase") in ("done", "need_revision", "await_user_confirm")),
+        "booking_volume_utilization": book_u,
+        "outer_space_utilization": outer_u,
+        "materials_incomplete": bool(state.get("materials_incomplete")),
+        "errors": [str(e) for e in (state.get("errors") or [])[:8]],
+        "show_banner": bool(
+            plan
+            or risk
+            or state.get("errors")
+            or state.get("materials_incomplete")
+            or state.get("phase") in ("done", "need_revision", "await_user_confirm")
+        ),
     }
 
 

@@ -56,11 +56,17 @@ def main() -> int:
         fails.append(f"high_util balance=block")
     if not cf:
         fails.append("high_util can_fit=False")
+    # 缓冲提示：贴近 60% 时告警（不单独 fail，避免 brittle）
+    if cf and mid + 1e-9 < 0.65:
+        print(f"WARN high_util mid50={mid:.2%} thin buffer above 60%")
 
     mid2, bal2, cf2 = run_case("steel", materials_steel_light())
-    # steel 可能低装载，mid50 有时因少箱仍可；至少不应 block 若 can_fit
-    if cf2 and bal2 == "block" and mid2 < 0.40:
-        fails.append(f"steel still hard-block mid50={mid2}")
+    # can_fit 时要求 CTU mid50 可见达标（≥60%），禁止「能装但重心垃圾」放行
+    if cf2:
+        if bal2 == "block":
+            fails.append(f"steel balance=block mid50={mid2}")
+        if mid2 + 1e-9 < 0.60:
+            fails.append(f"steel mid50 {mid2} < 0.60 while can_fit")
 
     if fails:
         print("FAIL", fails)

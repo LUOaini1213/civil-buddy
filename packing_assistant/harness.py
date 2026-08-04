@@ -743,7 +743,184 @@ def public_response(state: Dict[str, Any]) -> Dict[str, Any]:
         "hitl_summary": state.get("hitl_summary")
         or _maybe_hitl_summary(state),
         "harness_version": (state.get("harness_meta") or {}).get("harness_version")
-        or "",
+        or _harness_version_safe(),
+        "agent_count": _agent_count_safe(),
+        "errors": list(state.get("errors") or [])[:20],
+        "warnings": list(state.get("warnings") or state.get("validation_warnings") or [])[
+            :20
+        ],
+        "materials_incomplete": bool(state.get("materials_incomplete")),
+        "error_banner": _error_banner(state),
+        "multi_container": _multi_container_summary(state, plan),
+        "strategy_decision": _strategy_decision_summary(state, plan),
+    }
+
+
+def _multi_container_summary(
+    state: Dict[str, Any], plan: Dict[str, Any]
+) -> Dict[str, Any]:
+    """总览多柜解释：N0* → used、末柜、并回；大票分票提示。"""
+    p = plan or state.get("container_plan") or {}
+    book = p.get("booking") or state.get("booking") or {}
+    n0 = p.get("n0") or book.get("n0")
+    used = p.get("containers_used")
+    last = p.get("last_container_stats") or {}
+    comps = p.get("n0_components") or book.get("n0_components") or {}
+    wt_util = p.get("weight_utilization")
+    try:
+        wt_util_f = float(wt_util) if wt_util is not None else None
+    except (TypeError, ValueError):
+        wt_util_f = None
+    used_i = int(used or 0)
+    n0_i = int(n0 or 0)
+    n_wt = int(comps.get("weight") or 0)
+    # 大票：实装≥8 柜或重量下界≥6 → 业务分票提示
+    big_ticket = used_i >= 8 or n_wt >= 6 or n0_i >= 8
+    tips: list = []
+    if big_ticket:
+        tips.append(
+            f"大票：重量约 {n_wt or '—'} 柜 · 几何/N0* 约 {n0_i or '—'} 柜 · 实装 {used_i or '—'} 柜"
+            "；运营上建议分批发运/分票，勿单票硬塞。"
+        )
+    if wt_util_f is not None and used_i >= 4 and wt_util_f < 0.70:
+        tips.append(
+            f"重量利用率 {wt_util_f:.0%} 偏低（目标≥70%）；"
+            "多因几何占位/长料，非单纯可再压柜。"
+        )
+    if p.get("residual_last_container") and used_i >= 3:
+        tips.append("末柜偏空：已尝试并回；若仍残，可人工调票或接受 +1 柜。")
+    slot_raw = comps.get("geom_slot_raw")
+    slot = comps.get("geom_slot")
+    if (
+        slot_raw is not None
+        and slot is not None
+        and int(slot_raw or 0) > int(slot or 0) + 2
+    ):
+        tips.append(
+            f"槽位 raw={slot_raw} 已软封顶为 {slot}，避免 N0* 虚高。"
+        )
+    sd = p.get("strategy_decision") or state.get("strategy_decision") or {}
+    if sd.get("chosen"):
+        tips.append(
+            f"Agent 策略={sd.get('chosen')}：{sd.get('reason') or '多候选择优'}"
+        )
+    if p.get("reference_light_used"):
+        tips.append(
+            f"少柜下界参考 light={p.get('reference_light_used')} 柜（仅参考，非出运）"
+        )
+    mid50 = p.get("worst_mid50")
+    try:
+        mid50_f = float(mid50) if mid50 is not None else None
+    except (TypeError, ValueError):
+        mid50_f = None
+    return {
+        "n0": n0,
+        "n0_star": p.get("n0_star") or n0,
+        "n0_search": p.get("n0_search"),
+        "containers_used": used,
+        "n0_gap": p.get("n0_gap"),
+        "n0_components": comps,
+        "n0_note": p.get("n0_note") or book.get("n0_note"),
+        "explain": p.get("multi_container_explain") or "",
+        "last_container": last,
+        "residual_last_container": bool(p.get("residual_last_container")),
+        "merged_ok": bool(p.get("merged_ok")),
+        "merge_rounds": p.get("merge_rounds") or 0,
+        "n_tried": p.get("n_tried") or [],
+        "weight_utilization": wt_util_f,
+        "worst_mid50": mid50_f,
+        "density_mode": p.get("density_mode"),
+        "reference_light_used": p.get("reference_light_used"),
+        "strategy_decision": sd if sd else None,
+        "strategy_candidates": p.get("strategy_candidates")
+        or (sd.get("candidates") if isinstance(sd, dict) else None),
+        "big_ticket": big_ticket,
+        "tips": tips,
+        "show": bool(
+            used is not None and (int(used or 0) >= 2 or int(n0 or 0) >= 2)
+        ),
+    }
+
+
+def _strategy_decision_summary(
+    state: Dict[str, Any], plan: Dict[str, Any]
+) -> Dict[str, Any]:
+    """公共：策略决策卡（Agent 择优可审计）。"""
+    p = plan or state.get("container_plan") or {}
+    sd = p.get("strategy_decision") or state.get("strategy_decision") or {}
+    if not sd and not p.get("strategy_candidates"):
+        return {"show": False}
+    cands = sd.get("candidates") or p.get("strategy_candidates") or []
+    return {
+        "show": bool(sd.get("chosen") or cands),
+        "chosen": sd.get("chosen") or p.get("density_mode"),
+        "reason": sd.get("reason") or p.get("strategy_reason") or "",
+        "candidates": cands,
+        "chosen_row": sd.get("chosen_row"),
+        "need_cog_warn": bool(sd.get("need_cog_warn")),
+        "ship_ok_hint": sd.get("ship_ok_hint"),
+        "reference_light_used": p.get("reference_light_used"),
+        "density_mode": p.get("density_mode"),
+    }
+
+
+def _harness_version_safe() -> str:
+    try:
+        from packing_assistant.config import HARNESS_VERSION
+
+        return str(HARNESS_VERSION)
+    except Exception:
+        return ""
+
+
+def _agent_count_safe() -> int:
+    try:
+        from packing_assistant.teams.roster import AGENT_ROSTER
+
+        return len(AGENT_ROSTER)
+    except Exception:
+        return 13
+
+
+def _error_banner(state: Dict[str, Any]) -> Dict[str, Any]:
+    """前端大红报错条：缺尺寸/errors/结构阻断等一眼可见。"""
+    errs = [str(e) for e in (state.get("errors") or []) if e]
+    warns = [
+        str(w)
+        for w in (state.get("warnings") or state.get("validation_warnings") or [])
+        if w
+    ]
+    incomplete = bool(state.get("materials_incomplete"))
+    ta = state.get("team_a_summary") or {}
+    blocked_mode = str(ta.get("packing_mode") or "") == "blocked_missing_dims"
+    level = "ok"
+    title = ""
+    lines: List[str] = []
+    if incomplete or blocked_mode or any("missing_dims" in e.lower() or "缺尺寸" in e for e in errs):
+        level = "block"
+        title = "⛔ 缺尺寸 / 材料不完整"
+        lines.append("存在 L/W/H 为 0 的物料，已阻断成箱与出运（不会静默换成演示票）")
+        lines.append("请补全尺寸后重跑团队 A，或剔除无效行")
+    elif errs:
+        level = "block" if state.get("ship_ok") is False else "warn"
+        title = "⛔ 运行报错" if level == "block" else "⚠️ 运行警告"
+        lines.extend(errs[:6])
+    elif warns:
+        level = "warn"
+        title = "⚠️ 警告"
+        lines.extend(warns[:6])
+    if state.get("ship_ok") is False and level == "ok":
+        level = "block"
+        title = "⛔ 不可出运"
+        lines.append("ship_ok=False：见裁决横幅与风险详情")
+    return {
+        "level": level,
+        "title": title,
+        "lines": lines,
+        "show": level in ("block", "warn") and bool(lines or title),
+        "n_errors": len(errs),
+        "n_warnings": len(warns),
+        "materials_incomplete": incomplete,
     }
 
 

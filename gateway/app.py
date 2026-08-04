@@ -153,6 +153,8 @@ class DemoRequest(BaseModel):
     # high_util | steel_light | default | "" 自动
     preset: str = "high_util"
     materials: Optional[List[Dict[str, Any]]] = None
+    # 比赛演示默认 False：露出 HITL（await_user_confirm）；True=自动拼柜
+    enable_auto_confirm: bool = False
 
 
 @app.get("/")
@@ -174,11 +176,44 @@ def index():
 def api_health():
     # 短超时 + 缓存，避免每次刷新 health 卡住整个单线程网关
     sk = health_check(timeout=0.25, use_cache=True)
+    agent_count = 13
+    try:
+        from packing_assistant.teams.roster import AGENT_ROSTER
+
+        agent_count = len(AGENT_ROSTER)
+    except Exception:
+        pass
+    llm_key = bool(
+        (os.getenv("DEEPSEEK_API_KEY") or os.getenv("OPENAI_API_KEY") or "").strip()
+    )
+    sk_ok = bool(isinstance(sk, dict) and sk.get("ok"))
+    preflight = {
+        "gateway": True,
+        "skjolber": sk_ok,
+        "skjolber_optional": True,  # 可本地回退
+        "llm_key": llm_key,
+        "llm_optional": True,  # steps 主路径不强制
+        "harness_version": HARNESS_VERSION,
+        "agent_count": agent_count,
+        "demo_auto_confirm_default": False,
+        "ok": True,  # gateway UP 即预检通过；skjolber/llm 仅提示
+        "hints": [],
+    }
+    if not sk_ok:
+        preflight["hints"].append("skjolber 未连接 → 3D 用本地 bin3d 回退（可演示）")
+    if not llm_key:
+        preflight["hints"].append("无 LLM Key → llm_toolcall 走 policy_fallback（主路径 steps 不受影响）")
+    preflight["hints"].append(
+        f"演示默认 enable_auto_confirm=false，露出 HITL · harness {HARNESS_VERSION} · {agent_count} agents"
+    )
     return {
         "gateway": "UP",
         "harness_version": HARNESS_VERSION,
+        "agent_count": agent_count,
         "architecture": "big_team_wraps_a_b",
         "agent_style": "nl_general_agent_with_tools",
+        "llm_key_present": llm_key,
+        "preflight": preflight,
         "features": {
             "sse_stream": True,
             "websocket": True,
@@ -197,6 +232,7 @@ def api_health():
             "big_team_a_b": True,
             "llm_toolcall": True,
             "graph_ab_resume": True,
+            "demo_hitl_default": True,
         },
         "otel": _otel_status_safe(),
         "langgraph_checkpoint": _lg_status_safe(),
@@ -862,17 +898,21 @@ def api_p2_evidence(body: dict):
 
 @app.post("/api/demo")
 def api_demo(body: DemoRequest):
-    """兼容入口：全自动闭环 + 落盘（等同 /api/pipeline auto）。默认 high_util 满载物料。"""
+    """演示入口：默认 high_util；**默认不停 auto 确认**以露出 HITL。
+
+    enable_auto_confirm=true 时才自动进 B 并 finalize（非比赛主戏）。
+    """
     mats, opts, key, text = _apply_preset(
         preset=body.preset or "high_util",
         user_input=body.user_input,
         materials=body.materials,
     )
+    auto = bool(body.enable_auto_confirm)
     state = run_agent_pipeline(
         text,
         materials=mats,
         container_type=body.container_type,
-        enable_auto_confirm=True,
+        enable_auto_confirm=auto,
         max_containers=0,
         session_id=body.session_id,
         save_artifacts=True,
@@ -882,6 +922,12 @@ def api_demo(body: DemoRequest):
     resp = public_response(state)
     resp["agent_loop"] = "感知→规划→工具→行动→finalize"
     resp["preset"] = key or body.preset
+    resp["enable_auto_confirm"] = auto
+    resp["demo_note"] = (
+        "auto_confirm=on 已跑完拼柜"
+        if auto
+        else "已停在 HITL：请确认柜型后 resume Team B"
+    )
     return resp
 
 

@@ -15,6 +15,10 @@ def agent_planner(state: PackingState) -> Dict[str, Any]:
         boxes = [b for b in boxes if b.get("box_id") in confirmed]
 
     ctype = state.get("container_type") or "40HQ"
+    opts_early = dict(state.get("packing_options") or {})
+    if opts_early.get("prefer_40hq_multi") or opts_early.get("force_40hq"):
+        if str(ctype).upper() in ("40GP", "40HQ", ""):
+            ctype = "40HQ"
     # 自主定柜 N0（无业务目标柜数）；用户/state 给的 max 仅作 3D 搜索封顶，不是目标柜数
     user_cap = int(state.get("max_containers") or 0)
     booking: Dict[str, Any] = {}
@@ -43,16 +47,30 @@ def agent_planner(state: PackingState) -> Dict[str, Any]:
     else:
         max_c = min(40, n0 + 8)
 
-    # 优先级：超长/重货先装
+    # 优先级：小票超长/重货先装；大票改为重货优先（利于 mid50），并可清空强制序
+    gross_pre = sum(float(b.get("gross_weight_kg") or 0) for b in boxes)
+    big_multi = (
+        n0 >= 8
+        or gross_pre >= 80000
+        or len(boxes) >= 40
+        or bool(opts_early.get("drop_load_priority") or opts_early.get("prefer_40hq_multi"))
+    )
+
     def sort_key(b: Dict[str, Any]):
         special = b.get("special_attributes") or []
         L = float((b.get("outer_size_mm") or {}).get("length") or 0)
         g = float(b.get("gross_weight_kg") or 0)
         long = 1 if ("超长" in special or L >= 5800) else 0
+        if big_multi:
+            # 大票：重货先 → 中段配重；超长次之（避免长件先占满把重货挤到两端）
+            return (-g, -long, -L)
         return (-long, -g, -L)
 
     ordered = sorted(boxes, key=sort_key)
     priority = [b.get("box_id") for b in ordered if b.get("box_id")]
+    if big_multi and opts_early.get("drop_load_priority", True):
+        # 空优先序：Loader 不重排，bin3d 用内部重货/EP 序（对齐 Tool 捷径 mid50）
+        priority = []
 
     rules: List[str] = []
     if any(
@@ -68,12 +86,19 @@ def agent_planner(state: PackingState) -> Dict[str, Any]:
         rules.append("需加固箱注意垫木与绑扎")
 
     gross = sum(float(b.get("gross_weight_kg") or 0) for b in boxes)
+    comps = booking.get("n0_components") or {}
     rules.append(
-        f"自主定柜 N0={booking.get('n0') or max_c}："
-        f"重量柜={booking.get('containers_by_weight', '?')} "
-        f"有效体积柜={booking.get('containers_by_volume', '?')} "
+        f"自主定柜 N0*={booking.get('n0') or max_c}："
+        f"重量柜={comps.get('weight', booking.get('containers_by_weight', '?'))} "
+        f"体积柜={comps.get('volume', booking.get('containers_by_volume', '?'))} "
+        f"几何底面={comps.get('geom_floor', '?')} "
+        f"几何槽位={comps.get('geom_slot', '?')} "
         f"绑定={booking.get('binding_constraint', '?')} "
+        f"| {booking.get('n0_note') or ''} "
         f"(V_eff={booking.get('volume_m3', '?')}m³, PAYLOAD={booking.get('payload_kg', '?')}kg)"
+    )
+    rules.append(
+        "柜级策略=N0*下界+递增试装(+末柜并回)；柜内 multi_start=固定N多种放法（非跨柜FFD最优）"
     )
     if booking.get("volume_suspicious") or booking.get("warning"):
         rules.append(f"体积可疑: {booking.get('warning') or 'N_volume≥2×N_weight'}")
@@ -105,12 +130,17 @@ def agent_planner(state: PackingState) -> Dict[str, Any]:
         )
         rules.append("第二层仅堆在有支撑的箱顶，超长件禁止上二层")
 
-    # 优先序：底层件先装
-    if bottom_ids:
+    # 优先序：底层件先装（大票已清空 priority 则保持空，避免再注入超长优先）
+    if bottom_ids and priority:
         priority = sorted(
             priority,
             key=lambda bid: (0 if bid in bottom_ids else 1, priority.index(bid) if bid in priority else 99),
         )
+    if big_multi:
+        rules.append(
+            "大票多柜：装载优先序已放宽/清空，利于 mid50 中段配重与压柜（drop_load_priority）"
+        )
+        opts["drop_load_priority"] = True
 
     # 规划理由 3～5 条（可陈述，评委可指着看）
     n0_val = int(booking.get("n0") or max_c)
@@ -185,6 +215,8 @@ def agent_planner(state: PackingState) -> Dict[str, Any]:
         "plan": plan,
         "booking": booking,
         "max_containers": max_c,
+        "container_type": ctype,
+        "packing_options": opts,
         "phase": "team_b_running",
         "boxes": boxes if confirmed else state.get("boxes") or boxes,
         "agent_meta": {
@@ -194,7 +226,9 @@ def agent_planner(state: PackingState) -> Dict[str, Any]:
             "artifacts": {
                 "n0": n0,
                 "binding": booking.get("binding_constraint"),
-                "box_count": len(priority),
+                "box_count": len(boxes),
+                "priority_n": len(priority),
+                "drop_load_priority": bool(big_multi and not priority),
                 "planning_reasons": planning_reasons,
             },
         },
@@ -204,7 +238,9 @@ def agent_planner(state: PackingState) -> Dict[str, Any]:
                 "content": (
                     f"【规划】{ctype} 自主N0={n0} "
                     f"(重量柜{n_wt} / 有效体积柜{n_vol} / 绑定{binding})，"
-                    f"优先序 {len(priority)} 箱；3D 自 N0 递增至 can_fit。"
+                    f"优先序 {len(priority) if priority else 0} 箱"
+                    f"{'（大票已放宽）' if big_multi and not priority else ''}；"
+                    f"3D 自 N0 递增至 can_fit。"
                     f" 理由：{reasons_txt}"
                     f"｜tools={','.join(tools_used)}（数值由工具算，非 LLM 编造）"
                 ),

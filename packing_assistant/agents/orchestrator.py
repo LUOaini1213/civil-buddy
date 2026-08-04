@@ -49,14 +49,43 @@ def agent_orchestrator(state: PackingState) -> Dict[str, Any]:
         phase="start",
     )
     recommended = rec["recommended"]
-    # 采纳策略：无输入 / 默认 40HQ / 空 → 用推荐；用户明确 20GP 等则保留但记录对照
+    # 采纳策略：无输入 / AUTO → 用推荐；用户明确 20GP 等则保留
+    # 注意：enable_auto_confirm 时勿把默认 40HQ 换成 40GP（大票会多柜且 mid50 更难）
     adopt = False
+    opts0 = dict(state.get("packing_options") or {})
+    force_hq = bool(
+        opts0.get("force_40hq")
+        or opts0.get("prefer_40hq_multi")
+        or opts0.get("unify_40hq")
+    )
+    est0 = rec.get("estimates") or rec.get("est") or {}
+    try:
+        gross_est = float(est0.get("gross_kg_est") or est0.get("net_kg") or 0)
+    except (TypeError, ValueError):
+        gross_est = 0.0
+    # 重量约 ≥3×40HQ 货载 → 大票多柜
+    multi_ticket = gross_est >= 80000 or (
+        gross_est >= 50000 and str(recommended).upper() in ("40GP", "40HQ", "20GP")
+    )
+    if force_hq or (multi_ticket and not user_ct):
+        recommended = "40HQ"
+        rec = {**rec, "recommended": "40HQ", "multi_force_40hq": True}
     if not user_ct or user_ct.upper() in ("", "AUTO"):
         adopt = True
     elif user_ct.upper() == "40HQ" and state.get("enable_auto_confirm"):
-        # demo/auto 路径：默认 HQ 改为推荐，避免柜过大
-        adopt = True
+        # 仅小票允许 auto 把 HQ「降级」为推荐小柜；大票 / 强制 HQ 保持 40HQ
+        if force_hq or multi_ticket or str(recommended).upper() == "40HQ":
+            adopt = False
+        else:
+            adopt = True
     chosen = recommended if adopt else user_ct.upper()
+    if force_hq or (multi_ticket and chosen in ("40GP", "20GP") and not (
+        user_ct and user_ct.upper() in ("20GP", "40GP", "45HQ")
+    )):
+        # 大票未硬指定小柜 → 统一 40HQ
+        if not user_ct or user_ct.upper() in ("", "AUTO", "40HQ"):
+            chosen = "40HQ"
+            adopt = True
 
     goals = {
         "primary": ["can_fit", "structure_safe", "cog_balanced", "right_container"],

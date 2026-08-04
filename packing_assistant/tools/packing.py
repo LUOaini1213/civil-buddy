@@ -6,6 +6,11 @@
 2. 按几何与载荷选型（或升级箱型）
 3. 尝试合箱（同箱型、载荷与空间允许）
 4. 对每箱执行 structure_calc.run_structure_calc
+
+外廓哲学：
+- 硬：结构通过 + 外廓进柜（≤ 柜内净空）
+- 自由：非 standard 时宽高按货定制（可出现铁笼/定制架）
+- 软：截面过大 → 拒合/压矮；可 2 排 → snappoint 1100/1150
 """
 
 from __future__ import annotations
@@ -38,6 +43,110 @@ _BOX_ORDER = [
 _BOX_ORDER = [n for n in _BOX_ORDER if n in STANDARD_BOX_TYPES]
 
 CLEARANCE_MM = clearance_mm()
+
+# 截面过大软规：同时占柜宽/柜高过大 → 拼柜截面封锁，合箱应拆
+# （硬卡仍是：外廓 ≤ 柜内 + 结构通过）
+SECTION_W_RATIO = 0.70
+SECTION_H_RATIO = 0.85
+
+# 两排优先 snappoint（与标准库 1100 / 模块 1150 对齐）
+TWO_ROW_PACK_GAP_MM = 50.0  # 两排之间预留
+SNAP_W_STANDARD = 1100.0  # 知识库标准箱宽
+SNAP_W_MODULE = 1150.0  # 半柜模块宽
+
+
+def _container_cab_mm(container_type: str = "40HQ") -> Tuple[float, float, float]:
+    """柜内净空 mm (L, W, H)，作为外廓进柜硬卡上限。"""
+    ct = (container_type or "40HQ").upper()
+    try:
+        from packing_assistant.knowledge import container_inner_mm
+
+        m = container_inner_mm().get(ct) or {}
+        L = float(m.get("L") or 0)
+        W = float(m.get("W") or 0)
+        H = float(m.get("H") or 0)
+        if L > 0 and W > 0 and H > 0:
+            return L, W, H
+    except Exception:
+        pass
+    # 兜底：40HQ 级
+    defaults = {
+        "20GP": (5898.0, 2352.0, 2385.0),
+        "40GP": (12032.0, 2352.0, 2385.0),
+        "40HQ": (12032.0, 2352.0, 2698.0),
+        "45HQ": (13556.0, 2352.0, 2698.0),
+    }
+    return defaults.get(ct, defaults["40HQ"])
+
+
+def _two_row_outer_cap(cab_w: float, pack_gap: float = TWO_ROW_PACK_GAP_MM) -> float:
+    """允许柜内并排 2 箱的最大外宽：2*W + gap ≤ 柜宽。"""
+    return max(0.0, (float(cab_w) - float(pack_gap)) / 2.0)
+
+
+def _can_two_row(outer_w: float, cab_w: float) -> bool:
+    """外宽是否仍允许两排并放。"""
+    return float(outer_w) <= _two_row_outer_cap(cab_w) + 1e-6
+
+
+def _snap_width_prefer_two_row(
+    need_w: float,
+    cab_w: float,
+    *,
+    dense: bool = False,
+    pad: float = 40.0,
+) -> float:
+    """
+    软规：可 2 排则对齐 snappoint，避免 1300～1800 半废带宽。
+
+    - need ≤ 半柜 cap：优先 1100（标准）/ 1150（模块）/ cap 内 50mm 档
+    - dense 且很窄：允许更贴货（仍 ≤ cap，便于 2+ 排）
+    - need > cap：货本身超半柜 → 1 排贴货宽，不虚跳满柜
+    """
+    need_w = float(need_w or 0)
+    cab_w = float(cab_w or 0)
+    if cab_w <= 1e-6:
+        return max(need_w, 0.0)
+    cap2 = _two_row_outer_cap(cab_w)
+    step = 50.0
+
+    if need_w <= cap2 + 1e-6:
+        # 密装窄货：贴货以便多列，不强制拉到 1100
+        if dense and need_w < 900.0:
+            tight = math.ceil(max(need_w + pad, 400.0) / step) * step
+            return min(tight, cap2, cab_w)
+        # 优先标准 1100 → 模块 1150 → cap 内向上取整
+        if need_w <= SNAP_W_STANDARD + 1e-6:
+            return min(SNAP_W_STANDARD, cap2, cab_w)
+        if need_w <= SNAP_W_MODULE + 1e-6 and SNAP_W_MODULE <= cap2 + 1e-6:
+            return min(SNAP_W_MODULE, cab_w)
+        # 介于 1150 与 cap2 之间（40HQ 上 cap≈1151，几乎无）
+        snapped = math.ceil(need_w / step) * step
+        return min(max(snapped, need_w), cap2, cab_w)
+
+    # 1 排：贴真需宽
+    snapped = math.ceil((need_w + pad) / step) * step
+    return min(max(snapped, need_w), cab_w)
+
+
+def _section_too_large(
+    outer_w: float,
+    outer_h: float,
+    cab_w: float,
+    cab_h: float,
+    *,
+    w_ratio: float = SECTION_W_RATIO,
+    h_ratio: float = SECTION_H_RATIO,
+) -> bool:
+    """
+    软规则：箱外宽高同时过大 → 柜内截面被单箱封锁，无法并排/叠放。
+    例：2200×2650 占满 40HQ 截面，邻箱无法同截面共存。
+    """
+    if cab_w <= 1e-6 or cab_h <= 1e-6:
+        return False
+    return (float(outer_w) > w_ratio * cab_w + 1e-6) and (
+        float(outer_h) > h_ratio * cab_h + 1e-6
+    )
 
 
 def _inner_dims(spec: Dict[str, Any]) -> Dict[str, float]:
@@ -183,7 +292,12 @@ def _can_merge(
     standard: bool = False,
     container_type: str = "40HQ",
 ) -> bool:
-    """合箱前做重量 + 结构几何试算；aggressive 时放宽填充率与试算箱外廓。"""
+    """合箱前做重量 + 结构几何试算；aggressive 时放宽填充率与试算箱外廓。
+
+    哲学：
+    - 硬：结构过 + 外廓进柜
+    - 软：截面过大（宽且高同时占满柜截面）→ 拒绝合箱，拆成多箱
+    """
     trial = existing + [new_item]
     net = sum(float(i.get("总重_kg") or 0) for i in trial)
     if max_combined_net_kg is not None and net > float(max_combined_net_kg) + 1e-6:
@@ -202,6 +316,17 @@ def _can_merge(
         dense=dense and not standard,
         standard=standard,
     )
+    # 软规：合箱后截面过大 → 拆箱（不并）
+    cab_L, cab_W, cab_H = _container_cab_mm(container_type)
+    if _section_too_large(outer["宽"], outer["高"], cab_W, cab_H):
+        return False
+    # 硬：外廓必须进柜
+    if (
+        outer["长"] > cab_L + 1e-6
+        or outer["宽"] > cab_W + 1e-6
+        or outer["高"] > cab_H + 1e-6
+    ):
+        return False
     max_len = max(float(i["外尺寸_mm"]["长"]) for i in trial)
     if max_len + CLEARANCE_MM > inner["长"] + 1e-6:
         return False
@@ -293,9 +418,17 @@ def _fit_outer_to_cargo(
     """
     确定箱外廓。
 
-    - standard：锁定标准箱库外廓（知识库 1.1/2/3/4/6 米铁架等），仅超标长时放长。
-    - aggressive：卡拼柜模块（宽1150 / 层高1100~1200），便于二层对齐。
-    - dense：外廓贴货（薄板密装），短件可缩小外廓。
+    哲学：
+    - **硬卡**：外廓 ≤ 柜内净空（进柜）；结构通过另由 structure_calc 判定
+    - **宽高自由**：非 standard 时按货包络定制，不强制 2200 满宽
+    - **软规**：
+      1) 宽且高同时过大（截面封锁）→ 压矮/拒合箱
+      2) 可 2 排则 snappoint（1100/1150），避免半废带宽
+
+    模式：
+    - standard：锁定标准箱库外廓，仅超标长时放长
+    - aggressive：两排优先 + 层高模块（宽货不拔高）
+    - dense：外廓贴货（薄板密装），短件可缩小外廓
     """
     env = _cargo_envelope_mm(items)
     gap = float(CLEARANCE_MM)
@@ -303,12 +436,31 @@ def _fit_outer_to_cargo(
     need_L = float(env.get("长") or 0) + gap + 2 * wall
     need_W = float(env.get("宽") or 0) + gap + 2 * wall
     need_H = float(env.get("高") or 0) + gap + 2 * wall
-    # 柜内可装上限
-    max_L, max_W, max_H = 12000.0, 2300.0, 2650.0
+    # 进柜硬卡：柜内净空
+    max_L, max_W, max_H = _container_cab_mm(container_type)
     ct = (container_type or "40HQ").upper()
-    # 二层模块高：保证 2 层能进柜
+    # 二层模块高：保证 2 层能进柜（仅窄/两排箱偏好）
     stack_module_h = 1100.0 if ct in ("20GP", "40GP") else 1200.0
     content_long = max((float(i["外尺寸_mm"]["长"]) for i in items), default=0)
+    pad = 40.0
+    two_row_cap = _two_row_outer_cap(max_W)
+
+    def _free_width(need_w: float) -> float:
+        """两排优先 snappoint；超半柜才 1 排贴货。"""
+        return _snap_width_prefer_two_row(
+            need_w, max_W, dense=dense, pad=pad
+        )
+
+    def _prefer_stack_h(need_h: float, outer_w: float) -> float:
+        """两排/窄箱可对齐二层模块高；单排宽箱只贴货高。"""
+        if not _can_two_row(outer_w, max_W) or _section_too_large(
+            outer_w, max(need_h, stack_module_h), max_W, max_H
+        ):
+            # 单排或宽截面：高度只跟货，不拔到模块/满柜
+            return min(max(need_h, 200.0 if dense else 500.0), max_H)
+        if need_h <= stack_module_h:
+            return min(stack_module_h, max_H)
+        return min(max(need_h, stack_module_h), max_H)
 
     # —— 标准箱库外廓（优先）——
     if standard:
@@ -325,6 +477,10 @@ def _fit_outer_to_cargo(
             step = 50.0
             outer["长"] = min(math.ceil(piece_need_L / step) * step, max_L)
             customized = True  # 标准加长
+        # 进柜硬卡（标准箱本身应已 ≤ 柜，兜底）
+        outer["长"] = min(outer["长"], max_L)
+        outer["宽"] = min(outer["宽"], max_W)
+        outer["高"] = min(outer["高"], max_H)
         inner = {
             "长": max(outer["长"] - 2 * wall, 0),
             "宽": max(outer["宽"] - 2 * wall, 0),
@@ -342,17 +498,16 @@ def _fit_outer_to_cargo(
     flat_cargo = need_H <= (450.0 if dense else 0.0)
 
     if aggressive and not dense:
-        if need_W <= 1180:
-            outer["宽"] = 1150.0
-        else:
-            outer["宽"] = min(max(need_W, 2200.0), max_W)
-        # 二层堆：单层高度 = stack_module_h（可被货高顶高）
-        target_h = max(need_H, stack_module_h)
-        if content_long >= 5000:
+        outer["宽"] = _free_width(need_W)
+        # 窄箱对齐模块高；宽箱贴货高
+        if content_long >= 5000 and need_H <= stack_module_h:
             target_h = min(max(need_H, 1000.0), stack_module_h)
-        outer["高"] = min(target_h, stack_module_h if need_H <= stack_module_h else min(need_H, max_H))
-        if need_H <= stack_module_h:
-            outer["高"] = stack_module_h  # 统一层高，便于二层对齐
+            if not _section_too_large(outer["宽"], target_h, max_W, max_H):
+                outer["高"] = target_h
+            else:
+                outer["高"] = min(max(need_H, 500.0), max_H)
+        else:
+            outer["高"] = _prefer_stack_h(need_H, outer["宽"])
         step = 100.0
         outer["长"] = min(math.ceil(max(need_L, outer["长"]) / step) * step, max_L)
         if content_long < 2800:
@@ -360,47 +515,54 @@ def _fit_outer_to_cargo(
         elif content_long < 4000:
             outer["长"] = max(outer["长"], min(4000.0, max_L))
     elif dense:
-        # 混合密装：
-        # - 超长件(≥5m)：仍用半柜宽+二层模块高（几何/结构需要，否则合箱全炸）
-        # - 中长件：半柜宽 + 略矮于模块高
-        # - 短件/薄板：真正贴货，缩小外廓以便柜内多件并排/多层
-        pad = 40.0
+        # 混合密装：宽高自由贴货；长/中长窄货可对齐半柜模块
         step = 50.0
         longish = content_long >= 5000
         midlong = content_long >= 3500
 
         if longish or midlong:
-            # ≥3.5m：与 aggressive 同形 1150×模块高（合箱几何/挠度依赖此截面）
-            # 仅外长贴货：50mm 步进 + 余量，避免虚拉到标准 6m/4m 整数档
-            outer["宽"] = 1150.0 if need_W <= 1180 else min(max(need_W + pad, 2200.0), max_W)
-            outer["高"] = min(max(need_H, stack_module_h), max_H)
-            if need_H <= stack_module_h:
-                outer["高"] = stack_module_h
-            # 长：货长+间隙+壁厚+余量；中长不低于 need_L
+            outer["宽"] = _free_width(need_W)
+            outer["高"] = _prefer_stack_h(need_H, outer["宽"])
             base_L = max(need_L, content_long + gap + 2 * wall + 50.0)
             outer["长"] = min(math.ceil(base_L / step) * step, max_L)
-            # 短于 2.8m 的中长件仍略抬长便于并排工位（与 aggressive 一致的下限可略降）
             if content_long < 2800:
                 outer["长"] = max(outer["长"], min(2800.0, max_L))
         else:
-            # 短件/薄板：真正贴货，缩小外廓以便柜内多件并排/多层
-            if need_W > 1180:
-                outer["宽"] = min(max(need_W + pad, 2200.0), max_W)
-            elif need_W >= 900:
-                outer["宽"] = 1150.0
-            else:
-                outer["宽"] = min(
-                    math.ceil(max(need_W + pad, 400.0) / step) * step, max_W
-                )
+            # 短件/薄板：两排 snappoint + 密装可贴窄
+            outer["宽"] = _free_width(need_W)
             min_h = 220.0 if flat_cargo else 350.0
             outer["高"] = min(max(need_H + pad, min_h), max_H)
-            if need_H >= 900:
-                outer["高"] = min(max(outer["高"], min(need_H + pad, stack_module_h)), max_H)
+            # 仅两排箱才抬到模块高
+            if need_H >= 900 and _can_two_row(outer["宽"], max_W) and not _section_too_large(
+                outer["宽"], stack_module_h, max_W, max_H
+            ):
+                outer["高"] = min(
+                    max(outer["高"], min(need_H + pad, stack_module_h)), max_H
+                )
             outer["长"] = min(math.ceil(max(need_L, 600.0) / step) * step, max_L)
+    else:
+        # 非 aggressive 非 dense：两排优先 snappoint
+        outer["宽"] = _free_width(need_W)
+        outer["高"] = _prefer_stack_h(need_H, outer["宽"])
+        outer["长"] = min(math.ceil(max(need_L, 600.0) / 50.0) * 50.0, max_L)
 
     outer["长"] = min(max(outer["长"], need_L), max_L)
-    outer["宽"] = min(max(outer["宽"], need_W), max_W)
+    # 宽：不低于货需，但再走一遍两排 snappoint（可加宽到 1100/1150，不缩到货下）
+    outer["宽"] = max(outer["宽"], need_W)
+    outer["宽"] = _snap_width_prefer_two_row(outer["宽"], max_W, dense=dense, pad=pad)
+    outer["宽"] = min(outer["宽"], max_W)
     outer["高"] = min(max(outer["高"], need_H), max_H)
+
+    # 软规缓解：若截面过大且货高允许，压矮到贴货（不砍低于 need_H）
+    if _section_too_large(outer["宽"], outer["高"], max_W, max_H):
+        cargo_h = min(max(need_H, 200.0 if dense else 500.0), max_H)
+        if cargo_h + 1e-6 < outer["高"] and not _section_too_large(
+            outer["宽"], cargo_h, max_W, max_H
+        ):
+            outer["高"] = cargo_h
+    # 单排宽箱：若误拔到模块高，压回贴货高（利用率）
+    if not _can_two_row(outer["宽"], max_W) and outer["高"] > need_H + pad + 1e-6:
+        outer["高"] = min(max(need_H + (pad if dense else 0.0), need_H), max_H)
 
     # 几何兜底：保证 envelope+间隙 能进内腔（含截面旋转判定）
     # 否则 dense 合箱会被 structure 几何直接否掉
@@ -417,14 +579,29 @@ def _fit_outer_to_cargo(
     fit_def = geo_need_W <= inn_W + 1e-6 and geo_need_H <= inn_H + 1e-6
     fit_rot = geo_need_W <= inn_H + 1e-6 and geo_need_H <= inn_W + 1e-6
     if not (fit_def or fit_rot):
-        # 优先加高使旋转或默认通过
-        need_inn_h = max(geo_need_H, min(geo_need_W, max_H - 2 * wall))
-        outer["高"] = min(max(outer["高"], need_inn_h + 2 * wall + 20.0), max_H)
-        inn_H = max(outer["高"] - 2 * wall, 0)
+        # 优先加高使旋转或默认通过；若加高会截面过大则优先加宽
+        cand_h = min(max(outer["高"], geo_need_H + 2 * wall + 20.0), max_H)
+        if not _section_too_large(outer["宽"], cand_h, max_W, max_H):
+            outer["高"] = cand_h
+            inn_H = max(outer["高"] - 2 * wall, 0)
         fit_def = geo_need_W <= inn_W + 1e-6 and geo_need_H <= inn_H + 1e-6
         fit_rot = geo_need_W <= inn_H + 1e-6 and geo_need_H <= inn_W + 1e-6
         if not (fit_def or fit_rot):
             outer["宽"] = min(max(outer["宽"], geo_need_W + 2 * wall + 20.0), max_W)
+            inn_W = max(outer["宽"] - 2 * wall, 0)
+            # 仍不够则再抬高（单件硬几何优先于软规）
+            if not (
+                (geo_need_W <= inn_W + 1e-6 and geo_need_H <= inn_H + 1e-6)
+                or (geo_need_W <= inn_H + 1e-6 and geo_need_H <= inn_W + 1e-6)
+            ):
+                outer["高"] = min(
+                    max(outer["高"], geo_need_H + 2 * wall + 20.0), max_H
+                )
+
+    # 最终进柜硬卡
+    outer["长"] = min(max(outer["长"], 0), max_L)
+    outer["宽"] = min(max(outer["宽"], 0), max_W)
+    outer["高"] = min(max(outer["高"], 0), max_H)
 
     inner = {
         "长": max(outer["长"] - 2 * wall, 0),
@@ -592,13 +769,42 @@ def _build_box(
     if not struct["几何"]["尺寸适配"]:
         special.append("尺寸紧张")
 
+    cab_L, cab_W, cab_H = _container_cab_mm(container_type)
+    # 进柜硬卡标记（外廓已在 fit 中钳制）
+    if (
+        outer["长"] > cab_L + 1e-3
+        or outer["宽"] > cab_W + 1e-3
+        or outer["高"] > cab_H + 1e-3
+    ):
+        outer["长"] = min(outer["长"], cab_L)
+        outer["宽"] = min(outer["宽"], cab_W)
+        outer["高"] = min(outer["高"], cab_H)
+        inner = {
+            "长": max(outer["长"] - 2 * wall, 0),
+            "宽": max(outer["宽"] - 2 * wall, 0),
+            "高": max(outer["高"] - 2 * wall, 0),
+        }
+        special.append("进柜硬卡")
+    if _section_too_large(outer["宽"], outer["高"], cab_W, cab_H):
+        special.append("截面过大")
+    # 两排对齐标记（软规 snappoint 结果可观测）
+    if not standard:
+        if _can_two_row(outer["宽"], cab_W):
+            special.append("两排对齐")
+        else:
+            special.append("单排宽箱")
+
     # dense 贴货后结构不过：先抬外高（结构截面深度），再升级箱型
+    # 抬高不得造成「截面过大」软规违例（宽箱禁止拔到满柜高）
     if dense and not standard and struct["结论"] == "不通过":
         for bump_h in (900.0, 1100.0, 1200.0, 1400.0):
             if outer["高"] >= bump_h - 1e-6:
                 continue
+            cand_h = min(bump_h, cab_H)
+            if _section_too_large(outer["宽"], cand_h, cab_W, cab_H):
+                continue
             outer2 = dict(outer)
-            outer2["高"] = min(bump_h, 2650.0)
+            outer2["高"] = cand_h
             inner2 = {
                 "长": max(outer2["长"] - 2 * wall, 0),
                 "宽": max(outer2["宽"] - 2 * wall, 0),
@@ -629,6 +835,10 @@ def _build_box(
                 if struct["结论"] == "需加强" and "结构需加强" not in special:
                     special.append("结构需加强")
                 special.append("密装抬高过结构")
+                # 抬高后清掉旧的截面过大标记并重算
+                special = [s for s in special if s != "截面过大"]
+                if _section_too_large(outer["宽"], outer["高"], cab_W, cab_H):
+                    special.append("截面过大")
                 break
 
     # 结构/几何不过：尝试换箱（有深度/已试集合，防死循环）
@@ -759,6 +969,15 @@ def _build_box(
         "customized_outer": customized,
         "dense_outer": bool(dense and not standard),
         "standard_outer": bool(standard),
+        "section_too_large": bool(
+            _section_too_large(outer["宽"], outer["高"], cab_W, cab_H)
+        ),
+        "fits_container": bool(
+            outer["长"] <= cab_L + 1e-3
+            and outer["宽"] <= cab_W + 1e-3
+            and outer["高"] <= cab_H + 1e-3
+        ),
+        "two_row_ok": bool(_can_two_row(outer["宽"], cab_W)),
         "base_box_type": box_name,
         "content_max_length_mm": round(content_max_L, 1),
         "stackable": stackable,

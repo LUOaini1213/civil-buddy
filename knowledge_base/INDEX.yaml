@@ -1,7 +1,7 @@
 # 知识库索引（scripts/gen_kb_index.py 生成）
 version: 2
 root: knowledge_base
-generated: 2026-07-30
+generated: 2026-08-03
 priority_order:
   - 01_rules
   - 02_tools
@@ -551,6 +551,13 @@ documents:
     priority: low
     type: domain
     tags: [cargo, steel, plate, module]
+    status: active
+  - path: 07_domain_knowledge/cn_sg_corridor.md
+    title: 中新走廊实务卡（中国出运 / 新加坡中转或到港）
+    category: domain
+    priority: medium
+    type: reference
+    tags: [China, Singapore, VGM, CTU, SOLAS, ISPM15, corridor, MPA]
     status: active
   - path: 07_domain_knowledge/common_terms.md
     title: 术语表

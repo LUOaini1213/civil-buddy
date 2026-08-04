@@ -60,6 +60,17 @@ def agent_finalize(state: PackingState) -> Dict[str, Any]:
     reject_to = risk_report.get("reject_to") or ""
     reject_reason = risk_report.get("reject_reason") or ""
     ship_ok = bool(plan.get("can_fit")) and not need_revision and risk_decision != "REJECT"
+    # 缺尺寸 / 成箱阻断：硬否出运
+    if state.get("materials_incomplete") or state.get("ship_ok") is False:
+        ship_ok = False
+    errs = state.get("errors") or []
+    if any("missing_dims" in str(e).lower() or "缺尺寸" in str(e) for e in errs):
+        ship_ok = False
+    if not (state.get("boxes") or []) and state.get("materials"):
+        # 有料无箱且非纯演示空跑 → 不可 ship
+        ta = state.get("team_a_summary") or {}
+        if ta.get("packing_mode") == "blocked_missing_dims":
+            ship_ok = False
     # 可选：装前检查表强制
     _cl: Dict[str, Any] = {}
     try:

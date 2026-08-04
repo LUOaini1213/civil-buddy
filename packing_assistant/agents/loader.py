@@ -22,6 +22,19 @@ def agent_loader(state: PackingState) -> Dict[str, Any]:
     priority = plan.get("priority_order") or []
     booking = plan.get("booking") or state.get("booking") or {}
     packing_opts = dict(state.get("packing_options") or {})
+    # 大票 / 策略要求：统一 40HQ（除非用户硬锁 20/40GP/45）
+    if packing_opts.get("prefer_40hq_multi") or packing_opts.get("force_40hq"):
+        if str(ctype).upper() in ("40GP", "40HQ", ""):
+            ctype = "40HQ"
+    soft_b = int(
+        packing_opts.get("container_budget_soft")
+        or packing_opts.get("soft_budget")
+        or plan.get("container_budget_soft")
+        or 0
+    )
+    if soft_b > 0:
+        packing_opts["container_budget_soft"] = soft_b
+        packing_opts.setdefault("soft_budget_mid50", 0.60)
     # P0/P1 3D 堆码默认：可叠优先叠高 + 绑扎间隙 + 支撑比
     packing_opts.setdefault("prefer_stack", True)
     packing_opts.setdefault(
@@ -121,11 +134,27 @@ def agent_loader(state: PackingState) -> Dict[str, Any]:
     if n_max == n0 and user_cap <= 0 and not hard_lock:
         n_max = min(40, n0 + 8)
 
+    notes: List[str] = []
+    # 大票多柜：Planner 的「超长优先」序常伤 mid50 / 抬柜数；默认丢弃，交给 bin3d 重货+CoG
+    drop_prio = packing_opts.get("drop_load_priority")
+    if drop_prio is None:
+        drop_prio = (
+            len(boxes) >= 40
+            or n0 >= 8
+            or bool(packing_opts.get("prefer_40hq_multi") or packing_opts.get("force_40hq"))
+        )
+    if drop_prio and priority:
+        notes.append(
+            f"big_ticket drop_load_priority n_boxes={len(boxes)} n0={n0} "
+            f"(was {len(priority)} ids) → CoG/multi_start 默认序"
+        )
+        priority = []
+        packing_opts["drop_load_priority"] = True
+
     if priority:
         order = {bid: i for i, bid in enumerate(priority)}
         boxes = sorted(boxes, key=lambda b: order.get(b.get("box_id"), 999))
 
-    notes: List[str] = []
     container_plan: Dict[str, Any] | None = None
     rid = str(state.get("run_id") or state.get("packing_plan_id") or "")
 
@@ -176,11 +205,25 @@ def agent_loader(state: PackingState) -> Dict[str, Any]:
                 fill_ratio=0.82,
                 packing_options=packing_opts or None,
             )
+            # 与 booking 对齐 N0*（pack 可能刷新 geom 组件）
+            if container_plan.get("n0") is not None:
+                n0 = int(container_plan.get("n0") or n0)
             notes.append(
-                f"auto_N0={n0}->used={container_plan.get('containers_used')} "
+                f"auto_N0*={n0}->used={container_plan.get('containers_used')} "
+                f"gap={container_plan.get('n0_gap')} "
+                f"merge={container_plan.get('merged_ok')} "
                 f"booking_vol_util={container_plan.get('booking_volume_utilization')}"
             )
             notes.append(container_plan.get("engine") or "python-laff-3d")
+            # Loader 二次 soft 压柜：priority 序下 pack_with_auto 可能漏压；在 light..light+3 再扫
+            container_plan = _soft_budget_post_densify(
+                container_plan,
+                boxes=boxes,
+                container_type=str(ctype),
+                priority_order=priority or None,
+                packing_opts=packing_opts,
+                notes=notes,
+            )
         except Exception as e:
             notes.append(f"auto_booking失败: {e}")
             container_plan = None
@@ -222,6 +265,14 @@ def agent_loader(state: PackingState) -> Dict[str, Any]:
         n0=n0,
     )
     booking_out = container_plan.get("booking") or booking
+    # 保证 multi 解释字段进 plan
+    if not container_plan.get("multi_container_explain"):
+        n0x = int(container_plan.get("n0") or n0)
+        ux = int(container_plan.get("containers_used") or 0)
+        container_plan["multi_container_explain"] = (
+            f"N0*={n0x} → 3D实装={ux}（gap={ux - n0x}）"
+        )
+        container_plan.setdefault("n0_gap", ux - n0x)
 
     # 指标拆分文案
     outer_u = float(
@@ -289,8 +340,16 @@ def agent_loader(state: PackingState) -> Dict[str, Any]:
                 "content": (
                     f"【行动·装载】engine={eng} "
                     f"can_fit={container_plan.get('can_fit')} "
-                    f"用柜={used}(自N0={n0_used}递增) "
-                    f"重试轨迹: {' → '.join(retry_steps)} "
+                    f"用柜={used}(自N0*={n0_used}递增) "
+                    f"{container_plan.get('multi_container_explain') or ''} "
+                    + (
+                        f" 策略={((container_plan.get('strategy_decision') or {}).get('chosen'))}"
+                        f" mid50={container_plan.get('worst_mid50')} "
+                        if container_plan.get("strategy_decision")
+                        or container_plan.get("worst_mid50") is not None
+                        else " "
+                    )
+                    + f"重试轨迹: {' → '.join(retry_steps)} "
                     f"外廓摆柜率{outer_u:.0%} "
                     f"订柜有效体积率{book_u:.0%} "
                     f"货外廓{float(container_plan.get('cargo_solid_volume_m3') or 0):.2f}m³/"
@@ -303,6 +362,184 @@ def agent_loader(state: PackingState) -> Dict[str, Any]:
             }
         ],
     }
+
+
+def _soft_budget_post_densify(
+    plan: Dict[str, Any],
+    *,
+    boxes: List[Dict[str, Any]],
+    container_type: str,
+    priority_order: List[str] | None,
+    packing_opts: Dict[str, Any],
+    notes: List[str],
+) -> Dict[str, Any]:
+    """
+    Loader 二次压柜：优先无 multi_start 关 + 无 priority，在 25 附近找 mid≥0.55 最少柜。
+    """
+    if not plan or not boxes or packing_opts.get("disable_soft_budget_densify"):
+        return plan
+    try:
+        from packing_assistant.tools.booking import _plan_worst_mid50
+    except Exception as ex:
+        notes.append(f"soft_densify_import_fail:{ex}")
+        return plan
+
+    used = int(plan.get("containers_used") or 0)
+    ref = int(plan.get("reference_light_used") or 0)
+    mid0 = _plan_worst_mid50(plan)
+    plan["soft_densify_attempted"] = True
+    if used < 6:
+        return plan
+    if ref <= 0:
+        ref = max(1, used - 4)
+    # 目标带：light .. light+3（至少覆盖 used）
+    lo = max(1, min(ref, used))
+    hi = min(max(used, ref + 3), lo + 5, 40)
+    mid_tgt = float(packing_opts.get("soft_budget_mid50") or 0.60)
+    notes.append(f"soft_densify_scan {lo}..{hi} ref={ref} used={used} mid0={mid0}")
+
+    # Tool 对齐 opts（少扰动）优先；再完整 loader opts
+    base = dict(packing_opts or {})
+    tool_like = {
+        "prefer_stack": True,
+        "multi_start": True,
+        "cog_aware": True,
+        "cog_rebalance": True,
+        "r4_repair": True,
+        "r4_target_mid50": float(base.get("r4_target_mid50") or mid_tgt),
+        "r0_r1": True,
+        "r2_slab": True,
+        "lateral_repair": True,
+        "clearance_mm": int(base.get("clearance_mm") or 30),
+        "support_ratio_min": float(base.get("support_ratio_min") or 0.55),
+        "max_stack_layers": int(base.get("max_stack_layers") or 3),
+        "prefer_bottom_weight_kg": float(base.get("prefer_bottom_weight_kg") or 2000),
+        "lns_worst": False,
+        "r3_repack": False,
+    }
+    densify_opt_list = [tool_like, base]
+
+    best = plan
+    best_key = (
+        0 if (mid0 is not None and mid0 + 1e-9 >= 0.55) else 1,
+        used,
+        -(mid0 or 0),
+    )
+    # 大票压柜：默认不带 priority（与 Tool 捷径同构）
+    prio_list: List[Any] = [None]
+    if priority_order and not packing_opts.get("drop_load_priority", True):
+        prio_list.append(priority_order)
+    for densify_opts in densify_opt_list:
+        for prio in prio_list:
+            for n in range(lo, hi + 1):
+                try:
+                    trial = pack_boxes_api(
+                        boxes,
+                        container_type=container_type,
+                        max_containers=n,
+                        priority_order=prio,
+                        packing_options=densify_opts,
+                    )
+                except Exception:
+                    continue
+                if not trial.get("can_fit"):
+                    continue
+                tu = int(trial.get("containers_used") or 0)
+                if tu <= 0 or tu > n:
+                    continue
+                tm = _plan_worst_mid50(trial)
+                ge55 = tm is not None and tm + 1e-9 >= 0.55
+                improve_mid = (
+                    tm is not None
+                    and mid0 is not None
+                    and tm > mid0 + 0.03
+                    and tu <= used
+                )
+                if not ge55 and not improve_mid:
+                    continue
+                key = (0 if ge55 else 1, tu, -(tm or 0))
+                if key < best_key:
+                    best_key = key
+                    best = dict(trial)
+                    best["density_mode"] = (
+                        "soft_budget_cog"
+                        if tm is not None and tm + 1e-9 >= mid_tgt
+                        else "soft_budget_cog_soft"
+                    )
+                    best["worst_mid50"] = tm
+                    notes.append(
+                        f"soft_densify_cand n={n} used={tu} mid={tm} "
+                        f"prio={prio is not None} tool_like={densify_opts is tool_like}"
+                    )
+                    if (
+                        ge55
+                        and tm is not None
+                        and tm + 1e-9 >= mid_tgt
+                        and tu <= max(ref + 1, lo + 1)
+                    ):
+                        break
+            if best_key[0] == 0 and best_key[1] <= max(ref + 1, lo + 1):
+                break
+        if best_key[0] == 0 and best_key[1] <= max(ref + 1, lo + 1):
+            break
+
+    if best is plan or int(best.get("containers_used") or 0) <= 0:
+        notes.append("soft_densify_no_improve")
+        return plan
+
+    for k in (
+        "booking",
+        "n0",
+        "n0_star",
+        "n0_search",
+        "n0_components",
+        "n0_note",
+        "reference_light_used",
+        "reference_light_plan",
+        "strategy_decision",
+        "strategy_candidates",
+        "n_tried",
+    ):
+        if plan.get(k) is not None and best.get(k) is None:
+            best[k] = plan.get(k)
+    best["reference_light_used"] = plan.get("reference_light_used") or ref
+    best["soft_budget_applied"] = True
+    best["loader_post_densify"] = True
+    best["soft_densify_attempted"] = True
+    best["worst_mid50"] = _plan_worst_mid50(best)
+    # 刷新策略决策卡
+    try:
+        from packing_assistant.tools.booking import (
+            _candidate_row,
+            select_packing_strategy,
+        )
+
+        cands = []
+        refp = best.get("reference_light_plan")
+        if isinstance(refp, dict):
+            cands.append(
+                {
+                    "strategy_id": "min_bins_light",
+                    "used": int(refp.get("used") or ref),
+                    "weight_utilization": refp.get("weight_utilization"),
+                    "mid50": refp.get("mid50"),
+                    "can_fit": True,
+                    "reference_only": True,
+                    "ship_ok_hint": False,
+                    "note": "下界参考",
+                }
+            )
+        sid = str(best.get("density_mode") or "soft_budget_cog")
+        cands.append(_candidate_row(sid, best, note="loader soft densify"))
+        best["strategy_decision"] = select_packing_strategy(cands)
+        best["strategy_candidates"] = cands
+    except Exception:
+        pass
+    notes.append(
+        f"loader_soft_densify {used}->{best.get('containers_used')} "
+        f"mid50={best.get('worst_mid50')}"
+    )
+    return best
 
 
 def _want_one_box_per_container(

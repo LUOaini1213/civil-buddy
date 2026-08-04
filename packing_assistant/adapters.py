@@ -132,6 +132,9 @@ def box_internal_to_api(b: Dict[str, Any]) -> Dict[str, Any]:
         "stackable": bool(b.get("stackable")),
         "prefer_bottom": bool(b.get("prefer_bottom")),
         "max_stack_layers": b.get("max_stack_layers"),
+        "two_row_ok": b.get("two_row_ok"),
+        "section_too_large": b.get("section_too_large"),
+        "fits_container": b.get("fits_container"),
     }
 
 

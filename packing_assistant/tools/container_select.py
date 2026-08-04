@@ -223,10 +223,23 @@ def recommend_container(
             if ct in ("40GP", "40HQ") and max_L >= 3500 and box_n >= 3:
                 s += 15
                 n.append("多箱长件适合 40 尺纵向拼接+双列并排")
+            # 大票多柜：统一 40HQ（更高 payload + 净高，利于 mid50/叠高）
+            n_wt_hq = W / max(INNER_MM["40HQ"]["max_kg"], 1)
+            if n_wt_hq >= 3.0 or W >= 80000:
+                if ct == "40HQ":
+                    s += 28
+                    n.append("大票多柜统一 40HQ（重量下界≥3 柜）")
+                elif ct == "40GP":
+                    s -= 12
+                    n.append("大票多柜降权 40GP（相对 HQ 载重/净高）")
             scored.append((s, ct, n))
 
     scored.sort(key=lambda x: -x[0])
     best_s, best, best_notes = scored[0]
+    # 硬兜底：大票仍落到 40GP → 强制 40HQ（可解释）
+    if W >= 80000 and best == "40GP":
+        best = "40HQ"
+        reasons.append("大票多柜硬兜底：统一 40HQ（原推荐 40GP）")
     reasons.extend(best_notes)
 
     user = (user_hint or "").upper().replace(" ", "")

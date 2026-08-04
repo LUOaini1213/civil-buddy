@@ -535,26 +535,45 @@ def run_one_case(
     }
 
 
+def _filter_t80_sample(
+    cases: List[Phase0Case], t80_sample: Optional[int]
+) -> List[Phase0Case]:
+    """t80 抽样：保留全部非 t80 + 前 N 张 t80（加速 full）。"""
+    if t80_sample is None or t80_sample < 0:
+        return cases
+    t80 = [c for c in cases if "t80" in c.id]
+    rest = [c for c in cases if "t80" not in c.id]
+    keep = t80[: int(t80_sample)]
+    return rest + keep
+
+
 def run_baseline(
     cases: Optional[Sequence[Phase0Case]] = None,
     *,
     agent_mode: str = "steps",
     quick: bool = False,
     out_dir: Optional[Path] = None,
+    t80_sample: Optional[int] = None,
+    jobs: int = 1,
 ) -> Dict[str, Any]:
     criteria = load_success_criteria()
     if cases is None:
         cases = build_phase0_cases(include_heavy=not quick)
+    cases = list(cases)
     if quick:
         # 优先 short + 部分 boundary
         short = [c for c in cases if "short" in c.tags or "synth" in c.tags]
         rest = [c for c in cases if c not in short]
         cases = (short + rest)[:12]
+    else:
+        cases = _filter_t80_sample(cases, t80_sample)
 
+    n_jobs = max(1, int(jobs or 1))
     rows = []
     t0 = time.time()
-    for c in cases:
-        print("RUN", c.id, c.tags)
+
+    def _one(c: Phase0Case) -> Dict[str, Any]:
+        print("RUN", c.id, c.tags, flush=True)
         try:
             row = run_one_case(c, agent_mode=agent_mode, criteria=criteria)
         except Exception as e:
@@ -566,7 +585,6 @@ def run_baseline(
                 "score": {"total_score": 0.0, "dimensions": {}, "ms": 0},
                 "errors": [str(e)],
             }
-        rows.append(row)
         print(
             ("PASS" if row["pass"] else "FAIL"),
             c.id,
@@ -574,7 +592,26 @@ def run_baseline(
             (row.get("score") or {}).get("total_score"),
             "mode=",
             row.get("failure_mode"),
+            flush=True,
         )
+        return row
+
+    if n_jobs <= 1:
+        for c in cases:
+            rows.append(_one(c))
+    else:
+        # 线程池：IO/GIL 友好度一般，但可重叠部分等待；Windows 可用
+        from concurrent.futures import ThreadPoolExecutor, as_completed
+
+        print(f"PARALLEL jobs={n_jobs} cases={len(cases)}", flush=True)
+        with ThreadPoolExecutor(max_workers=n_jobs) as ex:
+            futs = {ex.submit(_one, c): c.id for c in cases}
+            by_id = {}
+            for fut in as_completed(futs):
+                row = fut.result()
+                by_id[row["id"]] = row
+            # 稳定顺序
+            rows = [by_id[c.id] for c in cases if c.id in by_id]
 
     n = len(rows)
     passed = sum(1 for r in rows if r.get("pass"))
@@ -603,6 +640,8 @@ def run_baseline(
         "version": "phase0-baseline-v1",
         "agent_mode": agent_mode,
         "quick": quick,
+        "t80_sample": t80_sample,
+        "jobs": n_jobs,
         "n": n,
         "passed": passed,
         "pass_rate": round(passed / n, 4) if n else 0.0,
@@ -621,18 +660,32 @@ def run_baseline(
     out_dir = Path(out_dir or (ROOT / "output" / "phase0"))
     out_dir.mkdir(parents=True, exist_ok=True)
     ts = time.strftime("%Y%m%d_%H%M%S")
-    json_path = out_dir / f"baseline_{ts}.json"
+    tag = "quick" if quick else "full"
+    json_path = out_dir / f"baseline_{tag}_{ts}.json"
     latest = out_dir / "baseline_latest.json"
     md_path = out_dir / "BASELINE_REPORT.md"
     text = json.dumps(report, ensure_ascii=False, indent=2)
     json_path.write_text(text, encoding="utf-8")
     latest.write_text(text, encoding="utf-8")
     md_path.write_text(render_baseline_md(report), encoding="utf-8")
-    report["paths"] = {
+    paths: Dict[str, str] = {
         "json": str(json_path),
         "latest": str(latest),
         "md": str(md_path),
     }
+    # full / quick 分轨归档：quick 不覆盖 full 快照
+    if quick:
+        qpath = out_dir / "baseline_quick_latest.json"
+        qpath.write_text(text, encoding="utf-8")
+        paths["quick_latest"] = str(qpath)
+    else:
+        fpath = out_dir / "baseline_full_latest.json"
+        fpath.write_text(text, encoding="utf-8")
+        fmd = out_dir / "BASELINE_FULL_REPORT.md"
+        fmd.write_text(render_baseline_md(report), encoding="utf-8")
+        paths["full_latest"] = str(fpath)
+        paths["full_md"] = str(fmd)
+    report["paths"] = paths
     return report
 
 

@@ -9,15 +9,28 @@ from packing_assistant.state import PackingState
 from packing_assistant.tools.packing import run_packing
 
 
+def _materials_missing_dims(materials: List[Dict[str, Any]]) -> bool:
+    if not materials:
+        return False
+    for m in materials:
+        L = float(m.get("length_mm") or (m.get("外尺寸_mm") or {}).get("长") or 0)
+        W = float(m.get("width_mm") or (m.get("外尺寸_mm") or {}).get("宽") or 0)
+        H = float(m.get("height_mm") or (m.get("外尺寸_mm") or {}).get("高") or 0)
+        if L <= 1e-6 or W <= 1e-6 or H <= 1e-6:
+            return True
+    return False
+
+
 def _crate_passthrough_enabled(materials: List[Dict[str, Any]], opts: Dict[str, Any]) -> bool:
     """
     工地/工厂当量箱直通：材料行本身已是「一箱一当量」，禁止再标准箱库二次放大外廓。
-    开启方式：
+    开启方式（收紧后，避免混料假直通 → 虚高柜数/低利用率）：
       - packing_options.crate_passthrough / materials_are_crates = True
-      - 或 materials 多数带 note: dims=crate_equiv_est / crate= / stack
-      - 或 ≥50% 名称含 铁件架/叠层架/长料架/当量
-      - 或 ≥70% 行已是「柜级外廓」(qty=1, L≥800, W≥400, H≥300) — 成品箱勿再塞 4m 标准铁架
-    显式 standard_boxes=True 且 crate_passthrough 未开 → 不自动直通。
+      - 或 materials 多数带 note: dims=crate_equiv_est / crate= / stack / 当量名
+      - 或 ≥50% 名称含 铁件架/叠层架/长料架/当量/密装
+      - 或模块级大件多数（_module_like_majority）
+    不再用「≥70% 行柜级外廓尺寸」整票自动直通（混料易误触发）。
+    显式 standard_boxes=True 且 crate_passthrough 未开 → 仅强 note 信号才直通。
     """
     if opts.get("crate_passthrough") is False or opts.get("materials_are_crates") is False:
         return False
@@ -33,7 +46,6 @@ def _crate_passthrough_enabled(materials: List[Dict[str, Any]], opts: Dict[str, 
     if not materials:
         return False
     hits = 0
-    crate_sized = 0
     for m in materials:
         note = str(m.get("note") or m.get("备注") or "")
         name = str(m.get("name") or "")
@@ -50,17 +62,10 @@ def _crate_passthrough_enabled(materials: List[Dict[str, Any]], opts: Dict[str, 
             or "密装" in name
         ):
             hits += 1
-        try:
-            L = float(m.get("length_mm") or m.get("L") or 0)
-            W = float(m.get("width_mm") or m.get("W") or 0)
-            H = float(m.get("height_mm") or m.get("H") or 0)
-            q = int(m.get("quantity") or 1)
-        except Exception:
-            L = W = H = 0.0
-            q = 1
-        if q == 1 and L >= 800 and W >= 400 and H >= 300:
-            crate_sized += 1
     n = len(materials)
+    # 模块级大件优先：即使 standard_boxes=True，也禁止再塞进多只 6m 空心架（假多柜根因）
+    if _module_like_majority(materials):
+        return True
     # 标准箱优先：只有 note 当量信号才直通（忽略「铁件」尺寸启发式）
     if force_standard:
         note_only = 0
@@ -78,9 +83,41 @@ def _crate_passthrough_enabled(materials: List[Dict[str, Any]], opts: Dict[str, 
         return note_only >= max(1, int(0.5 * n))
     if hits >= max(1, int(0.5 * n)):
         return True
-    if crate_sized >= max(2, int(0.7 * n)):
-        return True
     return False
+
+
+def _module_like_majority(materials: List[Dict[str, Any]]) -> bool:
+    """
+    模块/整包级外廓：一件≈一箱（半柜宽 + 有高度 + 单件重），
+    走当量直通/贴货，避免标准库拆成数十只 6m 架导致假多柜。
+    """
+    if not materials:
+        return False
+    hits = 0
+    for m in materials:
+        try:
+            L = float(m.get("length_mm") or m.get("L") or 0)
+            W = float(m.get("width_mm") or m.get("W") or 0)
+            H = float(m.get("height_mm") or m.get("H") or 0)
+            q = max(int(m.get("quantity") or 1), 1)
+            total = float(m.get("total_weight_kg") or 0)
+            unit = float(m.get("weight_kg") or 0)
+            if total <= 0 and unit > 0:
+                total = unit * q
+            unit = total / q if q else total
+        except Exception:
+            continue
+        # 半柜宽附近 + 中高 + 单行单件 + 有分量
+        if (
+            q == 1
+            and L >= 1200
+            and W >= 900
+            and H >= 500
+            and (unit >= 200 or H >= 800)
+        ):
+            hits += 1
+    n = len(materials)
+    return hits >= max(1, int(0.6 * n + 0.999))
 
 
 def _should_force_dense_sheets(materials: List[Dict[str, Any]], opts: Dict[str, Any]) -> bool:
@@ -215,6 +252,47 @@ def agent_box_scheme(state: PackingState) -> Dict[str, Any]:
     if str(ctype).upper() == "20GP" and (max_L >= 4000 or total_w >= 8000):
         ctype = "40HQ"
 
+    # 缺尺寸：禁止静默成箱出运
+    if state.get("materials_incomplete") or _materials_missing_dims(materials):
+        return {
+            "boxes": [],
+            "ship_ok": False,
+            "materials_incomplete": True,
+            "team_a_summary": {
+                "pass": 0,
+                "fail": len(materials),
+                "packing_mode": "blocked_missing_dims",
+            },
+            "structure_notes": ["材料缺 L/W/H，成箱阻断"],
+            "errors": list(state.get("errors") or [])
+            + ["box_scheme_blocked: materials_missing_dims"],
+            "agent_meta": {
+                "node": "box_scheme",
+                "capability": ["使用工具", "采取行动"],
+                "tools_used": ["box_scheme.block_missing_dims"],
+                "artifacts": {"boxes": 0, "mode": "blocked_missing_dims"},
+            },
+            "messages": [
+                {
+                    "role": "assistant",
+                    "content": (
+                        "装箱阻断：存在缺尺寸物料（L/W/H=0），"
+                        "拒绝编造外廓或换成演示票｜tools=box_scheme.block_missing_dims"
+                    ),
+                }
+            ],
+        }
+
+    # 模块级大件：覆盖 standard 默认，防空心标准架假多柜
+    packing_opts = dict(packing_opts)
+    module_pt = _module_like_majority(materials) and packing_opts.get(
+        "force_standard_boxes"
+    ) is not True
+    if module_pt:
+        packing_opts.setdefault("crate_passthrough", True)
+        packing_opts["standard_boxes"] = False
+        packing_opts.setdefault("dense_mode", True)
+
     # —— 当量箱直通：不二次标准箱合箱 ——
     if _crate_passthrough_enabled(materials, packing_opts):
         boxes = materials_to_passthrough_boxes(materials)
@@ -233,9 +311,12 @@ def agent_box_scheme(state: PackingState) -> Dict[str, Any]:
             "cargo_item_volume_m3": round(content_sum, 4),
             "avg_crate_fill": round(avg_fill, 4),
             "packing_mode": "crate_passthrough",
+            "multi_risk": "ok",
+            "module_passthrough": bool(module_pt),
         }
         return {
             "boxes": boxes,
+            "packing_options": packing_opts,
             "team_a_summary": {
                 **summary,
                 "structure_overall": "通过(当量直通)",
@@ -245,8 +326,13 @@ def agent_box_scheme(state: PackingState) -> Dict[str, Any]:
                 ),
             },
             "structure_notes": [
-                "当量箱直通：材料行=箱外廓，未再走标准箱库合箱（避免外廓虚高）"
-            ],
+                "当量箱直通：材料行=箱外廓，未再走标准箱库合箱（避免外廓虚高/假多柜）"
+            ]
+            + (
+                ["模块级外廓检测：已禁用空心标准架放大"]
+                if module_pt
+                else []
+            ),
             "agent_meta": {
                 "node": "box_scheme",
                 "capability": ["使用工具", "采取行动"],

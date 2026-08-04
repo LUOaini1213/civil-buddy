@@ -796,14 +796,22 @@
         <div class="brand-mark">P</div>
         <div>
           <h1>装箱拼柜 · Team Mode</h1>
-          <div class="tag">总分总分总 · 9 Agents + HITL</div>
+          <div class="tag">大 Team⊃A/B · {{ agentCount || 13 }} Agents · HITL · v{{ harnessVersion || '0.6.4' }}</div>
         </div>
       </div>
       <div class="top-status">
+        <span class="pill" :class="gatewayOk ? 'ok' : 'err'" :title="preflightTitle">
+          <span class="dot"></span> 网关 {{ gatewayOk ? 'UP' : 'DOWN' }}
+        </span>
         <span class="pill" :class="skjolberOk ? 'ok' : 'warn'">
           <span class="dot"></span> skjolber {{ skjolberOk ? 'UP' : '本地回退' }}
         </span>
+        <span class="pill" :class="llmKeyPresent ? 'ok' : 'warn'" title="无 Key 时 steps 主路径仍可用">
+          LLM {{ llmKeyPresent ? 'Key' : '无Key·fallback' }}
+        </span>
+        <span class="pill" v-if="harnessVersion">v{{ harnessVersion }}</span>
         <span class="pill" v-if="result.phase">phase {{ result.phase }}</span>
+        <span class="pill warn" v-if="result.phase === 'await_user_confirm'">★ 待 HITL 确认</span>
         <span class="pill" v-if="agentSteps.length">{{ agentSteps.length }} steps</span>
         <span class="pill warn" v-if="pendingCheckpoints.length"
               style="cursor:pointer" @click="mainTab='history'; loadPendingCheckpoints()"
@@ -834,12 +842,16 @@
         <span class="pill" v-if="loading || streamProgress.total">
           {{ streamProgress.done }}/{{ streamProgress.total || '—' }} agents
         </span>
-        <button class="soft" @click="refreshHealth" title="健康检查">刷新</button>
+        <label class="pill" style="cursor:pointer;user-select:none" title="关闭=露出 HITL 确认闸（比赛推荐）">
+          <input type="checkbox" v-model="demoAutoConfirm" style="margin-right:4px;vertical-align:middle" />
+          演示自动确认
+        </label>
+        <button class="soft" @click="refreshHealth" title="健康预检：网关/skjolber/LLM/版本">预检</button>
         <button class="ghost" @click="runPipelineTrace" :class="{ busy: loading }">全流程</button>
         <button class="soft" @click="runDemoSteel" :class="{ busy: loading }" title="少量钢件·利用率偏低属正常">
           钢件轻量
         </button>
-        <button class="primary-lg" @click="runDemo" :class="{ busy: loading }" title="30×密实模块≈24t，高利用率">
+        <button class="primary-lg" @click="runDemo" :class="{ busy: loading }" title="30×密实模块≈24t；默认停 HITL">
           {{ loading ? '运行中…' : '满载演示' }}
         </button>
       </div>
@@ -1004,18 +1016,38 @@
           <div class="empty-hero" v-if="!hasAnyResult && mainTab === 'overview'">
             <h3>组建团队，开始装柜</h3>
             <p>
-              左侧是 9 智能体 + HITL 团队。运行后可点选成员，在「Agent 输出」里看规划、工具与结论。
-              计算由代码完成，不是聊天编造柜数。
+              左侧是 <strong>{{ agentCount || 13 }}</strong> 智能体（大 Team⊃A/B）+ HITL。
+              harness <strong>v{{ harnessVersion || '0.6.4' }}</strong>。
+              演示默认<strong>停确认闸</strong>，tools 算数，不编造柜数。
             </p>
             <div class="actions">
-              <button class="primary-lg" @click="runDemo" :class="{ busy: loading }">一键演示</button>
+              <button class="primary-lg" @click="runDemo" :class="{ busy: loading }">一键演示（HITL）</button>
               <button class="soft" @click="runPipelineTrace" :class="{ busy: loading }">全流程轨迹</button>
               <button class="ghost" @click="runTeamA" :class="{ busy: loading }">仅团队 A</button>
+              <button class="soft" @click="refreshHealth">健康预检</button>
+            </div>
+            <div class="status-line" v-if="preflightHints.length" style="margin-top:12px;text-align:left;max-width:520px">
+              <div v-for="(h,i) in preflightHints" :key="'ph'+i">· {{ h }}</div>
             </div>
           </div>
 
           <!-- ===== 总览 ===== -->
           <template v-if="mainTab === 'overview' && hasAnyResult">
+            <!-- 报错条：缺尺寸 / errors -->
+            <div
+              class="verdict-banner"
+              v-if="errorBanner && errorBanner.show"
+              :class="errorBanner.level === 'block' ? 'block' : 'warn'"
+            >
+              <div class="vt">{{ errorBanner.title || '报错' }}</div>
+              <ul>
+                <li v-for="(ln, i) in (errorBanner.lines || [])" :key="'eb'+i">{{ ln }}</li>
+              </ul>
+              <div class="row-acts">
+                <button type="button" class="soft" @click="mainTab = 'boxes'">查看装箱</button>
+                <button type="button" class="ghost" @click="mainTab = 'agents'">Agent 轨迹</button>
+              </div>
+            </div>
             <!-- 一眼裁决：不必开 PDF -->
             <div
               class="verdict-banner"
@@ -1024,7 +1056,24 @@
             >
               <div class="vt">{{ verdict.title || '裁决' }}</div>
               <div class="vs">{{ verdict.summary || verdict.headline }}</div>
-              <ul v-if="verdict.issues && verdict.issues.length > 1">
+              <div class="vs" style="margin-top:6px;font-size:12px;opacity:.95" v-if="verdict.headline && verdict.headline !== verdict.summary">
+                {{ verdict.headline }}
+              </div>
+              <div class="row" style="margin-top:8px;flex-wrap:wrap;gap:6px" v-if="verdict.worst_mid50 != null || verdict.booking_volume_utilization != null">
+                <span class="pill" :class="(verdict.worst_mid50||0) >= 0.6 ? 'ok' : 'warn'">
+                  mid50 {{ pct(verdict.worst_mid50) }}
+                </span>
+                <span class="pill" v-if="verdict.booking_volume_utilization != null">
+                  订舱 {{ pct(verdict.booking_volume_utilization) }}
+                </span>
+                <span class="pill" v-if="verdict.outer_space_utilization != null">
+                  外廓 {{ pct(verdict.outer_space_utilization) }}
+                </span>
+                <span class="pill" :class="verdict.ship_ok === false ? 'err' : (verdict.ship_ok ? 'ok' : '')">
+                  ship_ok {{ verdict.ship_ok === false ? '否' : (verdict.ship_ok ? '是' : '—') }}
+                </span>
+              </div>
+              <ul v-if="verdict.issues && verdict.issues.length">
                 <li v-for="(iss, i) in verdict.issues" :key="'vi'+i">{{ iss }}</li>
               </ul>
               <div class="va" v-if="verdict.actions && verdict.actions.length">
@@ -1037,8 +1086,11 @@
                 <button type="button" class="ghost" @click="scrollToCog" v-if="cogPrimary">
                   查看重心 COG
                 </button>
+                <button type="button" class="soft" @click="mainTab = 'boxes'" v-if="verdict.materials_incomplete || (result.boxes||[]).length">
+                  装箱 / 两排标签
+                </button>
                 <span class="pill" :class="verdict.level === 'ok' ? 'ok' : (verdict.level === 'block' ? 'err' : 'warn')">
-                  {{ verdict.headline || verdict.level }}
+                  {{ verdict.level }}
                 </span>
               </div>
             </div>
@@ -1082,6 +1134,88 @@
                     </tr>
                   </tbody>
                 </table>
+              </div>
+            </div>
+
+            <!-- 多柜解释：N0* → 实装 -->
+            <div class="section" v-if="multiContainer && multiContainer.show">
+              <div class="section-h">
+                <h3>多柜规划（Agent）</h3>
+                <span class="pill" :class="(multiContainer.n0_gap||0)===0 ? 'ok' : 'warn'">
+                  N0*={{ multiContainer.n0_star || multiContainer.n0 }} → 实装 {{ multiContainer.containers_used }}
+                </span>
+                <span class="pill warn" v-if="multiContainer.residual_last_container">末柜偏空</span>
+                <span class="pill ok" v-if="multiContainer.merged_ok">已并回<span v-if="multiContainer.merge_rounds">×{{ multiContainer.merge_rounds }}</span></span>
+                <span class="pill warn" v-if="multiContainer.big_ticket">大票</span>
+                <span class="pill" v-if="multiContainer.weight_utilization != null"
+                  :class="multiContainer.weight_utilization >= 0.7 ? 'ok' : 'warn'">
+                  重量 {{ pct(multiContainer.weight_utilization) }}
+                </span>
+              </div>
+              <p class="foot-note" style="margin:0 0 8px">
+                {{ multiContainer.explain || multiContainer.n0_note || 'N0* = max(重量,体积,几何底面,几何槽位)；柜级递增试装 + 多轮末柜并回。柜内 multi_start 是固定 N 的多种放法，不是跨柜 FFD 最优。' }}
+              </p>
+              <div class="row" style="flex-wrap:wrap;gap:8px" v-if="multiContainer.n0_components">
+                <span class="pill">重量 {{ multiContainer.n0_components.weight }}</span>
+                <span class="pill">体积 {{ multiContainer.n0_components.volume }}</span>
+                <span class="pill">底面 {{ multiContainer.n0_components.geom_floor }}</span>
+                <span class="pill">槽位 {{ multiContainer.n0_components.geom_slot }}</span>
+                <span class="pill" v-if="multiContainer.n0_components.geom_slot_raw != null && multiContainer.n0_components.geom_slot_raw !== multiContainer.n0_components.geom_slot">
+                  槽位raw {{ multiContainer.n0_components.geom_slot_raw }}
+                </span>
+              </div>
+              <div class="foot-note" v-if="multiContainer.last_container && multiContainer.last_container.n_boxes != null" style="margin-top:8px">
+                末柜 #{{ multiContainer.last_container.container_no }}：
+                {{ multiContainer.last_container.n_boxes }} 箱
+                <span v-if="multiContainer.last_container.floor_utilization != null">
+                  · 底面积 {{ pct(multiContainer.last_container.floor_utilization) }}
+                </span>
+              </div>
+              <div v-if="multiContainer.tips && multiContainer.tips.length" style="margin-top:10px;padding:10px 12px;border-radius:8px;background:rgba(230,184,77,0.12);border:1px solid rgba(230,184,77,0.35)">
+                <div style="font-weight:600;margin-bottom:4px;color:#e6b84d">大票 / 利用率提示</div>
+                <ul style="margin:0;padding-left:18px">
+                  <li v-for="(t,i) in multiContainer.tips" :key="'mct'+i" class="foot-note" style="margin:2px 0">{{ t }}</li>
+                </ul>
+              </div>
+              <!-- Agent 策略决策：候选对比 -->
+              <div v-if="strategyDecision && strategyDecision.show" style="margin-top:12px">
+                <div class="row" style="flex-wrap:wrap;gap:8px;margin-bottom:6px">
+                  <span class="pill ok">策略 {{ strategyDecision.chosen || '—' }}</span>
+                  <span class="pill warn" v-if="strategyDecision.need_cog_warn">CoG 预警</span>
+                  <span class="pill" v-if="strategyDecision.reference_light_used != null">
+                    light 下界 {{ strategyDecision.reference_light_used }}
+                  </span>
+                  <span class="pill" v-if="multiContainer.worst_mid50 != null"
+                    :class="multiContainer.worst_mid50 >= 0.6 ? 'ok' : 'warn'">
+                    mid50 {{ pct(multiContainer.worst_mid50) }}
+                  </span>
+                </div>
+                <p class="foot-note" style="margin:0 0 8px">{{ strategyDecision.reason }}</p>
+                <div class="table-wrap" v-if="strategyDecision.candidates && strategyDecision.candidates.length">
+                  <table>
+                    <thead>
+                      <tr>
+                        <th>策略</th>
+                        <th>柜数</th>
+                        <th>重量</th>
+                        <th>mid50</th>
+                        <th>出运</th>
+                        <th>备注</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      <tr v-for="(c,i) in strategyDecision.candidates" :key="'sc'+i"
+                        :style="c.strategy_id === strategyDecision.chosen ? 'background:rgba(62,207,142,0.12)' : ''">
+                        <td>{{ c.strategy_id }}<span v-if="c.reference_only" class="muted"> ·参考</span></td>
+                        <td>{{ c.used }}</td>
+                        <td>{{ c.weight_utilization != null ? pct(c.weight_utilization) : '—' }}</td>
+                        <td>{{ c.mid50 != null ? pct(c.mid50) : '—' }}</td>
+                        <td>{{ c.ship_ok_hint ? '可' : (c.reference_only ? '否' : '慎') }}</td>
+                        <td class="foot-note">{{ c.note || '' }}</td>
+                      </tr>
+                    </tbody>
+                  </table>
+                </div>
               </div>
             </div>
 
@@ -1405,12 +1539,34 @@
                 <span class="pill" :class="designFactsOk ? 'ok' : 'warn'">
                   {{ designFactsOk ? '已加载详设' : '待详设' }}
                 </span>
+                <span class="pill ok" v-if="boxesTwoRowCount">两排对齐 {{ boxesTwoRowCount }}</span>
+                <span class="pill warn" v-if="boxesSingleRowCount">单排 {{ boxesSingleRowCount }}</span>
+                <span class="pill err" v-if="boxesSectionBigCount">截面过大 {{ boxesSectionBigCount }}</span>
+              </div>
+              <!-- 柜数与成箱同屏：预估 N0* / 实装 used -->
+              <div class="verdict-banner ok" style="margin-bottom:12px" v-if="boxSchemeCabinCard.show">
+                <div class="vt">{{ boxSchemeCabinCard.title }}</div>
+                <div class="vs">{{ boxSchemeCabinCard.summary }}</div>
+                <div class="row" style="margin-top:8px;flex-wrap:wrap;gap:6px">
+                  <span class="pill ok">建议 N0* {{ boxSchemeCabinCard.n0 }}</span>
+                  <span class="pill" v-if="boxSchemeCabinCard.used != null"
+                        :class="boxSchemeCabinCard.used === boxSchemeCabinCard.n0 ? 'ok' : 'warn'">
+                    3D 实装 {{ boxSchemeCabinCard.used }}
+                  </span>
+                  <span class="pill" v-if="boxSchemeCabinCard.used == null">确认后拼柜 → 实装柜数</span>
+                  <span class="pill" v-if="boxSchemeCabinCard.comps">{{ boxSchemeCabinCard.comps }}</span>
+                </div>
+                <div class="va" v-if="boxSchemeCabinCard.hint">{{ boxSchemeCabinCard.hint }}</div>
+              </div>
+              <div class="verdict-banner warn" v-if="result.materials_incomplete || (errorBanner && errorBanner.materials_incomplete)" style="margin-bottom:10px">
+                <div class="vt">⛔ 缺尺寸 · 不可出运</div>
+                <div class="vs">有物料 L/W/H=0，成箱已阻断；请补全尺寸后重跑，勿当成可装方案。</div>
               </div>
               <div style="overflow:auto">
                 <table class="data">
                   <thead>
                     <tr>
-                      <th>箱号</th><th>箱型</th><th>外尺寸 mm</th><th>毛重 kg</th><th>结构</th><th>属性</th><th>内容</th>
+                      <th>箱号</th><th>箱型</th><th>外尺寸 mm</th><th>毛重 kg</th><th>结构</th><th>横排</th><th>属性</th><th>内容</th>
                     </tr>
                   </thead>
                   <tbody>
@@ -1424,6 +1580,12 @@
                       </td>
                       <td>{{ b.gross_weight_kg }}</td>
                       <td>{{ b.structure_conclusion || '—' }}</td>
+                      <td>
+                        <span class="pill ok" v-if="boxTwoRowOk(b)">两排</span>
+                        <span class="pill warn" v-else-if="b.two_row_ok === false || (b.special_attributes||[]).indexOf('单排宽箱')>=0">单排</span>
+                        <span class="pill err" v-if="b.section_too_large || (b.special_attributes||[]).indexOf('截面过大')>=0">截面大</span>
+                        <span v-if="b.two_row_ok == null && !(b.special_attributes||[]).length">—</span>
+                      </td>
                       <td>{{ (b.special_attributes || []).join(', ') }}</td>
                       <td>
                         <span v-for="c in (b.content||[])" :key="(c.material_id||'')+(c.name||'')">
@@ -1456,10 +1618,17 @@
               <div class="status-line" v-if="nlStatus">{{ nlStatus }}</div>
             </div>
             <div class="empty-hero" v-if="!(result.boxes && result.boxes.length)">
-              <h3>尚无装箱方案</h3>
-              <p>先运行「生成方案」或「一键演示」。</p>
+              <h3>{{ (result.materials_incomplete || (result.errors||[]).length) ? '成箱已阻断' : '尚无装箱方案' }}</h3>
+              <p v-if="result.materials_incomplete || (errorBanner && errorBanner.show)">
+                {{ (errorBanner && errorBanner.lines && errorBanner.lines[0]) || '缺尺寸或错误导致未生成箱。请看总览报错条。' }}
+              </p>
+              <p v-else>先运行「生成方案」或「一键演示」。</p>
+              <ul v-if="(result.errors||[]).length" style="text-align:left;max-width:480px;margin:8px auto;color:var(--muted)">
+                <li v-for="(e,i) in result.errors.slice(0,6)" :key="'be'+i">{{ e }}</li>
+              </ul>
               <div class="actions">
                 <button @click="runTeamA" :class="{ busy: loading }">生成方案</button>
+                <button class="soft" @click="mainTab = 'overview'">回总览看报错</button>
               </div>
             </div>
           </template>
@@ -1803,6 +1972,11 @@
           statusText: '就绪 · 可一键演示或生成方案',
           skjolberOk: false,
           skjolberLabel: 'unknown',
+          gatewayOk: false,
+          llmKeyPresent: false,
+          agentCount: 13,
+          preflightHints: [],
+          demoAutoConfirm: false,
           result: {},
           agentSteps: [],
           selectedAgent: 'ALL',
@@ -2072,6 +2246,128 @@
           if (v > 300) return '#f07178';
           if (v > 150) return '#e6b84d';
           return '#3ecf8e';
+        },
+        boxSchemeCabinCard() {
+          const r = this.result || {};
+          const hitl = r.hitl_summary || {};
+          const mc = r.multi_container || {};
+          const p = r.container_plan || {};
+          const book = p.booking || r.booking || hitl.booking_preview || {};
+          const n0 = mc.n0_star != null ? mc.n0_star
+            : (mc.n0 != null ? mc.n0 : (p.n0 != null ? p.n0 : (hitl.n0 != null ? hitl.n0 : book.n0)));
+          const used = mc.containers_used != null ? mc.containers_used : p.containers_used;
+          const comps = mc.n0_components || book.n0_components || hitl.n0_components || {};
+          const hasBoxes = (r.boxes || []).length > 0;
+          if (!hasBoxes && n0 == null && used == null) return { show: false };
+          let compsTxt = '';
+          if (comps && (comps.weight != null || comps.volume != null)) {
+            compsTxt = '重' + (comps.weight != null ? comps.weight : '—')
+              + '/体' + (comps.volume != null ? comps.volume : '—')
+              + '/底' + (comps.geom_floor != null ? comps.geom_floor : '—')
+              + '/槽' + (comps.geom_slot != null ? comps.geom_slot : '—');
+          }
+          const afterB = used != null && r.phase !== 'await_user_confirm';
+          return {
+            show: hasBoxes || n0 != null,
+            title: afterB ? '柜数：成箱 N0* + 3D 实装' : '柜数预估（与成箱同屏 · 待你确认）',
+            summary: afterB
+              ? ('工具计算：N0*=' + n0 + ' → 实装 ' + used + (mc.explain ? ' · ' + mc.explain : ''))
+              : ('按当前 ' + (r.boxes || []).length + ' 箱估算建议订柜 N0*=' + (n0 != null ? n0 : '—')
+                + '（重量/体积/几何下界）。确认拼柜后由 3D 给出最终柜数，可能 +0~1。'),
+            n0: n0 != null ? n0 : '—',
+            used: used,
+            comps: compsTxt,
+            hint: afterB
+              ? 'N0* 非 LLM 拍数；柜内摆法用 multi_start，柜级用下界+试装（非纯 FFD）'
+              : '点「确认并拼柜」= 你确认方案与建议柜数，再跑 Team B',
+          };
+        },
+        multiContainer() {
+          const r = this.result || {};
+          if (r.multi_container && (r.multi_container.show || r.multi_container.n0 != null)) {
+            return r.multi_container;
+          }
+          const p = r.container_plan || {};
+          const book = p.booking || r.booking || {};
+          const n0 = p.n0 != null ? p.n0 : book.n0;
+          const used = p.containers_used;
+          if (n0 == null && used == null) return { show: false };
+          return {
+            show: !!(used >= 2 || n0 >= 2),
+            n0: n0,
+            n0_star: p.n0_star || n0,
+            containers_used: used,
+            n0_gap: p.n0_gap != null ? p.n0_gap : (used != null && n0 != null ? used - n0 : null),
+            n0_components: p.n0_components || book.n0_components,
+            n0_note: p.n0_note || book.n0_note,
+            explain: p.multi_container_explain || '',
+            last_container: p.last_container_stats || {},
+            residual_last_container: !!p.residual_last_container,
+            merged_ok: !!p.merged_ok,
+            worst_mid50: p.worst_mid50,
+            density_mode: p.density_mode,
+            reference_light_used: p.reference_light_used,
+            strategy_decision: p.strategy_decision,
+            strategy_candidates: p.strategy_candidates,
+          };
+        },
+        strategyDecision() {
+          const r = this.result || {};
+          if (r.strategy_decision && (r.strategy_decision.show || r.strategy_decision.chosen)) {
+            return r.strategy_decision;
+          }
+          const mc = this.multiContainer || {};
+          const p = r.container_plan || {};
+          const sd = mc.strategy_decision || p.strategy_decision || {};
+          const cands = sd.candidates || mc.strategy_candidates || p.strategy_candidates || [];
+          if (!sd.chosen && !cands.length) return { show: false };
+          return {
+            show: true,
+            chosen: sd.chosen || p.density_mode,
+            reason: sd.reason || p.strategy_reason || '',
+            candidates: cands,
+            need_cog_warn: !!sd.need_cog_warn,
+            reference_light_used: mc.reference_light_used != null
+              ? mc.reference_light_used
+              : p.reference_light_used,
+          };
+        },
+        errorBanner() {
+          const r = this.result || {};
+          if (r.error_banner && r.error_banner.show) return r.error_banner;
+          const errs = r.errors || [];
+          const warns = r.warnings || [];
+          if (r.materials_incomplete || errs.length) {
+            return {
+              show: true,
+              level: 'block',
+              title: r.materials_incomplete ? '⛔ 缺尺寸 / 材料不完整' : '⛔ 运行报错',
+              lines: (r.materials_incomplete
+                ? ['存在 L/W/H=0 的物料，已阻断成箱与出运']
+                : []).concat(errs.slice(0, 6)),
+              materials_incomplete: !!r.materials_incomplete,
+            };
+          }
+          if (warns.length) {
+            return { show: true, level: 'warn', title: '⚠️ 警告', lines: warns.slice(0, 6) };
+          }
+          return { show: false, lines: [] };
+        },
+        boxesTwoRowCount() {
+          return (this.result.boxes || []).filter((b) => this.boxTwoRowOk(b)).length;
+        },
+        boxesSingleRowCount() {
+          return (this.result.boxes || []).filter(
+            (b) => b.two_row_ok === false || (b.special_attributes || []).indexOf('单排宽箱') >= 0
+          ).length;
+        },
+        boxesSectionBigCount() {
+          return (this.result.boxes || []).filter(
+            (b) => b.section_too_large || (b.special_attributes || []).indexOf('截面过大') >= 0
+          ).length;
+        },
+        preflightTitle() {
+          return (this.preflightHints || []).join('\n') || '健康预检';
         },
         riskPillClass() {
           const d = (this.result.risk_report || {}).decision || '';
@@ -2592,6 +2888,12 @@
           } else {
             this.result = payload || {};
           }
+          if (payload && payload.harness_version) {
+            this.harnessVersion = payload.harness_version;
+          } else if (this.result.harness_version) {
+            this.harnessVersion = this.result.harness_version;
+          }
+          if (this.result.agent_count) this.agentCount = this.result.agent_count;
           if (!this.result.verdict) {
             this.result.verdict = this.buildClientVerdict(this.result);
           }
@@ -2600,9 +2902,9 @@
           if (this.hasAnyResult && this.mainTab === 'overview') {
             /* stay on overview after run */
           }
-          // 硬阻断时停在总览大红条，并可选跳风险
+          // 硬阻断 / 报错 / HITL 停在总览
           const lv = (this.result.verdict || {}).level;
-          if (lv === 'block' && this.mainTab === 'visual') {
+          if ((lv === 'block' || this.result.materials_incomplete) && this.mainTab === 'visual') {
             this.mainTab = 'overview';
           }
         },
@@ -2636,6 +2938,13 @@
           if (riskDec === 'REJECT') { issues.push('风险 REJECT'); bump('block'); }
           else if (riskDec && riskDec !== 'PASS' && riskDec !== 'OK') { issues.push('风险 ' + riskDec); bump('warn'); }
           if (shipOk === false) { issues.push('不可出运 ship_ok=False'); bump('block'); }
+          if (res.materials_incomplete) {
+            issues.push('材料缺尺寸 — 已阻断成箱');
+            bump('block');
+          }
+          for (const e of (res.errors || []).slice(0, 3)) {
+            if (e) { issues.push(String(e).slice(0, 120)); bump('block'); }
+          }
           if (!plan || (!plan.can_fit && plan.can_fit !== false && !res.phase)) {
             return { level: 'warn', title: '尚未出结果', summary: '请先运行演示或生成方案', show_banner: false, issues: [] };
           }
@@ -2726,26 +3035,59 @@
               j = {};
             }
             if (!r.ok) {
-              const detail = (j && (j.detail || j.error || j.message)) || ('HTTP ' + r.status);
-              throw new Error(typeof detail === 'string' ? detail : JSON.stringify(detail));
+              let detail = (j && (j.detail || j.error || j.message || j.final_response)) || ('HTTP ' + r.status);
+              if (Array.isArray(detail)) {
+                detail = detail.map((d) => (d && d.msg) || JSON.stringify(d)).join('; ');
+              } else if (typeof detail !== 'string') {
+                detail = JSON.stringify(detail);
+              }
+              const errList = (j && j.errors) || [];
+              if (errList.length) detail += ' | ' + errList.slice(0, 3).join('; ');
+              throw new Error(detail);
             }
             return j;
           } finally {
             if (timer) clearTimeout(timer);
           }
         },
+        boxTwoRowOk(b) {
+          if (!b) return false;
+          if (b.two_row_ok === true) return true;
+          const sp = b.special_attributes || [];
+          return sp.indexOf('两排对齐') >= 0;
+        },
         async refreshHealth() {
           try {
             const r = await fetch(API + '/api/health');
+            if (!r.ok) throw new Error('HTTP ' + r.status);
             const j = await r.json();
+            this.gatewayOk = (j.gateway || '').toUpperCase() === 'UP';
             this.skjolberOk = !!(j.skjolber && j.skjolber.ok);
             this.skjolberLabel = this.skjolberOk
               ? 'UP ' + (j.skjolber_url || '')
               : (j.skjolber && j.skjolber.reason) || '未连接（将用本地回退）';
-            this.harnessVersion = j.harness_version || '';
+            this.harnessVersion = j.harness_version || this.harnessVersion || '';
+            this.agentCount = j.agent_count || this.agentCount || 13;
+            this.llmKeyPresent = !!j.llm_key_present;
+            const pf = j.preflight || {};
+            this.preflightHints = pf.hints || [];
+            const parts = [
+              '网关 ' + (this.gatewayOk ? 'UP' : 'DOWN'),
+              'skjolber ' + (this.skjolberOk ? 'UP' : '本地回退'),
+              'LLM ' + (this.llmKeyPresent ? '有Key' : '无Key'),
+              'v' + (this.harnessVersion || '—'),
+              (this.agentCount || 13) + ' agents',
+            ];
+            this.statusText = '预检: ' + parts.join(' · ');
+            if (this.preflightHints.length) {
+              this.statusText += ' | ' + this.preflightHints[0];
+            }
           } catch (e) {
+            this.gatewayOk = false;
             this.skjolberOk = false;
             this.skjolberLabel = '网关不可达';
+            this.statusText = '预检失败: ' + e + ' · 请确认 uvicorn 已启动';
+            this.preflightHints = [String(e)];
           }
         },
         async runTeamA() {
@@ -2787,21 +3129,27 @@
               container_type: this.containerType,
               session_id: this.sessionId,
               preset: 'high_util',
+              enable_auto_confirm: !!this.demoAutoConfirm,
             }, 90000);
             this.applyResult(j);
             const vs = (this.result.volume_summary) || {};
             const lv = (this.verdict && this.verdict.level) || '';
             this.pushVerdictToStatus();
-            if (lv !== 'block') {
+            if (this.result.phase === 'await_user_confirm') {
+              this.statusText =
+                '★ 已停在 HITL · session=' + (this.result.session_id || this.sessionId) +
+                ' · 请确认柜型后点「确认并拼柜」';
+              this.mainTab = 'overview';
+            } else if (lv !== 'block') {
               this.statusText =
                 (this.statusText || '') +
                 ' · 订舱 ' + this.pct(vs.booking_volume_utilization) +
                 ' · 外廓 ' + this.pct(vs.outer_space_utilization);
+              this.mainTab = this.hasViews || this.hasScene3d ? 'visual' : 'overview';
+            } else {
+              this.mainTab = 'overview';
             }
-            // 阻断留总览红条；通过再进可视化
-            this.mainTab = lv === 'block'
-              ? 'overview'
-              : (this.hasViews || this.hasScene3d ? 'visual' : 'overview');
+            // 阻断留总览红条
             this.$nextTick(() => {
               try {
                 if (this.mainTab === 'visual') {
@@ -2831,10 +3179,16 @@
               container_type: this.containerType,
               session_id: this.sessionId,
               preset: 'steel_light',
+              enable_auto_confirm: !!this.demoAutoConfirm,
             }, 90000);
             this.applyResult(j);
-            this.statusText = '钢件演示完成 phase=' + (this.result.phase || '');
-            this.mainTab = this.hasViews || this.hasScene3d ? 'visual' : 'overview';
+            if (this.result.phase === 'await_user_confirm') {
+              this.statusText = '钢件已成箱 · 待 HITL 确认 · phase=await_user_confirm';
+              this.mainTab = 'overview';
+            } else {
+              this.statusText = '钢件演示完成 phase=' + (this.result.phase || '');
+              this.mainTab = this.hasViews || this.hasScene3d ? 'visual' : 'overview';
+            }
           } catch (e) {
             this.statusText = '失败: ' + e;
           } finally {
@@ -2860,13 +3214,17 @@
               user_input: this.userInput || 'Agent pipeline',
               container_type: this.containerType,
               session_id: this.sessionId,
-              enable_auto_confirm: true,
+              enable_auto_confirm: !!this.demoAutoConfirm,
               max_containers: 0,
               mode: 'steps',
               save_artifacts: true,
             }, 90000);
             this.applyResult(j);
-            this.statusText = '轨迹完成 steps=' + this.agentSteps.length + ' phase=' + (this.result.phase || '');
+            this.statusText =
+              '轨迹完成 steps=' + this.agentSteps.length +
+              ' phase=' + (this.result.phase || '') +
+              (this.result.phase === 'await_user_confirm' ? ' · 待 HITL' : '');
+            if (this.result.phase === 'await_user_confirm') this.mainTab = 'overview';
             this.loadRuns();
           } catch (e) {
             this.statusText = '失败: ' + e;

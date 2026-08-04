@@ -1,5 +1,19 @@
 # CHANGELOG · v0.5.0+
 
+## v0.6.4+ · 分卡诚实校准（workteams 评后）
+
+| 项 | 内容 |
+|----|------|
+| **分卡** | `eval_competition_scorecard` 跟踪 phase0 维均值；quick-only **封顶**；赢线 7.5/任务 8.0；冲刺 9.5 需 full baseline |
+| **HITL** | reject 拦 B + multi-container resume |
+| **对抗/mid50** | 可见拒装/锁柜/CTU mid50≥60%（can_fit 时） |
+| **文案** | README/演示脚本统一 **0.6.4 · 13 agents** |
+| **full phase0** | `baseline_full_latest.json`（含 t30/t80，n=30）；`--full` / 归档分轨 |
+| **llm 影子 KPI** | `scripts/test_llm_shadow_kpi.py` 挂硬门 |
+| **中新走廊** | `knowledge_base/07_domain_knowledge/cn_sg_corridor.md` |
+| **UX/速度** | 演示默认 HITL；health 预检；报错条；箱表两排标签；phase0 `--fast-full`/`--t80-sample`/`--jobs`；分卡自动 skip-phase0；HITL multi 轻量票 |
+| **多柜** | N0\*=max(wt,vol,geom)；末柜并回；模块防假多柜；成箱/HITL 同屏建议柜数；FFD vs multi_start 说明见 research |
+
 ## v0.6.4 · Agent 知识库 + 比赛九五分卡
 
 | 项 | 说明 |
@@ -14,7 +28,7 @@
 | **比赛分卡** | `scripts/eval_competition_scorecard.py` → 综合 ≥9.5 |
 | 回归 | kb · mid50 · HITL · booking · phase0 quick · scorecard |
 
-**Harness**：→ **0.6.4** · 分卡综合 **10.0 PASS**（本地）
+**Harness**：→ **0.6.4** · 分卡已改诚实校准（见 v0.6.4+；本地虚高 10.0 不再作为对外数字）
 
 ---
 

@@ -41,9 +41,14 @@ def agent_material_parser(state: PackingState) -> Dict[str, Any]:
         }
 
     llm_note = ""
-    if existing and _has_metrics_api(existing) and not _looks_like_list(raw):
-        mats = existing
-        source = "inject"
+    incomplete_dims = False
+    # 显式注入的材料：永远优先保留，禁止缺字段时静默换成 demo 票
+    if existing and not _looks_like_list(raw):
+        mats = _normalize_llm_materials(list(existing))
+        if not mats:
+            mats = list(existing)
+        source = "inject" if _has_metrics_api(mats) else "inject_partial"
+        incomplete_dims = _has_incomplete_dims(mats)
     else:
         mats = _rule_parse(raw)
         source = "rule"
@@ -67,9 +72,16 @@ def agent_material_parser(state: PackingState) -> Dict[str, Any]:
                     mats = _normalize_llm_materials(llm_mats)
                     source = "llm"
                     llm_note = f" LLM解析{len(mats)}条"
+        # 仅「无注入且解析为空」时用 demo；有注入残缺则保留残缺
         if not mats or not _has_metrics_api(mats):
-            mats = _demo_materials()
-            source = "demo"
+            if existing:
+                mats = _normalize_llm_materials(list(existing)) or list(existing)
+                source = "inject_partial"
+                incomplete_dims = True
+            else:
+                mats = _demo_materials()
+                source = "demo"
+        incomplete_dims = incomplete_dims or _has_incomplete_dims(mats)
 
     # 应用简单「去掉 xxx」
     if note and ("去掉" in note or "删除" in note):
@@ -83,6 +95,11 @@ def agent_material_parser(state: PackingState) -> Dict[str, Any]:
     tools_used = ["material_parser.rule_parse" if source == "rule" else f"material_parser.{source}"]
     if source == "llm":
         tools_used.append("llm.chat_json_array")
+    warn_bits = []
+    if incomplete_dims:
+        warn_bits.append("缺尺寸(L/W/H=0)不可默成出运")
+    if source == "inject_partial":
+        warn_bits.append("注入材料字段不完整")
     msg = (
         f"【感知】材料摘要({source}{llm_note})："
         f"{summary.get('total_pieces')} 件 / {summary.get('total_weight_kg')} kg / "
@@ -91,13 +108,15 @@ def agent_material_parser(state: PackingState) -> Dict[str, Any]:
         f"过滤={perception.get('filter_rules')}；"
         f"柜型假设={perception.get('container_assumption')}；"
         f"最长={perception.get('longest_mm')}mm 最重单件={perception.get('heaviest_unit_kg')}kg"
+        f"{('；警告=' + ';'.join(warn_bits)) if warn_bits else ''}"
         f"｜tools={','.join(tools_used)}"
     )
-    return {
+    out: Dict[str, Any] = {
         "materials": mats,
         "materials_summary": summary,
         "perception": perception,
         "phase": "team_a_running",
+        "materials_incomplete": bool(incomplete_dims),
         "agent_meta": {
             "node": "material_parser",
             "capability": ["感知环境"],
@@ -106,10 +125,21 @@ def agent_material_parser(state: PackingState) -> Dict[str, Any]:
                 "total_pieces": summary.get("total_pieces"),
                 "total_weight_kg": summary.get("total_weight_kg"),
                 "source": source,
+                "incomplete_dims": bool(incomplete_dims),
             },
         },
         "messages": [{"role": "assistant", "content": msg}],
     }
+    if incomplete_dims:
+        errs = list(state.get("errors") or [])  # type: ignore[arg-type]
+        errs.append("materials_missing_dims: 存在 L/W/H 为 0 的物料，禁止当完整方案出运")
+        out["errors"] = errs
+        out["warnings"] = list(state.get("warnings") or []) + [  # type: ignore[arg-type]
+            "缺尺寸物料：需补尺寸或剔除后再成箱"
+        ]
+        # 硬信号：不可 ship
+        out["ship_ok"] = False
+    return out
 
 
 def _normalize_llm_materials(items: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
@@ -162,6 +192,19 @@ def _has_metrics_api(materials: List[Dict[str, Any]]) -> bool:
         if float(m.get("weight_kg") or m.get("单重_kg") or 0) > 0:
             return True
         if float(m.get("length_mm") or (m.get("外尺寸_mm") or {}).get("长") or 0) > 0:
+            return True
+    return False
+
+
+def _has_incomplete_dims(materials: List[Dict[str, Any]]) -> bool:
+    """任一行缺有效三维 → 不可当完整装箱输入。"""
+    if not materials:
+        return False
+    for m in materials:
+        L = float(m.get("length_mm") or (m.get("外尺寸_mm") or {}).get("长") or 0)
+        W = float(m.get("width_mm") or (m.get("外尺寸_mm") or {}).get("宽") or 0)
+        H = float(m.get("height_mm") or (m.get("外尺寸_mm") or {}).get("高") or 0)
+        if L <= 1e-6 or W <= 1e-6 or H <= 1e-6:
             return True
     return False
 
