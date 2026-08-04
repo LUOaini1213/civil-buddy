@@ -1,5 +1,9 @@
 #!/usr/bin/env python3
-"""比赛对抗 5 票：坏输入/超重/锁柜/结构路径/乱 NL —— 不崩溃、illegal=0。"""
+"""比赛对抗 5 票：坏输入/超重/锁柜/结构路径/乱 NL。
+
+要求：不崩溃 + illegal=0 + **评委可见行为**（拒装/锁柜/结构路径），
+不只是 no-crash。
+"""
 
 from __future__ import annotations
 
@@ -80,9 +84,28 @@ def case_a1_missing_dims() -> Tuple[str, bool, str]:
     ]
     st = _run("a1", mats, "缺尺寸不要编造")
     ill = _illegal(st)
-    ok = _no_crash(st) and ill == 0
+    plan = st.get("container_plan") or {}
+    feas = st.get("cargo_feasibility") or {}
+    # 可见行为：不崩 + 不假装完美出运（缺尺寸不应 ship_ok 且 can_fit 双绿无告警）
+    ship = st.get("ship_ok")
+    can_fit = plan.get("can_fit")
+    visible_refuse = (
+        ship is False
+        or can_fit is False
+        or feas.get("ok") is False
+        or bool(st.get("errors") or st.get("warnings"))
+        or st.get("phase") in ("need_revision", "error", "await_user_confirm", "done")
+    )
+    # 若仍 can_fit+ship_ok，至少不得有完整伪造外尺寸成箱且无告警
+    boxes = st.get("boxes") or []
+    fake_ok = True
+    if boxes and ship is True and can_fit is True:
+        # 缺尺寸却「完美成箱出运」→ fail
+        fake_ok = False
+    ok = _no_crash(st) and ill == 0 and visible_refuse and fake_ok
     detail = (
-        f"phase={st.get('phase')} ship_ok={st.get('ship_ok')} "
+        f"phase={st.get('phase')} ship_ok={ship} can_fit={can_fit} "
+        f"feas_ok={feas.get('ok')} n_boxes={len(boxes)} "
         f"illegal={ill} wall={st.get('_wall_s'):.2f}"
     )
     return "A1_missing_dims", ok, detail
@@ -110,18 +133,26 @@ def case_a2_over_payload() -> Tuple[str, bool, str]:
     feas = st.get("cargo_feasibility") or {}
     plan = st.get("container_plan") or {}
     prop = st.get("replan_proposal") or {}
-    ok = _no_crash(st) and ill == 0
     boxes = st.get("boxes") or []
     max_net = max(
         (float(b.get("net_weight_kg") or b.get("gross_weight_kg") or 0) for b in boxes),
         default=0,
     )
+    # 可见拒装：不得 ship_ok 真出运超重；feas 或 can_fit 或 replan 拆箱路径
+    refused = (
+        st.get("ship_ok") is not True
+        or feas.get("ok") is False
+        or plan.get("can_fit") is False
+        or str(prop.get("route") or "") in ("box_scheme", "stop", "mass_split")
+        or max_net <= 3200 + 1e-6
+    )
     if st.get("ship_ok") is True and max_net > 30000:
-        ok = False
+        refused = False
+    ok = _no_crash(st) and ill == 0 and refused
     detail = (
         f"feas_ok={feas.get('ok')} can_fit={plan.get('can_fit')} "
-        f"route={prop.get('route')} max_net={max_net:.0f} "
-        f"illegal={ill} wall={st.get('_wall_s'):.2f}"
+        f"ship_ok={st.get('ship_ok')} route={prop.get('route')} "
+        f"max_net={max_net:.0f} illegal={ill} wall={st.get('_wall_s'):.2f}"
     )
     return "A2_over_payload", ok, detail
 
@@ -152,11 +183,21 @@ def case_a3_budget_lock() -> Tuple[str, bool, str]:
     plan = st.get("container_plan") or {}
     used = int(plan.get("containers_used") or 0)
     ill = _illegal(st)
-    ok = _no_crash(st) and ill == 0
+    # 硬锁：used 不得超过 1；装不下则 can_fit=False（可见），不许偷偷 used>1
+    lock_ok = used <= 1
     if plan.get("can_fit") is True and used > 1:
-        ok = False
+        lock_ok = False
+    # 12×2.5t 理论超单柜：要么 can_fit False，要么 used=1 且有 unpacked/超重提示
+    visible = (
+        plan.get("can_fit") is False
+        or used == 1
+        or bool(plan.get("unpacked_box_ids"))
+        or st.get("ship_ok") is False
+    )
+    ok = _no_crash(st) and ill == 0 and lock_ok and visible
     detail = (
         f"used={used} can_fit={plan.get('can_fit')} "
+        f"unpacked={len(plan.get('unpacked_box_ids') or [])} "
         f"illegal={ill} wall={st.get('_wall_s'):.2f}"
     )
     return "A3_budget_1c", ok, detail
@@ -182,12 +223,14 @@ def case_a4_structure_path() -> Tuple[str, bool, str]:
         if isinstance(s, dict)
     ]
     has_a = any(n in nodes for n in ("material_parser", "box_scheme", "structure"))
-    has_b = any(n in nodes for n in ("planner", "loader", "finalize"))
+    has_b = any(n in nodes for n in ("planner", "loader", "finalize", "evaluator"))
+    # 可见：A 与 B 节点都出现（或至少成箱+拼柜产物）
     ok = (
         _no_crash(st)
         and ill == 0
-        and (has_a or bool(st.get("boxes")))
-        and (has_b or st.get("container_plan") is not None or st.get("phase"))
+        and has_a
+        and (has_b or bool(st.get("container_plan")))
+        and (bool(st.get("boxes")) or "structure" in nodes)
     )
     detail = (
         f"nodes={len(nodes)} has_a={has_a} has_b={has_b} "
@@ -210,10 +253,21 @@ def case_a5_garbage_nl() -> Tuple[str, bool, str]:
     ]
     st = _run("a5", mats, "asdf@@@随便装 不要崩！！！" * 3)
     ill = _illegal(st)
-    ok = _no_crash(st) and ill == 0 and st.get("status") != "error"
+    plan = st.get("container_plan") or {}
+    # 乱 NL 不崩，且正常件仍应可走完（can_fit True 或 phase done）
+    ok = (
+        _no_crash(st)
+        and ill == 0
+        and st.get("status") != "error"
+        and (
+            plan.get("can_fit") is True
+            or st.get("phase") in ("done", "await_user_confirm")
+            or bool(st.get("boxes"))
+        )
+    )
     detail = (
         f"phase={st.get('phase')} "
-        f"can_fit={(st.get('container_plan') or {}).get('can_fit')} "
+        f"can_fit={plan.get('can_fit')} "
         f"illegal={ill} wall={st.get('_wall_s'):.2f}"
     )
     return "A5_garbage_nl", ok, detail

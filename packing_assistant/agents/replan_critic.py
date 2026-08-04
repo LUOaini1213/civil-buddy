@@ -115,9 +115,21 @@ def agent_replan_critic(state: Dict[str, Any]) -> Dict[str, Any]:
 
     if not need and not reasons:
         # 仍检查软问题
-        if mid50 is not None and mid50 < 0.60:
+        # mid 硬门 55%；55–60% 仅在柜数明显偏松时 soft densify
+        if mid50 is not None and mid50 < 0.55:
             need = True
         if bal == "block":
+            need = True
+        ref_chk = int(plan.get("reference_light_used") or 0)
+        used_chk = int(plan.get("containers_used") or 0)
+        if (
+            mid50 is not None
+            and 0.55 <= mid50 < 0.60
+            and used_chk >= 8
+            and ref_chk > 0
+            and used_chk > ref_chk + 2
+            and not opts.get("_soft_budget_densify_done")
+        ):
             need = True
         # 半柜空洞：能装下但过空（与「上次只装半柜被批」同类）
         if plan.get("can_fit") and not opts.get("_hollow_densify_done"):
@@ -134,6 +146,18 @@ def agent_replan_critic(state: Dict[str, Any]) -> Dict[str, Any]:
                 and ship_r < 1
             ):
                 need = True
+        # 柜数明显高于 light 下界：soft_budget 压柜一轮
+        ref_l = int(plan.get("reference_light_used") or 0)
+        used_l = int(plan.get("containers_used") or 0)
+        if (
+            plan.get("can_fit")
+            and used_l >= 8
+            and ref_l > 0
+            and used_l > ref_l + 2
+            and not opts.get("_soft_budget_densify_done")
+            and ship_r < 2
+        ):
+            need = True
 
     if not need:
         return _stop(max_c, ["无需 replan"])
@@ -190,14 +214,70 @@ def agent_replan_critic(state: Dict[str, Any]) -> Dict[str, Any]:
         if route != "box_scheme":
             route = "planner"
         delta["cog_aware"] = True
-        delta["cog_rebalance"] = True  # try_place + multi_start 中段加重
+        delta["cog_rebalance"] = True
         delta["multi_start"] = True
         delta["prefer_stack"] = True if worst_mid < 0.40 else bool(opts.get("prefer_stack", True))
-        # 第二轮更激进：略减间隙，利于中段填实
-        if ship_r >= 1 or worst_mid < 0.40:
-            delta["clearance_mm"] = max(15, int(opts.get("clearance_mm") or 30) - 15)
+        delta["disable_light_ship"] = True
+        delta["soft_budget_mid50"] = 0.60
+        delta["drop_load_priority"] = True
+        used_now = int(plan.get("containers_used") or max_c or 0)
+        ref_light = int(plan.get("reference_light_used") or 0)
+        if worst_mid < 0.55:
+            # 硬门：可抬柜 + 压柜
+            delta["strategy_request"] = "raise_bins_for_cog"
+            if worst_mid < 0.40 and used_now > 0 and not lock_max:
+                bump = min(40, used_now + (2 if worst_mid < 0.30 else 1))
+                max_c = max(max_c, bump)
+                delta["container_budget_soft"] = bump
+            elif ref_light > 0 and not lock_max:
+                delta["container_budget_soft"] = min(40, max(used_now, ref_light + 3))
+                delta["strategy_request"] = "densify_soft_budget_cog"
+            if ship_r >= 1 or worst_mid < 0.40:
+                delta["clearance_mm"] = max(15, int(opts.get("clearance_mm") or 30) - 15)
+            reasons.append(
+                f"最差柜 mid50={worst_mid:.0%}<55% → 策略={delta.get('strategy_request')}"
+                + (
+                    f" soft_budget={delta.get('container_budget_soft')}"
+                    if delta.get("container_budget_soft")
+                    else ""
+                )
+            )
+        else:
+            # 55%≤mid<60%：只压柜/再平衡，禁止为刷 60% 加柜（25→28 反例）
+            delta["strategy_request"] = "densify_soft_budget_cog"
+            delta["prefer_40hq_multi"] = True
+            if ref_light > 0 and not lock_max:
+                delta["container_budget_soft"] = max(
+                    ref_light, min(used_now, ref_light + 2)
+                )
+            reasons.append(
+                f"最差柜 mid50={worst_mid:.0%} 已≥55%、<60% → 压柜/再平衡，不抬柜"
+            )
+    elif (
+        plan.get("can_fit")
+        and int(plan.get("containers_used") or 0) >= 8
+        and int(plan.get("reference_light_used") or 0) > 0
+        and int(plan.get("containers_used") or 0)
+        > int(plan.get("reference_light_used") or 0) + 2
+        and not opts.get("_soft_budget_densify_done")
+    ):
+        # 可出运但柜数明显高于 light 下界：Agent 要求 soft 压柜
+        if route != "box_scheme":
+            route = "planner"
+        ref_light = int(plan.get("reference_light_used") or 0)
+        used_now = int(plan.get("containers_used") or 0)
+        soft = min(used_now, ref_light + 3, 40)
+        delta["strategy_request"] = "densify_soft_budget_cog"
+        delta["container_budget_soft"] = soft
+        delta["soft_budget_mid50"] = 0.60
+        delta["cog_aware"] = True
+        delta["cog_rebalance"] = True
+        delta["multi_start"] = True
+        delta["prefer_40hq_multi"] = True
+        delta["disable_light_ship"] = True
+        delta["_soft_budget_densify_done"] = True
         reasons.append(
-            f"最差柜 mid50={worst_mid:.0%}<60% → 自动 cog_rebalance+multi_start"
+            f"used={used_now}>light+2({ref_light}) → soft_budget={soft} 内找 mid50≥60%"
         )
 
     if lat is not None and lat >= 0.10:

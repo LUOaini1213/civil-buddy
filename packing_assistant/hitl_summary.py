@@ -43,6 +43,24 @@ def build_hitl_summary(state: Dict[str, Any]) -> Dict[str, Any]:
 
     n0 = plan.get("n0") or booking.get("n0")
     binding = booking.get("binding_constraint") or plan.get("binding_constraint")
+    n0_components = plan.get("n0_components") or booking.get("n0_components") or {}
+    n0_note = plan.get("n0_note") or booking.get("n0_note") or ""
+    # Team A 结束后尚未跑 Planner 时：用成箱结果现算 N0*（供人确认「几柜」）
+    if boxes and (n0 is None or not n0_components):
+        try:
+            from packing_assistant.tools.booking import compute_booking
+
+            booking = compute_booking(
+                boxes=boxes,
+                container_type=str(ctype),
+                fill_ratio=0.82,
+            )
+            n0 = booking.get("n0")
+            binding = booking.get("binding_constraint") or binding
+            n0_components = booking.get("n0_components") or {}
+            n0_note = booking.get("n0_note") or n0_note
+        except Exception:
+            pass
 
     # 标准箱型分布（评委可见）
     type_counts: Dict[str, int] = {}
@@ -98,9 +116,26 @@ def build_hitl_summary(state: Dict[str, Any]) -> Dict[str, Any]:
         },
         {
             "id": "n0",
-            "title": "订柜 N0",
+            "title": "建议柜数 N0*",
             "value": "—" if n0 is None else str(n0),
-            "hint": f"绑定 {binding or '—'}（规划估算）",
+            "hint": (
+                f"{n0_note or ('绑定 ' + str(binding or '—'))} "
+                f"· 确认后 3D 可能 +0~1 柜"
+            ),
+            "level": "ok" if n0 is not None else "warn",
+        },
+        {
+            "id": "n0_break",
+            "title": "N0* 分量",
+            "value": (
+                f"重{n0_components.get('weight', '—')}/"
+                f"体{n0_components.get('volume', '—')}/"
+                f"底{n0_components.get('geom_floor', '—')}/"
+                f"槽{n0_components.get('geom_slot', '—')}"
+                if n0_components
+                else "—"
+            ),
+            "hint": "max(重量,体积,底面几何,槽位) · 工具计算非 LLM 拍脑袋",
         },
         {
             "id": "structure",
@@ -136,7 +171,17 @@ def build_hitl_summary(state: Dict[str, Any]) -> Dict[str, Any]:
         "box_type_distribution": type_counts,
         "standard_box_hit_rate": hit_rate,
         "n0": n0,
+        "n0_star": n0,
+        "n0_components": n0_components,
+        "n0_note": n0_note,
         "binding": binding,
+        "booking_preview": {
+            "n0": n0,
+            "n0_components": n0_components,
+            "n0_note": n0_note,
+            "binding": binding,
+            "note": "成箱后预估；Team B 3D 实装可能微调",
+        },
         "structure_await_design": await_design,
         "structure_fail": fail_struct,
         "overlength_boxes": oversize,
@@ -156,8 +201,10 @@ def build_hitl_summary(state: Dict[str, Any]) -> Dict[str, Any]:
         },
         "message": (
             f"请确认柜型（推荐 {ctype}）后进入拼柜。"
-            f"当前 {len(boxes)} 箱，毛重 {total_gross:.0f} kg"
+            f"成箱 {len(boxes)} 只 · 建议订柜 N0*={n0 if n0 is not None else '—'} "
+            f"({n0_note or '工具估算'}) · 毛重 {total_gross:.0f} kg"
             + (f"；{await_design} 箱待详设" if await_design else "")
-            + "。状态已持久化，可安全关闭后 resume。"
+            + "。确认后 3D 实装可能 +0~1 柜；柜数由 tools 计算非 LLM 拍脑袋。"
+            + " 状态已持久化，可安全关闭后 resume。"
         ),
     }

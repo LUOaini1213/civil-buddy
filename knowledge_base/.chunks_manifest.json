@@ -29,7 +29,7 @@
     {
       "path": "01_rules/compliance/vgm_and_ship.md",
       "heading": "## 规则",
-      "chars": 109
+      "chars": 207
     },
     {
       "path": "01_rules/compliance/vgm_and_ship.md",
@@ -2149,12 +2149,17 @@
     {
       "path": "04_strategies/packing_heuristics.md",
       "heading": "(preamble)",
-      "chars": 355
+      "chars": 46
+    },
+    {
+      "path": "04_strategies/packing_heuristics.md",
+      "heading": "## 外廓哲学（硬/软）",
+      "chars": 1015
     },
     {
       "path": "04_strategies/packing_heuristics.md",
       "heading": "## 代码默认",
-      "chars": 79
+      "chars": 158
     },
     {
       "path": "04_strategies/risk_awareness.md",
@@ -2307,6 +2312,46 @@
       "chars": 141
     },
     {
+      "path": "07_domain_knowledge/cn_sg_corridor.md",
+      "heading": "(preamble)",
+      "chars": 242
+    },
+    {
+      "path": "07_domain_knowledge/cn_sg_corridor.md",
+      "heading": "## 1. 层级关系（Agent 怎么用）",
+      "chars": 276
+    },
+    {
+      "path": "07_domain_knowledge/cn_sg_corridor.md",
+      "heading": "## 2. 中国侧（出口装柜）— 引用级要点",
+      "chars": 483
+    },
+    {
+      "path": "07_domain_knowledge/cn_sg_corridor.md",
+      "heading": "## 3. 新加坡侧 — 引用级要点",
+      "chars": 223
+    },
+    {
+      "path": "07_domain_knowledge/cn_sg_corridor.md",
+      "heading": "## 4. 与 tools 的绑定（可执行）",
+      "chars": 338
+    },
+    {
+      "path": "07_domain_knowledge/cn_sg_corridor.md",
+      "heading": "## 5. 检索话术（评委/用户问合规时）",
+      "chars": 126
+    },
+    {
+      "path": "07_domain_knowledge/cn_sg_corridor.md",
+      "heading": "## 6. 明确不做 / 过期风险",
+      "chars": 104
+    },
+    {
+      "path": "07_domain_knowledge/cn_sg_corridor.md",
+      "heading": "## 相关路径",
+      "chars": 174
+    },
+    {
       "path": "07_domain_knowledge/common_terms.md",
       "heading": "",
       "chars": 225
@@ -2319,7 +2364,7 @@
     {
       "path": "README.md",
       "heading": "(preamble)",
-      "chars": 168
+      "chars": 183
     },
     {
       "path": "README.md",
@@ -2349,7 +2394,22 @@
     {
       "path": "README.md",
       "heading": "## 代码入口映射",
-      "chars": 418
+      "chars": 531
+    },
+    {
+      "path": "README.md",
+      "heading": "## API",
+      "chars": 201
+    },
+    {
+      "path": "README.md",
+      "heading": "## 回归（提交前）",
+      "chars": 260
+    },
+    {
+      "path": "README.md",
+      "heading": "## 维护约定",
+      "chars": 200
     }
   ]
 }

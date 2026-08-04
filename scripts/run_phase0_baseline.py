@@ -43,6 +43,23 @@ def main() -> int:
         default="",
         help="从已有 baseline json 重生成 MD",
     )
+    ap.add_argument(
+        "--t80-sample",
+        type=int,
+        default=None,
+        help="full 时只跑前 N 张 t80（加速；默认全部）。例: --t80-sample 2",
+    )
+    ap.add_argument(
+        "--jobs",
+        type=int,
+        default=1,
+        help="并行 case 数（线程池，默认 1）",
+    )
+    ap.add_argument(
+        "--fast-full",
+        action="store_true",
+        help="快捷 full：t80 抽 2 张 + jobs=2（日常冲刺预览）",
+    )
     args = ap.parse_args()
 
     if args.from_json:
@@ -55,8 +72,19 @@ def main() -> int:
         print("MD", out)
         return 0
 
+    t80_sample = args.t80_sample
+    jobs = max(1, int(args.jobs or 1))
+    if args.fast_full:
+        if args.quick:
+            print("NOTE --fast-full 与 --quick 互斥，已按 full 加速")
+        args.quick = False
+        if t80_sample is None:
+            t80_sample = 2
+        if jobs < 2:
+            jobs = 2
+
     cases = build_phase0_cases(include_heavy=not args.quick)
-    print("CASES", len(cases))
+    print("CASES", len(cases), "t80_sample=", t80_sample, "jobs=", jobs)
     if args.list_only:
         for c in cases:
             print(c.id, c.tags)
@@ -67,6 +95,8 @@ def main() -> int:
         cases,
         agent_mode=args.mode,
         quick=args.quick,
+        t80_sample=t80_sample,
+        jobs=jobs,
     )
     print(
         "BASELINE",

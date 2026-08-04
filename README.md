@@ -1,7 +1,7 @@
 # 智能装箱与拼柜 · packing-agent
 
-**Harness v0.6.3**（2026-07-30 · 比赛收尾）  
-架构：**大 Team ⊃ 小 Team A（成箱）+ 小 Team B（拼柜）**  
+**Harness v0.6.4**（2026-07-30 · 比赛收尾）  
+架构：**大 Team ⊃ 小 Team A（成箱）+ 小 Team B（拼柜）** · **13 节点**名册  
 NL 通用 Agent · 多工具求解 · 有界 critic · HITL  
 
 仓库：https://github.com/LUOaini1213/packing-agent  
@@ -10,19 +10,20 @@ NL 通用 Agent · 多工具求解 · 有界 critic · HITL
 
 ## 它做什么
 
-面向钢结构/项目物料的 **成箱 → 拼柜 → 风险/重心 → 出图 → 订舱草稿**：
+面向钢结构/项目物料的 **成箱 → 建议柜数 → 人确认 → 拼柜 → 风险/重心 → 出图 → 订舱草稿**：
 
 ```text
 NL / 物料表
     → IntentSpec
     → 小 Team A：材料解析 · 结构 · 成箱
-    → HITL 确认（可 auto）
-    → 小 Team B：N0 规划 · 3D 装载 · CoG · 评估 · 风险 · 可视化
+    → 工具算 N0*（重量/体积/几何下界）与成箱同屏
+    → HITL 确认（演示默认不 auto）
+    → 小 Team B：3D 实装 used · 柜内 multi_start · CoG · 评估 · 风险 · 可视化
     → 大 Team：有界 replan · finalize · 可选 TMS 订舱
 ```
 
-数值由 **tools** 计算；LLM 只解释意图 / 调度工具，**不写 xyz**。  
-业务场景名（如某次「1 柜 / 2 柜」）仅为示例，不是固定线路。
+数值由 **tools** 计算（含 **几柜**）；LLM 只解释意图 / 调度，**不写 xyz、不拍柜数**。  
+柜级：`N0* → 试装 → 末柜可并回`；柜内：`multi_start` 优化摆法（见 `docs/research/multi-container-ffd-agent.md`）。
 
 **主路径（对外只讲这一条）**
 

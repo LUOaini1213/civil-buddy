@@ -137,7 +137,7 @@ agents:
     team: B
     allow_search: true
     inject_mode: on_demand
-    categories: [rules, tools, strategies, trajectories]
+    categories: [rules, tools, strategies, trajectories, domain]
     path_prefixes:
       - 01_rules/ctu_loading/
       - 01_rules/compliance/
@@ -146,7 +146,8 @@ agents:
       - 02_tools/vgm_draft.md
       - 04_strategies/risk_awareness.md
       - 03_trajectories/failure_recovery/
-    tags: [CTU, CoG, VGM, mid50, redline]
+      - 07_domain_knowledge/cn_sg_corridor.md
+    tags: [CTU, CoG, VGM, mid50, redline, China, Singapore]
     trajectories: [T3, T7, T8]
 
   visualizer:
@@ -201,7 +202,7 @@ agents:
     team: big
     allow_search: true
     inject_mode: always_brief
-    categories: [rules, competition, tools, multi_agent]
+    categories: [rules, competition, tools, multi_agent, domain]
     path_prefixes:
       - 01_rules/volume_weight/dual_caliber.md
       - 01_rules/ctu_loading/safety_redlines.md
@@ -211,9 +212,10 @@ agents:
       - 02_tools/tms_booking.md
       - 02_tools/vgm_draft.md
       - 05_multi_agent/summary_protocol.md
-    tags: [ship, dual_caliber, VGM, scoring]
+      - 07_domain_knowledge/cn_sg_corridor.md
+    tags: [ship, dual_caliber, VGM, scoring, China, Singapore]
     trajectories: [T6]
-    note: 出运话术与双口径引用
+    note: 出运话术与双口径引用；中新走廊仅解释层
 
   intent:
     name: 意图解析

@@ -1045,11 +1045,16 @@ def _pack_items_core(
                 }
             )
 
-    # P0：多柜 + cog → 优先重量配额分柜（先于网格/条带，避免最差柜被轻货堆满）
+    # P0：多柜 → 优先重量配额分柜（先于网格/条带，避免最差柜被轻货堆满）
+    # 大票（≥4 柜或 ≥20 箱）即使未开 cog 也启用；均匀小箱走网格路径
     use_weight_balance_early = (
-        bool(getattr(pol, "cog_aware", False))
-        and max_c >= 2
+        max_c >= 2
         and len(remaining) >= 6
+        and (
+            bool(getattr(pol, "cog_aware", False))
+            or max_c >= 4
+            or len(remaining) >= 20
+        )
         and not _is_near_uniform(remaining)
     )
     if use_weight_balance_early:
@@ -1057,7 +1062,10 @@ def _pack_items_core(
 
         total_w = sum(float(it.weight_kg or 0) for it in remaining)
         cap = float(spec["max_load_kg"])
-        n_need = max(1, min(max_c, int(math.ceil(total_w / max(cap * 0.92, 1)))))
+        # 目标柜数：重量下界与 max_c 取紧；填充目标 0.88 提高重量利用率
+        fill_tgt = 0.88 if max_c >= 6 or len(remaining) >= 30 else 0.92
+        n_need = max(1, min(max_c, int(math.ceil(total_w / max(cap * fill_tgt, 1)))))
+        # 几何：若 max_c 明显大于重量下界，仍按重量分柜再 spill，避免一上来开满 max_c
         groups: List[List[Item3D]] = [[] for _ in range(n_need)]
         loads = [0.0] * n_need
         for it in sorted(remaining, key=lambda x: -float(x.weight_kg or 0)):
@@ -1073,11 +1081,51 @@ def _pack_items_core(
             groups[bi].append(it)
             loads[bi] += float(it.weight_kg or 0)
 
+        def _append_layout(pl: Placement3D) -> None:
+            layout.append(
+                {
+                    "box_id": pl.box_id,
+                    "container_no": pl.container_no,
+                    "position": {"x": pl.x, "y": pl.y, "z": pl.z},
+                    "size": {"dx": pl.dx, "dy": pl.dy, "dz": pl.dz},
+                    "rotation": "LWH",
+                    "layer": pl.layer,
+                }
+            )
+
+        def _place_or_spill(item: Item3D, preferred: Optional[Bin3D] = None) -> bool:
+            """在 preferred/已有柜/新柜(≤max_c) 放置；绝不突破 max_c。"""
+            order: List[Bin3D] = []
+            if preferred is not None:
+                order.append(preferred)
+            order.extend(b2 for b2 in bins if b2 is not preferred)
+            for b2 in order:
+                pl2 = try_place(b2, item)
+                if pl2:
+                    _append_layout(pl2)
+                    return True
+            if len(bins) < max_c:
+                b3 = new_bin(len(bins) + 1)
+                bins.append(b3)
+                pl3 = try_place(b3, item)
+                if pl3:
+                    _append_layout(pl3)
+                    return True
+            unpacked.append(item.box_id)
+            return False
+
         for gi, grp in enumerate(groups):
             if not grp:
                 continue
-            b = new_bin(len(bins) + 1)
-            bins.append(b)
+            # 关键：每组开柜必须受 max_c 约束（spill 已占满时不得再 append）
+            preferred: Optional[Bin3D] = None
+            if len(bins) < max_c:
+                preferred = new_bin(len(bins) + 1)
+                bins.append(preferred)
+            elif bins:
+                preferred = min(
+                    bins, key=lambda x: float(getattr(x, "_used_weight", 0) or 0)
+                )
             grp_ord = sorted(
                 grp,
                 key=lambda it: (
@@ -1087,56 +1135,7 @@ def _pack_items_core(
                 ),
             )
             for item in grp_ord:
-                pl = try_place(b, item)
-                if pl:
-                    layout.append(
-                        {
-                            "box_id": pl.box_id,
-                            "container_no": pl.container_no,
-                            "position": {"x": pl.x, "y": pl.y, "z": pl.z},
-                            "size": {"dx": pl.dx, "dy": pl.dy, "dz": pl.dz},
-                            "rotation": "LWH",
-                            "layer": pl.layer,
-                        }
-                    )
-                else:
-                    placed_spill = False
-                    for b2 in bins:
-                        if b2 is b:
-                            continue
-                        pl2 = try_place(b2, item)
-                        if pl2:
-                            layout.append(
-                                {
-                                    "box_id": pl2.box_id,
-                                    "container_no": pl2.container_no,
-                                    "position": {"x": pl2.x, "y": pl2.y, "z": pl2.z},
-                                    "size": {"dx": pl2.dx, "dy": pl2.dy, "dz": pl2.dz},
-                                    "rotation": "LWH",
-                                    "layer": pl2.layer,
-                                }
-                            )
-                            placed_spill = True
-                            break
-                    if not placed_spill and len(bins) < max_c:
-                        b3 = new_bin(len(bins) + 1)
-                        bins.append(b3)
-                        pl3 = try_place(b3, item)
-                        if pl3:
-                            layout.append(
-                                {
-                                    "box_id": pl3.box_id,
-                                    "container_no": pl3.container_no,
-                                    "position": {"x": pl3.x, "y": pl3.y, "z": pl3.z},
-                                    "size": {"dx": pl3.dx, "dy": pl3.dy, "dz": pl3.dz},
-                                    "rotation": "LWH",
-                                    "layer": pl3.layer,
-                                }
-                            )
-                        else:
-                            unpacked.append(item.box_id)
-                    elif not placed_spill:
-                        unpacked.append(item.box_id)
+                _place_or_spill(item, preferred)
         remaining = []
         # 跳过网格/条带预装与二次配额
 
@@ -1363,10 +1362,17 @@ def _pack_items_core(
         else 0
     )
 
-    can_fit = len(unpacked) == 0 and len(layout) > 0
+    # 必须同时：装完 + 用柜数 ≤ max_c（防 weight_balance 等路径越权开柜）
+    can_fit = (
+        len(unpacked) == 0
+        and len(layout) > 0
+        and used_bins <= max_c
+    )
     message = "可以顺利装下" if can_fit else f"未完全装入: {', '.join(unpacked[:20])}" + (
         f"…共{len(unpacked)}件" if len(unpacked) > 20 else ""
     )
+    if used_bins > max_c and len(unpacked) == 0:
+        message = f"用柜{used_bins}>上限{max_c}（视为未在预算内装下）"
     cargo_m3 = used_vol / 1e9
     cont_m3 = cont_vol / 1e9
     note = (

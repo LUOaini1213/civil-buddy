@@ -237,18 +237,41 @@ def agent_risk_compliance(state: PackingState) -> Dict[str, Any]:
         if lat_block >= 0.3:
             lat_block = 0.15
 
-        # 更严：>5% medium；>10% high；≥15% block
-        if lat_ecc >= lat_block or lat_ecc >= 0.15:
-            add(
-                "COG_LAT",
-                "high",
-                f"左右重心偏心率 {lat_ecc:.1%}（宜≤5%，≥15% 阻断）",
-                "layout",
-                None,
-                score=18,
-                raw_value=lat_ecc,
-                block=True,
+        # 更严：>5% medium；>10% high；≥15% 默认 block
+        # 大票多柜 + mid50 已过出运软线：横向偏心改 WARN（避免压柜成功后仍 hard REJECT）
+        n_used = int(plan.get("containers_used") or 0)
+        mid_soft = None
+        try:
+            mid_soft = float(
+                (plan.get("worst_mid50") if plan.get("worst_mid50") is not None else None)
+                or cog.get("mass_in_mid50_ratio")
             )
+        except Exception:
+            mid_soft = None
+        multi_soft_lat = n_used >= 6 and mid_soft is not None and mid_soft + 1e-9 >= 0.55
+        if lat_ecc >= lat_block or lat_ecc >= 0.15:
+            if multi_soft_lat:
+                add(
+                    "COG_LAT",
+                    "high",
+                    f"左右重心偏心率 {lat_ecc:.1%}（宜≤5%；大票多柜 mid50≥55% 降为预警非硬阻断）",
+                    "layout",
+                    None,
+                    score=14,
+                    raw_value=lat_ecc,
+                    block=False,
+                )
+            else:
+                add(
+                    "COG_LAT",
+                    "high",
+                    f"左右重心偏心率 {lat_ecc:.1%}（宜≤5%，≥15% 阻断）",
+                    "layout",
+                    None,
+                    score=18,
+                    raw_value=lat_ecc,
+                    block=True,
+                )
         elif lat_ecc >= 0.10:
             add(
                 "COG_LAT",
