@@ -101,6 +101,14 @@
         "industry",
         "pallet"
       ]
+    },
+    {
+      "id": "G15_mixed_units_stress",
+      "path": "G15_mixed_units_stress",
+      "tags": [
+        "units",
+        "stress"
+      ]
     }
   ]
 }
