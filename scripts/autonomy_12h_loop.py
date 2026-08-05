@@ -29,7 +29,66 @@ LOG = OUT / "loop.log"
 SCORE = OUT / "score_history.jsonl"
 STATE = OUT / "loop_state.json"
 FINAL = OUT / "FINAL_REPORT.md"
+LOCK = OUT / "loop.lock"
+PID_FILE = OUT / "loop.pid"
 CORE_G = ["G1_ecommerce_cartons", "G2_pallet_parts", "G3_long_pipes", "G4_bulk_bags", "G5_fragile_glass", "G6_messy_headers"]
+
+
+def acquire_singleton() -> None:
+    """Ensure only one autonomy loop owns the repo (Windows-friendly)."""
+    import atexit
+
+    def _pid_alive(pid: int) -> bool:
+        if pid <= 0:
+            return False
+        try:
+            # Windows: os.kill(pid, 0) may not work; use ctypes
+            if sys.platform == "win32":
+                import ctypes
+
+                k = ctypes.windll.kernel32
+                SYNCHRONIZE = 0x00100000
+                h = k.OpenProcess(SYNCHRONIZE, False, pid)
+                if h:
+                    k.CloseHandle(h)
+                    return True
+                return False
+            os.kill(pid, 0)
+            return True
+        except Exception:
+            return False
+
+    if LOCK.exists():
+        try:
+            old = json.loads(LOCK.read_text(encoding="utf-8"))
+            opid = int(old.get("pid") or 0)
+            if opid and opid != os.getpid() and _pid_alive(opid):
+                msg = f"another autonomy loop running pid={opid}; exit"
+                print(msg, flush=True)
+                with LOG.open("a", encoding="utf-8") as f:
+                    f.write(f"[{datetime.now(timezone.utc).isoformat()}] {msg}\n")
+                raise SystemExit(0)
+        except SystemExit:
+            raise
+        except Exception:
+            pass
+    payload = {"pid": os.getpid(), "py": sys.executable, "started": datetime.now(timezone.utc).isoformat()}
+    LOCK.write_text(json.dumps(payload, ensure_ascii=False, indent=2), encoding="utf-8")
+    PID_FILE.write_text(str(os.getpid()), encoding="utf-8")
+
+    def _release() -> None:
+        try:
+            if LOCK.exists():
+                cur = json.loads(LOCK.read_text(encoding="utf-8"))
+                if int(cur.get("pid") or 0) == os.getpid():
+                    LOCK.unlink(missing_ok=True)  # type: ignore[arg-type]
+        except Exception:
+            try:
+                LOCK.unlink()
+            except Exception:
+                pass
+
+    atexit.register(_release)
 
 
 def now() -> str:
@@ -483,12 +542,13 @@ def write_final(state: Dict[str, Any]) -> None:
 
 def main() -> int:
     load_dotenv()
+    acquire_singleton()
     # seed log
     if LOG.exists() and LOG.stat().st_size > 5_000_000:
         LOG.rename(OUT / f"loop_{int(time.time())}.log.bak")
     start = time.time()
     end = start + HOURS * 3600
-    log(f"AUTONOMY START hours={HOURS} baseline={BASELINE_AVG} head={head()[:8]}")
+    log(f"AUTONOMY START hours={HOURS} baseline={BASELINE_AVG} head={head()[:8]} pid={os.getpid()} py={sys.executable}")
 
     # commit mapper fixes if dirty before loop
     commit("auto(bootstrap): table_mapper delimiter+weight_t hardening")
