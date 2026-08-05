@@ -1,6 +1,6 @@
 # Overnight network eval
 
-- ts: 2026-08-05T19:52:23.303950+00:00
+- ts: 2026-08-05T20:00:18.025053+00:00
 - deepseek /models: 401 models=None
 - web: https://httpbin.org/get status=200 title_hit=True
 - github_search: 200 top=[{'full_name': 'Kubova-com/kubova-mcp', 'stars': 0, 'url': 'https://github.com/Kubova-com/kubova-mcp'}]
