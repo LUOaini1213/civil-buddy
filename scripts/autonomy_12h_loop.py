@@ -47,8 +47,8 @@ def acquire_singleton() -> None:
                 import ctypes
 
                 k = ctypes.windll.kernel32
-                SYNCHRONIZE = 0x00100000
-                h = k.OpenProcess(SYNCHRONIZE, False, pid)
+                # PROCESS_QUERY_LIMITED_INFORMATION = 0x1000
+                h = k.OpenProcess(0x1000, False, pid)
                 if h:
                     k.CloseHandle(h)
                     return True
@@ -68,10 +68,16 @@ def acquire_singleton() -> None:
                 with LOG.open("a", encoding="utf-8") as f:
                     f.write(f"[{datetime.now(timezone.utc).isoformat()}] {msg}\n")
                 raise SystemExit(0)
+            # stale lock
+            if opid and not _pid_alive(opid):
+                LOCK.unlink(missing_ok=True)  # type: ignore[arg-type]
         except SystemExit:
             raise
         except Exception:
-            pass
+            try:
+                LOCK.unlink(missing_ok=True)  # type: ignore[arg-type]
+            except Exception:
+                pass
     payload = {"pid": os.getpid(), "py": sys.executable, "started": datetime.now(timezone.utc).isoformat()}
     LOCK.write_text(json.dumps(payload, ensure_ascii=False, indent=2), encoding="utf-8")
     PID_FILE.write_text(str(os.getpid()), encoding="utf-8")
