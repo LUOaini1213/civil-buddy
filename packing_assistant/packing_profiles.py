@@ -111,3 +111,14 @@ def apply_profile(
     opts["profile_id"] = profile_id
     opts["single_team_loop"] = True
     return opts
+
+
+def profile_generic_table() -> dict:
+    """Non-steel default: passthrough crates, multi_start, cog."""
+    return {
+        "profile_id": "generic_table",
+        "crate_passthrough": True,
+        "multi_start": True,
+        "cog_aware": True,
+        "structure_calc": False,
+    }
