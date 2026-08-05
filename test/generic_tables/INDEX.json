@@ -78,6 +78,29 @@
       "tags": [
         "adv"
       ]
+    },
+    {
+      "id": "G12_furniture",
+      "path": "G12_furniture",
+      "tags": [
+        "industry",
+        "carton"
+      ]
+    },
+    {
+      "id": "G13_apparel",
+      "path": "G13_apparel",
+      "tags": [
+        "industry"
+      ]
+    },
+    {
+      "id": "G14_auto_parts",
+      "path": "G14_auto_parts",
+      "tags": [
+        "industry",
+        "pallet"
+      ]
     }
   ]
 }
