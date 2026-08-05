@@ -1,0 +1,4 @@
+﻿item,qty,length_cm,width_cm,height_cm,weight,sku,type
+Motor pallet,8,120,100,110,280,PLT-01,pallet
+Gearbox crate,12,80,60,70,95,PLT-02,crate
+Fastener carton,30,40,30,25,12,PLT-03,carton
