@@ -31,39 +31,48 @@ def log(msg: str) -> None:
 
 
 def clear_stale_lock() -> None:
-    if not LOCK.exists():
+    for p in (LOCK, PIDF):
+        try:
+            if p.exists():
+                p.unlink()
+        except Exception:
+            pass
+
+
+def kill_existing_loops() -> None:
+    """Kill any autonomy_12h_loop processes (not this supervisor)."""
+    if sys.platform != "win32":
         return
     try:
-        data = json.loads(LOCK.read_text(encoding="utf-8"))
-        pid = int(data.get("pid") or 0)
-    except Exception:
-        LOCK.unlink(missing_ok=True)
+        out = subprocess.check_output(
+            ["wmic", "process", "where", "name='python.exe'", "get", "ProcessId,CommandLine", "/FORMAT:LIST"],
+            text=True,
+            errors="replace",
+            timeout=30,
+        )
+    except Exception as e:
+        log(f"wmic fail: {e}")
         return
-    alive = False
-    if pid > 0:
-        try:
-            if sys.platform == "win32":
-                import ctypes
-
-                h = ctypes.windll.kernel32.OpenProcess(0x1000, False, pid)  # PROCESS_QUERY_LIMITED_INFORMATION
-                if h:
-                    ctypes.windll.kernel32.CloseHandle(h)
-                    alive = True
-            else:
-                os.kill(pid, 0)
-                alive = True
-        except Exception:
-            alive = False
-    if not alive:
-        log(f"clear stale lock pid={pid}")
-        try:
-            LOCK.unlink()
-        except Exception:
-            pass
-        try:
-            PIDF.unlink()
-        except Exception:
-            pass
+    cur = {"pid": None, "cmd": ""}
+    for line in out.splitlines():
+        line = line.strip()
+        if line.startswith("CommandLine="):
+            cur["cmd"] = line.split("=", 1)[1]
+        elif line.startswith("ProcessId="):
+            try:
+                cur["pid"] = int(line.split("=", 1)[1])
+            except Exception:
+                cur["pid"] = None
+            cmd = cur["cmd"] or ""
+            pid = cur["pid"]
+            if pid and "autonomy_12h_loop" in cmd and "autonomy_supervisor" not in cmd:
+                if pid != os.getpid():
+                    log(f"kill existing loop pid={pid}")
+                    try:
+                        subprocess.run(["taskkill", "/F", "/PID", str(pid)], capture_output=True, timeout=15)
+                    except Exception as e:
+                        log(f"taskkill {pid}: {e}")
+            cur = {"pid": None, "cmd": ""}
 
 
 def main() -> int:
@@ -74,12 +83,14 @@ def main() -> int:
     while time.time() < end:
         n += 1
         remaining = max(0.1, (end - time.time()) / 3600)
+        kill_existing_loops()
         clear_stale_lock()
         env = os.environ.copy()
         env["AUTONOMY_HOURS"] = f"{remaining:.4f}"
         env["AUTONOMY_BASELINE_AVG"] = env.get("AUTONOMY_BASELINE_AVG", "0.9485")
         env["PYTHONUNBUFFERED"] = "1"
         env["PYTHONPATH"] = str(ROOT)
+        env["AUTONOMY_SUPERVISED"] = "1"
         log(f"spawn loop#{n} remaining_h={remaining:.3f}")
         try:
             p = subprocess.Popen(

@@ -38,6 +38,13 @@ def acquire_singleton() -> None:
     """Ensure only one autonomy loop owns the repo (Windows-friendly)."""
     import atexit
 
+    # Supervisor manages single-instance; skip lock wars.
+    if os.environ.get("AUTONOMY_SUPERVISED") == "1":
+        payload = {"pid": os.getpid(), "py": sys.executable, "started": datetime.now(timezone.utc).isoformat(), "supervised": True}
+        LOCK.write_text(json.dumps(payload, ensure_ascii=False, indent=2), encoding="utf-8")
+        PID_FILE.write_text(str(os.getpid()), encoding="utf-8")
+        return
+
     def _pid_alive(pid: int) -> bool:
         if pid <= 0:
             return False
