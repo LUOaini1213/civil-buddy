@@ -1,5 +1,8 @@
 # 智能装箱与拼柜 · packing-agent
 
+> **Agent workbench**：NL → 白名单 tools → HITL → 影子评测 · 推理侧可接 **DeepSeek API**  
+> 与日常 Agentic Coding 产线（Grok Build / Claude + DeepSeek）同一产品原则：编排可换模型，硬数值只走工具。
+
 **Harness v0.6.4**（2026-07-30 · 比赛收尾）  
 架构：**大 Team ⊃ 小 Team A（成箱）+ 小 Team B（拼柜）** · **13 节点**名册  
 NL 通用 Agent · 多工具求解 · 有界 critic · HITL  
