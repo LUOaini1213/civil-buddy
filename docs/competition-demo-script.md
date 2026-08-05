@@ -155,3 +155,13 @@ powershell -File scripts/competition_smoke.ps1
 | `output/competition/SCORECARD.md` | 分卡 |
 | [ARCHITECTURE.md](./ARCHITECTURE.md) | 架构 |
 | [multi-container-ffd-agent.md](./research/multi-container-ffd-agent.md) | 多柜研究 |
+
+<!-- autonomy-generic-branch -->
+## 通用材料表支线（autonomy）
+
+```bash
+python scripts/run_generic_table_tests.py --pack
+python scripts/competition_demo_one_shot.py --table test/generic_tables/G1_ecommerce_cartons/materials.csv
+```
+
+任意材料明细表 → IR → boxes[] → 装柜；坐标由 tools 写。
