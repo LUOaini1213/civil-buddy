@@ -77,6 +77,34 @@ def evaluate_hitl_gates(state: Dict[str, Any]) -> Dict[str, Any]:
     if opts.get("force_hitl") or state.get("force_hitl"):
         add("FORCE_HITL", "medium", "强制人工闸门", True)
 
+    # 非标检验门禁
+    ns = state.get("nonstandard_summary") or state.get("nonstandard_report") or {}
+    ns_overall = str(ns.get("overall") or "")
+    ship_gate = ns.get("ship_gate") or {}
+    if ns_overall == "FAIL":
+        add(
+            "NONSTANDARD_FAIL",
+            "high",
+            ship_gate.get("note") or "非标检验 FAIL：缺尺寸/超柜/超货载等",
+            block_auto=True,
+        )
+    elif ns_overall in ("WARN", "NEED_DESIGN"):
+        add(
+            "NONSTANDARD_REVIEW",
+            "medium",
+            ship_gate.get("note") or f"非标检验 {ns_overall}：须人工复核",
+            block_auto=bool(opts.get("strict_nonstandard_gate")),
+        )
+    if ship_gate.get("blocks_confirm_to_team_b") or (
+        opts.get("strict_nonstandard_gate") and ns_overall == "FAIL"
+    ):
+        add(
+            "NONSTANDARD_STRICT",
+            "high",
+            "strict_nonstandard_gate：禁止确认进入拼柜直至整改",
+            True,
+        )
+
     block_auto = any(g.get("block_auto") for g in gates)
     # demo 自动确认仅在无阻断门时
     auto_ok = (not block_auto) and not export_strict

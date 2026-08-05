@@ -209,17 +209,54 @@ def merge_rules() -> Dict[str, Any]:
     return dict(load_kb().get("merge_rules") or {})
 
 
-def classify_by_kb(length_mm: float, unit_kg: float, total_kg: float) -> str:
+def classify_by_kb(
+    length_mm: float,
+    unit_kg: float,
+    total_kg: float,
+    *,
+    height_mm: float = 0.0,
+    width_mm: float = 0.0,
+    text: str = "",
+) -> str:
+    """扩展类：超长 > 薄板 > 重件 > 精密/工厂架关键词 > 普通。"""
     cats = (load_kb().get("materials") or {}).get("categories") or {}
     over = cats.get("超长件") or {}
     heavy = cats.get("重件") or {}
+    thin = cats.get("薄板") or {}
+    blob = (text or "").lower()
     if length_mm >= float(over.get("length_mm_gte") or 4000):
         return "超长件"
+    h_lim = float(thin.get("height_mm_lte") or 80)
+    l_lim = float(thin.get("length_mm_gte") or 1500)
+    if 0 < height_mm <= h_lim and length_mm >= l_lim:
+        return "薄板"
     if unit_kg >= float(heavy.get("unit_weight_kg_gte") or 200):
         return "重件"
     if total_kg >= float(heavy.get("or_total_weight_kg_gte") or 1500):
         return "重件"
+    prec = cats.get("精密件") or {}
+    for kw in prec.get("keywords") or []:
+        if str(kw).lower() in blob:
+            return "精密件"
+    fac = cats.get("工厂架") or {}
+    for kw in fac.get("keywords") or []:
+        if str(kw).lower() in blob:
+            return "工厂架"
+    if "异形" in blob or "非标" in blob:
+        return "异形件"
     return "普通件"
+
+
+# 物料 category 白名单（parser / API）
+MATERIAL_CATEGORIES = (
+    "超长件",
+    "重件",
+    "薄板",
+    "异形件",
+    "精密件",
+    "工厂架",
+    "普通件",
+)
 
 
 def color_for_box_type(box_type: str) -> str:

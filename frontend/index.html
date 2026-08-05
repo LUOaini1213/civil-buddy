@@ -7,26 +7,28 @@
   <script src="https://cdn.jsdelivr.net/npm/vue@2.7.16/dist/vue.min.js"></script>
   <style>
     :root {
-      --bg: #0b0f14;
-      --bg-elev: #121820;
-      --bg-soft: #161d27;
-      --border: #243041;
-      --border-soft: #1c2533;
-      --text: #e8eef7;
-      --muted: #8b98ab;
-      --faint: #5c6b80;
+      --bg: #0a0e13;
+      --bg-elev: #111820;
+      --bg-soft: #171e28;
+      --border: #2a3648;
+      --border-soft: #1e2836;
+      --text: #eef3fa;
+      --muted: #93a0b4;
+      --faint: #66778f;
       --accent: #5b8def;
-      --accent-soft: rgba(91, 141, 239, 0.14);
+      --accent-2: #7c5cfc;
+      --accent-soft: rgba(91, 141, 239, 0.16);
       --ok: #3ecf8e;
       --ok-bg: rgba(62, 207, 142, 0.12);
       --warn: #e6b84d;
       --warn-bg: rgba(230, 184, 77, 0.12);
       --err: #f07178;
       --err-bg: rgba(240, 113, 120, 0.12);
-      --side-w: 280px;
-      --top-h: 56px;
-      --radius: 12px;
-      --radius-sm: 8px;
+      --side-w: 300px;
+      --top-h: auto;
+      --radius: 14px;
+      --radius-sm: 10px;
+      --shadow: 0 8px 28px rgba(0, 0, 0, 0.28);
       --font: "Segoe UI", "PingFang SC", "Microsoft YaHei", system-ui, sans-serif;
       --mono: ui-monospace, "Cascadia Code", Consolas, monospace;
     }
@@ -35,9 +37,27 @@
     body {
       margin: 0;
       font-family: var(--font);
-      background: var(--bg);
+      background:
+        radial-gradient(1200px 600px at 10% -10%, rgba(91, 141, 239, 0.12), transparent 55%),
+        radial-gradient(900px 500px at 100% 0%, rgba(124, 92, 252, 0.08), transparent 50%),
+        var(--bg);
       color: var(--text);
       overflow: hidden;
+      -webkit-font-smoothing: antialiased;
+    }
+    /* scrollbars */
+    .roster, .workspace, .top-status-scroll {
+      scrollbar-width: thin;
+      scrollbar-color: #334155 transparent;
+    }
+    .roster::-webkit-scrollbar,
+    .workspace::-webkit-scrollbar,
+    .top-status-scroll::-webkit-scrollbar { width: 8px; height: 8px; }
+    .roster::-webkit-scrollbar-thumb,
+    .workspace::-webkit-scrollbar-thumb,
+    .top-status-scroll::-webkit-scrollbar-thumb {
+      background: #334155;
+      border-radius: 999px;
     }
     button, input, select, textarea { font-family: inherit; }
     button {
@@ -77,56 +97,76 @@
     /* —— App shell —— */
     .shell {
       display: grid;
-      grid-template-rows: var(--top-h) 1fr;
+      grid-template-rows: auto 1fr;
       height: 100vh;
       width: 100vw;
     }
     .topbar {
       display: flex;
-      align-items: center;
-      gap: 14px;
-      padding: 0 16px;
+      flex-direction: column;
+      gap: 0;
+      padding: 0;
       border-bottom: 1px solid var(--border-soft);
-      background: rgba(18, 24, 32, 0.92);
-      backdrop-filter: blur(10px);
+      background: rgba(14, 19, 28, 0.88);
+      backdrop-filter: blur(14px);
       z-index: 20;
+      position: relative;
+    }
+    .topbar-row {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      padding: 10px 16px;
+      min-height: 52px;
+    }
+    .topbar-row.secondary {
+      padding: 0 16px 10px;
+      gap: 8px;
+      border-top: 1px solid transparent;
     }
     .brand {
       display: flex;
       align-items: center;
       gap: 10px;
-      min-width: 200px;
+      min-width: 210px;
+      flex-shrink: 0;
     }
     .brand-mark {
-      width: 28px; height: 28px;
-      border-radius: 8px;
-      background: linear-gradient(135deg, #5b8def, #7c5cfc);
+      width: 32px; height: 32px;
+      border-radius: 10px;
+      background: linear-gradient(135deg, var(--accent), var(--accent-2));
       display: grid; place-items: center;
-      font-size: 13px; font-weight: 700; color: #fff;
+      font-size: 14px; font-weight: 700; color: #fff;
+      box-shadow: 0 4px 14px rgba(91, 141, 239, 0.35);
     }
     .brand h1 {
       margin: 0;
-      font-size: 14px;
-      font-weight: 650;
-      letter-spacing: .2px;
+      font-size: 15px;
+      font-weight: 700;
+      letter-spacing: .15px;
     }
     .brand .tag {
       font-size: 11px;
       color: var(--muted);
-      margin-top: 1px;
+      margin-top: 2px;
     }
-    .top-status {
+    .top-status-scroll {
       display: flex;
-      flex-wrap: wrap;
+      flex-wrap: nowrap;
       gap: 6px;
       flex: 1;
       min-width: 0;
+      overflow-x: auto;
+      padding-bottom: 2px;
     }
     .top-actions {
       display: flex;
       align-items: center;
       gap: 8px;
       flex-shrink: 0;
+    }
+    .top-actions .primary-lg {
+      box-shadow: 0 6px 18px rgba(91, 141, 239, 0.28);
     }
     .pill {
       display: inline-flex;
@@ -178,38 +218,39 @@
 
     .body {
       display: grid;
-      grid-template-columns: var(--side-w) 1fr;
+      grid-template-columns: var(--side-w) minmax(0, 1fr);
       min-height: 0;
     }
 
     /* —— Left: team mode —— */
     .sidebar {
       border-right: 1px solid var(--border-soft);
-      background: var(--bg-elev);
+      background: linear-gradient(180deg, rgba(17, 24, 32, 0.98), rgba(12, 16, 22, 0.98));
       display: flex;
       flex-direction: column;
       min-height: 0;
+      box-shadow: inset -1px 0 0 rgba(255,255,255,0.02);
     }
     .side-head {
-      padding: 14px 14px 8px;
+      padding: 16px 16px 10px;
     }
     .side-head .label {
-      font-size: 11px;
-      letter-spacing: .08em;
+      font-size: 10px;
+      letter-spacing: .1em;
       text-transform: uppercase;
       color: var(--faint);
-      font-weight: 600;
+      font-weight: 700;
     }
     .side-head h2 {
-      margin: 4px 0 0;
-      font-size: 15px;
-      font-weight: 650;
+      margin: 6px 0 0;
+      font-size: 16px;
+      font-weight: 700;
     }
     .side-head p {
-      margin: 4px 0 0;
+      margin: 6px 0 0;
       font-size: 12px;
       color: var(--muted);
-      line-height: 1.4;
+      line-height: 1.45;
     }
     .pipeline-mini {
       display: flex;
@@ -232,25 +273,37 @@
     }
     /* 三层组织图：大 Team ⊃ A + B */
     .org-chart {
-      margin: 0 12px 12px;
-      padding: 10px;
-      border-radius: 12px;
-      border: 1px solid var(--border);
-      background: linear-gradient(180deg, rgba(91,141,239,0.08), transparent 70%);
+      margin: 0 12px 10px;
+      padding: 10px 11px;
+      border-radius: 14px;
+      border: 1px solid rgba(91, 141, 239, 0.22);
+      background:
+        linear-gradient(165deg, rgba(91,141,239,0.12), rgba(124,92,252,0.04) 55%, transparent 90%);
+      box-shadow: 0 4px 16px rgba(0,0,0,0.12);
     }
     .org-chart .org-title {
       font-size: 11px;
       font-weight: 700;
-      color: #9ec1ff;
+      color: #b6d0ff;
       margin-bottom: 8px;
-      letter-spacing: 0.02em;
+      letter-spacing: 0.03em;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 8px;
+    }
+    .org-chart .org-title button {
+      padding: 2px 8px;
+      font-size: 11px;
+      border-radius: 999px;
     }
     .org-layer-big {
-      border: 1px dashed rgba(91,141,239,0.55);
-      border-radius: 10px;
+      border: 1px solid rgba(91,141,239,0.28);
+      border-radius: 12px;
       padding: 8px;
-      background: rgba(91,141,239,0.06);
+      background: rgba(8, 12, 18, 0.35);
     }
+    .org-chart.collapsed .org-layer-big { display: none; }
     .org-layer-big > .org-label {
       font-size: 10px;
       color: #5b8def;
@@ -385,21 +438,22 @@
 
     .side-composer {
       border-top: 1px solid var(--border-soft);
-      padding: 12px;
-      background: var(--bg-elev);
+      padding: 12px 14px 14px;
+      background: rgba(12, 16, 22, 0.95);
     }
     .side-composer textarea {
-      min-height: 72px;
+      min-height: 68px;
       max-height: 140px;
       margin-bottom: 8px;
       background: var(--bg);
+      border-radius: 10px;
     }
     .composer-row {
       display: flex;
       gap: 6px;
       flex-wrap: wrap;
     }
-    .composer-row button { flex: 1; min-width: 0; font-size: 12px; padding: 8px 10px; }
+    .composer-row button { flex: 1; min-width: 0; font-size: 12px; padding: 9px 10px; font-weight: 600; }
     .status-line {
       margin-top: 8px;
       font-size: 11.5px;
@@ -421,10 +475,15 @@
     }
     .tabs {
       display: flex;
-      gap: 2px;
+      gap: 4px;
       padding: 10px 16px 0;
       border-bottom: 1px solid var(--border-soft);
       overflow-x: auto;
+      background: rgba(11, 15, 20, 0.72);
+      backdrop-filter: blur(8px);
+      position: sticky;
+      top: 0;
+      z-index: 5;
     }
     .tab {
       appearance: none;
@@ -432,17 +491,17 @@
       color: var(--muted);
       border: none;
       border-bottom: 2px solid transparent;
-      border-radius: 0;
-      padding: 10px 14px;
+      border-radius: 10px 10px 0 0;
+      padding: 11px 14px;
       font-size: 13px;
-      font-weight: 500;
+      font-weight: 600;
       white-space: nowrap;
     }
-    .tab:hover { color: var(--text); opacity: 1; background: transparent; }
+    .tab:hover { color: var(--text); opacity: 1; background: rgba(255,255,255,0.03); }
     .tab.active {
-      color: var(--text);
+      color: #eaf1ff;
       border-bottom-color: var(--accent);
-      background: transparent;
+      background: rgba(91, 141, 239, 0.08);
     }
     .tab .n {
       display: inline-block;
@@ -458,30 +517,41 @@
     .workspace {
       flex: 1;
       overflow: auto;
-      padding: 16px 18px 28px;
+      padding: 18px 20px 36px;
       min-height: 0;
+    }
+    .workspace-inner {
+      max-width: 1180px;
+      margin: 0 auto;
     }
 
     .empty-hero {
-      max-width: 520px;
-      margin: 48px auto;
+      max-width: 560px;
+      margin: 56px auto;
       text-align: center;
       color: var(--muted);
+      padding: 28px 22px;
+      border-radius: 18px;
+      border: 1px solid var(--border-soft);
+      background: linear-gradient(180deg, rgba(91,141,239,0.08), rgba(17,24,32,0.6));
+      box-shadow: var(--shadow);
     }
     .empty-hero h3 {
-      margin: 0 0 8px;
+      margin: 0 0 10px;
       color: var(--text);
-      font-size: 18px;
+      font-size: 20px;
+      font-weight: 750;
     }
-    .empty-hero p { font-size: 13px; line-height: 1.55; margin: 0 0 16px; }
+    .empty-hero p { font-size: 13.5px; line-height: 1.6; margin: 0 0 18px; }
     .empty-hero .actions { display: flex; gap: 8px; justify-content: center; flex-wrap: wrap; }
 
     .section {
-      background: var(--bg-elev);
+      background: rgba(17, 24, 32, 0.92);
       border: 1px solid var(--border-soft);
       border-radius: var(--radius);
-      padding: 14px 16px;
+      padding: 16px 18px;
       margin-bottom: 14px;
+      box-shadow: 0 2px 12px rgba(0,0,0,0.12);
     }
     .section-h {
       display: flex;
@@ -489,39 +559,48 @@
       justify-content: space-between;
       gap: 10px;
       margin-bottom: 12px;
+      padding-bottom: 10px;
+      border-bottom: 1px solid rgba(255,255,255,0.04);
     }
     .section-h h3 {
       margin: 0;
-      font-size: 14px;
-      font-weight: 650;
+      font-size: 14.5px;
+      font-weight: 700;
+      letter-spacing: 0.01em;
     }
     .section-h .sub { font-size: 12px; color: var(--muted); }
 
     .metrics {
       display: grid;
-      grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+      grid-template-columns: repeat(auto-fit, minmax(148px, 1fr));
       gap: 10px;
     }
     .metric {
-      background: var(--bg-soft);
+      background: linear-gradient(180deg, rgba(255,255,255,0.03), transparent), var(--bg-soft);
       border: 1px solid var(--border-soft);
       border-radius: var(--radius-sm);
-      padding: 12px;
+      padding: 12px 13px;
+      transition: border-color .15s, transform .15s;
+    }
+    .metric:hover {
+      border-color: rgba(91, 141, 239, 0.28);
     }
     .metric .k {
       font-size: 11px;
       color: var(--muted);
       margin-bottom: 6px;
+      letter-spacing: 0.02em;
     }
     .metric .v {
-      font-size: 20px;
-      font-weight: 700;
-      letter-spacing: -.02em;
+      font-size: 22px;
+      font-weight: 750;
+      letter-spacing: -.03em;
+      font-variant-numeric: tabular-nums;
     }
     .metric .h {
       font-size: 11px;
       color: var(--faint);
-      margin-top: 4px;
+      margin-top: 5px;
       line-height: 1.35;
     }
 
@@ -743,8 +822,29 @@
       background: linear-gradient(90deg, #5b8def, #7c5cfc);
       transition: width .25s ease;
     }
-    .topbar { position: relative; }
+    .loading-toast {
+      position: fixed;
+      left: 50%;
+      bottom: 20px;
+      transform: translateX(-50%);
+      z-index: 60;
+      background: rgba(20, 35, 58, 0.95);
+      color: #e8eef7;
+      padding: 12px 16px;
+      border-radius: 999px;
+      border: 1px solid rgba(91, 141, 239, 0.35);
+      box-shadow: 0 12px 36px rgba(0,0,0,.4);
+      display: flex;
+      gap: 12px;
+      align-items: center;
+      font-size: 13px;
+      backdrop-filter: blur(10px);
+    }
     .nl-box textarea { min-height: 56px; }
+    .hitl-bar {
+      border-radius: 14px !important;
+      box-shadow: 0 8px 24px rgba(230, 184, 77, 0.08);
+    }
 
     .flow-strip {
       display: flex;
@@ -792,79 +892,71 @@
   <div id="app" class="shell">
     <!-- Top bar -->
     <header class="topbar">
-      <div class="brand">
-        <div class="brand-mark">P</div>
-        <div>
-          <h1>装箱拼柜 · Team Mode</h1>
-          <div class="tag">大 Team⊃A/B · {{ agentCount || 13 }} Agents · HITL · v{{ harnessVersion || '0.6.4' }}</div>
+      <div class="topbar-row">
+        <div class="brand">
+          <div class="brand-mark">P</div>
+          <div>
+            <h1>装箱拼柜 · Team Mode</h1>
+            <div class="tag">大 Team⊃A/B · {{ agentCount || 13 }} Agents · HITL · v{{ harnessVersion || '0.6.4' }}</div>
+          </div>
+        </div>
+        <div class="top-actions">
+          <span class="pill" v-if="loading || streamProgress.total">
+            {{ streamProgress.done }}/{{ streamProgress.total || '—' }}
+          </span>
+          <label class="pill" style="cursor:pointer;user-select:none" title="关闭=露出 HITL 确认闸（比赛推荐）">
+            <input type="checkbox" v-model="demoAutoConfirm" style="margin-right:4px;vertical-align:middle" />
+            演示自动确认
+          </label>
+          <button class="soft" @click="refreshHealth" title="健康预检">预检</button>
+          <button class="ghost" @click="runPipelineTrace" :class="{ busy: loading }">全流程</button>
+          <button class="soft" @click="runDemoSteel" :class="{ busy: loading }" title="少量钢件">钢件轻量</button>
+          <button class="primary-lg" @click="runDemo" :class="{ busy: loading }" title="30×钢实模块·默认 HITL">
+            {{ loading ? '运行中…' : '满载演示' }}
+          </button>
         </div>
       </div>
-      <div class="top-status">
-        <span class="pill" :class="gatewayOk ? 'ok' : 'err'" :title="preflightTitle">
-          <span class="dot"></span> 网关 {{ gatewayOk ? 'UP' : 'DOWN' }}
-        </span>
-        <span class="pill" :class="skjolberOk ? 'ok' : 'warn'">
-          <span class="dot"></span> skjolber {{ skjolberOk ? 'UP' : '本地回退' }}
-        </span>
-        <span class="pill" :class="llmKeyPresent ? 'ok' : 'warn'" title="无 Key 时 steps 主路径仍可用">
-          LLM {{ llmKeyPresent ? 'Key' : '无Key·fallback' }}
-        </span>
-        <span class="pill" v-if="harnessVersion">v{{ harnessVersion }}</span>
-        <span class="pill" v-if="result.phase">phase {{ result.phase }}</span>
-        <span class="pill warn" v-if="result.phase === 'await_user_confirm'">★ 待 HITL 确认</span>
-        <span class="pill" v-if="agentSteps.length">{{ agentSteps.length }} steps</span>
-        <span class="pill warn" v-if="pendingCheckpoints.length"
-              style="cursor:pointer" @click="mainTab='history'; loadPendingCheckpoints()"
-              title="磁盘上未确认的 HITL">
-          HITL 待恢复 {{ pendingCheckpoints.length }}
-        </span>
-        <span class="pill" :class="wsStatus === 'live' ? 'ok' : (wsStatus === 'err' ? 'err' : '')"
-              :title="'WebSocket ' + wsStatus">
-          ws {{ wsStatus }}
-        </span>
-        <span class="pill" v-if="result.container_plan && result.container_plan.can_fit != null"
-              :class="result.container_plan.can_fit ? 'ok' : 'err'">
-          can_fit {{ result.container_plan.can_fit }}
-        </span>
-        <span class="pill" v-if="result.risk_report && result.risk_report.decision"
-              :class="riskPillClass">
-          risk {{ result.risk_report.decision }}
-        </span>
-        <span class="pill" v-if="verdict && verdict.level"
-              :class="verdict.level === 'ok' ? 'ok' : (verdict.level === 'block' ? 'err' : 'warn')"
-              :title="verdict.summary || ''">
-          {{ verdict.level === 'block' ? '⛔阻断' : (verdict.level === 'warn' ? '⚠预警' : '✓可用') }}
-        </span>
-        <span class="pill err" v-if="result.ship_ok === false">ship_ok 否</span>
-        <span class="pill err" v-if="cogPrimary && cogPrimary.balance === 'block'">CoG block</span>
-      </div>
-      <div class="top-actions">
-        <span class="pill" v-if="loading || streamProgress.total">
-          {{ streamProgress.done }}/{{ streamProgress.total || '—' }} agents
-        </span>
-        <label class="pill" style="cursor:pointer;user-select:none" title="关闭=露出 HITL 确认闸（比赛推荐）">
-          <input type="checkbox" v-model="demoAutoConfirm" style="margin-right:4px;vertical-align:middle" />
-          演示自动确认
-        </label>
-        <button class="soft" @click="refreshHealth" title="健康预检：网关/skjolber/LLM/版本">预检</button>
-        <button class="ghost" @click="runPipelineTrace" :class="{ busy: loading }">全流程</button>
-        <button class="soft" @click="runDemoSteel" :class="{ busy: loading }" title="少量钢件·利用率偏低属正常">
-          钢件轻量
-        </button>
-        <button class="primary-lg" @click="runDemo" :class="{ busy: loading }" title="30×密实模块≈24t；默认停 HITL">
-          {{ loading ? '运行中…' : '满载演示' }}
-        </button>
+      <div class="topbar-row secondary">
+        <div class="top-status-scroll">
+          <span class="pill" :class="gatewayOk ? 'ok' : 'err'" :title="preflightTitle">
+            <span class="dot"></span> 网关 {{ gatewayOk ? 'UP' : 'DOWN' }}
+          </span>
+          <span class="pill" :class="skjolberOk ? 'ok' : 'warn'">
+            <span class="dot"></span> 3D {{ skjolberOk ? 'skjolber' : '本地' }}
+          </span>
+          <span class="pill" :class="llmKeyPresent ? 'ok' : 'warn'" title="无 Key 时 steps 仍可用">
+            LLM {{ llmKeyPresent ? 'Key' : 'fallback' }}
+          </span>
+          <span class="pill" v-if="result.phase">{{ result.phase }}</span>
+          <span class="pill warn" v-if="result.phase === 'await_user_confirm'">★ 待 HITL</span>
+          <span class="pill warn" v-if="pendingCheckpoints.length"
+                style="cursor:pointer" @click="mainTab='history'; loadPendingCheckpoints()">
+            HITL {{ pendingCheckpoints.length }}
+          </span>
+          <span class="pill" :class="wsStatus === 'live' ? 'ok' : (wsStatus === 'err' ? 'err' : '')">ws {{ wsStatus }}</span>
+          <span class="pill" v-if="result.container_plan && result.container_plan.can_fit != null"
+                :class="result.container_plan.can_fit ? 'ok' : 'err'">
+            can_fit {{ result.container_plan.can_fit }}
+          </span>
+          <span class="pill" v-if="result.risk_report && result.risk_report.decision" :class="riskPillClass">
+            risk {{ result.risk_report.decision }}
+          </span>
+          <span class="pill" v-if="verdict && verdict.level"
+                :class="verdict.level === 'ok' ? 'ok' : (verdict.level === 'block' ? 'err' : 'warn')"
+                :title="verdict.summary || ''">
+            {{ verdict.level === 'block' ? '⛔阻断' : (verdict.level === 'warn' ? '⚠预警' : '✓可用') }}
+          </span>
+          <span class="pill err" v-if="result.ship_ok === false">ship_ok 否</span>
+          <span class="pill err" v-if="cogPrimary && cogPrimary.balance === 'block'">CoG block</span>
+          <span class="pill" v-if="agentSteps.length">{{ agentSteps.length }} steps</span>
+        </div>
       </div>
       <div class="progress-track" v-if="loading || streamProgress.done">
         <div class="progress-fill" :style="{ width: streamProgress.pct + '%' }"></div>
       </div>
-      <div
-        v-if="loading"
-        class="pill"
-        style="position:fixed;left:50%;bottom:18px;transform:translateX(-50%);z-index:50;background:#1e3a5f;color:#e8eef7;padding:10px 16px;box-shadow:0 8px 24px rgba(0,0,0,.35);display:flex;gap:10px;align-items:center"
-      >
+      <div v-if="loading" class="loading-toast">
         <span>⏳ {{ statusText || '运行中…' }} · 连点会提示，不是死机</span>
-        <button type="button" class="soft" style="pointer-events:auto" @click="forceUnlock">强制解锁</button>
+        <button type="button" class="soft" @click="forceUnlock">强制解锁</button>
       </div>
     </header>
 
@@ -877,9 +969,14 @@
           <p>NL 通用 Agent · 点选成员 · tools 算数</p>
         </div>
 
-        <div class="org-chart" title="大 Team 包两个小 Team">
-          <div class="org-title">三层组织 · {{ result.team_mode || 'big_team_a_b' }}</div>
-          <div class="org-layer-big">
+        <div class="org-chart" :class="{ collapsed: !orgChartOpen }" title="大 Team 包两个小 Team">
+          <div class="org-title">
+            <span>三层组织 · {{ result.team_mode || 'big_team_a_b' }}</span>
+            <button type="button" class="ghost" @click="orgChartOpen = !orgChartOpen">
+              {{ orgChartOpen ? '收起' : '展开' }}
+            </button>
+          </div>
+          <div class="org-layer-big" v-show="orgChartOpen">
             <div class="org-label">大 Team · 编排 / 闸门 / critic / 收口</div>
             <div class="org-big-nodes">
               <span
@@ -1012,6 +1109,7 @@
 
         <div class="workspace-split">
         <div class="workspace" ref="workspace">
+          <div class="workspace-inner">
           <!-- Empty -->
           <div class="empty-hero" v-if="!hasAnyResult && mainTab === 'overview'">
             <h3>组建团队，开始装柜</h3>
@@ -1134,6 +1232,64 @@
                     </tr>
                   </tbody>
                 </table>
+              </div>
+
+              <!-- 非标检验 v2 仪表盘 -->
+              <div class="section" v-if="nsSummary && nsSummary.overall" style="margin-top:12px;padding-top:10px;border-top:1px dashed var(--border)">
+                <div class="section-h" style="margin-bottom:8px">
+                  <h3 style="margin:0;font-size:14px">非标件检验</h3>
+                  <span class="pill" :class="nsLevelClass">{{ nsSummary.overall }}</span>
+                  <span class="pill" v-if="nsUi.overlength">超长 {{ nsUi.overlength }}</span>
+                  <span class="pill" v-if="nsUi.heavy">重件 {{ nsUi.heavy }}</span>
+                  <span class="pill" v-if="nsUi.custom_shape">定制 {{ nsUi.custom_shape }}</span>
+                  <span class="pill warn" v-if="nsUi.struct_pending">待详设 {{ nsUi.struct_pending }}</span>
+                  <span class="pill err" v-if="nsUi.data_gap">数据缺口 {{ nsUi.data_gap }}</span>
+                  <button class="soft" style="margin-left:auto;font-size:12px" @click="nsFilter = nsFilter === 'all' ? 'FAIL' : 'all'">
+                    {{ nsFilter === 'all' ? '筛选严重项' : '显示全部 Top' }}
+                  </button>
+                </div>
+                <p class="foot-note" style="margin:0 0 8px">
+                  {{ (nsSummary.ship_gate && nsSummary.ship_gate.note) || '规则分型：数据缺口/超尺寸/重载/定制路径/结构；FAIL 阻断，WARN 人工复核。' }}
+                  <span v-if="(nsSummary.summary||{}).n_nonstandard_materials != null">
+                    · 非标物料 {{ (nsSummary.summary||{}).n_nonstandard_materials }}
+                  </span>
+                </p>
+                <div class="row" style="flex-wrap:wrap;gap:6px;margin-bottom:8px" v-if="(nsSummary.strategy_hints||[]).length">
+                  <span class="pill warn" v-for="(h,i) in (nsSummary.strategy_hints||[]).slice(0,3)" :key="'nsh'+i">{{ h }}</span>
+                </div>
+                <div style="overflow:auto" v-if="nsTopRisks.length">
+                  <table class="data">
+                    <thead><tr><th>ID</th><th>level</th><th>tags</th><th>lane</th><th>尺寸</th><th>kg</th><th>动作</th></tr></thead>
+                    <tbody>
+                      <tr v-for="r in nsTopRisks" :key="r.id">
+                        <td>{{ r.id }}</td>
+                        <td><span class="pill" :class="r.level==='FAIL'?'err':(r.level==='PASS'?'ok':'warn')">{{ r.level }}</span></td>
+                        <td style="font-size:11px">{{ (r.tags||[]).join(', ') }}</td>
+                        <td>{{ r.lane || '—' }}</td>
+                        <td style="font-size:11px">{{ r.dims_mm ? (r.dims_mm.L+'×'+r.dims_mm.W+'×'+r.dims_mm.H) : '—' }}</td>
+                        <td>{{ r.unit_kg }}</td>
+                        <td style="font-size:11px;max-width:220px">{{ r.action }}</td>
+                      </tr>
+                    </tbody>
+                  </table>
+                </div>
+                <div style="margin-top:8px" v-if="nsChecklistItems.length">
+                  <div class="row" style="align-items:center;gap:8px;margin-bottom:4px">
+                    <div style="font-size:12px;color:var(--muted)">装运勾选（非标 · 确认拼柜前必填）</div>
+                    <button type="button" class="soft" style="font-size:11px;padding:2px 8px" @click="checkAllNsRequired">演示一键勾选</button>
+                    <span class="pill err" v-if="nsMissingRequired.length">缺 {{ nsMissingRequired.length }} 项</span>
+                    <span class="pill ok" v-else-if="nsSummary && nsSummary.overall && nsSummary.overall !== 'PASS'">已齐套</span>
+                  </div>
+                  <label v-for="it in nsChecklistItems" :key="it.id" style="display:flex;align-items:flex-start;gap:8px;font-size:12px;margin:4px 0;cursor:pointer"
+                    :style="it.required && !nsChecked[it.id] ? 'outline:1px solid #c45c5c;border-radius:6px;padding:4px' : ''">
+                    <input type="checkbox" v-model="nsChecked[it.id]" style="margin-top:2px" />
+                    <span>
+                      {{ it.label }}
+                      <span class="pill" v-if="it.required" style="font-size:10px">必填</span>
+                      <span style="color:var(--muted)"> · {{ it.auto_hint || '' }}</span>
+                    </span>
+                  </label>
+                </div>
               </div>
             </div>
 
@@ -1903,7 +2059,8 @@
               </template>
             </div>
           </template>
-        </div>
+          </div><!-- /.workspace-inner -->
+        </div><!-- /.workspace -->
 
         <!-- 右侧 Agent 详情抽屉 -->
         <aside class="agent-drawer" v-if="selectedAgent !== 'ALL' || liveNode">
@@ -1976,11 +2133,14 @@
           llmKeyPresent: false,
           agentCount: 13,
           preflightHints: [],
+          nsFilter: 'all',
+          nsChecked: {},
           demoAutoConfirm: false,
           result: {},
           agentSteps: [],
           selectedAgent: 'ALL',
           mainTab: 'overview',
+          orgChartOpen: true,
           viewKeys: ['top', 'side', 'front'],
           nlInstruction: '',
           nlStatus: '',
@@ -2226,6 +2386,43 @@
           if (s === 'high') return 'err';
           if (s === 'medium') return 'warn';
           return 'ok';
+        },
+        nsSummary() {
+          const r = this.result || {};
+          const s = r.nonstandard_summary
+            || (r.hitl_summary && r.hitl_summary.nonstandard)
+            || {};
+          if (s && s.overall) return s;
+          return null;
+        },
+        nsUi() {
+          const s = this.nsSummary || {};
+          return (s.dashboard && s.dashboard.counts_for_ui)
+            || s.counts
+            || {};
+        },
+        nsLevelClass() {
+          const o = (this.nsSummary || {}).overall;
+          if (o === 'FAIL') return 'err';
+          if (o === 'PASS') return 'ok';
+          return 'warn';
+        },
+        nsTopRisks() {
+          const s = this.nsSummary || {};
+          let top = (s.dashboard && s.dashboard.top_risks) || s.top_risks || [];
+          if (this.nsFilter === 'FAIL') {
+            top = top.filter((x) => x.level === 'FAIL' || x.level === 'NEED_DESIGN');
+          }
+          return top.slice(0, 10);
+        },
+        nsChecklistItems() {
+          const s = this.nsSummary || {};
+          const items = (s.checklist && s.checklist.items) || [];
+          return items.filter((it) => it.required || this.nsFilter === 'all').slice(0, 12);
+        },
+        nsMissingRequired() {
+          const items = ((this.nsSummary || {}).checklist || {}).items || [];
+          return items.filter((it) => it.required && !this.nsChecked[it.id]).map((it) => it.id);
         },
         stackingInfo() {
           const p = this.result.container_plan || {};
@@ -2899,6 +3096,9 @@
           }
           this.applyAgentSteps(payload);
           this.pushVerdictToStatus();
+          this.$nextTick(() => {
+            try { this.seedNsCheckedFromResult(); } catch (e) { /* ignore */ }
+          });
           if (this.hasAnyResult && this.mainTab === 'overview') {
             /* stay on overview after run */
           }
@@ -3444,7 +3644,36 @@
             this.loading = false;
           }
         },
+        checkAllNsRequired() {
+          const items = ((this.nsSummary || {}).checklist || {}).items || [];
+          const next = Object.assign({}, this.nsChecked);
+          items.forEach((it) => {
+            if (it && it.id) next[it.id] = true;
+          });
+          this.nsChecked = next;
+          this.statusText = '已一键勾选非标预检（演示）';
+        },
+        seedNsCheckedFromResult() {
+          const s = this.nsSummary || {};
+          const items = (s.checklist && s.checklist.items) || [];
+          if (!items.length) return;
+          const next = Object.assign({}, this.nsChecked);
+          let changed = false;
+          items.forEach((it) => {
+            if (it && it.id && next[it.id] === undefined) {
+              next[it.id] = false;
+              changed = true;
+            }
+          });
+          if (changed) this.nsChecked = next;
+        },
         async confirmPack() {
+          // 客户端先拦：必填未勾选
+          if (this.nsMissingRequired.length) {
+            this.statusText = '请先完成非标预检勾选（缺 ' + this.nsMissingRequired.length + ' 项），或点「演示一键勾选」';
+            this.mainTab = 'overview';
+            return;
+          }
           if (!this.beginWork('确认拼柜')) return;
           this.statusText = '团队 B 拼柜中（本地 3D，通常数秒）…';
           try {
@@ -3455,6 +3684,8 @@
               action: 'confirm',
               container_type: this.containerType,
               max_containers: 0,
+              checklist_checked: this.nsChecked || {},
+              enforce_ns_checklist: true,
             }, 90000);
             this.applyResult(j);
             const next = (j.agent_steps || (j.public && j.public.agent_steps) || []);

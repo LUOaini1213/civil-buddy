@@ -103,6 +103,37 @@ def agent_present_team_a(state: PackingState) -> Dict[str, Any]:
 
     md = _render_markdown(plan_id, summary, materials, boxes, notes, suggested, reason)
 
+    # 非标件检验 v2（规则；可选 PACKING_NS_LLM 影子 enrich）
+    ns_report = state.get("nonstandard_report")
+    ns_summary = state.get("nonstandard_summary")
+    try:
+        import os
+
+        from packing_assistant.tools.nonstandard_inspect import public_summary, run_and_attach
+
+        enrich = bool((state.get("packing_options") or {}).get("ns_llm_enrich")) or (
+            os.environ.get("PACKING_NS_LLM", "").strip() in ("1", "true", "TRUE")
+        )
+        if not ns_report or not isinstance(ns_report, dict):
+            attached = run_and_attach({**state, "materials": materials, "boxes": boxes}, enrich=enrich)
+            ns_report = attached.get("nonstandard_report")
+            ns_summary = attached.get("nonstandard_summary") or public_summary(ns_report or {})
+            if attached.get("structure_notes"):
+                notes = list(attached["structure_notes"])
+        else:
+            ns_summary = ns_summary or public_summary(ns_report)
+    except Exception:
+        ns_report = ns_report if isinstance(ns_report, dict) else {}
+        ns_summary = ns_summary if isinstance(ns_summary, dict) else {}
+
+    if ns_summary and isinstance(ns_summary, dict):
+        summary = {
+            **summary,
+            "nonstandard_overall": ns_summary.get("overall"),
+            "nonstandard_counts": (ns_summary.get("dashboard") or {}).get("counts_for_ui"),
+            "nonstandard_ns": (ns_summary.get("summary") or {}).get("n_nonstandard_materials"),
+        }
+
     # demo 自动确认（HITL 工具：auto 模式 = 跳过等待）
     auto = bool(state.get("enable_auto_confirm"))
     phase = "await_user_confirm"
@@ -112,13 +143,21 @@ def agent_present_team_a(state: PackingState) -> Dict[str, Any]:
     agent_meta = {
         "node": "present_team_a",
         "capability": ["感知环境", "使用工具"],
-        "tools_used": ["hitl.confirm_gate"],
+        "tools_used": ["hitl.confirm_gate", "nonstandard.inspect"],
         "artifacts": {
             "hitl_mode": hitl_policy["mode"],
             "box_count": len(boxes),
             "suggested_containers": suggested,
+            "nonstandard_overall": (ns_summary or {}).get("overall"),
         },
     }
+
+    ns_line = ""
+    if ns_summary:
+        ns_line = (
+            f"｜nonstandard={ns_summary.get('overall')} "
+            f"ns={(ns_summary.get('summary') or {}).get('n_nonstandard_materials')}"
+        )
 
     if auto and not user_action:
         # container 可沿用 state 或建议
@@ -134,6 +173,8 @@ def agent_present_team_a(state: PackingState) -> Dict[str, Any]:
             "user_action": "confirm",
             "container_type": ctype,
             "agent_meta": agent_meta,
+            "nonstandard_report": ns_report,
+            "nonstandard_summary": ns_summary,
             "final_response": f"【HITL·自动确认】柜型 {ctype}，进入拼柜…\n\n" + md[:500],
             "messages": [
                 {
@@ -141,7 +182,7 @@ def agent_present_team_a(state: PackingState) -> Dict[str, Any]:
                     "content": (
                         f"【HITL 工具节点】mode=auto_confirm 柜型={ctype}；"
                         f"确认闸门作为环境反馈（非流程断裂），下游继续规划/装载"
-                        f"｜tools=hitl.confirm_gate"
+                        f"｜tools=hitl.confirm_gate,nonstandard.inspect{ns_line}"
                     ),
                 }
             ],
@@ -162,6 +203,8 @@ def agent_present_team_a(state: PackingState) -> Dict[str, Any]:
         "structure_notes": notes,
         "final_response": final,
         "agent_meta": agent_meta,
+        "nonstandard_report": ns_report,
+        "nonstandard_summary": ns_summary,
         "stats": {
             "by_box_type": list(by_type.values()),
             "heaviest_box_id": heaviest_id,
@@ -175,7 +218,7 @@ def agent_present_team_a(state: PackingState) -> Dict[str, Any]:
                 "content": (
                     "【HITL 工具节点】mode=await_user：请确认柜型后进入拼柜；"
                     "超时策略=保持 await_user_confirm 直至 confirm/revise/cancel"
-                    "｜tools=hitl.confirm_gate"
+                    f"｜tools=hitl.confirm_gate,nonstandard.inspect{ns_line}"
                 ),
             }
         ],

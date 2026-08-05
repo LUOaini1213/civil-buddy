@@ -50,14 +50,31 @@ def material_internal_to_api(m: Dict[str, Any], idx: int = 1) -> Dict[str, Any]:
     }
 
 
-def classify_material(length_mm: float, weight_kg: float, total_kg: float) -> str:
+def classify_material(
+    length_mm: float,
+    weight_kg: float,
+    total_kg: float,
+    *,
+    height_mm: float = 0.0,
+    width_mm: float = 0.0,
+    text: str = "",
+) -> str:
     try:
         from packing_assistant.knowledge import classify_by_kb
 
-        return classify_by_kb(length_mm, weight_kg, total_kg)
+        return classify_by_kb(
+            length_mm,
+            weight_kg,
+            total_kg,
+            height_mm=height_mm,
+            width_mm=width_mm,
+            text=text,
+        )
     except Exception:
         if length_mm >= 4000:
             return "超长件"
+        if 0 < height_mm <= 80 and length_mm >= 1500:
+            return "薄板"
         if weight_kg >= 200 or total_kg >= 1500:
             return "重件"
         return "普通件"
