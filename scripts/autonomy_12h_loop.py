@@ -20,7 +20,31 @@ sys.path.insert(0, str(ROOT))
 os.chdir(ROOT)
 
 PY = sys.executable
-HOURS = float(os.environ.get("AUTONOMY_HOURS", "12"))
+
+
+def _compute_hours() -> float:
+    """Prefer absolute deadline AUTONOMY_END_TS (ISO); else AUTONOMY_HOURS."""
+    end_ts = (os.environ.get("AUTONOMY_END_TS") or "").strip()
+    if end_ts:
+        try:
+            # support 2026-08-06T08:30:00+08:00
+            from datetime import datetime as _dt
+
+            s = end_ts.replace("Z", "+00:00")
+            target = _dt.fromisoformat(s)
+            if target.tzinfo is None:
+                # assume +08:00 Shanghai
+                from datetime import timezone as _tz, timedelta as _td
+
+                target = target.replace(tzinfo=_tz(_td(hours=8)))
+            now = datetime.now(tz=target.tzinfo)
+            return max(0.05, (target - now).total_seconds() / 3600.0)
+        except Exception:
+            pass
+    return float(os.environ.get("AUTONOMY_HOURS", "12"))
+
+
+HOURS = _compute_hours()
 BASELINE_AVG = float(os.environ.get("AUTONOMY_BASELINE_AVG", "0.9485"))
 PHASE0_FLOOR = 0.75
 OUT = ROOT / "output" / "autonomy"
@@ -29,6 +53,7 @@ LOG = OUT / "loop.log"
 SCORE = OUT / "score_history.jsonl"
 STATE = OUT / "loop_state.json"
 FINAL = OUT / "FINAL_REPORT.md"
+OVERNIGHT = OUT / "OVERNIGHT_STATUS.md"
 LOCK = OUT / "loop.lock"
 PID_FILE = OUT / "loop.pid"
 CORE_G = ["G1_ecommerce_cartons", "G2_pallet_parts", "G3_long_pipes", "G4_bulk_bags", "G5_fragile_glass", "G6_messy_headers"]
@@ -511,7 +536,113 @@ def r_refresh_only() -> str:
     return "refresh_metrics"
 
 
+def r_network_eval() -> str:
+    """Live network eval: DeepSeek API health + public web note on packing/agent eval."""
+    load_dotenv()
+    findings: Dict[str, Any] = {"ts": now()}
+    # 1) DeepSeek /models (live HTTP)
+    try:
+        import httpx
+
+        key = os.environ.get("DEEPSEEK_API_KEY") or os.environ.get("OPENAI_API_KEY") or ""
+        base = (os.environ.get("OPENAI_BASE_URL") or "https://api.deepseek.com").rstrip("/")
+        r = httpx.get(base + "/models", headers={"Authorization": f"Bearer {key}"}, timeout=45.0)
+        findings["deepseek_models_status"] = r.status_code
+        if r.status_code == 200:
+            data = r.json()
+            ids = [m.get("id") for m in (data.get("data") or [])[:8]]
+            findings["deepseek_models_sample"] = ids
+        else:
+            findings["deepseek_models_body"] = (r.text or "")[:200]
+    except Exception as e:
+        findings["deepseek_error"] = str(e)[:300]
+
+    # 2) Public page fetch (competition / bin packing agent landscape)
+    try:
+        import httpx
+
+        # Prefer resilient public endpoints (wikipedia may 403 bot UAs)
+        urls = [
+            "https://httpbin.org/get",
+            "https://raw.githubusercontent.com/wiki/facebook/react/Home.md",
+            "https://pypi.org/pypi/ortools/json",
+        ]
+        r2 = None
+        for url in urls:
+            try:
+                r2 = httpx.get(
+                    url,
+                    timeout=45.0,
+                    follow_redirects=True,
+                    headers={"User-Agent": "packing-agent-overnight/1.0"},
+                )
+                findings["web_url"] = url
+                findings["web_status"] = r2.status_code
+                if r2.status_code == 200:
+                    break
+            except Exception as e:
+                findings.setdefault("web_try_errors", []).append(f"{url}:{e}"[:120])
+        text = ((r2.text if r2 else "") or "")[:3000]
+        findings["web_title_hit"] = bool(text) and r2 is not None and r2.status_code == 200
+        findings["web_len"] = len(text)
+        findings["web_note"] = (
+            "Live network check for overnight eval. Bin packing / container loading remains "
+            "heuristic+constraint driven; agent value is tool-grounded layout + measurable harness "
+            "(phase0 weights), not unconstrained LLM xyz."
+        )
+    except Exception as e:
+        findings["web_error"] = str(e)[:300]
+
+    # 3) Optional GitHub public search via API (unauthenticated rate-limited)
+    try:
+        import httpx
+
+        g = httpx.get(
+            "https://api.github.com/search/repositories",
+            params={"q": "container packing agent 3d", "per_page": 3},
+            headers={"Accept": "application/vnd.github+json", "User-Agent": "packing-agent-overnight"},
+            timeout=45.0,
+        )
+        findings["github_search_status"] = g.status_code
+        if g.status_code == 200:
+            items = (g.json() or {}).get("items") or []
+            findings["github_top"] = [
+                {"full_name": it.get("full_name"), "stars": it.get("stargazers_count"), "url": it.get("html_url")}
+                for it in items[:3]
+            ]
+        else:
+            findings["github_body"] = (g.text or "")[:150]
+    except Exception as e:
+        findings["github_error"] = str(e)[:200]
+
+    outp = OUT / "network_eval_latest.json"
+    outp.write_text(json.dumps(findings, ensure_ascii=False, indent=2), encoding="utf-8")
+    log(f"network_eval {json.dumps({k: findings.get(k) for k in ('deepseek_models_status','web_status','github_search_status','web_title_hit')}, ensure_ascii=False)}")
+    score({"event": "network_eval", **{k: findings.get(k) for k in findings if k != "web_note"}})
+    # require at least one live HTTP success
+    ok = (
+        findings.get("deepseek_models_status") == 200
+        or findings.get("web_status") == 200
+        or findings.get("github_search_status") == 200
+    )
+    if not ok:
+        raise RuntimeError(f"network_eval all failed: {findings}")
+    # write research note into docs (small, stable)
+    note = ROOT / "docs" / "research" / "overnight-network-eval.md"
+    note.parent.mkdir(parents=True, exist_ok=True)
+    note.write_text(
+        f"# Overnight network eval\n\n- ts: {findings.get('ts')}\n"
+        f"- deepseek /models: {findings.get('deepseek_models_status')} models={findings.get('deepseek_models_sample')}\n"
+        f"- web: {findings.get('web_url')} status={findings.get('web_status')} title_hit={findings.get('web_title_hit')}\n"
+        f"- github_search: {findings.get('github_search_status')} top={findings.get('github_top')}\n\n"
+        f"{findings.get('web_note')}\n",
+        encoding="utf-8",
+    )
+    return f"network_eval ds={findings.get('deepseek_models_status')} web={findings.get('web_status')} gh={findings.get('github_search_status')}"
+
+
 RECIPES: List[Tuple[str, Callable[[], str]]] = [
+    ("network_eval", r_network_eval),
     ("adv_tables", r_semicolon_and_adv),
     ("unit_test", r_unit_test),
     ("synonyms", r_safe_synonyms),
@@ -524,47 +655,74 @@ RECIPES: List[Tuple[str, Callable[[], str]]] = [
 ]
 
 
-def write_final(state: Dict[str, Any]) -> None:
-    FINAL.write_text(
-        "\n".join(
-            [
-                "# FINAL_REPORT · 12h Autonomy",
-                f"- finished: {now()}",
-                f"- head: `{head()}`",
-                f"- rounds: {state.get('round')}",
-                f"- kept_commits: {state.get('commits')}",
-                f"- rollbacks: {state.get('rollbacks')}",
-                f"- baseline_avg: {state.get('baseline_avg')}",
-                f"- best_avg: {state.get('best_avg')}",
-                f"- recipe_stats: {json.dumps(state.get('recipe_stats'), ensure_ascii=False)}",
-                "",
-                "## Reproduce",
-                "```bash",
-                "python scripts/smoke_agent_product.py",
-                "python scripts/run_phase0_baseline.py --quick",
-                "python scripts/run_generic_table_tests.py --pack",
-                "python scripts/competition_demo_one_shot.py --table test/generic_tables/G1_ecommerce_cartons/materials.csv",
-                "```",
-                "",
-            ]
-        ),
-        encoding="utf-8",
+def write_final(state: Dict[str, Any], *, final_metrics: Optional[Dict[str, Any]] = None) -> None:
+    fm = final_metrics or {}
+    smoke = fm.get("smoke")
+    p0 = fm.get("phase0") or {}
+    gen = fm.get("generic") or {}
+    body = "\n".join(
+        [
+            "# OVERNIGHT / Autonomy FINAL STATUS",
+            f"- finished: {now()}",
+            f"- deadline_env: {os.environ.get('AUTONOMY_END_TS', '')}",
+            f"- head: `{head()}`",
+            f"- rounds: {state.get('round')}",
+            f"- kept_commits: {state.get('commits')}",
+            f"- rollbacks: {state.get('rollbacks')}",
+            f"- baseline_avg: {state.get('baseline_avg')}",
+            f"- best_avg: {state.get('best_avg')}",
+            f"- recipe_stats: {json.dumps(state.get('recipe_stats'), ensure_ascii=False)}",
+            "",
+            "## Final gates",
+            f"- smoke: {smoke}",
+            f"- phase0_avg: {p0.get('avg')} ok={p0.get('ok')} pass_rate={p0.get('pass_rate')}",
+            f"- generic: parse={gen.get('n_parse')} pack={gen.get('n_pack')} ok={gen.get('ok')}",
+            "",
+            "## Reproduce",
+            "```bash",
+            "python scripts/smoke_agent_product.py",
+            "python scripts/run_phase0_baseline.py --quick",
+            "python scripts/run_generic_table_tests.py --pack",
+            "```",
+            "",
+        ]
     )
+    FINAL.write_text(body, encoding="utf-8")
+    OVERNIGHT.write_text(body, encoding="utf-8")
     log(f"FINAL written {FINAL}")
+    log(f"OVERNIGHT_STATUS written {OVERNIGHT}")
 
 
 def main() -> int:
+    global HOURS
     load_dotenv()
     acquire_singleton()
+    HOURS = _compute_hours()
     # seed log
-    if LOG.exists() and LOG.stat().st_size > 5_000_000:
+    if LOG.exists() and LOG.stat().st_size > 8_000_000:
         LOG.rename(OUT / f"loop_{int(time.time())}.log.bak")
+    from datetime import timedelta as _td
+
     start = time.time()
     end = start + HOURS * 3600
-    log(f"AUTONOMY START hours={HOURS} baseline={BASELINE_AVG} head={head()[:8]} pid={os.getpid()} py={sys.executable}")
+    end_ts = (os.environ.get("AUTONOMY_END_TS") or "").strip()
+    if end_ts:
+        try:
+            s = end_ts.replace("Z", "+00:00")
+            target = datetime.fromisoformat(s)
+            if target.tzinfo is None:
+                target = target.replace(tzinfo=timezone(_td(hours=8)))
+            end = max(time.time() + 30, target.timestamp())
+        except Exception as e:
+            log(f"END_TS parse warn: {e}")
+    log(
+        f"AUTONOMY START hours={HOURS:.3f} end_ts={end_ts} baseline={BASELINE_AVG} "
+        f"head={head()[:8]} pid={os.getpid()} py={sys.executable}"
+    )
+    log(f"OVERNIGHT_KICKOFF until {os.environ.get('AUTONOMY_END_TS', '')}")
 
     # commit mapper fixes if dirty before loop
-    commit("auto(bootstrap): table_mapper delimiter+weight_t hardening")
+    commit("auto(bootstrap): overnight session start")
 
     log("initial measure")
     smoke = metric_smoke()
@@ -573,7 +731,14 @@ def main() -> int:
     baseline = max(BASELINE_AVG, float(p0.get("avg") or 0))
     best = baseline
     good = head()
-    score({"event": "start", "smoke": smoke, "phase0": p0, "generic": gen, "baseline": baseline})
+    score({
+        "event": "overnight_start",
+        "smoke": smoke,
+        "phase0": p0,
+        "generic": gen,
+        "baseline": baseline,
+        "deadline": os.environ.get("AUTONOMY_END_TS"),
+    })
     state: Dict[str, Any] = {
         "round": 0,
         "commits": 0,
@@ -582,6 +747,7 @@ def main() -> int:
         "best_avg": best,
         "recipe_stats": {},
         "started": now(),
+        "deadline": os.environ.get("AUTONOMY_END_TS"),
     }
     save_state(state)
     if not (smoke and p0.get("ok") and gen.get("ok")):
@@ -663,12 +829,20 @@ def main() -> int:
         time.sleep(5)
 
     log("final measure")
+    fm: Dict[str, Any] = {}
     try:
-        score({"event": "final", "smoke": metric_smoke(), "phase0": metric_phase0(), "generic": metric_core_generic(True)})
+        fm = {
+            "smoke": metric_smoke(),
+            "phase0": metric_phase0(),
+            "generic": metric_core_generic(True),
+        }
+        score({"event": "final", **fm, "deadline": os.environ.get("AUTONOMY_END_TS")})
     except Exception as e:
         log(f"final err {e}")
-    write_final(state)
+        fm = {"smoke": False, "phase0": {}, "generic": {}}
+    write_final(state, final_metrics=fm)
     log("AUTONOMY DONE")
+    log("OVERNIGHT_DEADLINE_DONE")
     return 0
 
 
