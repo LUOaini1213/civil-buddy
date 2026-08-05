@@ -43,6 +43,41 @@
       "tags": [
         "mapping"
       ]
+    },
+    {
+      "id": "G7_missing_dims",
+      "path": "G7_missing_dims",
+      "tags": [
+        "adv"
+      ]
+    },
+    {
+      "id": "G8_noise_rows",
+      "path": "G8_noise_rows",
+      "tags": [
+        "adv"
+      ]
+    },
+    {
+      "id": "G9_weight_tons",
+      "path": "G9_weight_tons",
+      "tags": [
+        "adv"
+      ]
+    },
+    {
+      "id": "G10_semicolon_eu",
+      "path": "G10_semicolon_eu",
+      "tags": [
+        "adv"
+      ]
+    },
+    {
+      "id": "G11_tab_sep",
+      "path": "G11_tab_sep",
+      "tags": [
+        "adv"
+      ]
     }
   ]
 }
