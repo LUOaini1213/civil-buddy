@@ -62,3 +62,7 @@ skjolber-service/target/
 
 # --- large local samples (optional; prefer data/samples tracked thin copies) ---
 # data/samples/ 内小样例可提交；超大原始件请放本地
+
+.env
+.venv/
+

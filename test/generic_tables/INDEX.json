@@ -1,0 +1,48 @@
+{
+  "version": 1,
+  "cases": [
+    {
+      "id": "G1_ecommerce_cartons",
+      "path": "G1_ecommerce_cartons",
+      "tags": [
+        "carton",
+        "short"
+      ]
+    },
+    {
+      "id": "G2_pallet_parts",
+      "path": "G2_pallet_parts",
+      "tags": [
+        "pallet"
+      ]
+    },
+    {
+      "id": "G3_long_pipes",
+      "path": "G3_long_pipes",
+      "tags": [
+        "long"
+      ]
+    },
+    {
+      "id": "G4_bulk_bags",
+      "path": "G4_bulk_bags",
+      "tags": [
+        "weight"
+      ]
+    },
+    {
+      "id": "G5_fragile_glass",
+      "path": "G5_fragile_glass",
+      "tags": [
+        "fragile"
+      ]
+    },
+    {
+      "id": "G6_messy_headers",
+      "path": "G6_messy_headers",
+      "tags": [
+        "mapping"
+      ]
+    }
+  ]
+}
