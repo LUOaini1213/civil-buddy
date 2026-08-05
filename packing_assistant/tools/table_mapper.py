@@ -31,6 +31,10 @@ COLUMN_SYNONYMS: Dict[str, Tuple[str, ...]] = {
         "sku_name",
         "物料名称",
         "品名规格",
+        "article",
+        "article_name",
+        "货品名称",
+        "商品名称",
     ),
     "quantity": (
         "quantity",
@@ -44,6 +48,7 @@ COLUMN_SYNONYMS: Dict[str, Tuple[str, ...]] = {
         "pcs",
         "pc",
         "件",
+        "装箱数",
     ),
     "length_mm": (
         "length_mm",
@@ -575,3 +580,15 @@ def parse_table_file(path: PathLike, **kwargs: Any) -> Dict[str, Any]:
             "total_weight_kg": round(sum(float(m.get("total_weight_kg") or 0) for m in mats), 3),
         },
     }
+
+
+# AUTONOMY_EXTRA_SYNONYMS_V2
+for _std, _extra in {
+    "name": ("货品名称", "中文品名", "商品名称", "material_name", "article"),
+    "quantity": ("装箱数", "包装数量", "包装件数", "pcs"),
+    "weight_kg": ("毛重kg", "毛重(kg)", "净重kg", "净重(kg)", "单件重量"),
+    "part_no": ("商品编码", "条码", "barcode", "物料号"),
+    "length_mm": ("外径", "总长", "全长"),
+}.items():
+    if _std in COLUMN_SYNONYMS:
+        COLUMN_SYNONYMS[_std] = tuple(dict.fromkeys(list(COLUMN_SYNONYMS[_std]) + list(_extra)))
