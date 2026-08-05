@@ -121,6 +121,7 @@ COLUMN_SYNONYMS: Dict[str, Tuple[str, ...]] = {
         "单重(kg)",
         "weight_t",
         "单重t",
+        "吨",
     ),
     "total_weight_kg": (
         "total_weight_kg",
@@ -272,12 +273,15 @@ def _infer_weight_scale(header: str, values: List[Optional[float]]) -> float:
     if re.search(r"(^|_)(t)($|[^a-z])", h) or h.endswith("_t") or "(t)" in h:
         if "kg" not in h and "weight" not in h:
             return 1000.0
-    if h in ("weight_t", "total_t", "单重t", "总重t") or h.endswith("weight_t"):
+    if (
+        h in ("weight_t", "total_t", "单重t", "总重t", "吨")
+        or h.endswith("weight_t")
+        or (h.endswith("_t") and "weight" in h)
+    ):
         return 1000.0
-    # 克（非 kg）
-    if re.search(r"(^|_)g($|[^a-z])", h) or h.endswith("_g") or "(g)" in h:
-        if "kg" not in h:
-            return 0.001
+    # 克（非 kg）— 避免 "kg" 被误判
+    if "kg" not in h and (h.endswith("_g") or h.endswith("(g)") or "(g)" in h):
+        return 0.001
     nums = [x for x in values if x is not None and x > 0]
     if nums:
         mid = sorted(nums)[len(nums) // 2]
@@ -441,17 +445,27 @@ def _guess_category(L: float, W: float, H: float, weight: float, name: str) -> s
 def load_csv(path: PathLike, encoding: str = "utf-8-sig") -> List[Dict[str, Any]]:
     path = Path(path)
     with path.open("r", encoding=encoding, newline="") as f:
-        # try sniffer
-        sample = f.read(4096)
+        sample = f.read(8192)
         f.seek(0)
-        try:
-            dialect = csv.Sniffer().sniff(sample, delimiters=",\t;")
-        except csv.Error:
-            dialect = csv.excel
-        reader = csv.DictReader(f, dialect=dialect)
+        # Prefer explicit delimiter counts (Sniffer often fails on short EU files)
+        delim = ","
+        for candidate in (";", "\t", ","):
+            if sample.count(candidate) >= 2:
+                # header line vote
+                first = sample.splitlines()[0] if sample else ""
+                if first.count(candidate) >= 2:
+                    delim = candidate
+                    break
+        else:
+            try:
+                dialect = csv.Sniffer().sniff(sample, delimiters=",\t;")
+                delim = dialect.delimiter
+            except csv.Error:
+                delim = ","
+        reader = csv.DictReader(f, delimiter=delim)
         rows = [dict(r) for r in reader]
-        headers = reader.fieldnames or []
-    return rows_to_ir(rows, headers=list(headers), source="csv", source_path=str(path))
+        headers = list(reader.fieldnames or [])
+    return rows_to_ir(rows, headers=headers, source="csv", source_path=str(path))
 
 
 def load_xlsx(path: PathLike, sheet: Optional[str] = None) -> List[Dict[str, Any]]:
