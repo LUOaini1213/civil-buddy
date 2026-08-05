@@ -280,9 +280,25 @@
     "categories": {
       "超长件": { "length_mm_gte": 4000 },
       "重件": { "unit_weight_kg_gte": 200, "or_total_weight_kg_gte": 1500 },
+      "薄板": { "height_mm_lte": 80, "length_mm_gte": 1500 },
+      "异形件": { "note": "不落标准箱或标记异形" },
+      "精密件": { "keywords": ["易碎", "玻璃", "精密", "仪表", "fragile"] },
+      "工厂架": { "keywords": ["crate", "叠层架", "铁件架", "当量", "factory_stack"] },
       "普通件": {}
     },
     "spec_patterns": ["{a}x{b}x{t}", "{a}×{b}×{t}"]
+  },
+
+  "nonstandard_thresholds": {
+    "overlength_mm": 4000,
+    "heavy_unit_kg": 200,
+    "heavy_total_kg": 1500,
+    "thin_h_mm": 80,
+    "heavy_box_kg": 1000,
+    "critical_box_kg": 2000,
+    "safe_payload_margin": 0.92,
+    "top_n": 20,
+    "module_like_max_aspect": 2.5
   },
 
   "section_i_table": {

@@ -133,6 +133,10 @@ class ConfirmRequest(BaseModel):
     max_containers: int = 0
     adjust_note: str = ""
     confirmed_box_ids: List[str] = Field(default_factory=list)
+    # 装前/非标勾选写回
+    checklist_checked: Dict[str, bool] = Field(default_factory=dict)
+    # 前端比赛路径默认 true；自动化测试勿传或 false
+    enforce_ns_checklist: bool = False
 
 
 class ReviseNlRequest(BaseModel):
@@ -543,6 +547,48 @@ def api_confirm(body: ConfirmRequest):
     if body.action != "confirm":
         raise HTTPException(400, "action 必须是 confirm | revise | cancel")
 
+    # 写回勾选表
+    checked = dict(body.checklist_checked or {})
+    if checked:
+        prev = dict(state.get("pre_ship_checked") or {})
+        prev.update(checked)
+        state = {**state, "pre_ship_checked": prev}
+
+    # 非标严格门禁：FAIL + strict_nonstandard_gate 禁止进入 Team B
+    opts = dict(state.get("packing_options") or {})
+    ns = state.get("nonstandard_summary") or state.get("nonstandard_report") or {}
+    if opts.get("strict_nonstandard_gate") and str(ns.get("overall") or "") == "FAIL":
+        raise HTTPException(
+            400,
+            (ns.get("ship_gate") or {}).get("note")
+            or "非标检验 FAIL 且 strict_nonstandard_gate：请整改后重跑 Team A",
+        )
+
+    # 非标必填勾选门禁（前端 enforce_ns_checklist 或 packing_options.require_ns_checklist）
+    try:
+        from packing_assistant.pre_ship_checklist import (
+            build_pre_ship_checklist,
+            evaluate_ns_checklist_gate,
+        )
+
+        gate = evaluate_ns_checklist_gate(
+            state,
+            checked=state.get("pre_ship_checked") or {},
+            enforce=bool(body.enforce_ns_checklist),
+        )
+        cl = build_pre_ship_checklist(state, checked=state.get("pre_ship_checked") or {})
+        state = {**state, "pre_ship_checklist": cl, "ns_checklist_gate": gate}
+        if gate.get("blocks"):
+            raise HTTPException(
+                400,
+                gate.get("note")
+                or f"非标预检未齐: {', '.join(gate.get('missing') or [])}",
+            )
+    except HTTPException:
+        raise
+    except Exception:
+        pass
+
     # resume 标记（interrupt → 小 Team B 子图）
     try:
         mark_checkpoint(body.session_id, status="resumed")
@@ -842,6 +888,76 @@ def api_export_shipment(body: dict):
         raise HTTPException(404, "session 不存在")
     meta = export_shipment_xlsx(st)
     return {"ok": True, **meta}
+
+
+@app.post("/api/nonstandard/inspect")
+def api_nonstandard_inspect(body: dict):
+    """非标件检验 v2。body: materials? | session_id? | container_type? | with_boxes? | ns_llm_enrich?"""
+    from packing_assistant.tools.nonstandard_inspect import (
+        inspect_nonstandard,
+        public_summary,
+        report_markdown,
+    )
+    from packing_assistant.tools.nl_nonstandard_enrich import enrich_materials
+
+    body = body or {}
+    sid = str(body.get("session_id") or "")
+    st = _get_session(sid) if sid else None
+    mats = body.get("materials")
+    if mats is None and st:
+        mats = st.get("materials") or []
+    mats = list(mats or [])
+    boxes = body.get("boxes")
+    if boxes is None and st:
+        boxes = st.get("boxes") or []
+    boxes = list(boxes or [])
+    ctype = str(body.get("container_type") or (st or {}).get("container_type") or "40HQ")
+    opts = dict((st or {}).get("packing_options") or {})
+    if body.get("ns_llm_enrich"):
+        opts["ns_llm_enrich"] = True
+        mats = enrich_materials(mats, force_llm=True)
+    elif opts.get("ns_llm_enrich") or __import__("os").environ.get("PACKING_NS_LLM", "").strip() in (
+        "1",
+        "true",
+        "TRUE",
+    ):
+        mats = enrich_materials(mats)
+    else:
+        mats = enrich_materials(mats, force_llm=False)
+
+    if body.get("with_boxes") and mats and not boxes:
+        try:
+            from packing_assistant.agents.box_scheme import agent_box_scheme
+
+            bout = agent_box_scheme(
+                {"materials": mats, "packing_options": opts, "messages": []}
+            )
+            boxes = list(bout.get("boxes") or [])
+        except Exception:
+            boxes = []
+
+    full = inspect_nonstandard(
+        materials=mats,
+        boxes=boxes,
+        container_type=ctype,
+        case_id=sid or "api",
+        packing_options=opts,
+    )
+    summary = public_summary(full)
+    if st is not None and sid:
+        st = {**st, "nonstandard_report": full, "nonstandard_summary": summary, "materials": mats}
+        if boxes:
+            st["boxes"] = boxes
+        _store_session(sid, st)
+    return {
+        "ok": True,
+        "overall": full.get("overall"),
+        "summary": summary,
+        "markdown": report_markdown(full),
+        "full_available": True,
+        "n_materials": (full.get("summary") or {}).get("n_materials"),
+        "n_boxes": (full.get("summary") or {}).get("n_boxes"),
+    }
 
 
 @app.post("/api/checklist")

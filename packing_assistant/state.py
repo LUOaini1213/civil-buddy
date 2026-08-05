@@ -57,6 +57,8 @@ class PackingState(TypedDict, total=False):
     team_a_summary: Dict[str, Any]
     user_prompt: Dict[str, Any]
     display_markdown: str
+    nonstandard_report: Dict[str, Any]  # 全量非标检验 v2（artifact / 内部）
+    nonstandard_summary: Dict[str, Any]  # API/HITL 轻量摘要
 
     # —— 小 Team B 拼柜 ——
     plan: Dict[str, Any]

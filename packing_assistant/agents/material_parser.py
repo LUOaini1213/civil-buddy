@@ -154,21 +154,51 @@ def _normalize_llm_materials(items: List[Dict[str, Any]]) -> List[Dict[str, Any]
         W = float(m.get("width_mm") or (m.get("外尺寸_mm") or {}).get("宽") or 0)
         H = float(m.get("height_mm") or (m.get("外尺寸_mm") or {}).get("高") or 0)
         name = str(m.get("name") or m.get("名称") or f"材料-{i}")
-        cat = str(m.get("category") or classify_material(L, unit, total))
-        out.append(
-            {
-                "id": str(m.get("id") or f"M{i:03d}"),
-                "name": name,
-                "spec": str(m.get("spec") or m.get("规格") or name),
-                "length_mm": L,
-                "width_mm": W,
-                "height_mm": H,
-                "weight_kg": unit,
-                "quantity": max(qty, 1),
-                "total_weight_kg": round(total, 3),
-                "category": cat if cat in ("超长件", "重件", "普通件") else classify_material(L, unit, total),
-            }
+        text_blob = " ".join(
+            str(x)
+            for x in (name, m.get("spec"), m.get("规格"), m.get("note"), m.get("备注"))
+            if x
         )
+        cat = str(m.get("category") or classify_material(L, unit, total, height_mm=H, width_mm=W, text=text_blob))
+        try:
+            from packing_assistant.knowledge import MATERIAL_CATEGORIES
+
+            allowed = set(MATERIAL_CATEGORIES)
+        except Exception:
+            allowed = {"超长件", "重件", "薄板", "异形件", "精密件", "工厂架", "普通件"}
+        if cat not in allowed:
+            cat = classify_material(L, unit, total, height_mm=H, width_mm=W, text=text_blob)
+        row = {
+            "id": str(m.get("id") or f"M{i:03d}"),
+            "name": name,
+            "spec": str(m.get("spec") or m.get("规格") or name),
+            "length_mm": L,
+            "width_mm": W,
+            "height_mm": H,
+            "weight_kg": unit,
+            "quantity": max(qty, 1),
+            "total_weight_kg": round(total, 3),
+            "category": cat,
+        }
+        # 可选透传字段（非标检验 / HITL）
+        for k in (
+            "note",
+            "备注",
+            "dims_source",
+            "orientation",
+            "lift_points",
+            "stackable",
+            "fragile",
+            "this_side_up",
+            "no_stack",
+            "envelope_mm",
+            "ns_tags",
+            "hazard_class",
+            "enrich_source",
+        ):
+            if m.get(k) is not None:
+                row[k] = m.get(k)
+        out.append(row)
     return out
 
 

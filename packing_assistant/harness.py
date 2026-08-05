@@ -753,7 +753,34 @@ def public_response(state: Dict[str, Any]) -> Dict[str, Any]:
         "error_banner": _error_banner(state),
         "multi_container": _multi_container_summary(state, plan),
         "strategy_decision": _strategy_decision_summary(state, plan),
+        "nonstandard_summary": _nonstandard_public(state),
+        "nonstandard_report": None,  # 全量过大；需要时读 artifact / 专用 API
     }
+
+
+def _nonstandard_public(state: Dict[str, Any]) -> Dict[str, Any]:
+    """对外只下发摘要（top_risks≤20），避免大票炸 payload。"""
+    s = state.get("nonstandard_summary")
+    if isinstance(s, dict) and s.get("overall"):
+        return s
+    rep = state.get("nonstandard_report")
+    if isinstance(rep, dict) and rep.get("overall"):
+        try:
+            from packing_assistant.tools.nonstandard_inspect import public_summary
+
+            return public_summary(rep)
+        except Exception:
+            return {
+                "overall": rep.get("overall"),
+                "summary": rep.get("summary"),
+                "dashboard": {
+                    "counts_for_ui": (rep.get("dashboard") or {}).get("counts_for_ui"),
+                    "top_risks": ((rep.get("dashboard") or {}).get("top_risks") or [])[:20],
+                },
+                "ship_gate": rep.get("ship_gate"),
+                "checklist": rep.get("checklist"),
+            }
+    return {}
 
 
 def _multi_container_summary(

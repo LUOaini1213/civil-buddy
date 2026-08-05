@@ -146,6 +146,47 @@ def build_hitl_summary(state: Dict[str, Any]) -> Dict[str, Any]:
         },
     ]
 
+    # 非标检验摘要卡
+    ns = state.get("nonstandard_summary") or state.get("nonstandard_report") or {}
+    if not ns.get("overall") and (mats or boxes):
+        try:
+            from packing_assistant.tools.nonstandard_inspect import (
+                inspect_nonstandard,
+                public_summary,
+            )
+
+            full = inspect_nonstandard(
+                materials=mats,
+                boxes=boxes,
+                container_type=str(ctype),
+                case_id=str(state.get("session_id") or ""),
+                packing_options=state.get("packing_options") or {},
+            )
+            ns = public_summary(full)
+        except Exception:
+            ns = {}
+    ns_overall = str(ns.get("overall") or "")
+    ns_ui = ((ns.get("dashboard") or {}).get("counts_for_ui")) or {}
+    ns_sum = ns.get("summary") or {}
+    if ns_overall:
+        cards.append(
+            {
+                "id": "nonstandard",
+                "title": "非标检验",
+                "value": ns_overall,
+                "hint": (
+                    f"非标物料 {ns_sum.get('n_nonstandard_materials', '—')} · "
+                    f"超长{ns_ui.get('overlength', 0)} 重件{ns_ui.get('heavy', 0)} "
+                    f"定制{ns_ui.get('custom_shape', 0)} 结构{ns_ui.get('struct_pending', 0)}"
+                ),
+                "level": (
+                    "err"
+                    if ns_overall == "FAIL"
+                    else ("warn" if ns_overall in ("WARN", "NEED_DESIGN") else "ok")
+                ),
+            }
+        )
+
     actions = [
         {"id": "confirm", "label": "确认并拼柜", "primary": True},
         {"id": "revise_nl", "label": "自然语言改方案", "primary": False},
@@ -185,6 +226,15 @@ def build_hitl_summary(state: Dict[str, Any]) -> Dict[str, Any]:
         "structure_await_design": await_design,
         "structure_fail": fail_struct,
         "overlength_boxes": oversize,
+        "nonstandard": {
+            "overall": ns_overall or None,
+            "counts": ns_ui,
+            "summary": ns_sum,
+            "top_risks": ((ns.get("dashboard") or {}).get("top_risks") or ns.get("top_risks") or [])[:10],
+            "checklist": ns.get("checklist"),
+            "ship_gate": ns.get("ship_gate"),
+            "strategy_hints": ns.get("strategy_hints") or [],
+        },
         "cards": cards,
         "boxes_preview": preview,
         "actions": actions,
@@ -204,6 +254,7 @@ def build_hitl_summary(state: Dict[str, Any]) -> Dict[str, Any]:
             f"成箱 {len(boxes)} 只 · 建议订柜 N0*={n0 if n0 is not None else '—'} "
             f"({n0_note or '工具估算'}) · 毛重 {total_gross:.0f} kg"
             + (f"；{await_design} 箱待详设" if await_design else "")
+            + (f"；非标检验 {ns_overall}" if ns_overall else "")
             + "。确认后 3D 实装可能 +0~1 柜；柜数由 tools 计算非 LLM 拍脑袋。"
             + " 状态已持久化，可安全关闭后 resume。"
         ),

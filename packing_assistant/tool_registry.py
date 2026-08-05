@@ -123,6 +123,22 @@ TOOL_CATALOG: List[ToolSpec] = [
         "超限禁止只加柜空转",
     ),
     ToolSpec(
+        "nonstandard.inspect",
+        "非标件检验 v2",
+        "A",
+        "packing_assistant.tools.nonstandard_inspect",
+        "taxonomy 分型 + 仪表盘 + 装运勾选（DATA/GEO/LOAD/SHAPE/PACK/STRUCT/PROCESS）",
+        "FAIL 阻断；WARN/NEED_DESIGN 人工；public 只下发 summary",
+    ),
+    ToolSpec(
+        "nonstandard.enrich",
+        "非标备注增强",
+        "A",
+        "packing_assistant.tools.nl_nonstandard_enrich",
+        "规则/可选 LLM 从备注抽 fragile/禁翻/ns_tags，禁止改尺寸重量",
+        "PACKING_NS_LLM=1 才走 LLM；默认 rules fallback",
+    ),
+    ToolSpec(
         "design.facts",
         "详设事实",
         "A",
