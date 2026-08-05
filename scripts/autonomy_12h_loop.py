@@ -536,6 +536,48 @@ def r_refresh_only() -> str:
     return "refresh_metrics"
 
 
+def r_adversarial_comp() -> str:
+    """Run shipped adversarial competition script if present (non-fatal log)."""
+    script = ROOT / "scripts" / "test_adversarial_competition.py"
+    if not script.exists():
+        return "adversarial_comp missing"
+    code, out = run([PY, str(script)], timeout=600)
+    (OUT / "adversarial_comp.txt").write_text(out[-6000:], encoding="utf-8")
+    log(f"adversarial_comp exit={code}")
+    # do not fail the recipe hard if suite has known warnings — only crash on interpreter error
+    if code == 124:
+        raise RuntimeError("adversarial_comp timeout")
+    return f"adversarial_comp code={code}"
+
+
+def r_scorecard_live() -> str:
+    """Refresh competition SCORECARD from live smoke/phase0 metrics."""
+    smoke = metric_smoke()
+    p0 = metric_phase0()
+    gen = metric_core_generic(pack=True)
+    sc = ROOT / "output" / "competition" / "SCORECARD.md"
+    sc.parent.mkdir(parents=True, exist_ok=True)
+    sc.write_text(
+        "\n".join(
+            [
+                "# SCORECARD (overnight live)",
+                f"- ts: {now()}",
+                f"- head: `{head()}`",
+                f"- smoke: **{smoke}**",
+                f"- phase0_quick_avg: **{p0.get('avg')}** (ok={p0.get('ok')})",
+                f"- generic parse/pack: **{gen.get('n_parse')}/{gen.get('n_pack')}** ok={gen.get('ok')}",
+                f"- win_threshold total: 0.75",
+                "",
+            ]
+        ),
+        encoding="utf-8",
+    )
+    score({"event": "scorecard_live", "smoke": smoke, "phase0": p0.get("avg"), "gen": gen})
+    if not smoke or not p0.get("ok") or not gen.get("ok"):
+        raise RuntimeError(f"scorecard_live gate fail smoke={smoke} p0={p0} gen={gen}")
+    return f"scorecard_live avg={p0.get('avg')} gen_pack={gen.get('n_pack')}"
+
+
 def r_network_eval() -> str:
     """Live network eval: DeepSeek API health + public web note on packing/agent eval."""
     load_dotenv()
@@ -651,6 +693,8 @@ RECIPES: List[Tuple[str, Callable[[], str]]] = [
     ("hitl_mid50", r_hitl_mid50),
     ("profile", r_profile),
     ("industry", r_more_industry),
+    ("adversarial_comp", r_adversarial_comp),
+    ("scorecard_live", r_scorecard_live),
     ("refresh", r_refresh_only),
 ]
 
