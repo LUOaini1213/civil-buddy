@@ -1,0 +1,4 @@
+name	quantity	length_mm	width_mm	height_mm	weight_kg	part_no	category
+TabBox1	10	500	400	300	2.1	TAB-1	carton
+TabBox2	6	700	500	350	3.8	TAB-2	carton
+TabPallet	2	1200	1000	150	45	TAB-P	pallet
