@@ -123,6 +123,14 @@ TOOL_CATALOG: List[ToolSpec] = [
         "超限禁止只加柜空转",
     ),
     ToolSpec(
+        "table.parse",
+        "通用材料表解析",
+        "A",
+        "packing_assistant.tools.table_mapper",
+        "CSV/XLSX/JSON 列同义+单位归一 → materials[]（MaterialTableIR）",
+        "LLM 不写尺寸；数值由 mapper 归一 mm/kg",
+    ),
+    ToolSpec(
         "nonstandard.inspect",
         "非标件检验 v2",
         "A",

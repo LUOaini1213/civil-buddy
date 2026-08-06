@@ -911,10 +911,23 @@
           <button class="soft" @click="refreshHealth" title="健康预检">预检</button>
           <button class="ghost" @click="runPipelineTrace" :class="{ busy: loading }">全流程</button>
           <button class="soft" @click="runDemoSteel" :class="{ busy: loading }" title="少量钢件">钢件轻量</button>
+          <label class="soft" style="cursor:pointer;display:inline-flex;align-items:center;gap:4px;padding:6px 10px;border-radius:8px"
+                 title="上传 CSV/XLSX → /api/table/parse → materials">
+            表上传
+            <input type="file" accept=".csv,.tsv,.txt,.xlsx,.xlsm,.json" style="display:none"
+                   @change="onTableFileSelected" :disabled="loading" />
+          </label>
+          <button class="soft" @click="runWithTableMaterials" :class="{ busy: loading }"
+                  :disabled="!tableMaterials.length" title="用已解析表材料跑 pipeline">
+            表材料跑 ({{ tableMaterials.length || 0 }})
+          </button>
           <button class="primary-lg" @click="runDemo" :class="{ busy: loading }" title="30×钢实模块·默认 HITL">
             {{ loading ? '运行中…' : '满载演示' }}
           </button>
         </div>
+      </div>
+      <div class="topbar-row secondary" v-if="tableParseNote" style="font-size:12px;color:var(--muted);padding:0 12px 6px">
+        <span class="pill" :class="tableMaterials.length ? 'ok' : 'warn'">{{ tableParseNote }}</span>
       </div>
       <div class="topbar-row secondary">
         <div class="top-status-scroll">
@@ -2135,6 +2148,9 @@
           preflightHints: [],
           nsFilter: 'all',
           nsChecked: {},
+          tableMaterials: [],
+          tableParseNote: '',
+          tableColumnMap: null,
           demoAutoConfirm: false,
           result: {},
           agentSteps: [],
@@ -3290,15 +3306,88 @@
             this.preflightHints = [String(e)];
           }
         },
+        async onTableFileSelected(ev) {
+          const input = ev && ev.target;
+          const file = input && input.files && input.files[0];
+          if (!file) return;
+          this.statusText = '解析材料表 ' + file.name + ' …';
+          try {
+            const fd = new FormData();
+            fd.append('file', file);
+            fd.append('session_id', this.sessionId || '');
+            fd.append('store_session', '1');
+            const res = await fetch(API + '/api/table/parse', {
+              method: 'POST',
+              body: fd,
+            });
+            const j = await res.json().catch(() => ({}));
+            if (!res.ok || !j.ok) {
+              const err = (j.errors && j.errors.join('; ')) || j.detail || ('HTTP ' + res.status);
+              this.tableMaterials = [];
+              this.tableParseNote = '表解析失败: ' + err;
+              this.statusText = this.tableParseNote;
+              return;
+            }
+            this.tableMaterials = j.materials || [];
+            this.tableColumnMap = j.column_map || null;
+            const st = j.stats || {};
+            this.tableParseNote =
+              '表OK · ' + (this.tableMaterials.length) + ' 行 · 总重≈' +
+              (st.total_weight_kg != null ? st.total_weight_kg : '—') + 'kg · 估尺寸 ' +
+              (st.n_dims_estimated || 0);
+            this.statusText = this.tableParseNote + ' · 可点「表材料跑」';
+            this.userInput = (this.userInput || '') +
+              (this.userInput ? ' | ' : '') +
+              'table:' + (file.name || 'upload');
+          } catch (e) {
+            this.tableMaterials = [];
+            this.tableParseNote = '表上传失败: ' + e;
+            this.statusText = this.tableParseNote;
+          } finally {
+            if (input) input.value = '';
+          }
+        },
+        async runWithTableMaterials() {
+          if (!this.tableMaterials.length) {
+            this.statusText = '请先上传材料表';
+            return;
+          }
+          if (!this.beginWork('表材料 pipeline')) return;
+          this.statusText = '用表材料跑 pipeline…';
+          this.mainTab = 'overview';
+          try {
+            const j = await this.fetchJson('/api/pipeline', {
+              user_input: this.userInput || '通用材料表装柜',
+              session_id: this.sessionId,
+              materials: this.tableMaterials,
+              container_type: this.containerType || '40HQ',
+              enable_auto_confirm: !!this.demoAutoConfirm,
+              packing_options: { profile_id: 'generic_table', crate_passthrough: true, multi_start: true, cog_aware: true },
+            }, 120000);
+            this.applyResult(j.public || j);
+            this.statusText =
+              '表材料完成 · phase=' + ((j.public || j).phase || '—') +
+              ' · 行数 ' + this.tableMaterials.length;
+            if ((j.public || j).phase === 'await_user_confirm') this.mainTab = 'boxes';
+          } catch (e) {
+            this.statusText = '表材料失败: ' + e;
+          } finally {
+            this.endWork();
+          }
+        },
         async runTeamA() {
           if (!this.beginWork('生成方案')) return;
           this.statusText = '团队 A 运行中…';
           this.mainTab = 'overview';
           try {
-            const j = await this.fetchJson('/api/team-a', {
+            const body = {
               user_input: this.userInput || '演示材料清单',
               session_id: this.sessionId,
-            }, 60000);
+            };
+            if (this.tableMaterials.length) {
+              body.materials = this.tableMaterials;
+            }
+            const j = await this.fetchJson('/api/team-a', body, 60000);
             this.applyResult(j);
             this.statusText = '团队 A 完成 · 请到「成箱」页确认并拼柜';
             this.mainTab = 'boxes';

@@ -20,7 +20,7 @@ from typing import Any, Dict, List, Optional
 import asyncio
 import queue as queue_mod
 
-from fastapi import FastAPI, HTTPException, WebSocket, WebSocketDisconnect
+from fastapi import FastAPI, File, Form, HTTPException, UploadFile, WebSocket, WebSocketDisconnect
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse, StreamingResponse
 from fastapi.staticfiles import StaticFiles
@@ -730,6 +730,152 @@ def api_profiles():
     from packing_assistant.packing_profiles import list_profiles
 
     return {"ok": True, "profiles": list_profiles()}
+
+
+class TableParseJsonBody(BaseModel):
+    """JSON 解析入口：path / rows / session 写入可选。"""
+
+    path: str = ""
+    rows: Optional[List[Dict[str, Any]]] = None
+    session_id: str = ""
+    apply_profile: str = "generic_table"
+    store_session: bool = False
+
+
+@app.post("/api/table/parse")
+async def api_table_parse(
+    file: Optional[UploadFile] = File(None),
+    session_id: str = Form(""),
+    store_session: str = Form("0"),
+    path: str = Form(""),
+):
+    """通用材料表 → materials[]（multipart file= 或 form path=）。
+
+    JSON 请用 POST /api/table/parse/json。
+    不写 xyz / 柜数；仅列映射与单位归一。
+    """
+    from packing_assistant.tools.table_mapper import parse_table_bytes, parse_table_file
+
+    result: Dict[str, Any]
+    try:
+        if file is not None and getattr(file, "filename", None):
+            raw = await file.read()
+            result = parse_table_bytes(raw, filename=file.filename or "upload.csv")
+        elif (path or "").strip():
+            p = Path(path.strip())
+            if not p.is_absolute():
+                p = ROOT / p
+            if not p.exists():
+                raise HTTPException(404, f"table not found: {path}")
+            result = parse_table_file(p)
+        else:
+            result = {
+                "ok": False,
+                "materials": [],
+                "column_map": {},
+                "stats": {},
+                "errors": [
+                    "provide multipart file= or form path=, or POST /api/table/parse/json"
+                ],
+            }
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(400, f"parse failed: {type(e).__name__}: {e}") from e
+
+    sid = (session_id or "").strip()
+    store = str(store_session or "0").strip() in ("1", "true", "True", "yes")
+    if store and sid and result.get("ok") and result.get("materials"):
+        st = _SESSIONS.get(sid) or _load_session(sid) or {
+            "session_id": sid,
+            "phase": "materials_ready",
+            "packing_options": {},
+        }
+        st = {
+            **st,
+            "materials": list(result["materials"]),
+            "table_parse": {
+                "column_map": result.get("column_map"),
+                "stats": result.get("stats"),
+                "path": result.get("path"),
+            },
+        }
+        try:
+            from packing_assistant.packing_profiles import apply_profile
+
+            st["packing_options"] = apply_profile(
+                st.get("packing_options") or {}, "generic_table"
+            )
+        except Exception:
+            pass
+        _store_session(sid, st)
+        result["session_id"] = sid
+        result["stored"] = True
+    else:
+        result["stored"] = False
+
+    if len(result.get("ir") or []) > 50:
+        result = {k: v for k, v in result.items() if k != "ir"}
+    return {
+        "ok": bool(result.get("ok")),
+        "materials": result.get("materials") or [],
+        "column_map": result.get("column_map") or {},
+        "stats": result.get("stats") or {},
+        "path": result.get("path"),
+        "errors": result.get("errors") or [],
+        "session_id": result.get("session_id"),
+        "stored": result.get("stored"),
+        "note": "tools map columns/units only; no xyz or container count",
+    }
+
+
+@app.post("/api/table/parse/json")
+def api_table_parse_json(body: TableParseJsonBody):
+    """JSON 入口：path 或 rows → materials（与 multipart 同一 mapper）。"""
+    from packing_assistant.tools.table_mapper import parse_table_file, parse_table_rows
+
+    if body.rows:
+        result = parse_table_rows(body.rows, source="api_json_rows")
+    elif (body.path or "").strip():
+        p = Path(body.path.strip())
+        if not p.is_absolute():
+            p = ROOT / p
+        if not p.exists():
+            raise HTTPException(404, f"table not found: {body.path}")
+        result = parse_table_file(p)
+    else:
+        raise HTTPException(400, "need path or rows")
+
+    if body.store_session and body.session_id and result.get("ok"):
+        st = _SESSIONS.get(body.session_id) or _load_session(body.session_id) or {
+            "session_id": body.session_id,
+            "phase": "materials_ready",
+            "packing_options": {},
+        }
+        st = {**st, "materials": list(result.get("materials") or [])}
+        try:
+            from packing_assistant.packing_profiles import apply_profile
+
+            pid = body.apply_profile or "generic_table"
+            st["packing_options"] = apply_profile(st.get("packing_options") or {}, pid)
+        except Exception:
+            pass
+        _store_session(body.session_id, st)
+        result["session_id"] = body.session_id
+        result["stored"] = True
+    if len(result.get("ir") or []) > 50:
+        result = {k: v for k, v in result.items() if k != "ir"}
+    return {
+        "ok": bool(result.get("ok")),
+        "materials": result.get("materials") or [],
+        "column_map": result.get("column_map") or {},
+        "stats": result.get("stats") or {},
+        "path": result.get("path"),
+        "errors": result.get("errors") or [],
+        "session_id": result.get("session_id"),
+        "stored": result.get("stored", False),
+        "note": "tools map columns/units only; no xyz or container count",
+    }
 
 
 @app.get("/api/whatif/scenarios")
