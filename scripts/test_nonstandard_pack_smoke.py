@@ -1,9 +1,9 @@
 #!/usr/bin/env python3
 """非标磁盘夹具 → 真实 run_agent_pipeline 拼柜路径冒烟（超 inspect-only）。
 
-覆盖：
-- 可装 WARN 件：须 phase=done、有 nonstandard_summary、pipeline 不崩
-- 硬 FAIL 件（缺尺寸 / 超柜宽）：须 ship 被拦或 can_fit=False / 材料不全
+覆盖全部 ns_INDEX 8 套：
+- PACKABLE（WARN/NEED_DESIGN）：pipeline 不崩、有 nonstandard_summary
+- HARD_FAIL（缺尺寸/超柜宽）：诚实拦截，禁止 clean ship_ok+PASS
 """
 
 from __future__ import annotations
@@ -19,17 +19,30 @@ os.environ.setdefault("PACKING_SKIP_SKJOLBER", "1")
 os.environ.setdefault("PACKING_FINALIZE_LLM", "0")
 
 NS_ROOT = ROOT / "test" / "sim_materials"
+INDEX = NS_ROOT / "ns_INDEX.json"
 
-# packable-ish WARN cases (expect pipeline completes)
+# packable-ish WARN / NEED_DESIGN cases
 PACK_CASES = (
     "ns_heavy_cast",
     "ns_thin_sheet_stack",
     "ns_fragile_process",
+    "ns_overlength_rail",
+    "ns_factory_crate_path",
+    "ns_mixed_industry_bundle",
 )
 # hard data/geo fail — must not silently ship_ok True without flags
 FAIL_CASES = (
     "ns_missing_dims_mix",
     "ns_over_container_width",
+)
+
+TERMINAL_PHASES = (
+    "done",
+    "await_user_confirm",
+    "team_b_done",
+    "complete",
+    "need_revision",
+    "await_revision",
 )
 
 
@@ -60,12 +73,18 @@ def _run(case_id: str, mats: list):
 def main() -> int:
     from packing_assistant.tools.nonstandard_inspect import inspect_nonstandard
 
+    # INDEX must list all required cases
+    assert INDEX.is_file(), INDEX
+    idx = json.loads(INDEX.read_text(encoding="utf-8"))
+    indexed = {c["id"] for c in (idx.get("cases") or [])}
+    for cid in PACK_CASES + FAIL_CASES:
+        assert cid in indexed, f"{cid} missing from ns_INDEX"
+
     results = []
     fails = []
 
     for cid in PACK_CASES:
         mats = _load(cid)
-        # inspect first (same fixture)
         rep = inspect_nonstandard(materials=mats, case_id=cid, container_type="40HQ")
         overall = rep.get("overall")
         st, pub = _run(cid, mats)
@@ -81,14 +100,14 @@ def main() -> int:
         )
         print(line)
         results.append(line)
-        if phase not in ("done", "await_user_confirm", "team_b_done", "complete"):
-            # allow terminal done-like; reject hard crash phases
-            if phase in ("error", "failed", None) and st.get("errors"):
-                fails.append(f"{cid} phase={phase} errors={st.get('errors')[:2]}")
-        # must surface nonstandard on public path when materials were ns
+        if phase in ("error", "failed") or (
+            phase is None and st.get("errors")
+        ):
+            fails.append(f"{cid} crash phase={phase} errors={(st.get('errors') or [])[:2]}")
+        elif phase not in TERMINAL_PHASES and st.get("errors"):
+            fails.append(f"{cid} non-terminal phase={phase}")
         if not (ns.get("overall") or rep.get("overall")):
             fails.append(f"{cid} missing nonstandard overall after pack")
-        # pipeline should not leave materials empty after parse
         if not (st.get("materials") or mats):
             fails.append(f"{cid} materials vanished")
 
@@ -110,11 +129,9 @@ def main() -> int:
         )
         print(line)
         results.append(line)
-        # Must not claim clean auto-ship success on hard FAIL fixtures
         clean_ship = ship_ok is True and can_fit is True and not mats_incomplete
         if clean_ship and (ns.get("overall") or rep.get("overall")) == "PASS":
             fails.append(f"{cid} unexpectedly clean PASS ship")
-        # Prefer: ship_ok False OR can_fit False OR materials_incomplete OR ns FAIL kept
         honest_block = (
             ship_ok is False
             or can_fit is False
@@ -129,7 +146,7 @@ def main() -> int:
         print("FAIL nonstandard_pack_smoke", fails)
         return 1
     print("ALL_PASS nonstandard_pack_smoke")
-    print(f"n_pack={len(PACK_CASES)} n_fail={len(FAIL_CASES)}")
+    print(f"n_pack={len(PACK_CASES)} n_fail={len(FAIL_CASES)} total={len(PACK_CASES)+len(FAIL_CASES)}")
     return 0
 
 

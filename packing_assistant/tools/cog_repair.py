@@ -105,14 +105,13 @@ def _try_swap(
     """尝试交换两箱的 (x,y,z)；要求对方足迹装得下本箱尺寸。"""
     hx, hy, hz, hdx, hdy, hdz = _rect(heavy)
     lx, ly, lz, ldx, ldy, ldz = _rect(light)
-    # 足迹：重货放轻货位置需 hdx<=空间——用轻货位置角点，尺寸用重货自身
-    # 简化：仅当平面尺寸相容（重货不比轻货足迹大太多）或双方尺寸相同
-    if hdx > ldx + 50 or hdy > ldy + 50:
-        # 重货更大：不能塞进轻货脚印，除非轻货更大
-        if hdx > L or hdy > W:
-            return None
-    if ldx > hdx + 50 or ldy > hdy + 50:
-        pass  # 轻货放重货位通常 OK
+    # 足迹：允许略放宽（同密实模块常尺寸一致）；重货不可超出柜
+    if hdx > L or hdy > W or ldx > L or ldy > W:
+        return None
+    # 位置角点放对方尺寸：仅当不撞墙（由 _fits_container 最终裁决）
+    if hdx > ldx + 120 or hdy > ldy + 120:
+        # 过大差：仍允许尝试，失败由碰撞/装柜检测回退
+        pass
 
     h2 = deepcopy(heavy)
     l2 = deepcopy(light)
@@ -154,11 +153,11 @@ def _try_slide_to_mid(
 
     # 在当前 x 与 ideal 之间采样
     samples = []
-    for t in (1.0, 0.75, 0.5, 0.35, 0.25):
+    for t in (1.0, 0.9, 0.75, 0.6, 0.5, 0.35, 0.25, 0.1):
         sx = x + (ideal_x - x) * t
         samples.append(int(round(sx)))
-    # 中段网格
-    for frac in (0.35, 0.45, 0.5, 0.55, 0.65):
+    # 中段网格（更密）
+    for frac in (0.30, 0.35, 0.40, 0.45, 0.5, 0.55, 0.60, 0.65, 0.70):
         samples.append(int(round(L * frac - dx / 2)))
     samples = sorted(set(max(0, min(int(L - dx), s)) for s in samples))
 
@@ -206,9 +205,9 @@ def _rigid_shift_to_max_mid50(
     best = work0
     best_mid = mid0
     max_left = max(0.0, L - span)
-    # 采样：居中优先 + 均匀网格
-    samples = [max_left * 0.5]
-    step = max(25.0, max_left / 48.0) if max_left > 0 else 25.0
+    # 采样：居中优先 + 更密均匀网格（抬 mid 舒适区）
+    samples = [max_left * 0.5, max_left * 0.4, max_left * 0.6]
+    step = max(15.0, max_left / 80.0) if max_left > 0 else 15.0
     t = 0.0
     while t <= max_left + 1e-6:
         samples.append(t)
@@ -253,6 +252,10 @@ def repair_container_r4(
     work = [deepcopy(it) for it in items]
     mid0 = _mid50_of(work, L, wmap)
     tgt = float(target_mid50 or 0.60)
+    # 高目标时加大迭代（满载舒适区）
+    if tgt >= 0.65:
+        max_swaps = max(int(max_swaps), 80)
+        max_slides = max(int(max_slides), 80)
     if mid0 >= tgt:
         return work, {
             "swaps": 0,
@@ -297,9 +300,9 @@ def repair_container_r4(
         if not heavies_out or not lights_in:
             break
         improved = False
-        for hm, h in heavies_out[:12]:
-            for lm, l in lights_in[:16]:
-                if hm <= lm * 1.05:
+        for hm, h in heavies_out[:16]:
+            for lm, l in lights_in[:24]:
+                if hm <= lm * 1.02:
                     continue  # 交换无质量收益
                 # 交换后：重货中心应更靠中段
                 if _in_mid(_cx(h), L):
@@ -346,7 +349,7 @@ def repair_container_r4(
         if not heavies_out:
             break
         improved = False
-        for hm, h in heavies_out[:15]:
+        for hm, h in heavies_out[:20]:
             slid = _try_slide_to_mid(h, work, L, W, H)
             if not slid:
                 continue
@@ -372,6 +375,72 @@ def repair_container_r4(
         if d2 > 1e-5:
             work = shifted2
             rigid += 1
+
+    # —— Phase D: 第二轮 swap/slide（高目标舒适区）——
+    if tgt >= 0.65 and _mid50_of(work, L, wmap) + 1e-9 < tgt:
+        for _ in range(max_swaps // 2):
+            mid_now = _mid50_of(work, L, wmap)
+            if mid_now >= tgt:
+                break
+            heavies_out, lights_in = refresh_lists()
+            if not heavies_out or not lights_in:
+                break
+            improved = False
+            for hm, h in heavies_out[:20]:
+                for lm, l in lights_in[:30]:
+                    if hm <= lm:
+                        continue
+                    pair = _try_swap(h, l, work, L, W, H)
+                    if not pair:
+                        continue
+                    h2, l2 = pair
+                    trial = []
+                    hid, lid = str(h.get("box_id")), str(l.get("box_id"))
+                    for it in work:
+                        bid = str(it.get("box_id"))
+                        if bid == hid:
+                            trial.append(h2)
+                        elif bid == lid:
+                            trial.append(l2)
+                        else:
+                            trial.append(it)
+                    m_new = _mid50_of(trial, L, wmap)
+                    if m_new > mid_now + 1e-4:
+                        work = trial
+                        swaps += 1
+                        improved = True
+                        break
+                if improved:
+                    break
+            if not improved:
+                break
+        for _ in range(max_slides // 2):
+            mid_now = _mid50_of(work, L, wmap)
+            if mid_now >= tgt:
+                break
+            heavies_out, _ = refresh_lists()
+            improved = False
+            for hm, h in heavies_out[:25]:
+                slid = _try_slide_to_mid(h, work, L, W, H)
+                if not slid:
+                    continue
+                trial = [
+                    slid if str(it.get("box_id")) == str(h.get("box_id")) else it
+                    for it in work
+                ]
+                m_new = _mid50_of(trial, L, wmap)
+                if m_new > mid_now + 1e-4:
+                    work = trial
+                    slides += 1
+                    improved = True
+                    break
+            if not improved:
+                break
+        if _mid50_of(work, L, wmap) < tgt:
+            shifted3, d3 = _rigid_shift_to_max_mid50(work, L, W, H, wmap)
+            if d3 > 1e-5:
+                work = shifted3
+                rigid += 1
 
     mid1 = _mid50_of(work, L, wmap)
     return work, {

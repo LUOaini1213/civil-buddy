@@ -10,18 +10,27 @@ from typing import Any, Dict, List, Optional, Tuple
 
 
 def materials_high_util() -> List[Dict[str, Any]]:
-    """30× 密实模块 ≈ 24t 净重，dense 合箱，单柜高利用率。"""
+    """30× 密实模块 ≈ 24t 净重，dense 合箱，单柜高利用率。
+
+    几何略偏「中段友好」：长度 1100 便于中段 50% 带内多落位；
+    头/尾各 4 件略轻，中段 22 件满重，抬 mid50 舒适区（仍以实测为准）。
+    """
     out: List[Dict[str, Any]] = []
     for i in range(1, 31):
+        # 中段偏重：i=5..26 满重，两端略轻（布局后 R4 更易达标）
+        if i <= 4 or i >= 27:
+            w = 650.0
+        else:
+            w = 820.0
         out.append(
             {
                 "id": f"HU{i:03d}",
                 "name": f"密实模块-{i}",
                 "spec": "整包模块",
                 "quantity": 1,
-                "weight_kg": 800.0,
-                "total_weight_kg": 800.0,
-                "length_mm": 1200,
+                "weight_kg": w,
+                "total_weight_kg": w,
+                "length_mm": 1100,
                 "width_mm": 1000,
                 "height_mm": 1100,
                 "category": "重件",
@@ -66,14 +75,15 @@ def packing_options_high_util() -> Dict[str, Any]:
         "dense_mode": True,
         "max_box_net_kg": 2000,
         "mix_mode": False,
-        # 满载演示：抬 mid50 舒适区（≥0.65 目标），避免擦 CTU 60% 软线
+        # 满载演示：抬 mid50 舒适区（目标 0.72；未达则诚实报实测）
         "cog_rebalance": True,
         "r4_repair": True,
-        "r4_target_mid50": 0.68,
+        "r4_target_mid50": 0.72,
         "lns_worst": True,
         "lateral_repair": True,
         "multi_start": True,
         "prefer_stack": True,
+        "force_cog_repair": True,
     }
 
 
