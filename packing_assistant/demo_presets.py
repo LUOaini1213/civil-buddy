@@ -39,6 +39,30 @@ def materials_high_util() -> List[Dict[str, Any]]:
     return out
 
 
+def materials_high_util_uniform() -> List[Dict[str, Any]]:
+    """均匀重货满载：30× 同尺寸同重量（回归 mid50 是否被「中段偏重」物料特化）。
+
+    全部 weight=800kg；几何略短于偏重版（1000mm）便于中段多落位 + R4 slide。
+    """
+    out: List[Dict[str, Any]] = []
+    for i in range(1, 31):
+        out.append(
+            {
+                "id": f"HU-U{i:03d}",
+                "name": f"均匀密实模块-{i}",
+                "spec": "整包模块-均匀重",
+                "quantity": 1,
+                "weight_kg": 800.0,
+                "total_weight_kg": 800.0,
+                "length_mm": 1000,
+                "width_mm": 1000,
+                "height_mm": 1100,
+                "category": "重件",
+            }
+        )
+    return out
+
+
 def materials_steel_light() -> List[Dict[str, Any]]:
     """旧演示：少量钢件（利用率低，适合讲结构/标准箱）。"""
     from packing_assistant.adapters import material_internal_to_api
@@ -133,6 +157,12 @@ PRESETS = {
         "materials": materials_high_util,
         "packing_options": packing_options_high_util,
         "user_input": "高利用率演示：30×密实模块≈24t，dense 合箱压满 40HQ",
+    },
+    "high_util_uniform": {
+        "label": "满载均匀重（mid50 回归）",
+        "materials": materials_high_util_uniform,
+        "packing_options": packing_options_high_util,
+        "user_input": "均匀重满载：30×800kg 同模块，测 mid50 是否稳",
     },
     "five_containers": {
         "label": "5箱→5柜（一箱一柜）",

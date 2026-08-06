@@ -249,6 +249,8 @@ def api_health():
             "vgm_status": True,
             "vgm_human_signoff": True,
             "vgm_signoff_path": "/api/vgm/signoff",
+            "demo_simple_mode": True,
+            "demo_simple_default": True,
             "primary_agent_mode": "steps",
             "llm_toolcall_reference_only": True,
         },
