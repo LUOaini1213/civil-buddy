@@ -87,6 +87,35 @@ def agent_material_parser(state: PackingState) -> Dict[str, Any]:
     if note and ("去掉" in note or "删除" in note):
         mats = _filter_remove(mats, note)
 
+    # 通用表注入：自动套 generic_table 档（当量直通、不强制结构）
+    packing_options = dict(state.get("packing_options") or {})
+    profile_applied = ""
+    table_src = existing if existing else mats
+    if mats and _looks_like_generic_table(table_src if table_src else mats):
+        try:
+            from packing_assistant.packing_profiles import apply_profile
+
+            if not packing_options.get("profile_id") or packing_options.get(
+                "profile_id"
+            ) in ("balanced", ""):
+                packing_options = apply_profile(packing_options, "generic_table")
+                profile_applied = "generic_table"
+        except Exception:
+            packing_options.setdefault("crate_passthrough", True)
+            packing_options.setdefault("profile_id", "generic_table")
+            profile_applied = "generic_table_fallback"
+    # 归一后 meta 可能被剥：若原 inject 有表迹象再判一次
+    if mats and not profile_applied and existing and _looks_like_generic_table(existing):
+        try:
+            from packing_assistant.packing_profiles import apply_profile
+
+            packing_options = apply_profile(packing_options, "generic_table")
+            profile_applied = "generic_table"
+        except Exception:
+            packing_options["profile_id"] = "generic_table"
+            packing_options["crate_passthrough"] = True
+            profile_applied = "generic_table_fallback"
+
     summary = _summary(mats)
     perception = _build_perception(mats, summary, source=source, note=note)
     summary = {**summary, **{k: perception[k] for k in (
@@ -95,11 +124,15 @@ def agent_material_parser(state: PackingState) -> Dict[str, Any]:
     tools_used = ["material_parser.rule_parse" if source == "rule" else f"material_parser.{source}"]
     if source == "llm":
         tools_used.append("llm.chat_json_array")
+    if profile_applied:
+        tools_used.append("profile.generic_table")
     warn_bits = []
     if incomplete_dims:
         warn_bits.append("缺尺寸(L/W/H=0)不可默成出运")
     if source == "inject_partial":
         warn_bits.append("注入材料字段不完整")
+    if profile_applied:
+        warn_bits.append(f"已套 profile={profile_applied}")
     msg = (
         f"【感知】材料摘要({source}{llm_note})："
         f"{summary.get('total_pieces')} 件 / {summary.get('total_weight_kg')} kg / "
@@ -126,10 +159,13 @@ def agent_material_parser(state: PackingState) -> Dict[str, Any]:
                 "total_weight_kg": summary.get("total_weight_kg"),
                 "source": source,
                 "incomplete_dims": bool(incomplete_dims),
+                "profile_applied": profile_applied or None,
             },
         },
         "messages": [{"role": "assistant", "content": msg}],
     }
+    if packing_options:
+        out["packing_options"] = packing_options
     if incomplete_dims:
         errs = list(state.get("errors") or [])  # type: ignore[arg-type]
         errs.append("materials_missing_dims: 存在 L/W/H 为 0 的物料，禁止当完整方案出运")
@@ -180,7 +216,7 @@ def _normalize_llm_materials(items: List[Dict[str, Any]]) -> List[Dict[str, Any]
             "total_weight_kg": round(total, 3),
             "category": cat,
         }
-        # 可选透传字段（非标检验 / HITL）
+        # 可选透传字段（非标检验 / HITL / 通用表 meta）
         for k in (
             "note",
             "备注",
@@ -195,6 +231,9 @@ def _normalize_llm_materials(items: List[Dict[str, Any]]) -> List[Dict[str, Any]
             "ns_tags",
             "hazard_class",
             "enrich_source",
+            "meta",
+            "profile_hint",
+            "part_no",
         ):
             if m.get(k) is not None:
                 row[k] = m.get(k)
@@ -215,6 +254,22 @@ def _looks_like_list(text: str) -> bool:
     if re.search(r"\d+[x×]\d+", t):
         return True
     return False
+
+
+def _looks_like_generic_table(materials: List[Dict[str, Any]]) -> bool:
+    """材料带 table_mapper meta 或 profile_hint=generic_table。"""
+    n_hint = 0
+    for m in materials:
+        if not isinstance(m, dict):
+            continue
+        meta = m.get("meta") if isinstance(m.get("meta"), dict) else {}
+        hint = str(meta.get("profile_hint") or m.get("profile_hint") or "")
+        src = str(meta.get("source") or "")
+        if hint == "generic_table" or src in ("csv", "xlsx", "json", "upload", "api_json_rows", "api_rows"):
+            n_hint += 1
+        if meta.get("column_map"):
+            n_hint += 1
+    return n_hint >= max(1, len(materials) // 3)
 
 
 def _has_metrics_api(materials: List[Dict[str, Any]]) -> bool:

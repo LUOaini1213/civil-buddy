@@ -210,6 +210,9 @@ def api_health():
     preflight["hints"].append(
         f"演示默认 enable_auto_confirm=false，露出 HITL · harness {HARNESS_VERSION} · {agent_count} agents"
     )
+    preflight["hints"].append(
+        "通用表：POST /api/table/parse（上传）或 /api/table/parse/json · 前端「表上传」"
+    )
     return {
         "gateway": "UP",
         "harness_version": HARNESS_VERSION,
@@ -237,6 +240,11 @@ def api_health():
             "llm_toolcall": True,
             "graph_ab_resume": True,
             "demo_hitl_default": True,
+            "table_parse": True,
+            "table_parse_path": "/api/table/parse",
+            "table_parse_json_path": "/api/table/parse/json",
+            "nonstandard_inspect": True,
+            "generic_table_profile": True,
         },
         "otel": _otel_status_safe(),
         "langgraph_checkpoint": _lg_status_safe(),
