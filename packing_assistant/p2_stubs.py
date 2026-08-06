@@ -51,16 +51,13 @@ def draft_vgm_submit(
     dry_run: bool = True,
 ) -> Dict[str, Any]:
     """VGM 提交骨架：默认 dry_run，不调用外部承运人；未人签则硬拦。"""
+    from packing_assistant.tools.vgm_draft import is_vgm_signed
+
     vgm = state.get("vgm_draft") or {}
     if not isinstance(vgm, dict):
         vgm = {}
     rows = vgm.get("per_container") or vgm.get("containers") or []
-    so = state.get("vgm_signoff") or vgm.get("signoff") or {}
-    checked = state.get("checklist_checked") or {}
-    signed = bool(
-        (isinstance(so, dict) and so.get("signed"))
-        or (isinstance(checked, dict) and checked.get("vgm_signed"))
-    )
+    signed = is_vgm_signed(state)
     if not signed:
         return {
             "schema": "vgm.submit.v1",

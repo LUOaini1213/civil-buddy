@@ -455,6 +455,7 @@ def api_vgm_signoff(body: dict):
         "vgm_status": pub.get("vgm_status"),
         "vgm_signoff": st2.get("vgm_signoff"),
         "checklist_checked": st2.get("checklist_checked"),
+        "pre_ship_checked": st2.get("pre_ship_checked"),
     }
 
 
