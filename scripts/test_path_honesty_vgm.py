@@ -12,6 +12,13 @@ sys.path.insert(0, str(ROOT))
 
 def main() -> int:
     from packing_assistant.harness import public_response, _path_honesty, _vgm_status
+    from packing_assistant.tools.vgm_draft import (
+        draft_vgm_method2,
+        record_human_signoff,
+        build_vgm_status_public,
+        VGM_CHECKLIST_ITEM_ID,
+    )
+    from packing_assistant.p2_stubs import draft_vgm_submit
 
     # steps path
     st_steps = {
@@ -26,43 +33,86 @@ def main() -> int:
     ph = _path_honesty(st_steps)
     assert ph.get("primary_path") == "steps", ph
     assert ph.get("reference_only") is False, ph
+    assert ph.get("cabin_count_reference_only") is False, ph
     assert ph.get("booking_authority") == "steps_tools", ph
 
-    # llm policy fallback
-    st_fb = {**st_steps, "agent_style": "policy_fallback", "agent_mode": "llm_toolcall"}
+    # llm policy fallback — cabin count reference-only
+    st_fb = {
+        **st_steps,
+        "agent_style": "policy_fallback",
+        "agent_mode": "llm_toolcall",
+        "container_plan": {"containers_used": 3, "n0": 3, "can_fit": True},
+    }
     ph2 = _path_honesty(st_fb)
     assert ph2.get("reference_only") is True, ph2
+    assert ph2.get("cabin_count_reference_only") is True, ph2
+    assert ph2.get("ui_label"), ph2
     assert "fallback" in (ph2.get("note") or "").lower() or "policy" in (
         ph2.get("this_run") or ""
     ), ph2
     assert ph2.get("booking_authority") == "steps_tools", ph2
+    note_cab = ph2.get("booking_containers_note") or ""
+    assert "订舱" in note_cab or "终裁" in note_cab or "对照" in note_cab, note_cab
 
-    # vgm not drafted
+    # vgm not drafted — human_signoff panel visible
     vg = _vgm_status({})
     assert vg.get("human_signoff_required") is True, vg
     assert vg.get("auto_submit_forbidden") is True, vg
     assert vg.get("status") == "not_drafted", vg
+    hs = vg.get("human_signoff") or {}
+    assert hs.get("ui_visible") is True, hs
+    assert hs.get("signed") is False, hs
+    assert hs.get("checklist_item_id") == VGM_CHECKLIST_ITEM_ID, hs
+    assert hs.get("pending_action"), hs
+    assert vg.get("checklist_item_id") == VGM_CHECKLIST_ITEM_ID
 
-    # vgm draft present
-    vg2 = _vgm_status(
-        {
-            "vgm_draft": {
-                "status": "draft",
-                "method": "method2",
-                "containers": [{"no": 1}],
-                "totals": {"cargo_kg": 1000},
-            }
-        }
+    # vgm draft via real draft_vgm_method2 (per_container path)
+    draft = draft_vgm_method2(
+        {"container_type": "40HQ", "containers_used": 2},
+        [{"box_id": "B1", "gross_weight_kg": 500}, {"box_id": "B2", "gross_weight_kg": 500}],
     )
-    assert vg2.get("status") == "draft", vg2
-    assert vg2.get("n_containers") == 1, vg2
+    assert draft.get("status") == "needs_shipper_signature", draft
+    assert draft.get("per_container") and draft.get("containers"), draft
+    vg2 = _vgm_status({"vgm_draft": draft})
+    assert vg2.get("status") == "needs_shipper_signature", vg2
+    assert vg2.get("n_containers") == 2, vg2  # must count per_container
     assert vg2.get("auto_submit_forbidden") is True
+    assert (vg2.get("human_signoff") or {}).get("signed") is False
+    assert (vg2.get("human_signoff") or {}).get("ui_visible") is True
+    assert vg2.get("ui_label")
+
+    # unsigned submit blocked
+    blocked = draft_vgm_submit({"vgm_draft": draft}, dry_run=True)
+    assert blocked.get("status") == "blocked_unsigned", blocked
+    assert blocked.get("blocks_until_signed") is True
+    assert blocked.get("accepted") is False
+
+    # record human signoff → signed_local + submit dry_run allowed
+    st_signed = record_human_signoff(
+        {"vgm_draft": draft}, signer="demo_shipper", acknowledged=True
+    )
+    assert st_signed.get("vgm_signoff", {}).get("signed") is True
+    assert st_signed.get("checklist_checked", {}).get(VGM_CHECKLIST_ITEM_ID) is True
+    vg3 = build_vgm_status_public(st_signed)
+    assert vg3.get("human_signoff", {}).get("signed") is True, vg3
+    assert vg3.get("status") == "signed_local", vg3
+    assert vg3.get("ui_label") and "签" in vg3["ui_label"]
+    ok_sub = draft_vgm_submit(st_signed, dry_run=True)
+    assert ok_sub.get("status") == "dry_run", ok_sub
+    assert ok_sub.get("signed_local") is True
+    assert ok_sub.get("blocks_until_signed") is False
 
     pub = public_response(st_fb)
     assert "path_honesty" in pub, list(pub.keys())[:20]
     assert pub["path_honesty"].get("reference_only") is True
+    assert pub["path_honesty"].get("cabin_count_reference_only") is True
     assert "vgm_status" in pub
     assert pub["vgm_status"].get("human_signoff_required") is True
+    assert (pub["vgm_status"].get("human_signoff") or {}).get("ui_visible") is True
+
+    pub2 = public_response({**st_signed, **st_steps})
+    assert pub2["vgm_status"]["human_signoff"]["signed"] is True
+    assert pub2["vgm_status"]["status"] == "signed_local"
 
     # multi_container big-ticket timing tip
     from packing_assistant.harness import _multi_container_summary
@@ -82,7 +132,10 @@ def main() -> int:
 
     print("ALL_PASS path_honesty_vgm")
     print("path_honesty=", pub["path_honesty"].get("this_run"))
-    print("vgm=", pub["vgm_status"].get("status"))
+    print("cabin_ref_only=", pub["path_honesty"].get("cabin_count_reference_only"))
+    print("vgm=", pub2["vgm_status"].get("status"))
+    print("vgm_signed=", pub2["vgm_status"]["human_signoff"].get("signed"))
+    print("submit_blocked=", blocked.get("status"), "submit_after=", ok_sub.get("status"))
     return 0
 
 

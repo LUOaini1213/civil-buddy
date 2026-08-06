@@ -770,13 +770,22 @@ def _path_honesty(state: Dict[str, Any]) -> Dict[str, Any]:
         or "llm" in style.lower()
         or mode == "llm_toolcall"
     )
-    is_steps = (not is_llm) or mode in ("steps", "big_team_a_b", "")
+    plan = state.get("container_plan") or state.get("packing_plan") or {}
+    used = plan.get("containers_used") if isinstance(plan, dict) else None
     if is_llm and style == "policy_fallback":
         return {
             "primary_path": "steps",
             "this_run": "llm_toolcall_policy_fallback",
             "booking_authority": "steps_tools",
             "reference_only": True,
+            "cabin_count_reference_only": True,
+            "ui_label": "路径仅参考 · policy_fallback",
+            "booking_containers_note": (
+                f"展示柜数 used={used} 来自 tools/steps；"
+                "llm_toolcall 回退路径不可作订舱终裁。"
+                if used is not None
+                else "llm 回退路径柜数不可作订舱终裁；以 steps+tools 为准。"
+            ),
             "note": (
                 "本 run 为 llm_toolcall 的 policy_fallback（无 Key 或策略回退）；"
                 "柜数/坐标仍以 steps+tools 为准，不可单独作订舱终裁。"
@@ -788,6 +797,13 @@ def _path_honesty(state: Dict[str, Any]) -> Dict[str, Any]:
             "this_run": "llm_toolcall",
             "booking_authority": "steps_tools",
             "reference_only": True,
+            "cabin_count_reference_only": True,
+            "ui_label": "路径仅参考 · llm_toolcall",
+            "booking_containers_note": (
+                f"影子路径 used={used} 仅供对照；订舱以 steps+tools 为准。"
+                if used is not None
+                else "llm_toolcall 影子柜数仅供对照，不可作订舱终裁。"
+            ),
             "note": (
                 "llm_toolcall 为实验/影子路径；生产与答辩默认 agent_mode=steps，"
                 "tools 计算 N0*/xyz/CoG。"
@@ -798,34 +814,59 @@ def _path_honesty(state: Dict[str, Any]) -> Dict[str, Any]:
         "this_run": "steps",
         "booking_authority": "steps_tools",
         "reference_only": False,
+        "cabin_count_reference_only": False,
+        "ui_label": "主路径 steps",
+        "booking_containers_note": "柜数由 tools 计算，可作为订舱依据（仍须业务复核）。",
         "note": "主路径 steps：工具计算柜数与坐标；LLM 不写 xyz。",
     }
 
 
 def _vgm_status(state: Dict[str, Any]) -> Dict[str, Any]:
-    """VGM 草稿状态摘要（禁止自动申报）。"""
-    vgm = state.get("vgm_draft") or {}
-    if not isinstance(vgm, dict):
-        vgm = {}
-    status = str(vgm.get("status") or "")
-    if not status and not vgm:
+    """VGM 草稿 + 人签可见状态（禁止自动申报）。"""
+    try:
+        from packing_assistant.tools.vgm_draft import build_vgm_status_public
+
+        return build_vgm_status_public(state)
+    except Exception:
+        vgm = state.get("vgm_draft") or {}
+        if not isinstance(vgm, dict):
+            vgm = {}
+        status = str(vgm.get("status") or "")
+        rows = vgm.get("per_container") or vgm.get("containers") or []
+        if not status and not vgm:
+            return {
+                "status": "not_drafted",
+                "human_signoff_required": True,
+                "auto_submit_forbidden": True,
+                "human_signoff": {
+                    "required": True,
+                    "signed": False,
+                    "checklist_item_id": "vgm_signed",
+                    "label": "VGM 已由托运人签署/确认",
+                    "ui_visible": True,
+                    "blocks_auto_submit": True,
+                    "pending_action": "先完成拼柜生成 VGM 草稿，再由托运人签署",
+                },
+                "note": "VGM 尚未生成草稿；出运前须方法2草稿 + 托运人签署（系统禁止自动申报）。",
+            }
         return {
-            "status": "not_drafted",
+            "status": status or "draft",
             "human_signoff_required": True,
             "auto_submit_forbidden": True,
-            "note": "VGM 尚未生成草稿；出运前须方法2草稿 + 托运人签署（系统禁止自动申报）。",
+            "method": vgm.get("method") or "method2",
+            "totals": vgm.get("totals") or {},
+            "n_containers": len(rows) if isinstance(rows, list) else 0,
+            "disclaimer": vgm.get("disclaimer")
+            or "VGM 草稿不可自动向船司/码头申报，须人签。",
+            "note": f"VGM 状态={status or 'draft'}；禁止自动申报，须托运人确认。",
+            "human_signoff": {
+                "required": True,
+                "signed": False,
+                "checklist_item_id": "vgm_signed",
+                "ui_visible": True,
+                "blocks_auto_submit": True,
+            },
         }
-    return {
-        "status": status or "draft",
-        "human_signoff_required": True,
-        "auto_submit_forbidden": True,
-        "method": vgm.get("method") or "method2",
-        "totals": vgm.get("totals") or {},
-        "n_containers": len(vgm.get("containers") or []),
-        "disclaimer": vgm.get("disclaimer")
-        or "VGM 草稿不可自动向船司/码头申报，须人签。",
-        "note": f"VGM 状态={status or 'draft'}；禁止自动申报，须托运人确认。",
-    }
 
 
 def _nonstandard_public(state: Dict[str, Any]) -> Dict[str, Any]:

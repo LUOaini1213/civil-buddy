@@ -247,6 +247,8 @@ def api_health():
             "generic_table_profile": True,
             "path_honesty": True,
             "vgm_status": True,
+            "vgm_human_signoff": True,
+            "vgm_signoff_path": "/api/vgm/signoff",
             "primary_agent_mode": "steps",
             "llm_toolcall_reference_only": True,
         },
@@ -411,6 +413,67 @@ def api_tms_bookings(limit: int = 20):
         "mode": tms_mode(),
         "bookings": list_stub_bookings(limit=limit),
     }
+
+
+@app.post("/api/vgm/signoff")
+def api_vgm_signoff(body: dict):
+    """记录 VGM 托运人本地人签（不向船司申报）；回写 session 与 public vgm_status。"""
+    from packing_assistant.harness import public_response
+    from packing_assistant.tools.vgm_draft import record_human_signoff
+
+    sid = str(body.get("session_id") or "")
+    st = _get_session(sid) if sid else None
+    if not st and sid:
+        from packing_assistant.session_store import load_session
+
+        st = load_session(sid)
+    if not st and body.get("state"):
+        st = body["state"]
+    if not st:
+        raise HTTPException(400, "需要 session_id 或 state")
+    acknowledged = body.get("acknowledged")
+    if acknowledged is None:
+        acknowledged = True
+    st2 = record_human_signoff(
+        st,
+        signer=str(body.get("signer") or body.get("signed_by") or "shipper"),
+        acknowledged=bool(acknowledged),
+        note=str(body.get("note") or ""),
+    )
+    if sid:
+        _store_session(sid, st2)
+        try:
+            from packing_assistant.session_store import save_session
+
+            save_session(sid, st2)
+        except Exception:
+            pass
+    pub = public_response(st2)
+    return {
+        "ok": True,
+        "session_id": sid or None,
+        "vgm_status": pub.get("vgm_status"),
+        "vgm_signoff": st2.get("vgm_signoff"),
+        "checklist_checked": st2.get("checklist_checked"),
+    }
+
+
+@app.post("/api/vgm/submit-preview")
+def api_vgm_submit_preview(body: dict):
+    """VGM 提交预览：未人签返回 blocked_unsigned。"""
+    from packing_assistant.p2_stubs import draft_vgm_submit
+
+    sid = str(body.get("session_id") or "")
+    st = _get_session(sid) if sid else None
+    if not st and sid:
+        from packing_assistant.session_store import load_session
+
+        st = load_session(sid)
+    if not st and body.get("state"):
+        st = body["state"]
+    if not st:
+        raise HTTPException(400, "需要 session_id 或 state")
+    return draft_vgm_submit(st, dry_run=True)
 
 
 @app.post("/api/intent")

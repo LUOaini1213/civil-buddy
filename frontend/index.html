@@ -941,13 +941,13 @@
             LLM {{ llmKeyPresent ? 'Key' : 'fallback' }}
           </span>
           <span class="pill warn" v-if="pathHonesty && pathHonesty.reference_only"
-                :title="pathHonesty.note || ''">
-            路径参考 · {{ pathHonesty.this_run || 'llm' }}
+                :title="(pathHonesty.booking_containers_note || pathHonesty.note || '')">
+            {{ pathHonesty.ui_label || ('路径参考 · ' + (pathHonesty.this_run || 'llm')) }}
           </span>
           <span class="pill" v-if="vgmStatus && vgmStatus.status"
-                :class="vgmStatus.status === 'not_drafted' ? 'warn' : 'ok'"
-                :title="vgmStatus.note || ''">
-            VGM {{ vgmStatus.status }}{{ vgmStatus.human_signoff_required ? ' ·须人签' : '' }}
+                :class="vgmPillClass"
+                :title="vgmStatus.note || (vgmHuman && vgmHuman.pending_action) || ''">
+            {{ vgmStatus.ui_label || ('VGM ' + vgmStatus.status + (vgmHuman && vgmHuman.signed ? ' ·已签' : (vgmStatus.human_signoff_required ? ' ·须人签' : ''))) }}
           </span>
           <span class="pill" v-if="result.phase">{{ result.phase }}</span>
           <span class="pill warn" v-if="result.phase === 'await_user_confirm'">★ 待 HITL</span>
@@ -2228,6 +2228,18 @@
         },
         vgmStatus() {
           return (this.result && this.result.vgm_status) || null;
+        },
+        vgmHuman() {
+          const v = this.vgmStatus;
+          return (v && v.human_signoff) || null;
+        },
+        vgmPillClass() {
+          const v = this.vgmStatus;
+          if (!v) return 'warn';
+          if (v.human_signoff && v.human_signoff.signed) return 'ok';
+          if (v.status === 'signed_local') return 'ok';
+          if (v.status === 'not_drafted') return 'warn';
+          return 'warn';
         },
         viewContainerOptions() {
           const meta = (this.result.views || {})._meta || {};
