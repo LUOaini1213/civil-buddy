@@ -1,7 +1,7 @@
 # 知识库索引（scripts/gen_kb_index.py 生成）
 version: 2
 root: knowledge_base
-generated: 2026-08-03
+generated: 2026-08-06
 priority_order:
   - 01_rules
   - 02_tools
@@ -251,6 +251,20 @@ documents:
     type: tool_doc
     tags: [material.parse, A, catalog]
     status: active
+  - path: 02_tools/nonstandard_enrich.md
+    title: 工具：非标备注增强 (`nonstandard.enrich`)
+    category: tools
+    priority: high
+    type: tool_doc
+    tags: [nonstandard.enrich, nonstandard, TeamA, notes, catalog]
+    status: active
+  - path: 02_tools/nonstandard_inspect.md
+    title: 工具：非标件检验 v2 (`nonstandard.inspect`)
+    category: tools
+    priority: high
+    type: tool_doc
+    tags: [nonstandard.inspect, nonstandard, TeamA, taxonomy, catalog]
+    status: active
   - path: 02_tools/packing_run.md
     title: 工具：装载编排 (`packing.run`)
     category: tools
@@ -454,6 +468,13 @@ documents:
     type: trajectory
     tags: [T6, dual_caliber, booking, volume]
     status: active
+  - path: 03_trajectories/success/T9_facade_sme_hitl.md
+    title: T9 · 幕墙 SME 成箱→HITL→拼柜（成功）
+    category: trajectories
+    priority: high
+    type: trajectory
+    tags: [T9, facade, SME, HITL, nonstandard, packing]
+    status: active
   - path: 04_strategies/booking_workflow.md
     title: 订舱工作流策略
     category: strategies
@@ -525,11 +546,11 @@ documents:
     tags: [summary, supervisor, failure_class]
     status: active
   - path: 06_competition/constraints.md
-    title: 比赛约束（Agent 叙事）
+    title: 比赛约束（Agent 叙事 + NUS-ISS 资格）
     category: competition
     priority: high
     type: scoring
-    tags: [constraints, steps, llm_toolcall, HITL]
+    tags: [constraints, steps, llm_toolcall, HITL, SME, eligibility]
     status: active
   - path: 06_competition/example_tasks.md
     title: 示例任务（镜像 phase0 任务族）

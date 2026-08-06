@@ -1,4 +1,4 @@
-# 比赛演示脚本（5 分钟 · 评委向）— **已冻结 A+B**
+﻿# 比赛演示脚本（5 分钟 · 评委向）— **已冻结 A+B**
 
 **Harness v0.6.4** · **13 agents** · 主路径 **`agent_mode=steps`**  
 **演示：关闭「演示自动确认」**，露出 `phase=await_user_confirm`  
@@ -107,6 +107,11 @@
 
 ---
 
+
+### 20s 幕墙 SME 叙事（Team Mintang）
+
+> REDACTED-VENDOR 项目物料：Team A 成箱 + nonstandard.inspect；人确认后 Team B 拼柜；tools 出 N0* 与 xyz。
+
 ## 不说的话
 
 - 不说「模型自己摆箱子 / 模型决定几柜」  
@@ -155,3 +160,4 @@ powershell -File scripts/competition_smoke.ps1
 | `output/competition/SCORECARD.md` | 分卡 |
 | [ARCHITECTURE.md](./ARCHITECTURE.md) | 架构 |
 | [multi-container-ffd-agent.md](./research/multi-container-ffd-agent.md) | 多柜研究 |
+

@@ -261,7 +261,24 @@ def _score_task_success(st: Dict[str, Any], case: Phase0Case) -> float:
     exp = case.expect or {}
     score = 0.5
     if can_fit is True:
-        score = 0.85
+        # 装下即高分；出运 OK / mid50 达标再抬，避免长期卡在 0.85 天花板
+        score = 0.90
+        ship = st.get("ship") or st.get("shipping") or {}
+        if isinstance(ship, dict) and ship.get("ok") is True:
+            score = max(score, 0.94)
+        elif plan.get("ship_ok") is True or st.get("ship_ok") is True:
+            score = max(score, 0.94)
+        cog = st.get("cog") or (st.get("cog_bundle") or {}).get("primary") or {}
+        if isinstance(cog, dict):
+            mid = float(cog.get("mass_in_mid50_ratio") or 0)
+            if mid >= 0.60:
+                score = max(score, 0.93)
+            if mid >= 0.60 and (
+                plan.get("ship_ok") is True
+                or (isinstance(ship, dict) and ship.get("ok") is True)
+                or st.get("ship_ok") is True
+            ):
+                score = max(score, 0.96)
     elif can_fit is False:
         # 锁柜过紧允许失败，但降分
         if case.max_containers and used >= case.max_containers:
@@ -276,7 +293,7 @@ def _score_task_success(st: Dict[str, Any], case: Phase0Case) -> float:
     max_c = exp.get("containers_needed_max")
     if max_c is not None and can_fit and used > int(max_c):
         # 软惩罚：expect 多为订舱 N0；3D 用柜可略多，不应打成失败
-        score = min(score, 0.84)
+        score = min(score, 0.88)
     min_c = exp.get("containers_needed_min")
     if min_c is not None and used and used < int(min_c):
         score = min(score, 0.5)

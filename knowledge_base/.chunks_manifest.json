@@ -1122,6 +1122,76 @@
       "chars": 96
     },
     {
+      "path": "02_tools/nonstandard_enrich.md",
+      "heading": "(preamble)",
+      "chars": 36
+    },
+    {
+      "path": "02_tools/nonstandard_enrich.md",
+      "heading": "## 功能",
+      "chars": 165
+    },
+    {
+      "path": "02_tools/nonstandard_enrich.md",
+      "heading": "## 代码入口",
+      "chars": 135
+    },
+    {
+      "path": "02_tools/nonstandard_enrich.md",
+      "heading": "## 参数（示意）",
+      "chars": 309
+    },
+    {
+      "path": "02_tools/nonstandard_enrich.md",
+      "heading": "## 规则命中示例",
+      "chars": 179
+    },
+    {
+      "path": "02_tools/nonstandard_enrich.md",
+      "heading": "## 何时调用",
+      "chars": 84
+    },
+    {
+      "path": "02_tools/nonstandard_enrich.md",
+      "heading": "## never",
+      "chars": 35
+    },
+    {
+      "path": "02_tools/nonstandard_inspect.md",
+      "heading": "(preamble)",
+      "chars": 39
+    },
+    {
+      "path": "02_tools/nonstandard_inspect.md",
+      "heading": "## 功能",
+      "chars": 227
+    },
+    {
+      "path": "02_tools/nonstandard_inspect.md",
+      "heading": "## 代码入口",
+      "chars": 210
+    },
+    {
+      "path": "02_tools/nonstandard_inspect.md",
+      "heading": "## 参数（示意）",
+      "chars": 499
+    },
+    {
+      "path": "02_tools/nonstandard_inspect.md",
+      "heading": "## 何时调用",
+      "chars": 100
+    },
+    {
+      "path": "02_tools/nonstandard_inspect.md",
+      "heading": "## overall 含义",
+      "chars": 159
+    },
+    {
+      "path": "02_tools/nonstandard_inspect.md",
+      "heading": "## never",
+      "chars": 57
+    },
+    {
       "path": "02_tools/packing_run.md",
       "heading": "(preamble)",
       "chars": 27
@@ -2137,6 +2207,21 @@
       "chars": 192
     },
     {
+      "path": "03_trajectories/success/T9_facade_sme_hitl.md",
+      "heading": "(preamble)",
+      "chars": 116
+    },
+    {
+      "path": "03_trajectories/success/T9_facade_sme_hitl.md",
+      "heading": "## steps",
+      "chars": 1318
+    },
+    {
+      "path": "03_trajectories/success/T9_facade_sme_hitl.md",
+      "heading": "## final",
+      "chars": 78
+    },
+    {
       "path": "04_strategies/booking_workflow.md",
       "heading": "",
       "chars": 146
@@ -2198,8 +2283,13 @@
     },
     {
       "path": "05_multi_agent/illegal_tools.md",
-      "heading": "",
-      "chars": 595
+      "heading": "(preamble)",
+      "chars": 596
+    },
+    {
+      "path": "05_multi_agent/illegal_tools.md",
+      "heading": "## nonstandard",
+      "chars": 83
     },
     {
       "path": "05_multi_agent/roles_definition.md",
@@ -2269,12 +2359,12 @@
     {
       "path": "06_competition/constraints.md",
       "heading": "",
-      "chars": 353
+      "chars": 561
     },
     {
       "path": "06_competition/example_tasks.md",
       "heading": "(preamble)",
-      "chars": 678
+      "chars": 762
     },
     {
       "path": "06_competition/example_tasks.md",
@@ -2298,8 +2388,13 @@
     },
     {
       "path": "06_competition/scoring_criteria.md",
+      "heading": "## 本地快照（2026-08-06 迭代）",
+      "chars": 313
+    },
+    {
+      "path": "06_competition/scoring_criteria.md",
       "heading": "## 基线命令",
-      "chars": 53
+      "chars": 157
     },
     {
       "path": "06_competition/scoring_criteria.md",

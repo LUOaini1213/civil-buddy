@@ -39,7 +39,11 @@ def test_steel_pieces_about_two() -> None:
 
 
 def test_hollow_outer_not_dominate() -> None:
-    """低填充大外廓箱：订柜用 min(outer, content×k)，不应到 10+ 柜。"""
+    """低填充大外廓箱：订柜有效体积用 min(outer, content×k)，体积柜不被 outer 绑架。
+
+    N0* = max(wt, vol, geom_floor, geom_slot)：4m 不可叠架的几何下界可以 >3 柜，
+    那是底面/槽位真实约束，不是虚大 outer 体积绑架（本用例外廓合计 ~354m³）。
+    """
     boxes = []
     # 67 个空心 4m 架，每架内容很小、毛重约 480 → 总 ~32t
     for i in range(67):
@@ -78,15 +82,43 @@ def test_hollow_outer_not_dominate() -> None:
         b["volume_m3"],
         "outer",
         b.get("volume_detail", {}).get("crate_outer_m3"),
+        "geom_f",
+        b.get("containers_by_geom_floor"),
+        "geom_s",
+        b.get("containers_by_geom_slot"),
+        "bind",
+        b.get("binding_constraint"),
         "suspicious",
         b.get("volume_suspicious"),
     )
     assert b["containers_by_weight"] == 2, b
-    # 有效体积应远小于 outer 353m3
+    # 有效体积应远小于 outer 353m3；体积柜不能被 outer 抬到 10+
     assert float(b["volume_m3"]) < 80, b
     assert b["containers_by_volume"] <= 3, b
-    assert b["n0"] <= 3, b
-    print("OK hollow outer discounted N0=", b["n0"])
+    outer_m3 = float((b.get("volume_detail") or {}).get("crate_outer_m3") or 0)
+    assert outer_m3 > 200, "fixture should have large hollow outer sum"
+    # 体积路径未把 outer 当订舱分子 → 体积柜 << 按实心 outer 估算
+    assert b["containers_by_volume"] < max(8, int(outer_m3 / 60)), b
+    # N0* 可由几何抬起，但不得由「虚大体积」单独抬起
+    comps = b.get("n0_components") or {}
+    assert int(comps.get("volume") or 0) <= 3, comps
+    assert int(b["n0"] or 0) == max(
+        int(comps.get("weight") or 0),
+        int(comps.get("volume") or 0),
+        int(comps.get("geom_floor") or 0),
+        int(comps.get("geom_slot") or 0),
+        1,
+    ), b
+    if int(b["n0"] or 0) > 3:
+        assert b.get("binding_constraint") in ("geom_floor", "geom_slot", "multi"), b
+    print(
+        "OK hollow outer discounted vol=",
+        b["containers_by_volume"],
+        "N0*=",
+        b["n0"],
+        "bind=",
+        b.get("binding_constraint"),
+    )
 
 
 def test_outer_only_suspicious() -> None:
@@ -155,8 +187,13 @@ def test_auto_pack_can_fit() -> None:
 
 
 def test_four_long_frames_one_40hq() -> None:
-    """4 个 ~4m 铁架应 1×40HQ 装下（贴端墙双列，禁止居中碎片）。"""
-    from packing_assistant.tools.bin3d import pack_boxes_api
+    """4 个 ~4m 铁架应 1×40HQ 装下：条带双列全进，CoG 后 mid50 达标。
+
+    条带初解贴端墙；R1 可能为 CTU mid50 做刚性平移（flush 时前两架质心会掉出 mid 带）。
+    回归防的是旧 bug：只装 2 箱 / 多柜碎片，而不是禁止一切 x>0。
+    """
+    from packing_assistant.tools.bin3d import pack_boxes_api, pack_items
+    from packing_assistant.tools import bin3d as B
 
     boxes = [
         {
@@ -175,15 +212,48 @@ def test_four_long_frames_one_40hq() -> None:
         }
         for i in range(4)
     ]
+    # 条带阶段必须贴端墙双列（pack_items 无 CoG 后处理）
+    items = []
+    for b in boxes:
+        o = b["outer_size_mm"]
+        items.append(
+            B.Item3D(
+                box_id=str(b["box_id"]),
+                dx=int(o["length"]),
+                dy=int(o["width"]),
+                dz=int(o["height"]),
+                weight_kg=750.0,
+                allow_rotate=True,
+                no_tip=True,
+                stackable=False,
+                prefer_bottom=True,
+            )
+        )
+    raw = pack_items(items, container_type="40HQ", max_containers=1)
+    assert raw.get("can_fit") is True, raw
+    assert int(raw.get("containers_used") or 0) == 1, raw
+    assert len(raw.get("layout") or []) == 4, raw
+    raw_xs = sorted(L["position"]["x"] for L in raw["layout"])
+    assert raw_xs[0] == 0, f"条带初解应贴端墙 x=0，实际 {raw_xs}"
+    assert len(set(raw_xs)) == 2, f"双列两条 x 前沿，实际 {raw_xs}"
+
     p = pack_boxes_api(boxes, container_type="40HQ", max_containers=1)
     assert p.get("can_fit") is True, p
     assert int(p.get("containers_used") or 0) == 1, p
-    # 不得出现居中 x≈4000 却只装 2 箱的旧 bug：4 箱全在柜 1
     nos = {L.get("container_no") for L in (p.get("layout") or [])}
     assert nos == {1}, p.get("layout")
-    xs = [L["position"]["x"] for L in p["layout"]]
-    assert min(xs) == 0, f"应贴端墙 x=0，实际 xs={xs}"
-    print("OK 4 long frames in 1×40HQ xs=", sorted(xs))
+    assert len(p.get("layout") or []) == 4, p.get("layout")
+    cog = (p.get("cog_bundle") or {}).get("primary") or p.get("cog") or {}
+    mid = float(cog.get("mass_in_mid50_ratio") or 0)
+    assert mid >= 0.60, f"出运 mid50 应≥0.60，实际 {mid} cog={cog}"
+    print(
+        "OK 4 long frames in 1×40HQ raw_xs=",
+        raw_xs,
+        "final_xs=",
+        sorted(L["position"]["x"] for L in p["layout"]),
+        "mid50=",
+        mid,
+    )
 
 
 if __name__ == "__main__":

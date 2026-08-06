@@ -25,3 +25,7 @@ status: active
 | I8 | 用轨迹 few-shot 替代求解器 | 轨迹只示范流程 |
 
 检索工具 `knowledge.search` **不得**返回坐标字段；见 search_knowledge 实现守卫。
+
+## nonstandard
+- 禁止 LLM 自判 overall FAIL/PASS；必须 `nonstandard.inspect`
+- 禁止 enrich 改 L/W/H/weight

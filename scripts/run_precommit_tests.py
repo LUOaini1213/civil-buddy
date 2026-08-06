@@ -38,9 +38,15 @@ def main() -> int:
     codes = []
     codes.append(run("scripts/test_booking_regression.py", 180))
     codes.append(run("scripts/test_p2_volume_gates.py", 180))
+    codes.append(run("scripts/test_nonstandard_tools.py", 60))
+    codes.append(run("scripts/test_cog_shift_mid_ok.py", 60))
+    codes.append(run("scripts/test_phase0_task_success.py", 60))
+    codes.append(run("scripts/test_facade_sme_mini.py", 180))
+    codes.append(run("scripts/test_hollow_volume_n0.py", 60))
     if args.more:
         codes.append(run("scripts/test_more_examples.py", 300))
     if not args.quick:
+        # 无工地 Excel 时脚本 exit 0 + SKIP；有数据时仍完整回归
         codes.append(run("scripts/run_vmu1_site_only.py", 600))
 
     failed = [c for c in codes if c != 0]
@@ -49,7 +55,11 @@ def main() -> int:
         print("PRECOMMIT FAIL", codes)
         return 1
     print("PRECOMMIT ALL GREEN")
-    print("  booking_regression + p2_gates" + (" + more" if args.more else "") + (" + vmu1_site" if not args.quick else ""))
+    print(
+        "  booking_regression + p2_gates"
+        + (" + more" if args.more else "")
+        + (" + vmu1_site(or SKIP)" if not args.quick else " (--quick no vmu)")
+    )
     return 0
 
 

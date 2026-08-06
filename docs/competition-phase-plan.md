@@ -1,4 +1,4 @@
-# 比赛/Agency 分阶段 Plan · 对齐 v0.6.2
+# 比赛/Agency 分阶段 Plan · 对齐 v0.6.4
 
 > 与「Phase 0–4」草案对齐：保留其逻辑，**映射到现有大 Team⊃A/B + IntentSpec + tools**，并标明**不伤 Agent 叙事**的讲法。  
 > Phase 0 工件：`packing_assistant/phase0_benchmark.py` · `scripts/run_phase0_baseline.py`
