@@ -1,0 +1,32 @@
+{
+  "case_id": "ns_thin_sheet_stack",
+  "story": "薄板 SHAPE_CUSTOM thin_plate",
+  "expect_tags": [
+    "SHAPE_CUSTOM"
+  ],
+  "materials": [
+    {
+      "id": "T1",
+      "name": "铝板-2.4m",
+      "quantity": 12,
+      "length_mm": 2400,
+      "width_mm": 1200,
+      "height_mm": 40,
+      "weight_kg": 45,
+      "total_weight_kg": 540,
+      "category": "薄板",
+      "note": "薄板密装"
+    },
+    {
+      "id": "T2",
+      "name": "不锈钢片",
+      "quantity": 8,
+      "length_mm": 1800,
+      "width_mm": 900,
+      "height_mm": 25,
+      "weight_kg": 30,
+      "total_weight_kg": 240,
+      "category": "薄板"
+    }
+  ]
+}

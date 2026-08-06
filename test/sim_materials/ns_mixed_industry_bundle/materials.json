@@ -1,0 +1,58 @@
+{
+  "case_id": "ns_mixed_industry_bundle",
+  "story": "跨行业混合非标：超长+重件+工厂架+易碎",
+  "expect_tags": [
+    "GEO_OVERSIZE",
+    "LOAD_HEAVY",
+    "PACK_PATH",
+    "PROCESS_SPECIAL"
+  ],
+  "materials": [
+    {
+      "id": "M1",
+      "name": "管线-11m",
+      "quantity": 2,
+      "length_mm": 11000,
+      "width_mm": 300,
+      "height_mm": 300,
+      "weight_kg": 400,
+      "total_weight_kg": 800,
+      "category": "超长件"
+    },
+    {
+      "id": "M2",
+      "name": "重电机",
+      "quantity": 1,
+      "length_mm": 1400,
+      "width_mm": 1000,
+      "height_mm": 900,
+      "weight_kg": 2100,
+      "total_weight_kg": 2100,
+      "category": "重件"
+    },
+    {
+      "id": "M3",
+      "name": "工厂叠层架",
+      "quantity": 2,
+      "length_mm": 2500,
+      "width_mm": 1100,
+      "height_mm": 1400,
+      "weight_kg": 380,
+      "total_weight_kg": 760,
+      "note": "factory_stack"
+    },
+    {
+      "id": "M4",
+      "name": "玻璃仪器柜",
+      "quantity": 3,
+      "length_mm": 700,
+      "width_mm": 500,
+      "height_mm": 1200,
+      "weight_kg": 55,
+      "total_weight_kg": 165,
+      "note": "易碎禁叠",
+      "fragile": true,
+      "no_stack": true
+    }
+  ]
+}

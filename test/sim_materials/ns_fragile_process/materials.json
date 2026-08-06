@@ -1,0 +1,35 @@
+{
+  "case_id": "ns_fragile_process",
+  "story": "易碎禁翻 PROCESS_SPECIAL",
+  "expect_tags": [
+    "PROCESS_SPECIAL"
+  ],
+  "materials": [
+    {
+      "id": "G1",
+      "name": "玻璃幕墙模块",
+      "quantity": 4,
+      "length_mm": 2200,
+      "width_mm": 1100,
+      "height_mm": 80,
+      "weight_kg": 95,
+      "total_weight_kg": 380,
+      "note": "易碎禁翻 this_side_up",
+      "fragile": true,
+      "this_side_up": true
+    },
+    {
+      "id": "G2",
+      "name": "精密仪表箱",
+      "quantity": 6,
+      "length_mm": 600,
+      "width_mm": 500,
+      "height_mm": 400,
+      "weight_kg": 18,
+      "total_weight_kg": 108,
+      "note": "精密 fragile",
+      "fragile": true,
+      "stackable": false
+    }
+  ]
+}
