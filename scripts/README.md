@@ -1,4 +1,4 @@
-# Scripts
+﻿# Scripts
 
 ## CI / 产品入口（保留在本目录）
 
@@ -28,3 +28,17 @@ python scripts/eval_harness_cli.py
 ## 本地实验
 
 `scripts/dev/` 与 `scripts/_*.py` **不入仓**（gitignore），仅本机临时实验。
+
+## 比赛回归（precommit --quick 已挂）
+
+| 脚本 | 用途 |
+|------|------|
+| `run_precommit_tests.py` | booking + volume gates + 下列单测（`--quick` 跳过工地 Excel） |
+| `test_booking_regression.py` | 订柜 N0* / 空心体积 / 铁架条带 |
+| `test_nonstandard_tools.py` | nonstandard.inspect/enrich 实跑 |
+| `test_cog_shift_mid_ok.py` | mid50 OK 贴墙不纵向拉开 |
+| `test_phase0_task_success.py` | task_success 计分单元 |
+| `test_facade_sme_mini.py` | 幕墙 SME 小票 A→B 闭环 |
+| `test_hollow_volume_n0.py` | 空心 outer 不绑架订舱体积 |
+| `competition_smoke.ps1` | 评委向 hard gates + scorecard |
+

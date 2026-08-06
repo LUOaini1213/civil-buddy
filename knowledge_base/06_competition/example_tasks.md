@@ -24,6 +24,7 @@ status: active
 | dual_caliber_talk | 订舱话术 | 双利用率字段 | T6 | dual_caliber |
 | structure_fail | 结构失败 | 打回成箱 | T7 | safety structure |
 | feas_block | 可行性拦截 | stop/人工 | T8 | feasibility |
+| facade_sme_hitl | 幕墙 SME 成箱→非标→HITL→拼柜 | A+B + inspect | T9 | nonstandard, HITL |
 
 ## phase0 目录
 

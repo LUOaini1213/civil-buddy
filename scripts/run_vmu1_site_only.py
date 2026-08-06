@@ -498,8 +498,10 @@ def run_pack(mats: List[Dict[str, Any]], container: str = "40HQ") -> Dict[str, A
 def main() -> int:
     OUT.mkdir(parents=True, exist_ok=True)
     if not SITE_XLSX.exists():
-        print("MISSING", SITE_XLSX)
-        return 1
+        # 工地 Excel 不在本机时：跳过而非 fail（CI / 无 A: 盘）。有文件时仍硬跑。
+        print("SKIP vmu1_site_only: site workbook not found:", SITE_XLSX)
+        print("HINT: mount job drive or pass local xlsx; precommit --quick skips this script.")
+        return 0
 
     rows = load_site_rows(SITE_XLSX)
     print(f"site summary rows: {len(rows)} from {SITE_XLSX.name}")

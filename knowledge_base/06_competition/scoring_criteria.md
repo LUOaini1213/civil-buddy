@@ -26,10 +26,29 @@ status: active
 
 - 总分 ≥ **0.75** 且 task_success ≥ **0.80**
 
+## 本地快照（2026-08-06 迭代）
+
+| 检查 | 结果 |
+|------|------|
+| phase0 `--quick` | pass_rate 1.0 · avg ≈ **0.973**（见下「评分口径」） |
+| competition_smoke | overall **9.75** · hard gates all PASS |
+| workteams tiny | agree=1.0 · illegal=0 |
+| KB scorecard | 综合 ≈ **9.86** · tool catalog 34/34 |
+
+### 评分口径（诚实说明 · 非装载质量跃迁）
+
+- **0.948 → 0.973** 主要来自 `_score_task_success` 口径调整，**不是** packing/3D 突然变好：
+  - 旧：`can_fit=True` 任务维常停在 **0.85**
+  - 新：`can_fit=True` 基线 **0.90**；`ship_ok` / mid50≥0.60 可抬到 **0.93–0.96**
+- 同票 pass_rate 在改前后均为 **1.0**；装载成败以 can_fit/ship_ok/mid50/adversarial 为准，勿把加权分上涨当成算法胜出。
+- 单元对照：`scripts/test_phase0_task_success.py`（直接调用 shipped `_score_task_success`）。
+
 ## 基线命令
 
 ```bash
-python scripts/run_phase0_baseline.py
+python scripts/run_phase0_baseline.py --quick
+powershell -File scripts/competition_smoke.ps1
+python scripts/eval_workteams_cli.py --tiny-only
 ```
 
 ## 与知识库

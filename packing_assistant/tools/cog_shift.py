@@ -238,7 +238,19 @@ def shift_layout_to_mass_center(
             gy = float(cog.get("gy_mm") or W / 2)
 
         min_x, min_y, max_x, max_y = _aabb(items)
-        sx = (L / 2.0 - gx) if shift_longitudinal else 0.0
+        # 若 mid50 已达标且纵向已在舒适区，禁止纵向平移拉开端墙（贴端墙+双列是铁架主路径）
+        mid_ok = False
+        long_ok = abs((gx / L) - 0.5) <= LONG_ECC_SOFT if L > 0 else True
+        if cog is not None:
+            mid_ok = float(cog.get("mass_in_mid50_ratio") or 0) >= (MID50_OK - 1e-6)
+            long_pos = float(cog.get("longitudinal_position") or (gx / L if L else 0.5))
+            long_ok = abs(long_pos - 0.5) <= LONG_ECC_SOFT
+        do_long = bool(shift_longitudinal) and not (mid_ok and long_ok)
+        # 已贴一端墙且 mid50 OK：保持贴墙，只修横向
+        wall_flush = min_x <= 1.0 or max_x >= L - 1.0
+        if mid_ok and wall_flush:
+            do_long = False
+        sx = (L / 2.0 - gx) if do_long else 0.0
         sy = (W / 2.0 - gy) if shift_lateral else 0.0
         sx = max(-min_x, min(L - max_x, sx))
         sy = max(-min_y, min(W - max_y, sy))
@@ -259,6 +271,7 @@ def shift_layout_to_mass_center(
                 "gx_before_mm": round(gx, 1),
                 "gy_before_mm": round(gy, 1),
                 "applied": bool(sx_i or sy_i),
+                "long_skipped_wall_flush": bool(mid_ok and wall_flush and shift_longitudinal),
             }
         )
 

@@ -65,7 +65,13 @@
     {
       "id": "g13",
       "q": "HITL 续跑 team A team B",
-      "expect_paths": ["03_trajectories/success/multi_agent_collab_03.md", "05_multi_agent/escalation_rules.md"]
+      "expect_paths": [
+        "03_trajectories/success/multi_agent_collab_03.md",
+        "05_multi_agent/escalation_rules.md",
+        "03_trajectories/success/T4_hitl_resume_ab.md",
+        "03_trajectories/success/T9_facade_sme_hitl.md",
+        "02_tools/hitl_confirm.md"
+      ]
     },
     {
       "id": "g14",
