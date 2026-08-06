@@ -88,6 +88,35 @@ def build_hitl_summary(state: Dict[str, Any]) -> Dict[str, Any]:
         except Exception:
             hit_rate = None
 
+    # VGM 人签可见卡（装前必填提示，非自动申报）
+    vgm_card = None
+    try:
+        from packing_assistant.tools.vgm_draft import build_vgm_status_public
+
+        vg = build_vgm_status_public(state)
+        hs = vg.get("human_signoff") or {}
+        vgm_card = {
+            "id": "vgm_signoff",
+            "title": "VGM 人签",
+            "value": "已签" if hs.get("signed") else (vg.get("status") or "待签"),
+            "hint": hs.get("pending_action")
+            or vg.get("note")
+            or "须托运人签署；禁止自动申报",
+            "level": "ok" if hs.get("signed") else "warn",
+            "checklist_item_id": hs.get("checklist_item_id") or "vgm_signed",
+            "ui_visible": True,
+        }
+    except Exception:
+        vgm_card = {
+            "id": "vgm_signoff",
+            "title": "VGM 人签",
+            "value": "待签",
+            "hint": "出运前须 VGM 草稿 + 托运人签署",
+            "level": "warn",
+            "checklist_item_id": "vgm_signed",
+            "ui_visible": True,
+        }
+
     cards = [
         {
             "id": "boxes",
@@ -145,6 +174,8 @@ def build_hitl_summary(state: Dict[str, Any]) -> Dict[str, Any]:
             "level": "warn" if await_design or fail_struct else "ok",
         },
     ]
+    if vgm_card:
+        cards.append(vgm_card)
 
     # 非标检验摘要卡
     ns = state.get("nonstandard_summary") or state.get("nonstandard_report") or {}

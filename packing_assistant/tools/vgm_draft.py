@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from datetime import datetime, timezone
 from typing import Any, Dict, List, Optional, Sequence
 
 # 常见柜型皮重近似 kg（草稿用，出运以箱门铭牌为准）
@@ -11,6 +12,10 @@ TARE_KG = {
     "40HQ": 3900.0,
     "45HQ": 4800.0,
 }
+
+# 装前检查表必填项 id（与 pre_ship_checklist.DEFAULT_ITEMS 对齐）
+VGM_CHECKLIST_ITEM_ID = "vgm_signed"
+VGM_CHECKLIST_LABEL = "VGM 已由托运人签署/确认"
 
 
 def draft_vgm_method2(
@@ -67,6 +72,7 @@ def draft_vgm_method2(
         "method": 2,
         "status": "needs_shipper_signature",
         "auto_submit_forbidden": True,
+        "human_signoff_required": True,
         "container_type": ctype,
         "containers_used": n,
         "totals": {
@@ -76,10 +82,166 @@ def draft_vgm_method2(
             "tare_kg_total": round(tare * n, 1),
             "vgm_sum_kg": round(vgm_per * n, 1),
         },
+        # 双写：历史读 containers；草稿生成写 per_container
         "per_container": containers,
+        "containers": containers,
         "disclaimer": (
             "SOLAS VGM 草稿仅供内部核对；提交承运人前必须托运人授权签字，"
             "皮重以箱门铭牌为准，包装/垫料系数可配置。"
         ),
         "box_lines_n": len(lines),
+        "signoff": {
+            "required": True,
+            "signed": False,
+            "checklist_item_id": VGM_CHECKLIST_ITEM_ID,
+            "label": VGM_CHECKLIST_LABEL,
+        },
+    }
+
+
+def record_human_signoff(
+    state: Dict[str, Any],
+    *,
+    signer: str,
+    acknowledged: bool = True,
+    note: str = "",
+) -> Dict[str, Any]:
+    """
+    记录托运人/授权人 VGM 人签（本地状态，不向船司提交）。
+
+    写入 state['vgm_signoff']，并在存在 vgm_draft 时同步 status=signed_local。
+    acknowledged=False 则清除签署（回到待签）。
+    """
+    st = dict(state or {})
+    now = datetime.now(timezone.utc).isoformat()
+    if not acknowledged:
+        signoff = {
+            "signed": False,
+            "signer": "",
+            "signed_at": None,
+            "checklist_item_id": VGM_CHECKLIST_ITEM_ID,
+            "label": VGM_CHECKLIST_LABEL,
+            "note": note or "已撤销本地人签",
+            "auto_submit_forbidden": True,
+        }
+        st["vgm_signoff"] = signoff
+        draft = dict(st.get("vgm_draft") or {})
+        if draft:
+            draft["status"] = "needs_shipper_signature"
+            draft["signoff"] = {**signoff, "required": True}
+            st["vgm_draft"] = draft
+        return st
+
+    who = (signer or "").strip() or "shipper"
+    signoff = {
+        "signed": True,
+        "signer": who,
+        "signed_at": now,
+        "checklist_item_id": VGM_CHECKLIST_ITEM_ID,
+        "label": VGM_CHECKLIST_LABEL,
+        "note": note
+        or "本地人签已记录；仍禁止自动向船司/码头申报，正式提交须承运人通道。",
+        "auto_submit_forbidden": True,
+        "carrier_submit": "not_configured",
+    }
+    st["vgm_signoff"] = signoff
+    draft = dict(st.get("vgm_draft") or {})
+    if draft:
+        draft["status"] = "signed_local"
+        draft["signoff"] = {**signoff, "required": True}
+        st["vgm_draft"] = draft
+    # 同步装前检查勾选痕迹（可见，非强制改 ship_ok）
+    checked = dict(st.get("checklist_checked") or st.get("pre_ship_checked") or {})
+    checked[VGM_CHECKLIST_ITEM_ID] = True
+    st["checklist_checked"] = checked
+    return st
+
+
+def container_rows(vgm: Dict[str, Any]) -> List[Dict[str, Any]]:
+    """兼容 per_container / containers 双键。"""
+    if not isinstance(vgm, dict):
+        return []
+    rows = vgm.get("per_container") or vgm.get("containers") or []
+    return list(rows) if isinstance(rows, list) else []
+
+
+def build_vgm_status_public(state: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
+    """
+    对外 VGM 状态面：草稿 + 人签可见字段（供 public_response / UI）。
+
+    超越单纯 status 字符串：带 checklist 绑定、pending_action、ui_visible。
+    """
+    st = state or {}
+    vgm = st.get("vgm_draft") or {}
+    if not isinstance(vgm, dict):
+        vgm = {}
+    so = st.get("vgm_signoff") or vgm.get("signoff") or {}
+    if not isinstance(so, dict):
+        so = {}
+    checked = st.get("checklist_checked") or st.get("pre_ship_checked") or {}
+    if not isinstance(checked, dict):
+        checked = {}
+
+    signed = bool(so.get("signed")) or bool(checked.get(VGM_CHECKLIST_ITEM_ID))
+    status = str(vgm.get("status") or "")
+    if signed and status in ("", "draft", "needs_shipper_signature"):
+        status = "signed_local"
+    if not status and not vgm and not signed:
+        status = "not_drafted"
+
+    rows = container_rows(vgm)
+    method = vgm.get("method") or "method2"
+    if method == 2:
+        method = "method2"
+
+    pending = (
+        None
+        if signed
+        else (
+            "勾选装前检查「VGM 已由托运人签署/确认」或调用 record_human_signoff"
+            if vgm
+            else "先完成拼柜生成 VGM 草稿，再由托运人签署"
+        )
+    )
+
+    human = {
+        "required": True,
+        "signed": signed,
+        "signer": (so.get("signer") or "") if signed else "",
+        "signed_at": so.get("signed_at") if signed else None,
+        "checklist_item_id": VGM_CHECKLIST_ITEM_ID,
+        "label": VGM_CHECKLIST_LABEL,
+        "pending_action": pending,
+        "ui_visible": True,
+        "blocks_auto_submit": True,
+        "carrier_submit": "not_configured",
+    }
+
+    note = (
+        f"VGM 本地人签完成（{human.get('signer') or 'shipper'}）；仍禁止自动申报。"
+        if signed
+        else (
+            f"VGM 状态={status}；须托运人签署（检查项 {VGM_CHECKLIST_ITEM_ID}），禁止自动申报。"
+            if status != "not_drafted"
+            else "VGM 尚未生成草稿；出运前须方法2草稿 + 托运人签署（系统禁止自动申报）。"
+        )
+    )
+
+    return {
+        "status": status or "not_drafted",
+        "human_signoff_required": True,
+        "human_signoff": human,
+        "auto_submit_forbidden": True,
+        "method": method,
+        "totals": vgm.get("totals") or {},
+        "n_containers": len(rows) or int(vgm.get("containers_used") or 0) or 0,
+        "disclaimer": vgm.get("disclaimer")
+        or "VGM 草稿不可自动向船司/码头申报，须人签。",
+        "note": note,
+        "checklist_item_id": VGM_CHECKLIST_ITEM_ID,
+        "ui_label": (
+            f"VGM 已签 · {human.get('signer') or 'local'}"
+            if signed
+            else f"VGM {status or 'not_drafted'} · 须人签"
+        ),
     }

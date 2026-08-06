@@ -50,23 +50,54 @@ def draft_vgm_submit(
     *,
     dry_run: bool = True,
 ) -> Dict[str, Any]:
-    """VGM 提交骨架：默认 dry_run，不调用外部承运人。"""
+    """VGM 提交骨架：默认 dry_run，不调用外部承运人；未人签则硬拦。"""
     vgm = state.get("vgm_draft") or {}
+    if not isinstance(vgm, dict):
+        vgm = {}
+    rows = vgm.get("per_container") or vgm.get("containers") or []
+    so = state.get("vgm_signoff") or vgm.get("signoff") or {}
+    checked = state.get("checklist_checked") or {}
+    signed = bool(
+        (isinstance(so, dict) and so.get("signed"))
+        or (isinstance(checked, dict) and checked.get("vgm_signed"))
+    )
+    if not signed:
+        return {
+            "schema": "vgm.submit.v1",
+            "status": "blocked_unsigned",
+            "dry_run": True,
+            "accepted": False,
+            "blocks_until_signed": True,
+            "human_signoff_required": True,
+            "checklist_item_id": "vgm_signed",
+            "payload_preview": {
+                "method": 2,
+                "totals": vgm.get("totals"),
+                "containers": (rows or [])[:5],
+            },
+            "message": (
+                "拒绝提交：VGM 尚未托运人签署。"
+                "请先 record_human_signoff 或勾选装前检查 vgm_signed。"
+            ),
+        }
     return {
         "schema": "vgm.submit.v1",
         "status": "dry_run" if dry_run else "not_configured",
         "dry_run": dry_run,
+        "accepted": bool(dry_run),
         "payload_preview": {
             "method": 2,
             "totals": vgm.get("totals"),
-            "containers": (vgm.get("containers") or [])[:5],
+            "containers": (rows or [])[:5],
         },
         "message": (
-            "Dry-run：未连接承运人 API。配置 VGM_SUBMIT_URL 后可真提交。"
+            "Dry-run：本地已人签，仍未连接承运人 API。配置 VGM_SUBMIT_URL 后可真提交。"
             if dry_run
             else "承运人端点未配置"
         ),
-        "blocks_until_signed": True,
+        "blocks_until_signed": False,
+        "human_signoff_required": True,
+        "signed_local": True,
     }
 
 
