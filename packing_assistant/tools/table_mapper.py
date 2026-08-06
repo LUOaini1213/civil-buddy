@@ -310,6 +310,15 @@ def normalize_category(raw: Any) -> str:
     return s  # keep free text; caller may still use as-is
 
 
+# 最近一次 rows_to_ir 清洗统计（parse_table_* 读取，避免改动返回类型）
+_LAST_CLEAN_STATS: Dict[str, Any] = {}
+
+
+def last_clean_stats() -> Dict[str, Any]:
+    """返回最近一次 rows_to_ir 的清洗计数。"""
+    return dict(_LAST_CLEAN_STATS)
+
+
 def rows_to_ir(
     rows: Sequence[Dict[str, Any]],
     *,
@@ -319,7 +328,18 @@ def rows_to_ir(
     profile_hint: str = "generic_table",
 ) -> List[Dict[str, Any]]:
     """字典行列表 → MaterialTableIR（同时兼容现有 materials API）。"""
+    global _LAST_CLEAN_STATS
+    clean_stats: Dict[str, int] = {
+        "n_input_rows": 0,
+        "n_kept": 0,
+        "n_skip_empty_name": 0,
+        "n_skip_noise_name": 0,
+        "n_skip_zero_qty": 0,
+        "n_skip_zero_placeholder": 0,
+        "n_skip_summary_row": 0,
+    }
     if not rows:
+        _LAST_CLEAN_STATS = {**clean_stats, "n_skipped_total": 0}
         return []
 
     if headers is None:
@@ -353,18 +373,33 @@ def rows_to_ir(
     )
 
     out: List[Dict[str, Any]] = []
+    # 汇总/小计行（整行品名，不误杀「合计架」类真货子串尾）
+    _SUMMARY_EXACT = {
+        "合计",
+        "小计",
+        "总计",
+        "汇总",
+        "总合计",
+        "本页合计",
+        "grand total",
+        "subtotal",
+        "total",
+        "sum",
+    }
     for i, r in enumerate(rows, 1):
+        clean_stats["n_input_rows"] += 1
         got: Dict[str, Any] = {}
         for raw_h, std in colmap.items():
             got[std] = r.get(raw_h)
 
         name = got.get("name")
-        if name is None or str(name).strip() == "":
-            # try any leftover text field
+        if name is None or str(name).strip() == "" or str(name).strip("\u3000 \t") == "":
+            clean_stats["n_skip_empty_name"] += 1
             continue
-        name_s = str(name).strip()
+        name_s = str(name).strip().strip("\u3000")
         # 噪声行：整行注释/占位（禁止用「表头」「跳过」等子串误杀真货名）
         if name_s.startswith("#") or name_s.startswith("//"):
+            clean_stats["n_skip_noise_name"] += 1
             continue
         low_name = name_s.lower().strip()
         if low_name in (
@@ -372,27 +407,46 @@ def rows_to_ir(
             "none",
             "null",
             "-",
+            "—",
             "n/a",
             "na",
             "header",
             "headers",
             "# comment",
             "comment",
+            "备注",
+            "备注行",
+            "说明",
+            "placeholder",
         ):
+            clean_stats["n_skip_noise_name"] += 1
             continue
         # 仅匹配整行或「注释:」类前缀，不匹配品名中含「表头/跳过」的真货
         if name_s in ("注释", "这是注释", "表头", "无效空行", "无效空行应跳过", "跳过"):
+            clean_stats["n_skip_noise_name"] += 1
             continue
         if name_s.startswith("注释") and (
             len(name_s) <= 2 or name_s[2] in (":", "：", " ", "\t", "-")
         ):
+            clean_stats["n_skip_noise_name"] += 1
             continue
         if name_s.startswith("这是注释"):
+            clean_stats["n_skip_noise_name"] += 1
             continue
+        if low_name in _SUMMARY_EXACT or name_s in _SUMMARY_EXACT:
+            clean_stats["n_skip_summary_row"] += 1
+            continue
+        # 仅标点/空白品名
+        if all(not ch.isalnum() and ord(ch) < 128 for ch in name_s.replace(" ", "")):
+            # allow CJK product names (non-ascii alnum check fails for CJK)
+            if not any("\u4e00" <= ch <= "\u9fff" for ch in name_s):
+                clean_stats["n_skip_noise_name"] += 1
+                continue
 
         qty_f = _to_float(got.get("quantity"))
         # 显式 0 数量：噪声，不升成 1
         if qty_f is not None and qty_f <= 0:
+            clean_stats["n_skip_zero_qty"] += 1
             continue
         qty = max(1, int(qty_f or 1))
 
@@ -419,6 +473,7 @@ def rows_to_ir(
         total_w = float(total_w or 0.0)
         # 全零占位行（无尺寸无重量）丢弃
         if L <= 0 and W <= 0 and H <= 0 and unit_w <= 0 and total_w <= 0:
+            clean_stats["n_skip_zero_placeholder"] += 1
             continue
 
         cat_raw = got.get("category") or ""
@@ -459,6 +514,11 @@ def rows_to_ir(
             },
         }
         out.append(item)
+        clean_stats["n_kept"] += 1
+    clean_stats["n_skipped_total"] = int(clean_stats["n_input_rows"]) - int(
+        clean_stats["n_kept"]
+    )
+    _LAST_CLEAN_STATS = dict(clean_stats)
     return out
 
 
@@ -604,6 +664,7 @@ def parse_table_file(path: PathLike, **kwargs: Any) -> Dict[str, Any]:
     colmap = {}
     if ir:
         colmap = dict((ir[0].get("meta") or {}).get("column_map") or {})
+    clean = last_clean_stats()
     return {
         "ok": bool(mats),
         "path": str(path),
@@ -615,6 +676,13 @@ def parse_table_file(path: PathLike, **kwargs: Any) -> Dict[str, Any]:
             "n_dims_estimated": n_est,
             "avg_confidence": round(sum(confs) / len(confs), 3) if confs else 0.0,
             "total_weight_kg": round(sum(float(m.get("total_weight_kg") or 0) for m in mats), 3),
+            "n_input_rows": clean.get("n_input_rows"),
+            "n_skipped_total": clean.get("n_skipped_total"),
+            "n_skip_noise_name": clean.get("n_skip_noise_name"),
+            "n_skip_summary_row": clean.get("n_skip_summary_row"),
+            "n_skip_zero_qty": clean.get("n_skip_zero_qty"),
+            "n_skip_zero_placeholder": clean.get("n_skip_zero_placeholder"),
+            "clean": clean,
         },
         "errors": [] if mats else ["no material rows parsed"],
     }
@@ -674,6 +742,7 @@ def parse_table_rows(
     if ir:
         colmap = dict((ir[0].get("meta") or {}).get("column_map") or {})
     n_est = sum(1 for m in ir if (m.get("meta") or {}).get("dims_estimated"))
+    clean = last_clean_stats()
     return {
         "ok": bool(mats),
         "path": "",
@@ -684,6 +753,9 @@ def parse_table_rows(
             "n_rows": len(mats),
             "n_dims_estimated": n_est,
             "total_weight_kg": round(sum(float(m.get("total_weight_kg") or 0) for m in mats), 3),
+            "n_input_rows": clean.get("n_input_rows"),
+            "n_skipped_total": clean.get("n_skipped_total"),
+            "clean": clean,
         },
         "errors": [] if mats else ["no material rows"],
     }
