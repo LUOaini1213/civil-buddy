@@ -128,7 +128,21 @@ def family_ns() -> Tuple[int, int, List[str]]:
 def family_generic_table() -> Tuple[int, int, List[str]]:
     from packing_assistant.tools.table_mapper import parse_table_file
 
-    cases = ["G1_ecommerce_cartons", "G2_pallet_parts", "G12_furniture"]
+    # Broader than prior G1/G2/G12: add long pipes / bulk bags / fragile / tons / apparel
+    cases = [
+        "G1_ecommerce_cartons",
+        "G2_pallet_parts",
+        "G3_long_pipes",
+        "G4_bulk_bags",
+        "G5_fragile_glass",
+        "G6_messy_headers",
+        "G9_weight_tons",
+        "G10_semicolon_eu",
+        "G11_tab_sep",
+        "G12_furniture",
+        "G13_apparel",
+        "G14_auto_parts",
+    ]
     ok = fail = 0
     lines: List[str] = []
     for name in cases:
@@ -263,7 +277,7 @@ def main() -> int:
     all_lines.extend(lines)
     print(f"ns family ok={o} fail={f}")
 
-    print("===== family generic_table (3) =====")
+    print("===== family generic_table (12) =====")
     o, f, lines = family_generic_table()
     total_ok += o
     total_fail += f
@@ -286,8 +300,11 @@ def main() -> int:
         print("FAIL expand_pack_scope")
         return 1
     print("ALL_PASS expand_pack_scope")
-    # before: ns 3 pack + 2 fail = 5; after: 8 ns + 3 gtable + 3 demo = 14
-    print("coverage_before=5 coverage_after=14 families=ns,gtable,demo")
+    # ns 8 + gtable 12 + demo 3 = 23
+    print(
+        f"coverage_before=14 coverage_after={total_ok + total_fail} "
+        f"families=ns,gtable,demo gtable_n=12"
+    )
     return 0
 
 

@@ -168,6 +168,19 @@
     .top-actions .primary-lg {
       box-shadow: 0 6px 18px rgba(91, 141, 239, 0.28);
     }
+    /* Demo simple mode: first-glance declutter */
+    .shell.demo-simple .sidebar { width: 0; min-width: 0; overflow: hidden; border: none; padding: 0; opacity: 0; pointer-events: none; }
+    .shell.demo-simple .body { grid-template-columns: 1fr; }
+    .shell.demo-simple .brand .tag-full { display: none; }
+    .shell.demo-simple .brand .tag-simple { display: block; }
+    .brand .tag-simple { display: none; font-size: 11px; color: var(--muted); margin-top: 2px; }
+    .demo-mode-toggle {
+      display: inline-flex; align-items: center; gap: 4px;
+      font-size: 11.5px; color: var(--muted); cursor: pointer; user-select: none;
+      padding: 4px 8px; border-radius: 999px; border: 1px solid var(--border);
+      background: var(--bg-soft);
+    }
+    .demo-mode-toggle input { margin: 0; }
     .pill {
       display: inline-flex;
       align-items: center;
@@ -889,7 +902,7 @@
   </style>
 </head>
 <body>
-  <div id="app" class="shell">
+  <div id="app" class="shell" :class="{ 'demo-simple': demoSimpleMode }" data-demo-simple-mode="true">
     <!-- Top bar -->
     <header class="topbar">
       <div class="topbar-row">
@@ -897,27 +910,33 @@
           <div class="brand-mark">P</div>
           <div>
             <h1>装箱拼柜 · Team Mode</h1>
-            <div class="tag">大 Team⊃A/B · {{ agentCount || 13 }} Agents · HITL · v{{ harnessVersion || '0.6.4' }}</div>
+            <div class="tag tag-full">大 Team⊃A/B · {{ agentCount || 13 }} Agents · HITL · v{{ harnessVersion || '0.6.4' }}</div>
+            <div class="tag tag-simple">tools 定柜坐标 · 人确认成箱 · 一键演示</div>
           </div>
         </div>
         <div class="top-actions">
           <span class="pill" v-if="loading || streamProgress.total">
             {{ streamProgress.done }}/{{ streamProgress.total || '—' }}
           </span>
-          <label class="pill" style="cursor:pointer;user-select:none" title="关闭=露出 HITL 确认闸（比赛推荐）">
+          <label class="demo-mode-toggle" title="简洁演示：隐藏侧栏与高级状态，突出主 CTA">
+            <input type="checkbox" v-model="demoSimpleMode" />
+            简洁演示
+          </label>
+          <label class="pill" v-show="!demoSimpleMode" style="cursor:pointer;user-select:none" title="关闭=露出 HITL 确认闸（比赛推荐）">
             <input type="checkbox" v-model="demoAutoConfirm" style="margin-right:4px;vertical-align:middle" />
             演示自动确认
           </label>
-          <button class="soft" @click="refreshHealth" title="健康预检">预检</button>
-          <button class="ghost" @click="runPipelineTrace" :class="{ busy: loading }">全流程</button>
-          <button class="soft" @click="runDemoSteel" :class="{ busy: loading }" title="少量钢件">钢件轻量</button>
-          <label class="soft" style="cursor:pointer;display:inline-flex;align-items:center;gap:4px;padding:6px 10px;border-radius:8px"
+          <button class="soft" v-show="!demoSimpleMode" @click="refreshHealth" title="健康预检">预检</button>
+          <button class="ghost" v-show="!demoSimpleMode" @click="runPipelineTrace" :class="{ busy: loading }">全流程</button>
+          <button class="soft" v-show="!demoSimpleMode" @click="runDemoSteel" :class="{ busy: loading }" title="少量钢件">钢件轻量</button>
+          <label class="soft" v-show="!demoSimpleMode || tableMaterials.length"
+                 style="cursor:pointer;display:inline-flex;align-items:center;gap:4px;padding:6px 10px;border-radius:8px"
                  title="上传 CSV/XLSX → /api/table/parse → materials">
             表上传
             <input type="file" accept=".csv,.tsv,.txt,.xlsx,.xlsm,.json" style="display:none"
                    @change="onTableFileSelected" :disabled="loading" />
           </label>
-          <button class="soft" @click="runWithTableMaterials" :class="{ busy: loading }"
+          <button class="soft" v-show="!demoSimpleMode && tableMaterials.length" @click="runWithTableMaterials" :class="{ busy: loading }"
                   :disabled="!tableMaterials.length" title="用已解析表材料跑 pipeline">
             表材料跑 ({{ tableMaterials.length || 0 }})
           </button>
@@ -934,6 +953,13 @@
           <span class="pill" :class="gatewayOk ? 'ok' : 'err'" :title="preflightTitle">
             <span class="dot"></span> 网关 {{ gatewayOk ? 'UP' : 'DOWN' }}
           </span>
+          <span class="pill warn" v-if="result.phase === 'await_user_confirm'">★ 待 HITL</span>
+          <span class="pill" v-if="verdict && verdict.level"
+                :class="verdict.level === 'ok' ? 'ok' : (verdict.level === 'block' ? 'err' : 'warn')"
+                :title="verdict.summary || ''">
+            {{ verdict.level === 'block' ? '⛔阻断' : (verdict.level === 'warn' ? '⚠预警' : '✓可用') }}
+          </span>
+          <template v-if="!demoSimpleMode">
           <span class="pill" :class="skjolberOk ? 'ok' : 'warn'">
             <span class="dot"></span> 3D {{ skjolberOk ? 'skjolber' : '本地' }}
           </span>
@@ -950,7 +976,6 @@
             {{ vgmStatus.ui_label || ('VGM ' + vgmStatus.status + (vgmHuman && vgmHuman.signed ? ' ·已签' : (vgmStatus.human_signoff_required ? ' ·须人签' : ''))) }}
           </span>
           <span class="pill" v-if="result.phase">{{ result.phase }}</span>
-          <span class="pill warn" v-if="result.phase === 'await_user_confirm'">★ 待 HITL</span>
           <span class="pill warn" v-if="pendingCheckpoints.length"
                 style="cursor:pointer" @click="mainTab='history'; loadPendingCheckpoints()">
             HITL {{ pendingCheckpoints.length }}
@@ -963,14 +988,10 @@
           <span class="pill" v-if="result.risk_report && result.risk_report.decision" :class="riskPillClass">
             risk {{ result.risk_report.decision }}
           </span>
-          <span class="pill" v-if="verdict && verdict.level"
-                :class="verdict.level === 'ok' ? 'ok' : (verdict.level === 'block' ? 'err' : 'warn')"
-                :title="verdict.summary || ''">
-            {{ verdict.level === 'block' ? '⛔阻断' : (verdict.level === 'warn' ? '⚠预警' : '✓可用') }}
-          </span>
           <span class="pill err" v-if="result.ship_ok === false">ship_ok 否</span>
           <span class="pill err" v-if="cogPrimary && cogPrimary.balance === 'block'">CoG block</span>
           <span class="pill" v-if="agentSteps.length">{{ agentSteps.length }} steps</span>
+          </template>
         </div>
       </div>
       <div class="progress-track" v-if="loading || streamProgress.done">
@@ -2161,11 +2182,13 @@
           tableParseNote: '',
           tableColumnMap: null,
           demoAutoConfirm: false,
+          /** 默认简洁演示：收侧栏、精简 pill/按钮，突出满载演示主 CTA */
+          demoSimpleMode: true,
           result: {},
           agentSteps: [],
           selectedAgent: 'ALL',
           mainTab: 'overview',
-          orgChartOpen: true,
+          orgChartOpen: false,
           viewKeys: ['top', 'side', 'front'],
           nlInstruction: '',
           nlStatus: '',

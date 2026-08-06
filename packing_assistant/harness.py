@@ -786,6 +786,7 @@ def _path_honesty(state: Dict[str, Any]) -> Dict[str, Any]:
                 if used is not None
                 else "llm 回退路径柜数不可作订舱终裁；以 steps+tools 为准。"
             ),
+            "used_containers": used,
             "note": (
                 "本 run 为 llm_toolcall 的 policy_fallback（无 Key 或策略回退）；"
                 "柜数/坐标仍以 steps+tools 为准，不可单独作订舱终裁。"
@@ -804,11 +805,17 @@ def _path_honesty(state: Dict[str, Any]) -> Dict[str, Any]:
                 if used is not None
                 else "llm_toolcall 影子柜数仅供对照，不可作订舱终裁。"
             ),
+            "used_containers": used,
             "note": (
                 "llm_toolcall 为实验/影子路径；生产与答辩默认 agent_mode=steps，"
                 "tools 计算 N0*/xyz/CoG。"
             ),
         }
+    used_note = (
+        f"steps+tools 柜数 used={used}，订舱以 tools 为准。"
+        if used is not None
+        else "柜数由 tools 计算，可作为订舱依据（仍须业务复核）。"
+    )
     return {
         "primary_path": "steps",
         "this_run": "steps",
@@ -816,7 +823,8 @@ def _path_honesty(state: Dict[str, Any]) -> Dict[str, Any]:
         "reference_only": False,
         "cabin_count_reference_only": False,
         "ui_label": "主路径 steps",
-        "booking_containers_note": "柜数由 tools 计算，可作为订舱依据（仍须业务复核）。",
+        "booking_containers_note": used_note,
+        "used_containers": used,
         "note": "主路径 steps：工具计算柜数与坐标；LLM 不写 xyz。",
     }
 

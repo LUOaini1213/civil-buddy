@@ -53,6 +53,12 @@ def main() -> int:
     assert ph2.get("booking_authority") == "steps_tools", ph2
     note_cab = ph2.get("booking_containers_note") or ""
     assert "订舱" in note_cab or "终裁" in note_cab or "对照" in note_cab, note_cab
+    assert ph2.get("used_containers") == 3, ph2
+    ph_steps_used = _path_honesty(
+        {**st_steps, "container_plan": {"containers_used": 2, "can_fit": True}}
+    )
+    assert ph_steps_used.get("used_containers") == 2, ph_steps_used
+    assert ph_steps_used.get("cabin_count_reference_only") is False
 
     # vgm not drafted — human_signoff panel visible
     vg = _vgm_status({})
