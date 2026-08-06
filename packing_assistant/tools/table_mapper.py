@@ -363,8 +363,22 @@ def rows_to_ir(
             # try any leftover text field
             continue
         name_s = str(name).strip()
+        # 噪声行：注释 / 占位 / 全零空行
+        if name_s.startswith("#") or name_s.startswith("//"):
+            continue
+        low_name = name_s.lower()
+        if low_name in ("nan", "none", "null", "-", "n/a", "na"):
+            continue
+        if any(
+            k in name_s
+            for k in ("注释", "跳过", "无效空行", "这是注释", "header", "表头")
+        ):
+            continue
 
         qty_f = _to_float(got.get("quantity"))
+        # 显式 0 数量：噪声，不升成 1
+        if qty_f is not None and qty_f <= 0:
+            continue
         qty = max(1, int(qty_f or 1))
 
         def dim(std: str) -> float:
@@ -388,6 +402,9 @@ def rows_to_ir(
             unit_w = total_w / qty
         unit_w = float(unit_w or 0.0)
         total_w = float(total_w or 0.0)
+        # 全零占位行（无尺寸无重量）丢弃
+        if L <= 0 and W <= 0 and H <= 0 and unit_w <= 0 and total_w <= 0:
+            continue
 
         cat_raw = got.get("category") or ""
         cat = normalize_category(cat_raw) if cat_raw else _guess_category(L, W, H, unit_w, name_s)

@@ -25,6 +25,26 @@ def main():
     if g10.exists():
         pr = parse_table_file(g10)
         assert pr["stats"]["n_rows"] >= 2, pr
+    # noise / zero rows skipped (G8 + synthetic)
+    g8 = base / "G8_noise_rows" / "materials.csv"
+    if g8.exists():
+        pr = parse_table_file(g8)
+        assert pr["ok"]
+        names = [m.get("name") for m in pr["materials"]]
+        assert all(not str(n).startswith("#") for n in names), names
+        assert not any("无效空行" in str(n) for n in names), names
+        assert not any("注释" in str(n) for n in names), names
+        # only real cargo rows
+        assert pr["stats"]["n_rows"] == 3, (pr["stats"], names)
+    noisy = rows_to_ir(
+        [
+            {"name": "# comment", "quantity": 1, "length_mm": 100, "width_mm": 100, "height_mm": 100, "weight_kg": 1},
+            {"name": "ok", "quantity": 1, "length_mm": 500, "width_mm": 400, "height_mm": 300, "weight_kg": 2},
+            {"name": "zero", "quantity": 0, "length_mm": 0, "width_mm": 0, "height_mm": 0, "weight_kg": 0},
+        ],
+        headers=["name", "quantity", "length_mm", "width_mm", "height_mm", "weight_kg"],
+    )
+    assert len(noisy) == 1 and noisy[0]["name"] == "ok", noisy
     print("ALL_PASS table_mapper_unit")
     return 0
 if __name__ == "__main__":
