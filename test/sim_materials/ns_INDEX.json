@@ -1,0 +1,81 @@
+{
+  "version": 1,
+  "suite": "nonstandard_new_materials",
+  "cases": [
+    {
+      "id": "ns_overlength_rail",
+      "path": "ns_overlength_rail",
+      "story": "超长轨道型材，非标 GEO_OVERSIZE",
+      "expect_tags": [
+        "GEO_OVERSIZE"
+      ],
+      "n_materials": 2
+    },
+    {
+      "id": "ns_heavy_cast",
+      "path": "ns_heavy_cast",
+      "story": "重铸件 LOAD_HEAVY",
+      "expect_tags": [
+        "LOAD_HEAVY"
+      ],
+      "n_materials": 2
+    },
+    {
+      "id": "ns_thin_sheet_stack",
+      "path": "ns_thin_sheet_stack",
+      "story": "薄板 SHAPE_CUSTOM thin_plate",
+      "expect_tags": [
+        "SHAPE_CUSTOM"
+      ],
+      "n_materials": 2
+    },
+    {
+      "id": "ns_missing_dims_mix",
+      "path": "ns_missing_dims_mix",
+      "story": "混缺尺寸 DATA_GAP",
+      "expect_tags": [
+        "DATA_GAP"
+      ],
+      "n_materials": 3
+    },
+    {
+      "id": "ns_factory_crate_path",
+      "path": "ns_factory_crate_path",
+      "story": "工厂架 PACK_PATH",
+      "expect_tags": [
+        "PACK_PATH"
+      ],
+      "n_materials": 2
+    },
+    {
+      "id": "ns_fragile_process",
+      "path": "ns_fragile_process",
+      "story": "易碎禁翻 PROCESS_SPECIAL",
+      "expect_tags": [
+        "PROCESS_SPECIAL"
+      ],
+      "n_materials": 2
+    },
+    {
+      "id": "ns_over_container_width",
+      "path": "ns_over_container_width",
+      "story": "超柜内宽 GEO FAIL",
+      "expect_tags": [
+        "GEO_OVERSIZE"
+      ],
+      "n_materials": 2
+    },
+    {
+      "id": "ns_mixed_industry_bundle",
+      "path": "ns_mixed_industry_bundle",
+      "story": "跨行业混合非标：超长+重件+工厂架+易碎",
+      "expect_tags": [
+        "GEO_OVERSIZE",
+        "LOAD_HEAVY",
+        "PACK_PATH",
+        "PROCESS_SPECIAL"
+      ],
+      "n_materials": 4
+    }
+  ]
+}

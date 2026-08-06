@@ -1,0 +1,30 @@
+{
+  "case_id": "ns_over_container_width",
+  "story": "超柜内宽 GEO FAIL",
+  "expect_tags": [
+    "GEO_OVERSIZE"
+  ],
+  "materials": [
+    {
+      "id": "W1",
+      "name": "超宽设备底座",
+      "quantity": 1,
+      "length_mm": 3000,
+      "width_mm": 2800,
+      "height_mm": 900,
+      "weight_kg": 1200,
+      "total_weight_kg": 1200,
+      "category": "重件"
+    },
+    {
+      "id": "W2",
+      "name": "标准附件箱",
+      "quantity": 4,
+      "length_mm": 800,
+      "width_mm": 600,
+      "height_mm": 500,
+      "weight_kg": 30,
+      "total_weight_kg": 120
+    }
+  ]
+}

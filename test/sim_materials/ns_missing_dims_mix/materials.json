@@ -1,0 +1,34 @@
+{
+  "case_id": "ns_missing_dims_mix",
+  "story": "混缺尺寸 DATA_GAP",
+  "expect_tags": [
+    "DATA_GAP"
+  ],
+  "materials": [
+    {
+      "id": "D1",
+      "name": "完整箱",
+      "quantity": 3,
+      "length_mm": 1000,
+      "width_mm": 800,
+      "height_mm": 600,
+      "weight_kg": 50,
+      "total_weight_kg": 150
+    },
+    {
+      "id": "D2",
+      "name": "缺宽件",
+      "quantity": 2,
+      "length_mm": 1500,
+      "height_mm": 400,
+      "weight_kg": 40,
+      "total_weight_kg": 80
+    },
+    {
+      "id": "D3",
+      "name": "缺尺寸未知件",
+      "quantity": 1,
+      "weight_kg": 25
+    }
+  ]
+}

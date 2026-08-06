@@ -1,0 +1,32 @@
+{
+  "case_id": "ns_overlength_rail",
+  "story": "超长轨道型材，非标 GEO_OVERSIZE",
+  "expect_tags": [
+    "GEO_OVERSIZE"
+  ],
+  "materials": [
+    {
+      "id": "R1",
+      "name": "轨道钢轨-6m",
+      "quantity": 4,
+      "length_mm": 6200,
+      "width_mm": 150,
+      "height_mm": 150,
+      "weight_kg": 180,
+      "total_weight_kg": 720,
+      "category": "超长件",
+      "note": "沿柜长"
+    },
+    {
+      "id": "R2",
+      "name": "连接板",
+      "quantity": 20,
+      "length_mm": 400,
+      "width_mm": 300,
+      "height_mm": 20,
+      "weight_kg": 8,
+      "total_weight_kg": 160,
+      "category": "普通件"
+    }
+  ]
+}

@@ -1,0 +1,32 @@
+{
+  "case_id": "ns_factory_crate_path",
+  "story": "工厂架 PACK_PATH",
+  "expect_tags": [
+    "PACK_PATH"
+  ],
+  "materials": [
+    {
+      "id": "F1",
+      "name": "叠层架-出厂",
+      "quantity": 3,
+      "length_mm": 3000,
+      "width_mm": 1100,
+      "height_mm": 1500,
+      "weight_kg": 450,
+      "total_weight_kg": 1350,
+      "note": "factory_stack crate_equiv",
+      "category": "工厂架"
+    },
+    {
+      "id": "F2",
+      "name": "铁件架-长料",
+      "quantity": 2,
+      "length_mm": 5800,
+      "width_mm": 1000,
+      "height_mm": 1200,
+      "weight_kg": 600,
+      "total_weight_kg": 1200,
+      "note": "crate=factory_long"
+    }
+  ]
+}
