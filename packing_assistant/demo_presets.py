@@ -66,11 +66,14 @@ def packing_options_high_util() -> Dict[str, Any]:
         "dense_mode": True,
         "max_box_net_kg": 2000,
         "mix_mode": False,
-        # 满载演示也要 CTU 中段质量，避免 CoG=block
+        # 满载演示：抬 mid50 舒适区（≥0.65 目标），避免擦 CTU 60% 软线
         "cog_rebalance": True,
         "r4_repair": True,
-        "r4_target_mid50": 0.60,
+        "r4_target_mid50": 0.68,
+        "lns_worst": True,
+        "lateral_repair": True,
         "multi_start": True,
+        "prefer_stack": True,
     }
 
 

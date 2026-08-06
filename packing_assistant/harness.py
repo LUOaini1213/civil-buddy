@@ -708,10 +708,12 @@ def public_response(state: Dict[str, Any]) -> Dict[str, Any]:
         or (verdict if isinstance(verdict, dict) else {}),
         "team_mode": state.get("team_mode") or "big_team_a_b",
         "agent_style": state.get("agent_style") or "",
+        "path_honesty": _path_honesty(state),
         "intent_spec": state.get("intent_spec") or {},
         "team_architecture": state.get("team_architecture") or {},
         "graph_segment": state.get("graph_segment"),
         "tms_booking": state.get("tms_booking") or {},
+        "vgm_status": _vgm_status(state),
         "team_loop_round": state.get("team_loop_round"),
         "replan_round": state.get("replan_round"),
         "ship_replan_round": state.get("ship_replan_round"),
@@ -755,6 +757,74 @@ def public_response(state: Dict[str, Any]) -> Dict[str, Any]:
         "strategy_decision": _strategy_decision_summary(state, plan),
         "nonstandard_summary": _nonstandard_public(state),
         "nonstandard_report": None,  # 全量过大；需要时读 artifact / 专用 API
+    }
+
+
+def _path_honesty(state: Dict[str, Any]) -> Dict[str, Any]:
+    """路径诚实标签：steps 主路径 vs llm 影子/回退（柜数不可当订舱终裁）。"""
+    style = str(state.get("agent_style") or "").strip()
+    mode = str(state.get("agent_mode") or state.get("team_mode") or "").strip()
+    # harness 常写 agent_style=policy_fallback 于 llm_toolcall 无 Key
+    is_llm = (
+        style in ("policy_fallback", "llm_toolcall", "llm")
+        or "llm" in style.lower()
+        or mode == "llm_toolcall"
+    )
+    is_steps = (not is_llm) or mode in ("steps", "big_team_a_b", "")
+    if is_llm and style == "policy_fallback":
+        return {
+            "primary_path": "steps",
+            "this_run": "llm_toolcall_policy_fallback",
+            "booking_authority": "steps_tools",
+            "reference_only": True,
+            "note": (
+                "本 run 为 llm_toolcall 的 policy_fallback（无 Key 或策略回退）；"
+                "柜数/坐标仍以 steps+tools 为准，不可单独作订舱终裁。"
+            ),
+        }
+    if is_llm:
+        return {
+            "primary_path": "steps",
+            "this_run": "llm_toolcall",
+            "booking_authority": "steps_tools",
+            "reference_only": True,
+            "note": (
+                "llm_toolcall 为实验/影子路径；生产与答辩默认 agent_mode=steps，"
+                "tools 计算 N0*/xyz/CoG。"
+            ),
+        }
+    return {
+        "primary_path": "steps",
+        "this_run": "steps",
+        "booking_authority": "steps_tools",
+        "reference_only": False,
+        "note": "主路径 steps：工具计算柜数与坐标；LLM 不写 xyz。",
+    }
+
+
+def _vgm_status(state: Dict[str, Any]) -> Dict[str, Any]:
+    """VGM 草稿状态摘要（禁止自动申报）。"""
+    vgm = state.get("vgm_draft") or {}
+    if not isinstance(vgm, dict):
+        vgm = {}
+    status = str(vgm.get("status") or "")
+    if not status and not vgm:
+        return {
+            "status": "not_drafted",
+            "human_signoff_required": True,
+            "auto_submit_forbidden": True,
+            "note": "VGM 尚未生成草稿；出运前须方法2草稿 + 托运人签署（系统禁止自动申报）。",
+        }
+    return {
+        "status": status or "draft",
+        "human_signoff_required": True,
+        "auto_submit_forbidden": True,
+        "method": vgm.get("method") or "method2",
+        "totals": vgm.get("totals") or {},
+        "n_containers": len(vgm.get("containers") or []),
+        "disclaimer": vgm.get("disclaimer")
+        or "VGM 草稿不可自动向船司/码头申报，须人签。",
+        "note": f"VGM 状态={status or 'draft'}；禁止自动申报，须托运人确认。",
     }
 
 
@@ -808,6 +878,9 @@ def _multi_container_summary(
         tips.append(
             f"大票：重量约 {n_wt or '—'} 柜 · 几何/N0* 约 {n0_i or '—'} 柜 · 实装 {used_i or '—'} 柜"
             "；运营上建议分批发运/分票，勿单票硬塞。"
+        )
+        tips.append(
+            "耗时提示：大票 3D/策略环可达数十秒～数分钟；答辩请预跑或缩短演示票。"
         )
     if wt_util_f is not None and used_i >= 4 and wt_util_f < 0.70:
         tips.append(
