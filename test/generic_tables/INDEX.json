@@ -1,0 +1,114 @@
+{
+  "version": 1,
+  "cases": [
+    {
+      "id": "G1_ecommerce_cartons",
+      "path": "G1_ecommerce_cartons",
+      "tags": [
+        "carton",
+        "short"
+      ]
+    },
+    {
+      "id": "G2_pallet_parts",
+      "path": "G2_pallet_parts",
+      "tags": [
+        "pallet"
+      ]
+    },
+    {
+      "id": "G3_long_pipes",
+      "path": "G3_long_pipes",
+      "tags": [
+        "long"
+      ]
+    },
+    {
+      "id": "G4_bulk_bags",
+      "path": "G4_bulk_bags",
+      "tags": [
+        "weight"
+      ]
+    },
+    {
+      "id": "G5_fragile_glass",
+      "path": "G5_fragile_glass",
+      "tags": [
+        "fragile"
+      ]
+    },
+    {
+      "id": "G6_messy_headers",
+      "path": "G6_messy_headers",
+      "tags": [
+        "mapping"
+      ]
+    },
+    {
+      "id": "G7_missing_dims",
+      "path": "G7_missing_dims",
+      "tags": [
+        "adv"
+      ]
+    },
+    {
+      "id": "G8_noise_rows",
+      "path": "G8_noise_rows",
+      "tags": [
+        "adv"
+      ]
+    },
+    {
+      "id": "G9_weight_tons",
+      "path": "G9_weight_tons",
+      "tags": [
+        "adv"
+      ]
+    },
+    {
+      "id": "G10_semicolon_eu",
+      "path": "G10_semicolon_eu",
+      "tags": [
+        "adv"
+      ]
+    },
+    {
+      "id": "G11_tab_sep",
+      "path": "G11_tab_sep",
+      "tags": [
+        "adv"
+      ]
+    },
+    {
+      "id": "G12_furniture",
+      "path": "G12_furniture",
+      "tags": [
+        "industry",
+        "carton"
+      ]
+    },
+    {
+      "id": "G13_apparel",
+      "path": "G13_apparel",
+      "tags": [
+        "industry"
+      ]
+    },
+    {
+      "id": "G14_auto_parts",
+      "path": "G14_auto_parts",
+      "tags": [
+        "industry",
+        "pallet"
+      ]
+    },
+    {
+      "id": "G15_mixed_units_stress",
+      "path": "G15_mixed_units_stress",
+      "tags": [
+        "units",
+        "stress"
+      ]
+    }
+  ]
+}

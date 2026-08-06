@@ -1,0 +1,5 @@
+{
+  "min_rows": 2,
+  "require_can_fit": true,
+  "story": "噪声过滤"
+}

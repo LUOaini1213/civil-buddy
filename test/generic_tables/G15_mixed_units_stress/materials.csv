@@ -1,0 +1,4 @@
+﻿name,qty,Length (cm),width_m,H_mm,weight_kg,category
+Stress carton A,12,45,0.3,280,2.5,carton
+Stress long bar,6,580,0.08,80,18,long_item
+Stress pallet,3,120,1.0,1100,200,pallet

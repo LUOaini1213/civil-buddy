@@ -83,6 +83,20 @@ PROFILES: Dict[str, Dict[str, Any]] = {
             "cog_rebalance": True,
         },
     },
+    "generic_table": {
+        "label": "通用材料表",
+        "description": "非钢默认：当量直通成箱，多起点，CoG；不强制结构半严格",
+        "options": {
+            "crate_passthrough": True,
+            "standard_boxes": False,
+            "dense_mode": True,
+            "prefer_stack": True,
+            "multi_start": True,
+            "cog_aware": True,
+            "cog_rebalance": True,
+            "structure_calc": False,
+        },
+    },
 }
 
 
@@ -111,3 +125,14 @@ def apply_profile(
     opts["profile_id"] = profile_id
     opts["single_team_loop"] = True
     return opts
+
+
+def profile_generic_table() -> dict:
+    """Non-steel default: passthrough crates, multi_start, cog."""
+    return {
+        "profile_id": "generic_table",
+        "crate_passthrough": True,
+        "multi_start": True,
+        "cog_aware": True,
+        "structure_calc": False,
+    }
