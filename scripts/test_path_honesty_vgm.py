@@ -87,12 +87,13 @@ def main() -> int:
     assert blocked.get("blocks_until_signed") is True
     assert blocked.get("accepted") is False
 
-    # record human signoff → signed_local + submit dry_run allowed
+    # record human signoff → signed_local + dual checklist write + submit dry_run
     st_signed = record_human_signoff(
         {"vgm_draft": draft}, signer="demo_shipper", acknowledged=True
     )
     assert st_signed.get("vgm_signoff", {}).get("signed") is True
     assert st_signed.get("checklist_checked", {}).get(VGM_CHECKLIST_ITEM_ID) is True
+    assert st_signed.get("pre_ship_checked", {}).get(VGM_CHECKLIST_ITEM_ID) is True
     vg3 = build_vgm_status_public(st_signed)
     assert vg3.get("human_signoff", {}).get("signed") is True, vg3
     assert vg3.get("status") == "signed_local", vg3
@@ -101,6 +102,50 @@ def main() -> int:
     assert ok_sub.get("status") == "dry_run", ok_sub
     assert ok_sub.get("signed_local") is True
     assert ok_sub.get("blocks_until_signed") is False
+
+    # pre_ship checklist built with pre_ship_checked must show vgm_signed checked
+    from packing_assistant.pre_ship_checklist import build_pre_ship_checklist
+
+    cl = build_pre_ship_checklist(
+        st_signed, checked=st_signed.get("pre_ship_checked") or {}
+    )
+    vgm_item = next(
+        (i for i in (cl.get("items") or []) if i.get("id") == VGM_CHECKLIST_ITEM_ID),
+        None,
+    )
+    assert vgm_item is not None, cl
+    assert vgm_item.get("checked") is True, vgm_item
+    print("pre_ship_vgm_checked=", vgm_item.get("checked"))
+
+    # UI-only path: pre_ship_checked[vgm_signed]=True (no vgm_signoff) unblocks submit
+    st_ui_only = {
+        "vgm_draft": draft,
+        "pre_ship_checked": {VGM_CHECKLIST_ITEM_ID: True},
+    }
+    vg_ui = build_vgm_status_public(st_ui_only)
+    assert vg_ui.get("human_signoff", {}).get("signed") is True, vg_ui
+    assert vg_ui.get("status") == "signed_local", vg_ui
+    sub_ui = draft_vgm_submit(st_ui_only, dry_run=True)
+    assert sub_ui.get("status") == "dry_run", sub_ui
+    assert sub_ui.get("blocks_until_signed") is False, sub_ui
+    print("pre_ship_only_submit=", sub_ui.get("status"))
+
+    # revoke signoff must clear both checklists and re-block submit
+    st_revoked = record_human_signoff(st_signed, signer="", acknowledged=False)
+    assert st_revoked.get("vgm_signoff", {}).get("signed") is False
+    assert st_revoked.get("checklist_checked", {}).get(VGM_CHECKLIST_ITEM_ID) is False
+    assert st_revoked.get("pre_ship_checked", {}).get(VGM_CHECKLIST_ITEM_ID) is False
+    vg_rev = build_vgm_status_public(st_revoked)
+    assert vg_rev.get("human_signoff", {}).get("signed") is False, vg_rev
+    assert vg_rev.get("status") != "signed_local", vg_rev
+    sub_rev = draft_vgm_submit(st_revoked, dry_run=True)
+    assert sub_rev.get("status") == "blocked_unsigned", sub_rev
+    print(
+        "revoke_signed=",
+        vg_rev.get("human_signoff", {}).get("signed"),
+        "revoke_submit=",
+        sub_rev.get("status"),
+    )
 
     pub = public_response(st_fb)
     assert "path_honesty" in pub, list(pub.keys())[:20]

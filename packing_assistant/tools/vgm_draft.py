@@ -99,6 +99,31 @@ def draft_vgm_method2(
     }
 
 
+def _sync_vgm_checklist_flags(st: Dict[str, Any], *, checked: bool) -> None:
+    """双写 checklist_checked 与 pre_ship_checked（UI/finalize 用后者）。"""
+    for key in ("checklist_checked", "pre_ship_checked"):
+        cur = st.get(key)
+        d = dict(cur) if isinstance(cur, dict) else {}
+        d[VGM_CHECKLIST_ITEM_ID] = bool(checked)
+        st[key] = d
+
+
+def is_vgm_signed(state: Optional[Dict[str, Any]] = None) -> bool:
+    """人签是否成立：vgm_signoff 或任一侧装前勾选 vgm_signed。"""
+    st = state or {}
+    so = st.get("vgm_signoff")
+    if not isinstance(so, dict):
+        vgm = st.get("vgm_draft") if isinstance(st.get("vgm_draft"), dict) else {}
+        so = (vgm or {}).get("signoff") or {}
+    if isinstance(so, dict) and so.get("signed"):
+        return True
+    for key in ("checklist_checked", "pre_ship_checked"):
+        c = st.get(key)
+        if isinstance(c, dict) and c.get(VGM_CHECKLIST_ITEM_ID):
+            return True
+    return False
+
+
 def record_human_signoff(
     state: Dict[str, Any],
     *,
@@ -110,7 +135,7 @@ def record_human_signoff(
     记录托运人/授权人 VGM 人签（本地状态，不向船司提交）。
 
     写入 state['vgm_signoff']，并在存在 vgm_draft 时同步 status=signed_local。
-    acknowledged=False 则清除签署（回到待签）。
+    acknowledged=False 则清除签署（回到待签），并清两侧 checklist 勾选。
     """
     st = dict(state or {})
     now = datetime.now(timezone.utc).isoformat()
@@ -130,6 +155,8 @@ def record_human_signoff(
             draft["status"] = "needs_shipper_signature"
             draft["signoff"] = {**signoff, "required": True}
             st["vgm_draft"] = draft
+        # 撤销必须清两侧勾选，否则仍被当作已签
+        _sync_vgm_checklist_flags(st, checked=False)
         return st
 
     who = (signer or "").strip() or "shipper"
@@ -150,10 +177,8 @@ def record_human_signoff(
         draft["status"] = "signed_local"
         draft["signoff"] = {**signoff, "required": True}
         st["vgm_draft"] = draft
-    # 同步装前检查勾选痕迹（可见，非强制改 ship_ok）
-    checked = dict(st.get("checklist_checked") or st.get("pre_ship_checked") or {})
-    checked[VGM_CHECKLIST_ITEM_ID] = True
-    st["checklist_checked"] = checked
+    # 同步装前检查两侧（finalize/gateway 读 pre_ship_checked）
+    _sync_vgm_checklist_flags(st, checked=True)
     return st
 
 
@@ -178,16 +203,16 @@ def build_vgm_status_public(state: Optional[Dict[str, Any]] = None) -> Dict[str,
     so = st.get("vgm_signoff") or vgm.get("signoff") or {}
     if not isinstance(so, dict):
         so = {}
-    checked = st.get("checklist_checked") or st.get("pre_ship_checked") or {}
-    if not isinstance(checked, dict):
-        checked = {}
 
-    signed = bool(so.get("signed")) or bool(checked.get(VGM_CHECKLIST_ITEM_ID))
+    signed = is_vgm_signed(st)
     status = str(vgm.get("status") or "")
     if signed and status in ("", "draft", "needs_shipper_signature"):
         status = "signed_local"
     if not status and not vgm and not signed:
         status = "not_drafted"
+    # 撤销后 draft 可能仍残留 signed_local 字符串，以 signed 为准
+    if not signed and status == "signed_local":
+        status = "needs_shipper_signature" if vgm else "not_drafted"
 
     rows = container_rows(vgm)
     method = vgm.get("method") or "method2"

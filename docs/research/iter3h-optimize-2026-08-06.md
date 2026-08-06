@@ -25,7 +25,8 @@
 - HITL 摘要卡 `vgm_signoff`；前端 pill 显示 ui_label / 已签态
 
 **证据**: `{SCRATCH}/iter3h_improve_vgm_path.log` · `scripts/test_path_honesty_vgm.py` → ALL_PASS  
-观测：`submit_blocked=blocked_unsigned` → 签后 `submit_after=dry_run` · `vgm_signed=True`
+观测：`submit_blocked=blocked_unsigned` → 签后 `submit_after=dry_run` · `vgm_signed=True`  
+一致性（skeptic 修复）：`is_vgm_signed` 同时认 `checklist_checked` **与** `pre_ship_checked`；`record_human_signoff` 双写两侧；撤销清勾选并 `blocked_unsigned`；仅 UI `pre_ship_checked.vgm_signed` 亦可 dry_run。
 
 ## 交付 B · 非标 pack-path smoke
 
