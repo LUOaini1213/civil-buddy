@@ -1,0 +1,4 @@
+name;qty;length_cm;width_cm;height_cm;weight_kg;sku;type
+EU Carton A;12;45;30;25;2.5;EU-A;carton
+EU Carton B;8;60;40;35;4.0;EU-B;carton
+EU Long Box;3;120;40;40;6.5;EU-C;carton

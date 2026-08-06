@@ -10,6 +10,7 @@ deepseek-api.txt
 *api-key*
 *-apiKey*
 *.csv
+!test/generic_tables/**/*.csv
 *.pem
 *.key
 credentials*
