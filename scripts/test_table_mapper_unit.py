@@ -45,6 +45,21 @@ def main():
         headers=["name", "quantity", "length_mm", "width_mm", "height_mm", "weight_kg"],
     )
     assert len(noisy) == 1 and noisy[0]["name"] == "ok", noisy
+    # 真货名含 header/表头/跳过 不得被噪声规则误杀
+    keep = rows_to_ir(
+        [
+            {"name": "header rail", "quantity": 1, "length_mm": 1200, "width_mm": 80, "height_mm": 40, "weight_kg": 5},
+            {"name": "表头零件A", "quantity": 2, "length_mm": 300, "width_mm": 200, "height_mm": 100, "weight_kg": 1.5},
+            {"name": "跳过梁-备用", "quantity": 1, "length_mm": 4000, "width_mm": 200, "height_mm": 200, "weight_kg": 80},
+            {"name": "这是注释行", "quantity": 1, "length_mm": 100, "width_mm": 100, "height_mm": 100, "weight_kg": 1},
+        ],
+        headers=["name", "quantity", "length_mm", "width_mm", "height_mm", "weight_kg"],
+    )
+    keep_names = [m["name"] for m in keep]
+    assert "header rail" in keep_names, keep_names
+    assert "表头零件A" in keep_names, keep_names
+    assert "跳过梁-备用" in keep_names, keep_names
+    assert "这是注释行" not in keep_names, keep_names
     print("ALL_PASS table_mapper_unit")
     return 0
 if __name__ == "__main__":

@@ -363,16 +363,31 @@ def rows_to_ir(
             # try any leftover text field
             continue
         name_s = str(name).strip()
-        # 噪声行：注释 / 占位 / 全零空行
+        # 噪声行：整行注释/占位（禁止用「表头」「跳过」等子串误杀真货名）
         if name_s.startswith("#") or name_s.startswith("//"):
             continue
-        low_name = name_s.lower()
-        if low_name in ("nan", "none", "null", "-", "n/a", "na"):
-            continue
-        if any(
-            k in name_s
-            for k in ("注释", "跳过", "无效空行", "这是注释", "header", "表头")
+        low_name = name_s.lower().strip()
+        if low_name in (
+            "nan",
+            "none",
+            "null",
+            "-",
+            "n/a",
+            "na",
+            "header",
+            "headers",
+            "# comment",
+            "comment",
         ):
+            continue
+        # 仅匹配整行或「注释:」类前缀，不匹配品名中含「表头/跳过」的真货
+        if name_s in ("注释", "这是注释", "表头", "无效空行", "无效空行应跳过", "跳过"):
+            continue
+        if name_s.startswith("注释") and (
+            len(name_s) <= 2 or name_s[2] in (":", "：", " ", "\t", "-")
+        ):
+            continue
+        if name_s.startswith("这是注释"):
             continue
 
         qty_f = _to_float(got.get("quantity"))

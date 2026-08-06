@@ -87,33 +87,31 @@ def agent_material_parser(state: PackingState) -> Dict[str, Any]:
     if note and ("去掉" in note or "删除" in note):
         mats = _filter_remove(mats, note)
 
-    # 通用表注入：自动套 generic_table 档（当量直通、不强制结构）
+    # 通用表注入：仅当 profile 未指定或为 balanced 时自动套 generic_table
     packing_options = dict(state.get("packing_options") or {})
     profile_applied = ""
-    table_src = existing if existing else mats
-    if mats and _looks_like_generic_table(table_src if table_src else mats):
-        try:
-            from packing_assistant.packing_profiles import apply_profile
 
-            if not packing_options.get("profile_id") or packing_options.get(
-                "profile_id"
-            ) in ("balanced", ""):
-                packing_options = apply_profile(packing_options, "generic_table")
-                profile_applied = "generic_table"
-        except Exception:
-            packing_options.setdefault("crate_passthrough", True)
-            packing_options.setdefault("profile_id", "generic_table")
-            profile_applied = "generic_table_fallback"
-    # 归一后 meta 可能被剥：若原 inject 有表迹象再判一次
-    if mats and not profile_applied and existing and _looks_like_generic_table(existing):
+    def _profile_is_default(opts: Dict[str, Any]) -> bool:
+        pid = str(opts.get("profile_id") or "").strip()
+        return pid in ("", "balanced")
+
+    table_src = existing if existing else mats
+    looks_table = bool(
+        mats
+        and (
+            _looks_like_generic_table(table_src if table_src else mats)
+            or (existing and _looks_like_generic_table(existing))
+        )
+    )
+    if looks_table and _profile_is_default(packing_options):
         try:
             from packing_assistant.packing_profiles import apply_profile
 
             packing_options = apply_profile(packing_options, "generic_table")
             profile_applied = "generic_table"
         except Exception:
-            packing_options["profile_id"] = "generic_table"
-            packing_options["crate_passthrough"] = True
+            packing_options.setdefault("crate_passthrough", True)
+            packing_options.setdefault("profile_id", "generic_table")
             profile_applied = "generic_table_fallback"
 
     summary = _summary(mats)
