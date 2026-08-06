@@ -937,8 +937,17 @@
           <span class="pill" :class="skjolberOk ? 'ok' : 'warn'">
             <span class="dot"></span> 3D {{ skjolberOk ? 'skjolber' : '本地' }}
           </span>
-          <span class="pill" :class="llmKeyPresent ? 'ok' : 'warn'" title="无 Key 时 steps 仍可用">
+          <span class="pill" :class="llmKeyPresent ? 'ok' : 'warn'" title="无 Key 时 steps 仍可用；llm_toolcall 仅影子参考">
             LLM {{ llmKeyPresent ? 'Key' : 'fallback' }}
+          </span>
+          <span class="pill warn" v-if="pathHonesty && pathHonesty.reference_only"
+                :title="pathHonesty.note || ''">
+            路径参考 · {{ pathHonesty.this_run || 'llm' }}
+          </span>
+          <span class="pill" v-if="vgmStatus && vgmStatus.status"
+                :class="vgmStatus.status === 'not_drafted' ? 'warn' : 'ok'"
+                :title="vgmStatus.note || ''">
+            VGM {{ vgmStatus.status }}{{ vgmStatus.human_signoff_required ? ' ·须人签' : '' }}
           </span>
           <span class="pill" v-if="result.phase">{{ result.phase }}</span>
           <span class="pill warn" v-if="result.phase === 'await_user_confirm'">★ 待 HITL</span>
@@ -2213,6 +2222,12 @@
             || (this.packingPlan || {}).por_manifest
             || {}
           );
+        },
+        pathHonesty() {
+          return (this.result && this.result.path_honesty) || null;
+        },
+        vgmStatus() {
+          return (this.result && this.result.vgm_status) || null;
         },
         viewContainerOptions() {
           const meta = (this.result.views || {})._meta || {};
