@@ -686,6 +686,7 @@ def public_response(state: Dict[str, Any]) -> Dict[str, Any]:
         "profile_id": (state.get("packing_options") or {}).get("profile_id")
         or (packing_plan or {}).get("profile_id"),
         "replan_proposal": state.get("replan_proposal") or {},
+        "bounded_debate": _bounded_debate_public(state),
         "final_response": state.get("final_response") or "",
         "materials": state.get("materials") or [],
         "boxes": state.get("boxes") or [],
@@ -758,6 +759,17 @@ def public_response(state: Dict[str, Any]) -> Dict[str, Any]:
         "nonstandard_summary": _nonstandard_public(state),
         "nonstandard_report": None,  # 全量过大；需要时读 artifact / 专用 API
     }
+
+
+def _bounded_debate_public(state: Dict[str, Any]) -> Dict[str, Any]:
+    """有界辩论摘要（critic↔planner）；空则 {}。"""
+    try:
+        from packing_assistant.bounded_debate import debate_public_summary
+
+        return debate_public_summary(state) or {}
+    except Exception:
+        d = state.get("bounded_debate")
+        return d if isinstance(d, dict) else {}
 
 
 def _path_honesty(state: Dict[str, Any]) -> Dict[str, Any]:

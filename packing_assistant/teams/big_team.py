@@ -344,11 +344,26 @@ def iter_big_team_run(
         prev_node = node
 
     def _apply_replan_critic() -> Dict[str, Any]:
+        """有界辩论（默认）或纯 critic；失败回退 stop。"""
         try:
-            from packing_assistant.agents.replan_critic import agent_replan_critic
+            opts = state.get("packing_options") or {}
+            # 默认开启 bounded_debate；显式 false 则仅 critic
+            if opts.get("bounded_debate") is False:
+                from packing_assistant.agents.replan_critic import agent_replan_critic
 
-            return agent_replan_critic(state) or {}
+                return agent_replan_critic(state) or {}
+            from packing_assistant.bounded_debate import run_bounded_debate
+
+            return run_bounded_debate(state) or {}
         except Exception as e:
+            try:
+                from packing_assistant.agents.replan_critic import agent_replan_critic
+
+                fb = agent_replan_critic(state) or {}
+                if fb:
+                    return fb
+            except Exception:
+                pass
             return {
                 "replan_proposal": {
                     "stop": True,
@@ -358,7 +373,7 @@ def iter_big_team_run(
                 "messages": [
                     {
                         "role": "assistant",
-                        "content": f"【replan_critic】失败: {e}",
+                        "content": f"【replan_critic/debate】失败: {e}",
                         "agent": "replan_critic",
                     }
                 ],
@@ -538,6 +553,7 @@ def iter_big_team_run(
                     if crit:
                         _merge_update(crit)
                     prop = state.get("replan_proposal") or {}
+                    debate = state.get("bounded_debate") or {}
                     if prop.get("stop"):
                         break
                     try:
@@ -548,6 +564,39 @@ def iter_big_team_run(
                         )
                     except Exception:
                         pass
+                    if debate.get("enabled"):
+                        yield emit(
+                            {
+                                "type": "debate",
+                                "node": "bounded_debate",
+                                "team": "B",
+                                "parent_node": "evaluator",
+                                "status": "debate",
+                                "message": debate.get("note")
+                                or f"有界辩论 {debate.get('outcome')}",
+                                "bounded_debate": {
+                                    "rounds": debate.get("rounds"),
+                                    "outcome": debate.get("outcome"),
+                                    "transcript": (debate.get("transcript") or [])[:6],
+                                    "tools_adjudicate": True,
+                                },
+                                "run_id": rid,
+                            }
+                        )
+                        steps.append(
+                            {
+                                "node": "bounded_debate",
+                                "title": "小TeamB·有界辩论 critic↔planner",
+                                "team": "B",
+                                "message": (
+                                    f"outcome={debate.get('outcome')} "
+                                    f"turns={debate.get('rounds')} · tools 裁决装载"
+                                ),
+                                "tools_used": ["bounded_debate.critic_planner"],
+                                "status": "ok",
+                                "bounded_debate": True,
+                            }
+                        )
                     if prop.get("route") == "box_scheme":
                         for node, title in team_a_rebox_nodes():
                             yield from run_one(

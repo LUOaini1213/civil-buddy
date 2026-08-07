@@ -37,6 +37,18 @@ NL → IntentSpec → 大Team.orchestrator
 | `auto` | 有 LLM Key 则 tool-call，否则 steps | 可选 |
 | `graph` | LangGraph 全图（gateway mode=graph） | HITL 分段，非第二产品 |
 
+### Team B 有界辩论（非 free swarm）
+
+当 `evaluation.need_replan` 时，默认跑 **critic ↔ planner 1～2 轮**（`bounded_debate.py`）：
+
+1. **replan_critic** 提案（改 `packing_options` / route，不写 xyz）  
+2. **planner** 确定性反方（如反对无脑加柜 → densify）  
+3. 可选 critic 收口  
+4. **tools** 重跑 planner/loader 裁决装载  
+
+关闭：`packing_options.bounded_debate=false`。  
+`public_response.bounded_debate` 含 transcript；**不是**多 LLM 自由 swarm。
+
 Agency 作战图：[competition-phase-plan.md](./competition-phase-plan.md)
 
 分段 resume（旧 A/B 子图）:
