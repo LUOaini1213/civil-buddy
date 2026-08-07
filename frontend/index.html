@@ -1236,6 +1236,30 @@
               </div>
             </div>
 
+            <!-- 有界辩论 critic↔planner（非 free swarm） -->
+            <div class="card" v-if="boundedDebate && boundedDebate.rounds"
+                 style="margin-bottom:12px;border:1px solid var(--border);border-radius:12px;padding:12px 14px;background:var(--bg-elev)">
+              <div style="display:flex;align-items:center;justify-content:space-between;gap:8px;flex-wrap:wrap">
+                <strong style="font-size:13px">有界辩论 · critic ↔ planner</strong>
+                <span class="pill" :class="boundedDebate.improved ? 'ok' : 'warn'">
+                  {{ boundedDebate.outcome || 'done' }} · {{ boundedDebate.rounds }} 轮
+                </span>
+              </div>
+              <div style="font-size:12px;color:var(--muted);margin-top:6px">
+                {{ boundedDebate.note || '策略协商后由 tools 裁决柜数/坐标' }}
+                <span v-if="boundedDebate.final_strategy"> · strategy={{ boundedDebate.final_strategy }}</span>
+              </div>
+              <ul style="margin:8px 0 0;padding-left:18px;font-size:12px;color:var(--text)"
+                  v-if="boundedDebate.transcript && boundedDebate.transcript.length">
+                <li v-for="(t, i) in boundedDebate.transcript" :key="'bd'+i" style="margin-bottom:4px">
+                  <strong>{{ t.role || t.speaker }}</strong>
+                  <span v-if="t.stance"> · {{ t.stance }}</span>
+                  <span v-if="t.strategy"> · {{ t.strategy }}</span>
+                  — {{ (t.reasons && t.reasons[0]) || t.accept_route || '' }}
+                </li>
+              </ul>
+            </div>
+
             <div class="hitl-bar" v-if="result.phase === 'await_user_confirm' || (result.hitl_summary && result.hitl_summary.n_boxes)">
               <div class="hitl-top">
                 <div>
@@ -2280,6 +2304,11 @@
         hitlPreview() {
           const h = this.result.hitl_summary || {};
           return h.boxes_preview || [];
+        },
+        boundedDebate() {
+          const d = (this.result && this.result.bounded_debate) || null;
+          if (!d || !d.rounds) return null;
+          return d;
         },
         drawerStep() {
           const id = this.selectedAgent !== 'ALL' ? this.selectedAgent : this.liveNode;
