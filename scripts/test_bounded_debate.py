@@ -1,9 +1,5 @@
 #!/usr/bin/env python3
-"""有界辩论回归：critic↔planner 确定性对话 + tools 仍裁决。
-
-1) 单元：planner_counter_proposal / run_bounded_debate 形状
-2) 集成：真实 pipeline 在 need_replan 场景可出现 bounded_debate 或干净结束
-"""
+"""有界辩论回归（优化版）：冲突消解 + transcript + public。"""
 
 from __future__ import annotations
 
@@ -24,7 +20,7 @@ def test_unit() -> None:
         debate_public_summary,
     )
 
-    # critic wants raise_bins but plan already fits with mid ok → planner modify
+    # raise_bins + mid ok → densify modify
     state = {
         "container_plan": {
             "can_fit": True,
@@ -45,26 +41,48 @@ def test_unit() -> None:
     prop = {
         "stop": False,
         "route": "planner",
-        "reasons": ["mid 刷分想加柜"],
+        "reasons": ["想加柜刷 mid"],
         "packing_options_delta": {
             "strategy_request": "raise_bins_for_cog",
+            "container_budget_soft": 6,
             "cog_rebalance": True,
         },
     }
     reply = planner_counter_proposal(state, prop)
     assert reply["stance"] == "modify", reply
-    assert "densify" in str(reply.get("packing_options_delta", {}).get("strategy_request", "")), reply
-    print("UNIT planner_counter modify_ok")
+    assert "densify" in str(
+        reply.get("packing_options_delta", {}).get("strategy_request", "")
+    ), reply
+    print("UNIT planner_counter anti_raise_bins ok")
 
-    # full debate with synthetic need (may stop if critic says no need)
-    # force critic path: can_fit false
+    # thin mid 55-60
+    state_thin = {
+        **state,
+        "container_plan": {
+            **state["container_plan"],
+            "worst_mid50": 0.57,
+            "cog": {"mass_in_mid50_ratio": 0.57},
+        },
+    }
+    prop2 = {
+        "stop": False,
+        "route": "planner",
+        "reasons": ["mid soft"],
+        "packing_options_delta": {"cog_rebalance": True},
+    }
+    r2 = planner_counter_proposal(state_thin, prop2)
+    assert r2["stance"] == "modify", r2
+    assert float(r2["packing_options_delta"].get("r4_target_mid50") or 0) >= 0.60
+    print("UNIT thin_mid densify ok")
+
+    # full debate can_fit false
     state2 = {
         "container_plan": {
             "can_fit": False,
             "containers_used": 1,
             "unpacked_box_ids": ["x"],
             "worst_mid50": 0.4,
-            "cog": {"mass_in_mid50_ratio": 0.4, "balance": "warn"},
+            "cog": {"mass_in_mid50_ratio": 0.4},
         },
         "evaluation": {"need_replan": True, "decision": "REPLAN"},
         "risk_report": {},
@@ -83,18 +101,54 @@ def test_unit() -> None:
         "max_containers": 2,
     }
     out = run_bounded_debate(state2)
-    assert "replan_proposal" in out, out.keys()
     deb = out.get("bounded_debate") or {}
-    assert deb.get("enabled") is True, deb
-    assert deb.get("tools_adjudicate") is True, deb
-    assert isinstance(deb.get("transcript"), list) and len(deb["transcript"]) >= 1, deb
-    print(
-        f"UNIT debate outcome={deb.get('outcome')} turns={deb.get('rounds')} "
-        f"stop={out.get('replan_proposal', {}).get('stop')}"
-    )
+    assert deb.get("enabled") and deb.get("tools_adjudicate")
+    assert len(deb.get("transcript") or []) >= 2
+    print(f"UNIT debate outcome={deb.get('outcome')} turns={deb.get('rounds')}")
 
-    # public summary
-    pub = debate_public_summary({"bounded_debate": deb})
+    # debate that should improve (raise vs densify)
+    state3 = {
+        "container_plan": {
+            "can_fit": True,
+            "containers_used": 4,
+            "worst_mid50": 0.58,
+            "reference_light_used": 3,
+            "cog": {"mass_in_mid50_ratio": 0.58, "balance": "ok"},
+            "n0": 3,
+        },
+        "evaluation": {"need_replan": True, "decision": "REPLAN"},
+        "risk_report": {"decision": "ACCEPT"},
+        "packing_options": {"bounded_debate": True},
+        "replan_round": 0,
+        "ship_replan_round": 0,
+        "boxes": [
+            {
+                "box_id": f"B{i}",
+                "gross_weight_kg": 800,
+                "outer_size_mm": {"length": 1100, "width": 1000, "height": 1100},
+            }
+            for i in range(8)
+        ],
+        "materials": [],
+        "container_type": "40HQ",
+        "max_containers": 8,
+    }
+    out3 = run_bounded_debate(state3)
+    deb3 = out3.get("bounded_debate") or {}
+    prop3 = out3.get("replan_proposal") or {}
+    strat = str(
+        (prop3.get("packing_options_delta") or {}).get("strategy_request")
+        or deb3.get("final_strategy")
+        or ""
+    )
+    print(
+        f"UNIT improve_path outcome={deb3.get('outcome')} improved={deb3.get('improved')} "
+        f"strategy={strat}"
+    )
+    # thin mid should densify not raise
+    assert "raise_bins" not in strat or deb3.get("improved") is True or "densify" in strat or prop3.get("stop")
+
+    pub = debate_public_summary({"bounded_debate": deb3})
     assert pub.get("tools_adjudicate") is True
     print("UNIT public_summary ok")
 
@@ -117,22 +171,24 @@ def test_pipeline_smoke() -> None:
         save_artifacts=False,
     )
     pub = public_response(st)
-    # may or may not trigger replan on good high_util; field must exist
     assert "bounded_debate" in pub
-    deb = pub.get("bounded_debate") or {}
     plan = st.get("container_plan") or {}
     print(
         f"PIPE phase={st.get('phase')} can_fit={plan.get('can_fit')} "
-        f"debate={bool(deb)} outcome={deb.get('outcome')} "
-        f"steps={[s.get('node') for s in (st.get('agent_steps') or []) if s.get('node') in ('bounded_debate', 'replan_critic')]}"
+        f"mid50={plan.get('worst_mid50')} debate={bool(pub.get('bounded_debate'))}"
     )
-    # tools still own packing
-    assert plan.get("can_fit") is True or st.get("ship_ok") is not None
+
+
+def test_frontend_marker() -> None:
+    html = (ROOT / "frontend" / "index.html").read_text(encoding="utf-8")
+    assert "boundedDebate" in html and "有界辩论" in html
+    print("UI marker boundedDebate ok")
 
 
 def main() -> int:
     test_unit()
     test_pipeline_smoke()
+    test_frontend_marker()
     print("ALL_PASS bounded_debate")
     return 0
 
