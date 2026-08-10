@@ -1,17 +1,69 @@
 # 智能装箱与拼柜 · packing-agent
 
-> **Agent workbench**：NL → 白名单 tools → HITL → 影子评测 · 推理侧可接 **DeepSeek API**  
-> 与日常 Agentic Coding 产线（Grok Build / Claude + DeepSeek）同一产品原则：编排可换模型，硬数值只走工具。
+> **Agent Harness / workbench**：NL → 白名单 tools → HITL → 影子评测 · 推理侧可接 **DeepSeek API**  
+> 原则：编排可换模型，**硬数值只走工具**（与 Agentic Coding 产线同一边界）。
 
-**Harness v0.6.4**（2026-07-30 · 比赛收尾）  
-架构：**大 Team ⊃ 小 Team A（成箱）+ 小 Team B（拼柜）** · **13 节点**名册  
-NL 通用 Agent · 多工具求解 · 有界 critic · HITL  
+**Harness v0.6.4**（2026-07-30）  
+架构：**大 Team ⊃ 小 Team A（成箱）+ 小 Team B（拼柜）** · 多节点名册  
+NL 通用 Agent · 多工具求解 · 有界 critic · HITL · shadow eval  
 
-仓库：https://github.com/LUOaini1213/packing-agent  
+Repo: https://github.com/LUOaini1213/packing-agent  
+
+> **First principle:** tools compute numbers; the model (if any) only routes.  
+> Geometry / counts are **never** free-written by the LLM.
 
 ---
 
-## 它做什么
+## Demo one-shot（最先跑这个）
+
+```bash
+pip install -r requirements.txt
+python scripts/demo_one_shot.py              # 冒烟，无需 API Key
+python scripts/demo_one_shot.py --all        # smoke + 闭环 + tiny 影子评测
+```
+
+成功后再开 UI：
+
+```bash
+uvicorn gateway.app:app --reload --host 127.0.0.1 --port 8000
+# http://127.0.0.1:8000
+```
+
+贡献指南：[CONTRIBUTING.md](CONTRIBUTING.md)
+
+---
+
+## Architecture as Harness
+
+把本仓库当成 **Agent Harness**，而不是「只会装箱的脚本」：
+
+| Layer | 本仓库对应 | 作用 |
+|-------|------------|------|
+| **Runtime** | Big Team 编排 · A/B subagents · `harness.py` · HITL · `steps` / `llm_toolcall` | 谁在何时跑、如何停 |
+| **Tools** | `tool_registry` 白名单 · 确定性求解器 | 算体积/装载/重心；禁止模型写 xyz |
+| **Memory** | session · artifacts · knowledge/skills · graph checkpoint | 有界状态，不是无限闲聊记忆 |
+| **Eval** | `eval_workteams` · KPI（agree_core / illegal tools） | steps vs llm 影子对比 |
+| **Trace** | `agent_steps` · trace events · SSE · `output/runs/` | 可演示、可回归 |
+
+```text
+NL (+ materials)
+  → IntentSpec
+  → Runtime scheduler (steps | llm_toolcall | auto)
+       → Subagent A → Tools → HITL
+       → Subagent B → Tools (3D / CoG / risk)
+       → Finalize (+ optional TMS)
+  → Trace + Artifacts
+  → Eval / KPI (CI or shadow)
+```
+
+**长文（投递 / 面试前读）：**  
+[docs/architecture-as-harness.md](docs/architecture-as-harness.md)
+
+域内架构：[docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) · 文档索引：[docs/README.md](docs/README.md)
+
+---
+
+## 它做什么（业务皮肤）
 
 面向钢结构/项目物料的 **成箱 → 建议柜数 → 人确认 → 拼柜 → 风险/重心 → 出图 → 订舱草稿**：
 
@@ -26,7 +78,7 @@ NL / 物料表
 ```
 
 数值由 **tools** 计算（含 **几柜**）；LLM 只解释意图 / 调度，**不写 xyz、不拍柜数**。  
-柜级：`N0* → 试装 → 末柜可并回`；柜内：`multi_start` 优化摆法（见 `docs/research/multi-container-ffd-agent.md`）。
+柜级：`N0* → 试装 → 末柜可并回`；柜内：`multi_start` 优化摆法。
 
 **主路径（对外只讲这一条）**
 
@@ -36,42 +88,32 @@ NL / 物料表
 | `llm_toolcall` | 实验 / 影子评测（有 Key 时 LLM 选工具） |
 | `graph` / team-a→confirm | HITL 分段 resume，不是第二条产品 |
 
-作战图与基线：[docs/competition-phase-plan.md](docs/competition-phase-plan.md) ·  
-`python scripts/run_phase0_baseline.py --quick`
-
-详设：[docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) · 变更：[docs/CHANGELOG-v0.5.md](docs/CHANGELOG-v0.5.md) · 文档索引：[docs/README.md](docs/README.md)
+业务场景名（如某次「1 柜 / 2 柜」）仅为示例，不是固定线路。
 
 ---
 
 ## 仓库结构
 
 ```text
-packing_assistant/   # 核心引擎（teams / agents / tools / IntentSpec）
-gateway/             # FastAPI 网关
-frontend/            # 单页工作台（三层组织图）
+packing_assistant/   # harness 核心（teams / agents / tools / IntentSpec）
+gateway/             # FastAPI runtime 网关
+frontend/            # 单页工作台
 test/sim_materials/  # 评测物料
-scripts/             # CI 与正式入口（见 scripts/README.md）
-docs/                # 产品文档 + research/ + archive/
+scripts/             # demo_one_shot / smoke / eval（见 scripts/README.md）
+docs/                # architecture-as-harness + 产品文档
+.github/             # Issue / PR 模板
 data/samples/        # 可选公开样例
-output/              # 本地运行产物（gitignore，不提交）
+output/              # 本地产物（gitignore）
 ```
 
 ---
 
-## 快速开始
+## 快速开始（分项）
 
 ```bash
-# 依赖
-pip install -r requirements.txt
-
-# 网关 + 前端（见 docker-compose 或本地 uvicorn）
-uvicorn gateway.app:app --reload --host 0.0.0.0 --port 8000
-# 浏览器打开 http://127.0.0.1:8000
-
-# 冒烟
+python scripts/demo_one_shot.py
 python scripts/smoke_agent_product.py
-
-# Workteams 影子评测（steps vs llm）
+python scripts/demo_agent_closed_loop.py --tiny
 python scripts/eval_workteams_cli.py --tiny-only
 ```
 
@@ -117,6 +159,15 @@ python scripts/eval_workteams_cli.py --tiny-only
 
 ---
 
+## Contributing & community
+
+- [CONTRIBUTING.md](CONTRIBUTING.md)
+- Issues: Bug · Feature · **Harness design** · Phase1/2 域任务
+- PRs welcome if they respect the **tools-compute / model-routes** boundary
+
+---
+
 ## 许可与项目说明
 
-内部/比赛向装柜 Agent 原型。业务数据请勿提交密钥与客户原始大文件；样例放 `data/samples/` 或 `test/sim_materials/`。
+开源作品集 / 研究向 **Agent Harness** 原型（装箱域）。  
+业务数据请勿提交密钥与客户原始大文件；样例放 `data/samples/` 或 `test/sim_materials/`。
