@@ -64,8 +64,10 @@ Use GitHub templates:
 | `packing_assistant/teams/` | Orchestrator + subagents |
 | `packing_assistant/tools/` | Deterministic tools |
 | `packing_assistant/tool_registry.py` | Whitelist |
+| `docs/harness-design.md` | Design decisions (tool/HITL/eval) — interview sheet |
 | `docs/architecture-as-harness.md` | Harness vocabulary map |
 | `docs/ARCHITECTURE.md` | Domain architecture |
+| `GOOD_FIRST_ISSUES.md` | Starter tasks for contributors |
 
 ## License / scope
 
