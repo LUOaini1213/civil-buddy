@@ -1,25 +1,36 @@
-## 改动说明
+## Summary
 
-- 
+<!-- What & why (1–3 bullets) -->
 
-## 阶段
+## Harness layer
 
-- [ ] phase1
-- [ ] phase2
-- [ ] orchestrator / docs
+- [ ] Runtime
+- [ ] Tools
+- [ ] Memory / session
+- [ ] Eval / KPI
+- [ ] Trace
+- [ ] Docs / demo DX
+- [ ] Domain phase1 / phase2
 
-## 测试
+## Boundary
+
+- [ ] LLM still **cannot** invent xyz / free container counts / raw weights
+- [ ] Tools remain the source of numerics
+
+## Test plan
 
 ```bash
-# 你跑过的命令
+python scripts/demo_one_shot.py
+# add more if needed:
+# python scripts/demo_one_shot.py --all
 ```
 
-## 契约
+## Contracts
 
-- [ ] 未改 `boxes[]` / `api-spec`
-- [ ] 有改动，已 @ 对方阶段
+- [ ] No change to `boxes[]` / public API contracts
+- [ ] API / schema changed (describe + update docs)
 
-## 检查
+## Checklist
 
-- [ ] 无 `.env` / API Key 文件
-- [ ] 本地可运行相关烟雾测试
+- [ ] No secrets / `.env` / customer dumps
+- [ ] Docs updated if behavior changed (`README` / `architecture-as-harness.md`)

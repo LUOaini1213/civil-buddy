@@ -1,10 +1,22 @@
 ﻿# Scripts
 
+## One-shot（新人 / 开源首页入口）
+
+| 脚本 | 用途 |
+|------|------|
+| **`demo_one_shot.py`** | **一键演示**：默认 smoke；`--closed-loop` / `--eval-tiny` / `--all` |
+
+```bash
+python scripts/demo_one_shot.py
+python scripts/demo_one_shot.py --all
+```
+
 ## CI / 产品入口（保留在本目录）
 
 | 脚本 | 用途 |
 |------|------|
-| `smoke_agent_product.py` | 产品冒烟 |
+| `smoke_agent_product.py` | 产品冒烟（demo_one_shot 默认调用） |
+| `demo_agent_closed_loop.py` | 闭环自检（感知→规划→工具→目标） |
 | `eval_harness_cli.py` | tiny/20t 评测 |
 | `eval_workteams_cli.py` | steps vs llm 影子评测 + KPI |
 | `test_agent_auto_mode.py` | 自动模式 |
@@ -16,6 +28,7 @@
 | `compare_pack_engines.py` | 引擎 A/B |
 
 ```bash
+python scripts/demo_one_shot.py
 python scripts/smoke_agent_product.py
 python scripts/eval_workteams_cli.py --tiny-only
 python scripts/eval_harness_cli.py

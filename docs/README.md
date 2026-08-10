@@ -1,9 +1,10 @@
 # 文档索引
 
-## 必读（产品）
+## 必读（产品 / Harness）
 
 | 文档 | 说明 |
 |------|------|
+| [architecture-as-harness.md](./architecture-as-harness.md) | **Agent Harness 视角**：Runtime · Tools · Memory · Eval · Trace |
 | [ARCHITECTURE.md](./ARCHITECTURE.md) | **当前架构**：大 Team ⊃ A 成箱 + B 拼柜 · IntentSpec · API |
 | [competition-phase-plan.md](./competition-phase-plan.md) | **比赛/Agency Phase 0–4** 对齐与验收 |
 | [competition-demo-script.md](./competition-demo-script.md) | **3 分钟评委演示脚本** |
