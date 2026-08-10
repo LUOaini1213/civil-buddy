@@ -57,7 +57,8 @@ NL (+ materials)
 ```
 
 **长文（投递 / 面试前读）：**  
-[docs/architecture-as-harness.md](docs/architecture-as-harness.md)
+- [docs/harness-design.md](docs/harness-design.md) — **设计决策表（tool / HITL / Subagent / eval）· 面试优先**  
+- [docs/architecture-as-harness.md](docs/architecture-as-harness.md) — 层映射 Runtime·Tools·Memory·Eval·Trace  
 
 域内架构：[docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) · 文档索引：[docs/README.md](docs/README.md)
 

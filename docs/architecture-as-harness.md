@@ -7,7 +7,7 @@ This document maps **packing-agent** onto an **Agent Harness** vocabulary
 > **Product thesis is harness-shaped:** the model proposes and routes; **tools own numbers**;  
 > the runtime owns gates, traces, and evaluation.
 
-Related: [ARCHITECTURE.md](./ARCHITECTURE.md) · version badge in root `README.md`.
+Related: [harness-design.md](./harness-design.md) (decision table) · [ARCHITECTURE.md](./ARCHITECTURE.md) · root `README.md`.
 
 ---
 
