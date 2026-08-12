@@ -573,22 +573,32 @@ def api_team_a(body: TeamARequest):
 @app.post("/api/revise-nl")
 def api_revise_nl(body: ReviseNlRequest):
     """
-    自然语言改方案：解析指令 → 更新材料/柜型/详设截面 → 重跑团队A。
-    例：框架用槽钢16#；去掉连接板；柜型40GP
+    自然语言改方案。
+
+    契约：
+    - 可改：应用 ops → 可选重跑 Team A → status=applied，revise_ok=true
+    - 不可改：方案不动 → status=unsupported，message 以「无此功能」开头，revise_ok=false
     """
     state = _get_session(body.session_id)
     if not state:
-        # 允许无会话时从空状态开始
         from packing_assistant.harness import make_initial_state
 
         state = make_initial_state(session_id=body.session_id, enable_auto_confirm=False)
     state = revise_plan_nl(
         state, body.instruction, rerun_team_a=body.rerun_team_a
     )
-    # revise_plan_nl 已重跑 team_a 时 session 更新
+    nr = dict(state.get("nl_revision") or {})
+    # applied 时 state 是新方案；unsupported 时 state 与改前一致（仅多了 nl_revision）
     _store_session(body.session_id, state)
     resp = public_response(state)
-    resp["nl_revision"] = state.get("nl_revision") or {}
+    resp["nl_revision"] = nr
+    resp["revise_ok"] = bool(nr.get("applied") and nr.get("status") == "applied")
+    resp["feature_available"] = bool(nr.get("feature_available"))
+    resp["revise_status"] = nr.get("status") or (
+        "applied" if nr.get("applied") else "unsupported"
+    )
+    # 客户端可直接观察 prefer_single_row 等（public_response 默认不带 packing_options）
+    resp["packing_options"] = dict(state.get("packing_options") or {})
     return resp
 
 

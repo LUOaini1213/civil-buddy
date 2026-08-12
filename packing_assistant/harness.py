@@ -162,15 +162,40 @@ def revise_plan_nl(
     rerun_team_a: bool = True,
 ) -> Dict[str, Any]:
     """
-    自然语言改方案：解析指令 → 更新 materials/design_facts/柜型 → 可选重跑团队A。
+    自然语言改方案：能改就改并重跑 Team A；不能改则原方案不动，返回无此功能。
+
+    契约（nl_revision）：
+    - status=applied / feature_available=true → 已改
+    - status=unsupported / feature_available=false → 无此功能（不重跑、不改箱）
     """
     from packing_assistant.tools.nl_revision import revise_with_natural_language
 
     s = revise_with_natural_language(dict(state), instruction)
-    if not rerun_team_a:
+    nr = dict(s.get("nl_revision") or {})
+    # 不可改：直接返回，session 保持原方案
+    if not nr.get("ok") or not nr.get("applied") or nr.get("status") == "unsupported":
+        s["nl_revision"] = {
+            **nr,
+            "applied": False,
+            "rerun": False,
+            "feature_available": False,
+            "status": "unsupported",
+            "message": nr.get("message")
+            if str(nr.get("message") or "").startswith("无此功能")
+            else f"无此功能：{nr.get('message') or instruction}",
+        }
         return s
-    # 重跑成箱（保留 design_facts / materials / packing_options）
-    return run_team_a(
+    if not rerun_team_a:
+        s["nl_revision"] = {
+            **nr,
+            "applied": True,
+            "rerun": False,
+            "feature_available": True,
+            "status": "applied",
+        }
+        return s
+    # 可改：重跑成箱（保留 design_facts / materials / packing_options）
+    out = run_team_a(
         s.get("user_input") or instruction,
         materials=s.get("materials"),
         session_id=str(s.get("session_id") or ""),
@@ -178,6 +203,20 @@ def revise_plan_nl(
         design_facts=s.get("design_facts"),
         packing_options=s.get("packing_options"),
     )
+    out = dict(out)
+    logs = list(nr.get("logs") or [])
+    out["nl_revision"] = {
+        **nr,
+        "applied": True,
+        "rerun": True,
+        "feature_available": True,
+        "status": "applied",
+        "logs": logs,
+        "message": nr.get("message") or ("已改方案：" + "；".join(logs)),
+    }
+    if s.get("packing_options"):
+        out["packing_options"] = s.get("packing_options")
+    return out
 
 
 def apply_user_confirmation(

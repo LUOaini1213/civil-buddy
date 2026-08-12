@@ -532,31 +532,57 @@
       overflow: auto;
       padding: 18px 20px 36px;
       min-height: 0;
+      /* Avoid a pure black “hole” when content is short */
+      background:
+        radial-gradient(900px 420px at 50% 28%, rgba(91, 141, 239, 0.10), transparent 62%),
+        radial-gradient(700px 360px at 70% 80%, rgba(124, 92, 252, 0.06), transparent 55%),
+        linear-gradient(180deg, #121a24 0%, #0e141c 48%, #0b1016 100%);
     }
     .workspace-inner {
       max-width: 1180px;
       margin: 0 auto;
+      min-height: min(70vh, 640px);
     }
 
     .empty-hero {
-      max-width: 560px;
-      margin: 56px auto;
+      max-width: 640px;
+      margin: 48px auto 24px;
       text-align: center;
       color: var(--muted);
-      padding: 28px 22px;
-      border-radius: 18px;
-      border: 1px solid var(--border-soft);
-      background: linear-gradient(180deg, rgba(91,141,239,0.08), rgba(17,24,32,0.6));
-      box-shadow: var(--shadow);
+      padding: 36px 28px 32px;
+      border-radius: 20px;
+      border: 1px solid rgba(91, 141, 239, 0.22);
+      background:
+        linear-gradient(165deg, rgba(91,141,239,0.14), rgba(17,24,32,0.92) 42%, rgba(17,24,32,0.88)),
+        var(--bg-elev);
+      box-shadow: 0 12px 40px rgba(0, 0, 0, 0.35), inset 0 1px 0 rgba(255,255,255,0.04);
+    }
+    .empty-hero .hero-icon {
+      width: 64px; height: 64px;
+      margin: 0 auto 16px;
+      border-radius: 16px;
+      display: grid; place-items: center;
+      font-size: 28px;
+      background: linear-gradient(135deg, rgba(91,141,239,0.28), rgba(124,92,252,0.18));
+      border: 1px solid rgba(91,141,239,0.35);
+      box-shadow: 0 8px 24px rgba(91,141,239,0.18);
     }
     .empty-hero h3 {
       margin: 0 0 10px;
       color: var(--text);
-      font-size: 20px;
+      font-size: 22px;
       font-weight: 750;
     }
-    .empty-hero p { font-size: 13.5px; line-height: 1.6; margin: 0 0 18px; }
-    .empty-hero .actions { display: flex; gap: 8px; justify-content: center; flex-wrap: wrap; }
+    .empty-hero p { font-size: 13.5px; line-height: 1.65; margin: 0 0 20px; max-width: 480px; margin-left: auto; margin-right: auto; }
+    .empty-hero .actions { display: flex; gap: 10px; justify-content: center; flex-wrap: wrap; }
+    .empty-hero .hint-row {
+      margin-top: 18px;
+      padding-top: 14px;
+      border-top: 1px solid rgba(255,255,255,0.06);
+      font-size: 12px;
+      color: var(--faint);
+      line-height: 1.5;
+    }
 
     .section {
       background: rgba(17, 24, 32, 0.92);
@@ -686,8 +712,9 @@
       width: 100%;
       height: auto;
       display: block;
-      background: #0a1018;
-      border-radius: 6px;
+      background: linear-gradient(180deg, #15202e 0%, #101820 100%);
+      border-radius: 8px;
+      border: 1px solid rgba(91, 141, 239, 0.12);
     }
     .legend {
       display: flex;
@@ -1153,19 +1180,23 @@
         <div class="workspace-split">
         <div class="workspace" ref="workspace">
           <div class="workspace-inner">
-          <!-- Empty -->
+          <!-- Empty: fill center so dark theme doesn’t look like a blank black hole -->
           <div class="empty-hero" v-if="!hasAnyResult && mainTab === 'overview'">
-            <h3>组建团队，开始装柜</h3>
+            <div class="hero-icon" aria-hidden="true">📦</div>
+            <h3>还没有装箱结果</h3>
             <p>
-              左侧是 <strong>{{ agentCount || 13 }}</strong> 智能体（大 Team⊃A/B）+ HITL。
-              harness <strong>v{{ harnessVersion || '0.6.4' }}</strong>。
-              演示默认<strong>停确认闸</strong>，tools 算数，不编造柜数。
+              中间这片是结果工作区（深色主题）。跑完演示后会在这里出现裁决、柜数、重心与 Agent 轨迹。
+              <span v-if="demoSimpleMode">当前为<strong>简洁演示</strong>，侧栏已收起；需要组织图可关掉顶栏「简洁演示」。</span>
+              <span v-else>左侧是 <strong>{{ agentCount || 13 }}</strong> 智能体（大 Team⊃A/B）+ HITL · harness v{{ harnessVersion || '0.6.4' }}。</span>
             </p>
             <div class="actions">
               <button class="primary-lg" @click="runDemo" :class="{ busy: loading }">一键演示（HITL）</button>
               <button class="soft" @click="runPipelineTrace" :class="{ busy: loading }">全流程轨迹</button>
               <button class="ghost" @click="runTeamA" :class="{ busy: loading }">仅团队 A</button>
               <button class="soft" @click="refreshHealth">健康预检</button>
+            </div>
+            <div class="hint-row">
+              点顶栏 <strong>满载演示</strong> 即可 · tools 定柜坐标 · 默认停在确认闸
             </div>
             <div class="status-line" v-if="preflightHints.length" style="margin-top:12px;text-align:left;max-width:520px">
               <div v-for="(h,i) in preflightHints" :key="'ph'+i">· {{ h }}</div>
@@ -1832,13 +1863,27 @@
               </div>
             </div>
             <div class="section nl-box" v-if="result.boxes && result.boxes.length">
-              <div class="section-h"><h3>自然语言改方案</h3></div>
+              <div class="section-h">
+                <h3>自然语言改方案</h3>
+                <span class="sub">能改就改 · 不能改返回「无此功能」（不假装成功）</span>
+              </div>
               <div class="row" style="align-items:stretch">
                 <textarea v-model="nlInstruction" style="flex:1;min-height:56px"
-                  placeholder="例：去掉钢梁；柜型改 40GP；框架槽钢16#，γ=2.0"></textarea>
+                  placeholder="例：要一排；要两排；去掉钢梁；柜型改 40GP；框架用槽钢16#，γ=2.0"></textarea>
                 <button @click="reviseNl" :disabled="!nlInstruction.trim()" :class="{ busy: loading }">应用</button>
               </div>
-              <div class="status-line" v-if="nlStatus">{{ nlStatus }}</div>
+              <div class="status-line" v-if="nlStatus"
+                   :style="(nlStatus.startsWith('无此功能') || nlStatus.startsWith('失败')) ? 'color:var(--warn)' : (nlStatus.startsWith('已改') ? 'color:var(--ok)' : '')">
+                {{ nlStatus }}
+              </div>
+              <div class="row" style="margin-top:8px;gap:6px;flex-wrap:wrap" v-if="nlHints && nlHints.length">
+                <button type="button" class="ghost" style="padding:4px 10px;font-size:12px"
+                        v-for="h in nlHints" :key="h"
+                        @click="nlInstruction = h; reviseNl()">支持：{{ h }}</button>
+              </div>
+              <div class="foot-note" style="margin-top:8px" v-if="nlCaps && nlCaps.length">
+                当前支持：{{ nlCaps.join(' · ') }}
+              </div>
             </div>
             <div class="empty-hero" v-if="!(result.boxes && result.boxes.length)">
               <h3>{{ (result.materials_incomplete || (result.errors||[]).length) ? '成箱已阻断' : '尚无装箱方案' }}</h3>
@@ -1938,8 +1983,13 @@
             </div>
 
             <div class="empty-hero" v-if="!hasViews && !hasScene3d">
+              <div class="hero-icon" aria-hidden="true">🗺</div>
               <h3>暂无布局图</h3>
-              <p>完成拼柜后显示三视角与 3D。</p>
+              <p>完成拼柜后这里显示三视角与等轴测 3D（本地 canvas，不是纯黑屏）。先跑「满载演示」或上传材料表。</p>
+              <div class="actions">
+                <button class="primary-lg" @click="runDemo" :class="{ busy: loading }">满载演示</button>
+                <button class="soft" @click="mainTab = 'overview'">回总览</button>
+              </div>
             </div>
           </template>
 
@@ -2216,6 +2266,8 @@
           viewKeys: ['top', 'side', 'front'],
           nlInstruction: '',
           nlStatus: '',
+          nlHints: [],
+          nlCaps: [],
           rot3d: { yaw: 0.55, pitch: 0.45, scale: 1, drag: false, lx: 0, ly: 0 },
           roster: TEAM_ROSTER,
           liveStatus: {},
@@ -3896,9 +3948,16 @@
         },
         async reviseNl() {
           const instruction = (this.nlInstruction || '').trim();
-          if (!instruction) return;
+          if (!instruction) {
+            this.nlStatus = '无此功能：请先输入改方案指令';
+            this.nlHints = ['要一排', '要两排', '柜型改 40GP', '去掉 连接板'];
+            this.nlCaps = ['要一排/两排', '柜型', '去掉材料', '详设截面'];
+            return;
+          }
           if (!this.beginWork('NL 改方案')) return;
-          this.nlStatus = '解析并改方案中…';
+          this.nlStatus = '判断能否改方案…';
+          this.nlHints = [];
+          this.nlCaps = [];
           this.statusText = '自然语言改方案…';
           try {
             const j = await this.fetchJson('/api/revise-nl', {
@@ -3906,12 +3965,29 @@
               instruction,
               rerun_team_a: true,
             }, 60000);
+            const nr = j.nl_revision || {};
+            const logs = nr.logs || [];
+            const applied = j.revise_ok === true
+              || (nr.status === 'applied' && nr.applied === true)
+              || (nr.applied === true && nr.feature_available !== false && logs.length > 0);
+            if (!applied) {
+              // 不可改：不 applyResult，方案保持原样
+              const msg = nr.message || ('无此功能：' + instruction);
+              this.nlStatus = msg.startsWith('无此功能') ? msg : ('无此功能：' + msg);
+              this.nlHints = (nr.hints && nr.hints.length)
+                ? nr.hints
+                : ['要一排', '要两排', '柜型改 40GP', '去掉 连接板'];
+              this.nlCaps = nr.supported_capabilities || [];
+              this.statusText = '无此功能（箱方案未改）';
+              return;
+            }
             this.applyResult(j);
-            const logs = (j.nl_revision && j.nl_revision.logs) || [];
             this.nlStatus = logs.length
-              ? '已应用：' + logs.join('；')
-              : (j.nl_revision && j.nl_revision.message) || '完成';
-            this.statusText = '改方案后团队 A 已重算';
+              ? ('已改：' + logs.join('；'))
+              : (nr.message || '已改方案并重算');
+            this.nlHints = [];
+            this.nlCaps = [];
+            this.statusText = '已改方案 · 团队 A 已重算';
             this.mainTab = 'boxes';
             const rec = (this.containerOptions.find((o) => o.recommended) || {}).value;
             if (j.container_type) this.containerType = j.containerType || j.container_type;
@@ -3950,8 +4026,20 @@
           const W = canvas.width;
           const H = canvas.height;
           ctx.clearRect(0, 0, W, H);
-          ctx.fillStyle = '#0a1018';
+          const g2 = ctx.createLinearGradient(0, 0, 0, H);
+          g2.addColorStop(0, '#1a2433');
+          g2.addColorStop(1, '#121a24');
+          ctx.fillStyle = g2;
           ctx.fillRect(0, 0, W, H);
+          // subtle grid so “empty canvas” never reads as pure black
+          ctx.strokeStyle = 'rgba(148, 163, 184, 0.06)';
+          ctx.lineWidth = 1;
+          for (let x = 0; x < W; x += 40) {
+            ctx.beginPath(); ctx.moveTo(x, 0); ctx.lineTo(x, H); ctx.stroke();
+          }
+          for (let y = 0; y < H; y += 40) {
+            ctx.beginPath(); ctx.moveTo(0, y); ctx.lineTo(W, y); ctx.stroke();
+          }
 
           const cont = view.container || {};
           const elements = this.elementsForView(key);
@@ -4135,8 +4223,20 @@
           const cog = scene.cog;
 
           ctx.clearRect(0, 0, W, H);
-          ctx.fillStyle = '#070b12';
+          const g3 = ctx.createLinearGradient(0, 0, 0, H);
+          g3.addColorStop(0, '#1a2536');
+          g3.addColorStop(0.55, '#121a26');
+          g3.addColorStop(1, '#0e151e');
+          ctx.fillStyle = g3;
           ctx.fillRect(0, 0, W, H);
+          ctx.strokeStyle = 'rgba(148, 163, 184, 0.05)';
+          ctx.lineWidth = 1;
+          for (let x = 0; x < W; x += 48) {
+            ctx.beginPath(); ctx.moveTo(x, 0); ctx.lineTo(x, H); ctx.stroke();
+          }
+          for (let y = 0; y < H; y += 48) {
+            ctx.beginPath(); ctx.moveTo(0, y); ctx.lineTo(W, y); ctx.stroke();
+          }
 
           const yaw = this.rot3d.yaw;
           const pitch = this.rot3d.pitch;
