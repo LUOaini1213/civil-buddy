@@ -53,6 +53,25 @@ def main() -> int:
     if "tools 定柜坐标" not in text and "人确认成箱" not in text:
         fails.append("missing simple-mode brand tag copy")
 
+    # Beauty / hierarchy markers (no pure black void workspace)
+    if ".empty-hero" not in text or ".empty-features" not in text:
+        fails.append("missing elevated empty-hero / empty-features surface")
+    if "background-color: #121a26" not in text and "#121a26" not in text:
+        fails.append("workspace surface token #121a26 missing (anti pure-black)")
+    if "canvas" in text and "linear-gradient(180deg, #1a2740" not in text and "#1a2740" not in text:
+        # allow either CSS canvas gradient
+        if "canvas {" not in text:
+            fails.append("missing canvas style block")
+    if "自然语言改方案" not in text:
+        fails.append("missing NL revise UI copy")
+    if "无此功能" not in text:
+        fails.append("missing 无此功能 contract copy on NL UI")
+    # Reject pure black hole tokens in workspace CSS
+    if re.search(r"\.workspace\s*\{[^}]*background:\s*#000\b", text):
+        fails.append("workspace uses pure #000 background")
+    if "#070b12" in text:
+        fails.append("legacy pure-void canvas fill #070b12 still present")
+
     # Gateway advertises demo_simple feature (shipped health surface)
     gw = ROOT / "gateway" / "app.py"
     if gw.is_file():
