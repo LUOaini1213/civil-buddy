@@ -33,9 +33,17 @@ def main() -> int:
     if "满载演示" not in text or "runDemo" not in text:
         fails.append("missing primary 满载演示 CTA")
 
-    # Simple mode CSS collapses sidebar
-    if ".shell.demo-simple .sidebar" not in text:
-        fails.append("missing CSS rule to collapse sidebar in demo-simple")
+    # Simple mode must display:none sidebar (width:0 still stacks in 1-col grid)
+    if "display: none !important" not in text or ".shell.demo-simple .sidebar" not in text:
+        fails.append("missing CSS rule to display:none sidebar in demo-simple")
+    if re.search(
+        r"\.shell\.demo-simple\s+\.sidebar\s*\{[^}]*width:\s*0",
+        text,
+        re.S,
+    ) and "display: none !important" not in text[
+        text.find(".shell.demo-simple .sidebar") : text.find(".shell.demo-simple .sidebar") + 200
+    ]:
+        fails.append("sidebar still width:0 only (causes empty middle)")
 
     # Toggle control present
     if "简洁演示" not in text:
@@ -49,8 +57,51 @@ def main() -> int:
     if "网关" not in text:
         fails.append("gateway pill missing")
 
+    # Simple mode is a guided 3-step script (meaningful, not just hide sidebar)
+    if 'data-demo-script="true"' not in text and "demo-script" not in text:
+        fails.append("missing demo-script guided strip")
+    if "demoScriptStep" not in text or "goDemoStep" not in text:
+        fails.append("missing demoScriptStep / goDemoStep wiring")
+    if "三步" not in text and "第 1 步" not in text:
+        fails.append("missing 3-step script copy")
+    if "满载成箱" not in text or "人确认" not in text:
+        fails.append("missing step labels 满载成箱 / 人确认")
+    if "is-landing" not in text:
+        fails.append("missing is-landing full-middle landing class")
+    if "ds-features" not in text:
+        fails.append("missing ds-features inside demo-script landing")
+    # grid must not leave permanent 320px empty column by default
+    if "has-drawer" not in text:
+        fails.append("missing has-drawer grid switch (avoids empty middle column)")
+    if "grid-template-columns: 1fr 320px" in text and "has-drawer" in text:
+        # ok if only under .has-drawer
+        import re as _re
+        if not _re.search(r"\.workspace-split\.has-drawer\s*\{[^}]*1fr 320px", text, _re.S):
+            # still accept if default is 1fr
+            if "/* 默认单列" not in text and "grid-template-columns: 1fr;" not in text:
+                fails.append("workspace-split still always two-column")
+
+    # Empty-middle fix: absolute fill landing (not center-in-tall-void)
+    if "position: absolute" not in text or "inset: 12px" not in text:
+        fails.append("missing absolute inset landing fill for simple no-result")
+    if "min-height: min(72vh, 680px)" in text:
+        fails.append("legacy workspace-inner min(72vh) hole still present")
+    if "justify-content: center" in text and "is-landing" in text:
+        # disallow center-only landing that parks card mid/low
+        if re.search(
+            r"is-landing[^{]*\{[^}]*justify-content:\s*center",
+            text,
+            re.S,
+        ):
+            fails.append("is-landing still uses justify-content:center (causes upper void)")
+    if ".shell.demo-simple.no-result .workspace" not in text:
+        fails.append("missing no-result workspace fill selectors")
+    if "开始第 1 步" not in text and "满载演示" not in text:
+        fails.append("missing first-step CTA copy")
+
+
     # Simple tag copy for first glance
-    if "tools 定柜坐标" not in text and "人确认成箱" not in text:
+    if "tools 定柜" not in text and "人确认成箱" not in text:
         fails.append("missing simple-mode brand tag copy")
 
     # Beauty / hierarchy markers (no pure black void workspace)
