@@ -136,6 +136,7 @@
       grid-template-rows: auto 1fr;
       height: 100vh;
       width: 100vw;
+      overflow: hidden;
     }
     .topbar {
       display: flex;
@@ -214,11 +215,30 @@
     .top-actions .primary-lg {
       box-shadow: 0 6px 18px rgba(91, 141, 239, 0.28);
     }
-    /* Demo simple mode: first-glance declutter */
-    .shell.demo-simple .sidebar { width: 0; min-width: 0; overflow: hidden; border: none; padding: 0; opacity: 0; pointer-events: none; }
-    .shell.demo-simple .body { grid-template-columns: 1fr; }
+    /* Demo simple = guided 3-step script (not just hide chrome) */
+    /*
+     * CRITICAL: must display:none the sidebar — width:0 still leaves it as a grid item.
+     * With body grid-template-columns:1fr, two children stack; invisible sidebar height
+     * (~roster full height) pushes .main below the viewport → “middle empty”.
+     */
+    .shell.demo-simple .sidebar {
+      display: none !important;
+    }
+    .shell.demo-simple .body {
+      grid-template-columns: minmax(0, 1fr);
+      grid-template-rows: minmax(0, 1fr);
+    }
+    .shell.demo-simple .main {
+      grid-column: 1;
+      grid-row: 1;
+      min-width: 0;
+      min-height: 0;
+      height: 100%;
+    }
     .shell.demo-simple .brand .tag-full { display: none; }
     .shell.demo-simple .brand .tag-simple { display: block; }
+    .shell.demo-simple .agent-drawer { display: none !important; }
+    .shell.demo-simple .tab-history { display: none; }
     .brand .tag-simple { display: none; font-size: 11px; color: var(--muted); margin-top: 2px; }
     .demo-mode-toggle {
       display: inline-flex; align-items: center; gap: 6px;
@@ -229,6 +249,266 @@
     }
     .demo-mode-toggle:hover { border-color: rgba(91,141,239,0.4); color: var(--text); }
     .demo-mode-toggle input { margin: 0; }
+    .demo-mode-toggle.on {
+      border-color: rgba(91, 141, 239, 0.55);
+      color: #dbe8ff;
+      background: var(--accent-soft);
+      box-shadow: 0 0 0 1px rgba(91, 141, 239, 0.15);
+    }
+
+    /* Guided script strip */
+    .demo-script {
+      margin: 0 0 16px;
+      padding: 14px 16px 12px;
+      border-radius: 16px;
+      border: 1px solid rgba(91, 141, 239, 0.28);
+      background:
+        linear-gradient(135deg, rgba(91,141,239,0.16), rgba(139,108,255,0.08) 55%, rgba(18,26,38,0.92));
+      box-shadow: 0 10px 28px rgba(0,0,0,0.2), inset 0 1px 0 rgba(255,255,255,0.06);
+    }
+    .demo-script .ds-head {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 10px;
+      margin-bottom: 12px;
+      flex-wrap: wrap;
+    }
+    .demo-script .ds-title {
+      font-size: 13px;
+      font-weight: 700;
+      color: #dce8ff;
+      letter-spacing: 0.02em;
+    }
+    .demo-script .ds-sub {
+      font-size: 11.5px;
+      color: var(--muted);
+    }
+    .demo-steps {
+      display: grid;
+      grid-template-columns: repeat(3, minmax(0, 1fr));
+      gap: 10px;
+    }
+    .demo-step {
+      appearance: none;
+      text-align: left;
+      width: 100%;
+      padding: 12px 12px 11px;
+      border-radius: 12px;
+      border: 1px solid rgba(255,255,255,0.08);
+      background: rgba(8, 12, 18, 0.4);
+      color: var(--muted);
+      cursor: pointer;
+      transition: border-color .15s, background .15s, transform .12s;
+    }
+    .demo-step:hover:not(:disabled) {
+      border-color: rgba(91,141,239,0.4);
+      transform: translateY(-1px);
+    }
+    .demo-step:disabled { cursor: default; opacity: 0.85; }
+    .demo-step .ds-num {
+      display: inline-flex;
+      width: 22px; height: 22px;
+      border-radius: 50%;
+      align-items: center; justify-content: center;
+      font-size: 11px; font-weight: 800;
+      margin-right: 6px;
+      background: rgba(255,255,255,0.06);
+      color: var(--faint);
+    }
+    .demo-step .ds-k {
+      font-size: 13px;
+      font-weight: 700;
+      color: var(--text);
+      margin-bottom: 4px;
+    }
+    .demo-step .ds-v {
+      font-size: 11.5px;
+      line-height: 1.4;
+      color: var(--muted);
+    }
+    .demo-step.done {
+      border-color: rgba(62, 207, 142, 0.35);
+      background: rgba(62, 207, 142, 0.08);
+    }
+    .demo-step.done .ds-num { background: rgba(62,207,142,0.2); color: #7ee7b0; }
+    .demo-step.active {
+      border-color: rgba(91, 141, 239, 0.55);
+      background: rgba(91, 141, 239, 0.14);
+      box-shadow: 0 0 0 1px rgba(91,141,239,0.18);
+    }
+    .demo-step.active .ds-num { background: var(--accent); color: #fff; }
+    .demo-step.todo .ds-k { color: var(--muted); }
+    .demo-script .ds-actions {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+      margin-top: 12px;
+      align-items: center;
+    }
+    .demo-script .ds-hint {
+      font-size: 12px;
+      color: var(--faint);
+      flex: 1;
+      min-width: 180px;
+    }
+    .shell.demo-simple .empty-hero .actions .soft,
+    .shell.demo-simple .empty-hero .actions .ghost { display: none; }
+    /*
+     * 简洁无结果落地：用 absolute inset 铺满 .workspace，不依赖脆弱的 height% 链。
+     * 根因：.main 无确定高度时 flex:1 不撑开 → min-height:72vh 的 inner 只撑出空洞。
+     */
+    .shell.demo-simple.no-result .body {
+      min-height: 0;
+      height: 100%;
+      overflow: hidden;
+    }
+    .shell.demo-simple.no-result .main {
+      height: 100%;
+      min-height: 0;
+      overflow: hidden;
+      display: flex;
+      flex-direction: column;
+    }
+    .shell.demo-simple.no-result .workspace-split {
+      flex: 1 1 auto;
+      min-height: 0;
+      height: 100%;
+      grid-template-columns: 1fr !important;
+      overflow: hidden;
+    }
+    .shell.demo-simple.no-result .workspace {
+      position: relative;
+      flex: 1 1 auto;
+      min-height: 0;
+      height: 100%;
+      overflow: hidden; /* landing fills; no outer scroll void */
+      padding: 0;
+      display: block;
+    }
+    .shell.demo-simple.no-result .workspace-inner.is-landing {
+      position: absolute;
+      inset: 12px 16px 16px;
+      max-width: none;
+      width: auto;
+      height: auto;
+      min-height: 0 !important; /* kill base min(72vh,680px) hole */
+      margin: 0;
+      padding: 0;
+      display: flex;
+      flex-direction: column;
+      justify-content: stretch;
+      align-items: stretch;
+      box-sizing: border-box;
+    }
+    .shell.demo-simple.no-result .workspace-inner.is-landing .demo-script {
+      flex: 1 1 auto;
+      width: 100%;
+      height: 100%;
+      min-height: 0 !important;
+      margin: 0;
+      padding: 20px 22px 18px;
+      box-sizing: border-box;
+      display: flex;
+      flex-direction: column;
+      gap: 12px;
+      overflow: auto;
+      background:
+        linear-gradient(155deg, rgba(91,141,239,0.34), rgba(28,40,60,0.98) 36%, rgba(14,20,32,0.99));
+      border: 1px solid rgba(140, 180, 255, 0.5);
+      border-radius: 18px;
+      box-shadow:
+        0 16px 40px rgba(0,0,0,0.4),
+        inset 0 1px 0 rgba(255,255,255,0.1);
+    }
+    .shell.demo-simple.no-result .workspace-inner.is-landing .demo-script .ds-head {
+      flex: 0 0 auto;
+    }
+    .shell.demo-simple.no-result .workspace-inner.is-landing .demo-steps {
+      flex: 1 1 auto;
+      align-content: start;
+      min-height: 120px;
+      gap: 12px;
+    }
+    .shell.demo-simple.no-result .workspace-inner.is-landing .ds-features {
+      flex: 0 0 auto;
+      margin-top: 0;
+    }
+    .shell.demo-simple.no-result .workspace-inner.is-landing .ds-actions {
+      flex: 0 0 auto;
+      margin-top: auto;
+      padding-top: 14px;
+      border-top: 1px solid rgba(255,255,255,0.12);
+    }
+    .shell.demo-simple.no-result .workspace-inner.is-landing .ds-title {
+      font-size: 22px;
+      color: #fff;
+    }
+    .shell.demo-simple.no-result .workspace-inner.is-landing .ds-sub {
+      font-size: 13.5px;
+      margin-top: 4px;
+      color: #c5d4ea;
+    }
+    .shell.demo-simple.no-result .workspace-inner.is-landing .demo-step {
+      padding: 16px 14px;
+      min-height: 100px;
+      background: rgba(6, 10, 18, 0.55);
+      border-color: rgba(255,255,255,0.14);
+    }
+    .shell.demo-simple.no-result .workspace-inner.is-landing .demo-step .ds-k {
+      font-size: 15px;
+      color: #fff;
+    }
+    .shell.demo-simple.no-result .workspace-inner.is-landing .demo-step .ds-v {
+      font-size: 12.5px;
+      color: #b0c0d8;
+    }
+    .shell.demo-simple.no-result .workspace-inner.is-landing .ds-actions .primary-lg {
+      padding: 14px 24px;
+      font-size: 15px;
+      min-width: 220px;
+    }
+    .shell.demo-simple.no-result .workspace-inner.is-landing .empty-hero {
+      display: none !important;
+    }
+    /* 简洁无结果：隐藏 Tabs，避免点到空页 */
+    .shell.demo-simple.no-result .tabs {
+      display: none !important;
+    }
+    .shell.demo-simple.no-result .topbar-row.secondary {
+      padding-bottom: 8px;
+    }
+    .demo-script .ds-features {
+      display: grid;
+      grid-template-columns: repeat(3, minmax(0, 1fr));
+      gap: 10px;
+      margin-top: 12px;
+    }
+    .demo-script .ds-features .empty-feature {
+      margin: 0;
+      background: rgba(8, 12, 18, 0.45);
+      border-color: rgba(255,255,255,0.1);
+    }
+    /* 简洁有结果：正常流 + 吸顶剧本条 */
+    .shell.demo-simple .workspace-inner.has-result {
+      max-width: 1180px;
+      width: 100%;
+      min-height: 0;
+      position: static;
+    }
+    .shell.demo-simple .workspace-inner.has-result .demo-script {
+      position: sticky;
+      top: 0;
+      z-index: 4;
+      margin-bottom: 14px;
+      min-height: 0;
+      height: auto;
+      flex: none;
+    }
+    @media (max-width: 720px) {
+      .demo-steps { grid-template-columns: 1fr; }
+      .demo-script .ds-features { grid-template-columns: 1fr; }
+    }
     .pill {
       display: inline-flex;
       align-items: center;
@@ -282,6 +562,8 @@
       display: grid;
       grid-template-columns: var(--side-w) minmax(0, 1fr);
       min-height: 0;
+      height: 100%; /* fill shell 1fr row so children can flex/absolute fill */
+      overflow: hidden;
     }
 
     /* —— Left: team mode —— */
@@ -531,6 +813,8 @@
       flex-direction: column;
       min-width: 0;
       min-height: 0;
+      height: 100%;
+      overflow: hidden;
       background:
         radial-gradient(1000px 380px at 78% -8%, rgba(91,141,239,.12), transparent 52%),
         radial-gradient(700px 300px at 10% 40%, rgba(139,108,255,.05), transparent 55%),
@@ -585,6 +869,7 @@
       overflow: auto;
       padding: 22px 22px 40px;
       min-height: 0;
+      height: 100%;
       /* Product surface — never a pure black void */
       background-color: #121a26;
       background-image:
@@ -602,7 +887,11 @@
     .workspace-inner {
       max-width: 1180px;
       margin: 0 auto;
-      min-height: min(72vh, 680px);
+      /* 默认不要硬撑 72vh 空洞；落地态另有 absolute 铺满 */
+      min-height: 0;
+    }
+    .workspace-inner.has-result {
+      min-height: min(50vh, 480px);
     }
 
     .empty-hero {
@@ -956,14 +1245,26 @@
     .hitl-card.warn { border-color: rgba(230,184,77,.45); background: rgba(230,184,77,0.06); }
     .workspace-split {
       display: grid;
-      grid-template-columns: 1fr 320px;
+      /* 默认单列：无抽屉时不再留 320px 空洞（中间空的主因） */
+      grid-template-columns: 1fr;
       gap: 0;
       flex: 1;
       min-height: 0;
+      height: 100%;
+      width: 100%;
+      overflow: hidden;
+    }
+    .workspace-split.has-drawer {
+      grid-template-columns: 1fr 320px;
     }
     @media (max-width: 1100px) {
-      .workspace-split { grid-template-columns: 1fr; }
+      .workspace-split,
+      .workspace-split.has-drawer { grid-template-columns: 1fr; }
       .agent-drawer { display: none !important; }
+    }
+    .shell.demo-simple .workspace-split,
+    .shell.demo-simple .workspace-split.has-drawer {
+      grid-template-columns: 1fr;
     }
     .agent-drawer {
       border-left: 1px solid var(--border-soft);
@@ -1053,7 +1354,9 @@
   </style>
 </head>
 <body>
-  <div id="app" class="shell" :class="{ 'demo-simple': demoSimpleMode }" data-demo-simple-mode="true">
+  <div id="app" class="shell"
+       :class="{ 'demo-simple': demoSimpleMode, 'no-result': !hasAnyResult, 'has-result': hasAnyResult }"
+       data-demo-simple-mode="true">
     <!-- Top bar -->
     <header class="topbar">
       <div class="topbar-row">
@@ -1062,14 +1365,15 @@
           <div>
             <h1>装箱拼柜 · Team Mode</h1>
             <div class="tag tag-full">大 Team⊃A/B · {{ agentCount || 13 }} Agents · HITL · v{{ harnessVersion || '0.6.4' }}</div>
-            <div class="tag tag-simple">tools 定柜坐标 · 人确认成箱 · 一键演示</div>
+            <div class="tag tag-simple">三步演示 · tools 定柜 · 人确认成箱</div>
           </div>
         </div>
         <div class="top-actions">
-          <span class="pill" v-if="loading || streamProgress.total">
+          <span class="pill" v-if="loading || (streamProgress.done > 0 && streamProgress.total)">
             {{ streamProgress.done }}/{{ streamProgress.total || '—' }}
           </span>
-          <label class="demo-mode-toggle" title="简洁演示：隐藏侧栏与高级状态，突出主 CTA">
+          <label class="demo-mode-toggle" :class="{ on: demoSimpleMode }"
+                 title="开=三步演示剧本（成箱→确认→看裁决）；关=完整调试台与组织图">
             <input type="checkbox" v-model="demoSimpleMode" />
             简洁演示
           </label>
@@ -1296,22 +1600,94 @@
           <button type="button" class="tab" :class="{ active: mainTab === 'agents' }" @click="mainTab = 'agents'">
             Agent 输出 <span class="n" v-if="agentSteps.length">{{ filteredSteps.length }}/{{ agentSteps.length }}</span>
           </button>
-          <button type="button" class="tab" :class="{ active: mainTab === 'history' }" @click="mainTab = 'history'; loadRuns()">
+          <button type="button" class="tab tab-history" :class="{ active: mainTab === 'history' }" @click="mainTab = 'history'; loadRuns()">
             历史
           </button>
         </nav>
 
-        <div class="workspace-split">
+        <div class="workspace-split" :class="{ 'has-drawer': showAgentDrawer && !demoSimpleMode }">
         <div class="workspace" ref="workspace">
-          <div class="workspace-inner">
-          <!-- Empty: elevated landing panel — not a black void -->
-          <div class="empty-hero" v-if="!hasAnyResult && mainTab === 'overview'">
+          <div class="workspace-inner"
+               :class="{
+                 'is-landing': demoSimpleMode && !hasAnyResult,
+                 'has-result': hasAnyResult
+               }">
+          <!-- 简洁演示：三步剧本（无结果时铺满中间，有结果时吸顶） -->
+          <div class="demo-script" v-if="demoSimpleMode" data-demo-script="true">
+            <div class="ds-head">
+              <div>
+                <div class="ds-title">{{ hasAnyResult ? '简洁演示 · 三步剧本' : '三步演示，开始装柜' }}</div>
+                <div class="ds-sub">
+                  ①满载成箱 → ②人确认 HITL → ③看裁决 · tools 定柜 · 默认停确认闸
+                </div>
+              </div>
+              <span class="pill" :class="demoScriptStep >= 3 ? 'ok' : (demoScriptStep === 2 ? 'warn' : '')">
+                当前第 {{ demoScriptStep }} 步 / 3
+              </span>
+            </div>
+            <div class="demo-steps">
+              <button type="button" class="demo-step"
+                      :class="demoStepClass(1)"
+                      @click="goDemoStep(1)"
+                      :disabled="loading">
+                <div class="ds-k"><span class="ds-num">1</span>满载成箱</div>
+                <div class="ds-v">跑 Team A · 出箱方案与 N0* · 不停在聊天编柜数</div>
+              </button>
+              <button type="button" class="demo-step"
+                      :class="demoStepClass(2)"
+                      @click="goDemoStep(2)"
+                      :disabled="loading || demoScriptStep < 2">
+                <div class="ds-k"><span class="ds-num">2</span>人确认 HITL</div>
+                <div class="ds-v">确认柜型与成箱 · 再进拼柜（闸门一等公民）</div>
+              </button>
+              <button type="button" class="demo-step"
+                      :class="demoStepClass(3)"
+                      @click="goDemoStep(3)"
+                      :disabled="demoScriptStep < 3">
+                <div class="ds-k"><span class="ds-num">3</span>看裁决</div>
+                <div class="ds-v">mid50 / ship_ok / 可视化 · Agent 轨迹可回放</div>
+              </button>
+            </div>
+            <div class="ds-features" v-if="!hasAnyResult" aria-label="产品要点">
+              <div class="empty-feature">
+                <div class="ef-k">Tools 定柜</div>
+                <div class="ef-v">N0* / 坐标由 tools 算，LLM 不写 xyz</div>
+              </div>
+              <div class="empty-feature">
+                <div class="ef-k">HITL 闸门</div>
+                <div class="ef-v">先确认成箱，再进入拼柜</div>
+              </div>
+              <div class="empty-feature">
+                <div class="ef-k">可回放</div>
+                <div class="ef-v">agent_steps 与裁决条可观察</div>
+              </div>
+            </div>
+            <div class="ds-actions">
+              <button class="primary-lg" v-if="demoScriptStep === 1" @click="runDemo" :class="{ busy: loading }">
+                {{ loading ? '成箱中…' : '开始第 1 步 · 满载演示' }}
+              </button>
+              <button class="primary-lg" v-else-if="demoScriptStep === 2" @click="goDemoStep(2)">
+                去第 2 步 · 确认并拼柜
+              </button>
+              <button class="primary-lg" v-else @click="goDemoStep(3)">
+                看第 3 步 · 总览裁决
+              </button>
+              <button class="soft" v-if="hasAnyResult" @click="runDemo" :class="{ busy: loading }" title="重跑成箱">
+                重跑成箱
+              </button>
+              <span class="ds-hint">{{ demoScriptHint }}</span>
+            </div>
+            <div class="status-line" v-if="!hasAnyResult && preflightHints.length" style="margin-top:12px">
+              <div v-for="(h,i) in preflightHints" :key="'phs'+i">· {{ h }}</div>
+            </div>
+          </div>
+
+          <!-- Empty: full mode landing（简洁无结果时隐藏，避免中间双空洞） -->
+          <div class="empty-hero" v-if="!hasAnyResult && mainTab === 'overview' && !demoSimpleMode">
             <div class="hero-icon" aria-hidden="true">📦</div>
             <h3>组建团队，开始装柜</h3>
             <p>
-              结果工作区已就绪。跑完演示后，这里会呈现裁决、柜数、重心与 Agent 轨迹。
-              <span v-if="demoSimpleMode">当前为<strong>简洁演示</strong>，侧栏已收起；需要组织图可关掉顶栏「简洁演示」。</span>
-              <span v-else>左侧是 <strong>{{ agentCount || 13 }}</strong> 智能体（大 Team⊃A/B）+ HITL · harness v{{ harnessVersion || '0.6.4' }}。</span>
+              结果工作区已就绪。左侧是 <strong>{{ agentCount || 13 }}</strong> 智能体（大 Team⊃A/B）+ HITL · harness v{{ harnessVersion || '0.6.4' }}。
             </p>
             <div class="empty-features" aria-label="产品要点">
               <div class="empty-feature">
@@ -2318,7 +2694,7 @@
         </div><!-- /.workspace -->
 
         <!-- 右侧 Agent 详情抽屉 -->
-        <aside class="agent-drawer" v-if="selectedAgent !== 'ALL' || liveNode">
+        <aside class="agent-drawer" v-if="showAgentDrawer && !demoSimpleMode">
           <h3>
             {{ selectedAgentLabel }}
             <span class="live-pulse" v-if="liveNode"> · live {{ liveNode }}</span>
@@ -2577,6 +2953,33 @@
             this.result.final_response ||
             this.result.phase
           );
+        },
+        showAgentDrawer() {
+          return this.selectedAgent !== 'ALL' || !!this.liveNode;
+        },
+        /** 简洁演示剧本：1 成箱 2 HITL 3 裁决完成 */
+        demoScriptStep() {
+          const r = this.result || {};
+          const phase = String(r.phase || '');
+          const boxes = (r.boxes || []).length;
+          const plan = r.container_plan || {};
+          if (phase === 'await_user_confirm') return 2;
+          const packed =
+            plan.can_fit != null ||
+            !!(plan.layout && (plan.layout.length || plan.containers_used != null)) ||
+            phase === 'done' ||
+            phase === 'team_b_done' ||
+            (r.ship_ok != null && boxes > 0 && phase && phase !== 'await_user_confirm');
+          if (packed) return 3;
+          if (boxes > 0) return 2;
+          return 1;
+        },
+        demoScriptHint() {
+          const s = this.demoScriptStep;
+          if (this.loading) return '运行中，请稍候…';
+          if (s === 1) return '点「开始第 1 步」跑满载成箱；柜数由 tools 算，不是聊天编的。';
+          if (s === 2) return '★ 停在确认闸：检查箱表 → 选柜型 →「确认并拼柜」。';
+          return '拼柜完成：看总览 mid50/ship_ok，可切可视化与 Agent 输出。';
         },
         cogPrimary() {
           const c = this.result.cog || {};
@@ -2929,6 +3332,12 @@
         this.disconnectSessionWs();
       },
       watch: {
+        demoSimpleMode(on) {
+          // 简洁且无结果：强制总览，避免停在可视化/装箱空页导致「中间一片空」
+          if (on && !this.hasAnyResult) {
+            this.mainTab = 'overview';
+          }
+        },
         result: {
           deep: true,
           handler() {
@@ -2950,6 +3359,10 @@
           },
         },
         mainTab(tab) {
+          if (this.demoSimpleMode && !this.hasAnyResult && tab !== 'overview') {
+            this.mainTab = 'overview';
+            return;
+          }
           if (tab === 'visual') {
             this.$nextTick(() => {
               try {
@@ -3383,6 +3796,7 @@
           this.pushVerdictToStatus();
           this.$nextTick(() => {
             try { this.seedNsCheckedFromResult(); } catch (e) { /* ignore */ }
+            try { this.syncDemoScriptTab(); } catch (e) { /* ignore */ }
           });
           if (this.hasAnyResult && this.mainTab === 'overview') {
             /* stay on overview after run */
@@ -3391,6 +3805,49 @@
           const lv = (this.result.verdict || {}).level;
           if ((lv === 'block' || this.result.materials_incomplete) && this.mainTab === 'visual') {
             this.mainTab = 'overview';
+          }
+        },
+        demoStepClass(n) {
+          const cur = this.demoScriptStep;
+          if (n < cur) return 'done';
+          if (n === cur) return 'active';
+          return 'todo';
+        },
+        goDemoStep(n) {
+          if (n === 1) {
+            if (!this.hasAnyResult) {
+              this.runDemo();
+              return;
+            }
+            this.mainTab = 'boxes';
+            this.statusText = '第 1 步：查看成箱方案（可重跑满载演示）';
+            return;
+          }
+          if (n === 2) {
+            this.mainTab = this.result.phase === 'await_user_confirm' ? 'overview' : 'boxes';
+            // scroll / focus HITL
+            this.$nextTick(() => {
+              const el = this.$el && this.$el.querySelector('.hitl-bar');
+              if (el && el.scrollIntoView) el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+            });
+            this.statusText = '第 2 步：确认柜型后点「确认并拼柜」';
+            return;
+          }
+          // step 3
+          this.mainTab = 'overview';
+          if (this.hasViews || this.hasScene3d) {
+            // leave overview with option; user can open visual
+          }
+          this.statusText = '第 3 步：看裁决 / mid50；可切换「可视化」「Agent 输出」';
+        },
+        syncDemoScriptTab() {
+          if (!this.demoSimpleMode) return;
+          const s = this.demoScriptStep;
+          if (s === 2 && this.result.phase === 'await_user_confirm') {
+            this.mainTab = 'overview';
+          } else if (s === 3) {
+            // keep current unless on history
+            if (this.mainTab === 'history') this.mainTab = 'overview';
           }
         },
         buildClientVerdict(res) {
@@ -3695,9 +4152,16 @@
             this.pushVerdictToStatus();
             if (this.result.phase === 'await_user_confirm') {
               this.statusText =
+                (this.demoSimpleMode ? '【剧本 1→2】' : '') +
                 '★ 已停在 HITL · session=' + (this.result.session_id || this.sessionId) +
                 ' · 请确认柜型后点「确认并拼柜」';
               this.mainTab = 'overview';
+              if (this.demoSimpleMode) {
+                this.$nextTick(() => {
+                  const el = this.$el && this.$el.querySelector('.hitl-bar');
+                  if (el && el.scrollIntoView) el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                });
+              }
             } else if (lv !== 'block') {
               this.statusText =
                 (this.statusText || '') +
@@ -4056,6 +4520,11 @@
             const lv = (this.verdict && this.verdict.level) || '';
             if (lv === 'block') {
               this.mainTab = 'overview';
+            } else if (this.demoSimpleMode) {
+              // 剧本第 3 步：先总览裁决，再可选手动进可视化
+              this.mainTab = 'overview';
+              this.statusText =
+                '【剧本 2→3】拼柜完成 · 看总览 mid50/ship_ok；需要布局图再点「可视化」';
             } else {
               this.mainTab = this.hasViews || this.hasScene3d ? 'visual' : 'overview';
             }
