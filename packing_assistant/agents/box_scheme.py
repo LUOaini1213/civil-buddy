@@ -380,6 +380,11 @@ def agent_box_scheme(state: PackingState) -> Dict[str, Any]:
         or packing_opts.get("dense")
         or rev.get("dense_mode")
     )
+    prefer_single_row = bool(
+        packing_opts.get("prefer_single_row")
+        or packing_opts.get("force_single_row")
+        or rev.get("prefer_single_row")
+    )
     # Agent 自动：薄板主材 → dense + 关标准箱，避免 3mm 铝板被合成 4/6m 空心铁架
     force_dense_sheets = _should_force_dense_sheets(materials, packing_opts)
     if force_dense_sheets:
@@ -388,6 +393,9 @@ def agent_box_scheme(state: PackingState) -> Dict[str, Any]:
         mix_mode = True
     if standard_boxes:
         dense_mode = False
+    # 一排偏好需要改外宽 → 不能锁标准箱库
+    if prefer_single_row:
+        standard_boxes = False
     design_facts = state.get("design_facts") or packing_opts.get("design_facts")
     # 自然语言强制箱型写入 defaults
     if packing_opts.get("force_box_type"):
@@ -421,6 +429,7 @@ def agent_box_scheme(state: PackingState) -> Dict[str, Any]:
         dense_mode=dense_mode,
         standard_boxes=standard_boxes,
         mix_mode=mix_mode,
+        prefer_single_row=prefer_single_row,
         design_facts=design_facts if isinstance(design_facts, dict) else None,
     )
     boxes_raw = result.get("箱子列表") or []

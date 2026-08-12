@@ -95,6 +95,7 @@ def _snap_width_prefer_two_row(
     *,
     dense: bool = False,
     pad: float = 40.0,
+    prefer_single_row: bool = False,
 ) -> float:
     """
     软规：可 2 排则对齐 snappoint，避免 1300～1800 半废带宽。
@@ -102,6 +103,7 @@ def _snap_width_prefer_two_row(
     - need ≤ 半柜 cap：优先 1100（标准）/ 1150（模块）/ cap 内 50mm 档
     - dense 且很窄：允许更贴货（仍 ≤ cap，便于 2+ 排）
     - need > cap：货本身超半柜 → 1 排贴货宽，不虚跳满柜
+    - prefer_single_row：外宽略超半柜 cap，柜内只能一列（「要一排」）
     """
     need_w = float(need_w or 0)
     cab_w = float(cab_w or 0)
@@ -109,6 +111,12 @@ def _snap_width_prefer_two_row(
         return max(need_w, 0.0)
     cap2 = _two_row_outer_cap(cab_w)
     step = 50.0
+
+    if prefer_single_row:
+        # 强制单排：外宽 > 两排 cap，柜内并排放不下第二箱
+        target = max(need_w + pad, cap2 + step)
+        snapped = math.ceil(target / step) * step
+        return min(max(snapped, need_w), cab_w)
 
     if need_w <= cap2 + 1e-6:
         # 密装窄货：贴货以便多列，不强制拉到 1100
@@ -291,6 +299,7 @@ def _can_merge(
     dense: bool = False,
     standard: bool = False,
     container_type: str = "40HQ",
+    prefer_single_row: bool = False,
 ) -> bool:
     """合箱前做重量 + 结构几何试算；aggressive 时放宽填充率与试算箱外廓。
 
@@ -315,6 +324,7 @@ def _can_merge(
         container_type=container_type,
         dense=dense and not standard,
         standard=standard,
+        prefer_single_row=prefer_single_row,
     )
     # 软规：合箱后截面过大 → 拆箱（不并）
     cab_L, cab_W, cab_H = _container_cab_mm(container_type)
@@ -414,6 +424,7 @@ def _fit_outer_to_cargo(
     container_type: str = "40HQ",
     dense: bool = False,
     standard: bool = False,
+    prefer_single_row: bool = False,
 ) -> Tuple[Dict[str, float], Dict[str, float], bool]:
     """
     确定箱外廓。
@@ -424,6 +435,7 @@ def _fit_outer_to_cargo(
     - **软规**：
       1) 宽且高同时过大（截面封锁）→ 压矮/拒合箱
       2) 可 2 排则 snappoint（1100/1150），避免半废带宽
+      3) prefer_single_row 时强制单排外宽
 
     模式：
     - standard：锁定标准箱库外廓，仅超标长时放长
@@ -446,9 +458,13 @@ def _fit_outer_to_cargo(
     two_row_cap = _two_row_outer_cap(max_W)
 
     def _free_width(need_w: float) -> float:
-        """两排优先 snappoint；超半柜才 1 排贴货。"""
+        """两排优先 snappoint；prefer_single_row 时强制单排外宽。"""
         return _snap_width_prefer_two_row(
-            need_w, max_W, dense=dense, pad=pad
+            need_w,
+            max_W,
+            dense=dense,
+            pad=pad,
+            prefer_single_row=prefer_single_row,
         )
 
     def _prefer_stack_h(need_h: float, outer_w: float) -> float:
@@ -547,9 +563,15 @@ def _fit_outer_to_cargo(
         outer["长"] = min(math.ceil(max(need_L, 600.0) / 50.0) * 50.0, max_L)
 
     outer["长"] = min(max(outer["长"], need_L), max_L)
-    # 宽：不低于货需，但再走一遍两排 snappoint（可加宽到 1100/1150，不缩到货下）
+    # 宽：不低于货需，但再走一遍 snappoint（两排 1100/1150 或强制单排）
     outer["宽"] = max(outer["宽"], need_W)
-    outer["宽"] = _snap_width_prefer_two_row(outer["宽"], max_W, dense=dense, pad=pad)
+    outer["宽"] = _snap_width_prefer_two_row(
+        outer["宽"],
+        max_W,
+        dense=dense,
+        pad=pad,
+        prefer_single_row=prefer_single_row,
+    )
     outer["宽"] = min(outer["宽"], max_W)
     outer["高"] = min(max(outer["高"], need_H), max_H)
 
@@ -650,6 +672,7 @@ def _build_box(
     container_type: str = "40HQ",
     dense: bool = False,
     standard: bool = False,
+    prefer_single_row: bool = False,
     design_facts: Optional[Dict[str, Any]] = None,
     _upgrade_depth: int = 0,
     _tried_types: Optional[set] = None,
@@ -690,6 +713,7 @@ def _build_box(
         container_type=container_type,
         dense=dense and not standard,
         standard=standard,
+        prefer_single_row=prefer_single_row and not standard,
     )
     # 标准模式展示名用库名，仅加长时标注
     if standard and not customized:
@@ -879,6 +903,7 @@ def _build_box(
                 container_type=container_type,
                 dense=dense,
                 standard=standard,
+                prefer_single_row=prefer_single_row,
                 design_facts=design_facts,
                 _upgrade_depth=_upgrade_depth + 1,
                 _tried_types=tried,
@@ -1172,6 +1197,7 @@ def run_packing(
     dense_mode: bool = False,
     standard_boxes: bool = True,
     mix_mode: bool = True,
+    prefer_single_row: bool = False,
     design_facts: Optional[Dict[str, Any]] = None,
 ) -> Dict[str, Any]:
     """
@@ -1182,6 +1208,7 @@ def run_packing(
     standard_boxes: True（默认）锁知识库标准箱外廓，不贴货定制
     mix_mode: True（默认）允许短件混入更长档标准箱填空
     dense_mode: True 时外廓贴货（与 standard 互斥，standard 优先）
+    prefer_single_row: True 时外宽略超半柜，柜内只能一列（「要一排」）
     design_facts: 详设结构事实（截面/γ/图纸）；无则结论「待详设」不可正式出运
     输出: {
       "箱子列表": [... 含 结构计算 ...],
@@ -1195,6 +1222,8 @@ def run_packing(
     standard = bool(standard_boxes)
     dense = bool(dense_mode) and not standard
     mix = bool(mix_mode)
+    # 标准箱库外廓固定，单排偏好需走定制外宽
+    single_row = bool(prefer_single_row) and not standard
     d_facts = design_facts
     # 打回改箱：更严载荷，优先结构通过
     cap = float(max_box_net_kg or 3200.0)
@@ -1252,6 +1281,7 @@ def run_packing(
                     dense=dense,
                     standard=standard,
                     container_type=ctype,
+                    prefer_single_row=single_row,
                 ):
                     b["items"].append(it)
                     placed = True
@@ -1265,6 +1295,7 @@ def run_packing(
                     dense=dense,
                     standard=standard,
                     container_type=ctype,
+                    prefer_single_row=single_row,
                 ):
                     b["box_name"] = upgraded
                     b["items"].append(it)
@@ -1282,15 +1313,24 @@ def run_packing(
         dense=dense,
         standard=standard,
         container_type=ctype,
+        prefer_single_row=single_row,
     )
     # 三轮：同长度小箱再合并
     bins = _merge_same_length_small_bins(
-        bins, dense=dense, standard=standard, container_type=ctype
+        bins,
+        dense=dense,
+        standard=standard,
+        container_type=ctype,
+        prefer_single_row=single_row,
     )
     # 四轮：跨长度档混装（短箱并入长箱填空）
     if mix:
         bins = _merge_cross_band_mix(
-            bins, dense=dense, standard=standard, container_type=ctype
+            bins,
+            dense=dense,
+            standard=standard,
+            container_type=ctype,
+            prefer_single_row=single_row,
         )
     bins_after_merge = len(bins)
 
@@ -1308,6 +1348,7 @@ def run_packing(
                 container_type=ctype,
                 dense=dense,
                 standard=standard,
+                prefer_single_row=single_row,
                 design_facts=d_facts,
             )
         )
@@ -1331,6 +1372,7 @@ def run_packing(
     summary["dense_mode"] = dense
     summary["standard_boxes"] = standard
     summary["mix_mode"] = mix
+    summary["prefer_single_row"] = single_row
     summary["container_type_for_module"] = ctype
     summary["max_box_net_kg"] = cap
     summary["revision_mode"] = bool(revision_mode)
@@ -1388,6 +1430,7 @@ def _try_absorb_bin(
     dense: bool = False,
     standard: bool = False,
     container_type: str = "40HQ",
+    prefer_single_row: bool = False,
 ) -> Optional[Dict[str, Any]]:
     """尝试把 guest 整箱并入 host；成功返回新 bin，失败 None。"""
     trial_items = list(host["items"])
@@ -1403,6 +1446,7 @@ def _try_absorb_bin(
             dense=dense,
             standard=standard,
             container_type=container_type,
+            prefer_single_row=prefer_single_row,
         ):
             trial_items.append(it)
             continue
@@ -1417,6 +1461,7 @@ def _try_absorb_bin(
             dense=dense,
             standard=standard,
             container_type=container_type,
+            prefer_single_row=prefer_single_row,
         ):
             trial_name = up
             trial_items.append(it)
@@ -1432,6 +1477,7 @@ def _aggressive_merge_bins(
     dense: bool = False,
     standard: bool = False,
     container_type: str = "40HQ",
+    prefer_single_row: bool = False,
 ) -> List[Dict[str, Any]]:
     """箱间合并：默认只合同长度档，保持多箱并排/堆叠以吃满柜。"""
     if len(bins) <= 1:
@@ -1468,6 +1514,7 @@ def _aggressive_merge_bins(
                     dense=dense,
                     standard=standard,
                     container_type=container_type,
+                    prefer_single_row=prefer_single_row,
                 )
                 if merged:
                     cur = merged
@@ -1490,6 +1537,7 @@ def _merge_same_length_small_bins(
     dense: bool = False,
     standard: bool = False,
     container_type: str = "40HQ",
+    prefer_single_row: bool = False,
 ) -> List[Dict[str, Any]]:
     """
     同长度小箱再合并：
@@ -1541,6 +1589,7 @@ def _merge_same_length_small_bins(
                     dense=dense,
                     standard=standard,
                     container_type=container_type,
+                    prefer_single_row=prefer_single_row,
                 )
                 if not merged:
                     # host/guest 对调再试（箱型不同时有时更易过）
@@ -1552,6 +1601,7 @@ def _merge_same_length_small_bins(
                         dense=dense,
                         standard=standard,
                         container_type=container_type,
+                        prefer_single_row=prefer_single_row,
                     )
                 if merged:
                     cur = merged
@@ -1572,6 +1622,7 @@ def _merge_cross_band_mix(
     dense: bool = False,
     standard: bool = False,
     container_type: str = "40HQ",
+    prefer_single_row: bool = False,
 ) -> List[Dict[str, Any]]:
     """
     跨长度档混装：把更短/更轻的整箱并入更长档标准箱填空。
@@ -1618,6 +1669,7 @@ def _merge_cross_band_mix(
                     dense=dense,
                     standard=standard,
                     container_type=container_type,
+                    prefer_single_row=prefer_single_row,
                 )
                 if merged:
                     cur = merged
