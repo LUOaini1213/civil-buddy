@@ -4,8 +4,8 @@
 
 ## 下一刀（按这个顺序）
 
-1. **招标文件进矩阵**  
-   主线 C 从「粘贴 / `.txt` `.md`」扩到整节招标（表格、多文件节选）。输出仍是响应矩阵 + P0，不是十万字写标。验收：同一份样例进 `/api/tender/parse`，条款行带 `exact_text`，`submit_blocked=true`。
+1. **招标文件进矩阵** ✅ 2026-08-17  
+   粘贴 / 多节选 / `.txt` `.md` `.csv` `.docx` `.xlsx` → 同一套矩阵 + P0。表格按行抄进 `exact_text`。`POST /api/tender/parse`（`sections`）· `/parse/file` · `/parse/files`。扫描 PDF 仍拒绝。验收：`python scripts/test_tender_ingest.py`。
 
 2. **装柜 MCP 工具表**  
    在 `pack-ship` / `civil-mcp` 上拆出可发现的 list / plan / export（利用率、can_fit、mid50、系固待办）。数字只抄本仓 solver；未接通写 `UNSPECIFIED`。

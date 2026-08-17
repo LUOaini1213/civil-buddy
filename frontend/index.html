@@ -347,9 +347,10 @@
           <span class="muted" style="font-size:12px">仅主线能力</span>
         </div>
         <div class="card-b">
-          <label class="field" for="tenderFile">上传 .txt / .md 节选</label>
-          <input id="tenderFile" type="file" accept=".txt,.md,text/plain" :disabled="busy"
-            @change="onTenderFile" />
+          <label class="field" for="tenderFile">上传招标节选（可多份：txt / md / csv / docx / xlsx）</label>
+          <input id="tenderFile" type="file" multiple
+            accept=".txt,.md,.csv,.tsv,.docx,.xlsx,text/plain,text/csv" :disabled="busy"
+            @change="onTenderFiles" />
           <label class="field" for="tender">招标文件节选（中/英均可）</label>
           <textarea id="tender" v-model="tenderText" :disabled="busy"
             placeholder="粘贴含包装、集装箱、货载、废标、资质等条款的文本…"></textarea>
@@ -364,7 +365,7 @@
             <button class="ghost" :disabled="busy || !tenderText.trim()" @click="runParseOnly">仅解析矩阵</button>
             <button class="ghost" :disabled="busy" @click="loadSample">填入样例</button>
           </div>
-          <p class="hint">默认用幕墙样例物料跑装柜交付；运输/包装条款可由 can_fit 自动标为 covered。★/资格/废标走 P0，须人确认，系统不判定可投标。</p>
+          <p class="hint">表格按行进矩阵，原文进 exact_text。多文件拼成一节招标。扫描 PDF 不解析。★/资格/废标走 P0，须人确认，系统不判定可投标。</p>
           <div class="err-box" v-if="error">{{ error }}</div>
         </div>
       </section>
@@ -592,17 +593,32 @@
           this.tenderText = SAMPLE;
           this.error = '';
         },
-        onTenderFile(ev) {
-          const f = ev.target && ev.target.files && ev.target.files[0];
-          if (!f) return;
-          const name = String(f.name || '').toLowerCase();
-          if (!name.endsWith('.txt') && !name.endsWith('.md')) {
-            this.error = '只接受 .txt / .md，不解析扫描 PDF';
+        async onTenderFiles(ev) {
+          const list = ev.target && ev.target.files ? [...ev.target.files] : [];
+          if (!list.length) return;
+          if (list.some((f) => /\.pdf$/i.test(f.name || ''))) {
+            this.error = '不解析扫描 PDF。请用 .txt / .md / .csv / .docx / .xlsx 节选。';
             return;
           }
-          const reader = new FileReader();
-          reader.onload = () => { this.tenderText = String(reader.result || ''); };
-          reader.readAsText(f, 'utf-8');
+          this.busy = true;
+          this.error = '';
+          try {
+            const fd = new FormData();
+            list.forEach((f) => fd.append('files', f));
+            fd.append('p0_confirmed', this.p0Confirmed ? 'true' : 'false');
+            const res = await fetch('/api/tender/parse/files', { method: 'POST', body: fd });
+            const dat = await res.json().catch(() => ({}));
+            if (!res.ok) {
+              this.error = (dat.detail && (dat.detail.msg || dat.detail)) || '上传解析失败';
+              return;
+            }
+            this.tenderText = dat.ingested_text || this.tenderText;
+            this.applyResult(dat);
+          } catch (e) {
+            this.error = String(e && e.message || e);
+          } finally {
+            this.busy = false;
+          }
         },
         evidenceLabel(ev) {
           if (!ev) return '—';
@@ -646,6 +662,21 @@
             p0_confirmed: this.p0Confirmed,
           });
         },
+        applyResult(data) {
+          const matrix = (data && data.matrix) || {};
+          this.matrixRows = matrix.rows || [];
+          this.matrixSummary = matrix.summary || {};
+          this.packing = data.packing_summary || null;
+          this.openActions = data.open_actions || (data.response_package && data.response_package.open_actions) || [];
+          this.exportMarkdown = data.export_markdown || (data.response_package && data.response_package.markdown) || data.matrix_markdown || '';
+          this.bidbookMarkdown = data.bidbook_markdown || (data.bidbook && data.bidbook.markdown) || '';
+          this.handoff = data.handoff || (data.parse && data.parse.handoff) || null;
+          this.techOutline = data.tech_outline || null;
+          this.submitBlocked = data.submit_blocked !== false;
+          this.submitBlockReason = data.submit_block_reason || '';
+          this.extractTable = data.extract_table_markdown || '';
+          this.matrixCsv = data.matrix_csv || '';
+        },
         async callApi(path, body) {
           this.busy = true;
           this.error = '';
@@ -660,19 +691,7 @@
             if (!res.ok || data.ok === false && !(data.matrix && data.matrix.rows)) {
               throw new Error(data.detail || data.message || ('HTTP ' + res.status));
             }
-            const matrix = data.matrix || {};
-            this.matrixRows = matrix.rows || [];
-            this.matrixSummary = matrix.summary || {};
-            this.packing = data.packing_summary || null;
-            this.openActions = data.open_actions || (data.response_package && data.response_package.open_actions) || [];
-            this.exportMarkdown = data.export_markdown || (data.response_package && data.response_package.markdown) || data.matrix_markdown || '';
-            this.bidbookMarkdown = data.bidbook_markdown || (data.bidbook && data.bidbook.markdown) || '';
-            this.handoff = data.handoff || (data.parse && data.parse.handoff) || null;
-            this.techOutline = data.tech_outline || null;
-            this.submitBlocked = data.submit_blocked !== false;
-            this.submitBlockReason = data.submit_block_reason || '';
-            this.extractTable = data.extract_table_markdown || '';
-            this.matrixCsv = data.matrix_csv || '';
+            this.applyResult(data);
           } catch (e) {
             this.error = (e && e.message) ? e.message : String(e);
           } finally {

@@ -107,7 +107,7 @@ HITL：标书要点确认 · 成箱确认 · 出运确认
 | **M1** Team T 骨架 | parse + checklist + matrix | 无装柜也能跑 T | ✅ `tender.*` + 单测 |
 | **M2** T→A/B 串联 | facade 样例端到端 | can_fit + 矩阵 + 导出包 | ✅ `run_tender_delivery_pipeline` · `/api/tender/delivery` |
 | **M2.1** 条款级交接 | ★/评分点/专项行 + P0 + 技术标目录 | handoff.next_experts · 不编天数 | ✅ `tender.handoff.v1` · UI 经营岗交接 |
-| **M3** 演示包 | 3 分钟：招标 → 矩阵 → 交付 → 人工待办 | 黑客松/客户 demo | ✅ UI 经营岗交接 + P0 勾选 + .txt 上传 + CSV 导出 |
+| **M3** 演示包 | 3 分钟：招标 → 矩阵 → 交付 → 人工待办 | 黑客松/客户 demo | ✅ UI 经营岗交接 + P0 + 多文件/表格节选 + CSV 导出 |
 | **M4** 知识库 | `08_tender_delivery` search 可引用 | search 命中策略/轨迹 | 🚧 目录已有，绑 search 待强 |
 
 ### 代码入口（主线 C）
@@ -116,7 +116,9 @@ HITL：标书要点确认 · 成箱确认 · 出运确认
 packing_assistant/tender_delivery.py     # run_tender_delivery_pipeline
 packing_assistant/tools/tender_parse.py  # parse / checklist / matrix / export
 packing_assistant/bidbook/sg_facade.py   # 新加坡幕墙英文整本草案
-POST /api/tender/parse                   # 仅矩阵
+POST /api/tender/parse                   # 仅矩阵（text / sections）
+POST /api/tender/parse/file              # 单文件节选
+POST /api/tender/parse/files             # 多文件 + 表格 → 同一矩阵
 POST /api/tender/delivery                # 矩阵 + A/B + bidbook
 POST /api/tender/bidbook                 # 英文整本（默认可不跑装柜）
 frontend/index.html                      # 默认产品面（复制英文标书草案）

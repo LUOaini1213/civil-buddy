@@ -276,6 +276,9 @@ def api_health():
             "tender_tech_outline": True,
             "tender_parse_file": True,
             "tender_parse_file_path": "/api/tender/parse/file",
+            "tender_parse_files": True,
+            "tender_parse_files_path": "/api/tender/parse/files",
+            "tender_ingest_tables": True,
         },
         "entries": {
             "tender_delivery": "/",
@@ -316,6 +319,8 @@ def api_architecture():
             "entries": {
                 "ui": "/",
                 "parse": "/api/tender/parse",
+                "parse_file": "/api/tender/parse/file",
+                "parse_files": "/api/tender/parse/files",
                 "delivery": "/api/tender/delivery",
             },
         },
@@ -361,13 +366,31 @@ def api_tools(team: str = ""):
     }
 
 
+def _tender_ingest_from_uploads(uploads: list) -> dict:
+    from packing_assistant.tools.tender_ingest import ingest_files
+
+    files = []
+    for f in uploads:
+        files.append({"filename": f.get("filename") or "upload.txt", "bytes": f.get("bytes") or b""})
+    try:
+        return ingest_files(files)
+    except ValueError as e:
+        raise HTTPException(400, str(e)) from e
+
+
 @app.post("/api/tender/parse")
 def api_tender_parse(body: dict = None):
-    """招标文本 → requirements / checklist / response_matrix / 应答包（可带装柜 summary）。"""
+    """招标文本 / 多节选 → requirements / checklist / response_matrix。"""
+    from packing_assistant.tools.tender_ingest import ingest_from_json
     from packing_assistant.tools.tender_parse import run_tender_pipeline
 
     body = body or {}
-    text = str(body.get("text") or body.get("tender_text") or "")
+    ingest = None
+    text = ingest_from_json(body)
+    if text:
+        ingest = {"schema": "tender.ingest.v1", "source": "json-sections"}
+    else:
+        text = str(body.get("text") or body.get("tender_text") or "")
     packing_summary = body.get("packing_summary")
     if packing_summary is not None and not isinstance(packing_summary, dict):
         packing_summary = None
@@ -378,6 +401,7 @@ def api_tender_parse(body: dict = None):
         source="api",
         project_name=project_name,
         p0_confirmed=bool(body.get("p0_confirmed")),
+        ingest=ingest,
     )
     return {"ok": bool(out.get("ok")), "product_mainline": "C_tender_delivery", **out}
 
@@ -388,23 +412,57 @@ async def api_tender_parse_file(
     p0_confirmed: str = Form("false"),
     project_name: str = Form("幕墙项目投标应答（草稿）"),
 ):
-    """Upload a .txt/.md ITT excerpt. No PDF vision; no invented pages."""
+    """Upload one ITT excerpt: txt/md/csv/docx/xlsx. No scanned-PDF vision."""
+    raw = await file.read()
+    ingested = _tender_ingest_from_uploads([{"filename": file.filename, "bytes": raw}])
     from packing_assistant.tools.tender_parse import run_tender_pipeline
 
-    name = (file.filename or "upload.txt").lower()
-    if not name.endswith((".txt", ".md")):
-        raise HTTPException(400, "只接受 .txt / .md 节选，不解析扫描 PDF")
-    raw = await file.read()
-    if len(raw) > 800_000:
-        raise HTTPException(400, "文件过大")
-    text = raw.decode("utf-8", errors="replace")
     out = run_tender_pipeline(
-        text,
+        ingested["text"],
         source="api-upload",
         project_name=project_name,
         p0_confirmed=str(p0_confirmed).lower() in {"1", "true", "yes"},
+        ingest=ingested,
     )
-    return {"ok": bool(out.get("ok")), "product_mainline": "C_tender_delivery", "filename": file.filename, **out}
+    return {
+        "ok": bool(out.get("ok")),
+        "product_mainline": "C_tender_delivery",
+        "filename": file.filename,
+        "ingested_text": ingested["text"],
+        **out,
+    }
+
+
+@app.post("/api/tender/parse/files")
+async def api_tender_parse_files(
+    files: list[UploadFile] = File(...),
+    p0_confirmed: str = Form("false"),
+    project_name: str = Form("幕墙项目投标应答（草稿）"),
+):
+    """Several excerpts (须知 + 评分表 + …) → one matrix. Still not a bid book."""
+    if not files:
+        raise HTTPException(400, "没有收到文件")
+    if len(files) > 8:
+        raise HTTPException(400, "一次最多 8 个节选")
+    uploads = []
+    for f in files:
+        uploads.append({"filename": f.filename, "bytes": await f.read()})
+    ingested = _tender_ingest_from_uploads(uploads)
+    from packing_assistant.tools.tender_parse import run_tender_pipeline
+
+    out = run_tender_pipeline(
+        ingested["text"],
+        source="api-uploads",
+        project_name=project_name,
+        p0_confirmed=str(p0_confirmed).lower() in {"1", "true", "yes"},
+        ingest=ingested,
+    )
+    return {
+        "ok": bool(out.get("ok")),
+        "product_mainline": "C_tender_delivery",
+        "ingested_text": ingested["text"],
+        **out,
+    }
 
 
 @app.post("/api/tender/delivery")

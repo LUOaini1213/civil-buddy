@@ -1191,6 +1191,7 @@ def run_tender_pipeline(
     source: str = "text",
     project_name: str = "幕墙项目投标应答（草稿）",
     p0_confirmed: bool = False,
+    ingest: Optional[Dict[str, Any]] = None,
 ) -> Dict[str, Any]:
     """投标解析 → 清单 → 响应矩阵 → 应答包一站式（可接装柜 summary）。"""
     parsed = parse_tender_text(text, source=source)
@@ -1243,5 +1244,6 @@ def run_tender_pipeline(
             if not p0_confirmed
             else "已记录 P0 核对，仍是 AI 草稿：无盖章、无业绩附件、不可递交。"
         ),
+        "ingest": ingest,
         "ok": bool(reqs),
     }
