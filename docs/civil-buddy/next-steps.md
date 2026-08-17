@@ -25,6 +25,9 @@
 7. **66 岗同一套 chat / run** ✅ 2026-08-17  
    `GET /api/experts` + `POST /api/turn` 带 `expert_id`。每岗独有工具只在 run；高风险须确认句。验收：`python scripts/test_expert_turn.py`。
 
+8. **每岗对照易标/pack-agent 长程规划** ✅ 2026-08-17  
+   66 条独立规划 + 16 条车道。见 `docs/civil-buddy/post-horizon-2026-08-17.md`。验收：`python scripts/test_post_horizon.py`。
+
 ## 有宿主再做
 
 接上 Claude / Cursor / 本机 MCP 客户端后，再做 `kb://` 分页与订阅（horizon D）。本机无 `link.exe` 时，验收仍以 Python `GET /api/mcp/*` 为准。
