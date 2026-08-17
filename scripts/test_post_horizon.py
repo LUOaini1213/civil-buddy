@@ -40,7 +40,9 @@ def main() -> int:
     assert pack["benchmark"] == "pack-agent"
     assert "list" in pack["steps"] and "plan" in pack["steps"] and "export" in pack["steps"]
     assert "UNSPECIFIED" in pack["steps"]["can_fit"]
-    assert "编" not in pack["next_knife"] or "禁止" in pack["steps"]["xyz"]
+    assert "UNSPECIFIED" in pack["next_knife"] and "xyz" in pack["next_knife"]
+    knives = [p["next_knife"] for p in plans]
+    assert len(set(knives)) == 66, f"duplicate next_knife {len(set(knives))}"
 
     blob = render_markdown(plans)
     ho = "\n".join(horizon_order())

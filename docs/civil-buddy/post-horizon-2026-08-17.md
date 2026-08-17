@@ -31,7 +31,7 @@
 - qa：已有 · bid__scan_forbidden
 - kb：已有 · 分层 KB + search_kb/read_kb（demo/kb）
 - write：已有 · 独有 bid-parse__extract；chat 不写盘
-- 下一刀：经营岗 turn 与 bid-parse 共用同一 extract 表；可选接通本机 MinerU，失败仍拒绝，不默认 OCR。
+- 下一刀：expert_turn 把 run_tender_pipeline 的 handoff 另存 tender.handoff.json，供后岗读；本岗 submit_blocked 仍 true。
 
 ### bid-compliance
 
@@ -44,7 +44,7 @@
 - qa：已有 · bid__scan_forbidden
 - kb：已有 · 分层 KB + search_kb/read_kb（demo/kb）
 - write：已有 · 独有 bid-compliance__gaps；chat 不写盘
-- 下一刀：把 tender.review.v1 禁语/缺项接到本岗 exclusive gaps，仍不判定废标。
+- 下一刀：expert_turn 专用 gaps：读 handoff 或重跑 pipeline，落盘三列已响应/未响应/招标未提供正文，不代判废标。
 
 ### bid-tech
 
@@ -57,7 +57,7 @@
 - qa：已有 · bid__scan_forbidden
 - kb：已有 · 分层 KB + search_kb/read_kb（demo/kb）
 - write：已有 · 独有 bid-tech__expand；chat 不写盘
-- 下一刀：技术标目录只按抽出评分点扩章，无评分点则待对照，不套上个项目。
+- 下一刀：expert_turn 读 scoring_points 调 build_tech_outline_from_handoff；无评分点不套上个项目目录。
 
 
 ## 大类 `design` · 车道 `lane-design`
@@ -73,7 +73,7 @@
 - qa：已有 · design__scan_forbidden
 - kb：已有 · 分层 KB + search_kb/read_kb（demo/kb）
 - write：已有 · 独有 architecture__memo；chat 不写盘
-- 下一刀：在 chat/run 上把 architecture__memo 的用户栏位写全，缺数 [A001]/UNSPECIFIED。
+- 下一刀：architecture__memo 按 outline.md 一次写 10 章，面积/疏散 [A001]，文末只贴已核官方标题。
 
 ### structure
 
@@ -86,7 +86,7 @@
 - qa：已有 · design__scan_forbidden + 高风险确认句
 - kb：已有 · 分层 KB + search_kb/read_kb（demo/kb）
 - write：已有 · 独有 structure__calc_outline；chat 不写盘
-- 下一刀：在 chat/run 上把 structure__calc_outline 的用户栏位写全，缺数 [A001]/UNSPECIFIED。
+- 下一刀：structure__calc_outline 按大纲落十章 + qa 自检表；无地勘不定承载力。
 
 ### geotech
 
@@ -99,7 +99,7 @@
 - qa：已有 · design__scan_forbidden + 高风险确认句
 - kb：已有 · 分层 KB + search_kb/read_kb（demo/kb）
 - write：已有 · 独有 geotech__brief；chat 不写盘
-- 下一刀：在 chat/run 上把 geotech__brief 的用户栏位写全，缺数 [A001]/UNSPECIFIED。
+- 下一刀：geotech__brief 只抄用户 SI 分层/孔号；未出现的 c/φ、水位写未在原文检出。
 
 ### plumbing
 
@@ -112,7 +112,7 @@
 - qa：已有 · design__scan_forbidden
 - kb：已有 · 分层 KB + search_kb/read_kb（demo/kb）
 - write：已有 · 独有 plumbing__memo；chat 不写盘
-- 下一刀：在 chat/run 上把 plumbing__memo 的用户栏位写全，缺数 [A001]/UNSPECIFIED。
+- 下一刀：plumbing__memo 按大纲落十章；管径/水压只抄用户资料，消防水量交消防岗。
 
 ### hvac
 
@@ -125,7 +125,7 @@
 - qa：已有 · design__scan_forbidden
 - kb：已有 · 分层 KB + search_kb/read_kb（demo/kb）
 - write：已有 · 独有 hvac__memo；chat 不写盘
-- 下一刀：在 chat/run 上把 hvac__memo 的用户栏位写全，缺数 [A001]/UNSPECIFIED。
+- 下一刀：hvac__memo 按大纲扩写；无负荷则主机/风管/排烟量 [A001]。
 
 ### electrical
 
@@ -138,7 +138,7 @@
 - qa：已有 · design__scan_forbidden
 - kb：已有 · 分层 KB + search_kb/read_kb（demo/kb）
 - write：已有 · 独有 electrical__memo；chat 不写盘
-- 下一刀：在 chat/run 上把 electrical__memo 的用户栏位写全，缺数 [A001]/UNSPECIFIED。
+- 下一刀：electrical__memo 落供配电/应急/防雷/消防电源；弱电整节交 intel-weak。
 
 ### fire-protect
 
@@ -151,7 +151,7 @@
 - qa：已有 · design__scan_forbidden + 高风险确认句
 - kb：已有 · 分层 KB + search_kb/read_kb（demo/kb）
 - write：已有 · 独有 fire-protect__brief；chat 不写盘
-- 下一刀：在 chat/run 上把 fire-protect__brief 的用户栏位写全，缺数 [A001]/UNSPECIFIED。
+- 下一刀：fire-protect__brief 按大纲写 11 章专篇目录；无来源限值，不替代审图。
 
 ### steel
 
@@ -164,7 +164,7 @@
 - qa：已有 · design__scan_forbidden + 高风险确认句
 - kb：已有 · 分层 KB + search_kb/read_kb（demo/kb）
 - write：已有 · 独有 steel__memo；chat 不写盘
-- 下一刀：在 chat/run 上把 steel__memo 的用户栏位写全，缺数 [A001]/UNSPECIFIED。
+- 下一刀：steel__memo 按大纲落体系/材料/连接；无跨度荷载不写梁高螺栓焊缝。
 
 ### landscape
 
@@ -177,7 +177,7 @@
 - qa：已有 · design__scan_forbidden
 - kb：已有 · 分层 KB + search_kb/read_kb（demo/kb）
 - write：已有 · 独有 landscape__memo；chat 不写盘
-- 下一刀：在 chat/run 上把 landscape__memo 的用户栏位写全，缺数 [A001]/UNSPECIFIED。
+- 下一刀：官方标题表锁定 Greenery 5.1；landscape__memo 只准抄表，胸径无苗木表则待填。
 
 ### interior
 
@@ -190,7 +190,7 @@
 - qa：已有 · design__scan_forbidden
 - kb：已有 · 分层 KB + search_kb/read_kb（demo/kb）
 - write：已有 · 独有 interior__schedule；chat 不写盘
-- 下一刀：在 chat/run 上把 interior__schedule 的用户栏位写全，缺数 [A001]/UNSPECIFIED。
+- 下一刀：interior__schedule 收成房间×饰面界面表；无样板不编品牌。
 
 ### facade
 
@@ -203,7 +203,7 @@
 - qa：已有 · design__scan_forbidden + 高风险确认句
 - kb：已有 · 分层 KB + search_kb/read_kb（demo/kb）
 - write：已有 · 独有 facade__brief；chat 不写盘
-- 下一刀：在 chat/run 上把 facade__brief 的用户栏位写全，缺数 [A001]/UNSPECIFIED。
+- 下一刀：facade__brief 按大纲落体系；无风压不写厚度；SG 稿禁 38 号/JGJ。
 
 ### intel-weak
 
@@ -216,7 +216,7 @@
 - qa：已有 · design__scan_forbidden
 - kb：已有 · 分层 KB + search_kb/read_kb（demo/kb）
 - write：已有 · 独有 intel-weak__memo；chat 不写盘
-- 下一刀：在 chat/run 上把 intel-weak__memo 的用户栏位写全，缺数 [A001]/UNSPECIFIED。
+- 下一刀：标题表锁定 COPIF 2018；2026 征求意见标非已生效；点数品牌待填。
 
 ### civil-defense
 
@@ -229,7 +229,7 @@
 - qa：已有 · design__scan_forbidden + 高风险确认句
 - kb：已有 · 分层 KB + search_kb/read_kb（demo/kb）
 - write：已有 · 独有 civil-defense__brief；chat 不写盘
-- 下一刀：在 chat/run 上把 civil-defense__brief 的用户栏位写全，缺数 [A001]/UNSPECIFIED。
+- 下一刀：成稿强制 SG/CN 分栏；SG 只抄 HS/SS 与 TRHS/THSS 标题，不写墙厚门樘。
 
 ### hydraulic
 
@@ -242,7 +242,7 @@
 - qa：已有 · design__scan_forbidden + 高风险确认句
 - kb：已有 · 分层 KB + search_kb/read_kb（demo/kb）
 - write：已有 · 独有 hydraulic__outline；chat 不写盘
-- 下一刀：在 chat/run 上把 hydraulic__outline 的用户栏位写全，缺数 [A001]/UNSPECIFIED。
+- 下一刀：三本 PUB COP 带生效日；Coastal Protection 必须同时写 2028 生效。
 
 ### port
 
@@ -255,7 +255,7 @@
 - qa：已有 · design__scan_forbidden + 高风险确认句
 - kb：已有 · 分层 KB + search_kb/read_kb（demo/kb）
 - write：已有 · 独有 port__outline；chat 不写盘
-- 下一刀：在 chat/run 上把 port__outline 的用户栏位写全，缺数 [A001]/UNSPECIFIED。
+- 下一刀：CN/SG 分栏标题表；SG 稿无 JTS；无水位波浪不写桩长。
 
 ### municipal
 
@@ -268,7 +268,7 @@
 - qa：已有 · design__scan_forbidden
 - kb：已有 · 分层 KB + search_kb/read_kb（demo/kb）
 - write：已有 · 独有 municipal__memo；chat 不写盘
-- 下一刀：在 chat/run 上把 municipal__memo 的用户栏位写全，缺数 [A001]/UNSPECIFIED。
+- 下一刀：municipal__memo 灌 principles.md；只抄 CDC A3 / SDRE Rev I 标题。
 
 ### bridge
 
@@ -281,7 +281,7 @@
 - qa：已有 · design__scan_forbidden + 高风险确认句
 - kb：已有 · 分层 KB + search_kb/read_kb（demo/kb）
 - write：已有 · 独有 bridge__outline；chat 不写盘
-- 下一刀：在 chat/run 上把 bridge__outline 的用户栏位写全，缺数 [A001]/UNSPECIFIED。
+- 下一刀：bridge__outline 比选不锁定最优；无跨径则梁高钢束失败。
 
 ### tunnel
 
@@ -294,7 +294,7 @@
 - qa：已有 · design__scan_forbidden + 高风险确认句
 - kb：已有 · 分层 KB + search_kb/read_kb（demo/kb）
 - write：已有 · 独有 tunnel__outline；chat 不写盘
-- 下一刀：在 chat/run 上把 tunnel__outline 的用户栏位写全，缺数 [A001]/UNSPECIFIED。
+- 下一刀：按用户工法分节；无地质不写支护参数；防火标题公路/轨交/房建不混。
 
 ### traffic
 
@@ -307,7 +307,7 @@
 - qa：已有 · design__scan_forbidden
 - kb：已有 · 分层 KB + search_kb/read_kb（demo/kb）
 - write：已有 · 独有 traffic__skeleton；chat 不写盘
-- 下一刀：在 chat/run 上把 traffic__skeleton 的用户栏位写全，缺数 [A001]/UNSPECIFIED。
+- 下一刀：traffic__skeleton 先选建成后 TIA 或施工导改；无流量不写饱和度。
 
 ### design-coord
 
@@ -320,7 +320,7 @@
 - qa：已有 · design__scan_forbidden
 - kb：已有 · 分层 KB + search_kb/read_kb（demo/kb）
 - write：已有 · 独有 design-coord__minutes；chat 不写盘
-- 下一刀：在 chat/run 上把 design-coord__minutes 的用户栏位写全，缺数 [A001]/UNSPECIFIED。
+- 下一刀：纪要收成表；文首只抄 APPBCA-2026-12（GFA≥5000 强制 Gateway）。
 
 
 ## 大类 `bim` · 车道 `lane-bim`
@@ -336,7 +336,7 @@
 - qa：已有 · bim__scan_forbidden
 - kb：已有 · 分层 KB + search_kb/read_kb（demo/kb）
 - write：已有 · 独有 bim-coord__clash；chat 不写盘
-- 下一刀：碰撞/算量/LOD 只出表头与口径，不接 IFC 真抽量（另开一轮）。
+- 下一刀：bim-coord__clash 按 outline 出碰撞表（硬/间隙/留洞/4D），无模型整表待填。
 
 ### bim-qto
 
@@ -349,7 +349,7 @@
 - qa：已有 · bim__scan_forbidden
 - kb：已有 · 分层 KB + search_kb/read_kb（demo/kb）
 - write：已有 · 独有 bim-qto__rules；chat 不写盘
-- 下一刀：碰撞/算量/LOD 只出表头与口径，不接 IFC 真抽量（另开一轮）。
+- 下一刀：bim-qto__rules 把过滤说明拆成行表，工程量单价列固定 TBD。不接 IFC 真抽量。
 
 ### bim-deliver
 
@@ -362,7 +362,7 @@
 - qa：已有 · bim__scan_forbidden
 - kb：已有 · 分层 KB + search_kb/read_kb（demo/kb）
 - write：已有 · 独有 bim-deliver__lod；chat 不写盘
-- 下一刀：碰撞/算量/LOD 只出表头与口径，不接 IFC 真抽量（另开一轮）。
+- 下一刀：bim-deliver__lod 一次写出坐标系/拆分/命名/LOD 表头，不宣称报审。
 
 
 ## 大类 `planning` · 车道 `lane-planning`
@@ -378,7 +378,7 @@
 - qa：已有 · planning__scan_forbidden
 - kb：已有 · 分层 KB + search_kb/read_kb（demo/kb）
 - write：已有 · 独有 plan-master__network；chat 不写盘
-- 下一刀：在 chat/run 上把 plan-master__network 的用户栏位写全，缺数 [A001]/UNSPECIFIED。
+- 下一刀：plan-master__network 固定 WBS|紧前|里程碑待填|关键线路=待计算。
 
 ### plan-lookahead
 
@@ -391,7 +391,7 @@
 - qa：已有 · planning__scan_forbidden
 - kb：已有 · 分层 KB + search_kb/read_kb（demo/kb）
 - write：已有 · 独有 plan-lookahead__week；chat 不写盘
-- 下一刀：在 chat/run 上把 plan-lookahead__week 的用户栏位写全，缺数 [A001]/UNSPECIFIED。
+- 下一刀：plan-lookahead__week 出四周表；制约未清不得写入本周承诺。
 
 ### plan-resource
 
@@ -404,7 +404,7 @@
 - qa：已有 · planning__scan_forbidden
 - kb：已有 · 分层 KB + search_kb/read_kb（demo/kb）
 - write：已有 · 独有 plan-resource__peak；chat 不写盘
-- 下一刀：在 chat/run 上把 plan-resource__peak 的用户栏位写全，缺数 [A001]/UNSPECIFIED。
+- 下一刀：plan-resource__peak 拆劳动力|机具|材料三表，数量待填。
 
 
 ## 大类 `construction` · 车道 `lane-construction`
@@ -420,7 +420,7 @@
 - qa：已有 · construction__scan_forbidden + 高风险确认句
 - kb：已有 · 分层 KB + search_kb/read_kb（demo/kb）
 - write：已有 · 独有 construction__scheme_draft, construction__fill_scheme_docx；chat 不写盘
-- 下一刀：scheme_draft 继续 11 章讨论提纲；确认句之后才写盘，不当法定专项。
+- 下一刀：run_expert_steps 在 scheme_draft 之后调用 fill_scheme_docx，不再跳过；仍是讨论提纲。
 
 ### method-hazard
 
@@ -433,7 +433,7 @@
 - qa：已有 · construction__scan_forbidden + 高风险确认句
 - kb：已有 · 分层 KB + search_kb/read_kb（demo/kb）
 - write：已有 · 独有 method-hazard__judge_hazard；chat 不写盘
-- 下一刀：判定书只打三态+依据标题；不写可以开工。
+- 下一刀：重写 judge-card.md 默认 SG WSH/PTW + 信息不足；37 号令只放 CN 栏。
 
 ### survey
 
@@ -446,7 +446,7 @@
 - qa：已有 · construction__scan_forbidden + 高风险确认句
 - kb：已有 · 分层 KB + search_kb/read_kb（demo/kb）
 - write：已有 · 独有 survey__record；chat 不写盘
-- 下一刀：在 chat/run 上把 survey__record 的用户栏位写全，缺数 [A001]/UNSPECIFIED。
+- 下一刀：survey__record 读本会话附件，只抄已给点号坐标；都无则表头+[A001]。
 
 ### dispatch
 
@@ -459,7 +459,7 @@
 - qa：已有 · construction__scan_forbidden
 - kb：已有 · 分层 KB + search_kb/read_kb（demo/kb）
 - write：已有 · 独有 dispatch__daily；chat 不写盘
-- 下一刀：在 chat/run 上把 dispatch__daily 的用户栏位写全，缺数 [A001]/UNSPECIFIED。
+- 下一刀：dispatch__daily 按 outline 十一章落表头；敏感作业只列名，判定交 method-hazard。
 
 
 ## 大类 `hse` · 车道 `lane-hse`
@@ -475,7 +475,7 @@
 - qa：已有 · hse__scan_forbidden + 高风险确认句
 - kb：已有 · 分层 KB + search_kb/read_kb（demo/kb）
 - write：已有 · 独有 safety-brief__talk；chat 不写盘
-- 下一刀：在 chat/run 上把 safety-brief__talk 的用户栏位写全，缺数 [A001]/UNSPECIFIED。
+- 下一刀：safety-brief__talk 按 outline 写全 11 栏；毫米/电话 [A001]；确认句后才写盘。
 
 ### quality
 
@@ -488,7 +488,7 @@
 - qa：已有 · hse__scan_forbidden + 高风险确认句
 - kb：已有 · 分层 KB + search_kb/read_kb（demo/kb）
 - write：已有 · 独有 quality__lot；chat 不写盘
-- 下一刀：在 chat/run 上把 quality__lot 的用户栏位写全，缺数 [A001]/UNSPECIFIED。
+- 下一刀：quality__lot 出主控|一般|隐蔽三表，结果=未检；写盘后 hse__scan_forbidden。
 
 ### env
 
@@ -501,7 +501,7 @@
 - qa：已有 · hse__scan_forbidden
 - kb：已有 · 分层 KB + search_kb/read_kb（demo/kb）
 - write：已有 · 独有 env__list；chat 不写盘
-- 下一刀：在 chat/run 上把 env__list 的用户栏位写全，缺数 [A001]/UNSPECIFIED。
+- 下一刀：env__list 拆扬尘/弃土/污水/夜间/市容五行，限值 UNSPECIFIED。
 
 ### emergency
 
@@ -514,7 +514,7 @@
 - qa：已有 · hse__scan_forbidden + 高风险确认句
 - kb：已有 · 分层 KB + search_kb/read_kb（demo/kb）
 - write：已有 · 独有 emergency__plan；chat 不写盘
-- 下一刀：在 chat/run 上把 emergency__plan 的用户栏位写全，缺数 [A001]/UNSPECIFIED。
+- 下一刀：emergency__plan 出综合目录+用户点名专项+演练表头，电话医院待填。
 
 
 ## 大类 `commercial` · 车道 `lane-commercial`
@@ -530,7 +530,7 @@
 - qa：已有 · commercial__scan_forbidden
 - kb：已有 · 分层 KB + search_kb/read_kb（demo/kb）
 - write：已有 · 独有 cost__takeoff；chat 不写盘
-- 下一刀：在 chat/run 上把 cost__takeoff 的用户栏位写全，缺数 [A001]/UNSPECIFIED。
+- 下一刀：cost__takeoff 按行 parse 清单成规则|量待填|单价 TBD，不编综合单价。
 
 ### variation
 
@@ -543,7 +543,7 @@
 - qa：已有 · commercial__scan_forbidden
 - kb：已有 · 分层 KB + search_kb/read_kb（demo/kb）
 - write：已有 · 独有 variation__form；chat 不写盘
-- 下一刀：在 chat/run 上把 variation__form 的用户栏位写全，缺数 [A001]/UNSPECIFIED。
+- 下一刀：variation__form 先判定文种再出事实|依据|签认空栏；无变更编号则依据待填。
 
 ### claim
 
@@ -556,7 +556,7 @@
 - qa：已有 · commercial__scan_forbidden
 - kb：已有 · 分层 KB + search_kb/read_kb（demo/kb）
 - write：已有 · 独有 claim__notice；chat 不写盘
-- 下一刀：在 chat/run 上把 claim__notice 的用户栏位写全，缺数 [A001]/UNSPECIFIED。
+- 下一刀：claim__notice 出意向栏+证据行+条款原文待贴；工期金额 TBD。
 
 ### subcontract
 
@@ -569,7 +569,7 @@
 - qa：已有 · commercial__scan_forbidden
 - kb：已有 · 分层 KB + search_kb/read_kb（demo/kb）
 - write：已有 · 独有 subcontract__sheet；chat 不写盘
-- 下一刀：在 chat/run 上把 subcontract__sheet 的用户栏位写全，缺数 [A001]/UNSPECIFIED。
+- 下一刀：subcontract__sheet 按行 parse 细目；无总包/业主确认不编金额。
 
 ### interim
 
@@ -582,7 +582,7 @@
 - qa：已有 · commercial__scan_forbidden
 - kb：已有 · 分层 KB + search_kb/read_kb（demo/kb）
 - write：已有 · 独有 interim__measure；chat 不写盘
-- 下一刀：在 chat/run 上把 interim__measure 的用户栏位写全，缺数 [A001]/UNSPECIFIED。
+- 下一刀：interim__measure 出开累/本期/监理审/业主核空表；无确认不编应付合价。
 
 
 ## 大类 `procurement` · 车道 `lane-procurement`
@@ -598,7 +598,7 @@
 - qa：已有 · procurement__scan_forbidden
 - kb：已有 · 分层 KB + search_kb/read_kb（demo/kb）
 - write：已有 · 独有 proc-plan__schedule；chat 不写盘
-- 下一刀：在 chat/run 上把 proc-plan__schedule 的用户栏位写全，缺数 [A001]/UNSPECIFIED。
+- 下一刀：proc-plan__schedule 先分甲供/甲指/自采再列表，提前期 UNSPECIFIED。
 
 ### proc-compare
 
@@ -611,7 +611,7 @@
 - qa：已有 · procurement__scan_forbidden
 - kb：已有 · 分层 KB + search_kb/read_kb（demo/kb）
 - write：已有 · 独有 proc-compare__table；chat 不写盘
-- 下一刀：在 chat/run 上把 proc-compare__table 的用户栏位写全，缺数 [A001]/UNSPECIFIED。
+- 下一刀：proc-compare__table 一行一家多列；定商标待制度定；写盘后 scan_forbidden。
 
 ### proc-vendor
 
@@ -624,7 +624,7 @@
 - qa：已有 · procurement__scan_forbidden
 - kb：已有 · 分层 KB + search_kb/read_kb（demo/kb）
 - write：已有 · 独有 proc-vendor__eval；chat 不写盘
-- 下一刀：在 chat/run 上把 proc-vendor__eval 的用户栏位写全，缺数 [A001]/UNSPECIFIED。
+- 下一刀：proc-vendor__eval 出准入|考察|短名单，分数/结论待核，禁止中标结论。
 
 
 ## 大类 `plant` · 车道 `lane-plant`
@@ -640,7 +640,7 @@
 - qa：已有 · plant__scan_forbidden + 高风险确认句
 - kb：已有 · 分层 KB + search_kb/read_kb（demo/kb）
 - write：已有 · 独有 equip__ledger；chat 不写盘
-- 下一刀：在 chat/run 上把 equip__ledger 的用户栏位写全，缺数 [A001]/UNSPECIFIED。
+- 下一刀：expert_turn 用 equip__ledger 写出与 Rust 同表头台账，只抄用户设备名与已给证件。
 
 ### warehouse
 
@@ -653,7 +653,7 @@
 - qa：已有 · plant__scan_forbidden
 - kb：已有 · 分层 KB + search_kb/read_kb（demo/kb）
 - write：已有 · 独有 warehouse__log；chat 不写盘
-- 下一刀：在 chat/run 上把 warehouse__log 的用户栏位写全，缺数 [A001]/UNSPECIFIED。
+- 下一刀：warehouse__log 按行 parse 收发原文；有数只抄、无数 TBD；无盘点不编盈亏。
 
 ### pack-ship
 
@@ -668,7 +668,7 @@
 - mid50：已有 · 只抄 solver；断线 UNSPECIFIED
 - utilization：已有 · 只抄 solver；断线 UNSPECIFIED
 - xyz：禁止编造 · 未接通不写坐标
-- 下一刀：默认召唤本岗时把最近一次 packing_summary 当 solver 快照抄进 plan/export，仍禁止重算 xyz。
+- 下一刀：sidecar/packing_summary 快照抄进 pack-ship__plan/export；先 health；无则四字段字面 UNSPECIFIED；禁止重算 xyz。
 
 ### material-site
 
@@ -681,7 +681,7 @@
 - qa：已有 · plant__scan_forbidden
 - kb：已有 · 分层 KB + search_kb/read_kb（demo/kb）
 - write：已有 · 独有 material-site__recon；chat 不写盘
-- 下一刀：在 chat/run 上把 material-site__recon 的用户栏位写全，缺数 [A001]/UNSPECIFIED。
+- 下一刀：material-site__recon 按行 parse 应耗/领料/盘点；算不出节超则 TBD。
 
 
 ## 大类 `lab` · 车道 `lane-lab`
@@ -697,7 +697,7 @@
 - qa：已有 · lab__scan_forbidden + 高风险确认句
 - kb：已有 · 分层 KB + search_kb/read_kb（demo/kb）
 - write：已有 · 独有 lab-mix__report；chat 不写盘
-- 下一刀：在 chat/run 上把 lab-mix__report 的用户栏位写全，缺数 [A001]/UNSPECIFIED。
+- 下一刀：lab-mix__report 四层目录；无试验数据则施工配比整节待填。
 
 ### lab-sample
 
@@ -710,7 +710,7 @@
 - qa：已有 · lab__scan_forbidden + 高风险确认句
 - kb：已有 · 分层 KB + search_kb/read_kb（demo/kb）
 - write：已有 · 独有 lab-sample__list；chat 不写盘
-- 下一刀：在 chat/run 上把 lab-sample__list 的用户栏位写全，缺数 [A001]/UNSPECIFIED。
+- 下一刀：lab-sample__list 出类别|部位|见证人空|升级路径；组数 [A001]。
 
 ### lab-record
 
@@ -723,7 +723,7 @@
 - qa：已有 · lab__scan_forbidden
 - kb：已有 · 分层 KB + search_kb/read_kb（demo/kb）
 - write：已有 · 独有 lab-record__ledger；chat 不写盘
-- 下一刀：在 chat/run 上把 lab-record__ledger 的用户栏位写全，缺数 [A001]/UNSPECIFIED。
+- 下一刀：lab-record__ledger 加报告编号待核|仪器检定|结论待填。
 
 
 ## 大类 `finance` · 车道 `lane-finance`
@@ -739,7 +739,7 @@
 - qa：已有 · finance__scan_forbidden
 - kb：已有 · 分层 KB + search_kb/read_kb（demo/kb）
 - write：已有 · 独有 finance-book__check；chat 不写盘
-- 下一刀：税务/资金日历只抄 IRAS 页述标题与 9%；税额 UNSPECIFIED。
+- 下一刀：finance-book__check 出报销勾选+科目对照+对账缺口，金额 [A001]。
 
 ### finance-fund
 
@@ -752,7 +752,7 @@
 - qa：已有 · finance__scan_forbidden
 - kb：已有 · 分层 KB + search_kb/read_kb（demo/kb）
 - write：已有 · 独有 finance-fund__plan；chat 不写盘
-- 下一刀：税务/资金日历只抄 IRAS 页述标题与 9%；税额 UNSPECIFIED。
+- 下一刀：finance-fund__plan 出收入/支出窗口，金额 TBD，不当付款指令。
 
 ### finance-tax
 
@@ -765,7 +765,7 @@
 - qa：已有 · finance__scan_forbidden
 - kb：已有 · 分层 KB + search_kb/read_kb（demo/kb）
 - write：已有 · 独有 finance-tax__calendar；chat 不写盘
-- 下一刀：税务/资金日历只抄 IRAS 页述标题与 9%；税额 UNSPECIFIED。
+- 下一刀：finance-tax__calendar 加税种|节点|资料是否齐全；税率空白，只可抄 IRAS 页述 9%。
 
 
 ## 大类 `docs` · 车道 `lane-docs`
@@ -781,7 +781,7 @@
 - qa：已有 · docs__scan_forbidden
 - kb：已有 · 分层 KB + search_kb/read_kb（demo/kb）
 - write：已有 · 独有 supervision__reply；chat 不写盘
-- 下一刀：在 chat/run 上把 supervision__reply 的用户栏位写全，缺数 [A001]/UNSPECIFIED。
+- 下一刀：supervision__reply：来文复述|拟办|证据目录；暂停/复工只出目录，不写复工许可。
 
 
 ## 大类 `hr` · 车道 `lane-hr`
@@ -797,7 +797,7 @@
 - qa：已有 · hr__scan_forbidden
 - kb：已有 · 分层 KB + search_kb/read_kb（demo/kb）
 - write：已有 · 独有 hr-recruit__brief；chat 不写盘
-- 下一刀：在 chat/run 上把 hr-recruit__brief 的用户栏位写全，缺数 [A001]/UNSPECIFIED。
+- 下一刀：hr-recruit__brief 出职责|任职|面试问法；薪资仅当用户给数才抄。
 
 ### hr-labor
 
@@ -810,7 +810,7 @@
 - qa：已有 · hr__scan_forbidden
 - kb：已有 · 分层 KB + search_kb/read_kb（demo/kb）
 - write：已有 · 独有 hr-labor__check；chat 不写盘
-- 下一刀：在 chat/run 上把 hr-labor__check 的用户栏位写全，缺数 [A001]/UNSPECIFIED。
+- 下一刀：hr-labor__check 按合同类型分表+必备条款对照；补偿 [A001]。
 
 ### hr-train
 
@@ -823,7 +823,7 @@
 - qa：已有 · hr__scan_forbidden
 - kb：已有 · 分层 KB + search_kb/read_kb（demo/kb）
 - write：已有 · 独有 hr-train__plan；chat 不写盘
-- 下一刀：在 chat/run 上把 hr-train__plan 的用户栏位写全，缺数 [A001]/UNSPECIFIED。
+- 下一刀：hr-train__plan 出公司/项目/班组三层课题表+签到空栏。
 
 
 ## 大类 `admin` · 车道 `lane-admin`
@@ -839,7 +839,7 @@
 - qa：已有 · admin__scan_forbidden
 - kb：已有 · 分层 KB + search_kb/read_kb（demo/kb）
 - write：已有 · 独有 admin-doc__draft；chat 不写盘
-- 下一刀：在 chat/run 上把 admin-doc__draft 的用户栏位写全，缺数 [A001]/UNSPECIFIED。
+- 下一刀：admin-doc__draft 按文种套请示/纪要/用印三套栏，禁止代用印。
 
 ### admin-office
 
@@ -852,7 +852,7 @@
 - qa：已有 · admin__scan_forbidden
 - kb：已有 · 分层 KB + search_kb/read_kb（demo/kb）
 - write：已有 · 独有 admin-office__list；chat 不写盘
-- 下一刀：在 chat/run 上把 admin-office__list 的用户栏位写全，缺数 [A001]/UNSPECIFIED。
+- 下一刀：admin-office__list 出场地|议程|与会|资料目录，决定栏留空。
 
 
 ## 大类 `it` · 车道 `lane-it`
@@ -868,7 +868,7 @@
 - qa：已有 · it__scan_forbidden
 - kb：已有 · 分层 KB + search_kb/read_kb（demo/kb）
 - write：已有 · 独有 it-ops__runbook；chat 不写盘
-- 下一刀：在 chat/run 上把 it-ops__runbook 的用户栏位写全，缺数 [A001]/UNSPECIFIED。
+- 下一刀：it-ops__runbook 出系统|角色|升级路径|联系人待填，禁止写密钥。
 
 ### it-data
 
@@ -881,7 +881,7 @@
 - qa：已有 · it__scan_forbidden
 - kb：已有 · 分层 KB + search_kb/read_kb（demo/kb）
 - write：已有 · 独有 it-data__backup；chat 不写盘
-- 下一刀：在 chat/run 上把 it-data__backup 的用户栏位写全，缺数 [A001]/UNSPECIFIED。
+- 下一刀：it-data__backup 按系统行出 RPO/RTO/介质/演练空，禁止编小时数。
 
 ### it-app
 
@@ -894,7 +894,7 @@
 - qa：已有 · it__scan_forbidden
 - kb：已有 · 分层 KB + search_kb/read_kb（demo/kb）
 - write：已有 · 独有 it-app__srs；chat 不写盘
-- 下一刀：在 chat/run 上把 it-app__srs 的用户栏位写全，缺数 [A001]/UNSPECIFIED。
+- 下一刀：it-app__srs 按行 parse 需求笔记成角色|场景|验收待填，禁止接口地址。
 
 
 ## 大类 `people` · 车道 `lane-people`
@@ -910,7 +910,7 @@
 - qa：已有 · people__scan_forbidden
 - kb：已有 · 分层 KB + search_kb/read_kb（demo/kb）
 - write：已有 · 独有 worker-brief__talk；chat 不写盘
-- 下一刀：在 chat/run 上把 worker-brief__talk 的用户栏位写全，缺数 [A001]/UNSPECIFIED。
+- 下一刀：worker-brief__talk 按 script.md 写三段口播；无尺寸不报毫米。
 
 ### pm-daily
 
@@ -923,4 +923,4 @@
 - qa：已有 · people__scan_forbidden
 - kb：已有 · 分层 KB + search_kb/read_kb（demo/kb）
 - write：已有 · 独有 pm-daily__log；chat 不写盘
-- 下一刀：在 chat/run 上把 pm-daily__log 的用户栏位写全，缺数 [A001]/UNSPECIFIED。
+- 下一刀：pm-daily__log 出天气待填|部位|形象（禁编百分比）|出勤待填。
