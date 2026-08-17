@@ -34,3 +34,7 @@
 
 ## 与易标模块对应
 共享四步：parse（`bid-parse__extract`）→ outline（`bid-tech__expand`）→ qa（`bid-compliance__gaps`）→ kb / write。旧名 `bid__parse_tender` / `bid__tech_outline` / `bid__compliance_gaps` 已拒绝，兄弟专家看不见独有工具。
+
+## 2026-08-17 接线
+
+主线 C 响应矩阵 + P0 + 技术标目录见 `docs/product-mainline-tender-delivery.md`。MCP 除 tools 外应暴露 `resources/list|read`（kb://）与 `prompts/list|get`（civil.bid.parse / civil.bid.compliance）。电子标加密 / CA 锁只摘原文，不编平台或锁号。运输包装条款的数字证据走 pack-ship / packing tools，不在本大类编柜数。

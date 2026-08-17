@@ -7,6 +7,7 @@ use crate::store;
 use serde_json::{json, Value};
 use std::io::{self, BufRead, Write};
 
+#[derive(Clone)]
 pub struct McpFilter {
     pub pack: Option<String>,
     pub expert: Option<String>,
@@ -26,7 +27,7 @@ pub fn serve_stdio(paths: Paths, filter: McpFilter) -> io::Result<()> {
         let Some(msg) = read_message(&mut lock)? else {
             break;
         };
-        if let Some(resp) = handle(&paths, &filter, msg) {
+        if let Some(resp) = handle_rpc(&paths, &filter, msg) {
             write_message(&mut stdout, &resp)?;
         }
     }
@@ -71,7 +72,8 @@ fn write_message(w: &mut impl Write, v: &Value) -> io::Result<()> {
     w.flush()
 }
 
-fn handle(paths: &Paths, filter: &McpFilter, msg: Value) -> Option<Value> {
+/// JSON-RPC handler (stdio + tests).
+pub fn handle_rpc(paths: &Paths, filter: &McpFilter, msg: Value) -> Option<Value> {
     let method = msg.get("method").and_then(|v| v.as_str()).unwrap_or("");
     let id = msg.get("id").cloned();
     if method.is_empty() || method.starts_with("notifications/") {
@@ -91,7 +93,11 @@ fn handle(paths: &Paths, filter: &McpFilter, msg: Value) -> Option<Value> {
                 .unwrap_or_else(|| "civil-buddy".into());
             json!({
                 "protocolVersion": ver,
-                "capabilities": { "tools": {} },
+                "capabilities": {
+                    "tools": {},
+                    "resources": {},
+                    "prompts": {}
+                },
                 "serverInfo": { "name": name, "version": "0.1.0" }
             })
         }
@@ -100,6 +106,10 @@ fn handle(paths: &Paths, filter: &McpFilter, msg: Value) -> Option<Value> {
             let tools: Vec<Value> = list_tools(filter).iter().map(|t| t.mcp_tool()).collect();
             json!({ "tools": tools })
         }
+        "resources/list" => json!({ "resources": list_resources(paths, filter) }),
+        "resources/read" => read_resource(paths, filter, &msg),
+        "prompts/list" => json!({ "prompts": list_prompts(filter) }),
+        "prompts/get" => get_prompt(filter, &msg),
         "tools/call" => {
             let name = msg
                 .pointer("/params/name")
@@ -188,4 +198,175 @@ fn infer_expert(tool: &str) -> &'static str {
     } else {
         "construction"
     }
+}
+
+fn scoped_expert(paths: &Paths, filter: &McpFilter) -> (String, String) {
+    if let Some(eid) = filter.expert.as_deref() {
+        if let Some(e) = store::get_expert(paths, eid) {
+            return (e.id, e.category);
+        }
+        let cat = seed()
+            .experts
+            .iter()
+            .find(|e| e.id == eid)
+            .map(|e| e.category.clone())
+            .unwrap_or_else(|| "bid".into());
+        return (eid.to_string(), cat);
+    }
+    if let Some(p) = filter.pack.as_deref() {
+        let eid = packs::default_expert(p);
+        return (eid.to_string(), p.to_string());
+    }
+    ("bid-parse".into(), "bid".into())
+}
+
+fn list_resources(paths: &Paths, filter: &McpFilter) -> Vec<Value> {
+    let (eid, cat) = scoped_expert(paths, filter);
+    crate::rag::list_kb(paths, &eid, &cat)
+        .into_iter()
+        .filter_map(|row| {
+            let rel = row.get("path").and_then(|v| v.as_str())?;
+            let title = row
+                .get("title")
+                .and_then(|v| v.as_str())
+                .unwrap_or(rel);
+            let layer = row.get("layer").and_then(|v| v.as_str()).unwrap_or("");
+            Some(json!({
+                "uri": format!("kb://{rel}"),
+                "name": title,
+                "description": format!("{layer} · {rel}"),
+                "mimeType": "text/markdown"
+            }))
+        })
+        .collect()
+}
+
+fn read_resource(paths: &Paths, filter: &McpFilter, msg: &Value) -> Value {
+    let uri = msg
+        .pointer("/params/uri")
+        .and_then(|v| v.as_str())
+        .unwrap_or("");
+    let rel = uri.strip_prefix("kb://").unwrap_or("");
+    let (eid, cat) = scoped_expert(paths, filter);
+    let allowed: Vec<String> = crate::rag::list_kb(paths, &eid, &cat)
+        .iter()
+        .filter_map(|r| r.get("path").and_then(|v| v.as_str()).map(|s| s.to_string()))
+        .collect();
+    if !allowed.iter().any(|p| p == rel) {
+        return json!({
+            "contents": [{
+                "uri": uri,
+                "mimeType": "text/plain",
+                "text": "拒绝：该知识不在当前专家可见层（私库 / 大类共享 / 公司）。"
+            }]
+        });
+    }
+    match crate::rag::read_kb(paths, rel) {
+        Some((_, text)) => json!({
+            "contents": [{
+                "uri": uri,
+                "mimeType": "text/markdown",
+                "text": text
+            }]
+        }),
+        None => json!({
+            "contents": [{
+                "uri": uri,
+                "mimeType": "text/plain",
+                "text": "拒绝：文件不存在或越权。"
+            }]
+        }),
+    }
+}
+
+fn list_prompts(filter: &McpFilter) -> Vec<Value> {
+    let mut all = vec![
+        json!({
+            "name": "civil.bid.parse",
+            "description": "招标解析：只抄原文成表，评分点交 bid-tech，★/废标交 bid-compliance。不判定可投标。",
+            "arguments": [
+                {"name": "tender_text", "description": "招标/ITT 节选", "required": true},
+                {"name": "jurisdiction", "description": "CN / SG / EU / DUAL", "required": false}
+            ]
+        }),
+        json!({
+            "name": "civil.bid.compliance",
+            "description": "P0 废标/资格/★ 扫描。三态：已响应 / 未响应 / 招标未提供正文。",
+            "arguments": [
+                {"name": "tender_text", "description": "招标正文", "required": true}
+            ]
+        }),
+        json!({
+            "name": "civil.pack-ship.plan",
+            "description": "装箱作业单。柜数/xyz/N0 只抄 pack-ship__plan；未接通写 UNSPECIFIED。",
+            "arguments": [
+                {"name": "materials", "description": "物料表或自然语言", "required": true}
+            ]
+        }),
+    ];
+    if let Some(eid) = filter.expert.as_deref() {
+        all.retain(|p| {
+            let n = p.get("name").and_then(|v| v.as_str()).unwrap_or("");
+            match eid {
+                "bid-parse" => n == "civil.bid.parse",
+                "bid-compliance" => n == "civil.bid.compliance",
+                "pack-ship" => n == "civil.pack-ship.plan",
+                _ => false,
+            }
+        });
+    } else if let Some(pack) = filter.pack.as_deref() {
+        all.retain(|p| {
+            let n = p.get("name").and_then(|v| v.as_str()).unwrap_or("");
+            match pack {
+                "bid" => n.starts_with("civil.bid."),
+                "plant" => n == "civil.pack-ship.plan",
+                _ => false,
+            }
+        });
+    }
+    all
+}
+
+fn get_prompt(filter: &McpFilter, msg: &Value) -> Value {
+    let name = msg
+        .pointer("/params/name")
+        .and_then(|v| v.as_str())
+        .unwrap_or("");
+    let allowed: Vec<String> = list_prompts(filter)
+        .iter()
+        .filter_map(|p| p.get("name").and_then(|v| v.as_str()).map(|s| s.to_string()))
+        .collect();
+    if !allowed.iter().any(|n| n == name) {
+        return json!({
+            "description": "拒绝：当前 --expert/--pack 看不见该 prompt",
+            "messages": []
+        });
+    }
+    let args = msg.pointer("/params/arguments").cloned().unwrap_or(json!({}));
+    let text = match name {
+        "civil.bid.parse" => format!(
+            "你是 Civil Buddy 招标解析岗。用 bid-parse__extract 抽表。天数/分值/workhead 只抄用户正文。\
+无正文则拒绝。不要判定可投标。评分点交给 bid-tech，★/废标交给 bid-compliance。辖区={}。正文：\n{}",
+            args.get("jurisdiction").and_then(|v| v.as_str()).unwrap_or("SG"),
+            args.get("tender_text").and_then(|v| v.as_str()).unwrap_or("（未提供）")
+        ),
+        "civil.bid.compliance" => format!(
+            "你是废标检查岗。用 bid-compliance__gaps。只打 已响应/未响应/招标未提供正文。\
+不要编造否决依据。正文：\n{}",
+            args.get("tender_text").and_then(|v| v.as_str()).unwrap_or("（未提供）")
+        ),
+        "civil.pack-ship.plan" => format!(
+            "你是装箱拼柜岗。先 pack-ship__health，再 pack-ship__plan。\
+柜数/N0/xyz 只抄工具；未接通写 UNSPECIFIED。禁止编 CTU 条款号。物料：\n{}",
+            args.get("materials").and_then(|v| v.as_str()).unwrap_or("（未提供）")
+        ),
+        _ => "未知 prompt".into(),
+    };
+    json!({
+        "description": name,
+        "messages": [{
+            "role": "user",
+            "content": { "type": "text", "text": text }
+        }]
+    })
 }

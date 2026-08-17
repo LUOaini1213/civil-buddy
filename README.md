@@ -1,12 +1,13 @@
 # Civil Buddy
 
 土木企业工作台：**16 大类 / 65 专家** · Rust 工作台 + MCP · 成稿走 steps。  
-装箱 / 拼柜是其中一岗（**pack-ship**）：硬数字只走本仓的 packing 引擎，模型不写 xyz、不拍柜数。
+装箱 / 拼柜是其中一岗（**pack-ship**）：硬数字只走本仓的 packing 引擎，模型不写 xyz、不拍柜数。  
+投标主线 C：招标文本 → 条款级响应矩阵 → 装柜 tools 作交付证据 → 经营岗交接（bid-tech / bid-compliance）。P0 资格/★/废标须人确认，**不**自动判定可投标。
 
 > 内部讨论草稿，不是法定专项方案、不是签认件。  
 > 高风险写盘前确认句：`我明白，将由持证人员签认`。
 
-原独立仓 [packing-agent](https://github.com/LUOaini1213/packing-agent) 与 [civil-buddy](https://github.com/LUOaini1213/civil-buddy) 已并入本树。GitHub 仓库名可在网页改为 `civil-buddy`。
+原独立仓 packing-agent 与 civil-buddy 已并入本树：https://github.com/LUOaini1213/civil-buddy
 
 ---
 
@@ -15,7 +16,8 @@
 | 入口 | 地址 | 用途 |
 |------|------|------|
 | **Civil Buddy 工作台** | http://127.0.0.1:8765 | 召唤专家、投标/施工草稿、装箱作业单 |
-| **装箱引擎 UI** | http://127.0.0.1:8000 | 成箱 → HITL → 拼柜 3D / CoG |
+| **主线 C · 投标应答 + 交付** | http://127.0.0.1:8000 | 招标要点 → 响应矩阵 → 装柜证据（草稿） |
+| **工程装柜台** | http://127.0.0.1:8000/workbench | 成箱 → HITL → 拼柜 3D / CoG |
 
 ### 1) Civil Buddy 工作台
 
@@ -27,7 +29,7 @@ cargo run --release --bin civil-workbench
 
 Python 参考实现：`demo/`（`uvicorn app:app --host 127.0.0.1 --port 8765`）。
 
-Grok skill：`skills/civil-buddy`。MCP：`cargo build --release --bin civil-mcp`，`--pack plant` 或 `--expert pack-ship`。
+Grok skill：`skills/civil-buddy`。MCP：`cargo build --release --bin civil-mcp`（tools + `kb://` resources + `civil.bid.*` / `civil.pack-ship.plan` prompts）。无 MSVC 时 Python 工作台 `GET /api/mcp/resources` 同一套 URI。长程：`docs/civil-buddy/kb-mcp-horizon.md`。
 
 ### 2) 装箱引擎（pack-ship 的计算器）
 

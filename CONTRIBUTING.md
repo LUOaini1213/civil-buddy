@@ -12,9 +12,8 @@ Thanks for interest in **Civil Buddy** (土木工作台 + packing engine).
 ## Dev setup
 
 ```bash
-git clone https://github.com/LUOaini1213/packing-agent.git
-cd packing-agent
-# 产品名 Civil Buddy；GitHub 仓名可改为 civil-buddy
+git clone https://github.com/LUOaini1213/civil-buddy.git
+cd civil-buddy
 python -m venv .venv
 # Windows: .venv\Scripts\activate
 source .venv/bin/activate   # Unix

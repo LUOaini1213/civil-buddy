@@ -48,6 +48,38 @@ def main() -> int:
     assert jp.get("ok") is True
     assert (jp.get("matrix") or {}).get("rows")
     assert (jp.get("parse") or {}).get("requirements")
+    assert (jp.get("handoff") or {}).get("schema") == "tender.handoff.v1"
+    assert (jp.get("p0_reject_scan") or {}).get("human_confirm_required") is True
+    assert (jp.get("tech_outline") or {}).get("schema") == "tender.tech_outline.v1"
+
+    up = client.post(
+        "/api/tender/parse/file",
+        files={"file": ("itt.txt", SAMPLE.encode("utf-8"), "text/plain")},
+    )
+    assert up.status_code == 200, up.text
+    assert (up.json().get("handoff") or {}).get("schema") == "tender.handoff.v1"
+    bad = client.post(
+        "/api/tender/parse/file",
+        files={"file": ("scan.pdf", b"%PDF-fake", "application/pdf")},
+    )
+    assert bad.status_code == 400
+    assert jp.get("submit_blocked") is True
+    assert jp.get("p0_confirmed") is False
+
+    rh = client.get("/api/health")
+    assert rh.status_code == 200
+    hh = rh.json()
+    assert (hh.get("entries") or {}).get("packing_workbench") == "/workbench"
+    assert (hh.get("features") or {}).get("tender_handoff") is True
+    arch = client.get("/api/architecture")
+    assert arch.status_code == 200
+    assert (arch.json().get("tender_mainline") or {}).get("submit_blocked_default") is True
+    assert "我已核对 P0" in index
+    assert "复制招标解析表" in index
+    assert "复制矩阵 CSV" in index
+    assert "tenderFile" in index
+    wb = (ROOT / "frontend" / "workbench.html").read_text(encoding="utf-8")
+    assert 'href="/"' in wb and "投标应答" in wb
 
     rd = client.post(
         "/api/tender/delivery",

@@ -29,14 +29,43 @@ def main() -> int:
     os.environ.setdefault("PACKING_FINALIZE_LLM", "0")
 
     raw = sys.stdin.read() if not sys.stdin.isatty() else ""
+    payload: dict = {}
     user = ""
     if raw.strip().startswith("{"):
         try:
-            user = str(json.loads(raw).get("user_input") or "")
+            payload = json.loads(raw)
+            user = str(payload.get("user_input") or "")
         except json.JSONDecodeError:
             user = raw
     else:
         user = raw
+    mode = str(payload.get("mode") or "").strip().lower()
+    tender_text = str(payload.get("tender_text") or payload.get("text") or "")
+    if mode in {"tender_parse", "tender", "bid-parse"} or (tender_text.strip() and not user.strip()):
+        from packing_assistant.tools.tender_parse import run_tender_pipeline
+
+        out = run_tender_pipeline(
+            tender_text or user,
+            source="civil-buddy-sidecar",
+            project_name=str(payload.get("project_name") or "Civil Buddy 招标解析"),
+            p0_confirmed=bool(payload.get("p0_confirmed")),
+        )
+        print(
+            json.dumps(
+                {
+                    "ok": bool(out.get("ok")),
+                    "mode": "tender_parse",
+                    "handoff": out.get("handoff"),
+                    "p0_reject_scan": out.get("p0_reject_scan"),
+                    "submit_blocked": out.get("submit_blocked"),
+                    "tech_outline": out.get("tech_outline"),
+                    "extract_table_markdown": out.get("extract_table_markdown"),
+                    "n_requirements": len((out.get("parse") or {}).get("requirements") or []),
+                },
+                ensure_ascii=False,
+            )
+        )
+        return 0
     if not user.strip():
         user = " ".join(sys.argv[1:]) or "civil-buddy packing sidecar"
 

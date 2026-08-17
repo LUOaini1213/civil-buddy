@@ -20,3 +20,5 @@ status: active
 | `trajectories/` | T-D1 happy path 等 |
 
 **分工**：本目录管「投什么、怎么应」；`01_rules`+装柜 tools 管「怎么装、能不能出运」。
+
+矩阵行通过 `knowledge_ref` 绑到本目录（M4 轻量）；`tender.handoff.v1` 把评分点交给 bid-tech、★/废标交给 bid-compliance。P0 不自动关闭。电子标加密/CA 锁只摘原文，不编平台或锁号。

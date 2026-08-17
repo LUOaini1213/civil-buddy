@@ -103,6 +103,7 @@ def run_tender_delivery_pipeline(
     project_name: str = "幕墙项目投标应答（草稿）",
     enable_auto_confirm: bool = True,
     save_artifacts: bool = False,
+    p0_confirmed: bool = False,
 ) -> Dict[str, Any]:
     """主线 C 端到端：招标文本 →（可选 A/B 装柜）→ 响应矩阵 + 应答导出包。"""
     from packing_assistant.tools.tender_parse import run_tender_pipeline
@@ -131,6 +132,7 @@ def run_tender_delivery_pipeline(
         packing_summary=packing_summary,
         source="tender-delivery",
         project_name=project_name,
+        p0_confirmed=p0_confirmed,
     )
     return {
         "ok": bool(out.get("ok")),

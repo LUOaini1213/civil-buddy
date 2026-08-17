@@ -18,6 +18,12 @@ python -m uvicorn app:app --reload --host 127.0.0.1 --port 8765
 
 高风险专家（施工方案、危大、交底、结构）写盘前勾选确认句。
 
+经营投标三岗与装箱主线共用 `packing_assistant.tools.tender_parse`：
+
+- 招标解析 → `extract_tender`（评分点 / ★ / 工期只抄原文）
+- 废标检查 → `compliance_gaps`（P0 须人确认，不判定可投标）
+- 技术标 → `tech_expand`（按抽出评分点出目录，不套上个项目模板）
+
 ## 自己设计专家和知识库
 
 点右上角 **设计专家 / 知识库**：

@@ -252,6 +252,7 @@
     .badge.pending { background: #f1f5f9; color: #475569; }
     .badge.human_required, .badge.review { background: var(--info-bg); color: var(--info); }
     .badge.ok { background: var(--ok-bg); color: var(--ok); }
+    .badge.warn { background: var(--warn-bg); color: var(--warn); }
     .badge.bad { background: var(--err-bg); color: var(--err); }
     .badge.neutral { background: #f1f5f9; color: #475569; }
 
@@ -316,6 +317,7 @@
       </div>
       <div class="links">
         <a href="/workbench">工程装柜台</a>
+        <a href="http://127.0.0.1:8765">Civil Buddy 工作台</a>
         <a href="/docs" target="_blank">API</a>
       </div>
     </header>
@@ -345,9 +347,16 @@
           <span class="muted" style="font-size:12px">仅主线能力</span>
         </div>
         <div class="card-b">
+          <label class="field" for="tenderFile">上传 .txt / .md 节选</label>
+          <input id="tenderFile" type="file" accept=".txt,.md,text/plain" :disabled="busy"
+            @change="onTenderFile" />
           <label class="field" for="tender">招标文件节选（中/英均可）</label>
           <textarea id="tender" v-model="tenderText" :disabled="busy"
             placeholder="粘贴含包装、集装箱、货载、废标、资质等条款的文本…"></textarea>
+          <label class="field" style="display:flex;align-items:center;gap:8px;margin:10px 0 0">
+            <input type="checkbox" v-model="p0Confirmed" :disabled="busy" />
+            我已核对 P0 资格 / ★ / 废标项（仍是草稿，不可递交）
+          </label>
           <div class="actions">
             <button class="primary" :disabled="busy || !tenderText.trim()" @click="runDelivery">
               {{ busy ? '处理中…' : '解析并生成交付证据' }}
@@ -355,7 +364,7 @@
             <button class="ghost" :disabled="busy || !tenderText.trim()" @click="runParseOnly">仅解析矩阵</button>
             <button class="ghost" :disabled="busy" @click="loadSample">填入样例</button>
           </div>
-          <p class="hint">默认用幕墙样例物料跑装柜交付；运输/包装条款可由 can_fit 自动标为 covered。</p>
+          <p class="hint">默认用幕墙样例物料跑装柜交付；运输/包装条款可由 can_fit 自动标为 covered。★/资格/废标走 P0，须人确认，系统不判定可投标。</p>
           <div class="err-box" v-if="error">{{ error }}</div>
         </div>
       </section>
@@ -405,6 +414,44 @@
       </section>
     </div>
 
+    <section class="card" style="margin-top:18px" v-if="handoff">
+      <div class="card-h">
+        <h2>经营岗交接 · P0</h2>
+        <span class="badge" :class="(handoff.p0_reject_scan && handoff.p0_reject_scan.human_confirm_required) ? 'warn' : 'ok'">
+          P0 须人确认
+        </span>
+      </div>
+      <div class="card-b">
+        <p class="hint" style="margin-top:0">
+          下一岗：{{ (handoff.next_experts || []).join(' → ') || '—' }}
+          · 工期 {{ handoff.duration_days != null ? (handoff.duration_days + ' 日历天') : '招标未写' }}
+          · workhead {{ (handoff.workheads || []).join(', ') || '未检出' }}
+          · 信封 {{ handoff.envelope || '招标未写' }}
+          · 保证金 {{ (handoff.bid_bond && handoff.bid_bond.mentioned) ? (handoff.bid_bond.amount_verbatim || '原文有、金额未写') : '招标未写' }}
+          · 评标办法 {{ handoff.eval_method || '招标未写' }}
+        </p>
+        <p class="hint" v-if="submitBlockReason" style="color:var(--warn)">{{ submitBlockReason }}</p>
+        <p class="hint">{{ (handoff.p0_reject_scan && handoff.p0_reject_scan.note) || '' }}</p>
+        <ul class="todo-list" v-if="(handoff.star_items || []).length">
+          <li v-for="s in handoff.star_items" :key="s.id">
+            <span class="badge bad">★</span>
+            <strong>{{ s.text }}</strong>
+            <span class="muted">· {{ s.requirement_ref }}</span>
+          </li>
+        </ul>
+        <ul class="todo-list" v-if="(handoff.scoring_points || []).length">
+          <li v-for="s in handoff.scoring_points" :key="s.id">
+            <span class="badge">评分点</span>
+            <strong>{{ s.text }}</strong>
+            <span class="muted">· {{ s.requirement_ref }}</span>
+          </li>
+        </ul>
+        <p class="hint" v-if="techOutline && techOutline.from_extracted_scores">
+          技术标目录已按抽出评分点生成（{{ techOutline.n_chapters }} 章），不是套用上个项目模板。
+        </p>
+      </div>
+    </section>
+
     <section class="card" style="margin-top:18px" v-if="openActions.length">
       <div class="card-h">
         <h2>人工待办</h2>
@@ -437,6 +484,14 @@
             :disabled="!bidbookMarkdown" @click="copyBidbook">
             {{ copied === 'en' ? '已复制英文标书' : '复制英文标书草案' }}
           </button>
+          <button class="ghost" style="padding:6px 12px;font-size:12px"
+            :disabled="!extractTable" @click="copyExtract">
+            {{ copied === 'table' ? '已复制解析表' : '复制招标解析表' }}
+          </button>
+          <button class="ghost" style="padding:6px 12px;font-size:12px"
+            :disabled="!matrixCsv" @click="copyCsv">
+            {{ copied === 'csv' ? '已复制 CSV' : '复制矩阵 CSV' }}
+          </button>
         </div>
       </div>
       <div class="card-b" style="padding-top:8px">
@@ -448,6 +503,7 @@
             <thead>
               <tr>
                 <th>条款</th>
+                <th>原文</th>
                 <th>类型</th>
                 <th>状态</th>
                 <th>合规</th>
@@ -461,6 +517,7 @@
             <tbody>
               <tr v-for="row in matrixRows" :key="row.req_id">
                 <td class="title-cell">{{ row.title }}</td>
+                <td class="muted" :title="row.knowledge_excerpt || ''">{{ row.exact_text || (row.snippets && row.snippets[0]) || '—' }}</td>
                 <td class="muted">{{ row.requirement_type || row.category || '—' }}</td>
                 <td><span class="badge" :class="row.status">{{ row.status }}</span></td>
                 <td class="muted">{{ row.compliance_label || '—' }}</td>
@@ -477,7 +534,7 @@
     </section>
 
     <footer class="foot">
-      主线 C · 投标应答 + 交付链路 · 装柜工程台见 <a href="/workbench">/workbench</a>
+      主线 C · 投标应答 + 交付链路 · 装柜工程台 <a href="/workbench">/workbench</a> · 专家工作台 <a href="http://127.0.0.1:8765">:8765</a>
     </footer>
   </div>
 
@@ -488,7 +545,10 @@
 四、严禁超载，单柜不超过货载限制；重心与绑扎须符合 CTU 要求。
 五、交货期：合同签订后 90 个日历天内到港。
 六、未实质性响应招标文件的作废标处理。
-七、须提供 VGM 及保险相关文件。`;
+七、须提供 VGM 及保险相关文件。
+八、技术标评分：施工组织设计 25 分、项目管理机构 10 分。
+九、★深基坑专项方案须编制，不满足即废标。
+十、采用两信封：技术标与报价分投。投标截止 2026-09-01 15:00。`;
 
     new Vue({
       el: '#app',
@@ -503,6 +563,13 @@
         exportMarkdown: '',
         bidbookMarkdown: '',
         copied: '',
+        handoff: null,
+        techOutline: null,
+        p0Confirmed: false,
+        submitBlocked: true,
+        submitBlockReason: '',
+        extractTable: '',
+        matrixCsv: '',
       },
       computed: {
         mid50Label() {
@@ -525,6 +592,18 @@
           this.tenderText = SAMPLE;
           this.error = '';
         },
+        onTenderFile(ev) {
+          const f = ev.target && ev.target.files && ev.target.files[0];
+          if (!f) return;
+          const name = String(f.name || '').toLowerCase();
+          if (!name.endsWith('.txt') && !name.endsWith('.md')) {
+            this.error = '只接受 .txt / .md，不解析扫描 PDF';
+            return;
+          }
+          const reader = new FileReader();
+          reader.onload = () => { this.tenderText = String(reader.result || ''); };
+          reader.readAsText(f, 'utf-8');
+        },
         evidenceLabel(ev) {
           if (!ev) return '—';
           if (ev.type === 'packing') {
@@ -539,6 +618,12 @@
         async copyBidbook() {
           await this.copyText(this.bidbookMarkdown, 'en');
         },
+        async copyExtract() {
+          await this.copyText(this.extractTable, 'table');
+        },
+        async copyCsv() {
+          await this.copyText(this.matrixCsv, 'csv');
+        },
         async copyText(text, flag) {
           if (!text) return;
           try {
@@ -550,7 +635,7 @@
           }
         },
         async runParseOnly() {
-          await this.callApi('/api/tender/parse', { text: this.tenderText });
+          await this.callApi('/api/tender/parse', { text: this.tenderText, p0_confirmed: this.p0Confirmed });
         },
         async runDelivery() {
           await this.callApi('/api/tender/delivery', {
@@ -558,6 +643,7 @@
             run_delivery: true,
             container_type: '40HQ',
             max_containers: 2,
+            p0_confirmed: this.p0Confirmed,
           });
         },
         async callApi(path, body) {
@@ -581,6 +667,12 @@
             this.openActions = data.open_actions || (data.response_package && data.response_package.open_actions) || [];
             this.exportMarkdown = data.export_markdown || (data.response_package && data.response_package.markdown) || data.matrix_markdown || '';
             this.bidbookMarkdown = data.bidbook_markdown || (data.bidbook && data.bidbook.markdown) || '';
+            this.handoff = data.handoff || (data.parse && data.parse.handoff) || null;
+            this.techOutline = data.tech_outline || null;
+            this.submitBlocked = data.submit_blocked !== false;
+            this.submitBlockReason = data.submit_block_reason || '';
+            this.extractTable = data.extract_table_markdown || '';
+            this.matrixCsv = data.matrix_csv || '';
           } catch (e) {
             this.error = (e && e.message) ? e.message : String(e);
           } finally {

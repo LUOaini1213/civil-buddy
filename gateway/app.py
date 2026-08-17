@@ -271,6 +271,16 @@ def api_health():
             "bounded_debate_default": True,
             "primary_agent_mode": "steps",
             "llm_toolcall_reference_only": True,
+            "tender_handoff": True,
+            "tender_p0_scan": True,
+            "tender_tech_outline": True,
+            "tender_parse_file": True,
+            "tender_parse_file_path": "/api/tender/parse/file",
+        },
+        "entries": {
+            "tender_delivery": "/",
+            "packing_workbench": "/workbench",
+            "civil_workbench": "http://127.0.0.1:8765",
         },
         "otel": _otel_status_safe(),
         "langgraph_checkpoint": _lg_status_safe(),
@@ -298,6 +308,17 @@ def api_architecture():
         "architecture": TEAM_ARCHITECTURE,
         "roster": AGENT_ROSTER,
         "kb_bindings": kb_bindings,
+        "tender_mainline": {
+            "id": "C_tender_delivery",
+            "handoff": True,
+            "p0_human_confirm": True,
+            "submit_blocked_default": True,
+            "entries": {
+                "ui": "/",
+                "parse": "/api/tender/parse",
+                "delivery": "/api/tender/delivery",
+            },
+        },
     }
 
 
@@ -356,8 +377,34 @@ def api_tender_parse(body: dict = None):
         packing_summary=packing_summary,
         source="api",
         project_name=project_name,
+        p0_confirmed=bool(body.get("p0_confirmed")),
     )
     return {"ok": bool(out.get("ok")), "product_mainline": "C_tender_delivery", **out}
+
+
+@app.post("/api/tender/parse/file")
+async def api_tender_parse_file(
+    file: UploadFile = File(...),
+    p0_confirmed: str = Form("false"),
+    project_name: str = Form("幕墙项目投标应答（草稿）"),
+):
+    """Upload a .txt/.md ITT excerpt. No PDF vision; no invented pages."""
+    from packing_assistant.tools.tender_parse import run_tender_pipeline
+
+    name = (file.filename or "upload.txt").lower()
+    if not name.endswith((".txt", ".md")):
+        raise HTTPException(400, "只接受 .txt / .md 节选，不解析扫描 PDF")
+    raw = await file.read()
+    if len(raw) > 800_000:
+        raise HTTPException(400, "文件过大")
+    text = raw.decode("utf-8", errors="replace")
+    out = run_tender_pipeline(
+        text,
+        source="api-upload",
+        project_name=project_name,
+        p0_confirmed=str(p0_confirmed).lower() in {"1", "true", "yes"},
+    )
+    return {"ok": bool(out.get("ok")), "product_mainline": "C_tender_delivery", "filename": file.filename, **out}
 
 
 @app.post("/api/tender/delivery")
@@ -380,6 +427,7 @@ def api_tender_delivery(body: dict = None):
         project_name=str(body.get("project_name") or "幕墙项目投标应答（草稿）"),
         enable_auto_confirm=True,
         save_artifacts=False,
+        p0_confirmed=bool(body.get("p0_confirmed")),
     )
 
 
