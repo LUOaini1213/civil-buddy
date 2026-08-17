@@ -37,7 +37,21 @@ def run_turn(
     p0_confirmed: bool = False,
     project_name: str = "幕墙项目投标应答（草稿）",
     force_intent: Optional[str] = None,
+    expert_id: str = "",
+    session_id: str = "",
 ) -> Dict[str, Any]:
+    from packing_assistant.expert_roster import get_expert, resolve_expert
+    from packing_assistant.expert_turn import run_expert_turn
+
+    eid = (expert_id or "").strip() or (resolve_expert(text) or "")
+    if eid and get_expert(eid):
+        return run_expert_turn(
+            text,
+            eid,
+            confirm_ok=p0_confirmed,
+            session_id=session_id,
+            force_intent=force_intent,
+        )
     intent = force_intent if force_intent in {"chat", "run", "both"} else understand(text)
     out: Dict[str, Any] = {
         "ok": True,

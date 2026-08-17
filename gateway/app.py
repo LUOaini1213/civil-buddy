@@ -286,6 +286,7 @@ def api_health():
             "otel_dashboard_path": "/api/otel/dashboard",
             "understand_default": True,
             "understand_path": "/api/turn",
+            "expert_turn": True,
         },
         "entries": {
             "tender_delivery": "/",
@@ -388,6 +389,14 @@ def _tender_ingest_from_uploads(uploads: list) -> dict:
         raise HTTPException(400, str(e)) from e
 
 
+@app.get("/api/experts")
+def api_experts():
+    from packing_assistant.expert_roster import list_experts
+
+    rows = [e.to_dict() for e in list_experts()]
+    return {"ok": True, "n": len(rows), "experts": rows}
+
+
 @app.post("/api/understand")
 def api_understand(body: dict = None):
     """Classify user text. No writes."""
@@ -407,9 +416,11 @@ def api_turn(body: dict = None):
     body = body or {}
     return run_turn(
         str(body.get("text") or body.get("message") or body.get("tender_text") or ""),
-        p0_confirmed=bool(body.get("p0_confirmed")),
+        p0_confirmed=bool(body.get("p0_confirmed") or body.get("confirm_ok")),
         project_name=str(body.get("project_name") or "幕墙项目投标应答（草稿）"),
         force_intent=str(body.get("intent") or "") or None,
+        expert_id=str(body.get("expert_id") or ""),
+        session_id=str(body.get("session_id") or ""),
     )
 
 
