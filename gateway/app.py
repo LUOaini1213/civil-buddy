@@ -284,6 +284,8 @@ def api_health():
             "sandbox": True,
             "otel_dashboard": True,
             "otel_dashboard_path": "/api/otel/dashboard",
+            "understand_default": True,
+            "understand_path": "/api/turn",
         },
         "entries": {
             "tender_delivery": "/",
@@ -328,6 +330,8 @@ def api_architecture():
                 "parse_files": "/api/tender/parse/files",
                 "delivery": "/api/tender/delivery",
                 "review": "/api/tender/review",
+                "turn": "/api/turn",
+                "understand": "/api/understand",
             },
         },
     }
@@ -382,6 +386,31 @@ def _tender_ingest_from_uploads(uploads: list) -> dict:
         return ingest_files(files)
     except ValueError as e:
         raise HTTPException(400, str(e)) from e
+
+
+@app.post("/api/understand")
+def api_understand(body: dict = None):
+    """Classify user text. No writes."""
+    from packing_assistant.understand import understand
+
+    body = body or {}
+    text = str(body.get("text") or body.get("message") or "")
+    intent = understand(text)
+    return {"ok": True, "intent": intent, "wrote": False, "schema": "civil.understand.v1"}
+
+
+@app.post("/api/turn")
+def api_turn(body: dict = None):
+    """Default surface: chat does not write; run uses existing tender pipeline."""
+    from packing_assistant.product_turn import run_turn
+
+    body = body or {}
+    return run_turn(
+        str(body.get("text") or body.get("message") or body.get("tender_text") or ""),
+        p0_confirmed=bool(body.get("p0_confirmed")),
+        project_name=str(body.get("project_name") or "幕墙项目投标应答（草稿）"),
+        force_intent=str(body.get("intent") or "") or None,
+    )
 
 
 @app.post("/api/tender/parse")

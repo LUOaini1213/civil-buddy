@@ -4,7 +4,7 @@
 
 **总判：部分合格。**
 
-它已经是带纪律的土木/投标/装柜 **application harness**（工具独占数字、P0 HITL、成稿标草稿、矩阵抄原文、断线写 `UNSPECIFIED`）。它还不是可以坐在人对面替代持证人员、也不是可以递交 GeBIZ / 当法定专项方案的行业 agent。官方门户标题与 GST **9%** 抄对；缺的是默认面上的「先理解再聊或跑」、真 MCP 宿主、扫描 PDF。竞品只作旁证，不以易标 AGPL 或营销字数为合格线。
+它已经是带纪律的土木/投标/装柜 **application harness**（工具独占数字、P0 HITL、成稿标草稿、矩阵抄原文、断线写 `UNSPECIFIED`）。默认面已接 `POST /api/turn`：提问不写盘。它还不是可以替代持证人员或递交 GeBIZ 的行业 agent。官方门户标题与 GST **9%** 抄对。仍缺真 MCP 宿主、扫描 PDF。竞品只作旁证，不以易标 AGPL 或营销字数为合格线。总判仍是 **部分合格**，不因补上默认面分流就改写成合格。
 
 禁止把下列句子写成产品能力：中标率 +N%、可以投标、可以开工。
 
@@ -35,7 +35,7 @@
 | 高风险 HITL | **通过（窄）** | P0 `human_confirm_required=true`；危大写盘要确认句。默认经营岗仍是按钮，不是每句先问。 |
 | 成稿仍标草稿 | **通过** | `submit_blocked=true`；bidbook DRAFT / NOT FOR SUBMIT；再审不填业绩、不改 `can_fit`。 |
 | 可回放 trace / eval | **部分** | 管线有 `run_id`、矩阵/`exact_text`、OTEL 文件大盘、脚本评测。缺常驻 `GET /api/eval/live` 宿主；OTEL SDK 未装，只走 jsonl。 |
-| 先理解再聊或跑 | **缺口** | `understand → chat/run/both` 在工作台 Rust；默认 `/` 是解析按钮，不是 Grok Build 式会话。 |
+| 先理解再聊或跑 | **通过（默认面）** | `packing_assistant.understand` + `POST /api/turn`：GST/危大提问 `chat` 且 `wrote=false`；写提纲/招标节选 `run` 进现有矩阵。 |
 | 官方事实不编条款 | **通过** | 上表四门户抄对。 |
 | 可发现工具 / MCP 宿主 | **部分** | list/plan/export 已露出；没有 Claude/Cursor 真宿主去调。 |
 | 扫描招标 PDF | **缺口** | 产品拒绝扫描 PDF；MinerU 可选且本机未当作默认。 |
@@ -56,7 +56,7 @@ README 营销字数、星标、「中标率」一律不当合格标准。
 
 ## 4. 仍不合格的具体缺口
 
-1. 默认产品面不是「每个专家都是可聊天可跑的 harness」。
+1. 65 岗并非每个都在默认面上可聊可跑（默认面是经营岗 turn，不是全名册会话）。
 2. 没有接上的 MCP 客户端；`kb://` 分页未做。
 3. 扫描件招标进不了矩阵。
 4. 联网评测入口绑在 Rust 工作台，本机无链接器时不能当日常闸。
