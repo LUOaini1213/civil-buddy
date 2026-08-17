@@ -311,9 +311,9 @@
   <div id="app" class="app">
     <header class="top">
       <div class="brand">
-        <span class="pill">主线 C · 投标应答 + 交付</span>
+        <span class="pill">主线 C · 先理解再聊或跑</span>
         <h1>项目投标应答 · 交付链路</h1>
-        <p>解析招标要点 → 合规响应矩阵 → 装柜交付证据。不编造资质，tools 算交付数字。</p>
+        <p>先判断是提问还是成稿。提问只解释、不写盘。成稿才进矩阵。内部讨论 AI 草稿，不可递交。</p>
       </div>
       <div class="links">
         <a href="/workbench">工程装柜台</a>
@@ -325,8 +325,8 @@
     <div class="steps">
       <div class="step">
         <div class="n">Step 1</div>
-        <div class="t">招标文本</div>
-        <div class="d">粘贴条款节选</div>
+        <div class="t">先理解</div>
+        <div class="d">提问聊天 · 招标才跑</div>
       </div>
       <div class="step">
         <div class="n">Step 2</div>
@@ -343,29 +343,32 @@
     <div class="grid">
       <section class="card">
         <div class="card-h">
-          <h2>招标要求</h2>
-          <span class="muted" style="font-size:12px">仅主线能力</span>
+          <h2>先说你要什么</h2>
+          <span class="muted" style="font-size:12px">提问不写盘</span>
         </div>
         <div class="card-b">
           <label class="field" for="tenderFile">上传招标节选（可多份：txt / md / csv / docx / xlsx）</label>
           <input id="tenderFile" type="file" multiple
             accept=".txt,.md,.csv,.tsv,.docx,.xlsx,text/plain,text/csv" :disabled="busy"
             @change="onTenderFiles" />
-          <label class="field" for="tender">招标文件节选（中/英均可）</label>
+          <label class="field" for="tender">提问或招标节选（中/英均可）</label>
           <textarea id="tender" v-model="tenderText" :disabled="busy"
-            placeholder="粘贴含包装、集装箱、货载、废标、资质等条款的文本…"></textarea>
+            placeholder="先问一句（如 GST 是什么、临边算不算危大），或粘贴招标条款再成稿…"></textarea>
           <label class="field" style="display:flex;align-items:center;gap:8px;margin:10px 0 0">
             <input type="checkbox" v-model="p0Confirmed" :disabled="busy" />
             我已核对 P0 资格 / ★ / 废标项（仍是草稿，不可递交）
           </label>
           <div class="actions">
-            <button class="primary" :disabled="busy || !tenderText.trim()" @click="runDelivery">
-              {{ busy ? '处理中…' : '解析并生成交付证据' }}
+            <button class="primary" :disabled="busy || !tenderText.trim()" @click="runTurn">
+              {{ busy ? '处理中…' : '先理解再处理' }}
             </button>
             <button class="ghost" :disabled="busy || !tenderText.trim()" @click="runParseOnly">仅解析矩阵</button>
+            <button class="ghost" :disabled="busy || !tenderText.trim()" @click="runDelivery">解析并生成交付证据</button>
             <button class="ghost" :disabled="busy" @click="loadSample">填入样例</button>
           </div>
-          <p class="hint">表格按行进矩阵，原文进 exact_text。多文件拼成一节招标。扫描 PDF 不解析。★/资格/废标走 P0，须人确认，系统不判定可投标。</p>
+          <p class="hint">提问只解释，不写投标应答或专项稿。成稿才进矩阵，原文进 exact_text。扫描 PDF 不解析。★/资格/废标走 P0。内部讨论 AI 草稿，系统不判定可投标，不可递交。</p>
+          <p class="hint" v-if="turnIntent">本轮意图：{{ turnIntent }}{{ wrote ? ' · 已进矩阵' : ' · 未写盘' }}</p>
+          <div class="hint" v-if="chatReply" style="white-space:pre-wrap;color:var(--ink)">{{ chatReply }}</div>
           <div class="err-box" v-if="error">{{ error }}</div>
         </div>
       </section>
@@ -638,6 +641,9 @@
         review: null,
         otelSpans: [],
         otelN: 0,
+        turnIntent: '',
+        wrote: false,
+        chatReply: '',
       },
       computed: {
         mid50Label() {
@@ -717,6 +723,9 @@
             this.error = '复制失败：请手动选择导出内容';
           }
         },
+        async runTurn() {
+          await this.callApi('/api/turn', { text: this.tenderText, p0_confirmed: this.p0Confirmed });
+        },
         async runParseOnly() {
           await this.callApi('/api/tender/parse', { text: this.tenderText, p0_confirmed: this.p0Confirmed });
         },
@@ -749,6 +758,21 @@
           }
         },
         applyResult(data) {
+          if (data && data.schema === 'civil.turn.v1') {
+            this.turnIntent = data.intent || '';
+            this.wrote = !!data.wrote;
+            this.chatReply = data.reply || '';
+            if (!data.wrote) {
+              this.matrixRows = [];
+              this.matrixSummary = {};
+              this.packing = null;
+              this.exportMarkdown = '';
+              this.bidbookMarkdown = '';
+              this.submitBlocked = true;
+              this.submitBlockReason = data.submit_block_reason || '提问未写盘。';
+              return;
+            }
+          }
           if (data && (data.schema === 'tender.review.v1' || data.step === 'post_draft_review')) {
             this.review = data;
             return;
