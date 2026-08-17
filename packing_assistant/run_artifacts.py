@@ -26,7 +26,11 @@ def run_dir(run_id: str) -> Path:
 
 
 def _write_json(path: Path, obj: Any) -> str:
-    path.write_text(json.dumps(obj, ensure_ascii=False, indent=2, default=str), encoding="utf-8")
+    from packing_assistant.sandbox import guarded_write_text
+
+    guarded_write_text(
+        path, json.dumps(obj, ensure_ascii=False, indent=2, default=str)
+    )
     return str(path)
 
 
@@ -70,7 +74,9 @@ def save_run_artifacts(
     paths["risk"] = _write_json(d / "risk.json", risk)
 
     risk_md = _risk_md(state)
-    (d / "risk.md").write_text(risk_md, encoding="utf-8")
+    from packing_assistant.sandbox import guarded_write_text
+
+    guarded_write_text(d / "risk.md", risk_md)
     paths["risk_md"] = str(d / "risk.md")
 
     # 目标达成

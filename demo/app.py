@@ -115,6 +115,34 @@ def mcp_prompt_get(body: McpPromptIn) -> dict:
     return {"ok": True, **get_prompt(body.name, body.arguments, expert_id=body.expert_id)}
 
 
+def _mcp_expert_ok(expert_id: str) -> bool:
+    return (not expert_id) or bool(get_expert(expert_id)) or expert_id in {"pack-ship"}
+
+
+@app.get("/api/mcp/tools")
+def mcp_tools(expert_id: str = "") -> dict:
+    from mcp_surface import list_tools
+
+    if expert_id and not _mcp_expert_ok(expert_id):
+        raise HTTPException(404, "unknown expert")
+    return {"ok": True, "tools": list_tools(expert_id=expert_id or None)}
+
+
+class McpToolIn(BaseModel):
+    name: str
+    expert_id: str = "pack-ship"
+    arguments: dict = Field(default_factory=dict)
+
+
+@app.post("/api/mcp/tools/call")
+def mcp_tool_call(body: McpToolIn) -> dict:
+    from mcp_surface import call_tool
+
+    if body.expert_id and not _mcp_expert_ok(body.expert_id):
+        raise HTTPException(404, "unknown expert")
+    return {"ok": True, **call_tool(body.name, body.arguments, expert_id=body.expert_id or None)}
+
+
 @app.get("/api/catalog")
 def catalog() -> dict:
     return catalog_payload()

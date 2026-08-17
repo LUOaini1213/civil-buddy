@@ -17,7 +17,7 @@ import time
 from contextlib import contextmanager
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Any, Dict, Iterator, Optional
+from typing import Any, Dict, Iterator, List, Optional
 
 from packing_assistant.config import HARNESS_VERSION, TRACE_DIR
 
@@ -267,3 +267,90 @@ def force_flush() -> None:
             provider.force_flush()
     except Exception:
         pass
+
+
+def spans_file() -> Path:
+    return _otel_file_path()
+
+
+def _duration_ms(rec: Dict[str, Any]) -> Optional[int]:
+    if rec.get("duration_ms") is not None:
+        try:
+            return int(rec["duration_ms"])
+        except (TypeError, ValueError):
+            pass
+    attrs = rec.get("attributes") or {}
+    if attrs.get("duration_ms") is not None:
+        try:
+            return int(attrs["duration_ms"])
+        except (TypeError, ValueError):
+            pass
+    start = rec.get("start_ns")
+    end = rec.get("end_ns")
+    if start is not None and end is not None:
+        try:
+            return int((int(end) - int(start)) / 1_000_000)
+        except (TypeError, ValueError):
+            return None
+    return None
+
+
+def list_spans(limit: int = 400) -> List[Dict[str, Any]]:
+    """Read exported JSONL spans. Not a fixture list."""
+    path = _otel_file_path()
+    if not path.is_file():
+        return []
+    rows: List[Dict[str, Any]] = []
+    try:
+        raw = path.read_text(encoding="utf-8")
+    except OSError:
+        return []
+    for line in raw.splitlines():
+        line = line.strip()
+        if not line:
+            continue
+        try:
+            rec = json.loads(line)
+        except json.JSONDecodeError:
+            continue
+        if not isinstance(rec, dict):
+            continue
+        attrs = rec.get("attributes") or {}
+        if not isinstance(attrs, dict):
+            attrs = {}
+        run_id = (
+            rec.get("run_id")
+            or attrs.get("run_id")
+            or attrs.get("packing.run_id")
+            or ""
+        )
+        node = rec.get("node") or attrs.get("node") or attrs.get("packing.node") or ""
+        tool = rec.get("tool") or attrs.get("tool") or attrs.get("packing.tool") or ""
+        rows.append(
+            {
+                "name": rec.get("name") or "",
+                "run_id": str(run_id) if run_id is not None else "",
+                "node": str(node) if node else "",
+                "tool": str(tool) if tool else "",
+                "duration_ms": _duration_ms(rec),
+                "ts": rec.get("ts") or "",
+                "span_id": rec.get("span_id") or "",
+                "trace_id": rec.get("trace_id") or "",
+            }
+        )
+    if limit and len(rows) > limit:
+        return rows[-int(limit) :]
+    return rows
+
+
+def dashboard_payload(limit: int = 400) -> Dict[str, Any]:
+    spans = list_spans(limit=limit)
+    return {
+        "ok": True,
+        "schema": "otel.dashboard.v1",
+        "fixture": False,
+        "source": str(_otel_file_path()),
+        "n": len(spans),
+        "spans": spans,
+        "status": otel_status(),
+    }

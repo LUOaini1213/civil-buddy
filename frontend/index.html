@@ -493,6 +493,10 @@
             :disabled="!matrixCsv" @click="copyCsv">
             {{ copied === 'csv' ? '已复制 CSV' : '复制矩阵 CSV' }}
           </button>
+          <button class="ghost" style="padding:6px 12px;font-size:12px"
+            :disabled="busy || !matrixRows.length" @click="runReview">
+            {{ busy ? '审查中…' : '成稿后再审一岗' }}
+          </button>
         </div>
       </div>
       <div class="card-b" style="padding-top:8px">
@@ -527,6 +531,66 @@
                 <td class="muted">{{ row.proposal_location || '—' }}</td>
                 <td class="muted">{{ row.requirement_ref || '—' }}</td>
                 <td class="muted">{{ evidenceLabel(row.evidence) }}</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </section>
+
+    <section class="card" style="margin-top:18px" v-if="review">
+      <div class="card-h">
+        <h2>成稿后再审</h2>
+        <span class="badge" :class="(review.n_forbidden || review.n_gaps) ? 'warn' : 'ok'">
+          禁语 {{ review.n_forbidden || 0 }} · 缺项 {{ review.n_gaps || 0 }}
+        </span>
+      </div>
+      <div class="card-b">
+        <p class="hint" style="margin-top:0">
+          不填业绩、不改 can_fit（仍是 {{ review.can_fit === undefined || review.can_fit === null ? '—' : review.can_fit }}）。
+        </p>
+        <ul class="todo-list" v-if="(review.forbidden_hits || []).length">
+          <li v-for="h in review.forbidden_hits" :key="h">
+            <span class="badge bad">禁语</span>
+            <strong>{{ h }}</strong>
+          </li>
+        </ul>
+        <ul class="todo-list" v-if="(review.gaps || []).length">
+          <li v-for="g in review.gaps" :key="g.req_id || g.title">
+            <span class="badge warn">缺项</span>
+            <strong>{{ g.title || g.req_id }}</strong>
+            <span class="muted">· {{ g.status }}</span>
+          </li>
+        </ul>
+      </div>
+    </section>
+
+    <section class="card" style="margin-top:18px">
+      <div class="card-h">
+        <h2>OTEL 大盘</h2>
+        <div style="display:flex;align-items:center;gap:10px">
+          <span class="muted" style="font-size:12px">{{ otelN }} spans · 真导出，非夹具</span>
+          <button class="ghost" style="padding:6px 12px;font-size:12px" @click="loadOtel">刷新</button>
+        </div>
+      </div>
+      <div class="card-b" style="padding-top:8px">
+        <div v-if="!otelSpans.length" class="empty">尚无 span。跑一次解析/交付后刷新。</div>
+        <div v-else style="overflow-x:auto">
+          <table class="matrix">
+            <thead>
+              <tr>
+                <th>name</th>
+                <th>run_id</th>
+                <th>node / tool</th>
+                <th>duration_ms</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr v-for="s in otelSpans" :key="(s.span_id || '') + (s.ts || '') + (s.name || '')">
+                <td class="title-cell">{{ s.name }}</td>
+                <td class="muted">{{ s.run_id || '—' }}</td>
+                <td class="muted">{{ s.node || s.tool || '—' }}</td>
+                <td class="muted">{{ s.duration_ms == null ? '—' : s.duration_ms }}</td>
               </tr>
             </tbody>
           </table>
@@ -571,6 +635,9 @@
         submitBlockReason: '',
         extractTable: '',
         matrixCsv: '',
+        review: null,
+        otelSpans: [],
+        otelN: 0,
       },
       computed: {
         mid50Label() {
@@ -662,7 +729,30 @@
             p0_confirmed: this.p0Confirmed,
           });
         },
+        async runReview() {
+          await this.callApi('/api/tender/review', {
+            draft: this.exportMarkdown || this.bidbookMarkdown || this.tenderText,
+            matrix: { rows: this.matrixRows, summary: this.matrixSummary },
+            packing_summary: this.packing,
+            tech_outline: this.techOutline,
+            bidbook_markdown: this.bidbookMarkdown,
+          });
+        },
+        async loadOtel() {
+          try {
+            const res = await fetch('/api/otel/dashboard');
+            const dat = await res.json().catch(() => ({}));
+            this.otelSpans = dat.spans || [];
+            this.otelN = dat.n || this.otelSpans.length;
+          } catch (e) {
+            this.error = String(e && e.message || e);
+          }
+        },
         applyResult(data) {
+          if (data && (data.schema === 'tender.review.v1' || data.step === 'post_draft_review')) {
+            this.review = data;
+            return;
+          }
           const matrix = (data && data.matrix) || {};
           this.matrixRows = matrix.rows || [];
           this.matrixSummary = matrix.summary || {};
@@ -676,6 +766,7 @@
           this.submitBlockReason = data.submit_block_reason || '';
           this.extractTable = data.extract_table_markdown || '';
           this.matrixCsv = data.matrix_csv || '';
+          if (data.review) this.review = data.review;
         },
         async callApi(path, body) {
           this.busy = true;
@@ -698,6 +789,9 @@
             this.busy = false;
           }
         },
+      },
+      created() {
+        this.loadOtel();
       },
     });
   </script>

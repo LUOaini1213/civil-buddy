@@ -865,6 +865,11 @@ fn pack_tools(pack: &str) -> Vec<ToolDef> {
                 ),
             },
             ToolDef {
+                name: "pack-ship__list",
+                description: "装箱拼柜独有：列出 list / plan / export。不含数字。",
+                parameters: obj(json!({}), &[]),
+            },
+            ToolDef {
                 name: "pack-ship__plan",
                 description: "装箱拼柜独有：出作业单。柜数/坐标只抄 packing-agent 工具回传，否则 UNSPECIFIED。不编 xyz。",
                 parameters: obj(
@@ -875,6 +880,17 @@ fn pack_tools(pack: &str) -> Vec<ToolDef> {
                         "notes": {"type": "string"}
                     }),
                     &["materials"],
+                ),
+            },
+            ToolDef {
+                name: "pack-ship__export",
+                description: "装箱拼柜独有：导出证据。utilization/can_fit/mid50/系固待办只抄 solver，否则 UNSPECIFIED。",
+                parameters: obj(
+                    json!({
+                        "solver": {"type": "object"},
+                        "connected": {"type": "boolean"}
+                    }),
+                    &[],
                 ),
             },
             ToolDef {
@@ -1290,7 +1306,9 @@ pub fn execute(ctx: &mut ToolCtx, name: &str, args: &Value) -> String {
         "survey__record" => survey_record(ctx, args),
         "dispatch__daily" => dispatch_daily(ctx, args),
         "warehouse__log" => warehouse_log(ctx, args),
+        "pack-ship__list" => pack_ship_list(),
         "pack-ship__plan" => pack_ship_plan(ctx, args),
+        "pack-ship__export" => pack_ship_export(args),
         "pack-ship__health" => pack_ship_health(),
         "env__list" => env_list(ctx, args),
         "subcontract__sheet" => subcontract_sheet(ctx, args),
@@ -2287,6 +2305,57 @@ fn warehouse_log(ctx: &mut ToolCtx, args: &Value) -> String {
         Ok(m) => m,
         Err(e) => e,
     }
+}
+
+fn pack_ship_list() -> String {
+    "pack-ship__list\npack-ship__plan\npack-ship__export\nutilization/can_fit/mid50/系固待办 只抄 solver；未接通写 UNSPECIFIED。".into()
+}
+
+fn _copy_solver_field(solver: &Value, keys: &[&str]) -> String {
+    for k in keys {
+        if let Some(v) = solver.get(*k) {
+            if v.is_null() {
+                continue;
+            }
+            if let Some(s) = v.as_str() {
+                if !s.is_empty() {
+                    return s.to_string();
+                }
+            } else {
+                return v.to_string();
+            }
+        }
+    }
+    "UNSPECIFIED".into()
+}
+
+fn pack_ship_export(args: &Value) -> String {
+    let connected = args.get("connected").and_then(|v| v.as_bool());
+    let solver = args.get("solver").cloned().unwrap_or(json!({}));
+    let disconnected = connected == Some(false) || !solver.is_object() || solver.as_object().map(|o| o.is_empty()).unwrap_or(true);
+    let util = if disconnected {
+        "UNSPECIFIED".into()
+    } else {
+        _copy_solver_field(&solver, &["utilization", "util", "volume_util"])
+    };
+    let can_fit = if disconnected {
+        "UNSPECIFIED".into()
+    } else {
+        _copy_solver_field(&solver, &["can_fit"])
+    };
+    let mid50 = if disconnected {
+        "UNSPECIFIED".into()
+    } else {
+        _copy_solver_field(&solver, &["mid50", "mass_in_mid50_ratio"])
+    };
+    let lash = if disconnected {
+        "UNSPECIFIED".into()
+    } else {
+        _copy_solver_field(&solver, &["系固待办", "lashing_todo"])
+    };
+    format!(
+        "pack-ship__export\nutilization={util}\ncan_fit={can_fit}\nmid50={mid50}\n系固待办={lash}\nxyz=UNSPECIFIED\n"
+    )
 }
 
 fn pack_ship_plan(ctx: &mut ToolCtx, args: &Value) -> String {

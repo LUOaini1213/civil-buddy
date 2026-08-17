@@ -16,6 +16,19 @@ from rag import list_kb, read_kb, search_kb
 if str(REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(REPO_ROOT))
 
+
+def _safe_write(path: Path, text: str) -> None:
+    try:
+        from packing_assistant.sandbox import guarded_write_text
+
+        guarded_write_text(path, text)
+    except PermissionError:
+        raise
+    except Exception:
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text(text, encoding="utf-8")
+
+
 TOOLS = [
     {
         "type": "function",
@@ -154,7 +167,7 @@ def execute_tool(
         out = _workbench_extract(text, str(args.get("project_name") or "工作台招标解析"))
         md = str(out.get("extract_table_markdown") or "")
         path = out_dir / "招标解析表.md"
-        path.write_text(md, encoding="utf-8")
+        _safe_write(path, md)
         deliverables.append({"expert": expert.id, "name": path.name, "path": str(path)})
         ho = out.get("handoff") or {}
         return json.dumps(
@@ -183,7 +196,7 @@ def execute_tool(
         for it in p0.get("items") or []:
             md.append(f"- [{it.get('risk')}] {it.get('title')} · {it.get('requirement_ref')} · {it.get('exact_text')}")
         path = out_dir / "响应缺口清单.md"
-        path.write_text("\n".join(md), encoding="utf-8")
+        _safe_write(path, "\n".join(md))
         deliverables.append({"expert": expert.id, "name": path.name, "path": str(path)})
         return json.dumps(
             {"ok": True, "p0_n": p0.get("n"), "human_confirm_required": True, "wrote": str(path)},
@@ -199,7 +212,7 @@ def execute_tool(
         outline = out.get("tech_outline") or {}
         md = str(outline.get("markdown") or "")
         path = out_dir / "技术标目录草稿.md"
-        path.write_text(md, encoding="utf-8")
+        _safe_write(path, md)
         deliverables.append({"expert": expert.id, "name": path.name, "path": str(path)})
         return json.dumps(
             {
@@ -235,7 +248,7 @@ def execute_tool(
         if not raw_name.endswith((".md", ".txt")):
             raw_name += ".md"
         path = out_dir / raw_name
-        path.write_text(str(args.get("markdown") or ""), encoding="utf-8")
+        _safe_write(path, str(args.get("markdown") or ""))
         item = {"expert": expert.id, "name": raw_name, "path": str(path)}
         deliverables.append(item)
         return f"已写入 {path}"

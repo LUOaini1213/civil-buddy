@@ -279,6 +279,11 @@ def api_health():
             "tender_parse_files": True,
             "tender_parse_files_path": "/api/tender/parse/files",
             "tender_ingest_tables": True,
+            "tender_review": True,
+            "pack_ship_mcp": True,
+            "sandbox": True,
+            "otel_dashboard": True,
+            "otel_dashboard_path": "/api/otel/dashboard",
         },
         "entries": {
             "tender_delivery": "/",
@@ -322,6 +327,7 @@ def api_architecture():
                 "parse_file": "/api/tender/parse/file",
                 "parse_files": "/api/tender/parse/files",
                 "delivery": "/api/tender/delivery",
+                "review": "/api/tender/review",
             },
         },
     }
@@ -463,6 +469,70 @@ async def api_tender_parse_files(
         "ingested_text": ingested["text"],
         **out,
     }
+
+
+@app.get("/api/mcp/tools")
+def api_mcp_tools(expert_id: str = ""):
+    from packing_assistant.tools.pack_ship_mcp import list_pack_ship_tools
+
+    if expert_id and expert_id not in {"pack-ship", ""}:
+        return {"ok": True, "tools": []}
+    return {"ok": True, "tools": list_pack_ship_tools()}
+
+
+@app.post("/api/mcp/tools/call")
+def api_mcp_tool_call(body: dict = None):
+    from packing_assistant.tools.pack_ship_mcp import call_tool
+
+    body = body or {}
+    name = str(body.get("name") or "")
+    expert_id = str(body.get("expert_id") or "pack-ship")
+    if expert_id and expert_id not in {"pack-ship"}:
+        raise HTTPException(403, "拒绝：当前专家看不见该工具")
+    out = call_tool(name, body.get("arguments") or {})
+    return {"ok": bool(out.get("ok", True)), **out}
+
+
+@app.post("/api/tender/review")
+def api_tender_review(body: dict = None):
+    """成稿后再审一岗：禁语 + 矩阵缺项。不填业绩、不改 can_fit。"""
+    from packing_assistant.tools.tender_review import review_draft, review_from_pipeline
+
+    body = body or {}
+    if body.get("pipeline"):
+        out = review_from_pipeline(body["pipeline"])
+    else:
+        out = review_draft(
+            draft=str(body.get("draft") or body.get("text") or body.get("bidbook_markdown") or ""),
+            matrix=body.get("matrix") if isinstance(body.get("matrix"), dict) else None,
+            packing_summary=body.get("packing_summary")
+            if isinstance(body.get("packing_summary"), dict)
+            else None,
+            tech_outline=body.get("tech_outline") if isinstance(body.get("tech_outline"), dict) else None,
+            bidbook_markdown=str(body.get("bidbook_markdown") or ""),
+        )
+    return {"ok": True, "product_mainline": "C_tender_delivery", **out}
+
+
+@app.get("/api/otel/dashboard")
+@app.get("/api/otel/spans")
+def api_otel_dashboard(limit: int = 400):
+    from packing_assistant.otel_hooks import dashboard_payload
+
+    return dashboard_payload(limit=max(1, min(int(limit or 400), 2000)))
+
+
+@app.post("/api/sandbox/check")
+def api_sandbox_check(body: dict = None):
+    from packing_assistant.sandbox import check_open, check_write, request_spawn
+
+    body = body or {}
+    action = str(body.get("action") or "write")
+    if action == "spawn":
+        return request_spawn(body.get("command"), kind=body.get("kind")).to_dict()
+    if action == "open":
+        return check_open(str(body.get("path") or "")).to_dict()
+    return check_write(str(body.get("path") or "")).to_dict()
 
 
 @app.post("/api/tender/delivery")

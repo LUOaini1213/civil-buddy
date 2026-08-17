@@ -1194,56 +1194,81 @@ def run_tender_pipeline(
     ingest: Optional[Dict[str, Any]] = None,
 ) -> Dict[str, Any]:
     """投标解析 → 清单 → 响应矩阵 → 应答包一站式（可接装柜 summary）。"""
-    parsed = parse_tender_text(text, source=source)
-    reqs = list(parsed.get("requirements") or [])
-    checklist = build_checklist(reqs)
-    matrix = build_response_matrix(reqs, packing_summary=packing_summary)
-    handoff = parsed.get("handoff") or build_handoff(reqs, duration_days=parsed.get("duration_days"))
-    outline = build_tech_outline_from_handoff(handoff, project_name=project_name)
-    extract_table = build_workbench_extract_table(parsed, project_name=project_name)
-    package = build_response_package(
-        matrix=matrix,
-        packing_summary=packing_summary,
-        parse_summary=parsed.get("summary"),
-        project_name=project_name,
-        handoff=handoff,
-        tech_outline=outline,
-    )
-    from packing_assistant.bidbook.sg_facade import build_sg_facade_bidbook
+    import uuid
 
-    bidbook = build_sg_facade_bidbook(
-        tender_text=text,
-        parsed=parsed,
-        matrix=matrix,
-        packing_summary=packing_summary,
-        open_actions=package["open_actions"],
-        p0_confirmed=p0_confirmed,
-    )
-    return {
-        "schema": "tender.pipeline.v1",
-        "product_mainline": "C_tender_delivery",
-        "parse": parsed,
-        "handoff": handoff,
-        "extract_table_markdown": extract_table,
-        "tech_outline": outline,
-        "tech_outline_markdown": outline.get("markdown"),
-        "p0_reject_scan": (handoff or {}).get("p0_reject_scan"),
-        "checklist": checklist,
-        "matrix": matrix,
-        "matrix_markdown": matrix_to_markdown(matrix),
-        "matrix_csv": matrix_to_csv(matrix),
-        "open_actions": package["open_actions"],
-        "response_package": package,
-        "export_markdown": package["markdown"],
-        "bidbook": bidbook,
-        "bidbook_markdown": bidbook.get("markdown"),
-        "p0_confirmed": bool(p0_confirmed),
-        "submit_blocked": True,
-        "submit_block_reason": (
-            "P0 资格/废标/★项尚未人工确认；成果仍是 AI 草稿，不可递交。"
-            if not p0_confirmed
-            else "已记录 P0 核对，仍是 AI 草稿：无盖章、无业绩附件、不可递交。"
-        ),
-        "ingest": ingest,
-        "ok": bool(reqs),
-    }
+    from packing_assistant.otel_hooks import span as otel_span
+    from packing_assistant.tools.tender_review import review_draft
+
+    run_id = f"tender-{uuid.uuid4().hex[:8]}"
+    with otel_span(
+        "tender.pipeline",
+        {"run_id": run_id, "node": "tender.parse", "tool": "tender.parse"},
+    ):
+        parsed = parse_tender_text(text, source=source)
+        reqs = list(parsed.get("requirements") or [])
+        checklist = build_checklist(reqs)
+        matrix = build_response_matrix(reqs, packing_summary=packing_summary)
+        handoff = parsed.get("handoff") or build_handoff(reqs, duration_days=parsed.get("duration_days"))
+        outline = build_tech_outline_from_handoff(handoff, project_name=project_name)
+        extract_table = build_workbench_extract_table(parsed, project_name=project_name)
+        package = build_response_package(
+            matrix=matrix,
+            packing_summary=packing_summary,
+            parse_summary=parsed.get("summary"),
+            project_name=project_name,
+            handoff=handoff,
+            tech_outline=outline,
+        )
+        from packing_assistant.bidbook.sg_facade import build_sg_facade_bidbook
+
+        bidbook = build_sg_facade_bidbook(
+            tender_text=text,
+            parsed=parsed,
+            matrix=matrix,
+            packing_summary=packing_summary,
+            open_actions=package["open_actions"],
+            p0_confirmed=p0_confirmed,
+        )
+        review = review_draft(
+            draft="\n".join(
+                [
+                    str(outline.get("markdown") or ""),
+                    str((bidbook or {}).get("markdown") or ""),
+                    str(package.get("markdown") or ""),
+                ]
+            ),
+            matrix=matrix,
+            packing_summary=packing_summary,
+            tech_outline=outline,
+            bidbook_markdown=str((bidbook or {}).get("markdown") or ""),
+        )
+        return {
+            "schema": "tender.pipeline.v1",
+            "product_mainline": "C_tender_delivery",
+            "run_id": run_id,
+            "parse": parsed,
+            "handoff": handoff,
+            "extract_table_markdown": extract_table,
+            "tech_outline": outline,
+            "tech_outline_markdown": outline.get("markdown"),
+            "p0_reject_scan": (handoff or {}).get("p0_reject_scan"),
+            "checklist": checklist,
+            "matrix": matrix,
+            "matrix_markdown": matrix_to_markdown(matrix),
+            "matrix_csv": matrix_to_csv(matrix),
+            "open_actions": package["open_actions"],
+            "response_package": package,
+            "export_markdown": package["markdown"],
+            "bidbook": bidbook,
+            "bidbook_markdown": bidbook.get("markdown"),
+            "review": review,
+            "p0_confirmed": bool(p0_confirmed),
+            "submit_blocked": True,
+            "submit_block_reason": (
+                "P0 资格/废标/★项尚未人工确认；成果仍是 AI 草稿，不可递交。"
+                if not p0_confirmed
+                else "已记录 P0 核对，仍是 AI 草稿：无盖章、无业绩附件、不可递交。"
+            ),
+            "ingest": ingest,
+            "ok": bool(reqs),
+        }
