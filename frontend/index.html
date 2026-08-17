@@ -347,6 +347,13 @@
           <span class="muted" style="font-size:12px">提问不写盘</span>
         </div>
         <div class="card-b">
+          <label class="field" for="expertSel">召唤专家（66 岗同一套 chat / run）</label>
+          <select id="expertSel" v-model="expertId" :disabled="busy" style="width:100%;margin-bottom:10px;padding:8px 10px;border:1px solid var(--line);border-radius:8px">
+            <option value="">经营岗（招标矩阵）</option>
+            <option v-for="e in experts" :key="e.id" :value="e.id">
+              {{ e.category_name }} / {{ e.name }}
+            </option>
+          </select>
           <label class="field" for="tenderFile">上传招标节选（可多份：txt / md / csv / docx / xlsx）</label>
           <input id="tenderFile" type="file" multiple
             accept=".txt,.md,.csv,.tsv,.docx,.xlsx,text/plain,text/csv" :disabled="busy"
@@ -356,7 +363,7 @@
             placeholder="先问一句（如 GST 是什么、临边算不算危大），或粘贴招标条款再成稿…"></textarea>
           <label class="field" style="display:flex;align-items:center;gap:8px;margin:10px 0 0">
             <input type="checkbox" v-model="p0Confirmed" :disabled="busy" />
-            我已核对 P0 资格 / ★ / 废标项（仍是草稿，不可递交）
+            我已核对 P0，并明白将由持证人员签认（仍是草稿，不可递交）
           </label>
           <div class="actions">
             <button class="primary" :disabled="busy || !tenderText.trim()" @click="runTurn">
@@ -644,6 +651,8 @@
         turnIntent: '',
         wrote: false,
         chatReply: '',
+        expertId: '',
+        experts: [],
       },
       computed: {
         mid50Label() {
@@ -724,7 +733,11 @@
           }
         },
         async runTurn() {
-          await this.callApi('/api/turn', { text: this.tenderText, p0_confirmed: this.p0Confirmed });
+          await this.callApi('/api/turn', {
+            text: this.tenderText,
+            p0_confirmed: this.p0Confirmed,
+            expert_id: this.expertId,
+          });
         },
         async runParseOnly() {
           await this.callApi('/api/tender/parse', { text: this.tenderText, p0_confirmed: this.p0Confirmed });
@@ -747,6 +760,13 @@
             bidbook_markdown: this.bidbookMarkdown,
           });
         },
+        async loadExperts() {
+          try {
+            const res = await fetch('/api/experts');
+            const dat = await res.json().catch(() => ({}));
+            this.experts = dat.experts || [];
+          } catch (e) { /* roster optional */ }
+        },
         async loadOtel() {
           try {
             const res = await fetch('/api/otel/dashboard');
@@ -758,7 +778,7 @@
           }
         },
         applyResult(data) {
-          if (data && data.schema === 'civil.turn.v1') {
+          if (data && (data.schema === 'civil.turn.v1' || data.schema === 'civil.expert_turn.v1')) {
             this.turnIntent = data.intent || '';
             this.wrote = !!data.wrote;
             this.chatReply = data.reply || '';
@@ -816,6 +836,7 @@
       },
       created() {
         this.loadOtel();
+        this.loadExperts();
       },
     });
   </script>

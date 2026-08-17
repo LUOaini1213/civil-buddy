@@ -330,6 +330,46 @@ def run_expert(
             "expert": expert.id,
         },
     }
+    blob = "\n".join(str(m.get("content") or "") for m in history if m.get("role") == "user")
+    try:
+        from packing_assistant.understand import understand
+
+        intent = understand(blob)
+    except Exception:
+        intent = "run"
+    yield {
+        "event": "status",
+        "data": {
+            "phase": "understand",
+            "text": f"{expert.name} · 听懂为 {intent}（能聊能跑）",
+            "expert": expert.id,
+            "intent": intent,
+        },
+    }
+    if intent == "chat":
+        try:
+            from packing_assistant.expert_roster import get_expert as _ge
+            from packing_assistant.expert_turn import explain_expert
+
+            rec = _ge(expert.id)
+            if rec:
+                text = explain_expert(rec, blob)
+                for i in range(0, len(text), 40):
+                    yield {"event": "token", "data": {"text": text[i : i + 40]}}
+                yield {
+                    "event": "done",
+                    "data": {
+                        "mode": "expert",
+                        "expert": expert.id,
+                        "intent": "chat",
+                        "text": text,
+                        "citations": [],
+                        "deliverables": [],
+                    },
+                }
+                return
+        except Exception:
+            pass
     messages: list[dict[str, Any]] = [
         {"role": "system", "content": _system(expert, confirm_ok)},
         *history,
@@ -341,6 +381,8 @@ def run_expert(
 
     def _exec(name: str, args: dict[str, Any]) -> str:
         nonlocal citations, deliverables
+        if intent == "chat" and name in {"write_deliverable", "extract_tender", "compliance_gaps", "tech_expand"}:
+            return "拒绝写盘：本轮是提问，不成稿。"
         return execute_tool(
             name,
             args,

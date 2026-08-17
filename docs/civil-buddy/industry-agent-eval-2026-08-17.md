@@ -35,7 +35,7 @@
 | 高风险 HITL | **通过（窄）** | P0 `human_confirm_required=true`；危大写盘要确认句。默认经营岗仍是按钮，不是每句先问。 |
 | 成稿仍标草稿 | **通过** | `submit_blocked=true`；bidbook DRAFT / NOT FOR SUBMIT；再审不填业绩、不改 `can_fit`。 |
 | 可回放 trace / eval | **部分** | 管线有 `run_id`、矩阵/`exact_text`、OTEL 文件大盘、脚本评测。缺常驻 `GET /api/eval/live` 宿主；OTEL SDK 未装，只走 jsonl。 |
-| 先理解再聊或跑 | **通过（默认面）** | `packing_assistant.understand` + `POST /api/turn`：GST/危大提问 `chat` 且 `wrote=false`；写提纲/招标节选 `run` 进现有矩阵。 |
+| 先理解再聊或跑 | **通过（66 岗）** | 同一套 `understand`。`GET /api/experts` 66 人；提问不写盘；run 只走该岗独有工具。高风险须确认句。 |
 | 官方事实不编条款 | **通过** | 上表四门户抄对。 |
 | 可发现工具 / MCP 宿主 | **部分** | list/plan/export 已露出；没有 Claude/Cursor 真宿主去调。 |
 | 扫描招标 PDF | **缺口** | 产品拒绝扫描 PDF；MinerU 可选且本机未当作默认。 |
@@ -56,7 +56,7 @@ README 营销字数、星标、「中标率」一律不当合格标准。
 
 ## 4. 仍不合格的具体缺口
 
-1. 65 岗并非每个都在默认面上可聊可跑（默认面是经营岗 turn，不是全名册会话）。
+1. 默认面已接 66 岗同一套 chat/run；仍不是每岗独立会话宿主（无 MCP 客户端）。
 2. 没有接上的 MCP 客户端；`kb://` 分页未做。
 3. 扫描件招标进不了矩阵。
 4. 联网评测入口绑在 Rust 工作台，本机无链接器时不能当日常闸。
