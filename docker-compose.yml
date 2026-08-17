@@ -1,10 +1,10 @@
-# packing-agent Team Mode
+# Civil Buddy packing engine (gateway)
 # usage: docker compose up --build
 # open:  http://localhost:8000
 services:
   gateway:
     build: .
-    image: packing-agent:0.5.0
+    image: civil-buddy-gateway:0.6.4
     ports:
       - "8000:8000"
     environment:

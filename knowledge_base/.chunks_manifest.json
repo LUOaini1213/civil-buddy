@@ -1617,6 +1617,26 @@
       "chars": 96
     },
     {
+      "path": "02_tools/tender_parse.md",
+      "heading": "(preamble)",
+      "chars": 36
+    },
+    {
+      "path": "02_tools/tender_parse.md",
+      "heading": "## 功能",
+      "chars": 219
+    },
+    {
+      "path": "02_tools/tender_parse.md",
+      "heading": "## 代码入口",
+      "chars": 141
+    },
+    {
+      "path": "02_tools/tender_parse.md",
+      "heading": "## never",
+      "chars": 36
+    },
+    {
       "path": "02_tools/tms_booking.md",
       "heading": "(preamble)",
       "chars": 28
@@ -2389,7 +2409,7 @@
     {
       "path": "06_competition/scoring_criteria.md",
       "heading": "## 本地快照（2026-08-06 迭代）",
-      "chars": 313
+      "chars": 640
     },
     {
       "path": "06_competition/scoring_criteria.md",
@@ -2455,6 +2475,46 @@
       "path": "07_domain_knowledge/container_types.md",
       "heading": "",
       "chars": 207
+    },
+    {
+      "path": "08_tender_delivery/README.md",
+      "heading": "",
+      "chars": 269
+    },
+    {
+      "path": "08_tender_delivery/rules/transport_packaging_redlines.md",
+      "heading": "(preamble)",
+      "chars": 21
+    },
+    {
+      "path": "08_tender_delivery/rules/transport_packaging_redlines.md",
+      "heading": "## 抽取后必进响应矩阵",
+      "chars": 234
+    },
+    {
+      "path": "08_tender_delivery/rules/transport_packaging_redlines.md",
+      "heading": "## 禁止",
+      "chars": 48
+    },
+    {
+      "path": "08_tender_delivery/strategies/facade_bid_response.md",
+      "heading": "",
+      "chars": 158
+    },
+    {
+      "path": "08_tender_delivery/trajectories/TD1_tender_to_pack.md",
+      "heading": "(preamble)",
+      "chars": 67
+    },
+    {
+      "path": "08_tender_delivery/trajectories/TD1_tender_to_pack.md",
+      "heading": "## steps",
+      "chars": 777
+    },
+    {
+      "path": "08_tender_delivery/trajectories/TD1_tender_to_pack.md",
+      "heading": "## final",
+      "chars": 46
     },
     {
       "path": "README.md",

@@ -42,11 +42,18 @@ def agent_material_parser(state: PackingState) -> Dict[str, Any]:
 
     llm_note = ""
     incomplete_dims = False
-    # 显式注入的材料：永远优先保留，禁止缺字段时静默换成 demo 票
-    if existing and not _looks_like_list(raw):
-        mats = _normalize_llm_materials(list(existing))
-        if not mats:
-            mats = list(existing)
+    existing_norm = _normalize_llm_materials(list(existing)) if existing else []
+    existing_complete = bool(existing_norm) and _has_metrics_api(existing_norm) and not _has_incomplete_dims(
+        existing_norm
+    )
+    # 显式注入且三维完整：优先保留。禁止把「只准 1 个柜」这类句子当成清单，
+    # 更不能 fallback 时强行 materials_incomplete=True。
+    if existing_complete:
+        mats = existing_norm
+        source = "inject"
+        incomplete_dims = False
+    elif existing and not _looks_like_list(raw):
+        mats = existing_norm or list(existing)
         source = "inject" if _has_metrics_api(mats) else "inject_partial"
         incomplete_dims = _has_incomplete_dims(mats)
     else:
@@ -75,9 +82,9 @@ def agent_material_parser(state: PackingState) -> Dict[str, Any]:
         # 仅「无注入且解析为空」时用 demo；有注入残缺则保留残缺
         if not mats or not _has_metrics_api(mats):
             if existing:
-                mats = _normalize_llm_materials(list(existing)) or list(existing)
+                mats = existing_norm or list(existing)
                 source = "inject_partial"
-                incomplete_dims = True
+                incomplete_dims = _has_incomplete_dims(mats)
             else:
                 mats = _demo_materials()
                 source = "demo"

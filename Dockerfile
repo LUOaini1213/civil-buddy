@@ -1,4 +1,4 @@
-# packing-agent gateway + frontend (cloud-ready)
+# Civil Buddy packing gateway + frontend (cloud-ready)
 FROM python:3.11-slim
 
 WORKDIR /app

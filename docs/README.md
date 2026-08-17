@@ -1,11 +1,23 @@
 # 文档索引
 
-## 必读（产品 / Harness）
+产品名 **Civil Buddy**。装箱引擎仍是其中一岗（pack-ship）。
+
+## Civil Buddy 工作台
+
+| 文档 | 说明 |
+|------|------|
+| [civil-buddy/harness.md](./civil-buddy/harness.md) | 工作台 harness：chat / run / HITL |
+| [civil-buddy/packing-agent.md](./civil-buddy/packing-agent.md) | pack-ship 如何调用本仓装箱引擎 |
+| [civil-buddy/enterprise-experts.md](./civil-buddy/enterprise-experts.md) | 16 大类 / 65 专家 |
+| [../skills/civil-buddy/SKILL.md](../skills/civil-buddy/SKILL.md) | Grok skill |
+
+## 必读（装箱引擎 / Harness）
 
 | 文档 | 说明 |
 |------|------|
 | [architecture-as-harness.md](./architecture-as-harness.md) | **Agent Harness 视角**：Runtime · Tools · Memory · Eval · Trace |
 | [ARCHITECTURE.md](./ARCHITECTURE.md) | **当前架构**：大 Team ⊃ A 成箱 + B 拼柜 · IntentSpec · API |
+| [product-mainline-tender-delivery.md](./product-mainline-tender-delivery.md) | **产品主线**：投标应答 + 交付链路（幕墙） |
 | [competition-phase-plan.md](./competition-phase-plan.md) | **比赛/Agency Phase 0–4** 对齐与验收 |
 | [competition-demo-script.md](./competition-demo-script.md) | **3 分钟评委演示脚本** |
 | [../knowledge_base/README.md](../knowledge_base/README.md) | **Agent 可检索知识库**（规则/工具/轨迹/多Agent · search + bindings） |

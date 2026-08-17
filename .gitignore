@@ -2,6 +2,7 @@
 .env
 .env.*
 !.env.example
+!**/.env.example
 deepseek api.txt
 deepseek_api.txt
 deepseek-api.txt
@@ -54,6 +55,14 @@ skjolber-service/target/
 *.class
 *.jar
 !**/gradle-wrapper.jar
+
+# --- Civil Buddy workbench ---
+demo/out/
+demo/.env
+demo/data/
+workbench/target/
+workbench/out/
+.civil-buddy/out/
 
 # --- session / tool caches ---
 .grok/

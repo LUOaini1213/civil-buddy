@@ -153,6 +153,45 @@ TOOL_CATALOG: List[ToolSpec] = [
         "packing_assistant.tools.design_facts",
         "截面/γ/图纸事实",
     ),
+    # —— Team T 投标应答（窄行业交付主线）——
+    ToolSpec(
+        "tender.parse",
+        "招标要点抽取",
+        "T",
+        "packing_assistant.tools.tender_parse",
+        "规则抽取资格/运输包装/废标等；带 ref/owner/risk",
+        "不做幻觉写标；条款可审计",
+    ),
+    ToolSpec(
+        "tender.checklist",
+        "投标响应清单",
+        "T",
+        "packing_assistant.tools.tender_parse",
+        "must_respond 勾选清单",
+    ),
+    ToolSpec(
+        "tender.response_matrix",
+        "响应/合规矩阵",
+        "T",
+        "packing_assistant.tools.tender_parse",
+        "条款×证据×owner；装柜结果可覆盖 transport/packaging",
+    ),
+    ToolSpec(
+        "tender.export_package",
+        "应答导出包",
+        "T",
+        "packing_assistant.tools.tender_parse",
+        "一页 Markdown：交付证据+就绪度+人工待办+矩阵",
+        "非盖章标书；商务资质仍须人签",
+    ),
+    ToolSpec(
+        "tender.bidbook_sg",
+        "新加坡幕墙英文标书草案",
+        "T",
+        "packing_assistant.bidbook.sg_facade",
+        "PSSCOC 风格分册英文 Markdown；资质/报价 [TO FILL]",
+        "DRAFT not for GeBIZ; no invented SGD or certificates",
+    ),
     # —— 小 Team B 拼柜 ——
     ToolSpec(
         "booking.n0",

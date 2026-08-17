@@ -1,6 +1,6 @@
-# Contributing to packing-agent
+# Contributing to Civil Buddy
 
-Thanks for interest in this **Agent Harness** prototype (domain skin: packing).
+Thanks for interest in **Civil Buddy** (土木工作台 + packing engine).
 
 ## Ground rules
 
@@ -14,6 +14,7 @@ Thanks for interest in this **Agent Harness** prototype (domain skin: packing).
 ```bash
 git clone https://github.com/LUOaini1213/packing-agent.git
 cd packing-agent
+# 产品名 Civil Buddy；GitHub 仓名可改为 civil-buddy
 python -m venv .venv
 # Windows: .venv\Scripts\activate
 source .venv/bin/activate   # Unix
