@@ -106,7 +106,8 @@ HITL：标书要点确认 · 成箱确认 · 出运确认
 | **M0** 叙事冻结 | 本文 + 对外一句话 | 团队对齐 | ✅ |
 | **M1** Team T 骨架 | parse + checklist + matrix | 无装柜也能跑 T | ✅ `tender.*` + 单测 |
 | **M2** T→A/B 串联 | facade 样例端到端 | can_fit + 矩阵 + 导出包 | ✅ `run_tender_delivery_pipeline` · `/api/tender/delivery` |
-| **M3** 演示包 | 3 分钟：招标 → 矩阵 → 交付 → 人工待办 | 黑客松/客户 demo | 🚧 默认 UI 已切主线 C |
+| **M2.1** 条款级交接 | ★/评分点/专项行 + P0 + 技术标目录 | handoff.next_experts · 不编天数 | ✅ `tender.handoff.v1` · UI 经营岗交接 |
+| **M3** 演示包 | 3 分钟：招标 → 矩阵 → 交付 → 人工待办 | 黑客松/客户 demo | ✅ UI 经营岗交接 + P0 勾选 + .txt 上传 + CSV 导出 |
 | **M4** 知识库 | `08_tender_delivery` search 可引用 | search 命中策略/轨迹 | 🚧 目录已有，绑 search 待强 |
 
 ### 代码入口（主线 C）

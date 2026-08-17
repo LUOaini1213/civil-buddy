@@ -78,6 +78,8 @@ def search_kb(expert_id: str, category: str, query: str, limit: int = 6) -> list
             # prefer contiguous phrase
             if query.strip() and query.strip() in text:
                 score += 8
+            name = path.name.lower()
+            score += sum(3.0 for t in q if t in name)
             if score <= 0:
                 continue
             rel = str(path.relative_to(KB_ROOT)).replace("\\", "/")

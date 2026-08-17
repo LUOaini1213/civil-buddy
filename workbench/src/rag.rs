@@ -100,6 +100,16 @@ pub fn search_kb(paths: &Paths, expert_id: &str, category: &str, query: &str, li
             if !qstrip.is_empty() && text.contains(qstrip) {
                 score += 8.0;
             }
+            let rel_l = path
+                .file_name()
+                .and_then(|s| s.to_str())
+                .unwrap_or("")
+                .to_ascii_lowercase();
+            for t in &q {
+                if rel_l.contains(t) {
+                    score += 3.0;
+                }
+            }
             if path
                 .file_name()
                 .and_then(|s| s.to_str())

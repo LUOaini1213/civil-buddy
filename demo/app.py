@@ -74,6 +74,47 @@ def health() -> dict:
     return {"ok": True, "deepseek": has_key(), "model": DEEPSEEK_MODEL, "context": policy()}
 
 
+@app.get("/api/mcp/capabilities")
+def mcp_capabilities() -> dict:
+    from mcp_surface import initialize_capabilities
+
+    return {"ok": True, "capabilities": initialize_capabilities()}
+
+
+@app.get("/api/mcp/resources")
+def mcp_resources(expert_id: str) -> dict:
+    from mcp_surface import list_resources
+
+    exp = get_expert(expert_id)
+    if not exp:
+        raise HTTPException(404, "unknown expert")
+    return {"ok": True, "resources": list_resources(exp.id, exp.category)}
+
+
+@app.get("/api/mcp/prompts")
+def mcp_prompts(expert_id: str = "") -> dict:
+    from mcp_surface import list_prompts
+
+    if expert_id and not get_expert(expert_id):
+        raise HTTPException(404, "unknown expert")
+    return {"ok": True, "prompts": list_prompts(expert_id=expert_id or None)}
+
+
+class McpPromptIn(BaseModel):
+    name: str
+    expert_id: str = "bid-parse"
+    arguments: dict = Field(default_factory=dict)
+
+
+@app.post("/api/mcp/prompts/get")
+def mcp_prompt_get(body: McpPromptIn) -> dict:
+    from mcp_surface import get_prompt
+
+    if not get_expert(body.expert_id):
+        raise HTTPException(404, "unknown expert")
+    return {"ok": True, **get_prompt(body.name, body.arguments, expert_id=body.expert_id)}
+
+
 @app.get("/api/catalog")
 def catalog() -> dict:
     return catalog_payload()

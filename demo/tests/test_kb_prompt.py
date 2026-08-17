@@ -9,7 +9,7 @@ ROOT = Path(__file__).resolve().parents[1]
 if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
-from agent import build_expert_prompt  # noqa: E402
+from agent import build_expert_prompt, execute_tool, tools_for_expert  # noqa: E402
 from catalog_seed import CATEGORIES, EXPERTS  # noqa: E402
 from config import KB_ROOT  # noqa: E402
 from rag import search_kb  # noqa: E402
@@ -82,3 +82,61 @@ def test_every_expert_private_and_category_shared_nonstub():
         assert sum(p.stat().st_size for p in body) >= 400, e.id
         ask = shared / "ask-from-others.md"
         assert ask.is_file(), e.category
+
+
+def test_bid_tools_exclusive_and_shared_parse(tmp_path):
+    parse = _exp("bid-parse")
+    tech = _exp("bid-tech")
+    comp = _exp("bid-compliance")
+    parse_names = [t["function"]["name"] for t in tools_for_expert(parse)]
+    tech_names = [t["function"]["name"] for t in tools_for_expert(tech)]
+    assert "extract_tender" in parse_names
+    assert "extract_tender" not in tech_names
+    assert "tech_expand" in tech_names
+    assert "compliance_gaps" in [t["function"]["name"] for t in tools_for_expert(comp)]
+
+    text = "交货期 90 个日历天。★深基坑专项须编制，不满足即废标。施工组织设计 25 分。"
+    cites: list = []
+    dels: list = []
+    refuse = execute_tool(
+        "extract_tender",
+        {"tender_text": text},
+        expert=tech,
+        confirm_ok=True,
+        out_dir=tmp_path,
+        citations=cites,
+        deliverables=dels,
+    )
+    assert "拒绝" in refuse
+
+    got = execute_tool(
+        "extract_tender",
+        {"tender_text": text, "project_name": "pytest"},
+        expert=parse,
+        confirm_ok=True,
+        out_dir=tmp_path,
+        citations=cites,
+        deliverables=dels,
+    )
+    import json
+
+    payload = json.loads(got)
+    assert payload.get("duration_days") == 90
+    assert payload.get("submit_blocked") is True
+    assert payload.get("n_star") >= 1
+    table = (tmp_path / "招标解析表.md").read_text(encoding="utf-8")
+    assert "90 日历天" in table
+    assert "365" not in table
+
+    outline = execute_tool(
+        "tech_expand",
+        {"tender_text": text, "project_name": "pytest"},
+        expert=tech,
+        confirm_ok=True,
+        out_dir=tmp_path,
+        citations=[],
+        deliverables=[],
+    )
+    op = json.loads(outline)
+    assert op.get("from_extracted_scores") is True
+    assert "已论证通过" not in (tmp_path / "技术标目录草稿.md").read_text(encoding="utf-8")

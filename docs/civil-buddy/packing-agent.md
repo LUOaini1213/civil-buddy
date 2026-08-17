@@ -30,6 +30,8 @@ cargo run --release --bin civil-workbench
 
 `GET /api/health` 里有 `packing_agent` 探测。MCP：`--pack plant` 或召唤 `pack-ship` 时带 `pack-ship__plan` / `pack-ship__health`。
 
+招标解析与装箱共用 sidecar：`workbench/scripts/run_packing_sidecar.py` 的 stdin 若为 `{"mode":"tender_parse","tender_text":"..."}`，走同一套 `run_tender_pipeline`（handoff / P0 / 技术标目录），不另写一套抽取。
+
 ## 边界
 
 | 谁 | 做什么 |

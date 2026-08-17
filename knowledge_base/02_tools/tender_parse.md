@@ -13,10 +13,11 @@ status: active
 
 ## 功能
 
-- `tender.parse`：规则抽取条款（category/title/snippets/**requirement_ref/owner/risk**）
+- `tender.parse`：规则抽取条款（category/title/snippets/**requirement_ref/owner/risk**）+ 行项目（★/评分点/专项）+ `handoff` / P0
 - `tender.checklist`：must_respond 勾选清单
 - `tender.response_matrix`：条款×证据；装柜 summary 可覆盖 transport/packaging
-- `run_tender_pipeline`：三步串联
+- `run_tender_pipeline`：解析 → 矩阵 → 经营岗交接 → 按抽出评分点出技术标目录骨架
+- 不编造天数/分值/workhead；原文没有则 `duration_days=null`
 
 ## 代码入口
 

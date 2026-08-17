@@ -159,8 +159,8 @@ TOOL_CATALOG: List[ToolSpec] = [
         "招标要点抽取",
         "T",
         "packing_assistant.tools.tender_parse",
-        "规则抽取资格/运输包装/废标等；带 ref/owner/risk",
-        "不做幻觉写标；条款可审计",
+        "规则抽取资格/运输包装/废标等；条款级★/评分点/专项 + handoff/P0",
+        "不做幻觉写标；条款可审计；P0 须人确认",
     ),
     ToolSpec(
         "tender.checklist",

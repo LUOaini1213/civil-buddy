@@ -174,6 +174,42 @@ def _annex_b(open_actions: List[Dict[str, Any]]) -> str:
     return "\n".join(lines) + "\n"
 
 
+def _scoring_map(handoff: Optional[Dict[str, Any]]) -> str:
+    """List extracted scoring points only. Do not invent PQM weights."""
+    ho = handoff or {}
+    points = list(ho.get("scoring_points") or [])
+    env = ho.get("envelope")
+    lines = [
+        "## 4b. Scoring-point map (extracted)",
+        "",
+        "Each row is copied from the invitation. Weights are **not** taken from the "
+        "BCA PQM Framework published bands (portal title *Price Quality Method (PQM) Framework*, "
+        "page last updated 26 January 2026; public CW01/CW02 construction). "
+        "This ITT's scores stay `[UNSPECIFIED]` unless quoted below.",
+        "",
+    ]
+    if env:
+        lines.append(f"- **Envelope scheme in ITT:** `{env}` (verbatim detect; not invented).")
+        lines.append("")
+    if not points:
+        lines += [
+            "No scoring-point lines were extracted. Technical chapters stay a generic "
+            "skeleton and must be aligned to the ITT evaluation table by a person.",
+            "",
+        ]
+        return "\n".join(lines)
+    lines += [
+        "| Ref | Extracted scoring line | Response chapter | Status |",
+        "|-----|------------------------|------------------|--------|",
+    ]
+    for p in points:
+        ref = str(p.get("requirement_ref") or "—").replace("|", "/")
+        text = str(p.get("text") or "").replace("|", "/")[:160]
+        lines.append(f"| {ref} | {text} | §4 / tech outline | [UNSPECIFIED] |")
+    lines.append("")
+    return "\n".join(lines)
+
+
 def build_sg_facade_bidbook(
     *,
     tender_text: str = "",
@@ -182,6 +218,7 @@ def build_sg_facade_bidbook(
     packing_summary: Optional[Dict[str, Any]] = None,
     open_actions: Optional[List[Dict[str, Any]]] = None,
     project_title: Optional[str] = None,
+    p0_confirmed: bool = False,
 ) -> Dict[str, Any]:
     """Deterministic English bid-book. Returns markdown + meta."""
     parsed = parsed or {}
@@ -191,6 +228,7 @@ def build_sg_facade_bidbook(
     sm = (matrix.get("summary") or {})
     title = (project_title or "").strip() or infer_project_title(tender_text)
     actions = list(open_actions or [])
+    ho = parsed.get("handoff") if isinstance(parsed, dict) else None
     ctx = {
         "legal_name": bidder["legal_name"],
         "tag": bidder["tag"],
@@ -209,6 +247,12 @@ def build_sg_facade_bidbook(
         "",
         "> " + T.WATERMARK.format(**ctx),
         "",
+        (
+            "> P0 noted by operator — still a draft, not for GeBIZ."
+            if p0_confirmed
+            else "> P0 qualification / reject / star items are **unconfirmed**. Not a bid decision."
+        ),
+        "",
         T.FORM_OF_TENDER.format(**ctx).rstrip(),
         "",
         T.EXEC_SUMMARY.format(**ctx).rstrip(),
@@ -216,6 +260,8 @@ def build_sg_facade_bidbook(
         _deviation_table(matrix).rstrip(),
         "",
         T.TECHNICAL.format(**ctx).rstrip(),
+        "",
+        _scoring_map(ho).rstrip(),
         "",
         T.METHOD.format(**ctx).rstrip(),
         "",

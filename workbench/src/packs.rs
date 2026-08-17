@@ -1473,6 +1473,21 @@ fn parse_tender(ctx: &mut ToolCtx, args: &Value) -> String {
     }
     let project = nonempty(&s(args, "project_name"), "未命名招标");
     let (jur, banner) = zone_banner(args);
+    // Prefer the packing tender-handoff transform so duration / ★ / scores stay one source.
+    if let Ok(ex) = crate::packing_bridge::tender_extract(&text, &project) {
+        if let Some(md) = ex.get("extract_table_markdown").and_then(|v| v.as_str()) {
+            let portal = if jur == "SG" || jur == "DUAL" {
+                "官方门户标题：Price Quality Method (PQM) Framework（BCA，页述 Last updated 26 January 2026）。本项目权重只抄 ITT 原文，不把框架区间当作本标分数。"
+            } else {
+                "辖区非 SG：评标办法以招标文件原文为准，禁止补编分数或条款号。"
+            };
+            let body = format!("{banner}\n{md}\n{portal}\n");
+            return match ctx.write_md("招标解析表.md", &body) {
+                Ok(m) => m,
+                Err(e) => e,
+            };
+        }
+    }
     let facts = crate::extract::facts_from_text(&text);
     let portal = if jur == "SG" || jur == "DUAL" {
         "官方门户标题：Price Quality Method (PQM) Framework（BCA，页述 Last updated 26 January 2026；适用 CW01/CW02 公共施工、估算造价不含 contingency ≥ S$3 million）。本项目权重只抄 ITT 原文，不把框架区间当作本标分数。GeBIZ 只是发布渠道。CSOC / Apply WSH in Construction Sites 只当招标点名课程，本表不发证。未抽出的 SS/CP/BCA 条款写 UNSPECIFIED，禁止补编分数。"

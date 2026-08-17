@@ -67,6 +67,11 @@ def main() -> int:
     _assert_no_invented_money(md)
     # title inferred from Latin first line
     assert "Marina Bay" in md or "Singapore" in md
+    assert "Scoring-point map" in md
+    assert "PQM Framework" in md
+    assert "40%–60%" not in md and "40%-60%" not in md
+    # do not treat framework band as this ITT's score
+    assert "[UNSPECIFIED]" in md or "No scoring-point" in md
 
     # no packing → logistics says not run
     empty = build_sg_facade_bidbook(tender_text=SAMPLE)

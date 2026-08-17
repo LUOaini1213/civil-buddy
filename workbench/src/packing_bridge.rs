@@ -110,6 +110,57 @@ pub fn probe() -> Value {
     })
 }
 
+/// Bid-parse extract via the same Python transform as packing tender-handoff.
+pub fn tender_extract(tender_text: &str, project_name: &str) -> Result<Value, String> {
+    let root = root_configured().ok_or_else(|| "no packing_assistant root".to_string())?;
+    let script = {
+        if let Ok(m) = env::var("CARGO_MANIFEST_DIR") {
+            let p = Path::new(&m).join("scripts").join("run_tender_extract.py");
+            if p.is_file() {
+                p
+            } else {
+                root.join("workbench")
+                    .join("scripts")
+                    .join("run_tender_extract.py")
+            }
+        } else {
+            root.join("workbench")
+                .join("scripts")
+                .join("run_tender_extract.py")
+        }
+    };
+    if !script.is_file() {
+        return Err("run_tender_extract.py missing".into());
+    }
+    let mut child = Command::new("python")
+        .arg(&script)
+        .env("PACKING_AGENT_ROOT", &root)
+        .stdin(Stdio::piped())
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped())
+        .spawn()
+        .map_err(|e| format!("python: {e}"))?;
+    let payload = json!({"tender_text": tender_text, "project_name": project_name});
+    if let Some(stdin) = child.stdin.as_mut() {
+        use std::io::Write;
+        stdin
+            .write_all(payload.to_string().as_bytes())
+            .map_err(|e| e.to_string())?;
+    }
+    let out = child.wait_with_output().map_err(|e| e.to_string())?;
+    if !out.status.success() {
+        return Err(format!(
+            "extract exit {:?} {}",
+            out.status.code(),
+            String::from_utf8_lossy(&out.stderr)
+                .chars()
+                .take(300)
+                .collect::<String>()
+        ));
+    }
+    serde_json::from_slice(&out.stdout).map_err(|e| e.to_string())
+}
+
 pub fn run(materials: &str, notes: &str) -> PackingSummary {
     if let Some(base) = url_configured() {
         match http_pipeline(&base, materials, notes) {

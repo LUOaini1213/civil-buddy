@@ -1,6 +1,10 @@
-# 招标解析 · 联网知识（2026-08-14 现场）
+# 招标解析 · 联网知识（2026-08-17 续）
 
 岗位对应：把招标/ITT 拆成摘录表。无正文写「招标未写」。不组价、不写施组、不报「可以投标」。CN 对应读公告、投标人须知、评标办法前附表、清单封面。SG 对应 GeBIZ 下 ITT、evaluation criteria；施工公共标再对 BCA PQM。网上是入口，表里的天数、等级、分值只抄本项目文件。易标 parse → 本岗摘录表；评分点交 bid-tech；★项、签章、保证金交 bid-compliance。
+
+## 2026-08-17 产品接线（主线 C 同一套 parse）
+
+工作台 Python `extract_tender` 与装箱 `/api/tender/parse` 共用 `tender.handoff.v1`：评分点 / ★ / 专项 / 工期日历天 / 信封 / 评标办法名称只抄原文。P0 资格废标须人确认，**系统不判定可投标**。BCA PQM Framework（页述 2026-01-26）只当门户标题，禁止把框架价格质量**区间**当成本标分数。MCP：`civil.bid.parse` prompt + `kb://bid/...` resources。Rust `bid-parse__extract` 仍是本岗正则表，与 Python handoff 尚未并表（见 `docs/civil-buddy/kb-mcp-horizon.md` 阶段 B）。
 
 辖区：用户 pack；未给则新加坡工地默认 SG。工程招标路径与政府采购货物服务路径不混用。本页不是规范全文库。
 

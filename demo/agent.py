@@ -6,10 +6,15 @@ from datetime import datetime
 from pathlib import Path
 from typing import Any
 
+import sys
+
 from catalog import Expert
-from config import MAX_AGENT_STEPS, OUT_ROOT
+from config import MAX_AGENT_STEPS, OUT_ROOT, REPO_ROOT
 from llm import chat, stream_plain
 from rag import list_kb, read_kb, search_kb
+
+if str(REPO_ROOT) not in sys.path:
+    sys.path.insert(0, str(REPO_ROOT))
 
 TOOLS = [
     {
@@ -61,6 +66,181 @@ TOOLS = [
     },
 ]
 
+EXTRACT_TENDER = {
+    "type": "function",
+    "function": {
+        "name": "extract_tender",
+        "description": "招标解析独有：用主线 C 同一套 tender.parse 抽出评分点/★/专项/工期。无正文则拒绝。",
+        "parameters": {
+            "type": "object",
+            "properties": {
+                "tender_text": {"type": "string"},
+                "project_name": {"type": "string"},
+            },
+            "required": ["tender_text"],
+        },
+    },
+}
+COMPLIANCE_GAPS = {
+    "type": "function",
+    "function": {
+        "name": "compliance_gaps",
+        "description": "废标检查独有：对照招标正文列出 P0 / ★ / 资格缺口。不判定可投标。",
+        "parameters": {
+            "type": "object",
+            "properties": {"tender_text": {"type": "string"}},
+            "required": ["tender_text"],
+        },
+    },
+}
+TECH_EXPAND = {
+    "type": "function",
+    "function": {
+        "name": "tech_expand",
+        "description": "技术标独有：按抽出的评分点出目录骨架，不套上个项目模板。",
+        "parameters": {
+            "type": "object",
+            "properties": {
+                "tender_text": {"type": "string"},
+                "project_name": {"type": "string"},
+            },
+            "required": ["tender_text"],
+        },
+    },
+}
+
+
+def tools_for_expert(expert: Expert | None) -> list:
+    extra = []
+    eid = getattr(expert, "id", "")
+    if eid == "bid-parse":
+        extra.append(EXTRACT_TENDER)
+    elif eid == "bid-compliance":
+        extra.append(COMPLIANCE_GAPS)
+    elif eid == "bid-tech":
+        extra.append(TECH_EXPAND)
+    return [*TOOLS, *extra]
+
+
+def _run_tender(text: str, project_name: str = "工作台招标解析") -> dict[str, Any]:
+    from packing_assistant.tools.tender_parse import run_tender_pipeline
+
+    return run_tender_pipeline(text, project_name=project_name, source="civil-workbench-demo")
+
+
+def _workbench_extract(text: str, project_name: str = "工作台招标解析") -> dict[str, Any]:
+    from packing_assistant.tools.tender_parse import workbench_bid_extract
+
+    return workbench_bid_extract(text, project_name=project_name)
+
+
+def execute_tool(
+    name: str,
+    args: dict[str, Any],
+    *,
+    expert: Expert,
+    confirm_ok: bool,
+    out_dir: Path,
+    citations: list[dict[str, Any]],
+    deliverables: list[dict[str, str]],
+) -> str:
+    """Shipped expert-tool dispatch. Tests call this; the LLM only chooses the name."""
+    if name == "extract_tender":
+        if expert.id != "bid-parse":
+            return "拒绝：extract_tender 是 bid-parse 独有。"
+        text = str(args.get("tender_text") or args.get("text") or "")
+        if not text.strip():
+            return "拒绝：没有招标正文。请粘贴公告/须知/评标办法后再抽。"
+        out = _workbench_extract(text, str(args.get("project_name") or "工作台招标解析"))
+        md = str(out.get("extract_table_markdown") or "")
+        path = out_dir / "招标解析表.md"
+        path.write_text(md, encoding="utf-8")
+        deliverables.append({"expert": expert.id, "name": path.name, "path": str(path)})
+        ho = out.get("handoff") or {}
+        return json.dumps(
+            {
+                "ok": out.get("ok"),
+                "duration_days": out.get("duration_days"),
+                "star_items": out.get("star_items"),
+                "scoring_points": out.get("scoring_points"),
+                "next_experts": ho.get("next_experts"),
+                "submit_blocked": True if out.get("submit_blocked") is None else out.get("submit_blocked"),
+                "n_star": len(out.get("star_items") or []),
+                "n_scores": len(out.get("scoring_points") or []),
+                "wrote": str(path),
+            },
+            ensure_ascii=False,
+        )
+    if name == "compliance_gaps":
+        if expert.id != "bid-compliance":
+            return "拒绝：compliance_gaps 是 bid-compliance 独有。"
+        text = str(args.get("tender_text") or "")
+        if not text.strip():
+            return "拒绝：没有招标正文。"
+        out = _run_tender(text)
+        p0 = (out.get("handoff") or {}).get("p0_reject_scan") or {}
+        md = ["# 响应缺口清单", "", p0.get("note") or "", ""]
+        for it in p0.get("items") or []:
+            md.append(f"- [{it.get('risk')}] {it.get('title')} · {it.get('requirement_ref')} · {it.get('exact_text')}")
+        path = out_dir / "响应缺口清单.md"
+        path.write_text("\n".join(md), encoding="utf-8")
+        deliverables.append({"expert": expert.id, "name": path.name, "path": str(path)})
+        return json.dumps(
+            {"ok": True, "p0_n": p0.get("n"), "human_confirm_required": True, "wrote": str(path)},
+            ensure_ascii=False,
+        )
+    if name == "tech_expand":
+        if expert.id != "bid-tech":
+            return "拒绝：tech_expand 是 bid-tech 独有。"
+        text = str(args.get("tender_text") or "")
+        if not text.strip():
+            return "拒绝：没有招标正文或评分点。"
+        out = _run_tender(text, str(args.get("project_name") or "工作台技术标"))
+        outline = out.get("tech_outline") or {}
+        md = str(outline.get("markdown") or "")
+        path = out_dir / "技术标目录草稿.md"
+        path.write_text(md, encoding="utf-8")
+        deliverables.append({"expert": expert.id, "name": path.name, "path": str(path)})
+        return json.dumps(
+            {
+                "ok": True,
+                "from_extracted_scores": outline.get("from_extracted_scores"),
+                "n_chapters": outline.get("n_chapters"),
+                "wrote": str(path),
+            },
+            ensure_ascii=False,
+        )
+    if name == "search_kb":
+        hits = search_kb(expert.id, expert.category, str(args.get("query") or ""))
+        citations.extend(
+            {"path": h.path, "layer": h.layer, "title": h.title, "snippet": h.snippet}
+            for h in hits
+        )
+        return json.dumps(
+            [{"path": h.path, "layer": h.layer, "snippet": h.snippet} for h in hits],
+            ensure_ascii=False,
+        )
+    if name == "list_kb":
+        return json.dumps(list_kb(expert.id, expert.category), ensure_ascii=False)
+    if name == "read_kb":
+        got = read_kb(str(args.get("path") or ""))
+        if not got:
+            return "文件不存在或越权"
+        rel, text = got
+        return f"# {rel}\n\n{text[:8000]}"
+    if name == "write_deliverable":
+        if expert.risk == "high" and not confirm_ok:
+            return "拒绝写盘：高风险稿需要用户确认句「我明白，将由持证人员签认」。"
+        raw_name = Path(str(args.get("filename") or "draft.md")).name
+        if not raw_name.endswith((".md", ".txt")):
+            raw_name += ".md"
+        path = out_dir / raw_name
+        path.write_text(str(args.get("markdown") or ""), encoding="utf-8")
+        item = {"expert": expert.id, "name": raw_name, "path": str(path)}
+        deliverables.append(item)
+        return f"已写入 {path}"
+    return f"未知工具 {name}"
+
 
 def build_expert_prompt(expert: Expert, confirm_ok: bool) -> str:
     """Shipped system prompt for a summoned expert. Tests must call this."""
@@ -95,6 +275,7 @@ B. 成稿 / 出文件 / 写方案表：按工序独立成稿，写完调用 writ
   若用户要成稿且 risk=high 且 confirm_ok 不为 true：只问用户打出「我明白，将由持证人员签认」，不要 write_deliverable。纯提问（A）不受确认门阻挡。
 
 先 search_kb。中文回答。
+经营投标：bid-parse 必须先 extract_tender（与装箱主线同一套 parse）；bid-compliance 用 compliance_gaps；bid-tech 用 tech_expand。不要编造天数、分值、证号，不要判定可投标。
 """
 
 
@@ -147,41 +328,21 @@ def run_expert(
 
     def _exec(name: str, args: dict[str, Any]) -> str:
         nonlocal citations, deliverables
-        if name == "search_kb":
-            hits = search_kb(expert.id, expert.category, str(args.get("query") or ""))
-            citations.extend(
-                {"path": h.path, "layer": h.layer, "title": h.title, "snippet": h.snippet}
-                for h in hits
-            )
-            return json.dumps(
-                [{"path": h.path, "layer": h.layer, "snippet": h.snippet} for h in hits],
-                ensure_ascii=False,
-            )
-        if name == "list_kb":
-            return json.dumps(list_kb(expert.id, expert.category), ensure_ascii=False)
-        if name == "read_kb":
-            got = read_kb(str(args.get("path") or ""))
-            if not got:
-                return "文件不存在或越权"
-            rel, text = got
-            return f"# {rel}\n\n{text[:8000]}"
-        if name == "write_deliverable":
-            if expert.risk == "high" and not confirm_ok:
-                return "拒绝写盘：高风险稿需要用户确认句「我明白，将由持证人员签认」。"
-            raw_name = Path(str(args.get("filename") or "draft.md")).name
-            if not raw_name.endswith((".md", ".txt")):
-                raw_name += ".md"
-            path = out_dir / raw_name
-            path.write_text(str(args.get("markdown") or ""), encoding="utf-8")
-            item = {"expert": expert.id, "name": raw_name, "path": str(path)}
-            deliverables.append(item)
-            return f"已写入 {path}"
-        return f"未知工具 {name}"
+        return execute_tool(
+            name,
+            args,
+            expert=expert,
+            confirm_ok=confirm_ok,
+            out_dir=out_dir,
+            citations=citations,
+            deliverables=deliverables,
+        )
 
     final_text = ""
+    expert_tools = tools_for_expert(expert)
     for step in range(MAX_AGENT_STEPS):
         yield {"event": "status", "data": {"phase": "think", "text": f"{expert.name} 步骤 {step + 1}/{MAX_AGENT_STEPS}"}}
-        msg = chat(messages, tools=TOOLS)
+        msg = chat(messages, tools=expert_tools)
         tool_calls = msg.get("tool_calls") or []
         if not tool_calls:
             final_text = msg.get("content") or ""

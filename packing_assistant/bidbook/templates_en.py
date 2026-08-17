@@ -23,7 +23,7 @@ Tenderers.
 | Item | Offer |
 |------|--------|
 | Project | {project_title} |
-| Contract sum (SGD) | S$ [TO FILL] |
+| Contract sum | S$ [TO FILL] |
 | Tender validity | [TO FILL] calendar days |
 | Authorised signatory | [TO FILL] |
 | Date | [TO FILL] |
@@ -109,7 +109,7 @@ RESOURCES = """## 8. Resources, Track Record & Commercial
 
 ### 8.2 Similar Singapore / regional projects
 
-| Project | Year | Scope | Value (SGD) | Client |
+| Project | Year | Scope | Value | Client |
 |---------|------|-------|-------------|--------|
 | [TO FILL] | [TO FILL] | [TO FILL] | S$ [TO FILL] | [TO FILL] |
 | [TO FILL] | [TO FILL] | [TO FILL] | S$ [TO FILL] | [TO FILL] |
@@ -118,7 +118,7 @@ RESOURCES = """## 8. Resources, Track Record & Commercial
 
 ### 8.3 Schedule of prices (not priced)
 
-| Item | Description | Qty | Unit | Rate (SGD) | Amount (SGD) |
+| Item | Description | Qty | Unit | Rate | Amount |
 |------|-------------|-----|------|------------|--------------|
 | 1 | Design & shop drawings | [TO FILL] | lot | S$ [TO FILL] | S$ [TO FILL] |
 | 2 | Supply of curtain wall | [TO FILL] | m² | S$ [TO FILL] | S$ [TO FILL] |

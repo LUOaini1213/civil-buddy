@@ -14,6 +14,8 @@
 
 `--pack construction` = 施工大类共享 + **施工方案**独有（不含危大独有）。`--expert method-hazard` 才带判定书。
 
+MCP 2026-07-28 三原语：`tools/*` 之外还有 `resources/list|read`（`kb://` 私库/大类/公司，越权拒绝）和 `prompts/list|get`（`civil.bid.parse` / `civil.bid.compliance` / `civil.pack-ship.plan`）。`initialize.capabilities` 须同时宣告三者。长程见 `kb-mcp-horizon.md`。
+
 ## 本轮对齐
 
 已对齐：65 / 65（`yibiao-map.json` 全部 `aligned: true`）。默认 **新加坡工地 / SG**：不编 SS/CP/BCA/WSH 条款号，缺数写 `[A001]` / `UNSPECIFIED`，禁止静默混入 GB/JGJ，高风险仍须「我明白，将由持证人员签认」。兄弟专家调用独有工具一律拒绝。`write_md` 在落盘前扫描法定断言与 SG 混用，命中则拒绝写盘。`zone_banner` 写出辖区；`DUAL` 必须分栏；`sg_only` / CN 规则过滤避免把 PSSCOC、GeBIZ、PUB 静默写进 CN 成稿。
