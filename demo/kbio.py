@@ -181,8 +181,21 @@ def write_text(rel: str, content: str) -> dict:
         raise ValueError("只允许 .md / .txt")
     if not valid_filename(path.name):
         raise ValueError("文件名只能用中文、字母、数字、_ -")
-    path.parent.mkdir(parents=True, exist_ok=True)
-    path.write_text(content, encoding="utf-8")
+    try:
+        import sys
+
+        from config import REPO_ROOT
+
+        if str(REPO_ROOT) not in sys.path:
+            sys.path.insert(0, str(REPO_ROOT))
+        from packing_assistant.sandbox import guarded_write_text
+
+        guarded_write_text(path, content)
+    except PermissionError:
+        raise
+    except Exception:
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text(content, encoding="utf-8")
     return file_stat(path, str(path.relative_to(KB_ROOT)).replace("\\", "/"), "")
 
 

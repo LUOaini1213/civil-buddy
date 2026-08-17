@@ -6,9 +6,15 @@ civil-mcp (Rust) without renaming. Tests drive this module; Rust needs MSVC.
 
 from __future__ import annotations
 
+import sys
+from pathlib import Path
 from typing import Any
 
 from rag import list_kb, read_kb
+
+_REPO = Path(__file__).resolve().parents[1]
+if str(_REPO) not in sys.path:
+    sys.path.insert(0, str(_REPO))
 
 PROMPTS: list[dict[str, Any]] = [
     {
@@ -26,6 +32,18 @@ PROMPTS: list[dict[str, Any]] = [
     {
         "name": "civil.pack-ship.plan",
         "description": "装箱作业单。柜数/xyz/N0 只抄工具；未接通写 UNSPECIFIED。",
+        "experts": {"pack-ship"},
+        "packs": {"plant"},
+    },
+    {
+        "name": "civil.pack-ship.list",
+        "description": "列出 pack-ship list / plan / export。",
+        "experts": {"pack-ship"},
+        "packs": {"plant"},
+    },
+    {
+        "name": "civil.pack-ship.export",
+        "description": "导出装柜证据。利用率/can_fit/mid50/系固待办只抄 solver。",
         "experts": {"pack-ship"},
         "packs": {"plant"},
     },
@@ -110,12 +128,44 @@ def get_prompt(name: str, arguments: dict | None = None, *, expert_id: str | Non
         )
     elif name == "civil.pack-ship.plan":
         text = (
-            "你是装箱拼柜岗。柜数/N0/xyz 只抄工具；未接通写 UNSPECIFIED。禁止编 CTU 条款号。"
+            "你是装箱拼柜岗。先 pack-ship__list，再 pack-ship__plan，再 pack-ship__export。"
+            "柜数/N0/xyz 只抄工具；未接通写 UNSPECIFIED。禁止编 CTU 条款号。"
             f"物料：\n{args.get('materials') or '（未提供）'}"
         )
+    elif name == "civil.pack-ship.list":
+        text = "列出 pack-ship__list / pack-ship__plan / pack-ship__export。不要编数字。"
+    elif name == "civil.pack-ship.export":
+        text = "导出装柜证据。utilization / can_fit / mid50 / 系固待办只抄 solver；未接通写 UNSPECIFIED。"
     else:
         return {"description": "未知 prompt", "messages": []}
     return {
         "description": name,
         "messages": [{"role": "user", "content": {"type": "text", "text": text}}],
     }
+
+
+def list_tools(*, expert_id: str | None = None, pack: str | None = None) -> list[dict[str, Any]]:
+    if expert_id and expert_id not in {"pack-ship"}:
+        return []
+    if pack and pack not in {"plant"}:
+        return []
+    from packing_assistant.tools.pack_ship_mcp import list_pack_ship_tools
+
+    return list_pack_ship_tools()
+
+
+def call_tool(
+    name: str,
+    arguments: dict | None = None,
+    *,
+    expert_id: str | None = None,
+) -> dict[str, Any]:
+    if expert_id and expert_id not in {"pack-ship"}:
+        return {"ok": False, "error": "拒绝：当前专家看不见该工具", "content": []}
+    from packing_assistant.tools.pack_ship_mcp import TOOL_NAMES, call_tool as _call, normalize_tool_name
+
+    tool = normalize_tool_name(name)
+    if tool not in TOOL_NAMES:
+        return {"ok": False, "error": f"未知工具 {name}", "names": list(TOOL_NAMES)}
+    out = _call(tool, arguments or {})
+    return {"ok": bool(out.get("ok", True)), "name": tool, **out}

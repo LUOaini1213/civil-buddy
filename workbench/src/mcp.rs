@@ -303,6 +303,18 @@ fn list_prompts(filter: &McpFilter) -> Vec<Value> {
                 {"name": "materials", "description": "物料表或自然语言", "required": true}
             ]
         }),
+        json!({
+            "name": "civil.pack-ship.list",
+            "description": "列出 pack-ship list / plan / export。",
+            "arguments": []
+        }),
+        json!({
+            "name": "civil.pack-ship.export",
+            "description": "导出装柜证据。utilization/can_fit/mid50/系固待办只抄 solver。",
+            "arguments": [
+                {"name": "solver", "description": "本仓 solver 快照", "required": false}
+            ]
+        }),
     ];
     if let Some(eid) = filter.expert.as_deref() {
         all.retain(|p| {
@@ -310,7 +322,7 @@ fn list_prompts(filter: &McpFilter) -> Vec<Value> {
             match eid {
                 "bid-parse" => n == "civil.bid.parse",
                 "bid-compliance" => n == "civil.bid.compliance",
-                "pack-ship" => n == "civil.pack-ship.plan",
+                "pack-ship" => n.starts_with("civil.pack-ship."),
                 _ => false,
             }
         });
@@ -319,7 +331,7 @@ fn list_prompts(filter: &McpFilter) -> Vec<Value> {
             let n = p.get("name").and_then(|v| v.as_str()).unwrap_or("");
             match pack {
                 "bid" => n.starts_with("civil.bid."),
-                "plant" => n == "civil.pack-ship.plan",
+                "plant" => n.starts_with("civil.pack-ship."),
                 _ => false,
             }
         });
@@ -356,10 +368,12 @@ fn get_prompt(filter: &McpFilter, msg: &Value) -> Value {
             args.get("tender_text").and_then(|v| v.as_str()).unwrap_or("（未提供）")
         ),
         "civil.pack-ship.plan" => format!(
-            "你是装箱拼柜岗。先 pack-ship__health，再 pack-ship__plan。\
+            "你是装箱拼柜岗。先 pack-ship__list，再 pack-ship__plan，再 pack-ship__export。\
 柜数/N0/xyz 只抄工具；未接通写 UNSPECIFIED。禁止编 CTU 条款号。物料：\n{}",
             args.get("materials").and_then(|v| v.as_str()).unwrap_or("（未提供）")
         ),
+        "civil.pack-ship.list" => "列出 pack-ship__list / pack-ship__plan / pack-ship__export。不要编数字。".into(),
+        "civil.pack-ship.export" => "导出装柜证据。utilization / can_fit / mid50 / 系固待办只抄 solver；未接通写 UNSPECIFIED。".into(),
         _ => "未知 prompt".into(),
     };
     json!({

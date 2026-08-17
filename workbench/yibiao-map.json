@@ -67,7 +67,7 @@
     {"id": "proc-vendor", "yibiao": ["qa", "kb", "write"], "exclusive": ["proc-vendor__eval"], "aligned": true, "note": "供方评价独有"},
     {"id": "equip", "yibiao": ["qa", "kb", "write"], "exclusive": ["equip__ledger"], "aligned": true, "note": "设备台账独有"},
     {"id": "warehouse", "yibiao": ["parse", "kb", "write"], "exclusive": ["warehouse__log"], "aligned": true, "note": "收发存独有"},
-    {"id": "pack-ship", "yibiao": ["outline", "kb", "write"], "exclusive": ["pack-ship__plan", "pack-ship__health"], "aligned": true, "note": "装箱拼柜独有；数值走 packing-agent 工具"},
+    {"id": "pack-ship", "yibiao": ["outline", "kb", "write"], "exclusive": ["pack-ship__list", "pack-ship__plan", "pack-ship__export", "pack-ship__health"], "aligned": true, "note": "装箱拼柜独有；数值走 packing-agent 工具"},
     {"id": "material-site", "yibiao": ["parse", "kb", "write"], "exclusive": ["material-site__recon"], "aligned": true, "note": "耗用核算独有"},
     {"id": "lab-mix", "yibiao": ["outline", "qa", "kb", "write"], "exclusive": ["lab-mix__report"], "aligned": true, "note": "配比提纲独有；无试验数据不给施工配比"},
     {"id": "lab-sample", "yibiao": ["qa", "kb", "write"], "exclusive": ["lab-sample__list"], "aligned": true, "note": "取样清单独有"},

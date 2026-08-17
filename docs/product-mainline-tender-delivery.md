@@ -120,6 +120,9 @@ POST /api/tender/parse                   # 仅矩阵（text / sections）
 POST /api/tender/parse/file              # 单文件节选
 POST /api/tender/parse/files             # 多文件 + 表格 → 同一矩阵
 POST /api/tender/delivery                # 矩阵 + A/B + bidbook
+POST /api/tender/review                  # 成稿后再审（禁语 + 缺项）
+GET  /api/otel/dashboard                 # OTEL 大盘（真 span）
+GET/POST /api/mcp/tools                  # pack-ship list/plan/export
 POST /api/tender/bidbook                 # 英文整本（默认可不跑装柜）
 frontend/index.html                      # 默认产品面（复制英文标书草案）
 frontend/workbench.html                  # 工程装柜台（旧装柜 UI）

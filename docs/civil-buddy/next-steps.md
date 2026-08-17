@@ -7,11 +7,17 @@
 1. **招标文件进矩阵** ✅ 2026-08-17  
    粘贴 / 多节选 / `.txt` `.md` `.csv` `.docx` `.xlsx` → 同一套矩阵 + P0。表格按行抄进 `exact_text`。`POST /api/tender/parse`（`sections`）· `/parse/file` · `/parse/files`。扫描 PDF 仍拒绝。验收：`python scripts/test_tender_ingest.py`。
 
-2. **装柜 MCP 工具表**  
-   在 `pack-ship` / `civil-mcp` 上拆出可发现的 list / plan / export（利用率、can_fit、mid50、系固待办）。数字只抄本仓 solver；未接通写 `UNSPECIFIED`。
+2. **装柜 MCP 工具表** ✅ 2026-08-17  
+   `pack-ship__list` / `pack-ship__plan` / `pack-ship__export` 可发现。利用率、`can_fit`、`mid50`、系固待办只抄本仓 solver；未接通写 `UNSPECIFIED`。`GET/POST /api/mcp/tools`（demo + gateway）。验收：`python scripts/test_mcp_surface.py`。
 
-3. **成稿后再审一岗**  
-   技术标目录或应答草稿出来后，跑一次禁语/缺项对照矩阵（写盘 `scan_forbidden` 之外的审查步）。不填业绩、不改 `can_fit`。
+3. **成稿后再审一岗** ✅ 2026-08-17  
+   技术标目录或应答草稿出来后，跑禁语/缺项对照矩阵（`scan_forbidden` 之外的 `tender.review.v1`）。不填业绩、不改 `can_fit`。`POST /api/tender/review`。验收：`python scripts/test_tender_review.py`。
+
+4. **沙箱** ✅ 2026-08-17  
+   应用层路径 + spawn 策略（非内核 jail）。允许写根；`.env` / secret / key 拒绝；通用 spawn 拒绝。验收：`python scripts/test_sandbox.py`。
+
+5. **OTEL 大盘** ✅ 2026-08-17  
+   `PACKING_OTEL=1` 文件导出 + `GET /api/otel/dashboard` 列 `run_id` / node / tool / duration。非夹具。验收：`python scripts/test_otel_dashboard.py`。
 
 ## 有宿主再做
 
@@ -19,4 +25,4 @@
 
 ## 不做
 
-GeBIZ 递交、托管 200+ 柜型替换 solver、16 类知识库全量 embedding 季更、沙箱 / 通用 spawn / OTEL、装箱评分离线循环。
+GeBIZ 递交、托管 200+ 柜型替换 solver、16 类知识库全量 embedding 季更、装箱评分离线循环、内核 Landlock/Seatbelt、以 Grafana/Jaeger 为唯一大盘。
