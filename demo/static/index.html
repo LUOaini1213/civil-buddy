@@ -1,0 +1,136 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Civil Buddy · 土木工作台</title>
+  <link rel="stylesheet" href="/static/styles.css?v=harness3" />
+</head>
+<body>
+  <header class="top">
+    <div class="brand">
+      <span class="mark">CB</span>
+      <div>
+        <strong>Civil Buddy</strong>
+        <small>Harness · 先理解 · 能聊能跑 · 出稿走 steps</small>
+      </div>
+    </div>
+    <div class="top-meta">
+      <span id="keyBadge" class="pill warn">检查 DeepSeek…</span>
+      <span class="pill" id="modelBadge">模型 deepseek-v4-flash · 1M 上下文</span>
+      <span class="pill ok" id="harnessBadge">Harness steps</span>
+      <button type="button" id="openStudio" class="top-btn">设计专家 / 知识库</button>
+    </div>
+  </header>
+
+  <main class="layout">
+    <aside class="rail">
+      <p class="rail-lead">点选即召唤。名字是岗位中文名；本岗知识只有这位专家先读，同部门还能读大类共享，公司规则人人可读。</p>
+      <button type="button" id="clearExperts" class="ghost">取消全部召唤</button>
+      <div id="wall"></div>
+    </aside>
+
+    <section class="stage">
+      <div class="summon-bar" id="summonBar">当前：<em>未召唤 · 普通 DeepSeek</em></div>
+      <div class="ctx-bar" id="ctxBar" data-zone="room">
+        <div class="ctx-meter" aria-hidden="true"><i id="ctxFill"></i></div>
+        <p class="ctx-text" id="ctxText">上下文 0 / 1,000,000 · DeepSeek V4 Flash · 用到 70% 会把更早对话压成摘要</p>
+      </div>
+      <div id="log" class="log"></div>
+      <form id="form" class="composer">
+        <label class="confirm">
+          <input type="checkbox" id="confirmOk" />
+          我明白，将由持证人员签认（高风险专家写盘前勾选）
+        </label>
+        <textarea id="input" rows="3" placeholder="可贴招标摘录，或在下面填本机路径。点「成套投标」按易标序一次出解析表、缺口清单、技术标目录。"></textarea>
+        <div class="local-row">
+          <input id="localPath" type="text" placeholder="本机路径，例 C:\Users\LW\Desktop\T5-ITT.pdf（不要填 D:\layout）" />
+          <button type="button" id="btnLocal">导入本机</button>
+          <button type="button" id="btnFirm">一人公司 · 成套投标</button>
+        </div>
+        <div id="attaches" class="attaches"></div>
+        <div class="row">
+          <div class="hints">
+            <input type="file" id="filePick" hidden multiple accept=".pdf,.docx,.txt,.md,.csv,.json" />
+            <button type="button" id="btnUpload">上传副本</button>
+            <button type="button" data-fill="临边防护算不算危大？要不要专家论证？">危大判定</button>
+            <button type="button" data-fill="按虚构滨河路人行道维修，写临边与洞口防护专项方案讨论提纲。高度未提供。">施工方案</button>
+            <button type="button" data-fill="把临边防护编成工友班前三分钟白话。">工友白话</button>
+            <button type="button" data-fill="从下面这段招标里抽出评分点和必须编制的专项：某市政人行道维修，要求编制高处作业/临边专项方案，技术标 40 分。">招标解析</button>
+          </div>
+          <button type="submit" id="send">发送</button>
+        </div>
+      </form>
+    </section>
+
+    <aside class="side">
+      <h2>本轮读过</h2>
+      <p class="muted">本岗知识（这位专家）· 大类共享（同部门）· 公司规则（所有人）</p>
+      <ul id="cites"></ul>
+      <h2>交付物</h2>
+      <ul id="files"></ul>
+      <h2>这位专家能读的库</h2>
+      <p class="muted">显示中文篇名。鼠标悬停可看文件路径。点开可改。</p>
+      <ul id="kblist"></ul>
+    </aside>
+  </main>
+
+  <div id="studio" class="studio hidden" aria-hidden="true">
+    <div class="studio-head">
+      <div>
+        <strong>专家与知识库工作室</strong>
+        <small id="studioTotal">总库 —</small>
+      </div>
+      <button type="button" id="closeStudio" class="top-btn">回到对话</button>
+    </div>
+    <div class="studio-grid">
+      <div class="studio-nav">
+        <label class="limit-row">单岗知识软上限
+          <input type="number" id="softLimit" min="8" max="8192" /> KB
+          <button type="button" id="saveLimit">保存</button>
+        </label>
+        <p class="muted">超限仍可编辑，只是标红。单篇硬顶 512 KB。左侧是中文篇名，悬停看路径。</p>
+        <div class="studio-actions">
+          <button type="button" id="btnNewCat">新建大类</button>
+          <button type="button" id="btnNewExp">新建专家</button>
+          <button type="button" id="btnNewFile">新建文件</button>
+          <button type="button" id="btnDelFile">删除当前文件</button>
+        </div>
+        <div id="studioTree"></div>
+      </div>
+      <div class="studio-main">
+        <form id="expertForm" class="expert-form">
+          <div class="form-row">
+            <label>内部编号（路径用，界面不展示） <input name="id" required placeholder="soil-lab" /></label>
+            <label>岗位中文名 <input name="name" required placeholder="试验室" /></label>
+            <label>大类
+              <select name="category" id="expCat"></select>
+            </label>
+            <label>风险
+              <select name="risk">
+                <option value="low">低</option>
+                <option value="high">高（写盘需确认）</option>
+              </select>
+            </label>
+          </div>
+          <label>职责 <input name="title" placeholder="这个专家独立完成什么" /></label>
+          <label>默认交付 <input name="delivers" placeholder="例如：试验计划草稿" /></label>
+          <label>别名（逗号分隔） <input name="aliases" placeholder="试验, 土工" /></label>
+          <div class="form-row">
+            <button type="submit">保存专家</button>
+            <button type="button" id="btnDelExp">停用 / 删除此专家</button>
+          </div>
+        </form>
+        <div class="editor-meta">
+          <span id="filePath">未打开文件</span>
+          <span id="fileSize"></span>
+          <button type="button" id="saveFile" disabled>保存文件</button>
+        </div>
+        <textarea id="editor" spellcheck="false" placeholder="在左侧点开一篇。同部门专家读大类共享；只有被召唤的这位专家先读本岗知识。"></textarea>
+      </div>
+    </div>
+  </div>
+  <script src="/static/app.js?v=harness3"></script>
+  <script src="/static/studio.js?v=harness3"></script>
+</body>
+</html>

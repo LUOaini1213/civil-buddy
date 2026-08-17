@@ -1,0 +1,685 @@
+use crate::agent::{self, LlmMode};
+use crate::attach;
+use crate::config::{deepseek_model, Paths};
+use crate::kbio::{self, MAX_FILE_BYTES};
+use crate::llm;
+use crate::rag::list_kb;
+use crate::store;
+use axum::extract::{DefaultBodyLimit, Multipart, Path as AxPath, Query, State};
+use axum::http::StatusCode;
+use axum::response::sse::{Event, KeepAlive, Sse};
+use axum::response::{IntoResponse, Response};
+use axum::routing::{delete, get, post};
+use axum::{Json, Router};
+use serde::Deserialize;
+use serde_json::{json, Value};
+use std::collections::HashMap;
+use std::convert::Infallible;
+use std::path::PathBuf;
+use std::sync::Arc;
+use tokio::sync::mpsc;
+use tokio_stream::wrappers::ReceiverStream;
+use tower_http::services::ServeDir;
+use uuid::Uuid;
+
+#[derive(Clone)]
+pub struct AppState {
+    pub paths: Paths,
+    pub llm: LlmMode,
+    pub force_has_key: Option<bool>,
+}
+
+impl AppState {
+    pub fn live(paths: Paths) -> Self {
+        Self {
+            paths,
+            llm: LlmMode::Live,
+            force_has_key: None,
+        }
+    }
+
+    fn has_key(&self) -> bool {
+        self.force_has_key.unwrap_or_else(llm::has_key)
+    }
+}
+
+pub fn app(state: AppState) -> Router {
+    let static_dir = state.paths.static_dir.clone();
+    Router::new()
+        .route("/", get(index))
+        .route("/api/health", get(health))
+        .route("/api/catalog", get(catalog))
+        .route("/api/kb/{expert_id}", get(kb))
+        .route("/api/studio/tree", get(studio_tree))
+        .route("/api/studio/file", get(studio_read).put(studio_write).post(studio_create).delete(studio_delete))
+        .route("/api/studio/experts", post(studio_expert))
+        .route("/api/studio/experts/{expert_id}", delete(studio_expert_del))
+        .route("/api/studio/categories", post(studio_category))
+        .route("/api/studio/limit", post(studio_limit))
+        .route("/api/chat", post(chat))
+        .route(
+            "/api/upload",
+            post(upload).layer(DefaultBodyLimit::max(25 * 1024 * 1024)),
+        )
+        .route("/api/attachments", get(attachments))
+        .route("/api/local", post(import_local))
+        .route("/api/firm/bid", post(firm_bid))
+        .route("/api/architecture", get(architecture))
+        .route("/api/eval/shadow", post(eval_shadow))
+        .route("/api/eval/shadow-expert", post(eval_shadow_expert))
+        .route("/api/eval/live", get(eval_live))
+        .route("/api/harness/expert", post(harness_expert))
+        .route("/api/harness/trace/{session}/{run_id}", get(harness_trace))
+        .route("/api/file", get(file_get))
+        .nest_service("/static", ServeDir::new(static_dir))
+        .with_state(Arc::new(state))
+}
+
+type ApiError = (StatusCode, Json<Value>);
+
+fn err(status: StatusCode, msg: impl Into<String>) -> ApiError {
+    (status, Json(json!({"detail": msg.into()})))
+}
+
+async fn index(State(st): State<Arc<AppState>>) -> Response {
+    let path = st.paths.static_dir.join("index.html");
+    match tokio::fs::read(&path).await {
+        Ok(bytes) => (
+            [(axum::http::header::CONTENT_TYPE, "text/html; charset=utf-8")],
+            bytes,
+        )
+            .into_response(),
+        Err(_) => err(StatusCode::NOT_FOUND, "missing index").into_response(),
+    }
+}
+
+async fn health(State(st): State<Arc<AppState>>) -> Json<Value> {
+    Json(json!({
+        "ok": true,
+        "deepseek": st.has_key(),
+        "model": deepseek_model(),
+        "context": crate::context::Policy::from_env().to_value(),
+        "harness": crate::harness::architecture(),
+        "parse": crate::parse::probe(),
+        "packing_agent": crate::packing_bridge::probe(),
+    }))
+}
+
+async fn architecture() -> Json<Value> {
+    Json(crate::harness::architecture())
+}
+
+async fn eval_shadow(State(st): State<Arc<AppState>>, Json(body): Json<FirmBidIn>) -> Result<Json<Value>, ApiError> {
+    let session = if body.session_id.is_empty() {
+        Uuid::new_v4().simple().to_string().chars().take(12).collect()
+    } else {
+        body.session_id.clone()
+    };
+    let args = json!({
+        "project_name": body.project_name,
+        "jurisdiction": body.jurisdiction,
+        "path": body.path,
+        "brief": body.brief,
+        "tender_text": body.brief,
+        "confirm_ok": body.confirm_ok,
+    });
+    let ticket = crate::harness::Ticket::from_args(&session, &args);
+    Ok(Json(crate::harness::shadow_eval(&st.paths, ticket)))
+}
+
+async fn harness_trace(
+    State(st): State<Arc<AppState>>,
+    AxPath((session, run_id)): AxPath<(String, String)>,
+) -> Result<Json<Value>, ApiError> {
+    crate::harness::load_trace(&st.paths, &session, &run_id)
+        .map(Json)
+        .ok_or_else(|| err(StatusCode::NOT_FOUND, "trace not found"))
+}
+
+#[derive(Deserialize)]
+struct ExpertRunIn {
+    #[serde(default)]
+    session_id: String,
+    expert_id: String,
+    #[serde(default)]
+    project_name: String,
+    #[serde(default)]
+    jurisdiction: String,
+    #[serde(default)]
+    path: String,
+    #[serde(default)]
+    brief: String,
+    #[serde(default)]
+    confirm_ok: bool,
+}
+
+fn expert_ticket(session: &str, body: &ExpertRunIn) -> crate::harness::Ticket {
+    let args = json!({
+        "project_name": body.project_name,
+        "jurisdiction": body.jurisdiction,
+        "path": body.path,
+        "brief": body.brief,
+        "tender_text": body.brief,
+        "confirm_ok": body.confirm_ok,
+    });
+    crate::harness::Ticket::from_args(session, &args)
+}
+
+async fn harness_expert(State(st): State<Arc<AppState>>, Json(body): Json<ExpertRunIn>) -> Result<Json<Value>, ApiError> {
+    let exp = store::get_expert(&st.paths, &body.expert_id)
+        .ok_or_else(|| err(StatusCode::NOT_FOUND, "unknown expert"))?;
+    let session = if body.session_id.is_empty() {
+        Uuid::new_v4().simple().to_string().chars().take(12).collect()
+    } else {
+        body.session_id.clone()
+    };
+    let ticket = expert_ticket(&session, &body);
+    Ok(Json(crate::harness::run_expert_steps(&st.paths, &exp, ticket).to_value()))
+}
+
+async fn eval_live(State(st): State<Arc<AppState>>) -> Json<Value> {
+    Json(tokio::task::spawn_blocking({
+        let paths = st.paths.clone();
+        move || crate::eval_live::report(&paths)
+    })
+    .await
+    .unwrap_or_else(|e| json!({"ok": false, "error": e.to_string()})))
+}
+
+async fn eval_shadow_expert(
+    State(st): State<Arc<AppState>>,
+    Json(body): Json<ExpertRunIn>,
+) -> Result<Json<Value>, ApiError> {
+    let exp = store::get_expert(&st.paths, &body.expert_id)
+        .ok_or_else(|| err(StatusCode::NOT_FOUND, "unknown expert"))?;
+    let session = if body.session_id.is_empty() {
+        Uuid::new_v4().simple().to_string().chars().take(12).collect()
+    } else {
+        body.session_id.clone()
+    };
+    let ticket = expert_ticket(&session, &body);
+    Ok(Json(crate::harness::shadow_eval_expert(&st.paths, &exp, ticket)))
+}
+
+async fn catalog(State(st): State<Arc<AppState>>) -> Json<Value> {
+    Json(store::catalog_payload(&st.paths))
+}
+
+async fn kb(State(st): State<Arc<AppState>>, AxPath(expert_id): AxPath<String>) -> Result<Json<Value>, ApiError> {
+    let exp = store::get_expert(&st.paths, &expert_id).ok_or_else(|| err(StatusCode::NOT_FOUND, "unknown expert"))?;
+    let files = list_kb(&st.paths, &exp.id, &exp.category);
+    let total: u64 = files
+        .iter()
+        .filter_map(|f| f.get("bytes").and_then(|v| v.as_u64()))
+        .sum();
+    Ok(Json(json!({
+        "expert": expert_id,
+        "files": files,
+        "bytes": total,
+        "label": kbio::format_bytes(total),
+    })))
+}
+
+async fn studio_tree(State(st): State<Arc<AppState>>) -> Json<Value> {
+    Json(store::tree_payload(&st.paths))
+}
+
+#[derive(Deserialize)]
+struct PathQ {
+    path: String,
+}
+
+async fn studio_read(State(st): State<Arc<AppState>>, Query(q): Query<PathQ>) -> Result<Json<Value>, ApiError> {
+    let (text, stat) = kbio::read_text(&st.paths, &q.path).ok_or_else(|| err(StatusCode::NOT_FOUND, "文件不存在"))?;
+    Ok(Json(json!({
+        "path": q.path,
+        "content": text,
+        "title": stat.title,
+        "display": stat.display,
+        "layer": stat.layer,
+        "layer_label": stat.layer_label,
+        "bytes": stat.bytes,
+        "chars": stat.chars,
+        "lines": stat.lines,
+    })))
+}
+
+#[derive(Deserialize)]
+struct FileIn {
+    path: String,
+    #[serde(default)]
+    content: String,
+}
+
+async fn studio_write(State(st): State<Arc<AppState>>, Json(body): Json<FileIn>) -> Result<Json<Value>, ApiError> {
+    let stat = kbio::write_text(&st.paths, &body.path, &body.content).map_err(|e| err(StatusCode::BAD_REQUEST, e))?;
+    Ok(Json(json!({
+        "ok": true,
+        "path": stat.path,
+        "title": stat.title,
+        "display": stat.display,
+        "layer": stat.layer,
+        "layer_label": stat.layer_label,
+        "bytes": stat.bytes,
+        "chars": stat.chars,
+        "lines": stat.lines,
+        "label": kbio::format_bytes(stat.bytes),
+    })))
+}
+
+async fn studio_create(State(st): State<Arc<AppState>>, Json(body): Json<FileIn>) -> Result<Json<Value>, ApiError> {
+    let stat = kbio::create_file(&st.paths, &body.path).map_err(|e| err(StatusCode::BAD_REQUEST, e))?;
+    Ok(Json(json!({
+        "ok": true,
+        "path": stat.path,
+        "title": stat.title,
+        "bytes": stat.bytes,
+        "chars": stat.chars,
+        "lines": stat.lines,
+    })))
+}
+
+async fn studio_delete(State(st): State<Arc<AppState>>, Query(q): Query<PathQ>) -> Result<Json<Value>, ApiError> {
+    kbio::delete_file(&st.paths, &q.path).map_err(|e| err(StatusCode::BAD_REQUEST, e))?;
+    Ok(Json(json!({"ok": true})))
+}
+
+#[derive(Deserialize)]
+struct ExpertIn {
+    id: String,
+    name: String,
+    category: String,
+    #[serde(default)]
+    title: String,
+    #[serde(default)]
+    delivers: String,
+    #[serde(default = "low")]
+    risk: String,
+    #[serde(default)]
+    aliases: String,
+    #[serde(default)]
+    pipeline: String,
+}
+
+fn low() -> String {
+    "low".into()
+}
+
+async fn studio_expert(State(st): State<Arc<AppState>>, Json(body): Json<ExpertIn>) -> Result<Json<Value>, ApiError> {
+    let payload = json!({
+        "id": body.id,
+        "name": body.name,
+        "category": body.category,
+        "title": body.title,
+        "delivers": body.delivers,
+        "risk": body.risk,
+        "aliases": body.aliases,
+        "pipeline": body.pipeline,
+    });
+    let exp = store::upsert_expert(&st.paths, &payload).map_err(|e| err(StatusCode::BAD_REQUEST, e))?;
+    serde_json::to_value(exp)
+        .map(Json)
+        .map_err(|e| err(StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))
+}
+
+#[derive(Deserialize)]
+struct DelQ {
+    #[serde(default = "default_true")]
+    delete_kb: bool,
+}
+
+fn default_true() -> bool {
+    true
+}
+
+async fn studio_expert_del(
+    State(st): State<Arc<AppState>>,
+    AxPath(expert_id): AxPath<String>,
+    Query(q): Query<DelQ>,
+) -> Result<Json<Value>, ApiError> {
+    if store::get_expert(&st.paths, &expert_id).is_none() {
+        return Err(err(StatusCode::NOT_FOUND, "unknown expert"));
+    }
+    store::disable_or_delete_expert(&st.paths, &expert_id, q.delete_kb)
+        .map_err(|e| err(StatusCode::BAD_REQUEST, e))?;
+    Ok(Json(json!({"ok": true})))
+}
+
+#[derive(Deserialize)]
+struct CategoryIn {
+    id: String,
+    name: String,
+    #[serde(default)]
+    blurb: String,
+}
+
+async fn studio_category(State(st): State<Arc<AppState>>, Json(body): Json<CategoryIn>) -> Result<Json<Value>, ApiError> {
+    store::upsert_category(&st.paths, &body.id, &body.name, &body.blurb)
+        .map(Json)
+        .map_err(|e| err(StatusCode::BAD_REQUEST, e))
+}
+
+#[derive(Deserialize)]
+struct LimitIn {
+    kb_soft_limit_kb: i64,
+}
+
+async fn studio_limit(State(st): State<Arc<AppState>>, Json(body): Json<LimitIn>) -> Json<Value> {
+    Json(json!({
+        "kb_soft_limit_kb": store::set_soft_limit(&st.paths, body.kb_soft_limit_kb),
+        "max_file_bytes": MAX_FILE_BYTES,
+    }))
+}
+
+#[derive(Deserialize)]
+struct SessionQ {
+    #[serde(default)]
+    session_id: String,
+}
+
+async fn attachments(
+    State(st): State<Arc<AppState>>,
+    Query(q): Query<SessionQ>,
+) -> Result<Json<Value>, ApiError> {
+    if q.session_id.is_empty() {
+        return Err(err(StatusCode::BAD_REQUEST, "缺少 session_id"));
+    }
+    Ok(Json(json!({
+        "files": attach::list_uploads(&st.paths, &q.session_id),
+    })))
+}
+
+async fn upload(State(st): State<Arc<AppState>>, mut multipart: Multipart) -> Result<Json<Value>, ApiError> {
+    let mut session = String::new();
+    let mut pending: Vec<(String, Vec<u8>)> = Vec::new();
+    while let Some(field) = multipart
+        .next_field()
+        .await
+        .map_err(|e| err(StatusCode::BAD_REQUEST, e.to_string()))?
+    {
+        let name = field.name().unwrap_or("").to_string();
+        if name == "session_id" {
+            session = field.text().await.unwrap_or_default();
+            continue;
+        }
+        if name != "file" && name != "files" {
+            continue;
+        }
+        let filename = field.file_name().unwrap_or("upload.bin").to_string();
+        let bytes = field
+            .bytes()
+            .await
+            .map_err(|e| err(StatusCode::BAD_REQUEST, e.to_string()))?;
+        pending.push((filename, bytes.to_vec()));
+    }
+    if session.is_empty() {
+        return Err(err(StatusCode::BAD_REQUEST, "缺少 session_id"));
+    }
+    if pending.is_empty() {
+        return Err(err(StatusCode::BAD_REQUEST, "没有收到文件"));
+    }
+    let mut saved = Vec::new();
+    for (filename, bytes) in pending {
+        let meta = attach::save_upload(&st.paths, &session, &filename, &bytes)
+            .map_err(|e| err(StatusCode::BAD_REQUEST, e))?;
+        saved.push(meta);
+    }
+    Ok(Json(json!({"ok": true, "files": saved})))
+}
+
+#[derive(Deserialize)]
+struct LocalIn {
+    session_id: String,
+    path: String,
+}
+
+async fn import_local(State(st): State<Arc<AppState>>, Json(body): Json<LocalIn>) -> Result<Json<Value>, ApiError> {
+    let files = attach::import_local(&st.paths, &body.session_id, &body.path)
+        .map_err(|e| err(StatusCode::BAD_REQUEST, e))?;
+    Ok(Json(json!({"ok": true, "files": files})))
+}
+
+#[derive(Deserialize)]
+struct FirmBidIn {
+    #[serde(default)]
+    session_id: String,
+    #[serde(default)]
+    project_name: String,
+    #[serde(default)]
+    jurisdiction: String,
+    #[serde(default)]
+    path: String,
+    #[serde(default)]
+    brief: String,
+    #[serde(default)]
+    confirm_ok: bool,
+}
+
+async fn firm_bid(State(st): State<Arc<AppState>>, Json(body): Json<FirmBidIn>) -> Result<Json<Value>, ApiError> {
+    let session = if body.session_id.is_empty() {
+        Uuid::new_v4().simple().to_string().chars().take(12).collect()
+    } else {
+        body.session_id.clone()
+    };
+    let args = json!({
+        "project_name": body.project_name,
+        "jurisdiction": body.jurisdiction,
+        "path": body.path,
+        "brief": body.brief,
+        "confirm_ok": body.confirm_ok,
+    });
+    let v = crate::firm::run_bid_job(&st.paths, &session, &args);
+    if v.get("ok").and_then(|x| x.as_bool()) != Some(true) {
+        let msg = v
+            .get("error")
+            .and_then(|x| x.as_str())
+            .unwrap_or("成套失败");
+        return Err(err(StatusCode::BAD_REQUEST, msg));
+    }
+    Ok(Json(v))
+}
+
+#[derive(Deserialize)]
+struct ChatIn {
+    message: String,
+    #[serde(default)]
+    history: Vec<Value>,
+    #[serde(default)]
+    expert_ids: Vec<String>,
+    #[serde(default)]
+    confirm_ok: bool,
+    #[serde(default)]
+    session_id: String,
+    #[serde(default)]
+    attachments: Vec<String>,
+}
+
+async fn chat(State(st): State<Arc<AppState>>, Json(body): Json<ChatIn>) -> Result<Response, ApiError> {
+    if !st.has_key() {
+        return Err(err(StatusCode::BAD_REQUEST, "未配置 DEEPSEEK_API_KEY"));
+    }
+    let session = if body.session_id.is_empty() {
+        let raw = Uuid::new_v4().simple().to_string();
+        raw.chars().take(12).collect()
+    } else {
+        body.session_id.clone()
+    };
+    let _ = std::fs::create_dir_all(&st.paths.out_root);
+    let mut ids: Vec<String> = body
+        .expert_ids
+        .iter()
+        .filter(|i| store::get_expert(&st.paths, i).is_some())
+        .cloned()
+        .collect();
+    if ids.is_empty() {
+        ids = store::resolve_mentions(&st.paths, &body.message);
+    }
+    let mut history = Vec::new();
+    for item in body.history.iter().rev().take(80).collect::<Vec<_>>().into_iter().rev() {
+        let role = item.get("role").and_then(|v| v.as_str()).unwrap_or("");
+        let content = item.get("content").and_then(|v| v.as_str());
+        if matches!(role, "user" | "assistant") {
+            if let Some(c) = content {
+                history.push(json!({"role": role, "content": c}));
+            }
+        }
+    }
+    let user_text = if body.attachments.is_empty() {
+        body.message.clone()
+    } else {
+        attach::bundle_for_prompt(&st.paths, &session, &body.attachments, &body.message)
+    };
+    history.push(json!({"role": "user", "content": user_text}));
+    let (history, ctx_report) = crate::context::prepare_history(history);
+
+    let (tx, rx) = mpsc::channel::<Result<Event, Infallible>>(32);
+    let st2 = st.clone();
+    let llm = st.llm.clone();
+    let confirm_ok = body.confirm_ok;
+    tokio::spawn(async move {
+        let send = |ev: agent::EventOut| {
+            let (name, data) = ev;
+            let payload = serde_json::to_string(&data).unwrap_or_else(|_| "{}".into());
+            Event::default().event(name).data(payload)
+        };
+        let result = async {
+            let ctx_ev = (
+                "context".into(),
+                ctx_report.to_value(),
+            );
+            if tx.send(Ok(send(ctx_ev))).await.is_err() {
+                return Ok(());
+            }
+            if ctx_report.compressed {
+                let ev = (
+                    "status".into(),
+                    json!({"phase": "compress", "text": ctx_report.note()}),
+                );
+                if tx.send(Ok(send(ev))).await.is_err() {
+                    return Ok(());
+                }
+            }
+            if ids.is_empty() {
+                let evs = agent::run_plain(history, &llm).await?;
+                for ev in evs {
+                    if tx.send(Ok(send(ev))).await.is_err() {
+                        break;
+                    }
+                }
+                return Ok(());
+            }
+            let last_user = history
+                .iter()
+                .rev()
+                .find(|m| m.get("role").and_then(|v| v.as_str()) == Some("user"))
+                .and_then(|m| m.get("content").and_then(|v| v.as_str()))
+                .unwrap_or("");
+            if agent::is_packish(last_user) {
+                let args = json!({
+                    "brief": last_user,
+                    "tender_text": last_user,
+                    "project_name": last_user.chars().take(40).collect::<String>(),
+                    "confirm_ok": confirm_ok,
+                });
+                let run_v = crate::firm::run_bid_job(&st2.paths, &session, &args);
+                let evs = vec![
+                    (
+                        "status".into(),
+                        json!({"phase": "harness", "text": "一人公司成套 · harness steps（一次，不按专家重复）"}),
+                    ),
+                    ("token".into(), json!({"text": run_v.to_string()})),
+                    (
+                        "done".into(),
+                        json!({
+                            "mode": "firm",
+                            "harness": true,
+                            "runtime": run_v.get("mode").cloned().unwrap_or(json!("steps")),
+                            "text": run_v.to_string(),
+                            "citations": [],
+                            "deliverables": run_v.get("files").cloned().unwrap_or(json!([])),
+                        }),
+                    ),
+                ];
+                for ev in evs {
+                    if tx.send(Ok(send(ev))).await.is_err() {
+                        break;
+                    }
+                }
+                return Ok(());
+            }
+            let n = ids.len();
+            for (i, eid) in ids.iter().enumerate() {
+                let Some(exp) = store::get_expert(&st2.paths, eid) else {
+                    continue;
+                };
+                if n > 1 {
+                    let ev = (
+                        "status".into(),
+                        json!({"phase": "queue", "text": format!("独立专家 {}/{}：{}", i + 1, n, exp.name)}),
+                    );
+                    if tx.send(Ok(send(ev))).await.is_err() {
+                        break;
+                    }
+                }
+                match agent::run_expert(&st2.paths, &exp, history.clone(), confirm_ok, &session, &llm).await {
+                    Ok(evs) => {
+                        for ev in evs {
+                            if tx.send(Ok(send(ev))).await.is_err() {
+                                return Ok(());
+                            }
+                        }
+                    }
+                    Err(e) => {
+                        let ev = ("error".into(), json!({"text": e.to_string()}));
+                        let _ = tx.send(Ok(send(ev))).await;
+                    }
+                }
+            }
+            Ok::<(), llm::LlmError>(())
+        }
+        .await;
+        if let Err(e) = result {
+            let ev = Event::default()
+                .event("error")
+                .data(json!({"text": e.to_string()}).to_string());
+            let _ = tx.send(Ok(ev)).await;
+        }
+    });
+
+    Ok(Sse::new(ReceiverStream::new(rx))
+        .keep_alive(KeepAlive::default())
+        .into_response())
+}
+
+async fn file_get(State(st): State<Arc<AppState>>, Query(q): Query<HashMap<String, String>>) -> Result<Response, ApiError> {
+    let raw = q.get("path").cloned().unwrap_or_default();
+    let target = PathBuf::from(&raw);
+    let target = target.canonicalize().map_err(|_| err(StatusCode::NOT_FOUND, "missing"))?;
+    let root = st
+        .paths
+        .out_root
+        .canonicalize()
+        .map_err(|_| err(StatusCode::FORBIDDEN, "not a deliverable"))?;
+    if !target.starts_with(&root) {
+        return Err(err(StatusCode::FORBIDDEN, "not a deliverable"));
+    }
+    if !target.is_file() {
+        return Err(err(StatusCode::NOT_FOUND, "missing"));
+    }
+    let bytes = tokio::fs::read(&target)
+        .await
+        .map_err(|_| err(StatusCode::NOT_FOUND, "missing"))?;
+    let name = target
+        .file_name()
+        .and_then(|s| s.to_str())
+        .unwrap_or("file");
+    let mut headers = axum::http::HeaderMap::new();
+    headers.insert(
+        axum::http::header::CONTENT_TYPE,
+        "application/octet-stream".parse().unwrap(),
+    );
+    if let Ok(v) = format!("attachment; filename=\"{name}\"").parse() {
+        headers.insert(axum::http::header::CONTENT_DISPOSITION, v);
+    }
+    Ok((headers, bytes).into_response())
+}

@@ -1,0 +1,1177 @@
+{
+  "categories": [
+    {
+      "id": "bid",
+      "name": "经营投标",
+      "blurb": "招标解析、响应检查",
+      "builtin": true
+    },
+    {
+      "id": "design",
+      "name": "勘察设计",
+      "blurb": "按审图专业拆：建筑结构机电 + 土木专项",
+      "builtin": true
+    },
+    {
+      "id": "bim",
+      "name": "BIM",
+      "blurb": "模型协调、碰撞、算量口径、交付",
+      "builtin": true
+    },
+    {
+      "id": "planning",
+      "name": "计划",
+      "blurb": "总控、周月计划、资源负荷",
+      "builtin": true
+    },
+    {
+      "id": "construction",
+      "name": "施工生产",
+      "blurb": "专项方案、危大、测量、调度",
+      "builtin": true
+    },
+    {
+      "id": "hse",
+      "name": "安质环",
+      "blurb": "安全、质量、环保、应急",
+      "builtin": true
+    },
+    {
+      "id": "commercial",
+      "name": "商务造价",
+      "blurb": "拆分、签证、分包、索赔、验工",
+      "builtin": true
+    },
+    {
+      "id": "procurement",
+      "name": "采购",
+      "blurb": "计划、比价、供应商",
+      "builtin": true
+    },
+    {
+      "id": "plant",
+      "name": "物机",
+      "blurb": "设备租赁维保、仓管、现场材料",
+      "builtin": true
+    },
+    {
+      "id": "lab",
+      "name": "试验室",
+      "blurb": "配合比、见证取样、台账",
+      "builtin": true
+    },
+    {
+      "id": "finance",
+      "name": "财务",
+      "blurb": "核算、资金、税务口径",
+      "builtin": true
+    },
+    {
+      "id": "docs",
+      "name": "资料监理",
+      "blurb": "目录闭合、回复草稿",
+      "builtin": true
+    },
+    {
+      "id": "hr",
+      "name": "人力",
+      "blurb": "招聘、劳动合同、培训",
+      "builtin": true
+    },
+    {
+      "id": "admin",
+      "name": "行政",
+      "blurb": "公文印章、会务后勤",
+      "builtin": true
+    },
+    {
+      "id": "it",
+      "name": "IT",
+      "blurb": "权限运维、数据备份、系统需求",
+      "builtin": true
+    },
+    {
+      "id": "people",
+      "name": "项目与工人",
+      "blurb": "班前白话、为工友谋幸福",
+      "builtin": true
+    }
+  ],
+  "experts": [
+    {
+      "id": "bid-parse",
+      "name": "招标解析",
+      "category": "bid",
+      "category_name": "经营投标",
+      "title": "抽出评分点、工期、资质和必须编制的专项",
+      "delivers": "评分点表 + 专项触发清单",
+      "risk": "low",
+      "aliases": [
+        "招标",
+        "解析招标"
+      ],
+      "pipeline": "理解任务 → 检索本库与大类库 → 提纲 → 独立成稿 → 自检",
+      "builtin": true,
+      "enabled": true
+    },
+    {
+      "id": "bid-compliance",
+      "name": "废标检查",
+      "category": "bid",
+      "category_name": "经营投标",
+      "title": "对照招标响应项列出未响应/易废标点",
+      "delivers": "响应缺口清单",
+      "risk": "low",
+      "aliases": [
+        "废标",
+        "响应检查"
+      ],
+      "pipeline": "理解任务 → 检索本库与大类库 → 提纲 → 独立成稿 → 自检",
+      "builtin": true,
+      "enabled": true
+    },
+    {
+      "id": "bid-tech",
+      "name": "技术标",
+      "category": "bid",
+      "category_name": "经营投标",
+      "title": "按评分点出技术标目录与扩写草稿",
+      "delivers": "技术标目录/草稿",
+      "risk": "low",
+      "aliases": [
+        "技术标",
+        "标书"
+      ],
+      "pipeline": "理解任务 → 检索本库与大类库 → 提纲 → 独立成稿 → 自检",
+      "builtin": true,
+      "enabled": true
+    },
+    {
+      "id": "architecture",
+      "name": "建筑",
+      "category": "design",
+      "category_name": "勘察设计",
+      "title": "平面功能、防火分区、无障碍、图则口径",
+      "delivers": "建筑专业说明草稿",
+      "risk": "low",
+      "aliases": [
+        "建筑专业",
+        "方案设计"
+      ],
+      "pipeline": "理解任务 → 检索本库与大类库 → 提纲 → 独立成稿 → 自检",
+      "builtin": true,
+      "enabled": true
+    },
+    {
+      "id": "structure",
+      "name": "结构",
+      "category": "design",
+      "category_name": "勘察设计",
+      "title": "结构体系、荷载组合提纲、构件复核清单",
+      "delivers": "结构计算书提纲",
+      "risk": "high",
+      "aliases": [
+        "结构专业",
+        "计算书"
+      ],
+      "pipeline": "理解任务 → 检索本库与大类库 → 提纲 → 独立成稿 → 自检",
+      "builtin": true,
+      "enabled": true
+    },
+    {
+      "id": "geotech",
+      "name": "岩土勘察",
+      "category": "design",
+      "category_name": "勘察设计",
+      "title": "勘察纲要、地基方案比选口径，无地勘不填承载力",
+      "delivers": "勘察/地基提纲",
+      "risk": "high",
+      "aliases": [
+        "岩土",
+        "勘察",
+        "地基"
+      ],
+      "pipeline": "理解任务 → 检索本库与大类库 → 提纲 → 独立成稿 → 自检",
+      "builtin": true,
+      "enabled": true
+    },
+    {
+      "id": "plumbing",
+      "name": "给排水",
+      "category": "design",
+      "category_name": "勘察设计",
+      "title": "给水、排水、消防水量原则，无标高不编管径",
+      "delivers": "给排水说明草稿",
+      "risk": "low",
+      "aliases": [
+        "给水",
+        "排水",
+        "水专业"
+      ],
+      "pipeline": "理解任务 → 检索本库与大类库 → 提纲 → 独立成稿 → 自检",
+      "builtin": true,
+      "enabled": true
+    },
+    {
+      "id": "hvac",
+      "name": "暖通",
+      "category": "design",
+      "category_name": "勘察设计",
+      "title": "冷热源与通风排烟原则，无负荷不选型",
+      "delivers": "暖通说明草稿",
+      "risk": "low",
+      "aliases": [
+        "暖通空调",
+        "通风"
+      ],
+      "pipeline": "理解任务 → 检索本库与大类库 → 提纲 → 独立成稿 → 自检",
+      "builtin": true,
+      "enabled": true
+    },
+    {
+      "id": "electrical",
+      "name": "电气",
+      "category": "design",
+      "category_name": "勘察设计",
+      "title": "供配电、照明、防雷接地原则，无负荷不选变压器",
+      "delivers": "电气说明草稿",
+      "risk": "low",
+      "aliases": [
+        "电气专业",
+        "强电"
+      ],
+      "pipeline": "理解任务 → 检索本库与大类库 → 提纲 → 独立成稿 → 自检",
+      "builtin": true,
+      "enabled": true
+    },
+    {
+      "id": "fire-protect",
+      "name": "消防",
+      "category": "design",
+      "category_name": "勘察设计",
+      "title": "消防系统与疏散原则，不替代消防审图",
+      "delivers": "消防专篇提纲",
+      "risk": "high",
+      "aliases": [
+        "消防设计",
+        "消电"
+      ],
+      "pipeline": "理解任务 → 检索本库与大类库 → 提纲 → 独立成稿 → 自检",
+      "builtin": true,
+      "enabled": true
+    },
+    {
+      "id": "steel",
+      "name": "钢结构",
+      "category": "design",
+      "category_name": "勘察设计",
+      "title": "钢结构体系、连接与防腐涂装提纲",
+      "delivers": "钢结构说明草稿",
+      "risk": "high",
+      "aliases": [
+        "钢构"
+      ],
+      "pipeline": "理解任务 → 检索本库与大类库 → 提纲 → 独立成稿 → 自检",
+      "builtin": true,
+      "enabled": true
+    },
+    {
+      "id": "landscape",
+      "name": "园林景观",
+      "category": "design",
+      "category_name": "勘察设计",
+      "title": "软硬景分区、苗木与铺装原则",
+      "delivers": "景观说明草稿",
+      "risk": "low",
+      "aliases": [
+        "景观",
+        "园林"
+      ],
+      "pipeline": "理解任务 → 检索本库与大类库 → 提纲 → 独立成稿 → 自检",
+      "builtin": true,
+      "enabled": true
+    },
+    {
+      "id": "interior",
+      "name": "室内装修",
+      "category": "design",
+      "category_name": "勘察设计",
+      "title": "饰面、隔墙、吊顶、精装界面与防水节点原则",
+      "delivers": "室内装修说明/界面表",
+      "risk": "low",
+      "aliases": [
+        "精装",
+        "室内",
+        "装修"
+      ],
+      "pipeline": "理解任务 → 检索本库与大类库 → 提纲 → 独立成稿 → 自检",
+      "builtin": true,
+      "enabled": true
+    },
+    {
+      "id": "facade",
+      "name": "幕墙",
+      "category": "design",
+      "category_name": "勘察设计",
+      "title": "幕墙体系、预埋、抗风、气密水密防火提纲，无风压不定量",
+      "delivers": "幕墙专篇/说明草稿",
+      "risk": "high",
+      "aliases": [
+        "外墙",
+        "幕墙工程",
+        "玻璃幕墙"
+      ],
+      "pipeline": "理解任务 → 检索本库与大类库 → 提纲 → 独立成稿 → 自检",
+      "builtin": true,
+      "enabled": true
+    },
+    {
+      "id": "intel-weak",
+      "name": "智能化弱电",
+      "category": "design",
+      "category_name": "勘察设计",
+      "title": "弱电系统清单与桥架原则，不编品牌除非用户指定",
+      "delivers": "弱电说明草稿",
+      "risk": "low",
+      "aliases": [
+        "弱电",
+        "智能化",
+        "综合布线"
+      ],
+      "pipeline": "理解任务 → 检索本库与大类库 → 提纲 → 独立成稿 → 自检",
+      "builtin": true,
+      "enabled": true
+    },
+    {
+      "id": "civil-defense",
+      "name": "人防",
+      "category": "design",
+      "category_name": "勘察设计",
+      "title": "防护单元、口部、防化通风、人防给排水原则，不替代人防审图",
+      "delivers": "人防专篇提纲",
+      "risk": "high",
+      "aliases": [
+        "人防工程",
+        "人防设计"
+      ],
+      "pipeline": "理解任务 → 检索本库与大类库 → 提纲 → 独立成稿 → 自检",
+      "builtin": true,
+      "enabled": true
+    },
+    {
+      "id": "hydraulic",
+      "name": "水利",
+      "category": "design",
+      "category_name": "勘察设计",
+      "title": "堤防、护岸、水闸、泵站提纲，无水文地质不定量",
+      "delivers": "水利设计提纲",
+      "risk": "high",
+      "aliases": [
+        "水利工程",
+        "堤防",
+        "水闸"
+      ],
+      "pipeline": "理解任务 → 检索本库与大类库 → 提纲 → 独立成稿 → 自检",
+      "builtin": true,
+      "enabled": true
+    },
+    {
+      "id": "port",
+      "name": "港航",
+      "category": "design",
+      "category_name": "勘察设计",
+      "title": "码头、航道、防波堤提纲，无水位与地质不定量",
+      "delivers": "港航设计提纲",
+      "risk": "high",
+      "aliases": [
+        "码头",
+        "港口",
+        "航道",
+        "港航"
+      ],
+      "pipeline": "理解任务 → 检索本库与大类库 → 提纲 → 独立成稿 → 自检",
+      "builtin": true,
+      "enabled": true
+    },
+    {
+      "id": "municipal",
+      "name": "市政道路",
+      "category": "design",
+      "category_name": "勘察设计",
+      "title": "横断、管线综合、路面结构原则",
+      "delivers": "市政道路原则稿",
+      "risk": "low",
+      "aliases": [
+        "道路",
+        "市政"
+      ],
+      "pipeline": "理解任务 → 检索本库与大类库 → 提纲 → 独立成稿 → 自检",
+      "builtin": true,
+      "enabled": true
+    },
+    {
+      "id": "bridge",
+      "name": "桥梁",
+      "category": "design",
+      "category_name": "勘察设计",
+      "title": "桥型比选、上下部结构提纲，无跨径不定量",
+      "delivers": "桥梁设计提纲",
+      "risk": "high",
+      "aliases": [
+        "桥涵"
+      ],
+      "pipeline": "理解任务 → 检索本库与大类库 → 提纲 → 独立成稿 → 自检",
+      "builtin": true,
+      "enabled": true
+    },
+    {
+      "id": "tunnel",
+      "name": "隧道",
+      "category": "design",
+      "category_name": "勘察设计",
+      "title": "开挖支护、防水与监控量测提纲",
+      "delivers": "隧道设计提纲",
+      "risk": "high",
+      "aliases": [
+        "暗挖",
+        "隧道工程"
+      ],
+      "pipeline": "理解任务 → 检索本库与大类库 → 提纲 → 独立成稿 → 自检",
+      "builtin": true,
+      "enabled": true
+    },
+    {
+      "id": "traffic",
+      "name": "交通工程",
+      "category": "design",
+      "category_name": "勘察设计",
+      "title": "交通组织、标志标线、仿真实验口径",
+      "delivers": "交通报告骨架",
+      "risk": "low",
+      "aliases": [
+        "交通",
+        "导改",
+        "仿真"
+      ],
+      "pipeline": "理解任务 → 检索本库与大类库 → 提纲 → 独立成稿 → 自检",
+      "builtin": true,
+      "enabled": true
+    },
+    {
+      "id": "design-coord",
+      "name": "设计统筹",
+      "category": "design",
+      "category_name": "勘察设计",
+      "title": "图纸会审、专业碰撞、设计变更口径",
+      "delivers": "会审纪要草稿",
+      "risk": "low",
+      "aliases": [
+        "图纸会审",
+        "设计变更",
+        "提资"
+      ],
+      "pipeline": "理解任务 → 检索本库与大类库 → 提纲 → 独立成稿 → 自检",
+      "builtin": true,
+      "enabled": true
+    },
+    {
+      "id": "bim-coord",
+      "name": "模型协调",
+      "category": "bim",
+      "category_name": "BIM",
+      "title": "碰撞检查口径、专业提资接口、问题清单",
+      "delivers": "碰撞/协调纪要",
+      "risk": "low",
+      "aliases": [
+        "碰撞",
+        "BIM协调"
+      ],
+      "pipeline": "理解任务 → 检索本库与大类库 → 提纲 → 独立成稿 → 自检",
+      "builtin": true,
+      "enabled": true
+    },
+    {
+      "id": "bim-qto",
+      "name": "模型算量",
+      "category": "bim",
+      "category_name": "BIM",
+      "title": "从模型出量的口径与过滤规则，不编单价",
+      "delivers": "算量口径说明",
+      "risk": "low",
+      "aliases": [
+        "算量",
+        "QTO"
+      ],
+      "pipeline": "理解任务 → 检索本库与大类库 → 提纲 → 独立成稿 → 自检",
+      "builtin": true,
+      "enabled": true
+    },
+    {
+      "id": "bim-deliver",
+      "name": "模型交付",
+      "category": "bim",
+      "category_name": "BIM",
+      "title": "LOD/交付物清单、命名与拆分规则",
+      "delivers": "BIM交付清单",
+      "risk": "low",
+      "aliases": [
+        "LOD",
+        "BIM交付"
+      ],
+      "pipeline": "理解任务 → 检索本库与大类库 → 提纲 → 独立成稿 → 自检",
+      "builtin": true,
+      "enabled": true
+    },
+    {
+      "id": "plan-master",
+      "name": "总控计划",
+      "category": "planning",
+      "category_name": "计划",
+      "title": "一级网络、关键线路、里程碑",
+      "delivers": "总进度计划草稿",
+      "risk": "low",
+      "aliases": [
+        "总计划",
+        "网络图"
+      ],
+      "pipeline": "理解任务 → 检索本库与大类库 → 提纲 → 独立成稿 → 自检",
+      "builtin": true,
+      "enabled": true
+    },
+    {
+      "id": "plan-lookahead",
+      "name": "周月计划",
+      "category": "planning",
+      "category_name": "计划",
+      "title": "四周滚动、停工条件、交叉作业",
+      "delivers": "周/月计划草稿",
+      "risk": "low",
+      "aliases": [
+        "周计划",
+        "月计划"
+      ],
+      "pipeline": "理解任务 → 检索本库与大类库 → 提纲 → 独立成稿 → 自检",
+      "builtin": true,
+      "enabled": true
+    },
+    {
+      "id": "plan-resource",
+      "name": "资源负荷",
+      "category": "planning",
+      "category_name": "计划",
+      "title": "人机料峰值与错峰口径，无定额不编用量",
+      "delivers": "资源负荷表头",
+      "risk": "low",
+      "aliases": [
+        "资源计划"
+      ],
+      "pipeline": "理解任务 → 检索本库与大类库 → 提纲 → 独立成稿 → 自检",
+      "builtin": true,
+      "enabled": true
+    },
+    {
+      "id": "construction",
+      "name": "施工方案",
+      "category": "construction",
+      "category_name": "施工生产",
+      "title": "专项施工方案讨论提纲，独立走完 11 章",
+      "delivers": "专项方案-AI草稿",
+      "risk": "high",
+      "aliases": [
+        "施工",
+        "专项方案",
+        "方案"
+      ],
+      "pipeline": "理解任务 → 检索本库与大类库 → 提纲 → 独立成稿 → 自检",
+      "builtin": true,
+      "enabled": true
+    },
+    {
+      "id": "method-hazard",
+      "name": "危大识别",
+      "category": "construction",
+      "category_name": "施工生产",
+      "title": "判断是否危大、要否论证，只判定不签发",
+      "delivers": "危大判定书",
+      "risk": "high",
+      "aliases": [
+        "危大",
+        "超危",
+        "论证"
+      ],
+      "pipeline": "理解任务 → 检索本库与大类库 → 提纲 → 独立成稿 → 自检",
+      "builtin": true,
+      "enabled": true
+    },
+    {
+      "id": "survey",
+      "name": "测量",
+      "category": "construction",
+      "category_name": "施工生产",
+      "title": "控制网、放样、复测记录口径，不编坐标除非用户给",
+      "delivers": "测量方案/记录表",
+      "risk": "high",
+      "aliases": [
+        "放样",
+        "复测",
+        "控制点"
+      ],
+      "pipeline": "理解任务 → 检索本库与大类库 → 提纲 → 独立成稿 → 自检",
+      "builtin": true,
+      "enabled": true
+    },
+    {
+      "id": "dispatch",
+      "name": "生产调度",
+      "category": "construction",
+      "category_name": "施工生产",
+      "title": "日报、指令下达、节点跟踪",
+      "delivers": "调度日报草稿",
+      "risk": "low",
+      "aliases": [
+        "调度",
+        "生产调度"
+      ],
+      "pipeline": "理解任务 → 检索本库与大类库 → 提纲 → 独立成稿 → 自检",
+      "builtin": true,
+      "enabled": true
+    },
+    {
+      "id": "safety-brief",
+      "name": "安全交底",
+      "category": "hse",
+      "category_name": "安质环",
+      "title": "技术交底草稿，给现场技术员",
+      "delivers": "安全交底草稿",
+      "risk": "high",
+      "aliases": [
+        "交底",
+        "安全交底"
+      ],
+      "pipeline": "理解任务 → 检索本库与大类库 → 提纲 → 独立成稿 → 自检",
+      "builtin": true,
+      "enabled": true
+    },
+    {
+      "id": "quality",
+      "name": "质量",
+      "category": "hse",
+      "category_name": "安质环",
+      "title": "检验批、隐蔽验收、通病防治，不给合格结论",
+      "delivers": "质量检查表",
+      "risk": "high",
+      "aliases": [
+        "质检",
+        "质量员",
+        "隐蔽"
+      ],
+      "pipeline": "理解任务 → 检索本库与大类库 → 提纲 → 独立成稿 → 自检",
+      "builtin": true,
+      "enabled": true
+    },
+    {
+      "id": "env",
+      "name": "环保文明",
+      "category": "hse",
+      "category_name": "安质环",
+      "title": "扬尘、弃土、污水、夜间施工口径",
+      "delivers": "环保文明清单",
+      "risk": "low",
+      "aliases": [
+        "环保",
+        "文明施工"
+      ],
+      "pipeline": "理解任务 → 检索本库与大类库 → 提纲 → 独立成稿 → 自检",
+      "builtin": true,
+      "enabled": true
+    },
+    {
+      "id": "emergency",
+      "name": "应急",
+      "category": "hse",
+      "category_name": "安质环",
+      "title": "预案目录、演练记录，联系人待填",
+      "delivers": "应急预案提纲",
+      "risk": "high",
+      "aliases": [
+        "应急预案",
+        "演练"
+      ],
+      "pipeline": "理解任务 → 检索本库与大类库 → 提纲 → 独立成稿 → 自检",
+      "builtin": true,
+      "enabled": true
+    },
+    {
+      "id": "cost",
+      "name": "造价",
+      "category": "commercial",
+      "category_name": "商务造价",
+      "title": "工程量拆分与组价口径，无清单则单价 TBD",
+      "delivers": "工程量拆分表",
+      "risk": "low",
+      "aliases": [
+        "造价",
+        "组价",
+        "清单"
+      ],
+      "pipeline": "理解任务 → 检索本库与大类库 → 提纲 → 独立成稿 → 自检",
+      "builtin": true,
+      "enabled": true
+    },
+    {
+      "id": "variation",
+      "name": "变更签证",
+      "category": "commercial",
+      "category_name": "商务造价",
+      "title": "事实、依据、工程量栏，金额待填",
+      "delivers": "签证单草稿",
+      "risk": "low",
+      "aliases": [
+        "签证",
+        "设计变更"
+      ],
+      "pipeline": "理解任务 → 检索本库与大类库 → 提纲 → 独立成稿 → 自检",
+      "builtin": true,
+      "enabled": true
+    },
+    {
+      "id": "claim",
+      "name": "索赔调概",
+      "category": "commercial",
+      "category_name": "商务造价",
+      "title": "索赔意向、证据清单、时限",
+      "delivers": "索赔意向草稿",
+      "risk": "low",
+      "aliases": [
+        "索赔",
+        "调概"
+      ],
+      "pipeline": "理解任务 → 检索本库与大类库 → 提纲 → 独立成稿 → 自检",
+      "builtin": true,
+      "enabled": true
+    },
+    {
+      "id": "subcontract",
+      "name": "分包结算",
+      "category": "commercial",
+      "category_name": "商务造价",
+      "title": "分包验工、扣款、结算口径",
+      "delivers": "分包结算表头",
+      "risk": "low",
+      "aliases": [
+        "分包",
+        "劳务结算"
+      ],
+      "pipeline": "理解任务 → 检索本库与大类库 → 提纲 → 独立成稿 → 自检",
+      "builtin": true,
+      "enabled": true
+    },
+    {
+      "id": "interim",
+      "name": "验工计价",
+      "category": "commercial",
+      "category_name": "商务造价",
+      "title": "对上验工表单口径，无业主确认不编金额",
+      "delivers": "验工计价草稿",
+      "risk": "low",
+      "aliases": [
+        "验工",
+        "计量"
+      ],
+      "pipeline": "理解任务 → 检索本库与大类库 → 提纲 → 独立成稿 → 自检",
+      "builtin": true,
+      "enabled": true
+    },
+    {
+      "id": "proc-plan",
+      "name": "采购计划",
+      "category": "procurement",
+      "category_name": "采购",
+      "title": "甲指/自采划分、提前期、到货节点",
+      "delivers": "采购计划表",
+      "risk": "low",
+      "aliases": [
+        "采购计划"
+      ],
+      "pipeline": "理解任务 → 检索本库与大类库 → 提纲 → 独立成稿 → 自检",
+      "builtin": true,
+      "enabled": true
+    },
+    {
+      "id": "proc-compare",
+      "name": "比价询价",
+      "category": "procurement",
+      "category_name": "采购",
+      "title": "询价口径与比价表，无报价不编价",
+      "delivers": "比价表草稿",
+      "risk": "low",
+      "aliases": [
+        "询价",
+        "比价"
+      ],
+      "pipeline": "理解任务 → 检索本库与大类库 → 提纲 → 独立成稿 → 自检",
+      "builtin": true,
+      "enabled": true
+    },
+    {
+      "id": "proc-vendor",
+      "name": "供应商",
+      "category": "procurement",
+      "category_name": "采购",
+      "title": "准入、考察、短名单口径",
+      "delivers": "供应商评价表",
+      "risk": "low",
+      "aliases": [
+        "供方",
+        "供应商"
+      ],
+      "pipeline": "理解任务 → 检索本库与大类库 → 提纲 → 独立成稿 → 自检",
+      "builtin": true,
+      "enabled": true
+    },
+    {
+      "id": "equip",
+      "name": "设备管理",
+      "category": "plant",
+      "category_name": "物机",
+      "title": "进场验收、租赁、维保、特种设备证件",
+      "delivers": "设备台账/维保计划",
+      "risk": "high",
+      "aliases": [
+        "机械",
+        "设备",
+        "特种设备"
+      ],
+      "pipeline": "理解任务 → 检索本库与大类库 → 提纲 → 独立成稿 → 自检",
+      "builtin": true,
+      "enabled": true
+    },
+    {
+      "id": "warehouse",
+      "name": "仓管",
+      "category": "plant",
+      "category_name": "物机",
+      "title": "入库验收、限额领料、盘点",
+      "delivers": "收发存台账口径",
+      "risk": "low",
+      "aliases": [
+        "仓库",
+        "领料"
+      ],
+      "pipeline": "理解任务 → 检索本库与大类库 → 提纲 → 独立成稿 → 自检",
+      "builtin": true,
+      "enabled": true
+    },
+    {
+      "id": "pack-ship",
+      "name": "装箱拼柜",
+      "category": "plant",
+      "category_name": "物机",
+      "title": "成箱/拼柜作业单：数值只走 packing-agent 工具，本岗不编坐标和柜数",
+      "delivers": "装箱作业单 + 可选 packing-agent 回传摘要",
+      "risk": "low",
+      "aliases": [
+        "装箱",
+        "拼柜",
+        "packing-agent",
+        "集装箱"
+      ],
+      "pipeline": "读物料表 → 检索 CTU/CSC 标题 → 调 packing-agent 或标 UNSPECIFIED → 作业单",
+      "builtin": true,
+      "enabled": true
+    },
+    {
+      "id": "material-site",
+      "name": "现场材料",
+      "category": "plant",
+      "category_name": "物机",
+      "title": "耗用核算、节超分析口径，无盘点不编盈亏",
+      "delivers": "材料核算表头",
+      "risk": "low",
+      "aliases": [
+        "材料员",
+        "料具"
+      ],
+      "pipeline": "理解任务 → 检索本库与大类库 → 提纲 → 独立成稿 → 自检",
+      "builtin": true,
+      "enabled": true
+    },
+    {
+      "id": "lab-mix",
+      "name": "配合比",
+      "category": "lab",
+      "category_name": "试验室",
+      "title": "砼/砂浆配合比选定口径，无试验数据不给施工配比",
+      "delivers": "配比报告提纲",
+      "risk": "high",
+      "aliases": [
+        "施工配合比",
+        "配比"
+      ],
+      "pipeline": "理解任务 → 检索本库与大类库 → 提纲 → 独立成稿 → 自检",
+      "builtin": true,
+      "enabled": true
+    },
+    {
+      "id": "lab-sample",
+      "name": "见证取样",
+      "category": "lab",
+      "category_name": "试验室",
+      "title": "原材料取样、送检、不合格报告升级",
+      "delivers": "取样送检清单",
+      "risk": "high",
+      "aliases": [
+        "取样",
+        "送检",
+        "见证"
+      ],
+      "pipeline": "理解任务 → 检索本库与大类库 → 提纲 → 独立成稿 → 自检",
+      "builtin": true,
+      "enabled": true
+    },
+    {
+      "id": "lab-record",
+      "name": "试验台账",
+      "category": "lab",
+      "category_name": "试验室",
+      "title": "记录、报告编号、仪器检定台账",
+      "delivers": "试验台账骨架",
+      "risk": "low",
+      "aliases": [
+        "试验资料"
+      ],
+      "pipeline": "理解任务 → 检索本库与大类库 → 提纲 → 独立成稿 → 自检",
+      "builtin": true,
+      "enabled": true
+    },
+    {
+      "id": "finance-book",
+      "name": "核算",
+      "category": "finance",
+      "category_name": "财务",
+      "title": "科目口径、报销审核清单，不编账套分录细节",
+      "delivers": "核算检查表",
+      "risk": "low",
+      "aliases": [
+        "会计",
+        "报销"
+      ],
+      "pipeline": "理解任务 → 检索本库与大类库 → 提纲 → 独立成稿 → 自检",
+      "builtin": true,
+      "enabled": true
+    },
+    {
+      "id": "finance-fund",
+      "name": "资金",
+      "category": "finance",
+      "category_name": "财务",
+      "title": "资金计划、收支平衡口径",
+      "delivers": "资金计划草稿",
+      "risk": "low",
+      "aliases": [
+        "资金计划",
+        "现金流"
+      ],
+      "pipeline": "理解任务 → 检索本库与大类库 → 提纲 → 独立成稿 → 自检",
+      "builtin": true,
+      "enabled": true
+    },
+    {
+      "id": "finance-tax",
+      "name": "税务",
+      "category": "finance",
+      "category_name": "财务",
+      "title": "税种清单与申报节点，不给出具体筹划方案当税务意见",
+      "delivers": "税务日历/检查表",
+      "risk": "low",
+      "aliases": [
+        "税务",
+        "发票"
+      ],
+      "pipeline": "理解任务 → 检索本库与大类库 → 提纲 → 独立成稿 → 自检",
+      "builtin": true,
+      "enabled": true
+    },
+    {
+      "id": "supervision",
+      "name": "资料监理",
+      "category": "docs",
+      "category_name": "资料监理",
+      "title": "验收资料目录与监理通知回复草稿",
+      "delivers": "资料目录 / 回复草稿",
+      "risk": "low",
+      "aliases": [
+        "资料",
+        "监理",
+        "验收"
+      ],
+      "pipeline": "理解任务 → 检索本库与大类库 → 提纲 → 独立成稿 → 自检",
+      "builtin": true,
+      "enabled": true
+    },
+    {
+      "id": "hr-recruit",
+      "name": "招聘",
+      "category": "hr",
+      "category_name": "人力",
+      "title": "岗位说明书、面试提纲，不编薪资带宽除非用户给",
+      "delivers": "招聘简报",
+      "risk": "low",
+      "aliases": [
+        "招聘",
+        "面试"
+      ],
+      "pipeline": "理解任务 → 检索本库与大类库 → 提纲 → 独立成稿 → 自检",
+      "builtin": true,
+      "enabled": true
+    },
+    {
+      "id": "hr-labor",
+      "name": "劳动关系",
+      "category": "hr",
+      "category_name": "人力",
+      "title": "劳动合同/劳务协议检查清单，普法不诉讼",
+      "delivers": "合同检查表",
+      "risk": "low",
+      "aliases": [
+        "劳动合同",
+        "劳务"
+      ],
+      "pipeline": "理解任务 → 检索本库与大类库 → 提纲 → 独立成稿 → 自检",
+      "builtin": true,
+      "enabled": true
+    },
+    {
+      "id": "hr-train",
+      "name": "培训",
+      "category": "hr",
+      "category_name": "人力",
+      "title": "三级安全教育与技能培训计划骨架",
+      "delivers": "培训计划草稿",
+      "risk": "low",
+      "aliases": [
+        "培训",
+        "三级教育"
+      ],
+      "pipeline": "理解任务 → 检索本库与大类库 → 提纲 → 独立成稿 → 自检",
+      "builtin": true,
+      "enabled": true
+    },
+    {
+      "id": "admin-doc",
+      "name": "公文印章",
+      "category": "admin",
+      "category_name": "行政",
+      "title": "请示、纪要、用印审批口径",
+      "delivers": "公文草稿",
+      "risk": "low",
+      "aliases": [
+        "公文",
+        "印章",
+        "用印"
+      ],
+      "pipeline": "理解任务 → 检索本库与大类库 → 提纲 → 独立成稿 → 自检",
+      "builtin": true,
+      "enabled": true
+    },
+    {
+      "id": "admin-office",
+      "name": "会务后勤",
+      "category": "admin",
+      "category_name": "行政",
+      "title": "会议、接待、差旅、办公物资",
+      "delivers": "会务/后勤清单",
+      "risk": "low",
+      "aliases": [
+        "行政",
+        "后勤",
+        "会议"
+      ],
+      "pipeline": "理解任务 → 检索本库与大类库 → 提纲 → 独立成稿 → 自检",
+      "builtin": true,
+      "enabled": true
+    },
+    {
+      "id": "it-ops",
+      "name": "运维权限",
+      "category": "it",
+      "category_name": "IT",
+      "title": "账号、权限、故障升级路径",
+      "delivers": "运维手册提纲",
+      "risk": "low",
+      "aliases": [
+        "运维",
+        "权限",
+        "账号"
+      ],
+      "pipeline": "理解任务 → 检索本库与大类库 → 提纲 → 独立成稿 → 自检",
+      "builtin": true,
+      "enabled": true
+    },
+    {
+      "id": "it-data",
+      "name": "数据备份",
+      "category": "it",
+      "category_name": "IT",
+      "title": "备份策略、恢复演练口径",
+      "delivers": "备份策略草稿",
+      "risk": "low",
+      "aliases": [
+        "备份",
+        "数据安全"
+      ],
+      "pipeline": "理解任务 → 检索本库与大类库 → 提纲 → 独立成稿 → 自检",
+      "builtin": true,
+      "enabled": true
+    },
+    {
+      "id": "it-app",
+      "name": "系统需求",
+      "category": "it",
+      "category_name": "IT",
+      "title": "业务系统需求说明书骨架",
+      "delivers": "需求说明书草稿",
+      "risk": "low",
+      "aliases": [
+        "信息化",
+        "需求"
+      ],
+      "pipeline": "理解任务 → 检索本库与大类库 → 提纲 → 独立成稿 → 自检",
+      "builtin": true,
+      "enabled": true
+    },
+    {
+      "id": "worker-brief",
+      "name": "工友白话",
+      "category": "people",
+      "category_name": "项目与工人",
+      "title": "3 分钟班前口播稿，给一线工人",
+      "delivers": "班前白话稿",
+      "risk": "low",
+      "aliases": [
+        "工人",
+        "白话",
+        "班前"
+      ],
+      "pipeline": "理解任务 → 检索本库与大类库 → 提纲 → 独立成稿 → 自检",
+      "builtin": true,
+      "enabled": true
+    },
+    {
+      "id": "pm-daily",
+      "name": "项目日报",
+      "category": "people",
+      "category_name": "项目与工人",
+      "title": "形象进度、人机料、安全质量记事",
+      "delivers": "项目日报草稿",
+      "risk": "low",
+      "aliases": [
+        "日报",
+        "工程日志"
+      ],
+      "pipeline": "理解任务 → 检索本库与大类库 → 提纲 → 独立成稿 → 自检",
+      "builtin": true,
+      "enabled": true
+    }
+  ]
+}

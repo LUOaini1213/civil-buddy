@@ -1,4 +1,4 @@
-# Good first issues (packing-agent · Agent Harness)
+# Good first issues (Civil Buddy)
 
 Open these on GitHub when ready; kept here so the portfolio shows **maintenance intent**.
 

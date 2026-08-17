@@ -1,0 +1,24 @@
+pub mod agent;
+pub mod api;
+pub mod attach;
+pub mod catalog;
+pub mod config;
+pub mod context;
+pub mod eval_live;
+pub mod extract;
+pub mod firm;
+pub mod harness;
+pub mod kbio;
+pub mod llm;
+pub mod mcp;
+pub mod packing_bridge;
+pub mod parse;
+pub mod packs;
+pub mod rag;
+pub mod store;
+pub mod tier_map;
+pub mod websearch;
+
+pub use api::{app, AppState};
+pub use catalog::{Category, Expert};
+pub use config::Paths;

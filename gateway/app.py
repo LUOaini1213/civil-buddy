@@ -44,7 +44,7 @@ if (os.getenv("PACKING_SKIP_SKJOLBER") or "").strip() == "":
     # 未显式配置时：若 URL 指向本机 8080 且我们偏好稳 UI，默认 skip（可用 PACKING_SKIP_SKJOLBER=0 打开）
     os.environ.setdefault("PACKING_SKIP_SKJOLBER", "1")
 
-from packing_assistant.config import HARNESS_VERSION  # noqa: E402
+from packing_assistant.config import HARNESS_VERSION, PRODUCT_NAME  # noqa: E402
 from packing_assistant.harness import (  # noqa: E402
     apply_user_confirmation,
     iter_agent_pipeline,
@@ -100,7 +100,7 @@ def _get_session(session_id: str) -> Optional[Dict[str, Any]]:
     return state
 
 
-app = FastAPI(title="Packing Multi-Agent Gateway", version=HARNESS_VERSION)
+app = FastAPI(title="Civil Buddy Gateway", version=HARNESS_VERSION)
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],
@@ -176,6 +176,21 @@ def index():
     return {"message": "frontend/index.html missing", "docs": "/docs"}
 
 
+@app.get("/workbench")
+def workbench():
+    """工程装柜工作台（非默认；产品主线为投标应答+交付）。"""
+    wb = FRONTEND_DIR / "workbench.html"
+    if wb.exists():
+        return FileResponse(
+            wb,
+            headers={
+                "Cache-Control": "no-store, no-cache, must-revalidate, max-age=0",
+                "Pragma": "no-cache",
+            },
+        )
+    return {"message": "frontend/workbench.html missing", "fallback": "/"}
+
+
 @app.get("/api/health")
 def api_health():
     # 短超时 + 缓存，避免每次刷新 health 卡住整个单线程网关
@@ -215,6 +230,7 @@ def api_health():
     )
     return {
         "gateway": "UP",
+        "product": PRODUCT_NAME,
         "harness_version": HARNESS_VERSION,
         "agent_count": agent_count,
         "architecture": "big_team_wraps_a_b",
@@ -321,6 +337,73 @@ def api_tools(team: str = ""):
         "ok": True,
         "tools": list_tools(team=t),
         "prompt_summary": tools_for_agent_prompt() if not t else None,
+    }
+
+
+@app.post("/api/tender/parse")
+def api_tender_parse(body: dict = None):
+    """招标文本 → requirements / checklist / response_matrix / 应答包（可带装柜 summary）。"""
+    from packing_assistant.tools.tender_parse import run_tender_pipeline
+
+    body = body or {}
+    text = str(body.get("text") or body.get("tender_text") or "")
+    packing_summary = body.get("packing_summary")
+    if packing_summary is not None and not isinstance(packing_summary, dict):
+        packing_summary = None
+    project_name = str(body.get("project_name") or "幕墙项目投标应答（草稿）")
+    out = run_tender_pipeline(
+        text,
+        packing_summary=packing_summary,
+        source="api",
+        project_name=project_name,
+    )
+    return {"ok": bool(out.get("ok")), "product_mainline": "C_tender_delivery", **out}
+
+
+@app.post("/api/tender/delivery")
+def api_tender_delivery(body: dict = None):
+    """主线 C：投标解析 + 可选交付装柜 → 响应矩阵 + 一页导出包。"""
+    from packing_assistant.tender_delivery import run_tender_delivery_pipeline
+
+    body = body or {}
+    materials = body.get("materials")
+    if materials is not None and not isinstance(materials, list):
+        materials = None
+    return run_tender_delivery_pipeline(
+        str(body.get("text") or body.get("tender_text") or ""),
+        run_delivery=bool(body.get("run_delivery", True)),
+        materials=materials,
+        container_type=str(body.get("container_type") or "40HQ"),
+        max_containers=int(body.get("max_containers") or 2),
+        user_input=str(body.get("user_input") or "投标交付：按招标运输包装要求装柜"),
+        session_id=str(body.get("session_id") or "tender-delivery"),
+        project_name=str(body.get("project_name") or "幕墙项目投标应答（草稿）"),
+        enable_auto_confirm=True,
+        save_artifacts=False,
+    )
+
+
+@app.post("/api/tender/bidbook")
+def api_tender_bidbook(body: dict = None):
+    """Singapore façade English bid-book draft (no packing unless run_delivery)."""
+    from packing_assistant.tender_delivery import run_tender_delivery_pipeline
+
+    body = body or {}
+    out = run_tender_delivery_pipeline(
+        str(body.get("text") or body.get("tender_text") or ""),
+        run_delivery=bool(body.get("run_delivery", False)),
+        container_type=str(body.get("container_type") or "40HQ"),
+        max_containers=int(body.get("max_containers") or 2),
+        project_name=str(body.get("project_name") or "幕墙项目投标应答（草稿）"),
+    )
+    return {
+        "ok": bool(out.get("ok")),
+        "product": "sg_facade_bidbook",
+        "bidbook": out.get("bidbook"),
+        "bidbook_markdown": out.get("bidbook_markdown"),
+        "open_actions": out.get("open_actions"),
+        "matrix": out.get("matrix"),
+        "packing_summary": out.get("packing_summary"),
     }
 
 
