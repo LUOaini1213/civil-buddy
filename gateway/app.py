@@ -287,6 +287,10 @@ def api_health():
             "understand_default": True,
             "understand_path": "/api/turn",
             "expert_turn": True,
+            "agent_loop": True,
+            "agent_path": "/api/agent",
+            "eval_live": True,
+            "eval_live_path": "/api/eval/live",
         },
         "entries": {
             "tender_delivery": "/",
@@ -333,6 +337,8 @@ def api_architecture():
                 "review": "/api/tender/review",
                 "turn": "/api/turn",
                 "understand": "/api/understand",
+                "agent": "/api/agent",
+                "eval_live": "/api/eval/live",
             },
         },
     }
@@ -425,14 +431,72 @@ def api_turn(body: dict = None):
     )
 
 
-@app.get("/api/runs/{run_id}")
-def api_run_get(run_id: str):
+@app.post("/api/agent")
+def api_agent(body: dict = None):
+    """Complete agent loop: Scheduler + ToolEngine + sandbox. Chat never writes."""
+    from packing_assistant.runtime.agent_loop import run_agent
+
+    body = body or {}
+    return run_agent(
+        str(body.get("text") or body.get("message") or body.get("tender_text") or ""),
+        session_id=str(body.get("session_id") or ""),
+        expert_id=str(body.get("expert_id") or ""),
+        p0_confirmed=bool(body.get("p0_confirmed") or body.get("confirm_ok")),
+        force_intent=str(body.get("intent") or "") or None,
+        packing_summary=body.get("packing_summary") if isinstance(body.get("packing_summary"), dict) else None,
+        project_name=str(body.get("project_name") or "幕墙项目投标应答（草稿）"),
+        max_steps=max(1, min(int(body.get("max_steps") or 8), 32)),
+    )
+
+
+@app.get("/api/eval/live")
+def api_eval_live():
+    """Offline official-title needles + agent/sandbox smoke. No IRAS scrape."""
+    from packing_assistant.runtime.eval_live import live_eval
+
+    return live_eval()
+
+
+@app.get("/api/runs/{run_id}/events")
+def api_run_events(run_id: str):
+    from packing_assistant.runtime.bus import get_bus
     from packing_assistant.runtime.scheduler import get_scheduler
 
     run = get_scheduler().get(run_id)
-    if not run:
+    events = [e.to_dict() for e in get_bus().for_run(run_id)]
+    if not run and not events:
         raise HTTPException(404, "unknown run")
-    return {"ok": True, **run.to_dict()}
+    return {"ok": True, "run_id": run_id, "events": events, "state": run.state if run else ""}
+
+
+@app.get("/api/runs/{run_id}")
+def api_run_get(run_id: str, include_trace: bool = True):
+    from packing_assistant.runtime.scheduler import get_scheduler
+    from packing_assistant.trace_events import RUNS_DIR
+
+    run = get_scheduler().get(run_id)
+    if run:
+        return {"ok": True, "source": "scheduler", **run.to_dict()}
+    d = RUNS_DIR / run_id
+    if not d.is_dir():
+        raise HTTPException(404, "unknown run")
+    idx = {}
+    p = d / "index.json"
+    if p.exists():
+        try:
+            idx = json.loads(p.read_text(encoding="utf-8"))
+        except Exception:
+            idx = {}
+    out: Dict[str, Any] = {
+        "ok": True,
+        "source": "disk",
+        "run_id": run_id,
+        "run_dir": str(d),
+        "index": idx,
+    }
+    if include_trace:
+        out["trace"] = read_trace_jsonl(run_id, limit=2000)
+    return out
 
 
 @app.post("/api/runs/{run_id}/cancel")
@@ -1938,31 +2002,6 @@ def api_compare_runs(a: str, b: str):
     for k in keys:
         diff[k] = {"a": ia.get(k), "b": ib.get(k), "same": ia.get(k) == ib.get(k)}
     return {"ok": True, "a": ia, "b": ib, "diff": diff}
-
-
-@app.get("/api/runs/{run_id}")
-def api_get_run(run_id: str, include_trace: bool = True):
-    from packing_assistant.trace_events import RUNS_DIR
-
-    d = RUNS_DIR / run_id
-    if not d.is_dir():
-        raise HTTPException(404, f"run not found: {run_id}")
-    idx = {}
-    p = d / "index.json"
-    if p.exists():
-        try:
-            idx = json.loads(p.read_text(encoding="utf-8"))
-        except Exception:
-            idx = {}
-    out: Dict[str, Any] = {
-        "ok": True,
-        "run_id": run_id,
-        "run_dir": str(d),
-        "index": idx,
-    }
-    if include_trace:
-        out["trace"] = read_trace_jsonl(run_id, limit=2000)
-    return out
 
 
 @app.get("/api/runs/{run_id}/replay")

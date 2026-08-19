@@ -157,7 +157,9 @@ Useful discussion topics (issues welcome):
 | Big / A / B teams | `packing_assistant/teams/` |
 | Tool registry | `packing_assistant/tool_registry.py` |
 | Intent | `packing_assistant/intent_spec.py` |
-| LLM loop | `packing_assistant/agent_loop.py` |
+| LLM loop | `packing_assistant/agent_loop.py` (packing steps/llm_toolcall; not the product loop) |
+| Product agent loop | `packing_assistant/runtime/agent_loop.py` · Scheduler + ToolEngine + sandbox |
+| ToolEngine / Scheduler | `packing_assistant/runtime/tool_engine.py`, `scheduler.py`, `bus.py` |
 | Eval | `packing_assistant/eval_workteams.py`, `workteam_kpi.py` |
 | Trace | `packing_assistant/trace_events.py`, `run_artifacts.py` |
 | Gateway | `gateway/app.py` |

@@ -88,13 +88,13 @@ Civil Buddy **已经有护栏**（工具独占数字、chat/run、HITL、草稿�
 
 | 手册模块 | 现网落点 | 完成度 | 缺口一句话 |
 |----------|----------|--------|------------|
-| 任务调度 | `understand` + `run_expert_steps` / `run_big_team` 函数栈 | 35% | 无队列、无取消、无跨请求优先级、无统一状态机 |
-| 消息通信 | FastAPI、少量 SSE/WS、函数返回值 | 25% | 无 Agent↔Agent 总线，无端云 correlation id |
-| 工具引擎 | `tool_registry`、岗 exclusive、MCP list/call | 45% | 无统一 allow/校验/超时/熔断/错误码；专家 turn 大量 `_draft_markdown` |
-| 记忆 | 会话压缩、`demo/out` 工件、分层 KB | 40% | 无长期记忆 API、无 user/device 隔离写入过滤 |
-| 可观测 | `agent_steps`、OTEL jsonl、`/api/otel/dashboard` | 40% | SDK 可选；Rust live eval 绑链接器；无标准 Run 回放 API |
-| 沙箱/权限 | `sandbox.py` 写根 + 禁 spawn；确认句 | 40% | 应用层；无多租户 ACL；chat 轮次靠约定 |
-| 评测 | 脚本 + shadow + 官方页抽查 | 45% | 无常驻 `GET /api/eval/live`（Python） |
+| 任务调度 | `runtime/scheduler.py` + `runtime/agent_loop.py` 挂 `/api/agent` | 70% | 进程内串行；无跨进程队列/优先级 |
+| 消息通信 | FastAPI + `runtime/bus.py` 进程内事件 | 40% | 无 Agent↔Agent 中间件，无端云 correlation id |
+| 工具引擎 | `runtime/tool_engine.py`：allow/超时/熔断/沙箱 | 75% | 66 岗 run 仍多为 `write_deliverable` 骨架 md |
+| 记忆 | Run.messages 工作记忆、`demo/out` 工件、分层 KB | 45% | 无长期记忆 API、无 user/device 隔离写入过滤 |
+| 可观测 | `agent_steps`、OTEL jsonl、`/api/otel/dashboard`、Run 回放 | 55% | SDK 可选；Rust live eval 仍绑链接器 |
+| 沙箱/权限 | ToolEngine.execute 调 `check_write` / `request_spawn` | 70% | 应用层；无多租户 ACL；非内核 jail |
+| 评测 | 脚本 + shadow + `GET /api/eval/live` 离线针 | 70% | 联网评测仍是发版闸，不是日常 CI |
 | 装箱接通 | `/api/tender/delivery` 与 `/workbench` **会真算** | 70% | **pack-ship 专家 turn 仍 `connected=False`** |
 | 招标主线 | ingest + matrix + review + submit_blocked | 75% | 扫描 PDF 仍拒绝（可选 CLI，失败即拒） |
 | 66 岗 | 同一套 chat/run | 50% | run 多为骨架 md，未按易标五段做实 |
@@ -232,7 +232,7 @@ P0 不做：长期记忆、Go 重写、PDF OCR、66 岗全部富写盘。
 | 刀 | 做什么 | 验收 |
 |----|--------|------|
 | **P1-1 投标三岗共用 handoff** | bid-parse 写 `tender.handoff.json`；compliance 读它出三列；tech 只按评分点排目录 | 无评分点不套模板；`submit_blocked` 仍 true |
-| **P1-2 Python eval/live** | `GET /api/eval/live`：understand 分流 + 官方标题针（GST 9%、Fire Code、CTU、GeBIZ≠评分）不绑 `link.exe` | 冷启动可跑；IRAS 针失败不得改口「官方没写 9%」除非打开页确实没有 |
+| **P1-2 Python eval/live** ✅ | `GET /api/eval/live`：understand 分流 + 官方标题针（GST 9%、Fire Code、CTU、GeBIZ≠评分）不绑 `link.exe` | 冷启动可跑；IRAS 针失败不得改口「官方没写 9%」除非打开页确实没有 |
 | **P1-3 Memory API** | `session.summary` + slot（辖区/项目/P0）；压缩可见；写入过 `scan_forbidden` | 压缩后提示不得假装读过被丢细节 |
 | **P1-4 Trace 回放** | `GET /api/runs/{run_id}` 返回 messages+steps+tools+duration；OTEL span 带同一 `run_id` | 两次 GET 同一 identity，非夹具 |
 | **P1-5 施工/危大** | scheme_draft 后可填 docx；judge-card 默认 SG WSH/PTW；确认句硬校验 | 未确认 0 份稿；正文无「可以开工」断言 |
@@ -332,6 +332,8 @@ python scripts/test_mcp_surface.py
 python scripts/test_tender_ingest.py
 python scripts/test_tender_review.py
 python scripts/test_sandbox.py
+python scripts/test_runtime_p0.py
+python scripts/test_agent_loop.py
 ```
 
 ### 7.2 平台新闸（P0 起新增）
@@ -422,4 +424,4 @@ P1：投标 handoff · Python eval · 回放 · 危大卡
 
 ## 12. 下一刀（手册执行入口）
 
-**P0 已落地。** 下一刀 **P1-1**：bid-parse / compliance / tech 共用 `tender.handoff.json`。
+**P0 已落地。完整 Agent 循环 + 沙箱门 + Python `GET /api/eval/live` 已落地。** 下一刀 **P1-1**：bid-parse / compliance / tech 共用 `tender.handoff.json`。行业总判仍是 **部分合格**（未把可以投标/可以开工做成能力）。
