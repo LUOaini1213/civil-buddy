@@ -23,7 +23,9 @@ metadata:
 
 Skill 根目录 = 本文件所在目录。硬规则、引用格式、辖区只读对应 `references/` 文件，不要把它们再抄进 expert 文件。
 
-V2 将接**只读** MCP（规范库 / 图档）。V1 不调用 MCP，不写回任何外部系统。
+本 skill 是 **SOP**（怎么起草、何时停、确认句）。**MCP 是动作**（KB、招标解析、solver 投影），见 `docs/civil-buddy/product-completion-plan.md`。  
+Grok skill **V1 专家路由只有 6 个 id**（`references/experts/`），其中 **construction 写满**。工作台是 **66 岗**，走 `demo/` / `workbench/`，不要把 66 份人格塞进本文件。  
+V1 离线可完成 construction 草稿，不依赖 MCP。工作台 / Host 要 KB 或装箱数字时走 MCP；禁止把 xyz / 柜数写进本 skill 正文。
 
 装箱/拼柜：工作台召唤 **pack-ship**，数字只抄 packing-agent（`PACKING_AGENT_URL` 或 `PACKING_AGENT_ROOT`）。见仓库 `docs/packing-agent.md`。禁止在草稿里手写柜数或 xyz。
 

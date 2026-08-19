@@ -1,6 +1,6 @@
 # Civil Buddy
 
-土木企业工作台：**16 大类 / 65 专家** · Rust 工作台 + MCP · 成稿走 steps。  
+土木企业工作台：**16 大类 / 66 岗** · Rust 工作台 + MCP · 成稿走 steps。  
 装箱 / 拼柜是其中一岗（**pack-ship**）：硬数字只走本仓的 packing 引擎，模型不写 xyz、不拍柜数。  
 投标主线 C：招标文本 → 条款级响应矩阵 → 装柜 tools 作交付证据 → 经营岗交接（bid-tech / bid-compliance）。P0 资格/★/废标须人确认，**不**自动判定可投标。
 
@@ -29,7 +29,7 @@ cargo run --release --bin civil-workbench
 
 Python 参考实现：`demo/`（`uvicorn app:app --host 127.0.0.1 --port 8765`）。
 
-Grok skill：`skills/civil-buddy`。MCP：`cargo build --release --bin civil-mcp`（tools + `kb://` resources + `civil.bid.*` / `civil.pack-ship.plan` prompts）。无 MSVC 时 Python 工作台 `GET /api/mcp/resources` 同一套 URI。长程：`docs/civil-buddy/kb-mcp-horizon.md`。
+Grok skill（怎么起草）：`skills/civil-buddy`。MCP（能调什么）：`civil-mcp --pack <大类>` 或 Python `GET /api/mcp/*`。产品完善（文档 / KB / MCP / Skill，不定时限、不准空转）：[docs/civil-buddy/product-completion-plan.md](docs/civil-buddy/product-completion-plan.md)。
 
 ### 2) 装箱引擎（pack-ship 的计算器）
 
