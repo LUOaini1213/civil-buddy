@@ -37,6 +37,18 @@ def main() -> int:
     denied = read_resource("bid-parse", "bid", "kb://bid/bid-tech/outline.md")
     assert denied["contents"][0]["text"].startswith("拒绝")
 
+    cross_uri = "kb://construction/method-hazard/outline.md"
+    assert not any("method-hazard/" in u for u in uris), uris
+    cross = read_resource("bid-parse", "bid", cross_uri)
+    assert cross["contents"][0]["text"].startswith("拒绝"), cross
+    rb = call_tool("read_kb", {"path": cross_uri}, expert_id="bid-parse")
+    assert rb.get("ok") is False
+    assert str(rb.get("text") or "").startswith("拒绝")
+    from rag import search_kb
+
+    hits = search_kb("bid-parse", "bid", "危大判定 37 号令", limit=8)
+    assert not any("/method-hazard/" in (h.path.replace("\\", "/")) for h in hits), [h.path for h in hits]
+
     names = [p["name"] for p in list_prompts(expert_id="bid-parse")]
     assert names == ["civil.bid.parse"], names
     got = get_prompt(
@@ -65,6 +77,19 @@ def main() -> int:
     assert "kb://bid/bid-parse/web-knowledge.md" in uris2
     sib = next((u for u in uris2 if "bid-tech/" in u), None)
     assert sib is None
+    assert not any("method-hazard/" in u for u in uris2)
+    http_cross = client.post(
+        "/api/mcp/resources/read",
+        json={"expert_id": "bid-parse", "uri": "kb://construction/method-hazard/outline.md"},
+    )
+    assert http_cross.status_code == 200, http_cross.text
+    assert http_cross.json()["contents"][0]["text"].startswith("拒绝")
+    http_own = client.post(
+        "/api/mcp/resources/read",
+        json={"expert_id": "bid-parse", "uri": "kb://bid/bid-parse/web-knowledge.md"},
+    )
+    assert http_own.status_code == 200, http_own.text
+    assert "招标解析" in http_own.json()["contents"][0]["text"]
     got = client.post(
         "/api/mcp/prompts/get",
         json={
@@ -143,7 +168,7 @@ def main() -> int:
     cnames = [p["name"] for p in _lp(expert_id="construction")]
     assert "civil.construction.scheme" in cnames
 
-    print("PASS mcp_surface resources+prompts scoped pack-ship list/plan/export")
+    print("PASS mcp_surface resources+prompts scoped pack-ship list/plan/export cross-kb-deny")
     return 0
 
 

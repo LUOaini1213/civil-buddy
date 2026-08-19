@@ -10,7 +10,7 @@
 | 纪律 | **不定时限 · 不准空转**。墙钟和睡眠评测环不是交付 |
 | 本文地位 | **产品规划唯一总入口**。切片文档只执行、不另开第三套「下一步」 |
 
-**怎么用：** 改产品前先读 §1 边界、§10 不做、§13 联网口径。开工只取 **§15 主链头指针**（此刻 = §11 的 T023）。岗栏位细节可读 post-horizon 该 id；已做/未做以 §7 / §15 为准。  
+**怎么用：** 改产品前先读 §1 边界、§10 不做、§13 联网口径。开工只取 **§15 主链头指针**（此刻 = §11 的 T003）。岗栏位细节可读 post-horizon 该 id；已做/未做以 §7 / §15 为准。  
 2026-08-19：§1–§15 各派一子代理对照现网，结论已并入本文。
 
 切片（从属于本文，不平行）：
@@ -89,7 +89,7 @@ pack-ship 岗 **不是第二套装箱**。它只投影本仓 solver 快照。断
 3. 选岗 `construction`，勾选 `confirm_ok`（不是把确认句糊进正文）→ 十一章 md，无「可以开工」。未勾选 0 份稿。  
 4. pack-ship 无会话 `packing_summary` → 四字段 `UNSPECIFIED`；有注入/落盘快照则原样抄，`xyz` 永不编。先 delivery 再抄的 HTTP 联测见 T052。  
 5. MCP **必须** `--pack bid` 或 `--expert`：list 到 `search_kb`/`tender.parse`，看不见 `pack-ship__plan`。裸起 stdio 会看见 pack-ship。  
-6. `kb://<大类>/<兄弟id>/…` → 正文以「拒绝」开头，不是空 404。现闸测了同大类兄弟；跨大类见 T023。
+6. `kb://<大类>/<兄弟id>/…` 与跨大类 `kb://construction/method-hazard/…`（bid-parse）→ 正文以「拒绝」开头，不是空 404（T023 ✅）。
 
 ---
 
@@ -260,7 +260,7 @@ xyz 只抄 solver。分页/订阅 = 有真 Host list/call 稳定之后（horizon
 | RT-P1-2 | `GET /api/eval/live` | ✅ | 四针离线；收口到 company 是 T003 |
 | K1 | 66 岗目录四件套闸 | ✅ | 66/66；`scripts/test_kb_schema.py` |
 | K2 | 门户标题只从 company 页 | **部分** | live 已有；针仍散落且无 APPBCA（T003） |
-| K3 | kb 隔离 + 文件名检索当闸 | 部分 | `test_mcp_surface.py` / `test_kb_search_filename.py` |
+| K3 | kb 隔离 + 文件名检索当闸 | 部分 | 跨大类拒绝 T023 ✅；文件名检索仍 `test_kb_search_filename.py` |
 | K4 | 按车道每次 1 岗富 faq/outline | 进行中 | 岗 README 字段表 |
 | M1–M4 | stdio、工具表、Host、prompts | ✅ | `test_mcp_stdio.py` |
 | M5 | 其余大类 Host 样例 | 未做 | 现挂 3 pack；样例应可复制 16 行注释（T020） |
@@ -322,7 +322,7 @@ python scripts/test_industry_agent_eval.py # 断言总判仍「部分合格」
 
 ```
 1. 取号：只取 §15 主链上第一个状态≠✅/延期 的 T 号。
-   当前指针见 §11（此刻 = T023）。
+   当前指针见 §11（此刻 = T003）。
    禁止 OR §7、切片勾选表、next-steps、post-horizon 原文、handbook「下一刀」。
    岗栏位细节可读 post-horizon 该 id；已做/未做以 §7/§15 为准。
 2. 改最少文件。绿之前必须指出新路径（代码 / KB / MCP / SKILL / 测试之一）。指不出 = 没做。
@@ -355,13 +355,13 @@ GeBIZ 代交 / 自动中标；法定专项方案 / PE·QP·RTO 签认件；十�
 
 ## 11. 下一刀（立刻）
 
-**T023 · kb:// 跨大类拒绝。**
+**T003 · eval/live 针改读 `company/web-portals.md`。**
 
-T021 ✅：`--pack construction` 的 tools 含 scheme_draft/scan，不含 tender.parse / bid-parse__extract / pack-ship__plan / method-hazard__judge_hazard；prompts 只有 `civil.construction.scheme`。验收：`python scripts/test_mcp_stdio.py`。
+T023 ✅：bid-parse 读 `kb://construction/method-hazard/outline.md` 拒绝句，不是空 404。`POST /api/mcp/resources/read` + `python scripts/test_mcp_surface.py`。
 
-T023：bid-parse 读 `kb://construction/method-hazard/…` 必须拒绝句（已有同大类兄弟例，补跨大类）。扩 `scripts/test_mcp_surface.py`。
+T003：`GET /api/eval/live` 五针 GST 9% / Fire Code 2023 / CTU 2014 / GeBIZ≠评分 / APPBCA-2026-12 只从 `demo/kb/company/web-portals.md` 取权威句。CTU 须先抄进 company 再改针。
 
-再官方口径闸（T003+T007+T008）→ T002 危大判定书。
+再 T007/T008 → T002 危大判定书。
 
 ---
 
@@ -416,7 +416,7 @@ T 号是开工 ID：K1=T001，P1-5=T002，K2=T003，P1-3=T010。handbook 不得�
 |--------|------|------|
 | 设计车道 18 岗 | `seed.json` **design=20**（66=3+20+3+3+4+4+5+3+4+3+3+1+3+2+3+2） | §6 已改正 |
 | 「其余 57 岗」 | 已富约 5 岗（bid×3 + pack-ship + construction 十一章），其余 **61** | §7.2 已改正 |
-| K1「目录齐但无闸」 | 当时 64/66；只缺 construction 与 method-hazard 的 `outline.md` | 已做 T001 ✅；§11 现为 T023 |
+| K1「目录齐但无闸」 | 当时 64/66；只缺 construction 与 method-hazard 的 `outline.md` | 已做 T001 ✅；§11 现为 T003 |
 | post-horizon bid 三岗「下一刀=handoff/gaps/评分点」 | P1-1 **已做** | 以本文 §7 为准；horizon 文当历史下一刀 |
 | post-horizon construction「下一刀=十一章接 turn」 | S2 **已做** md；下一刀才是 fill_scheme_docx | T005 |
 | 行业评测「缺 Python eval/live、MCP 几乎只有 pack-ship」 | 2026-08-19 已有 `GET /api/eval/live` 与 `mcp_stdio --pack bid` | 不改 08-17 历史总判日期；现网能力以本文 §3 为准 |
@@ -462,7 +462,7 @@ T 号是开工 ID：K1=T001，P1-5=T002，K2=T003，P1-3=T010。handbook 不得�
 | T020 | Host 样例补齐 16 pack（可复制，不要求用户全挂） | `mcp-host.example.toml` | 每 pack 一行注释 | 未做 |
 | T021 | `--pack construction` stdio：有 scheme_draft/scan；无 tender.parse、bid-parse__extract、pack-ship__plan、method-hazard__judge_hazard；prompt 不含危大 judge | `test_mcp_stdio.py` | 现仅测 bid pack | ✅ |
 | T022 | `write_deliverable` MCP `intent=chat` 拒绝 | 并进 T021 | engine 已拒；Host 面补测 | 并入 T021 |
-| T023 | kb:// 读 method-hazard 从 bid-parse 拒绝（已有 bid-tech 例，补跨大类） | `test_mcp_surface.py` | 拒绝句 | 未做 |
+| T023 | kb:// 读 method-hazard 从 bid-parse 拒绝（已有 bid-tech 例，补跨大类） | `test_mcp_surface.py` | 拒绝句 | ✅ |
 | T024 | 真 Host 手册：Grok/Cursor 各贴一份最小配置 | MCP.md | 命令本机跑过 | 未做 |
 | T025 | kb 分页/订阅 | 延期 | 有 Host 稳定 list/call 后再开 | 延期 |
 
@@ -513,6 +513,6 @@ T030–T047 是**批次合同**（约 59 岗，已扣 bid×3 / pack-ship / const
 
 **主链（不定时限；头指针 = 第一个非 ✅/延期）：**
 
-T001 → T021 → **T023** → T003（含 T007/T008 官方口径）→ T002 → T004 → T006 → T005 → T014 → T011 → T010 → T020+T024 → T030（仅 survey/dispatch）→ T031…T047 → T050 → T052 → T062。
+T001 → T021 → T023 → **T003**（含 T007/T008 官方口径）→ T002 → T004 → T006 → T005 → T014 → T011 → T010 → T020+T024 → T030（仅 survey/dispatch）→ T031…T047 → T050 → T052 → T062。
 
 T012/T060/T061/T051/T053 不占刀。中途红则停在该号，不准跳号。
