@@ -5,7 +5,7 @@ use flate2::read::ZlibDecoder;
 use regex::Regex;
 use serde_json::{json, Value};
 use std::fs;
-use std::io::{Cursor, Read};
+use std::io::{Cursor, Read, Write};
 use std::path::{Path, PathBuf};
 use uuid::Uuid;
 
@@ -14,7 +14,7 @@ pub const MAX_TEXT_CHARS: usize = 200_000;
 pub const MAX_FILES: usize = 12;
 pub const INJECT_CHARS: usize = 60_000;
 
-const ALLOWED_EXT: &[&str] = &["pdf", "docx", "txt", "md", "csv", "json", "log"];
+const ALLOWED_EXT: &[&str] = &["pdf", "docx", "xlsx", "txt", "md", "csv", "json", "log"];
 
 pub fn session_dir(paths: &Paths, session: &str) -> Result<PathBuf, String> {
     let sid = sanitize_session(session)?;
@@ -77,11 +77,12 @@ pub fn extract_upload(filename: &str, bytes: &[u8]) -> Result<(String, String, S
     }
     let ext = ext_of(filename);
     if !ALLOWED_EXT.contains(&ext.as_str()) {
-        return Err("只接受 pdf / docx / txt / md / csv / json".into());
+        return Err("只接受 pdf / docx / xlsx / txt / md / csv / json".into());
     }
     let builtin = match ext.as_str() {
         "pdf" => extract_pdf(bytes),
         "docx" => extract_docx(bytes),
+        "xlsx" => extract_xlsx(bytes),
         _ => Ok(String::from_utf8_lossy(bytes).into_owned()),
     };
     let got = crate::parse::extract_rich(filename, &ext, bytes, builtin)?;
@@ -110,6 +111,170 @@ fn collapse_ws(s: &str) -> String {
         prev_nl = false;
     }
     out
+}
+
+fn xlsx_shared_strings(xml: &str) -> Vec<String> {
+    let re = Regex::new(r"(?s)<t[^>]*>([^<]*)</t>").unwrap();
+    re.captures_iter(xml)
+        .filter_map(|c| c.get(1).map(|m| decode_xml(m.as_str())))
+        .collect()
+}
+
+fn xlsx_sheet_text(xml: &str, shared: &[String]) -> Vec<String> {
+    let row_re = Regex::new(r"(?s)<row\b[^>]*>(.*?)</row>").unwrap();
+    let c_re = Regex::new(r#"(?s)<c\b([^>]*)>(.*?)</c>"#).unwrap();
+    let v_re = Regex::new(r"(?s)<v>([^<]*)</v>").unwrap();
+    let t_re = Regex::new(r"(?s)<t[^>]*>([^<]*)</t>").unwrap();
+    let mut rows = Vec::new();
+    for row in row_re.captures_iter(xml) {
+        let body = row.get(1).map(|m| m.as_str()).unwrap_or("");
+        let mut cells = Vec::new();
+        for c in c_re.captures_iter(body) {
+            let attrs = c.get(1).map(|m| m.as_str()).unwrap_or("");
+            let inner = c.get(2).map(|m| m.as_str()).unwrap_or("");
+            let is_s = attrs.contains("t=\"s\"") || attrs.contains("t='s'");
+            let is_inline = attrs.contains("t=\"inlineStr\"") || attrs.contains("t='inlineStr'");
+            if is_inline {
+                if let Some(t) = t_re.captures(inner) {
+                    cells.push(decode_xml(t.get(1).unwrap().as_str()));
+                }
+                continue;
+            }
+            if let Some(v) = v_re.captures(inner) {
+                let raw = v.get(1).unwrap().as_str().trim();
+                if is_s {
+                    if let Ok(i) = raw.parse::<usize>() {
+                        cells.push(shared.get(i).cloned().unwrap_or_default());
+                    }
+                } else if !raw.is_empty() {
+                    cells.push(raw.to_string());
+                }
+            }
+        }
+        let line = cells.join("\t");
+        if !line.trim().is_empty() {
+            rows.push(line);
+        }
+    }
+    rows
+}
+
+fn extract_xlsx(bytes: &[u8]) -> Result<String, String> {
+    let mut zip = zip::ZipArchive::new(Cursor::new(bytes)).map_err(|e| format!("xlsx 不是有效压缩包：{e}"))?;
+    let mut shared = Vec::new();
+    if let Ok(mut f) = zip.by_name("xl/sharedStrings.xml") {
+        let mut xml = String::new();
+        f.read_to_string(&mut xml).map_err(|e| e.to_string())?;
+        drop(f);
+        shared = xlsx_shared_strings(&xml);
+    }
+    let mut sheet_names: Vec<String> = Vec::new();
+    for i in 0..zip.len() {
+        if let Ok(f) = zip.by_index(i) {
+            let n = f.name().replace('\\', "/");
+            if n.starts_with("xl/worksheets/") && n.ends_with(".xml") {
+                sheet_names.push(n);
+            }
+        }
+    }
+    sheet_names.sort();
+    let mut rows = Vec::new();
+    for name in sheet_names {
+        let mut xml = String::new();
+        {
+            let mut f = zip.by_name(&name).map_err(|e| e.to_string())?;
+            f.read_to_string(&mut xml).map_err(|e| e.to_string())?;
+        }
+        rows.extend(xlsx_sheet_text(&xml, &shared));
+    }
+    let text = rows.join("\n");
+    if text.chars().count() >= 8 {
+        return Ok(text);
+    }
+    let joined = shared.join(" ");
+    if joined.chars().count() >= 8 {
+        return Ok(joined);
+    }
+    Err("xlsx 抽不出可用文字。请另存为 CSV 或把单元格改成文本。".into())
+}
+
+fn xml_escape(s: &str) -> String {
+    s.replace('&', "&amp;")
+        .replace('<', "&lt;")
+        .replace('>', "&gt;")
+        .replace('"', "&quot;")
+}
+
+/// Minimal OOXML spreadsheet for tests and civil-software interchange fixtures.
+pub fn pack_minimal_xlsx(cells: &[&str]) -> Result<Vec<u8>, String> {
+    let mut buf = Cursor::new(Vec::<u8>::new());
+    {
+        let mut z = zip::ZipWriter::new(&mut buf);
+        let opt = zip::write::SimpleFileOptions::default()
+            .compression_method(zip::CompressionMethod::Stored);
+        z.start_file("[Content_Types].xml", opt)
+            .map_err(|e| e.to_string())?;
+        z.write_all(br#"<?xml version="1.0" encoding="UTF-8"?>
+<Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types">
+<Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/>
+<Default Extension="xml" ContentType="application/xml"/>
+<Override PartName="/xl/workbook.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet.main+xml"/>
+<Override PartName="/xl/worksheets/sheet1.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.worksheet+xml"/>
+<Override PartName="/xl/sharedStrings.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.sharedStrings+xml"/>
+</Types>"#)
+            .map_err(|e| e.to_string())?;
+        z.start_file("_rels/.rels", opt).map_err(|e| e.to_string())?;
+        z.write_all(br#"<?xml version="1.0" encoding="UTF-8"?>
+<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">
+<Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" Target="xl/workbook.xml"/>
+</Relationships>"#)
+            .map_err(|e| e.to_string())?;
+        z.start_file("xl/_rels/workbook.xml.rels", opt)
+            .map_err(|e| e.to_string())?;
+        z.write_all(br#"<?xml version="1.0" encoding="UTF-8"?>
+<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">
+<Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet" Target="worksheets/sheet1.xml"/>
+<Relationship Id="rId2" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/sharedStrings" Target="sharedStrings.xml"/>
+</Relationships>"#)
+            .map_err(|e| e.to_string())?;
+        z.start_file("xl/workbook.xml", opt).map_err(|e| e.to_string())?;
+        z.write_all(br#"<?xml version="1.0" encoding="UTF-8"?>
+<workbook xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships">
+<sheets><sheet name="Sheet1" sheetId="1" r:id="rId1"/></sheets>
+</workbook>"#)
+            .map_err(|e| e.to_string())?;
+        let mut sst = format!(
+            r#"<?xml version="1.0" encoding="UTF-8"?><sst xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main" count="{}" uniqueCount="{}">"#,
+            cells.len(),
+            cells.len()
+        );
+        for c in cells {
+            sst.push_str("<si><t>");
+            sst.push_str(&xml_escape(c));
+            sst.push_str("</t></si>");
+        }
+        sst.push_str("</sst>");
+        z.start_file("xl/sharedStrings.xml", opt)
+            .map_err(|e| e.to_string())?;
+        z.write_all(sst.as_bytes()).map_err(|e| e.to_string())?;
+        let mut sheet = String::from(
+            r#"<?xml version="1.0" encoding="UTF-8"?><worksheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main"><sheetData><row r="1">"#,
+        );
+        for (i, _) in cells.iter().enumerate() {
+            let col = if i < 26 {
+                (b'A' + i as u8) as char
+            } else {
+                'A'
+            };
+            sheet.push_str(&format!(r#"<c r="{col}1" t="s"><v>{i}</v></c>"#));
+        }
+        sheet.push_str("</row></sheetData></worksheet>");
+        z.start_file("xl/worksheets/sheet1.xml", opt)
+            .map_err(|e| e.to_string())?;
+        z.write_all(sheet.as_bytes()).map_err(|e| e.to_string())?;
+        z.finish().map_err(|e| e.to_string())?;
+    }
+    Ok(buf.into_inner())
 }
 
 fn extract_docx(bytes: &[u8]) -> Result<String, String> {
@@ -318,7 +483,7 @@ pub fn import_local(paths: &Paths, session: &str, raw: &str) -> Result<Vec<Value
         files.sort();
         files.truncate(8);
         if files.is_empty() {
-            return Err("这个文件夹里没有可抽文字的 pdf/docx/txt/md/csv".into());
+            return Err("这个文件夹里没有可抽文字的 pdf/docx/xlsx/txt/md/csv".into());
         }
         let mut out = Vec::new();
         for f in files {
@@ -409,5 +574,13 @@ mod tests {
     #[test]
     fn rejects_exe() {
         assert!(extract_text("x.exe", b"MZ").is_err());
+    }
+
+    #[test]
+    fn extracts_xlsx_shared_string() {
+        let bytes = pack_minimal_xlsx(&["C30临边梁 C-LN-01", "12"]).expect("xlsx");
+        let (kind, text) = extract_text("清单.xlsx", &bytes).unwrap();
+        assert_eq!(kind, "xlsx");
+        assert!(text.contains("C30临边梁 C-LN-01"), "{text}");
     }
 }

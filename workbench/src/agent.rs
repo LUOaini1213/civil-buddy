@@ -5,6 +5,7 @@ use crate::harness::{self, Run, Ticket};
 use crate::llm::{self, LlmError};
 use crate::packs::{self, ToolCtx};
 use serde_json::{json, Value};
+use std::fs;
 
 const READ_ONLY_TOOLS: &[&str] = &[
     "search_kb",
@@ -167,19 +168,18 @@ pub fn understand(blob: &str) -> Intent {
         ],
     );
     let qmark = t.contains('？') || t.contains('?') || t.ends_with('吗');
-    let tender = t.chars().count() > 80
-        && has_any(
-            t,
-            &[
-                "招标",
-                "ITT",
-                "评标",
-                "Two Envelope",
-                "双信封",
-                "workhead",
-                "必须编制",
-            ],
-        );
+    let tender = has_any(
+        t,
+        &[
+            "招标",
+            "ITT",
+            "评标",
+            "Two Envelope",
+            "双信封",
+            "workhead",
+            "必须编制",
+        ],
+    );
     if write && (ask || qmark) {
         return Intent::Both;
     }
@@ -191,6 +191,27 @@ pub fn understand(blob: &str) -> Intent {
 
 pub fn is_explain_only(blob: &str) -> bool {
     understand(blob) == Intent::Chat
+}
+
+/// Deterministic chat from company KB. GST must copy the IRAS 9% sentence; no live model.
+pub fn offline_explain(paths: &Paths, blob: &str) -> Option<String> {
+    let gst = blob.contains("GST") || blob.contains("消费税") || blob.contains("gst");
+    if !gst {
+        return None;
+    }
+    let page = paths.kb_root.join("company").join("web-portals.md");
+    let kb = fs::read_to_string(page).ok()?;
+    if !kb.contains("9%") {
+        return None;
+    }
+    let copied = kb
+        .lines()
+        .find(|l| l.contains("9%") && (l.contains("GST") || l.contains("税率") || l.contains("Current GST")))
+        .map(str::trim)
+        .unwrap_or("IRAS Current GST rates 页述现行标准税率 **9%**。");
+    Some(format!(
+        "新加坡现行 GST 税率按 IRAS Current GST rates 页述为 9%。\n{copied}\n内部讨论 AI 草稿，不是税务意见书。submit_blocked。禁止把 7%/8% 写成现行税率。"
+    ))
 }
 
 pub fn detect_jurisdiction(blob: &str) -> &'static str {
@@ -327,6 +348,9 @@ fn done_from_run(label: &str, expert_id: &str, run: &Run) -> EventOut {
                 "gate": run.hitl.gate,
             },
             "illegal_tool_calls": run.illegal_count(),
+            "intent": "run",
+            "wrote": !run.files.is_empty(),
+            "submit_blocked": true,
             "stamp": chrono::Local::now().format("%Y-%m-%dT%H-%M-%S").to_string(),
             "context": ctx.to_value(),
         }),
@@ -512,9 +536,25 @@ pub async fn run_expert(
     ));
     match intent {
         Intent::Chat => {
-            events.extend(
-                run_expert_explain(paths, expert, history, confirm_ok, session_id).await?,
-            );
+            if let Some(text) = offline_explain(paths, &blob) {
+                events.push(("token".into(), json!({"text": text})));
+                events.push((
+                    "done".into(),
+                    json!({
+                        "mode": "expert",
+                        "intent": "chat",
+                        "wrote": false,
+                        "submit_blocked": true,
+                        "expert": expert.id,
+                        "text": text,
+                        "deliverables": [],
+                    }),
+                ));
+            } else {
+                events.extend(
+                    run_expert_explain(paths, expert, history, confirm_ok, session_id).await?,
+                );
+            }
         }
         Intent::Run | Intent::Both => {
             let ticket = ticket_from_chat(session_id, expert, &history, confirm_ok);

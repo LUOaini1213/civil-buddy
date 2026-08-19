@@ -174,7 +174,7 @@ async fn harness_expert(State(st): State<Arc<AppState>>, Json(body): Json<Expert
         body.session_id.clone()
     };
     let ticket = expert_ticket(&session, &body);
-    Ok(Json(crate::harness::run_expert_steps(&st.paths, &exp, ticket).to_value()))
+    Ok(Json(crate::harness::run_turn(&st.paths, &exp, ticket).to_value()))
 }
 
 async fn eval_live(State(st): State<Arc<AppState>>) -> Json<Value> {
@@ -494,9 +494,42 @@ struct ChatIn {
     attachments: Vec<String>,
 }
 
+fn sse_offline_chat(text: String) -> Response {
+    let done = json!({
+        "mode": "chat",
+        "intent": "chat",
+        "wrote": false,
+        "submit_blocked": true,
+        "text": text,
+        "deliverables": [],
+    });
+    let body = format!(
+        "event: status\ndata: {{\"phase\":\"understand\",\"intent\":\"chat\"}}\n\nevent: token\ndata: {}\n\nevent: done\ndata: {}\n\n",
+        serde_json::to_string(&json!({"text": text})).unwrap_or_else(|_| "{}".into()),
+        serde_json::to_string(&done).unwrap_or_else(|_| "{}".into()),
+    );
+    (
+        [
+            (axum::http::header::CONTENT_TYPE, "text/event-stream"),
+            (axum::http::header::CACHE_CONTROL, "no-cache"),
+        ],
+        body,
+    )
+        .into_response()
+}
+
 async fn chat(State(st): State<Arc<AppState>>, Json(body): Json<ChatIn>) -> Result<Response, ApiError> {
+    let intent = crate::agent::understand(&body.message);
     if !st.has_key() {
-        return Err(err(StatusCode::BAD_REQUEST, "未配置 DEEPSEEK_API_KEY"));
+        if intent == crate::agent::Intent::Chat {
+            if let Some(text) = crate::agent::offline_explain(&st.paths, &body.message) {
+                return Ok(sse_offline_chat(text));
+            }
+        }
+        if intent == crate::agent::Intent::Chat {
+            return Err(err(StatusCode::BAD_REQUEST, "未配置 DEEPSEEK_API_KEY"));
+        }
+        // Run/Both: exclusive steps do not need a live model.
     }
     let session = if body.session_id.is_empty() {
         let raw = Uuid::new_v4().simple().to_string();
