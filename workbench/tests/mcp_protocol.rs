@@ -47,12 +47,25 @@ fn bid_parse_resources_are_scoped_and_readable() {
     assert!(!text.contains("可以投标") || text.contains("不报"), "{text}");
 
     let deny = rpc(
-        filter,
+        filter.clone(),
         "resources/read",
         json!({"uri": "kb://bid/bid-tech/outline.md"}),
     );
     let denied = deny["result"]["contents"][0]["text"].as_str().unwrap_or("");
     assert!(denied.starts_with("拒绝"), "{denied}");
+
+    let cross = rpc(
+        filter.clone(),
+        "resources/read",
+        json!({"uri": "kb://construction/method-hazard/outline.md"}),
+    );
+    let cross_txt = cross["result"]["contents"][0]["text"].as_str().unwrap_or("");
+    assert!(cross_txt.starts_with("拒绝"), "{cross_txt}");
+    assert!(
+        !res.iter()
+            .any(|r| r["uri"].as_str().unwrap_or("").contains("method-hazard/")),
+        "{res:?}"
+    );
 }
 
 #[test]

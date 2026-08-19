@@ -17,7 +17,7 @@ category   demo/kb/<cat>/_shared/*
 company    demo/kb/company/*
 ```
 
-兄弟私库不可见。`kb://bid/bid-tech/outline.md` 在 bid-parse 会话 → 拒绝句，不是空 404。
+兄弟私库不可见。跨大类同样拒绝：`kb://construction/method-hazard/outline.md` 在 bid-parse 会话 → 拒绝句，不是空 404。`kb://bid/bid-tech/outline.md` 在 bid-parse 会话 → 拒绝句。
 
 目录契约（K1）：每岗 `README.md` `faq.md` `outline.md` `web-knowledge.md`。
 

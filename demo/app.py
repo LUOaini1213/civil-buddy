@@ -91,6 +91,21 @@ def mcp_resources(expert_id: str) -> dict:
     return {"ok": True, "resources": list_resources(exp.id, exp.category)}
 
 
+class McpResourceIn(BaseModel):
+    uri: str
+    expert_id: str = "bid-parse"
+
+
+@app.post("/api/mcp/resources/read")
+def mcp_resource_read(body: McpResourceIn) -> dict:
+    from mcp_surface import read_resource
+
+    exp = get_expert(body.expert_id)
+    if not exp:
+        raise HTTPException(404, "unknown expert")
+    return {"ok": True, **read_resource(exp.id, exp.category, body.uri)}
+
+
 @app.get("/api/mcp/prompts")
 def mcp_prompts(expert_id: str = "") -> dict:
     from mcp_surface import list_prompts
