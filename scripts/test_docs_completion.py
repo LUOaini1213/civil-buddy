@@ -14,6 +14,7 @@ FILES = (
     "MCP.md",
     "SKILLS.md",
     "KB.md",
+    "product-plan.md",
 )
 
 
@@ -29,6 +30,10 @@ def main() -> int:
             assert "禁止" in text or "不当" in text or "不是" in text, name
     assert "66" in blob
     assert "submit_blocked" in blob
+    plan = (DOCS / "product-plan.md").read_text(encoding="utf-8")
+    assert "全量产品规划书" in plan
+    assert "lane-bid" in plan and "lane-people" in plan
+    assert "不准空转" in plan
     assert (DOCS / "mcp-host.example.toml").is_file()
     assert (DOCS / "product-completion-plan.md").is_file()
     print("PASS docs_completion", " ".join(FILES))

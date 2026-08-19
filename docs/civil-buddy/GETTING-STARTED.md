@@ -2,7 +2,7 @@
 
 产品：内部讨论 AI 草稿。不判定可投标，不判定可以开工。岗数 **66**。`submit_blocked` 默认 true。
 
-完善规划：[product-completion-plan.md](product-completion-plan.md)。Skill = 怎么写；MCP = 能调什么。
+全量规划：[product-plan.md](product-plan.md)。切片：[product-completion-plan.md](product-completion-plan.md)。Skill = 怎么写；MCP = 能调什么。
 
 ## 1. 起两个入口
 
