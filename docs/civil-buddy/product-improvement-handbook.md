@@ -426,4 +426,4 @@ P1：投标 handoff · Python eval · 回放 · 危大卡
 
 ## 12. 下一刀（手册执行入口）
 
-**P0 已落地。完整 Agent 循环 + 沙箱 + eval/live + P1-1 handoff 已落地。** 下一刀 **P1-4**：Run 回放 messages/steps/tools。行业总判仍是 **部分合格**。过夜规划见 [overnight-eval-iterate-2026-08-19.md](overnight-eval-iterate-2026-08-19.md)。
+**P0 与 P1-1/P1-2/P1-4 已落地。** 开工 ID 以 [product-plan.md](product-plan.md) §11 为准（此刻 **T001**）。行业总判仍是 **部分合格**。过夜 sleep 环已废止。

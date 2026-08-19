@@ -337,7 +337,7 @@ Grok skill **不**在 V1 里 `use_tool` 调 MCP（保持 skill 可离线出十�
 2. 栏位来自 outline.md / KB，缺数 `[A001]` / `UNSPECIFIED`；  
 3. `test_expert_turn.py` 对该 id 的 run 能断言 **至少一个栏位不是通用骨架句**。
 
-当前已达到：bid-parse / bid-compliance / bid-tech / pack-ship。下一优先：construction 十一章（与 S2 同一刀）、method-hazard 判定书、cost 工程量栏、finance-tax 日历栏。
+当前已达到：bid-parse / bid-compliance / bid-tech / pack-ship / construction 十一章 md。下一优先按 product-plan §15：T001 目录闸 → T021 pack 隔离 → T002 危大判定书。
 
 ---
 
