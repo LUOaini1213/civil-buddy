@@ -469,34 +469,52 @@ def api_run_events(run_id: str):
     return {"ok": True, "run_id": run_id, "events": events, "state": run.state if run else ""}
 
 
-@app.get("/api/runs/{run_id}")
-def api_run_get(run_id: str, include_trace: bool = True):
-    from packing_assistant.runtime.scheduler import get_scheduler
+def _packing_disk_sidecar(run_id: str, include_trace: bool) -> Optional[Dict[str, Any]]:
+    """Packing output/runs payload. Fallback only — never a Scheduler identity."""
     from packing_assistant.trace_events import RUNS_DIR
 
-    run = get_scheduler().get(run_id)
-    if run:
-        return {"ok": True, "source": "scheduler", **run.to_dict()}
     d = RUNS_DIR / run_id
     if not d.is_dir():
-        raise HTTPException(404, "unknown run")
-    idx = {}
+        return None
+    idx: Dict[str, Any] = {}
     p = d / "index.json"
     if p.exists():
         try:
             idx = json.loads(p.read_text(encoding="utf-8"))
         except Exception:
             idx = {}
-    out: Dict[str, Any] = {
-        "ok": True,
-        "source": "disk",
-        "run_id": run_id,
-        "run_dir": str(d),
-        "index": idx,
-    }
+    out: Dict[str, Any] = {"run_dir": str(d), "index": idx}
     if include_trace:
         out["trace"] = read_trace_jsonl(run_id, limit=2000)
     return out
+
+
+@app.get("/api/runs/{run_id}")
+def api_run_get(run_id: str, include_trace: bool = True):
+    from packing_assistant.runtime.scheduler import get_scheduler
+
+    run = get_scheduler().get(run_id)
+    disk = _packing_disk_sidecar(run_id, include_trace)
+    if run:
+        body: Dict[str, Any] = {"ok": True, "source": "scheduler", **run.to_dict()}
+        body["tools"] = list(run.tools_used)
+        body["step_log"] = list(run.history)
+        if disk:
+            body["disk"] = disk
+        return body
+    if disk:
+        return {
+            "ok": True,
+            "source": "disk",
+            "run_id": run_id,
+            "messages": [],
+            "tools_used": [],
+            "artifacts": [],
+            "history": [],
+            "duration_ms": None,
+            **disk,
+        }
+    raise HTTPException(404, "unknown run")
 
 
 @app.post("/api/runs/{run_id}/cancel")

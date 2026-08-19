@@ -3,6 +3,8 @@
 
 from __future__ import annotations
 
+import json
+import shutil
 import sys
 from pathlib import Path
 
@@ -146,10 +148,78 @@ def main() -> int:
     assert jc.get("run_id")
     got = client.get(f"/api/runs/{jc['run_id']}")
     assert got.status_code == 200
-    assert got.json().get("state") in {"done", "acting", "planning"}
+    gj = got.json()
+    assert gj.get("source") == "scheduler"
+    assert gj.get("run_id") == jc["run_id"]
+    assert gj.get("state") in {"done", "acting", "planning"}
+    assert isinstance(gj.get("messages"), list) and gj["messages"]
+    assert any(m.get("role") == "user" for m in gj["messages"])
+    assert any(m.get("role") == "assistant" for m in gj["messages"])
+    assert gj.get("tools_used") == []
+    assert gj.get("artifacts") == []
+    assert isinstance(gj.get("history"), list) and gj["history"]
+    assert isinstance(gj.get("duration_ms"), int)
     ev = client.get(f"/api/runs/{jc['run_id']}/events")
     assert ev.status_code == 200
     assert ev.json().get("events")
+
+    # P1-4: write-run replay; two GETs same identity (not packing output/runs)
+    http_run = client.post(
+        "/api/agent",
+        json={
+            "text": "出一份税务日历",
+            "expert_id": "finance-tax",
+            "session_id": "ag-http-tax",
+            "intent": "run",
+        },
+    )
+    assert http_run.status_code == 200, http_run.text
+    jr = http_run.json()
+    rid = jr.get("run_id")
+    assert rid and jr.get("wrote") is True
+    g1 = client.get(f"/api/runs/{rid}")
+    g2 = client.get(f"/api/runs/{rid}")
+    assert g1.status_code == 200 and g2.status_code == 200
+    a, b = g1.json(), g2.json()
+    assert a.get("source") == b.get("source") == "scheduler"
+    assert a.get("run_id") == b.get("run_id") == rid
+    assert a.get("session_id") == b.get("session_id") == "ag-http-tax"
+    assert a.get("messages") == b.get("messages")
+    assert a.get("tools_used") == b.get("tools_used")
+    assert a.get("artifacts") == b.get("artifacts")
+    assert a.get("history") == b.get("history")
+    assert any(m.get("role") == "user" for m in a["messages"])
+    assert any(m.get("role") == "tool" for m in a["messages"])
+    assert any(m.get("role") == "assistant" for m in a["messages"])
+    assert "write_deliverable" in (a.get("tools_used") or [])
+    assert a.get("artifacts")
+    assert a.get("history")
+    assert a.get("tools") == a.get("tools_used")
+    assert a.get("step_log") == a.get("history")
+    assert isinstance(a.get("duration_ms"), int)
+    assert "可以投标" not in json.dumps(a, ensure_ascii=False)
+    assert a.get("intent") == "run"
+
+    from packing_assistant.trace_events import RUNS_DIR
+
+    fake_id = "p14-disk-fallback-test"
+    fake = RUNS_DIR / fake_id
+    if fake.exists():
+        shutil.rmtree(fake)
+    fake.mkdir(parents=True, exist_ok=True)
+    (fake / "index.json").write_text(
+        json.dumps({"run_id": fake_id, "note": "packing sidecar"}, ensure_ascii=False),
+        encoding="utf-8",
+    )
+    try:
+        disk_got = client.get(f"/api/runs/{fake_id}")
+        assert disk_got.status_code == 200, disk_got.text
+        dj = disk_got.json()
+        assert dj.get("source") == "disk"
+        assert dj.get("run_id") == fake_id
+        assert "messages" in dj and "tools_used" in dj and "artifacts" in dj and "history" in dj
+    finally:
+        shutil.rmtree(fake, ignore_errors=True)
 
     live = client.get("/api/eval/live")
     assert live.status_code == 200, live.text

@@ -235,12 +235,15 @@ def run_agent(
         run.messages = list(messages)
         run.tools_used = list(out["tools_used"])
         run.artifacts = list(out["artifacts"])
+        run.stamp_end()
         out["messages"] = list(messages)
         out["state"] = run.state
         out["error_code"] = run.error_code or out.get("error_code") or ""
         out["events"] = [e.to_dict() for e in bus.for_run(run.run_id)]
         out["reply"] = _scrub(str(out.get("reply") or ""))
         out["submit_blocked"] = True
+        out["duration_ms"] = run.duration_ms
+        out["history"] = list(run.history)
         sched.release(sid)
         bus.emit(run.run_id, "run_ended", {"state": run.state, "wrote": out["wrote"]})
         return out
