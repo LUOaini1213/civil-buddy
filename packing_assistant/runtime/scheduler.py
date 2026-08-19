@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import time
 from dataclasses import dataclass, field
 from typing import Any, Dict, List, Optional  # Run.messages/tools keep mixed payloads
 from uuid import uuid4
@@ -54,6 +55,13 @@ class Run:
     messages: List[Dict[str, Any]] = field(default_factory=list)
     tools_used: List[str] = field(default_factory=list)
     artifacts: List[str] = field(default_factory=list)
+    started_at: float = field(default_factory=time.time)
+    ended_at: float = 0.0
+    duration_ms: int = 0
+
+    def stamp_end(self) -> None:
+        self.ended_at = time.time()
+        self.duration_ms = max(0, int((self.ended_at - self.started_at) * 1000))
 
     def to_dict(self) -> Dict[str, Any]:
         return {
@@ -70,6 +78,9 @@ class Run:
             "messages": list(self.messages),
             "tools_used": list(self.tools_used),
             "artifacts": list(self.artifacts),
+            "duration_ms": self.duration_ms,
+            "started_at": self.started_at,
+            "ended_at": self.ended_at,
         }
 
 
