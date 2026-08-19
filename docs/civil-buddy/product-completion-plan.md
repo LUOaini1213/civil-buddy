@@ -337,7 +337,7 @@ Grok skill **不**在 V1 里 `use_tool` 调 MCP（保持 skill 可离线出十�
 2. 栏位来自 outline.md / KB，缺数 `[A001]` / `UNSPECIFIED`；  
 3. `test_expert_turn.py` 对该 id 的 run 能断言 **至少一个栏位不是通用骨架句**。
 
-当前已达到：bid-parse / bid-compliance / bid-tech / pack-ship / construction 十一章 md。下一优先按 product-plan §15：T001 目录闸 → T021 pack 隔离 → T002 危大判定书。
+当前已达到：bid-parse / bid-compliance / bid-tech / pack-ship / construction 十一章 md + T001 目录闸。下一优先按 product-plan §15：T021 pack 隔离 → T023 → T002 危大判定书。
 
 ---
 
@@ -373,7 +373,7 @@ GeBIZ 代交、法定签认、十万字写标、标书查重产品化、模型�
 | D0 65→66 与入口收口 | ✅ | README / docs 索引 / yibiao-mcp-map / skill 开篇已 66；历史评测页可留 65 |
 | D1 GETTING-STARTED / PROTOCOL / MCP / SKILLS / KB | ✅ | `python scripts/test_docs_completion.py` |
 | D2 全量产品规划书 | ✅ | `docs/civil-buddy/product-plan.md` |
-| K1 66 岗目录契约 | 未做 | `test_kb_schema.py` |
+| K1 66 岗目录契约 | ✅ | `python scripts/test_kb_schema.py` |
 | K2 门户标题单一来源 | 未做 | eval/live 读 company 页 |
 | K3 kb:// 隔离 + 文件名检索闸 | 部分 | 扩 `test_mcp_surface.py` |
 | M1 Python stdio MCP | ✅ | `python scripts/test_mcp_stdio.py` |
@@ -392,4 +392,4 @@ P0 运行时、P1-1 handoff、Agent 循环+沙箱、pack-ship 投影：**已做*
 
 ## 8. 下一刀（读完本文立刻做的）
 
-全量任务号见 [product-plan.md](product-plan.md) §15。切片下一刀仍是 **T001/K1**（只缺 construction 与 method-hazard 的 `outline.md`）。
+全量任务号见 [product-plan.md](product-plan.md) §15。切片下一刀是 **T021**（`--pack construction` 工具隔离）。K1/T001 已 ✅。
