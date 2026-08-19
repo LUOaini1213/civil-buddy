@@ -60,7 +60,7 @@ async fn test_catalog_sixteen() {
     let v: Value = serde_json::from_str(&body).unwrap();
     assert_eq!(v["categories"].as_array().unwrap().len(), 16);
     let experts = v["experts"].as_array().unwrap();
-    assert!(experts.len() >= 65);
+    assert_eq!(experts.len(), 66, "catalog must list the seed 66");
     let ids: Vec<&str> = experts.iter().filter_map(|e| e["id"].as_str()).collect();
     for need in ["interior", "facade", "civil-defense", "hydraulic", "port", "pack-ship"] {
         assert!(ids.contains(&need), "{need}");
@@ -962,11 +962,17 @@ fn test_bid_parse_does_not_invent_bca_pqm_band() {
 #[test]
 fn test_bid_parse_extracts_from_uploaded_attachment() {
     let p = paths();
-    let sid = "attach-itt-01";
+    let sid = format!(
+        "attach-itt-{}",
+        std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .unwrap()
+            .as_millis()
+    );
     let body = "Technical score 42\nRequired 临边防护专项方案\nmethod statement for working at height";
-    let meta = civil_workbench::attach::save_upload(&p, sid, "itt.txt", body.as_bytes()).unwrap();
+    let meta = civil_workbench::attach::save_upload(&p, &sid, "itt.txt", body.as_bytes()).unwrap();
     assert!(meta.get("id").is_some());
-    let mut ctx = ToolCtx::new(p.clone(), "bid-parse", "bid", "low", true, sid);
+    let mut ctx = ToolCtx::new(p.clone(), "bid-parse", "bid", "low", true, &sid);
     let out = packs::execute(
         &mut ctx,
         "bid-parse__extract",
@@ -2381,7 +2387,12 @@ fn test_every_exclusive_execute_sg_and_high_risk_gate() {
     for e in &seed().experts {
         let em = tier_map::expert_map(&e.id).unwrap();
         for tool in &em.exclusive {
-            if tool.contains("fill_scheme") {
+            if tool.contains("fill_scheme")
+                || matches!(
+                    tool.as_str(),
+                    "pack-ship__list" | "pack-ship__health" | "pack-ship__export"
+                )
+            {
                 continue;
             }
             let mut ctx = ToolCtx::new(
@@ -2830,6 +2841,32 @@ fn test_high_risk_expert_harness_hitl_no_write() {
 
 #[tokio::test]
 async fn test_harness_expert_api_and_shadow() {
+    let (gst_st, gst_body) = send(
+        state(),
+        Request::builder()
+            .method("POST")
+            .uri("/api/harness/expert")
+            .header("content-type", "application/json")
+            .body(Body::from(
+                json!({
+                    "session_id": "hex-api-gst",
+                    "expert_id": "finance-tax",
+                    "brief": "什么是 GST",
+                    "confirm_ok": false
+                })
+                .to_string(),
+            ))
+            .unwrap(),
+    )
+    .await;
+    assert_eq!(gst_st, StatusCode::OK, "{gst_body}");
+    let gst: Value = serde_json::from_str(&gst_body).unwrap();
+    assert_eq!(gst["intent"], "chat", "{gst}");
+    assert_eq!(gst["wrote"], false, "{gst}");
+    assert_eq!(gst["submit_blocked"], true);
+    assert!(gst["reply"].as_str().unwrap_or("").contains("9%"), "{gst}");
+    assert!(gst["files"].as_array().map(|a| a.is_empty()).unwrap_or(false), "{gst}");
+
     let (st, body) = send(
         state(),
         Request::builder()
@@ -2882,4 +2919,192 @@ async fn test_harness_expert_api_and_shadow() {
     assert_eq!(ev["ok"], true, "{ev}");
     assert_eq!(ev["illegal_tool_calls"], 0);
     assert_eq!(ev["expert"], "cost");
+}
+
+const SCHEME_CHAPTERS: &[&str] = &[
+    "封面与文件控制",
+    "草稿与责任声明",
+    "工程概况",
+    "编制依据",
+    "施工部署与工艺",
+    "质量",
+    "安全与应急",
+    "环保与文明施工",
+    "资源计划",
+    "验收与资料",
+    "附录",
+];
+
+#[test]
+fn test_construction_eleven_chapters() {
+    let p = paths();
+    let blocked = {
+        let mut ctx = ToolCtx::new(
+            p.clone(),
+            "construction",
+            "construction",
+            "high",
+            false,
+            "wb-scheme-hitl",
+        );
+        let out = packs::execute(
+            &mut ctx,
+            "construction__scheme_draft",
+            &json!({
+                "project_name": "滨河路人行道维修",
+                "work_scope": "临边防护",
+                "jurisdiction": "SG"
+            }),
+        );
+        assert!(out.contains("拒绝写盘"), "{out}");
+        assert!(!ctx.out_dir.join("专项方案-AI草稿.md").is_file());
+        out
+    };
+    assert!(blocked.contains("我明白，将由持证人员签认"));
+
+    let mut ctx = ToolCtx::new(
+        p,
+        "construction",
+        "construction",
+        "high",
+        true,
+        "wb-scheme-11",
+    );
+    let out = packs::execute(
+        &mut ctx,
+        "construction__scheme_draft",
+        &json!({
+            "project_name": "滨河路人行道维修",
+            "work_scope": "临边防护",
+            "site_name": "滨河路人行道",
+            "height_m": 3.2,
+            "jurisdiction": "SG"
+        }),
+    );
+    assert!(out.contains("已写入"), "{out}");
+    let path = ctx.out_dir.join("专项方案-AI草稿.md");
+    let text = std::fs::read_to_string(&path).expect("scheme draft");
+    for (i, title) in SCHEME_CHAPTERS.iter().enumerate() {
+        let heading = format!("## {} {title}", i + 1);
+        assert!(text.contains(&heading), "missing {heading} in {text}");
+    }
+    assert!(!text.contains("可以开工"), "{text}");
+    assert!(text.contains("[A001]") || text.contains("UNSPECIFIED"), "{text}");
+}
+
+#[test]
+fn test_bid_parse_from_attached_tender() {
+    let p = paths();
+    let sid = "wb-bid-attach-01";
+    let needle = "Quality 41% — Jurong tank farm method statement for working at height";
+    let body = format!(
+        "INVITATION TO TENDER — Jurong Island tank farm\n\
+Evaluation criteria (PQM):\n\
+- {needle}\n\
+- Price 59%\n\
+Required: 临边防护专项方案\n\
+Time for Completion: 150 days\n"
+    );
+    civil_workbench::attach::save_upload(&p, sid, "jurong-itt.txt", body.as_bytes()).unwrap();
+    let mut ctx = ToolCtx::new(p.clone(), "bid-parse", "bid", "low", true, sid);
+    let out = packs::execute(
+        &mut ctx,
+        "bid-parse__extract",
+        &json!({"project_name": "Jurong Island tank farm", "jurisdiction": "SG"}),
+    );
+    assert!(out.contains("已写入"), "{out}");
+    let text = std::fs::read_to_string(ctx.out_dir.join("招标解析表.md")).unwrap();
+    assert!(text.contains(needle), "{text}");
+    assert!(text.contains("临边防护专项方案"), "{text}");
+    assert!(!text.contains("可以投标"), "{text}");
+}
+
+#[test]
+fn test_pack_ship_disconnected_unspecified() {
+    let p = paths();
+    let mut ctx = ToolCtx::new(p, "pack-ship", "plant", "low", true, "wb-pack-off");
+    let out = packs::execute(
+        &mut ctx,
+        "pack-ship__plan",
+        &json!({
+            "project_name": "Tuas steel batch",
+            "materials": "H-beam 12m x 20 pcs, no unit weight given",
+            "jurisdiction": "SG",
+            "connected": false
+        }),
+    );
+    assert!(out.contains("已写入"), "{out}");
+    let text = std::fs::read_to_string(ctx.out_dir.join("装箱作业单.md")).unwrap();
+    assert!(text.contains("H-beam 12m x 20 pcs"), "{text}");
+    for (k, line) in [
+        ("utilization", "utilization=UNSPECIFIED"),
+        ("can_fit", "can_fit=UNSPECIFIED"),
+        ("mid50", "mid50=UNSPECIFIED"),
+        ("系固待办", "系固待办=UNSPECIFIED"),
+    ] {
+        assert!(text.contains(line), "missing {k} in {text}");
+    }
+    assert!(!text.contains("(0.0, 0.0, 0.0)"), "{text}");
+}
+
+#[test]
+fn test_civil_spreadsheet_ingest_no_invented_price() {
+    let p = paths();
+    let sid = "wb-xlsx-cost-01";
+    let needle = "C30临边梁 C-LN-01";
+    let xlsx = civil_workbench::attach::pack_minimal_xlsx(&[needle, "12m"]).expect("xlsx");
+    civil_workbench::attach::save_upload(&p, sid, "广联达导出.xlsx", &xlsx).unwrap();
+    let mut ctx = ToolCtx::new(p, "cost", "commercial", "low", true, sid);
+    let out = packs::execute(
+        &mut ctx,
+        "cost__takeoff",
+        &json!({"project_name": "滨河路", "jurisdiction": "SG"}),
+    );
+    assert!(out.contains("已写入"), "{out}");
+    let text = std::fs::read_to_string(ctx.out_dir.join("工程量拆分表.md")).unwrap();
+    assert!(text.contains(needle), "{text}");
+    assert!(text.contains("UNSPECIFIED"), "{text}");
+    assert!(!text.contains("350"), "{text}");
+    assert!(!text.contains("综合单价 | 120"), "{text}");
+    let price_cells: Vec<&str> = text
+        .lines()
+        .filter(|l| l.contains(needle))
+        .collect();
+    assert!(!price_cells.is_empty(), "{text}");
+    for line in price_cells {
+        assert!(line.contains("UNSPECIFIED"), "{line}");
+        assert!(!line.contains("S$"), "{line}");
+    }
+}
+
+#[test]
+fn test_harness_gst_question_no_write() {
+    let p = paths();
+    let exp = seed()
+        .experts
+        .iter()
+        .find(|e| e.id == "finance-tax")
+        .cloned()
+        .unwrap();
+    let ticket = civil_workbench::harness::Ticket {
+        session: "wb-gst-chat".into(),
+        project: "GST".into(),
+        jurisdiction: "SG".into(),
+        brief: "什么是 GST".into(),
+        path: String::new(),
+        confirm_ok: false,
+    };
+    let run = civil_workbench::harness::run_turn(&p, &exp, ticket);
+    assert_eq!(run.intent, "chat");
+    assert!(run.files.is_empty(), "{:?}", run.files);
+    assert!(run.reply.contains("9%"), "{}", run.reply);
+    let v = run.to_value();
+    assert_eq!(v["wrote"], false);
+    assert_eq!(v["submit_blocked"], true);
+    assert!(!p
+        .out_root
+        .join("wb-gst-chat")
+        .join("finance-tax")
+        .join("税务检查表.md")
+        .is_file());
 }

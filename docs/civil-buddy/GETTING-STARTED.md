@@ -24,7 +24,16 @@ python -m uvicorn app:app --host 127.0.0.1 --port 8765
 |------|------|
 | http://127.0.0.1:8000/ | 先理解再处理 · Agent 循环 `POST /api/agent` |
 | http://127.0.0.1:8000/workbench | 真装箱 3D / HITL |
-| http://127.0.0.1:8765/ | 66 岗工作台 |
+| http://127.0.0.1:8765/ | 66 岗工作台（Python `demo/` 或 Rust `workbench/run.ps1`） |
+
+土木企业上手（Rust 工作台，不需要先起 Python demo）：
+
+```powershell
+cd C:\Users\LW\civil-buddy\workbench
+.\run.ps1
+```
+
+召唤专家后：提问不写盘；说「写一份」才出内部讨论草稿。可上传广联达/Excel 导出的 `xlsx`/`csv` 和招标 `docx`/`txt`，缺价标 `UNSPECIFIED`。
 
 本机刚跑过的冒烟：
 

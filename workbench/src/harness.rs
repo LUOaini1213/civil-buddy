@@ -102,6 +102,8 @@ pub struct Run {
     pub workheads: Vec<String>,
     pub envelope: Vec<String>,
     pub error: Option<String>,
+    pub intent: String,
+    pub reply: String,
 }
 
 impl Run {
@@ -139,6 +141,10 @@ impl Run {
                 "note": s.note,
             })).collect::<Vec<_>>(),
             "illegal_tool_calls": self.illegal_count(),
+            "intent": self.intent,
+            "wrote": !self.files.is_empty(),
+            "submit_blocked": true,
+            "reply": self.reply,
         })
     }
 
@@ -203,6 +209,8 @@ pub fn run_bid_steps(paths: &Paths, ticket: Ticket) -> Run {
         workheads: vec![],
         envelope: vec![],
         error: None,
+        intent: "run".into(),
+        reply: String::new(),
     };
 
     if !ticket.path.trim().is_empty() {
@@ -592,6 +600,8 @@ pub fn run_expert_steps(paths: &Paths, expert: &crate::catalog::Expert, ticket: 
         workheads: vec![],
         envelope: vec![],
         error: None,
+        intent: "run".into(),
+        reply: String::new(),
     };
 
     if !ticket.path.trim().is_empty() {
@@ -688,6 +698,80 @@ pub fn run_expert_steps(paths: &Paths, expert: &crate::catalog::Expert, ticket: 
             }),
         );
     }
+    persist_trace(&run);
+    run
+}
+
+/// Understand first: a question does not write; a write request uses exclusive `steps`.
+pub fn run_turn(paths: &Paths, expert: &crate::catalog::Expert, ticket: Ticket) -> Run {
+    match crate::agent::understand(&ticket.brief) {
+        crate::agent::Intent::Chat => explain_turn(paths, expert, ticket),
+        _ => {
+            let mut run = run_expert_steps(paths, expert, ticket);
+            run.intent = "run".into();
+            if run.reply.is_empty() {
+                run.reply = if run.hitl.pending {
+                    "HITL：高风险写盘未确认。请勾选「我明白，将由持证人员签认」后再发一次。本岗未出稿。".into()
+                } else {
+                    format!("已按 {} 岗 steps 出内部讨论草稿。submit_blocked。", expert.name)
+                };
+            }
+            persist_trace(&run);
+            run
+        }
+    }
+}
+
+fn explain_turn(paths: &Paths, expert: &crate::catalog::Expert, ticket: Ticket) -> Run {
+    let run_id = format!(
+        "c{}-{}",
+        Local::now().format("%H%M%S"),
+        &Uuid::new_v4().simple().to_string()[..6]
+    );
+    let run_dir = paths
+        .out_root
+        .join(&ticket.session)
+        .join("runs")
+        .join(&run_id);
+    let _ = fs::create_dir_all(&run_dir);
+    let reply = crate::agent::offline_explain(paths, &ticket.brief).unwrap_or_else(|| {
+        format!(
+            "{}：这是提问，不写盘。可以只聊天。成稿请明确说「写一份 / 出一份」。内部讨论 AI 草稿，不是法定签认件。",
+            expert.name
+        )
+    });
+    let run = Run {
+        run_id,
+        mode: DEFAULT_MODE.into(),
+        session: ticket.session.clone(),
+        project: ticket.project.clone(),
+        jurisdiction: ticket.jurisdiction.clone(),
+        steps: vec![Step {
+            name: "understand".into(),
+            tool: "chat".into(),
+            expert: expert.id.clone(),
+            legal: true,
+            ok: true,
+            note: "intent=chat; wrote=false".into(),
+        }],
+        files: vec![],
+        notes: vec![reply.clone()],
+        hitl: Hitl {
+            required: false,
+            confirmed: ticket.confirm_ok,
+            pending: false,
+            gate: "none".into(),
+        },
+        run_dir: run_dir.clone(),
+        job_dir: paths.out_root.join(&ticket.session).join(&expert.id),
+        scores: vec![],
+        specials: vec![],
+        workheads: vec![],
+        envelope: vec![],
+        error: None,
+        intent: "chat".into(),
+        reply,
+    };
     persist_trace(&run);
     run
 }

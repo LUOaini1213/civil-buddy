@@ -153,4 +153,50 @@ Time for Completion: 120 days";
         println!("cn_has_psscoc={}", t.contains("PSSCOC"));
         println!("cn_has_zone={}", t.contains("辖区：CN"));
     }
+
+    let mut pack = ToolCtx::new(
+        Paths::detect(),
+        "pack-ship",
+        "plant",
+        "low",
+        true,
+        "probe-pack-off",
+    );
+    let pack_ok = packs::execute(
+        &mut pack,
+        "pack-ship__plan",
+        &json!({
+            "materials": "H-beam 12m x 20 pcs",
+            "connected": false
+        }),
+    );
+    println!("pack_writer={pack_ok}");
+    if let Ok(t) = std::fs::read_to_string(pack.out_dir.join("装箱作业单.md")) {
+        println!("pack_util={}", t.contains("utilization=UNSPECIFIED"));
+        println!("pack_fit={}", t.contains("can_fit=UNSPECIFIED"));
+        println!("pack_mid50={}", t.contains("mid50=UNSPECIFIED"));
+        println!("pack_lash={}", t.contains("系固待办=UNSPECIFIED"));
+    }
+
+    let mut scheme11 = ToolCtx::new(
+        Paths::detect(),
+        "construction",
+        "construction",
+        "high",
+        true,
+        "probe-scheme-11",
+    );
+    let _ = packs::execute(
+        &mut scheme11,
+        "construction__scheme_draft",
+        &json!({
+            "project_name": "probe scheme",
+            "work_scope": "临边防护",
+            "jurisdiction": "SG"
+        }),
+    );
+    if let Ok(t) = std::fs::read_to_string(scheme11.out_dir.join("专项方案-AI草稿.md")) {
+        println!("scheme_ch8={}", t.contains("## 8 环保与文明施工"));
+        println!("scheme_no_start={}", !t.contains("可以开工"));
+    }
 }

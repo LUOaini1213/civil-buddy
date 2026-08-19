@@ -1487,25 +1487,10 @@ fn gather_tender_source(ctx: &ToolCtx, args: &Value) -> String {
 fn parse_tender(ctx: &mut ToolCtx, args: &Value) -> String {
     let text = gather_tender_source(ctx, args);
     if text.trim().is_empty() {
-        return "拒绝写盘：没有招标正文。请粘贴 ITT 或上传 pdf/docx/txt 后再抽。".into();
+        return "拒绝写盘：没有招标正文。请粘贴 ITT 或上传 pdf/docx/xlsx/txt 后再抽。".into();
     }
     let project = nonempty(&s(args, "project_name"), "未命名招标");
     let (jur, banner) = zone_banner(args);
-    // Prefer the packing tender-handoff transform so duration / ★ / scores stay one source.
-    if let Ok(ex) = crate::packing_bridge::tender_extract(&text, &project) {
-        if let Some(md) = ex.get("extract_table_markdown").and_then(|v| v.as_str()) {
-            let portal = if jur == "SG" || jur == "DUAL" {
-                "官方门户标题：Price Quality Method (PQM) Framework（BCA，页述 Last updated 26 January 2026）。本项目权重只抄 ITT 原文，不把框架区间当作本标分数。"
-            } else {
-                "辖区非 SG：评标办法以招标文件原文为准，禁止补编分数或条款号。"
-            };
-            let body = format!("{banner}\n{md}\n{portal}\n");
-            return match ctx.write_md("招标解析表.md", &body) {
-                Ok(m) => m,
-                Err(e) => e,
-            };
-        }
-    }
     let facts = crate::extract::facts_from_text(&text);
     let portal = if jur == "SG" || jur == "DUAL" {
         "官方门户标题：Price Quality Method (PQM) Framework（BCA，页述 Last updated 26 January 2026；适用 CW01/CW02 公共施工、估算造价不含 contingency ≥ S$3 million）。本项目权重只抄 ITT 原文，不把框架区间当作本标分数。GeBIZ 只是发布渠道。CSOC / Apply WSH in Construction Sites 只当招标点名课程，本表不发证。未抽出的 SS/CP/BCA 条款写 UNSPECIFIED，禁止补编分数。"
@@ -1676,7 +1661,7 @@ fn scheme_draft(ctx: &mut ToolCtx, args: &Value) -> String {
         "危大判定请改召唤 method-hazard。本处不写开工或报审类断言。"
     };
     let md = format!(
-        "# {project} 专项施工方案讨论提纲（AI 草稿）\n\n{DISCLAIMER}\n\n{banner}- 工地：{site}\n- 工作范围：{scope}\n- [A001] {unknowns}\n\n## 1 封面与文件控制\n\nPE / QP / 签认栏留空。本文件不是法定 method statement，也不是 WSH 签发件。\n\n## 2 草稿与责任声明\n\n{DISCLAIMER}\n\n## 3 工程概况\n\n{facts}\n\n不得默写栏杆高度、水平荷载、踢脚板高度。无来源整节待填。\n\n## 4 编制依据\n\n{basis}\n\n## 5 施工部署与工艺\n\n待按 {site} 现场条件填写。无图纸不编步骤参数。\n\n## 6 质量\n\n检查表头 + 待填。不给合格结论。\n\n## 7 安全与应急\n\n{safety}\n\n## 8 环保\n\n扬尘、弃土、夜间施工口径待填。\n\n## 9 资源计划\n\n| 资源 | 规格 | 数量 | 备注 |\n| --- | --- | --- | --- |\n| TBD | TBD | TBD | 无清单不编用量 |\n\n## 10 验收与资料\n\n资料目录待填。不给验收通过结论。\n\n## 11 附录\n\n图号清单：未提供则禁止写「见图」。\n"
+        "# {project} 专项施工方案讨论提纲（AI 草稿）\n\n{DISCLAIMER}\n\n{banner}- 工地：{site}\n- 工作范围：{scope}\n- [A001] {unknowns}\n\n## 1 封面与文件控制\n\nPE / QP / 签认栏留空。本文件不是法定 method statement，也不是 WSH 签发件。\n\n## 2 草稿与责任声明\n\n{DISCLAIMER}\n\n## 3 工程概况\n\n{facts}\n\n不得默写栏杆高度、水平荷载、踢脚板高度。无来源整节待填。\n\n## 4 编制依据\n\n{basis}\n\n## 5 施工部署与工艺\n\n待按 {site} 现场条件填写。无图纸不编步骤参数。\n\n## 6 质量\n\n检查表头 + 待填。不给合格结论。\n\n## 7 安全与应急\n\n{safety}\n\n## 8 环保与文明施工\n\n扬尘、弃土、夜间施工口径待填。\n\n## 9 资源计划\n\n| 资源 | 规格 | 数量 | 备注 |\n| --- | --- | --- | --- |\n| TBD | TBD | TBD | 无清单不编用量 |\n\n## 10 验收与资料\n\n资料目录待填。不给验收通过结论。\n\n## 11 附录\n\n图号清单：未提供则禁止写「见图」。\n"
     );
     if invented_sg_or_cn_codes(&md, &user_blob) {
         return "拒绝写盘：成稿出现未在用户输入中的 SS/CP/GB/JGJ 条款号，改为 UNSPECIFIED。".into();
@@ -1881,18 +1866,45 @@ fn scan_forbidden(ctx: &mut ToolCtx, args: &Value) -> String {
     }
 }
 
+fn gather_takeoff_lines(ctx: &ToolCtx, args: &Value) -> Vec<String> {
+    let mut lines = split_lines(&s(args, "items"));
+    for f in crate::attach::list_uploads(&ctx.paths, &ctx.session_id) {
+        let Some(id) = f.get("id").and_then(|v| v.as_str()) else {
+            continue;
+        };
+        if let Ok(body) = crate::attach::read_upload(&ctx.paths, &ctx.session_id, id, 0, 20_000) {
+            for raw in body.lines() {
+                let t = raw.trim();
+                if t.is_empty() || t.starts_with('【') || t.starts_with("offset=") {
+                    continue;
+                }
+                if t.contains("综合单价") && (t.contains("分项") || t.contains("单位")) {
+                    continue;
+                }
+                lines.push(t.to_string());
+            }
+        }
+    }
+    if lines.is_empty() {
+        lines.push("未提供分项 [A001]".into());
+    }
+    lines
+}
+
 fn takeoff(ctx: &mut ToolCtx, args: &Value) -> String {
     let project = nonempty(&s(args, "project_name"), "未命名");
     let (jur, banner) = zone_banner(args);
-    let items = split_lines(&s(args, "items"));
+    let items = gather_takeoff_lines(ctx, args);
     let mut table = format!(
         "{}{banner}\n## {project}\n\n| 分项 | 单位 | 数量 | 综合单价 | 合价 | 备注 |\n| --- | --- | --- | --- | --- | --- |\n",
         header("工程量拆分表")
     );
     for it in items {
-        table.push_str(&format!("| {it} | TBD | TBD | TBD | TBD | 无清单不编单价 |\n"));
+        table.push_str(&format!(
+            "| {it} | TBD | TBD | UNSPECIFIED | UNSPECIFIED | 无清单不编单价 |\n"
+        ));
     }
-    table.push_str("\n金额一律 TBD。[A001] 无清单/报价则合价待填。禁止编造综合单价，禁止补编清单条款号。");
+    table.push_str("\n金额一律 UNSPECIFIED。[A001] 无清单/报价则合价待填。禁止编造综合单价，禁止补编清单条款号。");
     table.push_str(&sg_only(&jur, "SG：PSSCOC 计量条款只写族名。"));
     table.push('\n');
     match ctx.write_md("工程量拆分表.md", &table) {
@@ -2359,16 +2371,47 @@ fn pack_ship_export(args: &Value) -> String {
 }
 
 fn pack_ship_plan(ctx: &mut ToolCtx, args: &Value) -> String {
-    let materials = nonempty(&s(args, "materials"), "未提供物料表");
+    let mut materials = nonempty(&s(args, "materials"), "");
+    if materials.is_empty() {
+        for f in crate::attach::list_uploads(&ctx.paths, &ctx.session_id) {
+            let Some(id) = f.get("id").and_then(|v| v.as_str()) else {
+                continue;
+            };
+            if let Ok(body) = crate::attach::read_upload(&ctx.paths, &ctx.session_id, id, 0, 8_000) {
+                materials.push_str(&body);
+                materials.push('\n');
+            }
+        }
+    }
+    let materials = nonempty(&materials, "未提供物料表");
     let project = nonempty(&s(args, "project_name"), "未命名发运");
     let notes = s(args, "notes");
     let (jur, banner) = zone_banner(args);
-    let agent = crate::websearch::run_blocking(|| crate::packing_bridge::run(&materials, &notes));
-    let tool_block = format!(
-        "## packing-agent 回传（工具计算，非本岗编造）\n\n{}\n",
-        agent.markdown()
-    );
-    let n0_line = agent.n0_line();
+    let force_off = args.get("connected").and_then(|v| v.as_bool()) == Some(false);
+    let solver = args.get("solver").cloned().unwrap_or(json!({}));
+    let solver_empty = solver.as_object().map(|o| o.is_empty()).unwrap_or(true);
+    let disconnected = force_off || solver_empty;
+    let four = if disconnected {
+        pack_ship_export(&json!({"connected": false}))
+    } else {
+        pack_ship_export(&json!({"connected": true, "solver": solver}))
+    };
+    let tool_block = if force_off {
+        format!(
+            "## packing-agent 回传（工具计算，非本岗编造）\n\n未接通 solver 快照。\n\n```\n{four}```\n"
+        )
+    } else {
+        let agent = crate::websearch::run_blocking(|| crate::packing_bridge::run(&materials, &notes));
+        format!(
+            "## packing-agent 回传（工具计算，非本岗编造）\n\n{}\n\n```\n{four}```\n",
+            agent.markdown()
+        )
+    };
+    let n0_line = if disconnected {
+        "柜数 N0* = UNSPECIFIED；摆位 xyz = UNSPECIFIED。"
+    } else {
+        "柜数/N0* 以上文工具回传为准；未出现的数字标 UNSPECIFIED。"
+    };
     let md = format!(
         "{}{banner}\n## 工程/批次\n{project}\n\n## 用户物料（只抄原文）\n{materials}\n\n{tool_block}\n## 口径\n- 官方作业守则标题：IMO/ILO/UNECE Code of Practice for Packing of Cargo Transport Units (**CTU Code**, 2014)。非强制性全球作业守则；条款 UNSPECIFIED。https://www.imo.org/en/ourwork/safety/pages/ctu-code.aspx\n- CSC（International Convention for Safe Containers）Safety Approval Plate 有效性由持证人员核，本表不判柜况。\n- 数值边界：与 packing-agent 相同——**工具算数，模型只编排**。禁止在本表手写坐标。\n- {n0_line}\n- [A001] 单件尺寸/重量未给则待填。\n{}\n本作业单不是订舱承诺，不是危险品申报。\n",
         header(&format!("{project} · 装箱拼柜作业单")),
