@@ -352,6 +352,16 @@ def run_agent(
                     data = result.get("data") if isinstance(result.get("data"), dict) else result
                     last_extract = str((data or {}).get("extract_table_markdown") or "")
                     out["wrote"] = True
+                    ho = (data or {}).get("handoff") if isinstance(data, dict) else None
+                    if isinstance(ho, dict) and ho:
+                        from packing_assistant.runtime.session_handoff import save_handoff
+
+                        hp = save_handoff(sid, ho)
+                        if hp:
+                            out["artifacts"].append(str(hp))
+                            out["files"].append(
+                                {"name": hp.name, "path": str(hp), "tool": "tender.handoff"}
+                            )
                 if name.startswith("pack-ship__") and result.get("ok"):
                     data = result.get("data") if isinstance(result.get("data"), dict) else result
                     pack_ship[name.split("__", 1)[-1]] = data
