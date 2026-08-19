@@ -1,7 +1,7 @@
 # 长程：知识库 + MCP
 
 > 2026-08-17 起。只管协议原语、库时效、招标抽取并表。  
-> **65 岗独有工具名册不归本文**：仍由 [`yibiao-mcp-map.md`](yibiao-mcp-map.md) + `workbench/yibiao-map.json` 维护。  
+> **66 岗独有工具名册不归本文**：仍由 [`yibiao-mcp-map.md`](yibiao-mcp-map.md) + `workbench/yibiao-map.json` 维护。  
 > MCP 对照 [2026-07-28](https://modelcontextprotocol.io/specification/2026-07-28/server/resources)：Tools（模型选）· Resources（宿主读）· Prompts（人点工作流）。
 
 ## 洞（仍成立的部分）
@@ -38,4 +38,4 @@
 
 ## 明确不做
 
-GeBIZ 递交、扫描 PDF 当全文库、规范正文进仓、沙箱 / 通用 spawn / OTEL、重写 65 岗名册、装箱评分离线循环。
+GeBIZ 递交、扫描 PDF 当全文库、规范正文进仓、沙箱 / 通用 spawn / OTEL、重写 66 岗名册、装箱评分离线循环。

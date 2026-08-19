@@ -1,5 +1,9 @@
 # 长程任务：联网评测 → 优化 → 更新 → 迭代（跑到 2026-08-20 08:30 +08）
 
+> **已废止（空转）。** 心跳 sleep + 定时刀没有把文档 / KB / MCP / Skill 做成产品。  
+> 现行规划改走：[product-completion-plan.md](product-completion-plan.md)。  
+> 监督进程与 90 分钟 scheduler 已停。本页只作历史，不要再启动 `overnight_civil_supervisor.py`。
+
 > 编写时刻：2026-08-19 22:30 中国标准时间  
 > 截止： **2026-08-20 08:30:00+08:00**（约 10 小时）  
 > 仓库：`C:\Users\LW\civil-buddy` · 分支 `main`  

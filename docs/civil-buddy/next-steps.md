@@ -34,10 +34,10 @@
 10. **完整 Agent 循环 + 沙箱门** ✅ 2026-08-19  
     `runtime/agent_loop.py`：understand → Scheduler → ToolEngine；chat 不写盘；写盘/`spawn` 过 `sandbox.assert_write` / `request_spawn`。`POST /api/agent` · `GET /api/eval/live`（离线官方标题针，不抓 IRAS）。验收：`python scripts/test_agent_loop.py`。
 
-11. **过夜联网评测迭代（至 2026-08-20 08:30 +08）**  
-    规划：[overnight-eval-iterate-2026-08-19.md](overnight-eval-iterate-2026-08-19.md)。心跳 `scripts/overnight_civil_supervisor.py`；Grok 90 分钟一刀。IRAS 抓失败不得改口「官方没写 9%」。总判仍部分合格。
+11. **过夜空转（废止）**  
+    定时评测环已停。现行完善规划：**[product-completion-plan.md](product-completion-plan.md)**（技术文档 / 知识库 / MCP / Skill，不定时限）。
 
-平台内核抽层、P1–P2 见 **[product-improvement-handbook.md](product-improvement-handbook.md)**。P1-1 handoff 本晚落地；下一刀 P1-4 Run 回放。
+平台内核见 [product-improvement-handbook.md](product-improvement-handbook.md)。岗独有写盘下一刀仍按 [post-horizon-2026-08-17.md](post-horizon-2026-08-17.md)。
 
 ## 有宿主再做
 

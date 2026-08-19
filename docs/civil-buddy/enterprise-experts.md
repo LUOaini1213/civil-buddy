@@ -173,7 +173,7 @@ method-hazard（危大判定，人可改）
 
 ## 8. 2026-08-14 现场状态
 
-- 16 大类 / 65 专家均 `aligned: true`，各有独有写入器；兄弟调用拒绝。
+- 16 大类 / 66 岗均 `aligned: true`，各有独有写入器；兄弟调用拒绝。
 - 每岗 `web-knowledge.md` + 大类 `_shared` + `company/web-portals.md` 已联网两遍（2026-08-14）。只写官方标题，条款 UNSPECIFIED。
 - 默认新加坡工地。`sg_only` / `zone_banner`：CN 成稿不再静默带 PSSCOC / GeBIZ / CONQUAS / toolbox / CORENET。
 - 抽出 APPBCA-2026-12（2026-07-23）：2026-10-01 CORENET X 仅 GFA≥5,000 m² 强制 Gateway。
