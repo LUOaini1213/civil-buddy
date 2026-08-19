@@ -40,7 +40,7 @@ def test_catalog_sixteen(client):
     assert r.status_code == 200
     body = r.json()
     assert len(body["categories"]) == 16
-    assert len(body["experts"]) >= 65
+    assert len(body["experts"]) == 66
     ids = {e["id"] for e in body["experts"]}
     for need in ("interior", "facade", "civil-defense", "hydraulic", "port"):
         assert need in ids

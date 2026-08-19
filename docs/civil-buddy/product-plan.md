@@ -10,7 +10,7 @@
 | 纪律 | **不定时限 · 不准空转**。墙钟和睡眠评测环不是交付 |
 | 本文地位 | **产品规划唯一总入口**。切片文档只执行、不另开第三套「下一步」 |
 
-**怎么用：** 改产品前先读 §1 边界、§10 不做、§13 联网口径。开工只取 **§15 主链头指针**（此刻 = §11 的 T001）。岗栏位细节可读 post-horizon 该 id；已做/未做以 §7 / §15 为准。  
+**怎么用：** 改产品前先读 §1 边界、§10 不做、§13 联网口径。开工只取 **§15 主链头指针**（此刻 = §11 的 T021）。岗栏位细节可读 post-horizon 该 id；已做/未做以 §7 / §15 为准。  
 2026-08-19：§1–§15 各派一子代理对照现网，结论已并入本文。
 
 切片（从属于本文，不平行）：
@@ -117,7 +117,7 @@ docs/                 装箱架构、主线 C、研究/归档
 | 装箱引擎 | 80% | 大 Team A/B、3D、CoG、HITL | 非本规划主战场；禁止第二套 packer |
 | MCP | 65% | Python stdio；bid 可见 KB+招标；pack-ship 投影 | 默认 Host toml 挂 **3 大类**（bid/construction/commercial）；其余 **13** 未进样例；plant 仅 CLI。分页/订阅延期 |
 | Skill | 55% | SOP 与 66 岗关系写清；施工十一章接 turn | 其余 5 个 Grok 专家仍提纲；docx 填充未接 turn |
-| 岗 KB | 目录 ~97% / 写盘栏位 ~8% | **64/66** 四件套在盘；faq 不少已写满 | 缺 2 个 `outline.md`（construction 用 `scheme-11.md`、危大用 `judge-card.md` 顶替）。**真写盘 5/66** |
+| 岗 KB | 目录 100% / 写盘栏位 ~8% | **66/66** 四件套在盘；`test_kb_schema.py` 缺一即红 | outline 指针：construction→`scheme-11.md`，危大→`judge-card.md`。**真写盘仍 5/66** |
 | 工作台 66 岗 | 平台齐、栏位 5/66 | 同一套 chat/run | 其余 61 岗 `_draft_markdown` |
 | 技术文档 | 70% | GETTING-STARTED/PROTOCOL/MCP/SKILLS/KB | 研究笔记不得冒充必读 |
 | 评测 | 60% | 离线闸 + `GET /api/eval/live` 四针 | 针未收口到 company 页；无 APPBCA 针 |
@@ -126,7 +126,7 @@ docs/                 装箱架构、主线 C、研究/归档
 
 ### 3.3 已落地短刀（不要重做）
 
-P0 ToolEngine/Scheduler/pack-ship 快照 · P1-1 handoff · P1-2 eval/live · P1-4 Run 回放 · Agent 循环+沙箱 · D0 名册 66 · D1 五篇说明书 · M1–M4 Python stdio 与工具表 · S1–S4 skill 拆分与施工十一章。
+P0 ToolEngine/Scheduler/pack-ship 快照 · P1-1 handoff · P1-2 eval/live · P1-4 Run 回放 · Agent 循环+沙箱 · D0 名册 66 · D1 五篇说明书 · M1–M4 Python stdio 与工具表 · S1–S4 skill 拆分与施工十一章 · T001/K1 四件套闸。
 
 ---
 
@@ -180,7 +180,7 @@ P0 ToolEngine/Scheduler/pack-ship 快照 · P1-1 handoff · P1-2 eval/live · P1
 | 岗库 | `demo/kb/<大类>/<id>/` | 私库 + `_shared` + `company`；兄弟不可见 |
 | 引擎库 | `knowledge_base/` | solver/harness；不并进岗库 |
 
-每岗契约：`README.md` `faq.md` `outline.md` `web-knowledge.md`。construction 现用 `scheme-11.md`、method-hazard 现用 `judge-card.md` **顶替** outline，T001 仍要补名为 `outline.md` 的指针文件。  
+每岗契约：`README.md` `faq.md` `outline.md` `web-knowledge.md`（T001 ✅；construction `outline.md` 指针到 `scheme-11.md`，method-hazard 指针到 `judge-card.md`）。  
 门户权威句目标在 `demo/kb/company/web-portals.md`（GST 9% / Fire Code 2023 / GeBIZ≠评分 / APPBCA-2026-12）。**CTU 2014 现网只在 pack-ship 岗页**，T003 先抄进 company 再改针。  
 规范全文不进仓。缺数不编条款号。
 
@@ -256,7 +256,7 @@ xyz 只抄 solver。分页/订阅 = 有真 Host list/call 稳定之后（horizon
 | RT-P0-1/2/3 | pack-ship 快照 · ToolEngine · Scheduler | ✅ | `test_runtime_p0.py` |
 | RT-P1-1 | `tender.handoff.json` + 三列 + 评分点目录 | ✅ | `test_tender_handoff.py` |
 | RT-P1-2 | `GET /api/eval/live` | ✅ | 四针离线；收口到 company 是 T003 |
-| K1 | 66 岗目录四件套闸 | **部分** | 64/66；缺 2×outline + `test_kb_schema.py`（T001） |
+| K1 | 66 岗目录四件套闸 | ✅ | 66/66；`scripts/test_kb_schema.py` |
 | K2 | 门户标题只从 company 页 | **部分** | live 已有；针仍散落且无 APPBCA（T003） |
 | K3 | kb 隔离 + 文件名检索当闸 | 部分 | `test_mcp_surface.py` / `test_kb_search_filename.py` |
 | K4 | 按车道每次 1 岗富 faq/outline | 进行中 | 岗 README 字段表 |
@@ -298,10 +298,11 @@ python scripts/test_tender_review.py
 python scripts/test_mcp_surface.py
 python scripts/test_mcp_stdio.py
 python scripts/test_docs_completion.py
+python scripts/test_kb_schema.py
 python scripts/test_industry_agent_eval.py # 断言总判仍「部分合格」
 ```
 
-刀相关：`test_construction_skill_path.py`（施工）· `test_expert_turn.py`（改 66 岗协议）· `test_tender_ingest.py`（招标进矩阵）· `test_kb_search_filename.py`（检索）。T001 后把 `test_kb_schema.py` 升日常。
+刀相关：`test_construction_skill_path.py`（施工）· `test_expert_turn.py`（改 66 岗协议）· `test_tender_ingest.py`（招标进矩阵）· `test_kb_search_filename.py`（检索）。
 
 联网：只在改 GST / Fire Code / CTU / GeBIZ / APPBCA 口径后。失败保留 KB 9%。禁止 `fetch_failed` ⇒「官方没写 9%」。结果追加 §13，**不改** `industry-agent-eval-2026-08-17.md` 总判句。脚本只报 `offline_gate_pass/fail`，不得把行业总判改成合格。
 
@@ -319,7 +320,7 @@ python scripts/test_industry_agent_eval.py # 断言总判仍「部分合格」
 
 ```
 1. 取号：只取 §15 主链上第一个状态≠✅/延期 的 T 号。
-   当前指针见 §11（此刻 = T001/K1）。
+   当前指针见 §11（此刻 = T021）。
    禁止 OR §7、切片勾选表、next-steps、post-horizon 原文、handbook「下一刀」。
    岗栏位细节可读 post-horizon 该 id；已做/未做以 §7/§15 为准。
 2. 改最少文件。绿之前必须指出新路径（代码 / KB / MCP / SKILL / 测试之一）。指不出 = 没做。
@@ -333,7 +334,7 @@ python scripts/test_industry_agent_eval.py # 断言总判仍「部分合格」
 5. 红：修好或回滚到本刀起点。禁止带着红测试停手、睡眠再测、跳号。
 ```
 
-K4「进行中」不是可抢的下一号。P 车道（T030+）不得在 T001 契约闸红着时开工。
+K4「进行中」不是可抢的下一号。P 车道（T030+）不得在主链头指针未走到 T030 时开工。T001 已 ✅。
 
 ---
 
@@ -352,18 +353,13 @@ GeBIZ 代交 / 自动中标；法定专项方案 / PE·QP·RTO 签认件；十�
 
 ## 11. 下一刀（立刻）
 
-**T001 / K1 · 补 2 个缺文件 + 冻结合约闸。**
+**T021 · `--pack construction` 工具隔离。**
 
-盘点（2026-08-19 扫 `demo/kb` + `seed.json`）：66 岗中 **64 已有** README/faq/outline/web-knowledge；只缺：
+T001 ✅：66 岗四件套齐；`scripts/test_kb_schema.py` 缺一即红。construction `outline.md` 指针到 `scheme-11.md`，method-hazard 指针到 `judge-card.md`。不改判定卡、不接 docx。
 
-- `demo/kb/construction/construction/outline.md`
-- `demo/kb/construction/method-hazard/outline.md`
+T021 验收：`python demo/mcp_stdio.py --pack construction` 的 `tools/list` 含 scheme_draft/scan；**不含** `tender.parse`、`bid-parse__extract`、`pack-ship__plan`、`method-hazard__judge_hazard`；prompt 不含危大 judge。扩 `scripts/test_mcp_stdio.py`。现网只测了 bid pack。
 
-补标题+本岗产出+「缺数 UNSPECIFIED」，**不假装富化**。然后落地 `scripts/test_kb_schema.py`（缺一即红）。
-
-T001 **只补短 outline 指针**（construction→`scheme-11.md`，危大→`judge-card.md`），不改判定卡、不接 docx。
-
-做完后主链头指针改为 **T021**（`--pack construction` 工具隔离，见 §15），再 T023 → 官方口径闸（T003+T007+T008）→ T002 危大判定书。
+做完后主链头指针改为 **T023**（kb:// 跨大类拒绝），再官方口径闸（T003+T007+T008）→ T002 危大判定书。
 
 ---
 
@@ -418,7 +414,7 @@ T 号是开工 ID：K1=T001，P1-5=T002，K2=T003，P1-3=T010。handbook 不得�
 |--------|------|------|
 | 设计车道 18 岗 | `seed.json` **design=20**（66=3+20+3+3+4+4+5+3+4+3+3+1+3+2+3+2） | §6 已改正 |
 | 「其余 57 岗」 | 已富约 5 岗（bid×3 + pack-ship + construction 十一章），其余 **61** | §7.2 已改正 |
-| K1「目录齐但无闸」 | 64/66 四件套已在；只缺 construction 与 method-hazard 的 `outline.md` | §11 改为补 2 文件 + 冻结合约 |
+| K1「目录齐但无闸」 | 当时 64/66；只缺 construction 与 method-hazard 的 `outline.md` | 已做 T001 ✅；§11 现为 T021 |
 | post-horizon bid 三岗「下一刀=handoff/gaps/评分点」 | P1-1 **已做** | 以本文 §7 为准；horizon 文当历史下一刀 |
 | post-horizon construction「下一刀=十一章接 turn」 | S2 **已做** md；下一刀才是 fill_scheme_docx | T005 |
 | 行业评测「缺 Python eval/live、MCP 几乎只有 pack-ship」 | 2026-08-19 已有 `GET /api/eval/live` 与 `mcp_stdio --pack bid` | 不改 08-17 历史总判日期；现网能力以本文 §3 为准 |
@@ -438,7 +434,7 @@ T 号是开工 ID：K1=T001，P1-5=T002，K2=T003，P1-3=T010。handbook 不得�
 
 | ID | 任务 | 产物 | 验收 | 状态 |
 |----|------|------|------|------|
-| T001 | K1：补 2 个 outline + `test_kb_schema.py` | 两路径 outline.md + 脚本 | 66 岗四件套全在 | 未做 |
+| T001 | K1：补 2 个 outline + `test_kb_schema.py` | 两路径 outline.md + 脚本 | 66 岗四件套全在 | ✅ |
 | T002 | method-hazard 判定书：默认 SG WSH/PTW；37 号令只在 CN 栏；信息不足不编 | `judge-card` 栏位写盘 | 未确认 0 稿；无「可以开工」 | 未做 |
 | T003 | K2：eval/live 针改读 `company/web-portals.md` | `eval_live.py` | GST/Fire/CTU/GeBIZ/APPBCA 五针 | 未做 |
 | T004 | finance-tax 日历栏：申报期空栏 + 页述 9% + 税额待填 | `finance-tax__calendar` 非骨架句 | 测试断言含 9% 且无自编税率 | 未做 |
