@@ -84,3 +84,41 @@ fn prompts_filtered_and_do_not_invent_bid() {
     assert!(text.contains("90"), "{text}");
     assert!(text.contains("不要判定可投标"), "{text}");
 }
+
+#[test]
+fn construction_pack_hides_tender_and_hazard_prompt() {
+    let filter = McpFilter {
+        pack: Some("construction".into()),
+        expert: None,
+    };
+    let listed = rpc(filter.clone(), "tools/list", json!({}));
+    let names: Vec<&str> = listed["result"]["tools"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .filter_map(|t| t["name"].as_str())
+        .collect();
+    assert!(names.contains(&"construction__scheme_draft"), "{names:?}");
+    assert!(names.contains(&"construction__scan_forbidden"), "{names:?}");
+    assert!(!names.contains(&"tender.parse") && !names.iter().any(|n| *n == "bid-parse__extract"), "{names:?}");
+    assert!(!names.contains(&"pack-ship__plan"), "{names:?}");
+    assert!(!names.contains(&"method-hazard__judge_hazard"), "{names:?}");
+
+    let prompts = rpc(filter.clone(), "prompts/list", json!({}));
+    let pnames: Vec<&str> = prompts["result"]["prompts"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .filter_map(|p| p["name"].as_str())
+        .collect();
+    assert_eq!(pnames, vec!["civil.construction.scheme"]);
+    assert!(!pnames.iter().any(|n| n.contains("judge") || n.contains("hazard")));
+
+    let got = rpc(
+        filter,
+        "prompts/get",
+        json!({"name": "civil.method-hazard.judge", "arguments": {}}),
+    );
+    let desc = got["result"]["description"].as_str().unwrap_or("");
+    assert!(desc.contains("拒绝"), "{got}");
+}

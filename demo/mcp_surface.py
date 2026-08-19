@@ -57,7 +57,7 @@ PROMPTS: list[dict[str, Any]] = [
         "name": "civil.method-hazard.judge",
         "description": "危大判定讨论卡。SG 默认 WSH/PTW，不套 37 号令。不判定可以开工。",
         "experts": {"method-hazard"},
-        "packs": {"construction"},
+        "packs": set(),
     },
     {
         "name": "civil.finance.tax-calendar",
@@ -182,8 +182,14 @@ def list_prompts(*, expert_id: str | None = None, pack: str | None = None) -> li
     return out
 
 
-def get_prompt(name: str, arguments: dict | None = None, *, expert_id: str | None = None) -> dict[str, Any]:
-    allowed = {p["name"] for p in list_prompts(expert_id=expert_id)}
+def get_prompt(
+    name: str,
+    arguments: dict | None = None,
+    *,
+    expert_id: str | None = None,
+    pack: str | None = None,
+) -> dict[str, Any]:
+    allowed = {p["name"] for p in list_prompts(expert_id=expert_id, pack=pack)}
     if expert_id and name not in allowed:
         return {"description": "拒绝：当前专家看不见该 prompt", "messages": []}
     args = arguments or {}

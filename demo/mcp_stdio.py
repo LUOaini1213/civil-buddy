@@ -80,7 +80,14 @@ def handle(msg: dict[str, Any], *, pack: str | None = None, expert: str | None =
     if method == "prompts/list":
         return ok({"prompts": list_prompts(expert_id=expert or None, pack=pack or None)})
     if method == "prompts/get":
-        return ok(get_prompt(str(params.get("name") or ""), params.get("arguments") if isinstance(params.get("arguments"), dict) else {}, expert_id=expert or eid or None))
+        return ok(
+            get_prompt(
+                str(params.get("name") or ""),
+                params.get("arguments") if isinstance(params.get("arguments"), dict) else {},
+                expert_id=expert or None,
+                pack=pack or None,
+            )
+        )
     return err(-32601, f"Method not found: {method}")
 
 

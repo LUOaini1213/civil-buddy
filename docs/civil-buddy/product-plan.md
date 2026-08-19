@@ -10,7 +10,7 @@
 | 纪律 | **不定时限 · 不准空转**。墙钟和睡眠评测环不是交付 |
 | 本文地位 | **产品规划唯一总入口**。切片文档只执行、不另开第三套「下一步」 |
 
-**怎么用：** 改产品前先读 §1 边界、§10 不做、§13 联网口径。开工只取 **§15 主链头指针**（此刻 = §11 的 T021）。岗栏位细节可读 post-horizon 该 id；已做/未做以 §7 / §15 为准。  
+**怎么用：** 改产品前先读 §1 边界、§10 不做、§13 联网口径。开工只取 **§15 主链头指针**（此刻 = §11 的 T023）。岗栏位细节可读 post-horizon 该 id；已做/未做以 §7 / §15 为准。  
 2026-08-19：§1–§15 各派一子代理对照现网，结论已并入本文。
 
 切片（从属于本文，不平行）：
@@ -34,6 +34,8 @@
 土木企业用的 **内部讨论 AI 起草搭子 + 交付证据工作台**：模型理解与编排，工具算数与抽原文，运行时决定谁跑、何时停、谁确认、留下痕迹。
 
 默认产出永远是 **AI 草稿**。`submit_blocked=true`。不判定可投标。不判定可以开工。
+
+对照腾讯云 WorkBuddy（2026-08-20 官网 [intl.cloud.tencent.com/products/workbuddy](https://intl.cloud.tencent.com/products/workbuddy) · [codebuddy.cn/work](https://www.codebuddy.cn/work/)）：它卖的是「自然语言 → 规划步骤 → 读写本机文件 → 可交差成品」，100+ 通岗专家、桌面/IM、云端托管。本仓对齐的是 **同一条回路**（先理解再出稿、岗有独有工具、附件只抄原文、高风险确认），**不**做桌面壳、IM、100 个办公专家、云端 7×24 托管。成品永远是内部讨论草稿，不是可直接验收的签认件。
 
 ### 1.2 三条产品线（一个仓库，三个用户问题）
 
@@ -320,7 +322,7 @@ python scripts/test_industry_agent_eval.py # 断言总判仍「部分合格」
 
 ```
 1. 取号：只取 §15 主链上第一个状态≠✅/延期 的 T 号。
-   当前指针见 §11（此刻 = T021）。
+   当前指针见 §11（此刻 = T023）。
    禁止 OR §7、切片勾选表、next-steps、post-horizon 原文、handbook「下一刀」。
    岗栏位细节可读 post-horizon 该 id；已做/未做以 §7/§15 为准。
 2. 改最少文件。绿之前必须指出新路径（代码 / KB / MCP / SKILL / 测试之一）。指不出 = 没做。
@@ -353,13 +355,13 @@ GeBIZ 代交 / 自动中标；法定专项方案 / PE·QP·RTO 签认件；十�
 
 ## 11. 下一刀（立刻）
 
-**T021 · `--pack construction` 工具隔离。**
+**T023 · kb:// 跨大类拒绝。**
 
-T001 ✅：66 岗四件套齐；`scripts/test_kb_schema.py` 缺一即红。construction `outline.md` 指针到 `scheme-11.md`，method-hazard 指针到 `judge-card.md`。不改判定卡、不接 docx。
+T021 ✅：`--pack construction` 的 tools 含 scheme_draft/scan，不含 tender.parse / bid-parse__extract / pack-ship__plan / method-hazard__judge_hazard；prompts 只有 `civil.construction.scheme`。验收：`python scripts/test_mcp_stdio.py`。
 
-T021 验收：`python demo/mcp_stdio.py --pack construction` 的 `tools/list` 含 scheme_draft/scan；**不含** `tender.parse`、`bid-parse__extract`、`pack-ship__plan`、`method-hazard__judge_hazard`；prompt 不含危大 judge。扩 `scripts/test_mcp_stdio.py`。现网只测了 bid pack。
+T023：bid-parse 读 `kb://construction/method-hazard/…` 必须拒绝句（已有同大类兄弟例，补跨大类）。扩 `scripts/test_mcp_surface.py`。
 
-做完后主链头指针改为 **T023**（kb:// 跨大类拒绝），再官方口径闸（T003+T007+T008）→ T002 危大判定书。
+再官方口径闸（T003+T007+T008）→ T002 危大判定书。
 
 ---
 
@@ -414,7 +416,7 @@ T 号是开工 ID：K1=T001，P1-5=T002，K2=T003，P1-3=T010。handbook 不得�
 |--------|------|------|
 | 设计车道 18 岗 | `seed.json` **design=20**（66=3+20+3+3+4+4+5+3+4+3+3+1+3+2+3+2） | §6 已改正 |
 | 「其余 57 岗」 | 已富约 5 岗（bid×3 + pack-ship + construction 十一章），其余 **61** | §7.2 已改正 |
-| K1「目录齐但无闸」 | 当时 64/66；只缺 construction 与 method-hazard 的 `outline.md` | 已做 T001 ✅；§11 现为 T021 |
+| K1「目录齐但无闸」 | 当时 64/66；只缺 construction 与 method-hazard 的 `outline.md` | 已做 T001 ✅；§11 现为 T023 |
 | post-horizon bid 三岗「下一刀=handoff/gaps/评分点」 | P1-1 **已做** | 以本文 §7 为准；horizon 文当历史下一刀 |
 | post-horizon construction「下一刀=十一章接 turn」 | S2 **已做** md；下一刀才是 fill_scheme_docx | T005 |
 | 行业评测「缺 Python eval/live、MCP 几乎只有 pack-ship」 | 2026-08-19 已有 `GET /api/eval/live` 与 `mcp_stdio --pack bid` | 不改 08-17 历史总判日期；现网能力以本文 §3 为准 |
@@ -458,7 +460,7 @@ T 号是开工 ID：K1=T001，P1-5=T002，K2=T003，P1-3=T010。handbook 不得�
 | ID | 任务 | 产物 | 验收 | 状态 |
 |----|------|------|------|------|
 | T020 | Host 样例补齐 16 pack（可复制，不要求用户全挂） | `mcp-host.example.toml` | 每 pack 一行注释 | 未做 |
-| T021 | `--pack construction` stdio：有 scheme_draft/scan；无 tender.parse、bid-parse__extract、pack-ship__plan、method-hazard__judge_hazard；prompt 不含危大 judge | `test_mcp_stdio.py` | 现仅测 bid pack | 部分 |
+| T021 | `--pack construction` stdio：有 scheme_draft/scan；无 tender.parse、bid-parse__extract、pack-ship__plan、method-hazard__judge_hazard；prompt 不含危大 judge | `test_mcp_stdio.py` | 现仅测 bid pack | ✅ |
 | T022 | `write_deliverable` MCP `intent=chat` 拒绝 | 并进 T021 | engine 已拒；Host 面补测 | 并入 T021 |
 | T023 | kb:// 读 method-hazard 从 bid-parse 拒绝（已有 bid-tech 例，补跨大类） | `test_mcp_surface.py` | 拒绝句 | 未做 |
 | T024 | 真 Host 手册：Grok/Cursor 各贴一份最小配置 | MCP.md | 命令本机跑过 | 未做 |
@@ -511,6 +513,6 @@ T030–T047 是**批次合同**（约 59 岗，已扣 bid×3 / pack-ship / const
 
 **主链（不定时限；头指针 = 第一个非 ✅/延期）：**
 
-T001 → **T021** → T023 → T003（含 T007/T008 官方口径）→ T002 → T004 → T006 → T005 → T014 → T011 → T010 → T020+T024 → T030（仅 survey/dispatch）→ T031…T047 → T050 → T052 → T062。
+T001 → T021 → **T023** → T003（含 T007/T008 官方口径）→ T002 → T004 → T006 → T005 → T014 → T011 → T010 → T020+T024 → T030（仅 survey/dispatch）→ T031…T047 → T050 → T052 → T062。
 
 T012/T060/T061/T051/T053 不占刀。中途红则停在该号，不准跳号。

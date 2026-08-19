@@ -4,7 +4,7 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>Civil Buddy · 土木工作台</title>
-  <link rel="stylesheet" href="/static/styles.css?v=harness3" />
+  <link rel="stylesheet" href="/static/styles.css?v=workbuddy1" />
 </head>
 <body>
   <header class="top">
@@ -12,7 +12,7 @@
       <span class="mark">CB</span>
       <div>
         <strong>Civil Buddy</strong>
-        <small>Harness · 先理解 · 能聊能跑 · 出稿走 steps</small>
+        <small>先理解再出稿 · 内部讨论 AI 草稿 · 不是签认件</small>
       </div>
     </div>
     <div class="top-meta">
@@ -25,7 +25,7 @@
 
   <main class="layout">
     <aside class="rail">
-      <p class="rail-lead">点选即召唤。名字是岗位中文名；本岗知识只有这位专家先读，同部门还能读大类共享，公司规则人人可读。</p>
+      <p class="rail-lead">点选岗位即召唤。提问只聊天；说「写一份」才落盘。本岗知识只有这位专家先读。</p>
       <button type="button" id="clearExperts" class="ghost">取消全部召唤</button>
       <div id="wall"></div>
     </aside>
@@ -42,7 +42,7 @@
           <input type="checkbox" id="confirmOk" />
           我明白，将由持证人员签认（高风险专家写盘前勾选）
         </label>
-        <textarea id="input" rows="3" placeholder="可贴招标摘录，或在下面填本机路径。点「成套投标」按易标序一次出解析表、缺口清单、技术标目录。"></textarea>
+        <textarea id="input" rows="3" placeholder="先点左侧岗位。提问不写盘；说「写一份」才出内部讨论草稿。可拖广联达/Excel 的 xlsx、csv，或招标 docx/txt。"></textarea>
         <div class="local-row">
           <input id="localPath" type="text" placeholder="本机路径，例 C:\Users\LW\Desktop\T5-ITT.pdf（不要填 D:\layout）" />
           <button type="button" id="btnLocal">导入本机</button>
@@ -51,8 +51,9 @@
         <div id="attaches" class="attaches"></div>
         <div class="row">
           <div class="hints">
-            <input type="file" id="filePick" hidden multiple accept=".pdf,.docx,.txt,.md,.csv,.json" />
+            <input type="file" id="filePick" hidden multiple accept=".pdf,.docx,.xlsx,.txt,.md,.csv,.json" />
             <button type="button" id="btnUpload">上传副本</button>
+            <button type="button" data-fill="什么是 GST">问 GST</button>
             <button type="button" data-fill="临边防护算不算危大？要不要专家论证？">危大判定</button>
             <button type="button" data-fill="按虚构滨河路人行道维修，写临边与洞口防护专项方案讨论提纲。高度未提供。">施工方案</button>
             <button type="button" data-fill="把临边防护编成工友班前三分钟白话。">工友白话</button>
@@ -130,7 +131,7 @@
       </div>
     </div>
   </div>
-  <script src="/static/app.js?v=harness3"></script>
-  <script src="/static/studio.js?v=harness3"></script>
+  <script src="/static/app.js?v=workbuddy1"></script>
+  <script src="/static/studio.js?v=workbuddy1"></script>
 </body>
 </html>
