@@ -39,6 +39,7 @@ def run_turn(
     force_intent: Optional[str] = None,
     expert_id: str = "",
     session_id: str = "",
+    packing_summary: Optional[dict] = None,
 ) -> Dict[str, Any]:
     from packing_assistant.expert_roster import get_expert, resolve_expert
     from packing_assistant.expert_turn import run_expert_turn
@@ -51,8 +52,16 @@ def run_turn(
             confirm_ok=p0_confirmed,
             session_id=session_id,
             force_intent=force_intent,
+            packing_summary=packing_summary,
         )
     intent = force_intent if force_intent in {"chat", "run", "both"} else understand(text)
+    from packing_assistant.runtime.scheduler import get_scheduler
+    from uuid import uuid4
+
+    sid = session_id or f"sess-{uuid4().hex[:8]}"
+    sched = get_scheduler()
+    run = sched.create_run(sid, intent=intent)
+    sched.transition(run, "planning")
     out: Dict[str, Any] = {
         "ok": True,
         "schema": "civil.turn.v1",
@@ -62,19 +71,33 @@ def run_turn(
         "matrix": None,
         "submit_blocked": True,
         "submit_block_reason": "未成稿或仍是 AI 草稿，不可递交。",
+        "run_id": run.run_id,
+        "state": run.state,
+        "session_id": sid,
     }
     if intent == "chat":
+        sched.transition(run, "done")
+        sched.release(sid)
         out["reply"] = explain(text)
+        out["state"] = run.state
         return out
 
     from packing_assistant.tools.tender_parse import run_tender_pipeline
 
+    sched.transition(run, "acting")
+    if run.cancelled:
+        sched.release(sid)
+        out["reply"] = "run cancelled"
+        out["state"] = run.state
+        return out
     pipe = run_tender_pipeline(
         text,
         source="default-turn",
         project_name=project_name,
         p0_confirmed=p0_confirmed,
     )
+    sched.transition(run, "done")
+    sched.release(sid)
     reply = explain(text) if intent == "both" else "已按招标节选进矩阵。仍是 AI 草稿，submit_blocked=true，不可递交。"
     out.update(
         {
@@ -92,7 +115,8 @@ def run_turn(
             "extract_table_markdown": pipe.get("extract_table_markdown"),
             "matrix_csv": pipe.get("matrix_csv"),
             "p0_reject_scan": pipe.get("p0_reject_scan"),
-            "run_id": pipe.get("run_id"),
+            "run_id": run.run_id,
+            "state": run.state,
             "product_mainline": "C_tender_delivery",
         }
     )

@@ -421,7 +421,28 @@ def api_turn(body: dict = None):
         force_intent=str(body.get("intent") or "") or None,
         expert_id=str(body.get("expert_id") or ""),
         session_id=str(body.get("session_id") or ""),
+        packing_summary=body.get("packing_summary") if isinstance(body.get("packing_summary"), dict) else None,
     )
+
+
+@app.get("/api/runs/{run_id}")
+def api_run_get(run_id: str):
+    from packing_assistant.runtime.scheduler import get_scheduler
+
+    run = get_scheduler().get(run_id)
+    if not run:
+        raise HTTPException(404, "unknown run")
+    return {"ok": True, **run.to_dict()}
+
+
+@app.post("/api/runs/{run_id}/cancel")
+def api_run_cancel(run_id: str):
+    from packing_assistant.runtime.scheduler import get_scheduler
+
+    ok = get_scheduler().cancel(run_id)
+    if not ok:
+        raise HTTPException(400, "cannot cancel")
+    return {"ok": True, "run_id": run_id, "state": "cancelled"}
 
 
 @app.post("/api/tender/parse")

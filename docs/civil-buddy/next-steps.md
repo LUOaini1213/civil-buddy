@@ -28,7 +28,10 @@
 8. **每岗对照易标/pack-agent 长程规划** ✅ 2026-08-17  
    66 条独立规划 + 16 条车道。见 `docs/civil-buddy/post-horizon-2026-08-17.md`。验收：`python scripts/test_post_horizon.py`。
 
-平台内核抽层、P0–P2 与验收闸见 **[product-improvement-handbook.md](product-improvement-handbook.md)**（Scheduler / ToolEngine / 接通 pack-ship）。下一刀执行入口：P0-1 pack-ship 抄 `packing_summary`。
+9. **P0 运行时内核** ✅ 2026-08-19  
+   pack-ship 抄 `packing_summary`（断线 `UNSPECIFIED`）；`runtime/tool_engine.py` 鉴权/超时/熔断；`runtime/scheduler.py` 状态机 + `/api/runs/{id}`。验收：`python scripts/test_runtime_p0.py`。
+
+平台内核抽层、P1–P2 见 **[product-improvement-handbook.md](product-improvement-handbook.md)**。
 
 ## 有宿主再做
 

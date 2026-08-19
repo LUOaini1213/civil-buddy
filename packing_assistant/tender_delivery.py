@@ -126,6 +126,9 @@ def run_tender_delivery_pipeline(
         packing_summary = packing_summary_from_state(
             pack_state, container_type=str(container_type or "40HQ")
         )
+        from packing_assistant.runtime.session_packing import save_packing_snapshot
+
+        save_packing_snapshot(str(session_id or "tender-delivery"), packing_summary)
 
     out = run_tender_pipeline(
         text,

@@ -14,7 +14,8 @@ UNSPECIFIED = "UNSPECIFIED"
 TOOL_LIST = "pack-ship__list"
 TOOL_PLAN = "pack-ship__plan"
 TOOL_EXPORT = "pack-ship__export"
-TOOL_NAMES = (TOOL_LIST, TOOL_PLAN, TOOL_EXPORT)
+TOOL_HEALTH = "pack-ship__health"
+TOOL_NAMES = (TOOL_LIST, TOOL_PLAN, TOOL_EXPORT, TOOL_HEALTH)
 
 EVIDENCE_FIELDS = ("utilization", "can_fit", "mid50", "系固待办")
 
@@ -25,6 +26,8 @@ _ALIASES = {
     "civil.pack-ship.list": TOOL_LIST,
     "civil.pack-ship.plan": TOOL_PLAN,
     "civil.pack-ship.export": TOOL_EXPORT,
+    "health": TOOL_HEALTH,
+    "civil.pack-ship.health": TOOL_HEALTH,
 }
 
 _UTIL_KEYS = ("utilization", "util", "volume_util", "volume_utilization", "util_ratio")
@@ -94,6 +97,11 @@ def list_pack_ship_tools() -> List[Dict[str, Any]]:
             },
         },
         {
+            "name": TOOL_HEALTH,
+            "description": "探测本仓 solver 快照是否可用。不编数字。",
+            "inputSchema": {"type": "object", "properties": {"solver": {"type": "object"}}},
+        },
+        {
             "name": TOOL_EXPORT,
             "description": "导出装柜证据表。字段只抄 plan 同源 solver，不重算 xyz。",
             "inputSchema": {
@@ -117,6 +125,19 @@ def list_tool() -> Dict[str, Any]:
         "list": TOOL_LIST,
         "plan": TOOL_PLAN,
         "export": TOOL_EXPORT,
+        "health": TOOL_HEALTH,
+    }
+
+
+def health_tool(solver: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
+    connected = solver_connected(solver)
+    return {
+        "schema": "pack-ship.health.v1",
+        "ok": True,
+        "tool": TOOL_HEALTH,
+        "solver": "in-repo-projection",
+        "connected": connected,
+        "xyz": UNSPECIFIED,
     }
 
 
@@ -187,4 +208,6 @@ def call_tool(name: str, arguments: Optional[Dict[str, Any]] = None) -> Dict[str
         return plan_tool(solver, connected=connected, materials=str(args.get("materials") or ""))
     if tool == TOOL_EXPORT:
         return export_tool(solver, connected=connected)
+    if tool == TOOL_HEALTH:
+        return health_tool(solver)
     return {"ok": False, "error": f"unknown pack-ship tool: {name}", "names": list(TOOL_NAMES)}

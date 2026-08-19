@@ -221,9 +221,9 @@ def run_agent(session, user_msg, tools, llm, max_steps=8):
 
 | 刀 | 做什么 | 验收（必须跑） |
 |----|--------|----------------|
-| **P0-1 接通 pack-ship** | `expert_turn` 不再写死 `connected=False`。有 `packing_summary` / sidecar 快照则原样抄进 list/plan/export；无则四字段字面 `UNSPECIFIED`。先 `health`。 | 断线四字段 `UNSPECIFIED`；喂入 `{can_fit:true,mid50:0.7,…}` 则相等，不重算。`python scripts/test_mcp_surface.py` 仍过 |
-| **P0-2 ToolEngine** | 新模块 `packing_assistant/runtime/tool_engine.py`：`register/list/allow/execute`。把 pack-ship、tender.parse、写盘类迁过去。chat 轮次拒绝写盘。 | 单测：越权、非法参数、超时码、chat 拒写 |
-| **P0-3 Scheduler + Run** | `packing_assistant/runtime/scheduler.py`：状态机、`max_steps`、单步超时、`cancel`。`POST /api/turn` 创建 Run，返回 `run_id`+state。 | 非法边 `done→acting` 被拒；取消后不再写盘 |
+| **P0-1 接通 pack-ship** ✅ | `expert_turn` 先 `health`；有 `packing_summary` / 会话快照则原样抄进 list/plan/export；无则四字段字面 `UNSPECIFIED`。delivery 会 `save_packing_snapshot`。 | `python scripts/test_runtime_p0.py` |
+| **P0-2 ToolEngine** ✅ | `packing_assistant/runtime/tool_engine.py`：`register/list/allow/execute`。chat 拒写盘；岗 exclusive；超时/熔断错误码。 | 同上 |
+| **P0-3 Scheduler + Run** ✅ | `packing_assistant/runtime/scheduler.py`：合法边、`max_steps`、cancel。`POST /api/turn` 带 `run_id`；`GET /api/runs/{id}`。 | `done→acting` 拒绝；cancel 后 execute `permission_denied` |
 
 P0 不做：长期记忆、Go 重写、PDF OCR、66 岗全部富写盘。
 
@@ -422,5 +422,4 @@ P1：投标 handoff · Python eval · 回放 · 危大卡
 
 ## 12. 下一刀（手册执行入口）
 
-**立刻做 P0-1：** 召唤 pack-ship 时若本会话已有装箱结果则抄入 plan/export，否则 `UNSPECIFIED`。  
-这是用户已经问过「装箱能不能在 Civil Buddy 里跑」的缺口：delivery/workbench 能跑，专家岗还不能抄数。
+**P0 已落地。** 下一刀 **P1-1**：bid-parse / compliance / tech 共用 `tender.handoff.json`。
