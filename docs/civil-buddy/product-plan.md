@@ -3,14 +3,14 @@
 | 项 | 值 |
 |----|----|
 | 产品 | Civil Buddy |
-| 版本 | 2026-08-19 |
+| 版本 | 2026-08-19 · **联网审阅同日** |
 | 仓库 | https://github.com/LUOaini1213/civil-buddy |
 | 岗 / 大类 | **66 / 16**（`workbench/seed.json`） |
 | 总判 | **部分合格**的内部起草搭子，不是签认/递交机器人 |
 | 纪律 | **不定时限 · 不准空转**。墙钟和睡眠评测环不是交付 |
 | 本文地位 | **产品规划唯一总入口**。切片文档只执行、不另开第三套「下一步」 |
 
-**怎么用：** 改产品前先读 §1 边界与 §12 不做。开工只取 §11 下一刀。66 岗独有栏位不在本文复制，见 [post-horizon-2026-08-17.md](post-horizon-2026-08-17.md)。
+**怎么用：** 改产品前先读 §1 边界、§13 联网口径与 §12 不做。开工只取 §11 / §15 下一未勾选任务。66 岗独有栏位细节见 [post-horizon-2026-08-17.md](post-horizon-2026-08-17.md)；其中 bid 三岗「下一刀」与 construction 十一章 **已过时**，以本文 §7 为准。
 
 切片（从属于本文，不平行）：
 
@@ -115,7 +115,7 @@ docs/                 装箱架构、主线 C、研究/归档
 | 工作台 66 岗 | 40% | 同一套 chat/run；bid 三岗+pack-ship+construction 有真栏位 | 其余岗骨架 md |
 | MCP | 65% | Python stdio；bid 可见 KB+招标；pack-ship 投影；Host 样例 | 12 大类未挂 Host；kb 分页/订阅延期 |
 | Skill | 55% | SOP 与 66 岗关系写清；施工十一章接 turn | 其余 5 个 Grok 专家仍提纲；docx 填充未接 turn |
-| 岗 KB | 45% | 目录齐、08-14 门户摘录、隔离可测 | schema 闸未做；多数 faq/outline 骨架 |
+| 岗 KB | 48% | 64/66 岗四件套已在盘；08-14 门户摘录；隔离可测 | **仅 construction / method-hazard 缺 `outline.md`**；多数 faq/outline 仍是骨架正文 |
 | 技术文档 | 70% | GETTING-STARTED/PROTOCOL/MCP/SKILLS/KB | 本文收口后，研究笔记不得再冒充必读 |
 | 评测 | 60% | 离线闸 + eval/live 针 | 联网只在改官方口径后做 |
 
@@ -207,7 +207,7 @@ xyz 只抄 solver。分页/订阅 = 有真 Host list/call 稳定之后（horizon
 | 车道 | 大类 | 岗数 | 产品目标 | 现网富化 |
 |------|------|------|----------|----------|
 | `lane-bid` | 经营投标 | 3 | 解析→交接→三列废标检查→按评分点排技术标目录 | **已富** handoff / gaps / expand |
-| `lane-design` | 设计 | 18 | 各专业说明/计算提纲；条款 UNSPECIFIED；DUAL 分栏 | 骨架 md |
+| `lane-design` | 设计 | **20** | 各专业说明/计算提纲；条款 UNSPECIFIED；DUAL 分栏 | 骨架 md |
 | `lane-bim` | BIM | 3 | 协同/算量/交付目录；不假装 IFC 全量抽量 | 骨架 |
 | `lane-planning` | 计划 | 3 | 总控/近看/资源栏位；无进度数据不编工期 | 骨架 |
 | `lane-construction` | 施工生产 | 4 | 十一章提纲；危大判定卡；测量/调度作业单 | **construction 十一章已接 turn**；危大仍骨架 |
@@ -266,7 +266,7 @@ xyz 只抄 solver。分页/订阅 = 有真 Host list/call 稳定之后（horizon
 | 4 | method-hazard | 未做判定书栏 |
 | 5 | cost | 未做 takeoff 栏 |
 | 6 | finance-tax | KB 有 9%；日历栏未富 |
-| 7+ | 其余 57 岗 | 骨架；下一刀在 post-horizon |
+| 7+ | 其余 61 岗 | 骨架；下一刀在 post-horizon（bid/pack-ship/construction 十一章已从「未做」划出） |
 
 ---
 
@@ -315,13 +315,18 @@ GeBIZ 代交、法定签认、十万字写标、标书查重产品化、模型�
 
 ---
 
-## 11. 下一刀
+## 11. 下一刀（立刻）
 
-**K1 · 66 岗知识库目录契约。**
+**T001 / K1 · 补 2 个缺文件 + 冻结合约闸。**
 
-`python scripts/test_kb_schema.py`：每个 `demo/kb/<cat>/<id>/` 必须有 README / faq / outline / web-knowledge。允许内容短，不允许缺文件。缺的补空文件头（标题+本岗产出+「缺数 UNSPECIFIED」），不假装富化。
+盘点（2026-08-19 扫 `demo/kb` + `seed.json`）：66 岗中 **64 已有** README/faq/outline/web-knowledge；只缺：
 
-做完 K1 → **RT-P1-5 method-hazard 判定书**（与 construction 同车道）→ **K2 门户单一来源** → 按 §6 总序富 cost / finance-tax。
+- `demo/kb/construction/construction/outline.md`
+- `demo/kb/construction/method-hazard/outline.md`
+
+补标题+本岗产出+「缺数 UNSPECIFIED」，**不假装富化**。然后落地 `scripts/test_kb_schema.py`（缺一即红）。
+
+做完后按 **§15 加长任务** 顺序：T002 危大判定书 → T003 门户单一来源 → T004–T006 cost/finance/docx → 再按车道批次 T010+。
 
 ---
 
@@ -335,4 +340,130 @@ GeBIZ 代交、法定签认、十万字写标、标书查重产品化、模型�
 | 名册 | seed.json + yibiao-map.json | 文档服从 JSON |
 | 历史 | industry-eval、live-eval、github-wheels、overnight 废止页 | 不改已发布总判日期；现网名册仍 66 |
 
-新建「规划」前先改本文 §7。禁止第三份总路线。
+新建「规划」前先改本文 §7 与 §15。禁止第三份总路线。
+
+---
+
+## 13. 联网评测（2026-08-19 现场检索，不是只读旧笔记）
+
+规则：官方页有 9% 就抄 9%。抓失败或 JS 壳 **不得** 写「官方没写 9%」。博客与旧通告不得覆盖联合通告。竞品星标不是合格线。
+
+| 门户 | 本日检索到的口径 | 本仓 | 判定 |
+|------|------------------|------|------|
+| [IRAS Current GST rates](https://www.iras.gov.sg/taxes/goods-services-tax-(gst)/basics-of-gst/current-gst-rates) | *The current GST rate in Singapore is 9%.* 检索页 2026-08-16 仍爬到该句 | `company/web-portals.md` 与 finance-tax 抄同句 | **抄对** |
+| [IRAS When to Charge GST](https://www.iras.gov.sg/taxes/goods-services-tax-(gst)/charging-gst-(output-tax)/when-to-charge-goods-services-tax-(gst)) | *prevailing rate of 9%*（页更记录 2026-03-04） | 写稿标「页述 9%」，税额待持证人员 | **抄对** |
+| [IRAS GST rate change](https://www.iras.gov.sg/taxes/goods-services-tax-(gst)/gst-rate-change/gst-rate-change-for-business/overview-of-gst-rate-change) | 2023-01-01：7%→8%；**2024-01-01：8%→9%** | 不把 7%/8% 写成现行税率 | **须在规划与 KB 标明「现行 9%，历史升档仅作背景」** |
+| [SCDF Fire Code 2023](https://www.scdf.gov.sg/fire-safety-services-listing/fire-code-2023) | 页题 *Fire Code 2023* / *Code of Practice for Fire Precautions in Buildings 2023* | 只列官方标题，条款 UNSPECIFIED | **抄对**。营销文「2026 Fire Code」或「仍是 2018」**不是**本仓口径 |
+| [IMO CTU Code](https://www.imo.org/en/ourwork/safety/pages/ctu-code.aspx) | *IMO/ILO/UNECE Code of Practice for Packing of Cargo Transport Units (CTU Code)*，**2014**，**non-mandatory** global code of practice | 同标题、2014、非强制、不编条款号 | **抄对** |
+| [GeBIZ](https://www.gebiz.gov.sg/) | 新加坡政府一站式电子采购门户；GTP 注册后投标 | 「门户不是评分办法」 | **抄对**。第三方指南里的 ITT 金额门槛 **不**当本仓默认数字 |
+| [MOF procurement processes](https://www.mof.gov.sg/policies/government-procurement/procurement-processes/) | Sourcing → Evaluation（按标书已公布标准）→ Approval of Award（授标公示上 GeBIZ） | 分值/PQM 只抄 ITT | **抄对** |
+| [URA/BCA APPBCA-2026-12](https://www.ura.gov.sg/guidelines/circulars/dc26-08/) · 通告 PDF | **2026-07-23**：2026-10-01 起 **新项目 GFA≥5,000 m²** 强制 CORENET X Gateway Processes；FAQ 同口径 | company 页已写收窄 | **抄对**。**警告：** 仍有博客/旧 DC25-01 写「2026-10-01 不论 GFA」。本产品 **只认 APPBCA-2026-12 / dc26-08** |
+
+旁证（不是合格线）：OpenBidKit 易标仍为 **AGPL-3.0** 写标桌面。本仓不并许可、不做十万字生成。星标数字随第三方页面漂，规划书不把它当 KPI。
+
+行业总判：**部分合格**。本日联网 **未发现** 本仓把 9% 写错或把 GeBIZ 当评分公式。缺口仍是：多数岗骨架、扫描 PDF 拒绝、无代交。
+
+---
+
+## 14. 规划书审阅发现（必须改口的内部错误）
+
+| 原表述 | 实测 | 处理 |
+|--------|------|------|
+| 设计车道 18 岗 | `seed.json` **design=20**（66=3+20+3+3+4+4+5+3+4+3+3+1+3+2+3+2） | §6 已改正 |
+| 「其余 57 岗」 | 已富约 5 岗（bid×3 + pack-ship + construction 十一章），其余 **61** | §7.2 已改正 |
+| K1「目录齐但无闸」 | 64/66 四件套已在；只缺 construction 与 method-hazard 的 `outline.md` | §11 改为补 2 文件 + 冻结合约 |
+| post-horizon bid 三岗「下一刀=handoff/gaps/评分点」 | P1-1 **已做** | 以本文 §7 为准；horizon 文当历史下一刀 |
+| post-horizon construction「下一刀=十一章接 turn」 | S2 **已做** md；下一刀才是 fill_scheme_docx | T005 |
+| 行业评测「缺 Python eval/live、MCP 几乎只有 pack-ship」 | 2026-08-19 已有 `GET /api/eval/live` 与 `mcp_stdio --pack bid` | 不改 08-17 历史总判日期；现网能力以本文 §3 为准 |
+| 营销博客「CORENET X 2026-10-01 全部新项目」 | 已被 APPBCA-2026-12 收窄为 GFA≥5,000 m² | §13 列为反例 |
+
+---
+
+## 15. 加长任务总表（不定时限，按号做）
+
+每条必须有产物路径 + 测试。不做睡眠环。勾选时改本表「状态」。
+
+### A. 库与官方口径（先把事实源钉死）
+
+| ID | 任务 | 产物 | 验收 | 状态 |
+|----|------|------|------|------|
+| T001 | K1：补 2 个 outline + `test_kb_schema.py` | 两路径 outline.md + 脚本 | 66 岗四件套全在 | 未做 |
+| T002 | method-hazard 判定书：默认 SG WSH/PTW；37 号令只在 CN 栏；信息不足不编 | `judge-card` 栏位写盘 | 未确认 0 稿；无「可以开工」 | 未做 |
+| T003 | K2：eval/live 针改读 `company/web-portals.md` | `eval_live.py` | GST/Fire/CTU/GeBIZ/APPBCA 五针 | 未做 |
+| T004 | finance-tax 日历栏：申报期空栏 + 页述 9% + 税额待填 | `finance-tax__calendar` 非骨架句 | 测试断言含 9% 且无自编税率 | 未做 |
+| T005 | construction `fill_scheme_docx`；失败则 `docx_pending` | skill 模板管道 | 扫描 0 才报成功 | 未做 |
+| T006 | cost takeoff 栏：工程量来自用户表；无清单不编单价 | `cost` 独有写盘 | 无单价则 TBD/UNSPECIFIED | 未做 |
+| T007 | 岗若写 GST 必须含 9%；禁止 7%/8% 当现行 | 扫描脚本或评测针 | 历史升档只可出现在「背景」句 | 未做 |
+| T008 | CORENET 反例测试：草稿不得写「全部新项目不论 GFA 强制」 | `scan` 或评测 | 只允许 APPBCA-2026-12 句 | 未做 |
+
+### B. 运行时（平台可复用）
+
+| ID | 任务 | 产物 | 验收 | 状态 |
+|----|------|------|------|------|
+| T010 | Memory slot：辖区 / 项目名 / P0；压缩打标 | `session.summary` | 压缩后不得假装读过被丢细节 | 未做 |
+| T011 | `/api/tender/parse` 走同一 ToolEngine 鉴权 | gateway 调 engine | chat 意图拒写 | 未做 |
+| T012 | OTEL span 带同一 `run_id` 与 agent_loop | `otel_hooks` | dashboard 能按 run_id 过滤 | 未做 |
+| T013 | 高风险 HITL 确认句硬校验（方法-危大+施工已有，扩到 scheme deliver） | allow() | 未打原句 0 份稿 | 部分 |
+| T014 | agent_loop 对 bid-compliance/tech 走与 expert_turn 同一 handoff | `agent_loop.py` | 同 session 读到 tender.handoff.json | 未做 |
+
+### C. MCP / Host
+
+| ID | 任务 | 产物 | 验收 | 状态 |
+|----|------|------|------|------|
+| T020 | Host 样例补齐 16 pack（可复制，不要求用户全挂） | `mcp-host.example.toml` | 每 pack 一行注释 | 未做 |
+| T021 | `list_tools(--pack construction)` 不含 bid 独有 | stdio 测试 | 已有 bid 隔离，补 construction 包测试 | 部分 |
+| T022 | `write_deliverable` MCP chat 拒绝（intent=chat） | call_tool | `permission_denied` | 未做 |
+| T023 | kb:// 读 method-hazard 从 bid-parse 拒绝（已有 bid-tech 例，补跨大类） | `test_mcp_surface.py` | 拒绝句 | 未做 |
+| T024 | 真 Host 手册：Grok/Cursor 各贴一份最小配置 | MCP.md | 命令本机跑过 | 未做 |
+| T025 | kb 分页/订阅 | 延期 | 有 Host 稳定 list/call 后再开 | 延期 |
+
+### D. 车道批次（每岗一任务，栏位非骨架）
+
+**纪律：** 一次只做一岗。测：该岗 run 产物含 outline 栏位名；chat 仍不写盘。
+
+| ID | 车道 | 岗（按序） |
+|----|------|------------|
+| T030 | construction 收尾 | survey__record（只抄已给点号）→ dispatch__daily（敏感作业交危大岗） |
+| T031 | commercial | cost（T006）→ variation → claim → subcontract → interim |
+| T032 | planning | plan-master → plan-lookahead → plan-resource |
+| T033 | lab | lab-mix → lab-sample → lab-record |
+| T034 | docs | supervision 闭合目录（不代替监理指令） |
+| T035 | hse | safety-brief → quality → env → emergency（SG 走 WSH 标题） |
+| T036 | plant 非装箱 | equip → warehouse → material-site（pack-ship 已富，跳过） |
+| T037 | procurement | proc-plan → proc-compare → proc-vendor（金额门槛不默写） |
+| T038 | finance 其余 | finance-book → finance-fund（tax 见 T004） |
+| T039 | people | worker-brief 白话 ≠ 技术稿 → pm-daily |
+| T040 | hr | hr-recruit → hr-labor → hr-train |
+| T041 | admin | admin-doc → admin-office（不自动盖章） |
+| T042 | it | it-ops → it-data → it-app（禁止密钥进稿） |
+| T043 | bim | bim-coord → bim-qto → bim-deliver（不假装 IFC 全量） |
+| T044 | design 批次 1 | architecture（10 章面积[A001]）→ structure → geotech → facade |
+| T045 | design 批次 2 | plumbing → hvac → electrical → fire-protect → steel |
+| T046 | design 批次 3 | landscape → interior → intel-weak → civil-defense → hydraulic |
+| T047 | design 批次 4 | port → municipal → bridge → tunnel → traffic → design-coord |
+
+T030–T047 展开为 **61 岗 × 一刀**，细节仍读 post-horizon 该 id。本表是加长后的**批次合同**：做完一岗勾 horizon「下一刀=已做」，并在本行末加日期。
+
+### E. 主线 C 与装箱（插件，不另起炉灶）
+
+| ID | 任务 | 验收 | 状态 |
+|----|------|------|------|
+| T050 | 扫描 PDF：产品默认拒绝；文档写清 MinerU 可选失败即拒 | GETTING-STARTED 一句 + 上传 PDF 返回拒绝 | 部分（行为已有，文档须钉） |
+| T051 | 资格/★ P0 必须人确认才许「覆盖」态 | 矩阵 human_confirm | 已有窄实现 |
+| T052 | pack-ship 与 /workbench 同 session 必能抄 can_fit | 先 delivery 再 expert pack-ship | 已有快照；补一条 HTTP 联测 |
+| T053 | 禁止第二套 3D packer 出现在 agent_loop | 代码检索 `run_big_team` 不在 pack-ship turn | 纪律 |
+
+### F. 文档与评测
+
+| ID | 任务 | 验收 | 状态 |
+|----|------|------|------|
+| T060 | 本文 D2 | 本文件 | ✅ |
+| T061 | post-horizon 文首加「已做刀以 product-plan §7 为准」 | 避免双下一刀 | ✅ 2026-08-19 |
+| T062 | 刀后快闸清单写入 GETTING-STARTED | 命令本机跑过 | 未做 |
+| T063 | 改官方口径时才联网；结果追加 §13 表，不改 08-17 历史总判句 | 部分合格保持 | 纪律 |
+
+**建议执行序（加长后的主链，仍不定时限）：**
+
+T001 → T002 → T003 → T007 → T008 → T004 → T006 → T005 → T010 → T014 → T022 → T023 → T030 → T031 → … → T047 → T052 → T061。
+
+中途任何刀红则停在该号，不准跳号用「先测一夜」冒充进度。

@@ -392,4 +392,4 @@ P0 运行时、P1-1 handoff、Agent 循环+沙箱、pack-ship 投影：**已做*
 
 ## 8. 下一刀（读完本文立刻做的）
 
-**K1 岗目录契约** `test_kb_schema.py`（允许内容短，不允许缺文件），然后按 post-horizon 富写盘。D1/M1–M4/S1–S4 已落地。
+全量任务号见 [product-plan.md](product-plan.md) §15。切片下一刀仍是 **T001/K1**（只缺 construction 与 method-hazard 的 `outline.md`）。

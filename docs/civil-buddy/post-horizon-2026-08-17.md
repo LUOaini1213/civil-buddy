@@ -1,5 +1,7 @@
 # 66 岗对照易标 / pack-agent 的长程规划（2026-08-17）
 
+> 已做/未做以全量规划书 [product-plan.md](product-plan.md) §7 / §15 为准。本文保留每岗「下一刀」原文；bid 三岗 handoff 与 construction 十一章 md **已经落地**，勿再当缺口。
+
 每岗一条。车道 = `lane-<大类>`（子代理分批，不是 16 份大类摘要冒充）。
 易标完成度 = parse → outline → qa → kb → write。pack-agent = 数字只抄 solver + list/plan/export + 断线 UNSPECIFIED。
 内部讨论草稿。不以可以投标、可以开工、中标率 +N% 为完成目标。本轮只规划，不实现缺口。

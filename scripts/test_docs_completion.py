@@ -34,6 +34,9 @@ def main() -> int:
     assert "全量产品规划书" in plan
     assert "lane-bid" in plan and "lane-people" in plan
     assert "不准空转" in plan
+    assert "T001" in plan and "T047" in plan
+    assert "APPBCA-2026-12" in plan
+    assert "The current GST rate in Singapore is 9%" in plan or "9%" in plan
     assert (DOCS / "mcp-host.example.toml").is_file()
     assert (DOCS / "product-completion-plan.md").is_file()
     print("PASS docs_completion", " ".join(FILES))
