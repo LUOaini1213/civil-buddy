@@ -6,7 +6,8 @@
 
 | 文档 | 说明 |
 |------|------|
-| [civil-buddy/product-completion-plan.md](./civil-buddy/product-completion-plan.md) | **产品完善（文档 / KB / MCP / Skill）· 不定时限 · 不准空转** |
+| [civil-buddy/product-plan.md](./civil-buddy/product-plan.md) | **全量产品规划书（总入口）** |
+| [civil-buddy/product-completion-plan.md](./civil-buddy/product-completion-plan.md) | 切片：文档 / KB / MCP / Skill 勾选 |
 | [civil-buddy/GETTING-STARTED.md](./civil-buddy/GETTING-STARTED.md) | 起服务、问 GST、接 MCP Host |
 | [civil-buddy/PROTOCOL.md](./civil-buddy/PROTOCOL.md) | chat/run、错误码、沙箱、确认句 |
 | [civil-buddy/MCP.md](./civil-buddy/MCP.md) | stdio / HTTP / tools 表 |

@@ -1,6 +1,7 @@
 # Civil Buddy 产品完善规划
 
-> 文档 / 知识库 / MCP / Skill · 把半套做成可交付产品  
+> **切片。** 全量产品规划书：[product-plan.md](product-plan.md)。  
+> 本文只勾选文档 / KB / MCP / Skill 执行刀。  
 > 2026-08-19 · **不定时限** · **不准空转**  
 > 废止：[overnight-eval-iterate-2026-08-19.md](overnight-eval-iterate-2026-08-19.md)（sleep 评测环）
 
@@ -371,6 +372,7 @@ GeBIZ 代交、法定签认、十万字写标、标书查重产品化、模型�
 |----|------|----------|
 | D0 65→66 与入口收口 | ✅ | README / docs 索引 / yibiao-mcp-map / skill 开篇已 66；历史评测页可留 65 |
 | D1 GETTING-STARTED / PROTOCOL / MCP / SKILLS / KB | ✅ | `python scripts/test_docs_completion.py` |
+| D2 全量产品规划书 | ✅ | `docs/civil-buddy/product-plan.md` |
 | K1 66 岗目录契约 | 未做 | `test_kb_schema.py` |
 | K2 门户标题单一来源 | 未做 | eval/live 读 company 页 |
 | K3 kb:// 隔离 + 文件名检索闸 | 部分 | 扩 `test_mcp_surface.py` |

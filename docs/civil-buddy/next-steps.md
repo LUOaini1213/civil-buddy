@@ -35,7 +35,7 @@
     `runtime/agent_loop.py`：understand → Scheduler → ToolEngine；chat 不写盘；写盘/`spawn` 过 `sandbox.assert_write` / `request_spawn`。`POST /api/agent` · `GET /api/eval/live`（离线官方标题针，不抓 IRAS）。验收：`python scripts/test_agent_loop.py`。
 
 11. **过夜空转（废止）**  
-    定时评测环已停。现行完善规划：**[product-completion-plan.md](product-completion-plan.md)**。
+    定时评测环已停。全量规划：**[product-plan.md](product-plan.md)**。切片：[product-completion-plan.md](product-completion-plan.md)。
 
 12. **D1 + MCP + 施工 skill 路径** ✅ 2026-08-19  
     五篇说明书；`demo/mcp_stdio.py`；pack=bid 的 tools 含 KB/招标不含 pack-ship；construction 十一章接 turn。验收：`test_docs_completion.py` · `test_mcp_stdio.py` · `test_construction_skill_path.py`。

@@ -29,7 +29,8 @@ cargo run --release --bin civil-workbench
 
 Python 参考实现：`demo/`（`uvicorn app:app --host 127.0.0.1 --port 8765`）。
 
-Grok skill（怎么起草）：`skills/civil-buddy`。MCP（能调什么）：`civil-mcp --pack <大类>` 或 Python `GET /api/mcp/*`。产品完善（文档 / KB / MCP / Skill，不定时限、不准空转）：[docs/civil-buddy/product-completion-plan.md](docs/civil-buddy/product-completion-plan.md)。
+Grok skill（怎么起草）：`skills/civil-buddy`。MCP（能调什么）：`python demo/mcp_stdio.py --pack <大类>`。  
+**全量产品规划书**：[docs/civil-buddy/product-plan.md](docs/civil-buddy/product-plan.md)。切片执行：[product-completion-plan.md](docs/civil-buddy/product-completion-plan.md)。
 
 ### 2) 装箱引擎（pack-ship 的计算器）
 

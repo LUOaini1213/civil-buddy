@@ -5,6 +5,8 @@
 > 对照：创维智能体平台岗所考的 Scheduler · Bus · ToolEngine · Memory · Auth · Trace。  
 > 领域皮肤：土木工作搭子 + 投标矩阵 + 装箱交付。数字仍只许工具算。
 
+全量产品规划书（总入口）：[product-plan.md](product-plan.md)。
+
 相关文档：
 
 - 现状内核叙事：[architecture-as-harness.md](../architecture-as-harness.md) · [harness-design.md](../harness-design.md)
