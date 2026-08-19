@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Optional  # Run.messages/tools keep mixed payloads
 from uuid import uuid4
 
 STATES = (
@@ -51,6 +51,9 @@ class Run:
     cancelled: bool = False
     history: List[Dict[str, str]] = field(default_factory=list)
     error_code: str = ""
+    messages: List[Dict[str, Any]] = field(default_factory=list)
+    tools_used: List[str] = field(default_factory=list)
+    artifacts: List[str] = field(default_factory=list)
 
     def to_dict(self) -> Dict[str, Any]:
         return {
@@ -64,6 +67,9 @@ class Run:
             "cancelled": self.cancelled,
             "error_code": self.error_code,
             "history": list(self.history),
+            "messages": list(self.messages),
+            "tools_used": list(self.tools_used),
+            "artifacts": list(self.artifacts),
         }
 
 
@@ -116,12 +122,14 @@ class Scheduler:
             run.history.append({"from": run.state, "to": dest, "ok": "false", "error": "illegal_edge"})
             return False
         if dest not in TERMINAL:
-            run.steps += 1
-            if run.steps > run.max_steps:
-                run.state = "failed"
-                run.error_code = "max_steps"
-                run.history.append({"from": edge[0], "to": "failed", "ok": "true", "error": "max_steps"})
-                return False
+            # Count tool rounds, not every legal edge (chat planning→done is not a tool step).
+            if dest == "waiting_tool":
+                run.steps += 1
+                if run.steps > run.max_steps:
+                    run.state = "failed"
+                    run.error_code = "max_steps"
+                    run.history.append({"from": edge[0], "to": "failed", "ok": "true", "error": "max_steps"})
+                    return False
         run.history.append({"from": run.state, "to": dest, "ok": "true"})
         run.state = dest
         if dest == "cancelled":

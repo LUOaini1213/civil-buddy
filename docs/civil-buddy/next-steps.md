@@ -31,7 +31,10 @@
 9. **P0 运行时内核** ✅ 2026-08-19  
    pack-ship 抄 `packing_summary`（断线 `UNSPECIFIED`）；`runtime/tool_engine.py` 鉴权/超时/熔断；`runtime/scheduler.py` 状态机 + `/api/runs/{id}`。验收：`python scripts/test_runtime_p0.py`。
 
-平台内核抽层、P1–P2 见 **[product-improvement-handbook.md](product-improvement-handbook.md)**。
+10. **完整 Agent 循环 + 沙箱门** ✅ 2026-08-19  
+    `runtime/agent_loop.py`：understand → Scheduler → ToolEngine；chat 不写盘；写盘/`spawn` 过 `sandbox.assert_write` / `request_spawn`。`POST /api/agent` · `GET /api/eval/live`（离线官方标题针，不抓 IRAS）。验收：`python scripts/test_agent_loop.py`。
+
+平台内核抽层、P1–P2 见 **[product-improvement-handbook.md](product-improvement-handbook.md)**。下一刀仍是手册 **P1-1** 投标三岗 handoff。
 
 ## 有宿主再做
 

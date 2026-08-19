@@ -1,5 +1,7 @@
-"""Agent runtime kernel (Scheduler · ToolEngine · Run). Domain plugins stay outside."""
+"""Agent runtime kernel (Scheduler · ToolEngine · Run · Bus · loop). Domain plugins stay outside."""
 
+from packing_assistant.runtime.agent_loop import run_agent
+from packing_assistant.runtime.bus import Bus, get_bus
 from packing_assistant.runtime.scheduler import (
     FORBIDDEN,
     LEGAL,
@@ -22,7 +24,9 @@ from packing_assistant.runtime.tool_engine import (
 __all__ = [
     "FORBIDDEN",
     "LEGAL",
+    "Bus",
     "Scheduler",
+    "get_bus",
     "get_scheduler",
     "load_packing_snapshot",
     "save_packing_snapshot",
@@ -35,4 +39,5 @@ __all__ = [
     "ERR_UNSPECIFIED",
     "ToolEngine",
     "get_engine",
+    "run_agent",
 ]
