@@ -73,6 +73,47 @@ def _write_tools(expert: ExpertRec) -> List[str]:
     return [t for t in expert.exclusive if "fill_scheme" not in t]
 
 
+_SCHEME_CHAPTERS = (
+    "封面与文件控制",
+    "草稿与责任声明",
+    "工程概况",
+    "编制依据",
+    "施工部署与工艺",
+    "质量",
+    "安全与应急",
+    "环保与文明施工",
+    "资源计划",
+    "验收与资料",
+    "附录",
+)
+
+
+def _construction_eleven(text: str) -> str:
+    lines = [
+        "# 专项施工方案讨论提纲（AI 草稿）",
+        "",
+        DISCLAIMER,
+        "",
+        "不是法定专项方案，不是签认件。缺数 [A001]。条款 UNSPECIFIED。",
+        "",
+        "## 用户原文",
+        "",
+        (text or "").strip() or "（未提供）",
+        "",
+    ]
+    for i, title in enumerate(_SCHEME_CHAPTERS, 1):
+        lines.append(f"## {i} {title}")
+        lines.append("")
+        if i == 2:
+            lines.append(DISCLAIMER)
+        elif i == 10:
+            lines.append("验收结论待持证人员。本页不给合格结论。")
+        else:
+            lines.append("待按项目 pack / 图纸填写。[A001]")
+        lines.append("")
+    return "\n".join(lines)
+
+
 _COVERED = frozenset({"covered", "ok", "done"})
 _OPEN = frozenset({"gap", "pending", "missing", "uncovered", "open", "partial", "human_required", "review"})
 
@@ -298,6 +339,35 @@ def _run_exclusive(
                 "plan": plan.get("data") or plan,
                 "export": exported.get("data") or exported,
             },
+        }
+
+    if expert.id == "construction":
+        md = _construction_eleven(text)
+        from packing_assistant.tools.tender_review import forbidden_hits
+
+        hits = forbidden_hits(md)
+        if hits:
+            return {
+                "wrote": False,
+                "hitl_pending": False,
+                "files": [],
+                "tools_run": [],
+                "reply": "禁语扫描命中，未报成功：" + "、".join(hits),
+                "submit_blocked": True,
+                "p0_reject_scan": {"hits": hits},
+            }
+        path = out_dir / "construction__scheme_draft.md"
+        guarded_write_text(path, md)
+        files.append({"name": path.name, "path": str(path), "tool": "construction__scheme_draft"})
+        ran.append("construction__scheme_draft")
+        return {
+            "wrote": True,
+            "hitl_pending": False,
+            "files": files,
+            "tools_run": ran,
+            "reply": "已出十一章讨论提纲（docx_pending）。不是法定专项，submit_blocked=true。",
+            "submit_blocked": True,
+            "docx_pending": True,
         }
 
     if not tools:

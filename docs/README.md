@@ -7,6 +7,11 @@
 | 文档 | 说明 |
 |------|------|
 | [civil-buddy/product-completion-plan.md](./civil-buddy/product-completion-plan.md) | **产品完善（文档 / KB / MCP / Skill）· 不定时限 · 不准空转** |
+| [civil-buddy/GETTING-STARTED.md](./civil-buddy/GETTING-STARTED.md) | 起服务、问 GST、接 MCP Host |
+| [civil-buddy/PROTOCOL.md](./civil-buddy/PROTOCOL.md) | chat/run、错误码、沙箱、确认句 |
+| [civil-buddy/MCP.md](./civil-buddy/MCP.md) | stdio / HTTP / tools 表 |
+| [civil-buddy/SKILLS.md](./civil-buddy/SKILLS.md) | Grok skill ≠ 引擎 skill ≠ MCP |
+| [civil-buddy/KB.md](./civil-buddy/KB.md) | 岗库 vs 引擎库 |
 | [civil-buddy/harness.md](./civil-buddy/harness.md) | 工作台 harness：chat / run / HITL |
 | [civil-buddy/packing-agent.md](./civil-buddy/packing-agent.md) | pack-ship 如何调用本仓装箱引擎 |
 | [civil-buddy/enterprise-experts.md](./civil-buddy/enterprise-experts.md) | 16 大类 / 66 岗 |

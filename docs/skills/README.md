@@ -1,7 +1,9 @@
 # Skills 文档（v0.5 · 非 MCP 完整实现）
 
 本仓库采用 **确定性 tools + 多智能体编排**，而非通用 MCP skill 市场。  
-下列「skill」是可复用能力包：输入/输出契约固定，供 Agent 节点调用。
+下列「skill」是装箱引擎节点契约，**不是** Grok `/civil-buddy` SOP，也**不要**做成让模型改 xyz 的 MCP。对照 [civil-buddy/SKILLS.md](../civil-buddy/SKILLS.md)。
+
+下列「skill」是可复用能力包：输入/输出契约固定，供 Agent 节点调用。MCP 列：无 = 引擎内部。
 
 | Skill ID | 职责 | 入口模块 | 主要 Agent |
 |----------|------|----------|------------|
