@@ -183,6 +183,9 @@ pub fn understand(blob: &str) -> Intent {
     if write && (ask || qmark) {
         return Intent::Both;
     }
+    if (ask || qmark) && !write {
+        return Intent::Chat;
+    }
     if write || tender {
         return Intent::Run;
     }

@@ -2771,6 +2771,14 @@ fn test_understand_chat_or_run() {
     );
     assert_eq!(understand("一人公司成套投标"), Intent::Run);
     assert_eq!(understand("先解释 GST 再出一份税务日历"), Intent::Both);
+    assert_eq!(understand("评标是什么"), Intent::Chat);
+    assert_eq!(understand("ITT 是什么意思"), Intent::Chat);
+    assert_eq!(understand("workhead 算不算资质？"), Intent::Chat);
+    assert_eq!(understand("招标文件评标办法怎么理解"), Intent::Chat);
+    assert_eq!(
+        understand("Quality 33%\nPrice 67%\nBCA workhead CW01\nTwo Envelope"),
+        Intent::Run
+    );
     assert!(is_packish("一人公司成套投标"));
 }
 
@@ -3106,5 +3114,72 @@ fn test_harness_gst_question_no_write() {
         .join("wb-gst-chat")
         .join("finance-tax")
         .join("税务检查表.md")
+        .is_file());
+}
+
+#[tokio::test]
+async fn test_harness_tender_question_no_write() {
+    let p = paths();
+    let exp = seed()
+        .experts
+        .iter()
+        .find(|e| e.id == "bid-parse")
+        .cloned()
+        .unwrap();
+    let questions = ["评标是什么", "ITT 是什么意思", "workhead 算不算资质？"];
+    for (i, brief) in questions.iter().enumerate() {
+        let session = format!("wb-q-bid-{i}");
+        let draft = p
+            .out_root
+            .join(&session)
+            .join("bid-parse")
+            .join("招标解析表.md");
+        let _ = std::fs::remove_file(&draft);
+        let ticket = civil_workbench::harness::Ticket {
+            session: session.clone(),
+            project: "问".into(),
+            jurisdiction: "SG".into(),
+            brief: (*brief).into(),
+            path: String::new(),
+            confirm_ok: true,
+        };
+        let run = civil_workbench::harness::run_turn(&p, &exp, ticket);
+        assert_eq!(run.intent, "chat", "{brief} {:?}", run.intent);
+        assert!(run.files.is_empty(), "{brief} {:?}", run.files);
+        assert_eq!(run.to_value()["wrote"], false, "{brief}");
+        assert!(!draft.is_file(), "{brief} wrote {}", draft.display());
+    }
+
+    let (st, body) = send(
+        state(),
+        Request::builder()
+            .method("POST")
+            .uri("/api/harness/expert")
+            .header("content-type", "application/json")
+            .body(Body::from(
+                json!({
+                    "session_id": "wb-http-q-bid",
+                    "expert_id": "bid-parse",
+                    "brief": "评标是什么",
+                    "confirm_ok": true
+                })
+                .to_string(),
+            ))
+            .unwrap(),
+    )
+    .await;
+    assert_eq!(st, StatusCode::OK, "{body}");
+    let v: Value = serde_json::from_str(&body).unwrap();
+    assert_eq!(v["intent"], "chat", "{v}");
+    assert_eq!(v["wrote"], false, "{v}");
+    assert!(
+        v["files"].as_array().map(|a| a.is_empty()).unwrap_or(false),
+        "{v}"
+    );
+    assert!(!p
+        .out_root
+        .join("wb-http-q-bid")
+        .join("bid-parse")
+        .join("招标解析表.md")
         .is_file());
 }
