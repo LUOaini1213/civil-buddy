@@ -39,6 +39,8 @@ async fn test_index_and_static() {
     assert!(body.contains("Civil Buddy"));
     assert!(body.contains("全企业") || body.contains("任意专家") || body.contains("本岗知识"));
     assert!(body.contains("ctxBar"));
+    assert!(body.contains(".xlsx"), "{body}");
+    assert!(body.contains("提问不写盘") || body.contains("写一份"), "{body}");
     let (js_st, js) = send(
         state(),
         Request::builder().uri("/static/app.js").body(Body::empty()).unwrap(),

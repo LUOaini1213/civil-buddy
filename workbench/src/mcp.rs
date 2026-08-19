@@ -315,6 +315,13 @@ fn list_prompts(filter: &McpFilter) -> Vec<Value> {
                 {"name": "solver", "description": "本仓 solver 快照", "required": false}
             ]
         }),
+        json!({
+            "name": "civil.construction.scheme",
+            "description": "专项方案讨论提纲十一章。须确认句。禁止可以开工。不是法定专项。",
+            "arguments": [
+                {"name": "task", "description": "工作范围 / 临边部位", "required": true}
+            ]
+        }),
     ];
     if let Some(eid) = filter.expert.as_deref() {
         all.retain(|p| {
@@ -323,6 +330,7 @@ fn list_prompts(filter: &McpFilter) -> Vec<Value> {
                 "bid-parse" => n == "civil.bid.parse",
                 "bid-compliance" => n == "civil.bid.compliance",
                 "pack-ship" => n.starts_with("civil.pack-ship."),
+                "construction" => n == "civil.construction.scheme",
                 _ => false,
             }
         });
@@ -332,6 +340,7 @@ fn list_prompts(filter: &McpFilter) -> Vec<Value> {
             match pack {
                 "bid" => n.starts_with("civil.bid."),
                 "plant" => n.starts_with("civil.pack-ship."),
+                "construction" => n == "civil.construction.scheme",
                 _ => false,
             }
         });
@@ -374,6 +383,10 @@ fn get_prompt(filter: &McpFilter, msg: &Value) -> Value {
         ),
         "civil.pack-ship.list" => "列出 pack-ship__list / pack-ship__plan / pack-ship__export。不要编数字。".into(),
         "civil.pack-ship.export" => "导出装柜证据。utilization / can_fit / mid50 / 系固待办只抄 solver；未接通写 UNSPECIFIED。".into(),
+        "civil.construction.scheme" => format!(
+            "你是施工方案岗。出十一章讨论提纲，不是法定专项。写盘前须确认句「我明白，将由持证人员签认」。禁止断言可以开工。任务：\n{}",
+            args.get("task").or_else(|| args.get("text")).and_then(|v| v.as_str()).unwrap_or("（未提供）")
+        ),
         _ => "未知 prompt".into(),
     };
     json!({

@@ -337,7 +337,7 @@ Grok skill **不**在 V1 里 `use_tool` 调 MCP（保持 skill 可离线出十�
 2. 栏位来自 outline.md / KB，缺数 `[A001]` / `UNSPECIFIED`；  
 3. `test_expert_turn.py` 对该 id 的 run 能断言 **至少一个栏位不是通用骨架句**。
 
-当前已达到：bid-parse / bid-compliance / bid-tech / pack-ship / construction 十一章 md + T001 目录闸。下一优先按 product-plan §15：T021 pack 隔离 → T023 → T002 危大判定书。
+当前已达到：bid-parse / bid-compliance / bid-tech / pack-ship / construction 十一章 md + T001 目录闸 + T021 construction pack 隔离。下一优先按 product-plan §15：T023 → T003 → T002 危大判定书。
 
 ---
 
@@ -392,4 +392,4 @@ P0 运行时、P1-1 handoff、Agent 循环+沙箱、pack-ship 投影：**已做*
 
 ## 8. 下一刀（读完本文立刻做的）
 
-全量任务号见 [product-plan.md](product-plan.md) §15。切片下一刀是 **T021**（`--pack construction` 工具隔离）。K1/T001 已 ✅。
+全量任务号见 [product-plan.md](product-plan.md) §15。切片下一刀是 **T023**（kb:// 跨大类拒绝）。T021 已 ✅。

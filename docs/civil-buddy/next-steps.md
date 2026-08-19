@@ -41,7 +41,10 @@
     五篇说明书；`demo/mcp_stdio.py`；pack=bid 的 tools 含 KB/招标不含 pack-ship；construction 十一章接 turn。验收：`test_docs_completion.py` · `test_mcp_stdio.py` · `test_construction_skill_path.py`。
 
 13. **T001 / K1 66 岗四件套闸** ✅ 2026-08-19  
-    补 `demo/kb/construction/construction/outline.md`、`demo/kb/construction/method-hazard/outline.md`（短指针，不改判定卡）。`scripts/test_kb_schema.py` 遍历 seed 66 岗，缺 README/faq/outline/web-knowledge 即红。demo `catalog_seed` 补上漏掉的 pack-ship，工作台 `/api/catalog` 列出 66。主链头指针改为 T021。
+    补 `demo/kb/construction/construction/outline.md`、`demo/kb/construction/method-hazard/outline.md`（短指针，不改判定卡）。`scripts/test_kb_schema.py` 遍历 seed 66 岗，缺 README/faq/outline/web-knowledge 即红。demo `catalog_seed` 补上漏掉的 pack-ship，工作台 `/api/catalog` 列出 66。
+
+14. **T021 `--pack construction` 工具隔离** ✅ 2026-08-20  
+    stdio tools 含 scheme_draft/scan，不含 tender.parse / bid-parse__extract / pack-ship__plan / method-hazard__judge_hazard；prompts 只有 `civil.construction.scheme`。主链头指针改为 T023。
 
 平台内核见 [product-improvement-handbook.md](product-improvement-handbook.md)。岗独有写盘下一刀仍按 [post-horizon-2026-08-17.md](post-horizon-2026-08-17.md)。
 
