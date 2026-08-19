@@ -90,6 +90,7 @@ def _run_exclusive(
     *,
     confirm_ok: bool,
     session_id: str,
+    packing_summary: Optional[Dict[str, Any]] = None,
 ) -> Dict[str, Any]:
     tools = _write_tools(expert)
     if expert.risk == "high" and not confirm_ok:
@@ -128,23 +129,56 @@ def _run_exclusive(
         }
 
     if expert.id == "pack-ship":
-        from packing_assistant.tools.pack_ship_mcp import call_tool
+        from packing_assistant.runtime.session_packing import load_packing_snapshot
+        from packing_assistant.runtime.tool_engine import get_engine
 
-        listed = call_tool("pack-ship__list", {})
-        plan = call_tool("pack-ship__plan", {"connected": False, "materials": text})
-        exported = call_tool("pack-ship__export", {"connected": False})
+        snap = packing_summary if isinstance(packing_summary, dict) else load_packing_snapshot(session_id)
+        connected = bool(snap)
+        eng = get_engine()
+        health = eng.execute(
+            "pack-ship__health",
+            {"solver": snap},
+            expert_id="pack-ship",
+            intent="run",
+        )
+        listed = eng.execute("pack-ship__list", {}, expert_id="pack-ship", intent="run")
+        plan = eng.execute(
+            "pack-ship__plan",
+            {"solver": snap, "connected": connected, "materials": text},
+            expert_id="pack-ship",
+            intent="run",
+        )
+        exported = eng.execute(
+            "pack-ship__export",
+            {"solver": snap, "connected": connected},
+            expert_id="pack-ship",
+            intent="run",
+        )
+        md = str((exported.get("data") or exported).get("markdown") or exported.get("markdown") or "")
         path = out_dir / "pack-ship__export.md"
-        guarded_write_text(path, str(exported.get("markdown") or ""))
+        guarded_write_text(path, md)
         files.append({"name": path.name, "path": str(path), "tool": "pack-ship__export"})
-        ran.extend(["pack-ship__list", "pack-ship__plan", "pack-ship__export"])
+        ran.extend(["pack-ship__health", "pack-ship__list", "pack-ship__plan", "pack-ship__export"])
+        src = "solver" if connected else "disconnected"
+        reply = (
+            "装柜证据只抄 solver 快照，未重算 xyz。"
+            if connected
+            else "装柜证据只抄 solver；本轮未接通，utilization/can_fit/mid50/系固待办 为 UNSPECIFIED。"
+        )
         return {
             "wrote": True,
             "hitl_pending": False,
             "files": files,
             "tools_run": ran,
-            "reply": "装柜证据只抄 solver；本轮未接通，utilization/can_fit/mid50/系固待办 为 UNSPECIFIED。",
+            "reply": reply,
             "submit_blocked": True,
-            "pack_ship": {"list": listed.get("names"), "plan": plan, "export": exported},
+            "pack_ship": {
+                "source": src,
+                "health": health,
+                "list": (listed.get("data") or listed).get("names") if isinstance(listed.get("data") or listed, dict) else listed.get("names"),
+                "plan": plan.get("data") or plan,
+                "export": exported.get("data") or exported,
+            },
         }
 
     if not tools:
@@ -172,6 +206,7 @@ def run_expert_turn(
     confirm_ok: bool = False,
     session_id: str = "",
     force_intent: Optional[str] = None,
+    packing_summary: Optional[Dict[str, Any]] = None,
 ) -> Dict[str, Any]:
     exp = get_expert(expert_id)
     if not exp:
@@ -183,6 +218,12 @@ def run_expert_turn(
             "wrote": False,
         }
     intent = force_intent if force_intent in {"chat", "run", "both"} else understand(text)
+    from packing_assistant.runtime.scheduler import get_scheduler
+
+    sid = session_id or f"turn-{uuid4().hex[:8]}"
+    sched = get_scheduler()
+    run = sched.create_run(sid, expert_id=exp.id, intent=intent)
+    sched.transition(run, "planning")
     base: Dict[str, Any] = {
         "ok": True,
         "schema": "civil.expert_turn.v1",
@@ -199,14 +240,34 @@ def run_expert_turn(
         "reply": "",
         "submit_blocked": True,
         "n_experts": len(list_experts()),
+        "run_id": run.run_id,
+        "state": run.state,
+        "session_id": sid,
     }
     if intent == "chat":
+        sched.transition(run, "done")
+        sched.release(sid)
         base["reply"] = explain_expert(exp, text)
+        base["state"] = run.state
         return base
-    sid = session_id or f"turn-{uuid4().hex[:8]}"
-    ran = _run_exclusive(exp, text, confirm_ok=confirm_ok, session_id=sid)
-    if intent == "both":
+    ran = _run_exclusive(
+        exp, text, confirm_ok=confirm_ok, session_id=sid, packing_summary=packing_summary
+    )
+    if ran.get("hitl_pending"):
+        sched.transition(run, "waiting_hitl")
+    else:
+        sched.transition(run, "acting")
+        if run.cancelled:
+            ran["wrote"] = False
+            ran["files"] = []
+            ran["reply"] = "run cancelled"
+        else:
+            sched.transition(run, "done")
+    sched.release(sid)
+    if intent == "both" and not ran.get("hitl_pending"):
         ran["reply"] = explain_expert(exp, text) + "\n\n" + str(ran.get("reply") or "")
     base.update(ran)
     base["session_id"] = sid
+    base["run_id"] = run.run_id
+    base["state"] = run.state
     return base
