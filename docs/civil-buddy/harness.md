@@ -18,12 +18,20 @@ Every summoned expert is a harness that **understands first**.
 | Trace | ordered `steps` + `trace.json` |
 | HITL | 高风险专家写盘前确认句 |
 
+Python 网关（:8000）现网入口：
+
+- `POST /api/agent` — 完整循环（Scheduler + ToolEngine + 沙箱）
+- `POST /api/turn` — 兼容 66 岗 chat/run
+- `GET /api/eval/live` — 离线官方标题针
+- `GET /api/runs/{run_id}` — Scheduler 回放（messages / tools / artifacts）
+
+工作台（:8765 / Rust）另有：
+
 - `GET /api/architecture`
 - `POST /api/firm/bid`
 - `POST /api/harness/expert`
 - `POST /api/eval/shadow`
 - `POST /api/eval/shadow-expert`
-- `GET /api/eval/live`
 - `GET /api/harness/trace/{session}/{run_id}`
 
 ## 文档解析（可选外挂）

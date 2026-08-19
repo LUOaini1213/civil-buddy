@@ -370,18 +370,18 @@ GeBIZ 代交、法定签认、十万字写标、标书查重产品化、模型�
 | 刀 | 状态 | 验收入口 |
 |----|------|----------|
 | D0 65→66 与入口收口 | ✅ | README / docs 索引 / yibiao-mcp-map / skill 开篇已 66；历史评测页可留 65 |
-| D1 GETTING-STARTED / PROTOCOL / MCP / SKILLS / KB | 未做 | `test_docs_completion.py` |
+| D1 GETTING-STARTED / PROTOCOL / MCP / SKILLS / KB | ✅ | `python scripts/test_docs_completion.py` |
 | K1 66 岗目录契约 | 未做 | `test_kb_schema.py` |
 | K2 门户标题单一来源 | 未做 | eval/live 读 company 页 |
 | K3 kb:// 隔离 + 文件名检索闸 | 部分 | 扩 `test_mcp_surface.py` |
-| M1 Python stdio MCP | 未做 | `test_mcp_stdio.py` |
-| M2 工具表（KB+招标+装箱+扫描） | 未做 | pack≠ship 时 list 非空 |
-| M3 Host 样例 toml | 未做 | MCP.md 命令可复制 |
-| M4 construction / 危大 / 税务 prompts | 未做 | prompts/list 可见 |
-| S1 两套 skill 拆开写清 | 未做 | SKILLS.md |
-| S2 construction 十一章 + 扫描接 turn | 未做 | `test_construction_skill_path.py` |
-| S3 skill 文案与 66 岗关系 | 未做 | SKILL.md 开篇 |
-| S4 装箱 skill↔MCP 对账 | 未做 | docs/skills 一列 |
+| M1 Python stdio MCP | ✅ | `python scripts/test_mcp_stdio.py` |
+| M2 工具表（KB+招标+装箱+扫描） | ✅ | pack=bid 含 tender.parse，不含 pack-ship__plan |
+| M3 Host 样例 toml | ✅ | `mcp-host.example.toml` |
+| M4 construction / 危大 / 税务 prompts | ✅ | `civil.construction.scheme` 等 |
+| S1 两套 skill 拆开写清 | ✅ | SKILLS.md |
+| S2 construction 十一章 + 扫描接 turn | ✅ | `python scripts/test_construction_skill_path.py` |
+| S3 skill 文案与 66 岗关系 | ✅ | SKILL.md 开篇 |
+| S4 装箱 skill↔MCP 对账 | ✅ | SKILLS.md + docs/skills/README.md |
 | P 按 post-horizon 富写盘 | 进行中 | 每岗下一刀已写在 horizon 文 |
 
 P0 运行时、P1-1 handoff、Agent 循环+沙箱、pack-ship 投影：**已做**，见 handbook / next-steps。不要在完善文档面时把它们重做一遍。
@@ -390,6 +390,4 @@ P0 运行时、P1-1 handoff、Agent 循环+沙箱、pack-ship 投影：**已做*
 
 ## 8. 下一刀（读完本文立刻做的）
 
-**D0。** 改 README / docs 索引 / 名册 65→66，废止过夜空转页（已废止），让后人只从本文件开工。
-
-做完 D0 立刻 D1 五篇短文档，然后 **M1+M2**（Host 才能把产品当 MCP 用）与 **S2**（施工 skill 名实相符）二选一：若先要接 Cursor/Grok Host 就 M；若先要「写出像 skill 承诺的十一章」就 S2。
+**K1 岗目录契约** `test_kb_schema.py`（允许内容短，不允许缺文件），然后按 post-horizon 富写盘。D1/M1–M4/S1–S4 已落地。

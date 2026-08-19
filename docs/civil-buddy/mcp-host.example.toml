@@ -1,0 +1,22 @@
+# Copy into ~/.grok/config.toml (or Cursor/Claude MCP config equivalent).
+# Run from the civil-buddy repo root. Do not put API keys in this file.
+
+[mcp_servers.civil-bid]
+command = "python"
+args = ["demo/mcp_stdio.py", "--pack", "bid"]
+
+[mcp_servers.civil-construction]
+command = "python"
+args = ["demo/mcp_stdio.py", "--pack", "construction"]
+
+[mcp_servers.civil-commercial]
+command = "python"
+args = ["demo/mcp_stdio.py", "--pack", "commercial"]
+
+[mcp_servers.civil-buddy]
+command = "python"
+args = ["demo/mcp_stdio.py", "--expert", "construction"]
+
+# If workbench/target/release/civil-mcp.exe exists, you may replace command/args with:
+# command = "workbench/target/release/civil-mcp.exe"
+# args = ["--pack", "bid"]

@@ -132,7 +132,16 @@ def main() -> int:
     assert hx.json().get("utilization") == 0.71
     sneak_tools = client.get("/api/mcp/tools", params={"expert_id": "bid-parse"})
     assert sneak_tools.status_code == 200
-    assert sneak_tools.json()["tools"] == []
+    bnames = [t["name"] for t in sneak_tools.json()["tools"]]
+    assert "bid-parse__extract" in bnames or "tender.parse" in bnames or "search_kb" in bnames, bnames
+    assert "pack-ship__plan" not in bnames, bnames
+    deny_ps = call_tool("pack-ship__plan", {"connected": False}, expert_id="bid-parse")
+    assert deny_ps.get("ok") is False
+
+    from mcp_surface import list_prompts as _lp
+
+    cnames = [p["name"] for p in _lp(expert_id="construction")]
+    assert "civil.construction.scheme" in cnames
 
     print("PASS mcp_surface resources+prompts scoped pack-ship list/plan/export")
     return 0
