@@ -231,7 +231,7 @@ P0 不做：长期记忆、Go 重写、PDF OCR、66 岗全部富写盘。
 
 | 刀 | 做什么 | 验收 |
 |----|--------|------|
-| **P1-1 投标三岗共用 handoff** | bid-parse 写 `tender.handoff.json`；compliance 读它出三列；tech 只按评分点排目录 | 无评分点不套模板；`submit_blocked` 仍 true |
+| **P1-1 投标三岗共用 handoff** ✅ | bid-parse 写 `tender.handoff.json`；compliance 读它出三列；tech 只按评分点排目录 | 无评分点不套模板；`submit_blocked` 仍 true |
 | **P1-2 Python eval/live** ✅ | `GET /api/eval/live`：understand 分流 + 官方标题针（GST 9%、Fire Code、CTU、GeBIZ≠评分）不绑 `link.exe` | 冷启动可跑；IRAS 针失败不得改口「官方没写 9%」除非打开页确实没有 |
 | **P1-3 Memory API** | `session.summary` + slot（辖区/项目/P0）；压缩可见；写入过 `scan_forbidden` | 压缩后提示不得假装读过被丢细节 |
 | **P1-4 Trace 回放** | `GET /api/runs/{run_id}` 返回 messages+steps+tools+duration；OTEL span 带同一 `run_id` | 两次 GET 同一 identity，非夹具 |
@@ -424,4 +424,4 @@ P1：投标 handoff · Python eval · 回放 · 危大卡
 
 ## 12. 下一刀（手册执行入口）
 
-**P0 已落地。完整 Agent 循环 + 沙箱门 + Python `GET /api/eval/live` 已落地。** 下一刀 **P1-1**：bid-parse / compliance / tech 共用 `tender.handoff.json`。行业总判仍是 **部分合格**（未把可以投标/可以开工做成能力）。
+**P0 已落地。完整 Agent 循环 + 沙箱 + eval/live + P1-1 handoff 已落地。** 下一刀 **P1-4**：Run 回放 messages/steps/tools。行业总判仍是 **部分合格**。过夜规划见 [overnight-eval-iterate-2026-08-19.md](overnight-eval-iterate-2026-08-19.md)。
