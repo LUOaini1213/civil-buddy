@@ -28,6 +28,8 @@
 8. **每岗对照易标/pack-agent 长程规划** ✅ 2026-08-17  
    66 条独立规划 + 16 条车道。见 `docs/civil-buddy/post-horizon-2026-08-17.md`。验收：`python scripts/test_post_horizon.py`。
 
+平台内核抽层、P0–P2 与验收闸见 **[product-improvement-handbook.md](product-improvement-handbook.md)**（Scheduler / ToolEngine / 接通 pack-ship）。下一刀执行入口：P0-1 pack-ship 抄 `packing_summary`。
+
 ## 有宿主再做
 
 接上 Claude / Cursor / 本机 MCP 客户端后，再做 `kb://` 分页与订阅（horizon D）。本机无 `link.exe` 时，验收仍以 Python `GET /api/mcp/*` 为准。
