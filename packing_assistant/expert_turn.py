@@ -594,6 +594,26 @@ _FB_CHAPTERS = (
 
 _FB_PERIOD = re.compile(r"(20\d{2})[-./年](\d{1,2})")
 
+_FF_CHAPTERS = (
+    "封面",
+    "草稿声明",
+    "编制原则",
+    "合同价款节点",
+    "收入栏",
+    "支出栏",
+    "平衡试算",
+    "风险提示",
+    "自检",
+    "禁令",
+)
+
+_FF_SKIP = {
+    "草稿提纲",
+    "资金计划",
+    "资金计划草稿",
+    "待填",
+}
+
 _MILESTONE_KEYS = ("桩基", "±0", "封顶", "砌筑", "机电", "装饰", "竣工")
 
 _QTY_RE = re.compile(
@@ -3022,6 +3042,141 @@ def _finance_book_md(text: str) -> str:
     return "\n".join(lines)
 
 
+def _parse_fund_windows(blob: str) -> tuple:
+    income: List[str] = []
+    spend: List[str] = []
+    for piece in (blob or "").replace("；", "\n").replace(";", "\n").splitlines():
+        t = piece.strip()
+        t = re.sub(r"^写一份\S*\s*", "", t).strip()
+        t = re.sub(r"^(资金计划草稿|资金计划)\s*", "", t).strip()
+        if not t or t.lower() in _FF_SKIP or t in _FF_SKIP:
+            continue
+        if t.startswith("#") or t.startswith("内部"):
+            continue
+        if t in {"JGJ", "SAC", "CN", "SG", "DUAL"}:
+            continue
+        if _FB_PERIOD.search(t) and len(t) <= 12:
+            continue
+        raw = t
+        is_in = any(k in t for k in ("收入", "到账", "预付款", "进度款", "结算款", "质保金", "拨款"))
+        is_out = any(k in t for k in ("支出", "付款", "材料", "分包", "工资", "机械", "现场经费", "安措"))
+        for k in ("收入", "支出", "付款"):
+            t = t.replace(k, "")
+        t = re.sub(r"\s+", " ", t).strip(" ，,;；") or raw
+        if len(t) > 40:
+            t = t[:40]
+        if is_in and not is_out:
+            income.append(t)
+        elif is_out:
+            spend.append(t)
+    return income, spend
+
+
+def _fund_plan_md(text: str) -> str:
+    blob = text or ""
+    zone = _mix_zone(blob)
+    period = _fb_period(blob)
+    income, spend = _parse_fund_windows(blob)
+    if not income:
+        inc_tbl = (
+            "| 节点名称 | 计划日 | 到账账户 | 状态 | 金额 |\n"
+            "| --- | --- | --- | --- | --- |\n"
+            "| 业主到账 | 待填 | 待填 | 未报量 | TBD |\n"
+            "| 质保金返还 | 待填 | 待填 | 待填 | TBD |\n"
+            "| 公司拨款 | 待填 | 待填 | 待填 | TBD |\n"
+        )
+    else:
+        inc_tbl = (
+            "| 节点名称 | 计划日 | 到账账户 | 状态 | 金额 |\n"
+            "| --- | --- | --- | --- | --- |\n"
+            + "".join(f"| {n} | 待填 | 待填 | 待填 | TBD |\n" for n in income)
+        )
+    if not spend:
+        exp_tbl = (
+            "| 事项 | 账户 | 是否专户 | 金额 |\n"
+            "| --- | --- | --- | --- |\n"
+            "| 材料 | 基本结算户 | 否 | TBD |\n"
+            "| 人工费代发 | 农民工工资专用账户 | 是 | TBD |\n"
+            "| 现场经费 | 基本结算户 | 否 | TBD |\n"
+        )
+    else:
+        exp_tbl = (
+            "| 事项 | 账户 | 是否专户 | 金额 |\n"
+            "| --- | --- | --- | --- |\n"
+            + "".join(
+                (
+                    f"| {n} | 农民工工资专用账户 | 是 | TBD |\n"
+                    if any(k in n for k in ("工资", "人工"))
+                    else f"| {n} | 基本结算户 | 否 | TBD |\n"
+                )
+                for n in spend
+            )
+        )
+    lines = [
+        "# 项目资金计划草稿（AI 草稿）",
+        "",
+        DISCLAIMER,
+        "",
+        "内部讨论。不构成付款指令、银行划款依据或融资承诺。",
+        "",
+        f"- 辖区：{zone}",
+        f"- 计划期：{period}",
+        "",
+        "## 用户原文",
+        "",
+        blob.strip() or "（未提供）",
+        "",
+    ]
+    for i, title in enumerate(_FF_CHAPTERS, 1):
+        lines.append(f"## {i} {title}")
+        lines.append("")
+        if i == 1:
+            lines.append(f"项目待填。币种待填。计划期：{period}。编制人空栏。[A001]")
+        elif i == 2:
+            lines.append("内部讨论。不构成付款指令、银行划款依据或融资承诺。")
+        elif i == 3:
+            lines.append("以收定支、量入为出、专户分账。没有预计收款节点，整表待填。")
+        elif i == 4:
+            lines.append(
+                "预付款、进度款、竣工结算款、质量保证金：只列名称与日期栏。"
+                "时限与比例以本合同及现行办法为准，禁止默写百分比。"
+            )
+        elif i == 5:
+            lines.append("每笔写节点、计划日、账户、状态。无证据则待填。索赔意向不计入可支。")
+            lines.append("")
+            lines.append(inc_tbl)
+            lines.append("")
+            lines.append("金额 TBD。未把验工金额当成已到账。")
+        elif i == 6:
+            lines.append("分账户，禁止混户。专户资金不用于材料款或其他工程款。")
+            lines.append("")
+            lines.append(exp_tbl)
+            lines.append("")
+            lines.append("金额 TBD。无三方协议则专户栏待填。")
+        elif i == 7:
+            lines.append(
+                "| 期初可用 | 计划收款 | 计划付款 | 期末 |\n"
+                "| --- | --- | --- | --- |\n"
+                "| TBD | TBD | TBD | 无法试算 |"
+            )
+            lines.append("")
+            lines.append("四格都缺数就写无法试算，不要编现金。")
+        elif i == 8:
+            lines.append("计量未签认则进度款计划日待填。专户未开则工资支出不得列入可付。无三方协议则专户栏待填。")
+        elif i == 9:
+            lines.append("未把商务验工金额当成已到账。本稿不是银行划款依据。不承诺垫资。")
+        else:
+            lines.append("无合同节点不编付款承诺。不编利率、融资方案。不把工资专户余额拿去平衡材料缺口。")
+        lines.append("")
+    lines.append("[A001] 无合同节点则整表待填。金额 TBD。本稿不是付款指令。")
+    if zone in ("SG", "DUAL"):
+        lines.append("SG：CPF 缴交义务只写 CPF Board 标题。GST 备付只列申报期空栏。")
+    if zone in ("CN", "DUAL"):
+        lines.append("CN：工资专户 / 农民工工资条例只写标题。")
+    lines.append("")
+    return "\n".join(lines)
+
+
 def _dispatch_daily_md(text: str) -> str:
     jobs = _copy_sensitive_jobs(text)
     sensitive = (
@@ -4126,6 +4281,33 @@ def _run_exclusive(
             "files": files,
             "tools_run": ran,
             "reply": "已出核算检查表。报销勾选/科目对照/对账缺口。金额 [A001]。submit_blocked=true。",
+            "submit_blocked": True,
+        }
+
+    if expert.id == "finance-fund":
+        md = _fund_plan_md(text)
+        from packing_assistant.tools.tender_review import forbidden_hits
+
+        hits = forbidden_hits(md)
+        if hits:
+            return {
+                "wrote": False,
+                "hitl_pending": False,
+                "files": [],
+                "tools_run": [],
+                "reply": "禁语扫描命中，未报成功：" + "、".join(hits),
+                "submit_blocked": True,
+            }
+        path = out_dir / "finance-fund__plan.md"
+        guarded_write_text(path, md)
+        files.append({"name": path.name, "path": str(path), "tool": "finance-fund__plan"})
+        ran.append("finance-fund__plan")
+        return {
+            "wrote": True,
+            "hitl_pending": False,
+            "files": files,
+            "tools_run": ran,
+            "reply": "已出资金计划草稿。收入/支出窗口。金额 TBD。不是付款指令。submit_blocked=true。",
             "submit_blocked": True,
         }
 

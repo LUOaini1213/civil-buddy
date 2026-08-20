@@ -785,6 +785,37 @@ def main() -> int:
     assert "收发存" in fbg
     assert "不编盈亏" in fbg
 
+    ff_chat = run_expert_turn("以收定支怎么理解？", "finance-fund")
+    assert ff_chat["intent"] == "chat" and ff_chat["wrote"] is False
+    ff_ok = run_expert_turn(
+        "写一份资金计划 2026-08",
+        "finance-fund",
+        force_intent="run",
+        session_id="t038-ff",
+    )
+    assert ff_ok["wrote"] is True
+    assert "finance-fund__plan" in ff_ok["tools_run"]
+    fft = Path(ff_ok["files"][0]["path"]).read_text(encoding="utf-8")
+    assert "2026-08" in fft
+    assert "收入栏" in fft and "支出栏" in fft
+    assert "TBD" in fft
+    assert "不构成付款指令" in fft
+    assert "无法试算" in fft
+    assert "可以开工" not in fft
+    assert "资金充足" not in fft
+    ff_io = run_expert_turn(
+        "写一份资金计划 收入 业主进度款；支出 钢筋",
+        "finance-fund",
+        force_intent="run",
+        session_id="t038-ff-io",
+    )
+    ffi = Path(ff_io["files"][0]["path"]).read_text(encoding="utf-8")
+    inc = ffi.split("## 5 收入栏")[1].split("## 6")[0]
+    exp = ffi.split("## 6 支出栏")[1].split("## 7")[0]
+    assert "业主进度款" in inc
+    assert "钢筋" in exp
+    assert "TBD" in inc and "TBD" in exp
+
     high = [e for e in roster if e.risk == "high"][0]
     blocked = run_expert_turn("写一份专项方案讨论提纲", high.id, confirm_ok=False)
     assert blocked["intent"] == "run"

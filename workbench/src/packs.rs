@@ -937,7 +937,7 @@ fn pack_tools(pack: &str) -> Vec<ToolDef> {
             },
             ToolDef {
                 name: "finance-fund__plan",
-                description: "资金计划草稿，不编账套分录。",
+                description: "资金计划：收入/支出窗口。金额 TBD。不是付款指令。",
                 parameters: obj(json!({"period": {"type": "string"}, "notes": {"type": "string"}}), &["period"]),
             },
             ToolDef {
@@ -3424,16 +3424,99 @@ fn equip_ledger(ctx: &mut ToolCtx, args: &Value) -> String {
     }
 }
 
+fn parse_fund_windows(blob: &str) -> (Vec<String>, Vec<String>) {
+    let mut income = Vec::new();
+    let mut spend = Vec::new();
+    let period_re = regex::Regex::new(r"^20\d{2}[-./年]\d{1,2}$").expect("ff period");
+    for raw in blob.replace('；', "\n").replace(';', "\n").lines() {
+        let mut t = raw.trim().to_string();
+        if let Some(rest) = t.strip_prefix("写一份") {
+            t = rest.trim().to_string();
+        }
+        for p in ["资金计划草稿", "资金计划"] {
+            if let Some(rest) = t.strip_prefix(p) {
+                t = rest.trim().to_string();
+                break;
+            }
+        }
+        if t.is_empty()
+            || matches!(
+                t.as_str(),
+                "草稿提纲" | "待填" | "SG" | "CN" | "DUAL" | "资金计划" | "资金计划草稿"
+            )
+        {
+            continue;
+        }
+        if t.starts_with('#') || t.starts_with("内部") {
+            continue;
+        }
+        if period_re.is_match(&t) {
+            continue;
+        }
+        let raw_line = t.clone();
+        let is_in = ["收入", "到账", "预付款", "进度款", "结算款", "质保金", "拨款"]
+            .iter()
+            .any(|k| t.contains(k));
+        let is_out = ["支出", "付款", "材料", "分包", "工资", "机械", "现场经费", "安措"]
+            .iter()
+            .any(|k| t.contains(k));
+        for k in ["收入", "支出", "付款"] {
+            t = t.replace(k, "");
+        }
+        t = t.split_whitespace().collect::<Vec<_>>().join(" ");
+        if t.is_empty() {
+            t = raw_line.chars().take(40).collect();
+        }
+        if t.chars().count() > 40 {
+            t = t.chars().take(40).collect();
+        }
+        if is_in && !is_out {
+            income.push(t);
+        } else if is_out {
+            spend.push(t);
+        }
+    }
+    (income, spend)
+}
+
 fn fund_plan(ctx: &mut ToolCtx, args: &Value) -> String {
     let (jur, banner) = zone_banner(args);
+    let blob = format!(
+        "{}\n{}\n{}",
+        s(args, "period"),
+        s(args, "notes"),
+        s(args, "note")
+    );
+    let period = fb_period(&blob, &s(args, "period"));
+    let (income, spend) = parse_fund_windows(&blob);
+    let inc_tbl = if income.is_empty() {
+        "| 节点名称 | 计划日 | 到账账户 | 状态 | 金额 |\n| --- | --- | --- | --- | --- |\n| 业主到账 | 待填 | 待填 | 未报量 | TBD |\n| 质保金返还 | 待填 | 待填 | 待填 | TBD |\n| 公司拨款 | 待填 | 待填 | 待填 | TBD |\n".to_string()
+    } else {
+        let mut out = String::from("| 节点名称 | 计划日 | 到账账户 | 状态 | 金额 |\n| --- | --- | --- | --- | --- |\n");
+        for n in &income {
+            out.push_str(&format!("| {n} | 待填 | 待填 | 待填 | TBD |\n"));
+        }
+        out
+    };
+    let exp_tbl = if spend.is_empty() {
+        "| 事项 | 账户 | 是否专户 | 金额 |\n| --- | --- | --- | --- |\n| 材料 | 基本结算户 | 否 | TBD |\n| 人工费代发 | 农民工工资专用账户 | 是 | TBD |\n| 现场经费 | 基本结算户 | 否 | TBD |\n".to_string()
+    } else {
+        let mut out = String::from("| 事项 | 账户 | 是否专户 | 金额 |\n| --- | --- | --- | --- |\n");
+        for n in &spend {
+            if n.contains("工资") || n.contains("人工") {
+                out.push_str(&format!("| {n} | 农民工工资专用账户 | 是 | TBD |\n"));
+            } else {
+                out.push_str(&format!("| {n} | 基本结算户 | 否 | TBD |\n"));
+            }
+        }
+        out
+    };
     let md = format!(
-        "{}{banner}\n## 周期\n{}\n\n## 口径\n{}\n\n不编会计分录。{}\n",
+        "{}{banner}\n内部讨论。不构成付款指令、银行划款依据或融资承诺。\n\n- 计划期：{period}\n\n## 1 封面\n项目待填。币种待填。计划期：{period}。编制人空栏。[A001]\n\n## 2 草稿声明\n内部讨论。不构成付款指令、银行划款依据或融资承诺。\n\n## 3 编制原则\n以收定支、量入为出、专户分账。没有预计收款节点，整表待填。\n\n## 4 合同价款节点\n预付款、进度款、竣工结算款、质量保证金：只列名称与日期栏。时限与比例以本合同及现行办法为准，禁止默写百分比。\n\n## 5 收入栏\n每笔写节点、计划日、账户、状态。无证据则待填。索赔意向不计入可支。\n\n{inc_tbl}\n金额 TBD。未把验工金额当成已到账。\n\n## 6 支出栏\n分账户，禁止混户。专户资金不用于材料款或其他工程款。\n\n{exp_tbl}\n金额 TBD。无三方协议则专户栏待填。\n\n## 7 平衡试算\n| 期初可用 | 计划收款 | 计划付款 | 期末 |\n| --- | --- | --- | --- |\n| TBD | TBD | TBD | 无法试算 |\n\n四格都缺数就写无法试算，不要编现金。\n\n## 8 风险提示\n计量未签认则进度款计划日待填。专户未开则工资支出不得列入可付。无三方协议则专户栏待填。\n\n## 9 自检\n未把商务验工金额当成已到账。本稿不是银行划款依据。不承诺垫资。\n\n## 10 禁令\n无合同节点不编付款承诺。不编利率、融资方案。不把工资专户余额拿去平衡材料缺口。\n\n[A001] 无合同节点则整表待填。金额 TBD。本稿不是付款指令。{}\n",
         header("资金计划草稿"),
-        nonempty(&s(args, "period"), "待填"),
-        nonempty(&s(args, "notes"), "待填"),
         format!(
             "{}{}",
-            sg_only(&jur, "SG：CPF 缴交义务只写 CPF Board 标题。"),
+            sg_only(&jur, "SG：CPF 缴交义务只写 CPF Board 标题。GST 备付只列申报期空栏。"),
             cn_only(&jur, "CN：工资专户 / 农民工工资条例只写标题。"),
         ),
     );
