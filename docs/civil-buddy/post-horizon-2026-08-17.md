@@ -613,7 +613,7 @@
 - qa：已有 · procurement__scan_forbidden
 - kb：已有 · 分层 KB + search_kb/read_kb（demo/kb）
 - write：已有 · 独有 proc-compare__table；chat 不写盘
-- 下一刀：proc-compare__table 一行一家多列；定商标待制度定；写盘后 scan_forbidden。
+- 下一刀：已做 T037 proc-compare。proc-compare__table 一行一家多列；定商标待制度定；写盘后 scan_forbidden。
 
 ### proc-vendor
 

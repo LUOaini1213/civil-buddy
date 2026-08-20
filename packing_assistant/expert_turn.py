@@ -528,6 +528,33 @@ _LEAD_QTY = re.compile(
     re.I,
 )
 
+_PC_CHAPTERS = (
+    "范围与方式定性",
+    "草稿声明",
+    "询价文件必备栏",
+    "邀请口径",
+    "比价表",
+    "评审口径",
+    "串标与形式审查",
+    "定商建议栏",
+    "接口栏",
+    "禁令",
+)
+
+_PC_SKIP = {
+    "草稿提纲",
+    "比价",
+    "询价",
+    "比价表",
+    "询价比价",
+    "询价比价表",
+    "待填",
+}
+
+_QUOTE_QTY = re.compile(
+    r"(?:单价|报价)[:：\s]*(?P<qty>\d+(?:\.\d+)?)",
+)
+
 _MILESTONE_KEYS = ("桩基", "±0", "封顶", "砌筑", "机电", "装饰", "竣工")
 
 _QTY_RE = re.compile(
@@ -2608,6 +2635,133 @@ def _proc_plan_md(text: str) -> str:
     return "\n".join(lines)
 
 
+def _pc_price(line: str) -> str:
+    if "无报价" in (line or ""):
+        return "TBD"
+    m = _QUOTE_QTY.search(line or "")
+    if not m:
+        return "TBD"
+    return f"{m.group('qty')}（用户报价）"
+
+
+def _parse_compare(blob: str) -> tuple:
+    item = ""
+    vendors: List[tuple] = []
+    for piece in (blob or "").replace("；", "\n").replace(";", "\n").splitlines():
+        raw = piece.strip()
+        t = re.sub(r"^写一份\S*\s*", "", raw).strip()
+        t = re.sub(r"^(询价比价表|比价表草稿|比价表|询价比价|询价|比价)\s*", "", t).strip()
+        if not t or t.lower() in _PC_SKIP or t in _PC_SKIP:
+            continue
+        if t.startswith("#") or t.startswith("内部"):
+            continue
+        if t in {"JGJ", "SAC", "CN", "SG", "DUAL"}:
+            continue
+        marked = ("供方" in t) or ("供应商" in t)
+        cleaned = re.sub(r"供方|供应商", "", t)
+        cleaned = _QUOTE_QTY.sub("", cleaned)
+        cleaned = re.sub(r"\s+", " ", cleaned).strip(" ，,;；") or t
+        if len(cleaned) > 40:
+            cleaned = cleaned[:40]
+        price = _pc_price(raw)
+        if marked:
+            if cleaned and cleaned not in _PC_SKIP:
+                vendors.append((cleaned, price))
+            continue
+        parts = cleaned.split()
+        if not item:
+            item = parts[0] if parts else t[:40]
+            for p in parts[1:]:
+                if p and p not in _PC_SKIP:
+                    vendors.append((p, price))
+        else:
+            if cleaned and cleaned != item:
+                vendors.append((cleaned, price))
+    return item or "待填", vendors
+
+
+def _compare_md(text: str) -> str:
+    blob = text or ""
+    zone = _mix_zone(blob)
+    item, vendors = _parse_compare(blob)
+    head = (
+        "| 供方名称 | 规格响应 | 品牌产地 | 数量 | 单价 | 合价 | 到货期 | 质保 | 付款 | 运费装卸 | 发票种类 | 偏离说明 | 资料是否齐全 |\n"
+        "| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |\n"
+    )
+    if not vendors:
+        table = head + "| 待询 | 待填 | 待填 | [A001] | TBD | TBD | 待填 | 待填 | 待填 | 待填 | 待填 | 待填 | 待核 |\n"
+        invite = "拟询对象待填。企业询比通常不少于三家；不足三家写明原因，不得虚构第三家。"
+    else:
+        table = head + "".join(
+            f"| {n} | 待填 | 待填 | [A001] | {p} | TBD | 待填 | 待填 | 待填 | 待填 | 待填 | 待填 | 待核 |\n"
+            for n, p in vendors
+        )
+        if len(vendors) < 3:
+            invite = f"本轮列 {len(vendors)} 家。有效报价不足三家及原因待填。不得虚构第三家。"
+        else:
+            invite = f"本轮列 {len(vendors)} 家。来源（合格名录 / 业主书面短名单 / 用户指定）待填。"
+    lines = [
+        "# 询价比价表（AI 草稿）",
+        "",
+        DISCLAIMER,
+        "",
+        "询价比价口径。无供应商书面报价一律不填单价。不是招标文件，也不是成交通知。",
+        "",
+        f"- 辖区：{zone}",
+        f"- 标的：{item}",
+        "",
+        "## 用户原文",
+        "",
+        blob.strip() or "（未提供）",
+        "",
+    ]
+    for i, title in enumerate(_PC_CHAPTERS, 1):
+        lines.append(f"## {i} {title}")
+        lines.append("")
+        if i == 1:
+            lines.append(
+                "先定性本包是现场自采询比、依法必须招标货物，还是政府采购，再列表。"
+                "三类法规名称不同。金额门槛不默写。是否达到必须招标，待用户提供估算依据，本岗不随口估合同额。"
+            )
+        elif i == 2:
+            lines.append("内部讨论。无报价不编价。不做价格本。本稿不定标。")
+        elif i == 3:
+            lines.append(
+                "物资名称、规格型号、计量单位、数量来源、交货期、交货地点、运输卸车、质保、售后、"
+                "付款、发票、验收、样品/检测、有效期、违约责任。空栏待填。不要只写请报价。"
+            )
+        elif i == 4:
+            lines.append(invite)
+        elif i == 5:
+            lines.append(table)
+            lines.append("")
+            lines.append("一行一家，一列一项。禁止只留总价列。无报价单价 TBD。无单价不乘合价。")
+        elif i == 6:
+            lines.append(
+                "同等条件比到货期、质保、付款、运距、检测、售后。价格只是一列。"
+                "不得用市场价补未报列。不得写建议成交价。"
+            )
+        elif i == 7:
+            lines.append("只列异常现象（同一模板、同一小数、同一邮箱）。不下已串标法律结论。")
+        elif i == 8:
+            lines.append("待用户/评标小组按制度定。可列响应缺口。本稿不定标，不写现定给哪一家。")
+        elif i == 9:
+            lines.append("本表编号回写采购计划行号。是否已在合格名录问供应商岗。付款条件原文抄给财务，不替财务做资金计划。")
+        else:
+            lines.append(
+                "无报价不编单价。不做价格本、信息价本。"
+                "不把政府采购方式不加说明地套到非政府采购项目。本稿不下成交结论。"
+            )
+        lines.append("")
+    lines.append("[A001] 无报价不编价。定商标待制度定。禁止编造市场价。")
+    if zone in ("SG", "DUAL"):
+        lines.append("SG：GeBIZ / MOF value for money 只写标题。不把 PQM 权重抄进材料比价。")
+    if zone in ("CN", "DUAL"):
+        lines.append("CN：无报价不编价。询价程序不是招标定标。必须招标的工程项目规定只写全名。")
+    lines.append("")
+    return "\n".join(lines)
+
+
 def _dispatch_daily_md(text: str) -> str:
     jobs = _copy_sensitive_jobs(text)
     sensitive = (
@@ -3623,6 +3777,44 @@ def _run_exclusive(
             "submit_blocked": True,
         }
 
+    if expert.id == "proc-compare":
+        md = _compare_md(text)
+        from packing_assistant.tools.tender_review import forbidden_hits
+
+        hits = forbidden_hits(md)
+        if hits:
+            return {
+                "wrote": False,
+                "hitl_pending": False,
+                "files": [],
+                "tools_run": [],
+                "reply": "禁语扫描命中，未报成功：" + "、".join(hits),
+                "submit_blocked": True,
+            }
+        path = out_dir / "proc-compare__table.md"
+        guarded_write_text(path, md)
+        files.append({"name": path.name, "path": str(path), "tool": "proc-compare__table"})
+        ran.append("proc-compare__table")
+        post = forbidden_hits(path.read_text(encoding="utf-8"))
+        ran.append("procurement__scan_forbidden")
+        if post:
+            return {
+                "wrote": False,
+                "hitl_pending": False,
+                "files": files,
+                "tools_run": ran,
+                "reply": "写盘后扫描命中，未报成功：" + "、".join(post),
+                "submit_blocked": True,
+            }
+        return {
+            "wrote": True,
+            "hitl_pending": False,
+            "files": files,
+            "tools_run": ran,
+            "reply": "已出比价表。一行一家多列。定商标待制度定。写盘后扫描通过。submit_blocked=true。",
+            "submit_blocked": True,
+        }
+
     if expert.id == "cost":
         md = (
             f"# 工程量拆分表（AI 草稿）\n\n{DISCLAIMER}\n\n"
@@ -3748,6 +3940,8 @@ def run_named_exclusive(name: str, args: Optional[Dict[str, Any]] = None) -> Dic
         "scenario",
         "certs",
         "item",
+        "vendors",
+        "vendor",
         "note",
         "notes",
     ):

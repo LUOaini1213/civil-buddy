@@ -121,6 +121,9 @@
 39. **T037 proc-plan 一岗** ✅ 2026-08-20  
     proc-plan__schedule 先分甲供/甲指/自采再列表；无供方周期则提前期 UNSPECIFIED。金额门槛不默写。T037 批次未完：下一岗 **proc-compare**。不得把比价/供方一并勾完。行业总判仍 **部分合格**。
 
+40. **T037 proc-compare 一岗** ✅ 2026-08-20  
+    proc-compare__table 一行一家多列；无报价不编价；定商标待制度定；写盘后 procurement__scan_forbidden。T037 批次未完：下一岗 **proc-vendor**。不得把供方一并勾完。行业总判仍 **部分合格**。
+
 平台内核见 [product-improvement-handbook.md](product-improvement-handbook.md)。岗独有写盘下一刀仍按 [post-horizon-2026-08-17.md](post-horizon-2026-08-17.md)。
 
 ## 有宿主再做

@@ -827,7 +827,7 @@ fn pack_tools(pack: &str) -> Vec<ToolDef> {
             },
             ToolDef {
                 name: "proc-compare__table",
-                description: "比价表。无报价不编价。",
+                description: "比价表：一行一家多列。无报价不编价。定商标待制度定。写盘后扫描。",
                 parameters: obj(
                     json!({
                         "item": {"type": "string"},
@@ -2402,25 +2402,142 @@ fn plan_skeleton(ctx: &mut ToolCtx, args: &Value) -> String {
     }
 }
 
+fn vendor_price(line: &str) -> String {
+    if line.contains("无报价") {
+        return "TBD".into();
+    }
+    let re = regex::Regex::new(r"(?:单价|报价)[:：\s]*(\d+(?:\.\d+)?)").expect("quote re");
+    if let Some(c) = re.captures(line) {
+        return format!("{}（用户报价）", &c[1]);
+    }
+    "TBD".into()
+}
+
+fn parse_compare(blob: &str, item_arg: &str, vendors_arg: &str) -> (String, Vec<(String, String)>) {
+    let mut item = item_arg.trim().to_string();
+    let mut vendors: Vec<(String, String)> = Vec::new();
+    let vendor_src = if vendors_arg.trim().is_empty() {
+        blob.to_string()
+    } else {
+        vendors_arg.to_string()
+    };
+    for raw in vendor_src.replace('；', "\n").replace(';', "\n").lines() {
+        let mut t = raw.trim().to_string();
+        if let Some(rest) = t.strip_prefix("写一份") {
+            t = rest.trim().to_string();
+        }
+        for p in ["询价比价表", "比价表草稿", "比价表", "询价比价", "询价", "比价"] {
+            if let Some(rest) = t.strip_prefix(p) {
+                t = rest.trim().to_string();
+                break;
+            }
+        }
+        if t.is_empty()
+            || matches!(
+                t.as_str(),
+                "草稿提纲" | "待填" | "SG" | "CN" | "DUAL" | "比价" | "询价" | "比价表"
+            )
+        {
+            continue;
+        }
+        if t.starts_with('#') || t.starts_with("内部") {
+            continue;
+        }
+        let price = vendor_price(&t);
+        let marked = t.contains("供方") || t.contains("供应商");
+        t = t.replace("供应商", "").replace("供方", "");
+        let quote_re = regex::Regex::new(r"(?:单价|报价)[:：\s]*\d+(?:\.\d+)?").expect("strip quote");
+        if let Some(m) = quote_re.find(&t) {
+            let span = m.as_str().to_string();
+            t = t.replace(&span, "");
+        }
+        t = t.split_whitespace().collect::<Vec<_>>().join(" ");
+        if t.is_empty() {
+            continue;
+        }
+        if marked {
+            vendors.push((t.chars().take(40).collect(), price));
+            continue;
+        }
+        if vendors_arg.trim().is_empty() && item.is_empty() {
+            let mut parts = t.split_whitespace();
+            if let Some(first) = parts.next() {
+                item = first.to_string();
+            }
+            for p in parts {
+                vendors.push((p.to_string(), price.clone()));
+            }
+        } else {
+            if !item.is_empty() && (t == item || t.eq_ignore_ascii_case(&item)) {
+                continue;
+            }
+            vendors.push((t.chars().take(40).collect(), price));
+        }
+    }
+    if item.is_empty() {
+        for raw in blob.replace('；', "\n").replace(';', "\n").lines() {
+            let t = raw.trim();
+            if t.is_empty() || t == "待填" {
+                continue;
+            }
+            if vendors.iter().any(|(n, _)| n == t) {
+                continue;
+            }
+            let stripped = t.strip_prefix("写一份").unwrap_or(t).trim();
+            if stripped.is_empty() || matches!(stripped, "比价" | "询价" | "比价表" | "草稿提纲") {
+                continue;
+            }
+            item = stripped.split_whitespace().next().unwrap_or("待填").to_string();
+            break;
+        }
+    }
+    vendors.retain(|(n, _)| n != &item && !n.eq_ignore_ascii_case(&item));
+    (nonempty(&item, "待填"), vendors)
+}
+
 fn compare_table(ctx: &mut ToolCtx, args: &Value) -> String {
     let (jur, banner) = zone_banner(args);
-    let vendors = split_lines(&s(args, "vendors"));
-    let mut md = format!(
-        "{}{banner}\n标的：{}\n\n| 供应商 | 报价 | 工期 | 备注 |\n| --- | --- | --- | --- |\n",
-        header("比价表草稿"),
-        nonempty(&s(args, "item"), "待填")
+    let blob = format!(
+        "{}\n{}\n{}\n{}\n{}",
+        s(args, "item"),
+        s(args, "vendors"),
+        s(args, "vendor"),
+        s(args, "notes"),
+        s(args, "note")
     );
-    if vendors.is_empty() {
-        md.push_str("| 待询 | 无报价不编价 | TBD |  |\n");
-    }
-    for v in vendors {
-        md.push_str(&format!("| {v} | 无报价不编价 | TBD |  |\n"));
-    }
-    md.push_str("\n[A001] 无报价不编价。");
-    md.push_str(&sg_only(&jur, "SG：GeBIZ / MOF value for money 只写标题。"));
-    md.push('\n');
+    let (item, vendors) = parse_compare(&blob, &s(args, "item"), &s(args, "vendors"));
+    let head = "| 供方名称 | 规格响应 | 品牌产地 | 数量 | 单价 | 合价 | 到货期 | 质保 | 付款 | 运费装卸 | 发票种类 | 偏离说明 | 资料是否齐全 |\n| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |\n";
+    let (table, invite) = if vendors.is_empty() {
+        (
+            format!("{head}| 待询 | 待填 | 待填 | [A001] | TBD | TBD | 待填 | 待填 | 待填 | 待填 | 待填 | 待填 | 待核 |\n"),
+            "拟询对象待填。企业询比通常不少于三家；不足三家写明原因，不得虚构第三家。".to_string(),
+        )
+    } else {
+        let mut out = head.to_string();
+        for (n, p) in &vendors {
+            out.push_str(&format!("| {n} | 待填 | 待填 | [A001] | {p} | TBD | 待填 | 待填 | 待填 | 待填 | 待填 | 待填 | 待核 |\n"));
+        }
+        let invite = if vendors.len() < 3 {
+            format!("本轮列 {} 家。有效报价不足三家及原因待填。不得虚构第三家。", vendors.len())
+        } else {
+            format!("本轮列 {} 家。来源（合格名录 / 业主书面短名单 / 用户指定）待填。", vendors.len())
+        };
+        (out, invite)
+    };
+    let md = format!(
+        "{}{banner}\n询价比价口径。无供应商书面报价一律不填单价。不是招标文件，也不是成交通知。\n\n- 标的：{item}\n\n## 1 范围与方式定性\n先定性本包是现场自采询比、依法必须招标货物，还是政府采购，再列表。三类法规名称不同。金额门槛不默写。是否达到必须招标，待用户提供估算依据，本岗不随口估合同额。\n\n## 2 草稿声明\n内部讨论。无报价不编价。不做价格本。本稿不定标。\n\n## 3 询价文件必备栏\n物资名称、规格型号、计量单位、数量来源、交货期、交货地点、运输卸车、质保、售后、付款、发票、验收、样品/检测、有效期、违约责任。空栏待填。不要只写请报价。\n\n## 4 邀请口径\n{invite}\n\n## 5 比价表\n{table}\n一行一家，一列一项。禁止只留总价列。无报价单价 TBD。无单价不乘合价。\n\n## 6 评审口径\n同等条件比到货期、质保、付款、运距、检测、售后。价格只是一列。不得用市场价补未报列。不得写建议成交价。\n\n## 7 串标与形式审查\n只列异常现象（同一模板、同一小数、同一邮箱）。不下已串标法律结论。\n\n## 8 定商建议栏\n待用户/评标小组按制度定。可列响应缺口。本稿不定标，不写现定给哪一家。\n\n## 9 接口栏\n本表编号回写采购计划行号。是否已在合格名录问供应商岗。付款条件原文抄给财务，不替财务做资金计划。\n\n## 10 禁令\n无报价不编单价。不做价格本、信息价本。不把政府采购方式不加说明地套到非政府采购项目。本稿不下成交结论。\n\n[A001] 无报价不编价。定商标待制度定。禁止编造市场价。{}\n",
+        header("比价表草稿"),
+        format!(
+            "{}{}",
+            sg_only(&jur, "SG：GeBIZ / MOF value for money 只写标题。不把 PQM 权重抄进材料比价。"),
+            cn_only(&jur, "CN：无报价不编价。询价程序不是招标定标。必须招标的工程项目规定只写全名。"),
+        ),
+    );
     match ctx.write_md("比价表草稿.md", &md) {
-        Ok(m) => m,
+        Ok(m) => {
+            let scan = scan_forbidden(ctx, &json!({"filename": "比价表草稿.md"}));
+            format!("{m}；{scan}")
+        }
         Err(e) => e,
     }
 }
