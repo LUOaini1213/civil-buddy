@@ -11,30 +11,38 @@ from typing import Any, Dict, List
 
 _ROOT = Path(__file__).resolve().parents[2]
 
+COMPANY = "demo/kb/company/web-portals.md"
+
 NEEDLES = (
     {
         "id": "gst-9",
-        "path": "demo/kb/finance/finance-tax/web-knowledge.md",
+        "path": COMPANY,
         "must": ("9%", "Current GST rates"),
-        "note": "IRAS 页述 GST 9%；离线闸抄 KB，不改口「官方没写」。",
+        "note": "IRAS 页述 GST 9%；离线闸抄 company 页，不改口「官方没写」。",
     },
     {
         "id": "fire-code",
-        "path": "demo/kb/company/web-portals.md",
+        "path": COMPANY,
         "must": ("Fire Code 2023",),
         "note": "SCDF 官方标题。条款 UNSPECIFIED。",
     },
     {
         "id": "ctu-2014",
-        "path": "demo/kb/plant/pack-ship/web-knowledge.md",
-        "must": ("CTU Code", "2014"),
-        "note": "IMO/ILO/UNECE CTU Code 2014。不编条款号。",
+        "path": COMPANY,
+        "must": ("CTU Code", "2014", "非强制"),
+        "note": "IMO/ILO/UNECE CTU Code 2014 非强制。不编条款号。",
     },
     {
         "id": "gebiz-not-scoring",
-        "path": "demo/kb/company/web-portals.md",
-        "must": ("GeBIZ", "不是评分"),
+        "path": COMPANY,
+        "must": ("GeBIZ", "不是评分办法"),
         "note": "GeBIZ 是门户不是评分办法。",
+    },
+    {
+        "id": "appbca-2026-12",
+        "path": COMPANY,
+        "must": ("APPBCA-2026-12", "5,000"),
+        "note": "CORENET X 2026-10-01 仅新项目 GFA≥5,000 m²。不是全部新项目不论 GFA。",
     },
 )
 

@@ -8,7 +8,7 @@
 
 ## 国际作业守则（2026-08-15 打开过）
 
-- 官方标题 **IMO/ILO/UNECE Code of Practice for Packing of Cargo Transport Units (CTU Code)**，2014 年版。IMO 页述：非强制性全球作业守则，2014 年由 UNECE Inland Transport Committee、IMO MSC、ILO Governing Body 核可；并作为 MSC.1/Circ.1497 印发。https://www.imo.org/en/ourwork/safety/pages/ctu-code.aspx
+- 官方标题与公司层 `company/web-portals.md` 同一句：**IMO/ILO/UNECE Code of Practice for Packing of Cargo Transport Units (CTU Code)**，2014 年版，非强制性全球作业守则。IMO 页述 2014 年由 UNECE Inland Transport Committee、IMO MSC、ILO Governing Body 核可；并作为 MSC.1/Circ.1497 印发。条款 UNSPECIFIED。https://www.imo.org/en/ourwork/safety/pages/ctu-code.aspx
 - UNECE 专题页（同一守则）：https://unece.org/transport/intermodal-transport/imoilounece-code-practice-packing-cargo-transport-units-ctu-code
 - CSC（International Convention for Safe Containers）Safety Approval Plate：柜况与铭牌由持证人员核，本岗不判「可装船」。
 - 危险品另对 IMDG Code；本岗无申报正文则不编 UN 号。

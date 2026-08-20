@@ -47,7 +47,10 @@
     stdio tools 含 scheme_draft/scan，不含 tender.parse / bid-parse__extract / pack-ship__plan / method-hazard__judge_hazard；prompts 只有 `civil.construction.scheme`。
 
 15. **T023 kb:// 跨大类拒绝** ✅ 2026-08-20  
-    bid-parse 读 `kb://construction/method-hazard/outline.md` 拒绝句。`POST /api/mcp/resources/read`。验收：`python scripts/test_mcp_surface.py`。主链头指针改为 T003。
+    bid-parse 读 `kb://construction/method-hazard/outline.md` 拒绝句。`POST /api/mcp/resources/read`。验收：`python scripts/test_mcp_surface.py`。
+
+16. **T003 eval/live 五针收口 company 页** ✅ 2026-08-20  
+    GST 9% / Fire Code 2023 / CTU 2014 非强制 / GeBIZ≠评分 / APPBCA-2026-12 只读 `demo/kb/company/web-portals.md`。验收：`python scripts/test_agent_loop.py`。主链头指针改为 T007。
 
 平台内核见 [product-improvement-handbook.md](product-improvement-handbook.md)。岗独有写盘下一刀仍按 [post-horizon-2026-08-17.md](post-horizon-2026-08-17.md)。
 

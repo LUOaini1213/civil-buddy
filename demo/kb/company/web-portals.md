@@ -20,6 +20,7 @@
 - PSSCOC for Construction Works 2020（第 8 版）；PSSCOC-lite for Construction Works 2025（2025-03）。只写合同族名，条款 UNSPECIFIED。https://www1.bca.gov.sg/growth-and-transformation/procurement/standard-contract-forms/public-sector-standard-conditions-of-contract-psscoc/
 - Buildability / C-Score 框架：Code of Practice on Buildability 2022 + Addendum No.3；BDAS/CAS 计算指南页述 Mar 2026 版。最低分 UNSPECIFIED。https://www1.bca.gov.sg/growth-and-transformation/productivity/buildability-and-constructability-framework/
 - SCDF Fire Code 2023（Code of Practice for Fire Precautions in Buildings 2023）：https://www.scdf.gov.sg/fire-safety-services-listing/fire-code-2023
+- IMO/ILO/UNECE Code of Practice for Packing of Cargo Transport Units (**CTU Code**, 2014)。非强制性全球作业守则。条款 UNSPECIFIED。https://www.imo.org/en/ourwork/safety/pages/ctu-code.aspx
 - PUB Codes of Practice：Surface Water Drainage（第七版 2018 + Addendum No.3 2025-04）；Sewerage and Sanitary Works（第 3 版 2025-03，新要求 2025-09-01 起）；Coastal Protection（第一版 2026-06，页称 2028 生效）；SS 636:2018 Water Services：https://www.pub.gov.sg/Professionals/Resources/Code-of-Practices
 - BCA Household and Storey Shelters（页更 2026-03-16）：https://www1.bca.gov.sg/safety-and-standards/applications-and-licenses/building-plan-submission/household-and-storey-shelters/
 - LTA Development & Construction / 铁路与道路结构保护：https://www.lta.gov.sg/content/ltagov/en/industry_innovations/industry_matters/development_construction_specifications_resources.html
