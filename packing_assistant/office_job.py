@@ -1,7 +1,9 @@
 """Authorized job folder + Office interchange (WorkBuddy local-file slice).
 
 NL run writes real .xlsx next to table drafts so Excel can open them.
-Not a desktop shell. Not D:\\layout. Not in-place COM into Word/Excel windows.
+If the user names an existing workbook in CIVIL_JOB_ROOT, patch only CB草稿-*
+sheets and leave the owner's sheets alone.
+Not a desktop shell. Not D:\\layout. Not COM into an open Excel window.
 """
 
 from __future__ import annotations
@@ -15,6 +17,7 @@ JOB_EXTS = {".xlsx", ".csv", ".txt", ".md", ".json", ".docx", ".log"}
 JOB_MAX_FILES = 12
 JOB_FILE_CHARS = 8_000
 JOB_TOTAL_CHARS = 48_000
+DRAFT_PREFIX = "CB草稿"
 
 FORBIDDEN_LAYOUT = ("d:\\layout", "d:/layout")
 
@@ -95,27 +98,83 @@ def write_xlsx(path: Path, sheets: List[Tuple[str, List[List[str]]]]) -> Path:
     return guarded_write_bytes(Path(path), bio.getvalue())
 
 
-def export_md_to_xlsx(md_path: Path) -> List[Path]:
-    """Write sibling xlsx in the md folder and a copy in the job root. Skip if no tables."""
+def _query_from_md(md: str) -> str:
+    if "## 用户原文" in (md or ""):
+        return (md or "").split("## 用户原文", 1)[1].split("##", 1)[0].strip()
+    return (md or "")[:400]
+
+
+def pick_job_xlsx(query: str) -> Path | None:
+    """Existing job-root workbook the user named. Do not guess the first file."""
+    q = (query or "").lower()
+    if not q:
+        return None
+    for f in list_job_files():
+        if f.get("suffix") != ".xlsx":
+            continue
+        name = str(f.get("name") or "")
+        stem = Path(name).stem.lower()
+        if name.lower() in q or (stem and stem in q):
+            return Path(str(f["path"]))
+    return None
+
+
+def patch_xlsx(path: Path, sheets: List[Tuple[str, List[List[str]]]]) -> Path:
+    """Replace only CB草稿-* sheets. Owner sheets stay."""
+    from io import BytesIO
+
+    from packing_assistant.sandbox import guarded_write_bytes
+
+    import openpyxl
+
+    p = Path(path)
+    root = job_root().resolve()
+    try:
+        resolved = p.resolve()
+        resolved.relative_to(root)
+    except (OSError, ValueError) as e:
+        raise PermissionError("job file outside authorized root") from e
+    if is_forbidden_layout(resolved):
+        raise PermissionError("D:\\layout denied")
+    wb = openpyxl.load_workbook(resolved)
+    for name in list(wb.sheetnames):
+        if name.startswith(DRAFT_PREFIX):
+            del wb[name]
+    used = set(wb.sheetnames)
+    for title, rows in sheets:
+        ws = wb.create_sheet(_sheet_name(f"{DRAFT_PREFIX}-{title}", used))
+        for r_i, row in enumerate(rows, 1):
+            for c_i, val in enumerate(row, 1):
+                ws.cell(r_i, c_i, val)
+    bio = BytesIO()
+    wb.save(bio)
+    return guarded_write_bytes(resolved, bio.getvalue())
+
+
+def export_md_to_xlsx(md_path: Path, query: str = "") -> List[Path]:
+    """Sibling xlsx always. If the user named a job-root workbook, patch it too."""
     p = Path(md_path)
     if not p.is_file() or p.suffix.lower() != ".md":
         return []
-    sheets = tables_from_md(p.read_text(encoding="utf-8", errors="ignore"))
+    text = p.read_text(encoding="utf-8", errors="ignore")
+    sheets = tables_from_md(text)
     if not sheets:
         return []
     written: List[Path] = []
     sibling = p.with_suffix(".xlsx")
     written.append(write_xlsx(sibling, sheets))
-    if not (os.getenv("CIVIL_JOB_ROOT") or "").strip():
+    if not job_root_granted():
         return written
-    root = job_root()
-    if is_forbidden_layout(root):
-        return written
-    dest = root / sibling.name
+    q = query or _query_from_md(text)
+    target = pick_job_xlsx(q)
     try:
-        if dest.resolve() != sibling.resolve():
-            written.append(write_xlsx(dest, sheets))
-    except OSError:
+        if target is not None:
+            written.append(patch_xlsx(target, sheets))
+        else:
+            dest = job_root() / sibling.name
+            if dest.resolve() != sibling.resolve():
+                written.append(write_xlsx(dest, sheets))
+    except (OSError, PermissionError, RuntimeError):
         pass
     return written
 

@@ -88,6 +88,18 @@ def main() -> int:
     wt = Path(wh["files"][0]["path"]).read_text(encoding="utf-8")
     assert "钢筋" in wt
     assert "12吨" in wt
+    patched = openpyxl.load_workbook(ledger)
+    assert "收发" in patched.sheetnames
+    assert patched["收发"]["A2"].value == "钢筋"
+    assert patched["收发"]["B2"].value == "12吨"
+    drafts = [n for n in patched.sheetnames if n.startswith("CB草稿")]
+    assert drafts, patched.sheetnames
+    found = False
+    for n in drafts:
+        for row in patched[n].iter_rows(max_row=20, max_col=8, values_only=True):
+            if row and any(cell and "钢筋" in str(cell) for cell in row):
+                found = True
+    assert found, [list(patched[n].iter_rows(max_row=8, values_only=True)) for n in drafts]
     print("PASS office_job")
     return 0
 

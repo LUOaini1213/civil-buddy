@@ -41,7 +41,7 @@ cd C:\Users\LW\civil-buddy\workbench
 $env:CIVIL_JOB_ROOT = "C:\Users\LW\Documents\某工地"
 ```
 
-目录须已存在。说「写一份」会自动抄夹内 `.xlsx` / `.docx` / `.csv` / `.txt`。点名文件名则优先那一份。**禁止**把 `D:\layout` 当缺省作业根。construction 方案另有模板 `专项施工方案-AI草稿.docx`。这不是接管本机 Word/Excel 窗口，也不是全盘搜索。
+目录须已存在。说「写一份」会自动抄夹内 `.xlsx` / `.docx` / `.csv` / `.txt`。点名已有工作簿（如「现场台账」）时，在该文件里只增改 `CB草稿-*` 工作表，**不改你原来的表**。**禁止**把 `D:\layout` 当缺省作业根。construction 方案另有模板 `专项施工方案-AI草稿.docx`。这不是接管本机 Word/Excel 窗口，也不是全盘搜索。
 
 扫描件 PDF：产品默认拒绝（无文字层）。可选 `CIVIL_PARSE=auto` 走 MinerU/Docling；失败仍拒绝，不装 OCR 成功。不要把扫描 PDF 当已抽出招标。
 
