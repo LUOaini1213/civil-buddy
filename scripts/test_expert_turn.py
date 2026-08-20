@@ -78,6 +78,64 @@ def main() -> int:
     assert "综合单价" in cost_text and "合价" in cost_text
     assert "UNSPECIFIED" in cost_text
 
+    sv_chat = run_expert_turn("测量点号怎么填？", "survey")
+    assert sv_chat["intent"] == "chat" and sv_chat["wrote"] is False
+    sv_empty = run_expert_turn(
+        "写一份测量记录",
+        "survey",
+        confirm_ok=True,
+        force_intent="run",
+        session_id="t030-sv-empty",
+    )
+    assert sv_empty["wrote"] is True
+    assert "survey__record" in sv_empty["tools_run"]
+    sv_empty_text = Path(sv_empty["files"][0]["path"]).read_text(encoding="utf-8")
+    for title in (
+        "封面与文件控制",
+        "已知起算",
+        "放样内容",
+        "复测与检核",
+        "附录",
+    ):
+        assert title in sv_empty_text, title
+    assert "[A001]" in sv_empty_text
+    assert "CP99" not in sv_empty_text
+    assert "可以开工" not in sv_empty_text
+    sv_ok = run_expert_turn(
+        "写一份测量记录 点号 CP01 东 12345.67 北 23456.89",
+        "survey",
+        confirm_ok=True,
+        force_intent="run",
+        session_id="t030-sv-cp01",
+    )
+    sv_ok_text = Path(sv_ok["files"][0]["path"]).read_text(encoding="utf-8")
+    assert "CP01" in sv_ok_text
+    assert "12345.67" in sv_ok_text
+    assert "23456.89" in sv_ok_text
+
+    dp_chat = run_expert_turn("调度日报怎么写？", "dispatch")
+    assert dp_chat["intent"] == "chat" and dp_chat["wrote"] is False
+    dp = run_expert_turn(
+        "写一份调度日报 临边防护 白班",
+        "dispatch",
+        force_intent="run",
+        session_id="t030-dp",
+    )
+    assert dp["wrote"] is True
+    assert "dispatch__daily" in dp["tools_run"]
+    dp_text = Path(dp["files"][0]["path"]).read_text(encoding="utf-8")
+    for title in (
+        "报头",
+        "当日实际",
+        "危大/高处/临边等敏感作业清单",
+        "明日条件与待决策",
+        "附件表头",
+    ):
+        assert title in dp_text, title
+    assert "临边" in dp_text
+    assert "method-hazard" in dp_text
+    assert "可以开工" not in dp_text
+
 
     high = [e for e in roster if e.risk == "high"][0]
     blocked = run_expert_turn("写一份专项方案讨论提纲", high.id, confirm_ok=False)
