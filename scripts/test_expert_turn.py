@@ -190,6 +190,34 @@ def main() -> int:
     assert "监理通知 NCR-1" in cv or "NCR-1" in cv
     assert "停工令" in cv
 
+    sub_chat = run_expert_turn("分包结算怎么填？", "subcontract")
+    assert sub_chat["intent"] == "chat" and sub_chat["wrote"] is False
+    sub_empty = run_expert_turn(
+        "写一份分包结算草稿",
+        "subcontract",
+        force_intent="run",
+        session_id="t031-sub-empty",
+    )
+    assert sub_empty["wrote"] is True
+    assert "subcontract__sheet" in sub_empty["tools_run"]
+    se = Path(sub_empty["files"][0]["path"]).read_text(encoding="utf-8")
+    for title in ("本期完成", "合同内价款栏", "扣款表头", "农民工工资专节", "会签栏"):
+        assert title in se, title
+    assert "TBD" in se
+    assert "可以开工" not in se
+    sub_ok = run_expert_turn(
+        "写一份分包结算 模板 120m2；钢筋 2.5t",
+        "subcontract",
+        force_intent="run",
+        session_id="t031-sub-rows",
+    )
+    so = Path(sub_ok["files"][0]["path"]).read_text(encoding="utf-8")
+    assert "模板" in so
+    assert "120" in so
+    assert "钢筋" in so
+    assert "2.5" in so
+    assert so.count("TBD") >= 2
+
 
     high = [e for e in roster if e.risk == "high"][0]
     blocked = run_expert_turn("写一份专项方案讨论提纲", high.id, confirm_ok=False)

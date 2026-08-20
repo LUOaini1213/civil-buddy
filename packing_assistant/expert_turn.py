@@ -145,6 +145,25 @@ _CLAIM_CHAPTERS = (
     "自检",
 )
 
+_SUBCONTRACT_CHAPTERS = (
+    "封面与草稿声明",
+    "合同关系",
+    "本期完成",
+    "合同内价款栏",
+    "合同外",
+    "扣款表头",
+    "质量与质保",
+    "农民工工资专节",
+    "会签栏",
+    "与对上验工、财务接口",
+    "自检",
+)
+
+_QTY_RE = re.compile(
+    r"(?P<qty>\d+(?:\.\d+)?)\s*(?P<unit>m2|m²|m3|t|吨|kg|工日|项)?",
+    re.I,
+)
+
 _EVIDENCE_KEYS = (
     "函",
     "通知",
@@ -401,6 +420,91 @@ def _claim_notice_md(text: str) -> str:
         lines.append("")
     lines.append("SG：Building and Construction Industry Security of Payment Act 只写全名，时限 UNSPECIFIED。PSSCOC-lite 2025 / Clause 23 Procedure for Claims 只写条名。")
     lines.append("CN：GF-2017-0201 索赔意向/报告天数以用户合同为准。发改投资〔2015〕482 号只写全名。GB 50500 只出现在 CN 栏。")
+    lines.append("")
+    return "\n".join(lines)
+
+
+def _parse_subcontract_lines(blob: str) -> List[tuple[str, str, str]]:
+    rows: List[tuple[str, str, str]] = []
+    for raw in (blob or "").replace("；", "\n").replace(";", "\n").splitlines():
+        t = raw.strip()
+        t = re.sub(r"^写一份\S*\s*", "", t).strip()
+        if not t or t in {"草稿提纲", "待填分包", "待计量"}:
+            continue
+        if t.startswith("#") or t.startswith("内部"):
+            continue
+        m = _QTY_RE.search(t)
+        if m:
+            name = (t[: m.start()] + t[m.end() :]).strip(" ，,") or t[:80]
+            unit = m.group("unit") or "TBD"
+            rows.append((name[:80], unit, m.group("qty")))
+        elif len(t) <= 80:
+            rows.append((t[:80], "TBD", "TBD"))
+    return rows
+
+
+def _subcontract_sheet_md(text: str) -> str:
+    items = _parse_subcontract_lines(text)
+    if items:
+        table = "| 分项 | 单位 | 数量 | 合同单价 | 合价 | 来源 |\n| --- | --- | --- | --- | --- | --- |\n"
+        table += "".join(
+            f"| {n} | {u} | {q} | TBD | TBD | 用户细目 |\n" for n, u, q in items
+        )
+    else:
+        table = (
+            "| 分项 | 单位 | 数量 | 合同单价 | 合价 | 来源 |\n| --- | --- | --- | --- | --- | --- |\n"
+            "| [A001] | TBD | TBD | TBD | TBD | 用户未给细目 |\n"
+        )
+    lines = [
+        "# 分包（劳务）结算表头（AI 草稿）",
+        "",
+        DISCLAIMER,
+        "",
+        "内部对下结算讨论稿，不是已生效结算协议。无总包/业主确认不编金额。",
+        "",
+        "## 用户原文",
+        "",
+        (text or "").strip() or "（未提供）",
+        "",
+    ]
+    for i, title in enumerate(_SUBCONTRACT_CHAPTERS, 1):
+        lines.append(f"## {i} {title}")
+        lines.append("")
+        if i == 1:
+            lines.append(DISCLAIMER)
+        elif i == 2:
+            lines.append("专业分包或劳务分包待用户指定。禁止把违法转包写成合法分包。合同编号/计价方式待贴。[A001]")
+        elif i == 3:
+            lines.append(table)
+            lines.append("")
+            lines.append("量只抄用户任务单或实测。禁止用形象百分比空估。对上未批则本期待填。")
+        elif i == 4:
+            lines.append("数量 × 合同单价。无合同单价、无总包/业主确认则合价 TBD。")
+        elif i == 5:
+            lines.append("洽商、签证另表。无签认不进结算。")
+        elif i == 6:
+            lines.append(
+                "| 扣款项 | 金额 |\n| --- | --- |\n| 甲供材领用 / 水电 / 周转料具损坏 | TBD |\n| 质量/安全罚款（须书面通知） | TBD |\n| 预付款抵扣 / 前期末扣清 | TBD |\n| 农民工工资代发已付 / 其他 | TBD |"
+            )
+            lines.append("")
+            lines.append("没有凭证不编扣款。")
+        elif i == 7:
+            lines.append("缺陷责任期内预留质量保证金。预留比例待按建质〔2017〕138 号与用户合同核对，不另编百分比当结算结论。")
+        elif i == 8:
+            lines.append("| 栏 | 金额 |\n| --- | --- |\n| 应付人工费 | TBD |\n| 应付分包工程款 | TBD |")
+            lines.append("")
+            lines.append("两栏分列，不混。保障农民工工资支付条例只写全名。")
+        elif i == 9:
+            lines.append(
+                "| 部门 | 意见 |\n| --- | --- |\n| 现场工长核量 | 未会签 |\n| 工程部 / 安质 / 物资 / 商务 | 未会签 |\n| 项目经理 | 未会签 |"
+            )
+        elif i == 10:
+            lines.append("对下累计原则上不超过对上已计价对应份额。付款申请交 finance-fund，发票税目交 finance-tax。")
+        else:
+            lines.append("无编造工日单价。无把工人生活费写成已结清工资。本表不下发放结论。")
+        lines.append("")
+    lines.append("SG：PSSCOC Nominated Sub-Contract / SOP Act 只写全名。")
+    lines.append("CN：保障农民工工资支付条例只写全名，金额 TBD。GB 50500 只出现在 CN 栏。")
     lines.append("")
     return "\n".join(lines)
 
@@ -958,6 +1062,33 @@ def _run_exclusive(
             "files": files,
             "tools_run": ran,
             "reply": "已出索赔意向草稿。条款原文待贴。工期金额 TBD。submit_blocked=true。",
+            "submit_blocked": True,
+        }
+
+    if expert.id == "subcontract":
+        md = _subcontract_sheet_md(text)
+        from packing_assistant.tools.tender_review import forbidden_hits
+
+        hits = forbidden_hits(md)
+        if hits:
+            return {
+                "wrote": False,
+                "hitl_pending": False,
+                "files": [],
+                "tools_run": [],
+                "reply": "禁语扫描命中，未报成功：" + "、".join(hits),
+                "submit_blocked": True,
+            }
+        path = out_dir / "subcontract__sheet.md"
+        guarded_write_text(path, md)
+        files.append({"name": path.name, "path": str(path), "tool": "subcontract__sheet"})
+        ran.append("subcontract__sheet")
+        return {
+            "wrote": True,
+            "hitl_pending": False,
+            "files": files,
+            "tools_run": ran,
+            "reply": "已出分包结算表头。无总包/业主确认金额 TBD。submit_blocked=true。",
             "submit_blocked": True,
         }
 
