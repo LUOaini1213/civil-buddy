@@ -771,6 +771,9 @@ def main() -> int:
     assert "[A001]" in fbt
     assert "发票查验" in fbt
     assert "人工费" in fbt
+    assert "office__xlsx" in fb_ok["tools_run"]
+    xlsx_paths = [Path(f["path"]) for f in fb_ok["files"] if str(f.get("name") or "").endswith(".xlsx")]
+    assert xlsx_paths and xlsx_paths[0].is_file()
     assert "GST" in fbt or "IRAS" in fbt
     assert "可以开工" not in fbt
     assert "账已平" not in fbt

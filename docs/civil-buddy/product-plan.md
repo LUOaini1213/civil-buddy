@@ -35,7 +35,7 @@
 
 默认产出永远是 **AI 草稿**。`submit_blocked=true`。不判定可投标。不判定可以开工。
 
-对照腾讯云 WorkBuddy（2026-08-20 官网 [intl.cloud.tencent.com/products/workbuddy](https://intl.cloud.tencent.com/products/workbuddy) · [codebuddy.cn/work](https://www.codebuddy.cn/work/)）：它卖的是「自然语言 → 规划步骤 → 读写本机文件 → 可交差成品」，100+ 通岗专家、桌面/IM、云端托管。本仓对齐的是 **同一条回路**（先理解再出稿、岗有独有工具、附件只抄原文、高风险确认），**不**做桌面壳、IM、100 个办公专家、云端 7×24 托管。成品永远是内部讨论草稿，不是可直接验收的签认件。
+对照腾讯云 WorkBuddy（2026-08-20 官网 [intl.cloud.tencent.com/products/workbuddy](https://intl.cloud.tencent.com/products/workbuddy) · [codebuddy.cn/work](https://www.codebuddy.cn/work/)）：它卖「自然语言 → 规划步骤 → **授权文件夹里读写 Word/Excel** → 成品」，另加桌面壳、IM、100+ 通岗、云端托管。本仓对齐 **同一条回路里的本地成稿**：作业根（`CIVIL_JOB_ROOT`）里出可双击的 `.xlsx`（有表的岗）和 construction 模板 `.docx`。**不**做桌面壳、IM、100 个办公专家、云端 7×24、接管 Word/Excel 窗口、默认 `D:\layout`。成品永远是内部讨论草稿，不是可直接验收的签认件。
 
 ### 1.2 三条产品线（一个仓库，三个用户问题）
 
@@ -536,6 +536,7 @@ T030–T047 是**批次合同**（T030–T038 ✅、T039 worker-brief ✅ 后约
 | T061 | post-horizon 文首加「已做刀以 product-plan §7 为准」 | 避免双下一刀 | ✅ 2026-08-19 |
 | T062 | 刀后快闸清单写入 GETTING-STARTED | 命令本机跑过 | ✅ |
 | T063 | 改官方口径时才联网；结果追加 §13 表，不改 08-17 历史总判句 | 部分合格保持 | 纪律 |
+| T064 | 作业根 Office：有表的岗另存 `.xlsx`，可 Excel 打开 | `CIVIL_JOB_ROOT`（禁 `D:\layout`）+ sibling xlsx | ✅ |
 
 **主链（不定时限；头指针 = 第一个非 ✅/延期）：**
 
