@@ -786,11 +786,13 @@ fn pack_tools(pack: &str) -> Vec<ToolDef> {
         },
             ToolDef {
                 name: "plan-lookahead__week",
-                description: "周月计划独有：四周滚动骨架。无定额不编用量。",
+                description: "周月计划独有：四周滚动表。制约未清不得写入本周承诺。",
                 parameters: obj(
                     json!({
                         "window": {"type": "string"},
-                        "constraints": {"type": "string"}
+                        "constraints": {"type": "string"},
+                        "works": {"type": "string"},
+                        "jurisdiction": {"type": "string"}
                     }),
                     &["window"],
                 ),
@@ -2504,13 +2506,139 @@ fn geotech_brief(ctx: &mut ToolCtx, args: &Value) -> String {
     }
 }
 
+fn lookahead_skip(t: &str) -> bool {
+    matches!(
+        t,
+        "草稿提纲"
+            | "总进度计划"
+            | "总控计划"
+            | "周计划"
+            | "月计划"
+            | "四周滚动"
+            | "周月计划"
+            | "四周滚动计划"
+            | "master"
+            | "lookahead"
+            | "制约已清"
+            | "条件已具备"
+            | "待填"
+            | "四周"
+            | "第1–4周"
+            | "第1-4周"
+    ) || (t.starts_with('第') && t.contains('周'))
+}
+
+fn lookahead_blocked(t: &str) -> bool {
+    const MARK: &[&str] = &["未清", "未到", "未交", "无图", "未发", "过期"];
+    if MARK.iter().any(|m| t.contains(m)) {
+        return true;
+    }
+    if t.contains("制约已清") || t.contains("条件已具备") {
+        return false;
+    }
+    t.contains("制约")
+}
+
+fn clean_lookahead_job(t: &str) -> String {
+    t.replace("制约已清", "")
+        .replace("条件已具备", "")
+        .split_whitespace()
+        .collect::<Vec<_>>()
+        .join(" ")
+        .trim_matches(|c: char| c == ' ' || c == '，' || c == ',' || c == ';' || c == '；')
+        .to_string()
+}
+
+fn parse_lookahead(blob: &str) -> (Vec<String>, Vec<String>, bool) {
+    let any_cleared = blob.contains("制约已清") || blob.contains("条件已具备");
+    let mut jobs: Vec<String> = Vec::new();
+    let mut blocked: Vec<String> = Vec::new();
+    for raw in blob.replace('；', "\n").replace(';', "\n").lines() {
+        let mut t = raw.trim().to_string();
+        if let Some(rest) = t.strip_prefix("写一份") {
+            t = rest.trim().to_string();
+        }
+        if t.is_empty() || lookahead_skip(&t) {
+            continue;
+        }
+        if t.starts_with('#') || t.starts_with("内部") {
+            continue;
+        }
+        if t.chars().count() > 80 {
+            t = t.chars().take(80).collect();
+        }
+        let name = {
+            let c = clean_lookahead_job(&t);
+            if c.is_empty() {
+                t.clone()
+            } else {
+                c
+            }
+        };
+        if name.is_empty() || lookahead_skip(&name) {
+            continue;
+        }
+        if lookahead_blocked(&t) {
+            blocked.push(name);
+        } else if !jobs.iter().any(|j| j == &name) {
+            jobs.push(name);
+        }
+    }
+    let can_promise = any_cleared && blocked.is_empty() && !jobs.is_empty();
+    (jobs, blocked, can_promise)
+}
+
 fn plan_lookahead(ctx: &mut ToolCtx, args: &Value) -> String {
     let (jur, banner) = zone_banner(args);
+    let window = nonempty(&s(args, "window"), "待填");
+    let constraints = s(args, "constraints");
+    let works = s(args, "works");
+    let blob = format!("{window}\n{constraints}\n{works}");
+    let (jobs, blocked, can_promise) = parse_lookahead(&blob);
+    let week_jobs = if jobs.is_empty() {
+        "待填 [A001]".to_string()
+    } else {
+        jobs.join("；")
+    };
+    let week_block = if !blocked.is_empty() {
+        blocked.join("；")
+    } else if can_promise {
+        "无未清制约".to_string()
+    } else {
+        "制约未清".to_string()
+    };
+    let four = format!(
+        "| 周次 | 粒度 | 作业 | 制约状态 |\n| --- | --- | --- | --- |\n| 第1周 | 班组、工作面、日顺序 | {week_jobs} | {week_block} |\n| 第2周 | 分项与责任人 | {week_jobs} | {week_block} |\n| 第3周 | 分项与制约（较粗） | {week_jobs} | {week_block} |\n| 第4周 | 分项与制约（较粗） | {week_jobs} | {week_block} |"
+    );
+    let cons = if blocked.is_empty() {
+        "| 工作 | 制约 | 责任人 | 计划清除日 |\n| --- | --- | --- | --- |\n| [A001] | 待填 | 待填 | 待填 |".to_string()
+    } else {
+        let mut out = String::from("| 工作 | 制约 | 责任人 | 计划清除日 |\n| --- | --- | --- | --- |\n");
+        for n in &blocked {
+            out.push_str(&format!("| {n} | 未清 | 待填 | 待填 |\n"));
+        }
+        out
+    };
+    let (promise_note, promise) = if can_promise {
+        let mut tbl = String::from("| 作业 | 认领人 | 周末兑现 |\n| --- | --- | --- |\n");
+        for n in &jobs {
+            tbl.push_str(&format!("| {n} | 待填 | 待对照 |\n"));
+        }
+        ("只列入用户已标明条件已具备的工作。工长认领栏待填。", tbl)
+    } else {
+        (
+            "制约未清，不得写入本周承诺。",
+            "| 作业 | 认领人 | 周末兑现 |\n| --- | --- | --- |\n| （空） | — | — |".to_string(),
+        )
+    };
+    let named = if jobs.is_empty() {
+        String::new()
+    } else {
+        format!("\n本轮点名作业：{}\n", jobs.join("；"))
+    };
     let md = format!(
-        "{}{banner}\n## 窗口\n{}\n\n## 约束\n{}\n\n[A001] 无定额不编人机料用量。四周滚动只列表头。{}\n",
+        "{}{banner}\n必须挂在总控里程碑下。禁止用周计划改合同工期。不是工期签证，不是复工许可。窗口：{window}。\n\n## 1 封面\n计划期（哪四周或哪一自然月）待填。对应总控版本号待填。编制人栏空。内部讨论草稿。[A001]\n\n## 2 从总控抽取窗口\n把总控里落在未来约四周的工作拉到工长能认领的粒度。总控没有该窗口的工作，本栏写待补，不要发明作业。{named}\n## 3 近细远粗\n{four}\n\n第 1 周量化到班组、工作面、日顺序；第 2 周到分项与责任人；第 3–4 周保留分项与制约，允许较粗。不编持续天数。\n\n## 4 制约因素\n{cons}\n\n每条制约指定责任人和计划清除日。未清项不得列入第 5 节周承诺。\n\n## 5 周承诺\n{promise_note}\n\n{promise}\n\n周末对照承诺兑现（完成项 / 承诺项）。未完成只记原因分类（图、料、人、机、面、天气、指令），不写处罚结论。\n\n## 6 交叉作业\n同一工作面或上下立体空间有两个及以上专业时，单列交叉窗口：谁先谁后、防护谁做、吊装禁区、噪音时段。计划只排窗口。安全措施改召唤安全交底或施工方案，不在本稿编栏杆高度或吊装半径。\n\n## 7 停工条件\n本月可能触发暂停的外部条件，日期待填：大风、暴雨暴雪、能见度不足、高温橙色以上、冬期测温未达标、台风预警、政府停工令、危大方案未论证、特种设备证件过期。停工后只列复工条件栏。本岗不签发复工许可，不编风速限值。\n\n## 8 与总控的回写\n本周若拖的是关键工作或吃完总时差，必须回写总控版本，并提示索赔调概看时限。非关键工作的小调整可留在四周窗口内，纪要写明未改总工期。\n\n## 9 月度形象对照\n| 形象部位 | 计划形象 | 实际形象 | 偏差天数 | 原因 | 纠偏 |\n| --- | --- | --- | --- | --- | --- |\n| 待填 | 待填 | 待填 | 待填 | 待填 | 待填 |\n\n无现场反馈则实际栏待填。不要把照片描述写成已验收合格。\n\n## 10 待填与禁令\n无班组名单、无总控版本、无制约责任人，对应整节待填。禁止断言本周计划必定兑现、交叉作业已安全、停工后即可实施。\n\n{}\n",
         header("周月计划骨架"),
-        nonempty(&s(args, "window"), "待填"),
-        nonempty(&s(args, "constraints"), "待填"),
         format!(
             "{}{}",
             sg_only(&jur, "SG：Last Planner lookahead 只写方法名，不是合同工期变更。"),

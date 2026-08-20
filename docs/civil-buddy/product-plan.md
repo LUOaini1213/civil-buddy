@@ -119,8 +119,8 @@ docs/                 装箱架构、主线 C、研究/归档
 | 装箱引擎 | 80% | 大 Team A/B、3D、CoG、HITL | 非本规划主战场；禁止第二套 packer |
 | MCP | 75% | Python stdio；bid 可见 KB+招标；pack-ship 投影；Host 样例 16 pack 可复制 | 默认仍挂 3 大类；分页/订阅延期 |
 | Skill | 65% | SOP 与 66 岗关系写清；施工十一章接 turn；fill_scheme 失败则 `docx_pending` | 其余 5 个 Grok 专家仍提纲 |
-| 岗 KB | 目录 100% / 写盘栏位 ~23% | **66/66** 四件套在盘；`test_kb_schema.py` 缺一即红 | outline 指针：construction→`scheme-11.md`，危大→`judge-card.md`。**真写盘 15/66**（+ plan-master） |
-| 工作台 66 岗 | 平台齐、栏位 15/66 | 同一套 chat/run | 其余 ~51 岗 `_draft_markdown` |
+| 岗 KB | 目录 100% / 写盘栏位 ~24% | **66/66** 四件套在盘；`test_kb_schema.py` 缺一即红 | outline 指针：construction→`scheme-11.md`，危大→`judge-card.md`。**真写盘 16/66**（+ plan-lookahead） |
+| 工作台 66 岗 | 平台齐、栏位 16/66 | 同一套 chat/run | 其余 ~50 岗 `_draft_markdown` |
 | 技术文档 | 80% | GETTING-STARTED/PROTOCOL/MCP/SKILLS/KB；Grok/Cursor 最小 Host；刀后快闸 | 研究笔记不得冒充必读 |
 | 评测 | 75% | 离线闸 + `GET /api/eval/live` 五针（company 页）+ 岗 GST/CORENET 扫描 | 行业总判仍部分合格 |
 
@@ -222,7 +222,7 @@ xyz 只抄 solver。分页/订阅 = 有真 Host list/call 稳定之后（horizon
 | `lane-bid` | 经营投标 | 3 | 解析→交接→三列废标检查→按评分点排技术标目录 | **已富** handoff / gaps / expand |
 | `lane-design` | 勘察设计 | **20** | 各专业说明/计算提纲；条款 UNSPECIFIED；DUAL 分栏 | **0/20** 骨架 |
 | `lane-bim` | BIM | 3 | 协同/算量/交付目录；不假装 IFC 全量抽量 | **0/3** |
-| `lane-planning` | 计划 | 3 | 总控/近看/资源栏位；无进度数据不编工期 | **0/3** |
+| `lane-planning` | 计划 | 3 | 总控/近看/资源栏位；无进度数据不编工期 | **2/3** plan-master + plan-lookahead |
 | `lane-construction` | 施工生产 | 4 | 十一章提纲；危大判定卡；测量/调度作业单 | **1/4**：十一章 md；危大/测量/调度仍骨架 |
 | `lane-hse` | 安质环 | 4 | 交底/质量/环保/应急草稿；SG 走 WSH 标题 | **0/4** |
 | `lane-commercial` | 商务造价 | 5 | 造价 takeoff 栏、变更/索赔/分包/报量；无单价不编 | **0/5** |
@@ -287,8 +287,9 @@ xyz 只抄 solver。分页/订阅 = 有真 Host list/call 稳定之后（horizon
 | 9 | claim | ✅ 意向栏+证据行+条款原文待贴 |
 | 10 | subcontract | ✅ 按行抄细目，金额 TBD |
 | 11 | interim | ✅ 开累/本期/监理审/业主核空表（T031 ✅） |
-| 12 | plan-master | ✅ WBS｜紧前｜里程碑待填｜关键线路=待计算（T032 进行中） |
-| 13+ | 其余 ~51 岗 | 骨架；下一刀在 post-horizon（已富岗勿再当缺口） |
+| 12 | plan-master | ✅ WBS｜紧前｜里程碑待填｜关键线路=待计算 |
+| 13 | plan-lookahead | ✅ 四周表；制约未清不得写入本周承诺（T032 进行中） |
+| 14+ | 其余 ~50 岗 | 骨架；下一刀在 post-horizon（已富岗勿再当缺口） |
 
 ---
 
@@ -362,11 +363,11 @@ GeBIZ 代交 / 自动中标；法定专项方案 / PE·QP·RTO 签认件；十�
 
 ## 11. 下一刀（立刻）
 
-**T032 · planning 进行中：下一岗 plan-lookahead__week。**
+**T032 · planning 进行中：下一岗 plan-resource__peak。**
 
-plan-master ✅：WBS｜紧前｜里程碑待填｜关键线路=待计算。不编持续天数。chat 仍不写盘。T032 其余岗 plan-lookahead → plan-resource **未做**，不得一行勾完。
+plan-lookahead ✅：四周表；制约未清不得写入本周承诺。不编风速限值、不写可以复工。chat 仍不写盘。T032 其余岗 plan-resource **未做**，不得一行勾完。
 
-T032 下一岗：plan-lookahead 出四周表；制约未清不得写入本周承诺。
+T032 下一岗：plan-resource 拆劳动力｜机具｜材料三表，数量待填。
 
 ---
 
@@ -423,7 +424,7 @@ T 号是开工 ID：K1=T001，P1-5=T002，K2=T003，P1-3=T010。handbook 不得�
 | 「其余 57 岗」 | 已富约 5 岗（bid×3 + pack-ship + construction 十一章），其余 **61** | §7.2 已改正 |
 | K1「目录齐但无闸」 | 当时 64/66；只缺 construction 与 method-hazard 的 `outline.md` | 已做 T001 ✅；§11 现为 T032 |
 | post-horizon bid 三岗「下一刀=handoff/gaps/评分点」 | P1-1 **已做** | 以本文 §7 为准；horizon 文当历史下一刀 |
-| post-horizon construction「下一刀=十一章接 turn」 | S2 **已做** md；fill_scheme / `docx_pending` 已接（T005 ✅） | 岗栏下一刀 = T032 plan-master（T031 ✅） |
+| post-horizon construction「下一刀=十一章接 turn」 | S2 **已做** md；fill_scheme / `docx_pending` 已接（T005 ✅） | 岗栏下一刀 = T032 plan-resource（lookahead ✅） |
 | 行业评测「缺 Python eval/live、MCP 几乎只有 pack-ship」 | 2026-08-19 已有 `GET /api/eval/live` 与 `mcp_stdio --pack bid` | 不改 08-17 历史总判日期；现网能力以本文 §3 为准 |
 | 营销博客「CORENET X 2026-10-01 全部新项目」 | 已被 APPBCA-2026-12 收窄为 GFA≥5,000 m² | §13 列为反例 |
 | §15「T030–T047 = 61 岗」 | 展开约 **56**（已扣 bid×3、pack-ship、construction、method-hazard、finance-tax、cost、survey、dispatch） | 下表已改 |
@@ -479,7 +480,7 @@ T 号是开工 ID：K1=T001，P1-5=T002，K2=T003，P1-3=T010。handbook 不得�
 |----|------|------------|
 | T030 | construction 收尾 | survey__record（只抄已给点号）→ dispatch__daily（敏感作业交危大岗）✅ |
 | T031 | commercial | variation ✅ → claim ✅ → subcontract ✅ → interim ✅（cost 见 T006） |
-| T032 | planning | plan-master ✅ → plan-lookahead → plan-resource |
+| T032 | planning | plan-master ✅ → plan-lookahead ✅ → plan-resource |
 | T033 | lab | lab-mix → lab-sample → lab-record |
 | T034 | docs | supervision 闭合目录（不代替监理指令） |
 | T035 | hse | safety-brief → quality → env → emergency（SG 走 WSH 标题） |
@@ -496,7 +497,7 @@ T 号是开工 ID：K1=T001，P1-5=T002，K2=T003，P1-3=T010。handbook 不得�
 | T046 | design 批次 3 | landscape → interior → intel-weak → civil-defense → hydraulic |
 | T047 | design 批次 4 | port → municipal → bridge → tunnel → traffic → design-coord |
 
-T030–T047 是**批次合同**（T030 / T031 ✅、plan-master ✅ 后约 **51** 岗）。**一行不得一次勾完**；每岗一 commit。细节读 post-horizon 该 id。
+T030–T047 是**批次合同**（T030 / T031 ✅、plan-master ✅、plan-lookahead ✅ 后约 **50** 岗）。**一行不得一次勾完**；每岗一 commit。细节读 post-horizon 该 id。
 
 ### E. 主线 C 与装箱（插件，不另起炉灶）
 
@@ -518,6 +519,6 @@ T030–T047 是**批次合同**（T030 / T031 ✅、plan-master ✅ 后约 **51*
 
 **主链（不定时限；头指针 = 第一个非 ✅/延期）：**
 
-T001 → T021 → T023 → T003 → T007 → T008 → T002 → T004 → T006 → T005 → T014 → T011 → T010 → T020+T024 → T030 → T031 → **T032**（plan-master ✅，下一岗 lookahead）→ T033…T047（T050 / T052 / T062 文档与联测已 ✅，不占岗栏）。
+T001 → T021 → T023 → T003 → T007 → T008 → T002 → T004 → T006 → T005 → T014 → T011 → T010 → T020+T024 → T030 → T031 → **T032**（plan-master ✅，lookahead ✅，下一岗 resource）→ T033…T047（T050 / T052 / T062 文档与联测已 ✅，不占岗栏）。
 
 T012/T060/T061/T051/T053 不占刀。中途红则停在该号，不准跳号。

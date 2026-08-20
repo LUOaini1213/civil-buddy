@@ -79,6 +79,9 @@
 25. **API 会话槽装配** ✅ 2026-08-20  
     DeepSeek 无会话。`assemble_context` 每轮读/写 `session.summary`：项目名粘滞、P0 粘滞、压缩提示进 chat。`GET /api/context/{session_id}`。默认幕墙项目名不得盖槽。验收：`python scripts/test_memory_slot.py`。T032 指针不变。
 
+26. **T032 plan-lookahead 一岗** ✅ 2026-08-20  
+    plan-lookahead__week 出四周表；制约未清不得写入本周承诺。不编风速限值、不写可以复工。T032 批次未完：下一岗 **plan-resource**。不得把资源一并勾完。行业总判仍 **部分合格**。
+
 平台内核见 [product-improvement-handbook.md](product-improvement-handbook.md)。岗独有写盘下一刀仍按 [post-horizon-2026-08-17.md](post-horizon-2026-08-17.md)。
 
 ## 有宿主再做

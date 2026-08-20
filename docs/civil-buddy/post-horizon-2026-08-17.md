@@ -393,7 +393,7 @@
 - qa：已有 · planning__scan_forbidden
 - kb：已有 · 分层 KB + search_kb/read_kb（demo/kb）
 - write：已有 · 独有 plan-lookahead__week；chat 不写盘
-- 下一刀：plan-lookahead__week 出四周表；制约未清不得写入本周承诺。
+- 下一刀：已做 T032 plan-lookahead。plan-lookahead__week 出四周表；制约未清不得写入本周承诺。
 
 ### plan-resource
 
