@@ -816,6 +816,32 @@ def main() -> int:
     assert "钢筋" in exp
     assert "TBD" in inc and "TBD" in exp
 
+    wb_chat = run_expert_turn("班前会怎么理解？", "worker-brief")
+    assert wb_chat["intent"] == "chat" and wb_chat["wrote"] is False
+    wb_ok = run_expert_turn(
+        "写一份班前白话 edge",
+        "worker-brief",
+        force_intent="run",
+        session_id="t039-wb",
+    )
+    assert wb_ok["wrote"] is True
+    assert "worker-brief__talk" in wb_ok["tools_run"]
+    wbt = Path(wb_ok["files"][0]["path"]).read_text(encoding="utf-8")
+    assert "edge" in wbt
+    assert "今天干什么" in wbt and "哪儿会掉" in wbt and "三步怎么干" in wbt
+    assert "toolbox" in wbt
+    assert "毫米" not in wbt
+    assert "可以开工" not in wbt
+    wb_mm = run_expert_turn(
+        "写一份班前白话 临边 1200mm",
+        "worker-brief",
+        force_intent="run",
+        session_id="t039-wb-mm",
+    )
+    wbm = Path(wb_mm["files"][0]["path"]).read_text(encoding="utf-8")
+    assert "临边" in wbm
+    assert "1200mm" in wbm
+
     high = [e for e in roster if e.risk == "high"][0]
     blocked = run_expert_turn("写一份专项方案讨论提纲", high.id, confirm_ok=False)
     assert blocked["intent"] == "run"

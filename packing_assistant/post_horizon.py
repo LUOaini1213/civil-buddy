@@ -128,7 +128,7 @@ _NEXT = {
     "it-ops": "it-ops__runbook 出系统|角色|升级路径|联系人待填，禁止写密钥。",
     "it-data": "it-data__backup 按系统行出 RPO/RTO/介质/演练空，禁止编小时数。",
     "it-app": "it-app__srs 按行 parse 需求笔记成角色|场景|验收待填，禁止接口地址。",
-    "worker-brief": "worker-brief__talk 按 script.md 写三段口播；无尺寸不报毫米。",
+    "worker-brief": "已做 T039 worker-brief。worker-brief__talk 按 script.md 写三段口播；无尺寸不报毫米。",
     "pm-daily": "pm-daily__log 出天气待填|部位|形象（禁编百分比）|出勤待填。",
 }
 

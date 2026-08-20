@@ -614,6 +614,24 @@ _FF_SKIP = {
     "待填",
 }
 
+_WB_CHAPTERS = (
+    "今天干什么",
+    "哪儿会掉、会砸、会淹",
+    "三步怎么干",
+    "谁喊停、找谁",
+    "结束",
+)
+
+_WB_SKIP = {
+    "草稿提纲",
+    "班前白话",
+    "班前白话稿",
+    "口播",
+    "待填",
+}
+
+_MM_RE = re.compile(r"(\d+(?:\.\d+)?)\s*(mm|毫米)", re.I)
+
 _MILESTONE_KEYS = ("桩基", "±0", "封顶", "砌筑", "机电", "装饰", "竣工")
 
 _QTY_RE = re.compile(
@@ -3177,6 +3195,90 @@ def _fund_plan_md(text: str) -> str:
     return "\n".join(lines)
 
 
+def _wb_job(blob: str) -> str:
+    t = (blob or "").strip()
+    t = re.sub(r"^写一份\S*\s*", "", t).strip()
+    t = re.sub(r"^(班前白话稿|班前白话|口播)\s*", "", t).strip()
+    for piece in t.replace("；", "\n").replace(";", "\n").splitlines():
+        p = piece.strip()
+        if not p or p in _WB_SKIP or p.lower() in _WB_SKIP:
+            continue
+        if p.startswith("#") or p.startswith("内部"):
+            continue
+        if p in {"JGJ", "SAC", "CN", "SG", "DUAL"}:
+            continue
+        p = re.sub(r"\s+", " ", p)
+        return p[:80]
+    return "[A001] 待填部位"
+
+
+def _wb_mm(blob: str) -> str:
+    m = _MM_RE.search(blob or "")
+    if not m:
+        return ""
+    return f"{m.group(1)}{m.group(2)}"
+
+
+def _worker_brief_md(text: str) -> str:
+    blob = text or ""
+    zone = _mix_zone(blob)
+    job = _wb_job(blob)
+    mm = _wb_mm(blob)
+    size_line = (
+        f"用户给的尺寸：{mm}。只抄这一处，别的尺寸仍按书面交底。"
+        if mm
+        else "尺寸按书面交底，口播不报未给的尺寸。"
+    )
+    hazards = []
+    for k in ("临边", "洞口", "吊", "电", "基坑", "有限空间", "动火", "交叉"):
+        if k in blob:
+            hazards.append(k)
+    hazard_line = (
+        "、".join(hazards) + "。先讲会死的，再讲会受伤的。用户没点名的危险源不编。"
+        if hazards
+        else "临边、洞口、吊物下、用电：用户没点名的危险源不编，只点到为止。"
+    )
+    lines = [
+        "# 班前白话稿（AI 草稿 · 内部讨论）",
+        "",
+        DISCLAIMER,
+        "",
+        "3 分钟口播讨论稿。不是交底签认件，不能代替书面安全技术交底和班组签字。",
+        "",
+        f"- 辖区：{zone}",
+        "",
+        "## 用户原文",
+        "",
+        blob.strip() or "（未提供）",
+        "",
+    ]
+    for i, title in enumerate(_WB_CHAPTERS, 1):
+        lines.append(f"## {i} {title}")
+        lines.append("")
+        if i == 1:
+            lines.append(f"今天：{job}。一两句人话。禁止全面推进主体结构。")
+        elif i == 2:
+            lines.append(hazard_line)
+            lines.append("")
+            lines.append(size_line)
+        elif i == 3:
+            lines.append("先看防护齐不齐。再干活。活完盖好、清场、断电。特殊工种无证不干。起重信号不明不吊。高处：帽、带、挂点。")
+            lines.append("")
+            lines.append(size_line)
+        elif i == 4:
+            lines.append("防护没了、指挥乱了、身体不舒服、看不懂，先停。班组长可以喊停全班。找不到人就看门口告示牌。电话待填。")
+        else:
+            lines.append("没听懂再问，不丢人。问完再上。口播代替不了书面交底和签字。")
+        lines.append("")
+    lines.append("[A001] 缺部位待填。无尺寸不报未给的尺寸。本稿不是交底签认件。")
+    if zone in ("SG", "DUAL"):
+        lines.append("SG：toolbox meeting 导则只写标题。")
+    if zone in ("CN", "DUAL"):
+        lines.append("CN：班前会不是安全技术交底。")
+    lines.append("")
+    return "\n".join(lines)
+
+
 def _dispatch_daily_md(text: str) -> str:
     jobs = _copy_sensitive_jobs(text)
     sensitive = (
@@ -4311,6 +4413,33 @@ def _run_exclusive(
             "submit_blocked": True,
         }
 
+    if expert.id == "worker-brief":
+        md = _worker_brief_md(text)
+        from packing_assistant.tools.tender_review import forbidden_hits
+
+        hits = forbidden_hits(md)
+        if hits:
+            return {
+                "wrote": False,
+                "hitl_pending": False,
+                "files": [],
+                "tools_run": [],
+                "reply": "禁语扫描命中，未报成功：" + "、".join(hits),
+                "submit_blocked": True,
+            }
+        path = out_dir / "worker-brief__talk.md"
+        guarded_write_text(path, md)
+        files.append({"name": path.name, "path": str(path), "tool": "worker-brief__talk"})
+        ran.append("worker-brief__talk")
+        return {
+            "wrote": True,
+            "hitl_pending": False,
+            "files": files,
+            "tools_run": ran,
+            "reply": "已出班前白话稿。三段口播。无尺寸不报未给的尺寸。submit_blocked=true。",
+            "submit_blocked": True,
+        }
+
     if expert.id == "cost":
         md = (
             f"# 工程量拆分表（AI 草稿）\n\n{DISCLAIMER}\n\n"
@@ -4440,6 +4569,8 @@ def run_named_exclusive(name: str, args: Optional[Dict[str, Any]] = None) -> Dic
         "vendor",
         "criteria",
         "period",
+        "work_today",
+        "watchouts",
         "note",
         "notes",
     ):

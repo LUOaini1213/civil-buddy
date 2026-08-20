@@ -1763,6 +1763,38 @@ fn test_finance_fund_windows_exclusive() {
 }
 
 #[test]
+fn test_worker_brief_three_part_exclusive() {
+    let p = paths();
+    assert!(packs::visible_tool_names("worker-brief").iter().any(|n| n == "worker-brief__talk"));
+    assert!(!packs::visible_tool_names("pm-daily").iter().any(|n| n == "worker-brief__talk"));
+    let mut ctx = ToolCtx::new(p.clone(), "worker-brief", "people", "low", true, "iter-wb-t039");
+    let out = packs::execute(
+        &mut ctx,
+        "worker-brief__talk",
+        &json!({"work_today":"edge","jurisdiction":"SG"}),
+    );
+    assert!(out.contains("已写入"), "{out}");
+    let text = std::fs::read_to_string(ctx.out_dir.join("班前白话稿.md")).unwrap();
+    assert!(text.contains("edge"), "{text}");
+    assert!(text.contains("今天干什么") && text.contains("哪儿会掉") && text.contains("三步怎么干"), "{text}");
+    assert!(text.contains("toolbox"), "{text}");
+    assert!(!text.contains("毫米"), "{text}");
+    assert!(!text.contains("可以开工"), "{text}");
+    let mut sized = ToolCtx::new(p.clone(), "worker-brief", "people", "low", true, "iter-wb-mm");
+    let so = packs::execute(
+        &mut sized,
+        "worker-brief__talk",
+        &json!({"work_today":"临边 1200mm","jurisdiction":"SG"}),
+    );
+    assert!(so.contains("已写入"), "{so}");
+    let st = std::fs::read_to_string(sized.out_dir.join("班前白话稿.md")).unwrap();
+    assert!(st.contains("临边"), "{st}");
+    assert!(st.contains("1200mm"), "{st}");
+    let mut sib = ToolCtx::new(p, "pm-daily", "people", "low", true, "iter-wb-t039-sib");
+    assert!(packs::execute(&mut sib, "worker-brief__talk", &json!({"work_today":"x"})).contains("拒绝"));
+}
+
+#[test]
 fn test_variation_form_exclusive() {
     let p = paths();
     assert!(packs::visible_tool_names("variation").iter().any(|n| n == "variation__form"));

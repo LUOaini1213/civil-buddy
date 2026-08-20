@@ -133,6 +133,9 @@
 43. **T038 finance-fund 一岗（T038 批次完）** ✅ 2026-08-20  
     finance-fund__plan 出收入/支出窗口；金额 TBD；不构成付款指令。无合同节点不编付款承诺。主链头指针改为 **T039**（worker-brief 先）。T039–T047 不得一行勾完。行业总判仍 **部分合格**。
 
+44. **T039 worker-brief 一岗** ✅ 2026-08-20  
+    worker-brief__talk 按 script 写三段口播；无尺寸不报毫米。不是书面交底签认件。T039 批次未完：下一岗 **pm-daily**。不得把日报一并勾完。行业总判仍 **部分合格**。
+
 平台内核见 [product-improvement-handbook.md](product-improvement-handbook.md)。岗独有写盘下一刀仍按 [post-horizon-2026-08-17.md](post-horizon-2026-08-17.md)。
 
 ## 有宿主再做

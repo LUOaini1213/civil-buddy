@@ -912,7 +912,7 @@
 - qa：已有 · people__scan_forbidden
 - kb：已有 · 分层 KB + search_kb/read_kb（demo/kb）
 - write：已有 · 独有 worker-brief__talk；chat 不写盘
-- 下一刀：worker-brief__talk 按 script.md 写三段口播；无尺寸不报毫米。
+- 下一刀：已做 T039 worker-brief。worker-brief__talk 按 script.md 写三段口播；无尺寸不报毫米。
 
 ### pm-daily
 
