@@ -456,6 +456,32 @@ def main() -> int:
     assert "待填" in lrt
     assert "可以开工" not in lrt
 
+    sv_chat = run_expert_turn("监理通知怎么回？", "supervision")
+    assert sv_chat["intent"] == "chat" and sv_chat["wrote"] is False
+    sv_ok = run_expert_turn(
+        "写一份监理回复 NCR-1 钢筋保护层",
+        "supervision",
+        force_intent="run",
+        session_id="t034-sv",
+    )
+    assert sv_ok["wrote"] is True
+    assert "supervision__reply" in sv_ok["tools_run"]
+    svt = Path(sv_ok["files"][0]["path"]).read_text(encoding="utf-8")
+    for col in ("来文要点复述", "拟办", "证据目录"):
+        assert col in svt, col
+    assert "NCR-1" in svt
+    assert "可以开工" not in svt
+    assert "可以复工" not in svt
+    sv_stop = run_expert_turn(
+        "写一份监理回复 暂停令",
+        "supervision",
+        force_intent="run",
+        session_id="t034-sv-stop",
+    )
+    sst = Path(sv_stop["files"][0]["path"]).read_text(encoding="utf-8")
+    assert "只出目录" in sst
+    assert "可以复工" not in sst
+
     high = [e for e in roster if e.risk == "high"][0]
     blocked = run_expert_turn("写一份专项方案讨论提纲", high.id, confirm_ok=False)
     assert blocked["intent"] == "run"

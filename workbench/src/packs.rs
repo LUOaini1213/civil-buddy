@@ -945,7 +945,7 @@ fn pack_tools(pack: &str) -> Vec<ToolDef> {
             },
             ToolDef {
             name: "supervision__reply",
-            description: "资料目录或监理通知回复草稿。",
+            description: "监理回复独有：来文复述|拟办|证据目录。暂停/复工只出目录。",
             parameters: obj(
                 json!({
                     "notice": {"type": "string"},
@@ -2983,11 +2983,17 @@ fn tax_calendar(ctx: &mut ToolCtx, args: &Value) -> String {
 
 fn supervision_reply(ctx: &mut ToolCtx, args: &Value) -> String {
     let (jur, banner) = zone_banner(args);
+    let notice = nonempty(&s(args, "notice"), "待填");
+    let points = nonempty(&s(args, "reply_points"), "待填");
+    let blob = format!("{notice}\n{points}");
+    let stop_note = if blob.contains("暂停") || blob.contains("复工") || blob.contains("停工") {
+        "暂停令、复工报审只出目录和拟办提纲。本岗不签发复工。"
+    } else {
+        "若来文是暂停/复工，只出目录和拟办提纲。本岗不签发复工。"
+    };
     let md = format!(
-        "{}{banner}\n## 通知/事项\n{}\n\n## 拟回复\n{}\n\n本回复是资料草稿，不是监理指令。{}\n",
+        "{}{banner}\n本回复是资料草稿，不是监理指令。待持证人员审核签发后报出。\n\n## 1 文头\n工程名称待填。回复编号待填。对应来文编号/日期待填。[A001]\n\n## 2 致\n致：项目监理机构。抄送栏待填。\n\n## 3 来文要点复述\n{notice}\n\n只复述用户提供的事由、部位、条数，不扩写没给的事实。\n\n## 4 原因分析\n管理/工艺/材料/资料。缺事实则待填。[A001]\n\n## 5 拟办\n{points}\n\n逐条对应来文，一条不漏。举一反三和预防只作栏目，不编造已培训记录。\n\n{stop_note}\n\n## 6 完成时限\n从来文或合同抄，否则 [A001] 待填。\n\n## 7 证据目录\n| 证据 | 本稿 |\n| --- | --- |\n| 整改前后影像 | 待附 |\n| 检查记录 | 待附 |\n| 检测报告 | 待附 |\n| 方案/交底目录 | 待附 |\n\n## 8 自检\n项目技术/质量负责人栏空白。\n\n## 9 签发\n本回复为 AI 草稿，待项目经理等持证人员审核签发后报出。\n\n## 10 闭合台账行\n| 来文号 | 要求闭合日 | 实际回复日 | 复查意见 |\n| --- | --- | --- | --- |\n| 待填 | 待填 | 待填 | （空，复查属监理） |\n\n## 11 禁令\n不写验收合格、资料已闭合可备案。不冒充总监签发。不编报告编号、强度、闭合天数。暂停/复工只出目录。\n\n{}\n",
         header("监理通知回复草稿"),
-        nonempty(&s(args, "notice"), "待填"),
-        nonempty(&s(args, "reply_points"), "待填"),
         format!(
             "{}{}",
             sg_only(&jur, "SG：BCA construction site records / record structural plan C-forms 只写标题。"),

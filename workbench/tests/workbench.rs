@@ -1822,6 +1822,40 @@ fn test_lab_record_ledger_exclusive() {
 }
 
 #[test]
+fn test_supervision_reply_exclusive() {
+    let p = paths();
+    assert!(packs::visible_tool_names("supervision").iter().any(|n| n == "supervision__reply"));
+    let mut ctx = ToolCtx::new(p.clone(), "supervision", "docs", "low", true, "iter-sv");
+    let out = packs::execute(
+        &mut ctx,
+        "supervision__reply",
+        &json!({"notice":"NCR-1 钢筋保护层","jurisdiction":"SG"}),
+    );
+    assert!(out.contains("已写入"), "{out}");
+    let text = std::fs::read_to_string(ctx.out_dir.join("监理回复草稿.md")).unwrap();
+    assert!(text.contains("来文要点复述"), "{text}");
+    assert!(text.contains("拟办"), "{text}");
+    assert!(text.contains("证据目录"), "{text}");
+    assert!(text.contains("NCR-1"), "{text}");
+    assert!(text.contains("C-forms"), "{text}");
+    assert!(!text.contains("可以开工"), "{text}");
+    assert!(!text.contains("可以复工"), "{text}");
+    let mut stop = ToolCtx::new(p.clone(), "supervision", "docs", "low", true, "iter-sv-stop");
+    let so = packs::execute(
+        &mut stop,
+        "supervision__reply",
+        &json!({"notice":"暂停令","jurisdiction":"CN"}),
+    );
+    assert!(so.contains("已写入"), "{so}");
+    let st = std::fs::read_to_string(stop.out_dir.join("监理回复草稿.md")).unwrap();
+    assert!(st.contains("只出目录"), "{st}");
+    assert!(st.contains("监理规范"), "{st}");
+    assert!(!st.contains("可以复工"), "{st}");
+    let mut sib = ToolCtx::new(p, "admin-doc", "admin", "low", true, "iter-sv-sib");
+    assert!(packs::execute(&mut sib, "supervision__reply", &json!({"notice":"x"})).contains("拒绝"));
+}
+
+#[test]
 fn test_bid_compliance_exclusive_and_scan_sg_mix() {
     let p = paths();
     assert!(packs::visible_tool_names("bid-compliance").iter().any(|n| n == "bid-compliance__gaps"));

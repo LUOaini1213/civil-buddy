@@ -783,7 +783,7 @@
 - qa：已有 · docs__scan_forbidden
 - kb：已有 · 分层 KB + search_kb/read_kb（demo/kb）
 - write：已有 · 独有 supervision__reply；chat 不写盘
-- 下一刀：supervision__reply：来文复述|拟办|证据目录；暂停/复工只出目录，不写复工许可。
+- 下一刀：已做 T034 supervision。supervision__reply：来文复述|拟办|证据目录；暂停/复工只出目录，不写复工许可。
 
 
 ## 大类 `hr` · 车道 `lane-hr`
