@@ -873,11 +873,12 @@ fn pack_tools(pack: &str) -> Vec<ToolDef> {
             },
             ToolDef {
                 name: "warehouse__log",
-                description: "仓管独有：收发存口径。不编盈亏数字。",
+                description: "仓管独有：按行抄收发原文。有数只抄、无数 TBD。无盘点不编盈亏。",
                 parameters: obj(
                     json!({
                         "item": {"type": "string"},
-                        "note": {"type": "string"}
+                        "note": {"type": "string"},
+                        "jurisdiction": {"type": "string"}
                     }),
                     &["item"],
                 ),
@@ -2844,12 +2845,78 @@ fn survey_record(ctx: &mut ToolCtx, args: &Value) -> String {
     }
 }
 
+fn parse_wh_rows(blob: &str) -> Vec<(String, String, String)> {
+    let mut rows = Vec::new();
+    for raw in blob.replace('；', "\n").replace(';', "\n").lines() {
+        let mut t = raw.trim().to_string();
+        if let Some(rest) = t.strip_prefix("写一份") {
+            t = rest.trim().to_string();
+        }
+        if t.is_empty()
+            || matches!(
+                t.as_str(),
+                "草稿提纲" | "收发存" | "收发存台账" | "仓管" | "待填" | "SG" | "CN"
+            )
+        {
+            continue;
+        }
+        if t.starts_with('#') || t.starts_with("内部") {
+            continue;
+        }
+        let (mut name, qty, _) = split_resource_qty(&t);
+        for key in ["入库", "进场", "出库", "领料", "盘点", "实存"] {
+            name = name.replace(key, "");
+        }
+        name = name.split_whitespace().collect::<Vec<_>>().join(" ");
+        if name.is_empty() {
+            name = t.chars().take(80).collect();
+        }
+        let mut inbound = "TBD".to_string();
+        let mut outbound = "TBD".to_string();
+        if t.contains("出库") || t.contains("领料") {
+            if qty != "TBD" {
+                outbound = qty;
+            }
+        } else if t.contains("入库") || t.contains("进场") {
+            if qty != "TBD" {
+                inbound = qty;
+            }
+        } else if qty != "TBD" {
+            inbound = qty;
+        }
+        rows.push((name, inbound, outbound));
+    }
+    rows
+}
+
 fn warehouse_log(ctx: &mut ToolCtx, args: &Value) -> String {
-    let item = nonempty(&s(args, "item"), "待填物资");
-    let note = nonempty(&s(args, "note"), "待填");
     let (jur, banner) = zone_banner(args);
+    let item = s(args, "item");
+    let note = nonempty(&s(args, "note"), "待填");
+    let blob = format!("{item}\n{note}");
+    let has_count = blob.contains("盘点") || blob.contains("实存");
+    let rows = parse_wh_rows(&blob);
+    let (short, full) = if rows.is_empty() {
+        (
+            "| 物资 | 入库 | 出库 | 结存 | 备注 |\n| --- | --- | --- | --- | --- |\n| 待填物资 | TBD | TBD | TBD | 待填 |".to_string(),
+            "| 物资 | 规格批次 | 单位 | 期初 | 入库 | 出库 | 账面结存 | 盘点实存 | 差异 | 来源单据号 | 单价 |\n| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |\n| 待填物资 | 待填 | 待填 | TBD | TBD | TBD | TBD | TBD | TBD | 待填 | TBD |".to_string(),
+        )
+    } else {
+        let mut short = String::from("| 物资 | 入库 | 出库 | 结存 | 备注 |\n| --- | --- | --- | --- | --- |\n");
+        let mut full = String::from("| 物资 | 规格批次 | 单位 | 期初 | 入库 | 出库 | 账面结存 | 盘点实存 | 差异 | 来源单据号 | 单价 |\n| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |\n");
+        for (n, inn, out) in &rows {
+            short.push_str(&format!("| {n} | {inn} | {out} | TBD | {note} |\n"));
+            full.push_str(&format!("| {n} | 待填 | 待填 | TBD | {inn} | {out} | TBD | TBD | TBD | 待填 | TBD |\n"));
+        }
+        (short, full)
+    };
+    let count_note = if has_count {
+        "有盘点栏。账、卡、物三栏和差异原因待现场填写。未签字确认不得向现场材料提供盈亏数。"
+    } else {
+        "[A001] 无盘点不编盈亏。"
+    };
     let md = format!(
-        "{}{banner}\n| 物资 | 入库 | 出库 | 结存 | 备注 |\n| --- | --- | --- | --- | --- |\n| {item} | TBD | TBD | TBD | {note} |\n\n[A001] 无盘点不编盈亏。FIFO 不是法定检定周期。{}\n",
+        "{}{banner}\n内部讨论，不替代正式入库单签认，不替代财务记账，不给材料合格结论。\n\n## 1 草稿声明\n内部讨论。不替代正式入库单签认，不替代财务记账，不给材料合格结论。\n\n## 2 库区与分类\n合格区、待检区、不合格隔离区分开。甲指、甲限、自采分堆分账。危险品单独库位。本岗不编间距米数。\n\n## 3 入库验收\n对照采购订单或送货单核名称、规格、数量、批次、外观。需复试的材料进待检区，试验报告未出不得当作合格料发放。实收与应收差异记数量，不涂改凑平。\n\n## 4 标识与保管\n每垛标明名称、规格、批次、进场日期、状态（合格 / 待检 / 不合格）。不擅自报废数字。\n\n## 5 限额领料出库\n必须凭限额领料单。无单不发料。超限额走追加审批，不口头超发。\n\n## 6 盘点\n{count_note}\n\n至少月清。账物不符先记差异，禁止改台账凑数。[A001] 无盘点不编盈亏。\n\n## 7 收发存表头\n{short}\n\n{full}\n\n有数只抄用户原文。无数 TBD。单价无询价或合同价则 TBD。FIFO 不是法定检定周期。\n\n## 8 危险品台账\n| 物资 | 入库 | 领用 | 退回 | 结存 | 双人复核 |\n| --- | --- | --- | --- | --- | --- |\n| 待填 | TBD | TBD | TBD | TBD | 待填 |\n\n消防间距和存储限量以用户平面和安质环要求为准，本岗不编间距米数。\n\n## 9 禁令\n不把待检料写成已合格。不给复试合格结论。不编定额章节和综合单价。塔吊证件交设备管理岗。\n\n{}\n",
         header("收发存台账口径"),
         format!(
             "{}{}",

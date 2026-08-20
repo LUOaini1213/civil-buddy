@@ -461,6 +461,26 @@ _CERT_COPY = re.compile(
     r"(合格证|使用登记|作业人员证件|作业证)[:：\s]*([A-Za-z0-9][\w\-./]{2,})"
 )
 
+_WH_CHAPTERS = (
+    "草稿声明",
+    "库区与分类",
+    "入库验收",
+    "标识与保管",
+    "限额领料出库",
+    "盘点",
+    "收发存表头",
+    "危险品台账",
+    "禁令",
+)
+
+_WH_SKIP = {
+    "草稿提纲",
+    "收发存",
+    "收发存台账",
+    "仓管",
+    "待填",
+}
+
 _MILESTONE_KEYS = ("桩基", "±0", "封顶", "砌筑", "机电", "装饰", "竣工")
 
 _QTY_RE = re.compile(
@@ -2116,6 +2136,140 @@ def _equip_md(text: str) -> str:
     return "\n".join(lines)
 
 
+def _parse_wh_rows(blob: str) -> List[tuple]:
+    rows: List[tuple] = []
+    for piece in (blob or "").replace("；", "\n").replace(";", "\n").splitlines():
+        t = piece.strip()
+        t = re.sub(r"^写一份\S*\s*", "", t).strip()
+        if not t or t in _WH_SKIP:
+            continue
+        if t.startswith("#") or t.startswith("内部"):
+            continue
+        if t in {"JGJ", "SAC", "CN", "SG", "DUAL"}:
+            continue
+        inbound = "TBD"
+        outbound = "TBD"
+        m = _RES_QTY.search(t)
+        qty = f"{m.group('qty')}{m.group('unit')}" if m else ""
+        name = t
+        if m:
+            name = (t[: m.start()] + t[m.end() :]).strip(" ，,;；") or t
+        for key in ("入库", "进场", "出库", "领料", "盘点", "实存"):
+            name = name.replace(key, "")
+        name = re.sub(r"\s+", " ", name).strip() or t[:80]
+        if len(name) > 80:
+            name = name[:80]
+        if "出库" in t or "领料" in t:
+            outbound = qty or "TBD"
+        elif "入库" in t or "进场" in t:
+            inbound = qty or "TBD"
+        elif qty:
+            inbound = qty
+        rows.append((name, inbound, outbound))
+    return rows
+
+
+def _warehouse_md(text: str) -> str:
+    blob = text or ""
+    zone = _mix_zone(blob)
+    rows = _parse_wh_rows(blob)
+    has_count = any(k in blob for k in ("盘点", "实存"))
+    if not rows:
+        short = (
+            "| 物资 | 入库 | 出库 | 结存 | 备注 |\n"
+            "| --- | --- | --- | --- | --- |\n"
+            "| 待填物资 | TBD | TBD | TBD | 待填 |\n"
+        )
+        full = (
+            "| 物资 | 规格批次 | 单位 | 期初 | 入库 | 出库 | 账面结存 | 盘点实存 | 差异 | 来源单据号 | 单价 |\n"
+            "| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |\n"
+            "| 待填物资 | 待填 | 待填 | TBD | TBD | TBD | TBD | TBD | TBD | 待填 | TBD |\n"
+        )
+    else:
+        short = (
+            "| 物资 | 入库 | 出库 | 结存 | 备注 |\n"
+            "| --- | --- | --- | --- | --- |\n"
+            + "".join(f"| {n} | {inn} | {out} | TBD | 待填 |\n" for n, inn, out in rows)
+        )
+        full = (
+            "| 物资 | 规格批次 | 单位 | 期初 | 入库 | 出库 | 账面结存 | 盘点实存 | 差异 | 来源单据号 | 单价 |\n"
+            "| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |\n"
+            + "".join(
+                f"| {n} | 待填 | 待填 | TBD | {inn} | {out} | TBD | TBD | TBD | 待填 | TBD |\n"
+                for n, inn, out in rows
+            )
+        )
+    count_note = (
+        "有盘点栏。账、卡、物三栏和差异原因待现场填写。未签字确认不得向现场材料提供盈亏数。"
+        if has_count
+        else "[A001] 无盘点不编盈亏。"
+    )
+    lines = [
+        "# 收发存台账口径（AI 草稿）",
+        "",
+        DISCLAIMER,
+        "",
+        "内部讨论，不替代正式入库单签认，不替代财务记账，不给材料合格结论。",
+        "",
+        f"- 辖区：{zone}",
+        "",
+        "## 用户原文",
+        "",
+        blob.strip() or "（未提供）",
+        "",
+    ]
+    for i, title in enumerate(_WH_CHAPTERS, 1):
+        lines.append(f"## {i} {title}")
+        lines.append("")
+        if i == 1:
+            lines.append("内部讨论。不替代正式入库单签认，不替代财务记账，不给材料合格结论。")
+        elif i == 2:
+            lines.append(
+                "合格区、待检区、不合格隔离区分开。甲指、甲限、自采分堆分账。"
+                "危险品单独库位。堆码上盖下垫，留通道。本岗不编间距米数。"
+            )
+        elif i == 3:
+            lines.append(
+                "对照采购订单或送货单核名称、规格、数量、批次、外观。"
+                "需复试的材料进待检区，试验报告未出不得当作合格料发放。"
+                "实收与应收差异记数量，不涂改凑平。"
+            )
+        elif i == 4:
+            lines.append("每垛标明名称、规格、批次、进场日期、状态（合格 / 待检 / 不合格）。不擅自报废数字。")
+        elif i == 5:
+            lines.append("必须凭限额领料单。无单不发料。超限额走追加审批，不口头超发。")
+        elif i == 6:
+            lines.append(count_note)
+            lines.append("")
+            lines.append("至少月清。账物不符先记差异，禁止改台账凑数。[A001] 无盘点不编盈亏。")
+        elif i == 7:
+            lines.append(short)
+            lines.append("")
+            lines.append(full)
+            lines.append("")
+            lines.append("有数只抄用户原文。无数 TBD。单价无询价或合同价则 TBD。FIFO 不是法定检定周期。")
+        elif i == 8:
+            lines.append(
+                "| 物资 | 入库 | 领用 | 退回 | 结存 | 双人复核 |\n"
+                "| --- | --- | --- | --- | --- | --- |\n"
+                "| 待填 | TBD | TBD | TBD | TBD | 待填 |"
+            )
+            lines.append("")
+            lines.append("消防间距和存储限量以用户平面和安质环要求为准，本岗不编间距米数。")
+        else:
+            lines.append(
+                "不把待检料写成已合格。不给复试合格结论。"
+                "不编定额章节和综合单价。塔吊证件交设备管理岗。"
+            )
+        lines.append("")
+    if zone in ("SG", "DUAL"):
+        lines.append("SG：Factory Notification 不是损耗公式。")
+    if zone in ("CN", "DUAL"):
+        lines.append("CN：收发存台账不是特种设备检定周期。")
+    lines.append("")
+    return "\n".join(lines)
+
+
 def _dispatch_daily_md(text: str) -> str:
     jobs = _copy_sensitive_jobs(text)
     sensitive = (
@@ -3050,6 +3204,33 @@ def _run_exclusive(
             "submit_blocked": True,
         }
 
+    if expert.id == "warehouse":
+        md = _warehouse_md(text)
+        from packing_assistant.tools.tender_review import forbidden_hits
+
+        hits = forbidden_hits(md)
+        if hits:
+            return {
+                "wrote": False,
+                "hitl_pending": False,
+                "files": [],
+                "tools_run": [],
+                "reply": "禁语扫描命中，未报成功：" + "、".join(hits),
+                "submit_blocked": True,
+            }
+        path = out_dir / "warehouse__log.md"
+        guarded_write_text(path, md)
+        files.append({"name": path.name, "path": str(path), "tool": "warehouse__log"})
+        ran.append("warehouse__log")
+        return {
+            "wrote": True,
+            "hitl_pending": False,
+            "files": files,
+            "tools_run": ran,
+            "reply": "已出收发存台账。有数只抄。无盘点不编盈亏。submit_blocked=true。",
+            "submit_blocked": True,
+        }
+
     if expert.id == "cost":
         md = (
             f"# 工程量拆分表（AI 草稿）\n\n{DISCLAIMER}\n\n"
@@ -3174,6 +3355,8 @@ def run_named_exclusive(name: str, args: Optional[Dict[str, Any]] = None) -> Dic
         "issues",
         "scenario",
         "certs",
+        "item",
+        "note",
     ):
         v = args.get(k)
         if v:

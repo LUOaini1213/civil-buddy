@@ -655,7 +655,7 @@
 - qa：已有 · plant__scan_forbidden
 - kb：已有 · 分层 KB + search_kb/read_kb（demo/kb）
 - write：已有 · 独有 warehouse__log；chat 不写盘
-- 下一刀：warehouse__log 按行 parse 收发原文；有数只抄、无数 TBD；无盘点不编盈亏。
+- 下一刀：已做 T036 warehouse。warehouse__log 按行 parse 收发原文；有数只抄、无数 TBD；无盘点不编盈亏。
 
 ### pack-ship
 

@@ -112,6 +112,9 @@
 36. **T036 equip 一岗** ✅ 2026-08-20  
     equip__ledger 只抄用户设备名与已给证件；无证件不编进场结论。高风险须确认句。T036 批次未完：下一岗 **warehouse**。不得把仓管/现场料一并勾完。行业总判仍 **部分合格**。
 
+37. **T036 warehouse 一岗** ✅ 2026-08-20  
+    warehouse__log 按行抄收发原文；有数只抄、无数 TBD；无盘点不编盈亏。T036 批次未完：下一岗 **material-site**。不得把现场料一并勾完。行业总判仍 **部分合格**。
+
 平台内核见 [product-improvement-handbook.md](product-improvement-handbook.md)。岗独有写盘下一刀仍按 [post-horizon-2026-08-17.md](post-horizon-2026-08-17.md)。
 
 ## 有宿主再做
