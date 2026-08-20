@@ -124,6 +124,9 @@
 40. **T037 proc-compare 一岗** ✅ 2026-08-20  
     proc-compare__table 一行一家多列；无报价不编价；定商标待制度定；写盘后 procurement__scan_forbidden。T037 批次未完：下一岗 **proc-vendor**。不得把供方一并勾完。行业总判仍 **部分合格**。
 
+41. **T037 proc-vendor 一岗（T037 批次完）** ✅ 2026-08-20  
+    proc-vendor__eval 出准入｜考察｜短名单；分数/结论待核；禁止成交结论。不编证书号和业绩额。主链头指针改为 **T038**（finance-book 先）。T038–T047 不得一行勾完。行业总判仍 **部分合格**。
+
 平台内核见 [product-improvement-handbook.md](product-improvement-handbook.md)。岗独有写盘下一刀仍按 [post-horizon-2026-08-17.md](post-horizon-2026-08-17.md)。
 
 ## 有宿主再做

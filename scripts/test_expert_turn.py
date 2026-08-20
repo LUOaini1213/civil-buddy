@@ -726,6 +726,35 @@ def main() -> int:
     sec = pcv.split("## 5 比价表")[1].split("## 6")[0]
     assert "甲" in sec and "乙" in sec
 
+    pv_chat = run_expert_turn("准入和短名单怎么理解？", "proc-vendor")
+    assert pv_chat["intent"] == "chat" and pv_chat["wrote"] is False
+    pv_ok = run_expert_turn(
+        "写一份供方评价 local fab",
+        "proc-vendor",
+        force_intent="run",
+        session_id="t037-pv",
+    )
+    assert pv_ok["wrote"] is True
+    assert "proc-vendor__eval" in pv_ok["tools_run"]
+    pvt = Path(pv_ok["files"][0]["path"]).read_text(encoding="utf-8")
+    assert "local fab" in pvt
+    assert "准入" in pvt and "考察" in pvt and "短名单" in pvt
+    assert "待核" in pvt
+    assert "分数" in pvt
+    assert "GeBIZ" in pvt
+    assert "[A001]" in pvt
+    assert "可以开工" not in pvt
+    assert "中标" not in pvt
+    pv_two = run_expert_turn(
+        "写一份供方评价 甲；乙",
+        "proc-vendor",
+        force_intent="run",
+        session_id="t037-pv-two",
+    )
+    pvv = Path(pv_two["files"][0]["path"]).read_text(encoding="utf-8")
+    acc = pvv.split("## 3 准入")[1].split("## 4")[0]
+    assert "甲" in acc and "乙" in acc
+
     high = [e for e in roster if e.risk == "high"][0]
     blocked = run_expert_turn("写一份专项方案讨论提纲", high.id, confirm_ok=False)
     assert blocked["intent"] == "run"

@@ -626,7 +626,7 @@
 - qa：已有 · procurement__scan_forbidden
 - kb：已有 · 分层 KB + search_kb/read_kb（demo/kb）
 - write：已有 · 独有 proc-vendor__eval；chat 不写盘
-- 下一刀：proc-vendor__eval 出准入|考察|短名单，分数/结论待核，禁止中标结论。
+- 下一刀：已做 T037 proc-vendor。proc-vendor__eval 出准入|考察|短名单；分数/结论待核；禁止成交结论。
 
 
 ## 大类 `plant` · 车道 `lane-plant`

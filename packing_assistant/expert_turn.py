@@ -555,6 +555,30 @@ _QUOTE_QTY = re.compile(
     r"(?:单价|报价)[:：\s]*(?P<qty>\d+(?:\.\d+)?)",
 )
 
+_PV_CHAPTERS = (
+    "封面与目的",
+    "草稿声明",
+    "准入",
+    "初审",
+    "考察",
+    "短名单",
+    "评价表头",
+    "动态与退出",
+    "接口栏",
+    "禁令",
+)
+
+_PV_SKIP = {
+    "草稿提纲",
+    "供方评价",
+    "供方评价表头",
+    "供应商",
+    "准入",
+    "考察",
+    "短名单",
+    "待填",
+}
+
 _MILESTONE_KEYS = ("桩基", "±0", "封顶", "砌筑", "机电", "装饰", "竣工")
 
 _QTY_RE = re.compile(
@@ -2762,6 +2786,123 @@ def _compare_md(text: str) -> str:
     return "\n".join(lines)
 
 
+def _parse_pv_names(blob: str) -> List[str]:
+    names: List[str] = []
+    for piece in (blob or "").replace("；", "\n").replace(";", "\n").splitlines():
+        t = piece.strip()
+        t = re.sub(r"^写一份\S*\s*", "", t).strip()
+        t = re.sub(
+            r"^(供方评价表头|供应商评价表|供方评价|供应商评价|评价表|准入考察)\s*",
+            "",
+            t,
+        ).strip()
+        t = re.sub(r"^(供方|供应商)\s*", "", t).strip()
+        if not t or t.lower() in _PV_SKIP or t in _PV_SKIP:
+            continue
+        if t.startswith("#") or t.startswith("内部"):
+            continue
+        if t in {"JGJ", "SAC", "CN", "SG", "DUAL"}:
+            continue
+        if len(t) > 80:
+            t = t[:80]
+        if t not in names:
+            names.append(t)
+    return names
+
+
+def _pv_three_tables(names: List[str]) -> tuple:
+    rows = names or ["待填供方"]
+    access = (
+        "| 供方 | 执照 | 许可 | 业绩 | 有效期 | 初审 |\n"
+        "| --- | --- | --- | --- | --- | --- |\n"
+        + "".join(f"| {n} | 未提供 | 许可种类待核对 | 待填 | 待核 | 待核 |\n" for n in rows)
+    )
+    visit = (
+        "| 供方 | 厂址与库容 | 产线与样品 | 检测设备 | 考察人日期 | 结论 |\n"
+        "| --- | --- | --- | --- | --- | --- |\n"
+        + "".join(f"| {n} | 待填 | 待填 | 待填 | 待填 | 待核 |\n" for n in rows)
+    )
+    short = (
+        "| 供方 | 口径 | 来源 | 结论 |\n"
+        "| --- | --- | --- | --- |\n"
+        + "".join(f"| {n} | 待核（拟入名录 / 仅本项目短名单 / 观察期） | 待填 | 待核 |\n" for n in rows)
+    )
+    score = (
+        "| 供方 | 供货批次 | 规格符合 | 到货及时 | 资料齐全 | 售后 | 取样复试 | 安全文明 | 书面报价 | 分数 | 结论 |\n"
+        "| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |\n"
+        + "".join(
+            f"| {n} | 待填 | 待核 | 待核 | 待核 | 待核 | 待核 | 待核 | 无书面报价 | 待核 | 待核 |\n"
+            for n in rows
+        )
+    )
+    return access, visit, short, score
+
+
+def _vendor_eval_md(text: str) -> str:
+    blob = text or ""
+    zone = _mix_zone(blob)
+    names = _parse_pv_names(blob)
+    access, visit, short, score = _pv_three_tables(names)
+    shown = "、".join(names) if names else "待填供方"
+    lines = [
+        "# 供应商准入 / 考察 / 评价表（AI 草稿）",
+        "",
+        DISCLAIMER,
+        "",
+        "供方建档口径。不是成交通知，不是合格证，也不是进场许可。缺证照就待填，不编证书号和业绩额。",
+        "",
+        f"- 辖区：{zone}",
+        f"- 供方：{shown}",
+        "",
+        "## 用户原文",
+        "",
+        blob.strip() or "（未提供）",
+        "",
+    ]
+    for i, title in enumerate(_PV_CHAPTERS, 1):
+        lines.append(f"## {i} {title}")
+        lines.append("")
+        if i == 1:
+            lines.append("本次是新供方准入、既有名录复评、项目短名单，还是退出建议，待用户标明。项目、品类、编制人空栏。[A001]")
+        elif i == 2:
+            lines.append("内部讨论。无履约事实不打分。权重待企业制度。本稿不下成交结论。")
+        elif i == 3:
+            lines.append("有原件/复印件/系统截图才勾。没有就写未提供。不编许可证号。未提供自愿性证书不写已通过。")
+            lines.append("")
+            lines.append(access)
+        elif i == 4:
+            lines.append("证照是否在有效期、经营范围是否覆盖本包，只记录用户出示的名单名称。不联网查询后认定。")
+        elif i == 5:
+            lines.append("去了才填。没去就整节待填。考察人、日期、照片编号留空给用户。")
+            lines.append("")
+            lines.append(visit)
+        elif i == 6:
+            lines.append("列拟入名录 / 仅本项目短名单 / 观察期。名录规则待企业制度。不新造黑名单栏目当已生效文件。")
+            lines.append("")
+            lines.append(short)
+        elif i == 7:
+            lines.append("无履约事实不打分。价格只作有无书面报价，不填金额。禁止发明权重。")
+            lines.append("")
+            lines.append(score)
+        elif i == 8:
+            lines.append("质量事故、虚假资料、无故断供、拒绝配合复试：只列事实和证据编号。退出写提请按企业制度审议，不写已清退出库。")
+        elif i == 9:
+            lines.append("未准入是否允许被询价按企业制度，制度待填。甲指供方仍要资料建档。厂家报告交试验室，取样结论不由本岗改写。")
+        else:
+            lines.append(
+                "不编业绩和证书编号。不因关系户省略考察栏。"
+                "能进名录不等于已经成交。评价不打价格分。不替代特种设备或危化品许可本身。"
+            )
+        lines.append("")
+    lines.append("[A001] 分数待核。结论待核。不编证书号和业绩额。禁止编造成交结论。")
+    if zone in ("SG", "DUAL"):
+        lines.append("SG：GeBIZ / BCA CRS 只写门户标题。GTP 不等于执照。")
+    if zone in ("CN", "DUAL"):
+        lines.append("CN：无证照不编已准入。国资采购管理工作指导意见只写全名。")
+    lines.append("")
+    return "\n".join(lines)
+
+
 def _dispatch_daily_md(text: str) -> str:
     jobs = _copy_sensitive_jobs(text)
     sensitive = (
@@ -3815,6 +3956,33 @@ def _run_exclusive(
             "submit_blocked": True,
         }
 
+    if expert.id == "proc-vendor":
+        md = _vendor_eval_md(text)
+        from packing_assistant.tools.tender_review import forbidden_hits
+
+        hits = forbidden_hits(md)
+        if hits:
+            return {
+                "wrote": False,
+                "hitl_pending": False,
+                "files": [],
+                "tools_run": [],
+                "reply": "禁语扫描命中，未报成功：" + "、".join(hits),
+                "submit_blocked": True,
+            }
+        path = out_dir / "proc-vendor__eval.md"
+        guarded_write_text(path, md)
+        files.append({"name": path.name, "path": str(path), "tool": "proc-vendor__eval"})
+        ran.append("proc-vendor__eval")
+        return {
+            "wrote": True,
+            "hitl_pending": False,
+            "files": files,
+            "tools_run": ran,
+            "reply": "已出供方评价表头。准入/考察/短名单。分数结论待核。submit_blocked=true。",
+            "submit_blocked": True,
+        }
+
     if expert.id == "cost":
         md = (
             f"# 工程量拆分表（AI 草稿）\n\n{DISCLAIMER}\n\n"
@@ -3942,6 +4110,7 @@ def run_named_exclusive(name: str, args: Optional[Dict[str, Any]] = None) -> Dic
         "item",
         "vendors",
         "vendor",
+        "criteria",
         "note",
         "notes",
     ):
