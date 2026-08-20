@@ -110,7 +110,7 @@ _NEXT = {
     "proc-compare": "proc-compare__table 一行一家多列；定商标待制度定；写盘后 scan_forbidden。",
     "proc-vendor": "proc-vendor__eval 出准入|考察|短名单，分数/结论待核，禁止中标结论。",
     "equip": "已做 T036 equip。equip__ledger 写出与 Rust 同表头台账，只抄用户设备名与已给证件。",
-    "warehouse": "warehouse__log 按行 parse 收发原文；有数只抄、无数 TBD；无盘点不编盈亏。",
+    "warehouse": "已做 T036 warehouse。warehouse__log 按行 parse 收发原文；有数只抄、无数 TBD；无盘点不编盈亏。",
     "pack-ship": "sidecar/packing_summary 快照抄进 pack-ship__plan/export；先 health；无则四字段字面 UNSPECIFIED；禁止重算 xyz。",
     "material-site": "material-site__recon 按行 parse 应耗/领料/盘点；算不出节超则 TBD。",
     "lab-mix": "已做 T033 lab-mix。lab-mix__report 四层目录；无试验数据则施工配比整节待填。",

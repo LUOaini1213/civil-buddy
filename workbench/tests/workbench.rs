@@ -1514,6 +1514,34 @@ fn test_equip_ledger_exclusive() {
 }
 
 #[test]
+fn test_warehouse_log_exclusive() {
+    let p = paths();
+    assert!(packs::visible_tool_names("warehouse").iter().any(|n| n == "warehouse__log"));
+    assert!(!packs::visible_tool_names("equip").iter().any(|n| n == "warehouse__log"));
+    let mut ctx = ToolCtx::new(p.clone(), "warehouse", "plant", "low", true, "iter-wh-t036");
+    let out = packs::execute(&mut ctx, "warehouse__log", &json!({"item":"rebar","jurisdiction":"SG"}));
+    assert!(out.contains("已写入"), "{out}");
+    let text = std::fs::read_to_string(ctx.out_dir.join("收发存台账.md")).unwrap();
+    assert!(text.contains("rebar"), "{text}");
+    assert!(text.contains("TBD"), "{text}");
+    assert!(text.contains("无盘点不编盈亏"), "{text}");
+    assert!(text.contains("Factory Notification"), "{text}");
+    assert!(!text.contains("可以开工"), "{text}");
+    let mut qty = ToolCtx::new(p.clone(), "warehouse", "plant", "low", true, "iter-wh-qty");
+    let qo = packs::execute(
+        &mut qty,
+        "warehouse__log",
+        &json!({"item":"钢筋 入库 12吨","jurisdiction":"SG"}),
+    );
+    assert!(qo.contains("已写入"), "{qo}");
+    let qt = std::fs::read_to_string(qty.out_dir.join("收发存台账.md")).unwrap();
+    assert!(qt.contains("钢筋"), "{qt}");
+    assert!(qt.contains("12吨"), "{qt}");
+    let mut sib = ToolCtx::new(p, "equip", "plant", "high", true, "iter-wh-t036-sib");
+    assert!(packs::execute(&mut sib, "warehouse__log", &json!({"item":"x"})).contains("拒绝"));
+}
+
+#[test]
 fn test_variation_form_exclusive() {
     let p = paths();
     assert!(packs::visible_tool_names("variation").iter().any(|n| n == "variation__form"));

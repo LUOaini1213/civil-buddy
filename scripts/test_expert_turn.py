@@ -606,6 +606,31 @@ def main() -> int:
     assert "TS-88" in eqc
     assert "用户给定" in eqc
 
+    wh_chat = run_expert_turn("收发存怎么理解？", "warehouse")
+    assert wh_chat["intent"] == "chat" and wh_chat["wrote"] is False
+    wh_ok = run_expert_turn(
+        "写一份收发存台账 rebar",
+        "warehouse",
+        force_intent="run",
+        session_id="t036-wh",
+    )
+    assert wh_ok["wrote"] is True
+    assert "warehouse__log" in wh_ok["tools_run"]
+    wht = Path(wh_ok["files"][0]["path"]).read_text(encoding="utf-8")
+    assert "rebar" in wht
+    assert "TBD" in wht
+    assert "无盘点不编盈亏" in wht
+    assert "可以开工" not in wht
+    wh_qty = run_expert_turn(
+        "写一份收发存台账 钢筋 入库 12吨",
+        "warehouse",
+        force_intent="run",
+        session_id="t036-wh-qty",
+    )
+    whq = Path(wh_qty["files"][0]["path"]).read_text(encoding="utf-8")
+    assert "钢筋" in whq
+    assert "12吨" in whq
+
     high = [e for e in roster if e.risk == "high"][0]
     blocked = run_expert_turn("写一份专项方案讨论提纲", high.id, confirm_ok=False)
     assert blocked["intent"] == "run"
