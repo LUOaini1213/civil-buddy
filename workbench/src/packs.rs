@@ -2010,15 +2010,55 @@ fn variation(ctx: &mut ToolCtx, args: &Value) -> String {
     }
 }
 
+fn copy_claim_evidence(blob: &str) -> String {
+    const KEYS: &[&str] = &[
+        "函",
+        "通知",
+        "停工",
+        "天气",
+        "影像",
+        "照片",
+        "试验",
+        "会议纪要",
+        "回证",
+        "letter",
+        "notice",
+        "photo",
+        "record",
+    ];
+    let mut rows = Vec::new();
+    for raw in blob.replace('；', "\n").replace(';', "\n").lines() {
+        let t = raw.trim();
+        if t.is_empty() || t == "待列" || t == "待补" {
+            continue;
+        }
+        let low = t.to_ascii_lowercase();
+        if KEYS.iter().any(|k| t.contains(k) || low.contains(&k.to_ascii_lowercase())) {
+            rows.push(format!("- {}（只抄用户已给）", t.chars().take(160).collect::<String>()));
+        }
+    }
+    if rows.is_empty() {
+        "| 证据 | 状态 |\n| --- | --- |\n| 往来函 / 监理通知 / 停工令 | 待补 |\n| 天气或停水停电记录 | 待补 |\n| 人员机械进出场 / 影像 / 试验报告 | 待补 |\n| 采购合同 / 会议纪要 / 送达回证 | 待补 |".into()
+    } else {
+        rows.join("\n")
+    }
+}
+
 fn claim(ctx: &mut ToolCtx, args: &Value) -> String {
     let (jur, banner) = zone_banner(args);
+    let event = nonempty(&s(args, "event"), "整节待填。[A001]");
+    let evidence_raw = nonempty(&s(args, "evidence"), "");
+    let clock = nonempty(&s(args, "deadline_note"), "用户合同索赔条款原文待贴。时限未提供，待按合同核对。");
+    let blob = format!("{event}\n{evidence_raw}\n{clock}");
+    let evidence = copy_claim_evidence(&blob);
     let md = format!(
-        "{}{banner}\n## 事件\n{}\n\n## 证据清单\n{}\n\n## 时限\n{}\n\n金额 TBD。本意向不是索赔报告。{}\n",
+        "{}{banner}\n## 1 封面与草稿声明\n不是已送达的索赔报告，不构成调概批复。工期天数 TBD。金额 TBD。条款原文待贴。\n\n## 2 事件识别\n{event}\n\n费用索赔与工期索赔分列。变更指令内调价优先走变更签证（variation），不重复当索赔。\n\n## 3 合同时钟\n{clock}\n\n不编条款号。只提示逾期风险，不断言已失权。\n\n## 4 意向通知必备\n| 栏 | 内容 |\n| --- | --- |\n| 事件事由 | 只抄用户原文 |\n| 发生时间 | 待填 |\n| 合同依据名称 | 待贴原文 |\n| 可能费用和／或工期 | TBD |\n| 已采取减损 | 待填 |\n| 证据目录 | 见第 5 节 |\n\n不填索赔总价。\n\n## 5 证据清单\n{evidence}\n\n## 6 因果与责任栏\n事件 → 影响工作面 → 关键线路是否被占（无网络图则工期影响待填）→ 己方有无扩大损失。[A001]\n\n## 7 费用组成口径\n| 组成 | 单价 |\n| --- | --- |\n| 人工停置 | TBD |\n| 机械停滞 | TBD |\n| 材料仓储或贬值 | TBD |\n| 赶工 | TBD |\n| 利润（是否计取看合同） | TBD |\n| 总部管理费 | TBD |\n\n## 8 调概专节\n政府投资调概只出事项对照表。预备费能覆盖的不调概。本岗不下报批结论。\n\n## 9 与签证、验工接口\n能签认的事实先固定在签证。索赔成立后的金额进验工计价，无业主确认不编入当期付款。\n\n## 10 自检\n无编造条款号。无编造索赔额。无胜诉或必然支持。\n\n{}\n",
         header("索赔意向草稿"),
-        nonempty(&s(args, "event"), "待填"),
-        nonempty(&s(args, "evidence"), "待列"),
-        nonempty(&s(args, "deadline_note"), "时限未提供，待按合同核对"),
-        sg_only(&jur, "SG：Building and Construction Industry Security of Payment Act 只写全名，时限 UNSPECIFIED。PSSCOC-lite 2025 只写族名。"),
+        format!(
+            "{}{}",
+            sg_only(&jur, "SG：Building and Construction Industry Security of Payment Act 只写全名，时限 UNSPECIFIED。PSSCOC-lite 2025 / Clause 23 Procedure for Claims 只写条名。"),
+            cn_only(&jur, "CN：GF-2017-0201 索赔意向/报告天数以用户合同为准。发改投资〔2015〕482 号只写全名。GB 50500 只出现在 CN 栏。"),
+        ),
     );
     match ctx.write_md("索赔意向草稿.md", &md) {
         Ok(m) => m,

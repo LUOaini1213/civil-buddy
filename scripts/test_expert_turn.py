@@ -164,6 +164,32 @@ def main() -> int:
     assert "VO-12" in vn
     assert "见图" not in vn
 
+    cl_chat = run_expert_turn("索赔意向怎么写？", "claim")
+    assert cl_chat["intent"] == "chat" and cl_chat["wrote"] is False
+    cl_empty = run_expert_turn(
+        "写一份索赔意向草稿",
+        "claim",
+        force_intent="run",
+        session_id="t031-cl-empty",
+    )
+    assert cl_empty["wrote"] is True
+    assert "claim__notice" in cl_empty["tools_run"]
+    ce = Path(cl_empty["files"][0]["path"]).read_text(encoding="utf-8")
+    for title in ("事件识别", "合同时钟", "意向通知必备", "证据清单", "调概专节"):
+        assert title in ce, title
+    assert "条款原文待贴" in ce
+    assert "TBD" in ce
+    assert "可以开工" not in ce
+    cl_ev = run_expert_turn(
+        "写一份索赔意向 图纸迟到 证据：监理通知 NCR-1；停工令 8 月 1 日",
+        "claim",
+        force_intent="run",
+        session_id="t031-cl-ev",
+    )
+    cv = Path(cl_ev["files"][0]["path"]).read_text(encoding="utf-8")
+    assert "监理通知 NCR-1" in cv or "NCR-1" in cv
+    assert "停工令" in cv
+
 
     high = [e for e in roster if e.risk == "high"][0]
     blocked = run_expert_turn("写一份专项方案讨论提纲", high.id, confirm_ok=False)

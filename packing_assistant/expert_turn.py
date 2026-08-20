@@ -132,6 +132,35 @@ _VARIATION_CHAPTERS = (
     "自检",
 )
 
+_CLAIM_CHAPTERS = (
+    "封面与草稿声明",
+    "事件识别",
+    "合同时钟",
+    "意向通知必备",
+    "证据清单",
+    "因果与责任栏",
+    "费用组成口径",
+    "调概专节",
+    "与签证、验工接口",
+    "自检",
+)
+
+_EVIDENCE_KEYS = (
+    "函",
+    "通知",
+    "停工",
+    "天气",
+    "影像",
+    "照片",
+    "试验",
+    "会议纪要",
+    "回证",
+    "letter",
+    "notice",
+    "photo",
+    "record",
+)
+
 _VAR_NO_RE = re.compile(r"(?i)\b(?:VO|SI|DC|VAR)[-_./]?\d+[A-Za-z]?\b")
 
 _POINT_RE = re.compile(r"(?i)\b(?:CP|BM|PT|TP|GC|SP)[-_]?\d+[A-Za-z]?\b")
@@ -299,6 +328,79 @@ def _variation_form_md(text: str) -> str:
         lines.append("")
     lines.append("SG：PSSCOC 2020 / PSSCOC-lite 2025 / SIA / REDAS 只写合同族名，条款 UNSPECIFIED。")
     lines.append("CN：GF-2017-0201 / GB/T 50500-2024 只写全名；财建〔2004〕369 号程序是否适用看用户合同，不编确认天数。")
+    lines.append("")
+    return "\n".join(lines)
+
+
+def _copy_claim_evidence(blob: str) -> str:
+    rows: List[str] = []
+    for line in (blob or "").replace("；", "\n").replace(";", "\n").splitlines():
+        t = line.strip()
+        if not t or t in {"待列", "待补"}:
+            continue
+        low = t.lower()
+        if any(k in t or k in low for k in _EVIDENCE_KEYS):
+            rows.append(t[:160])
+    if rows:
+        return "\n".join(f"- {r}（只抄用户已给）" for r in rows)
+    return (
+        "| 证据 | 状态 |\n| --- | --- |\n"
+        "| 往来函 / 监理通知 / 停工令 | 待补 |\n"
+        "| 天气或停水停电记录 | 待补 |\n"
+        "| 人员机械进出场 / 影像 / 试验报告 | 待补 |\n"
+        "| 采购合同 / 会议纪要 / 送达回证 | 待补 |"
+    )
+
+
+def _claim_notice_md(text: str) -> str:
+    event = (text or "").strip()[:240] or "整节待填。[A001]"
+    evidence = _copy_claim_evidence(text)
+    lines = [
+        "# 索赔意向 / 调概事项草稿（AI 草稿）",
+        "",
+        DISCLAIMER,
+        "",
+        "不是已送达的索赔报告，不构成调概批复。工期天数 TBD。金额 TBD。条款原文待贴。",
+        "",
+        "## 用户原文",
+        "",
+        (text or "").strip() or "（未提供）",
+        "",
+    ]
+    for i, title in enumerate(_CLAIM_CHAPTERS, 1):
+        lines.append(f"## {i} {title}")
+        lines.append("")
+        if i == 1:
+            lines.append(DISCLAIMER)
+        elif i == 2:
+            lines.append(event)
+            lines.append("")
+            lines.append("费用索赔与工期索赔分列。变更指令内调价优先走变更签证（variation），不重复当索赔。")
+        elif i == 3:
+            lines.append("用户合同索赔条款原文待贴。不编条款号。时限以用户纸本为准，本表不代填天数。")
+            lines.append("")
+            lines.append("只提示逾期风险，不断言已失权，不断言一定能要回。")
+        elif i == 4:
+            lines.append("| 栏 | 内容 |\n| --- | --- |\n| 事件事由 | 只抄用户原文 |\n| 发生时间 | 待填 |\n| 合同依据名称 | 待贴原文 |\n| 可能费用和／或工期 | TBD |\n| 已采取减损 | 待填 |\n| 证据目录 | 见第 5 节 |")
+            lines.append("")
+            lines.append("不填索赔总价。")
+        elif i == 5:
+            lines.append(evidence)
+        elif i == 6:
+            lines.append("事件 → 影响工作面 → 关键线路是否被占（无网络图则工期影响待填）→ 己方有无扩大损失。[A001]")
+        elif i == 7:
+            lines.append(
+                "| 组成 | 单价 |\n| --- | --- |\n| 人工停置 | TBD |\n| 机械停滞 | TBD |\n| 材料仓储或贬值 | TBD |\n| 赶工 | TBD |\n| 利润（是否计取看合同） | TBD |\n| 总部管理费 | TBD |"
+            )
+        elif i == 8:
+            lines.append("政府投资调概只出事项对照表。预备费能覆盖的不调概。本岗不下报批结论。")
+        elif i == 9:
+            lines.append("能签认的事实先固定在签证。索赔成立后的金额进验工计价或过程结算，无业主确认不编入当期付款。")
+        else:
+            lines.append("无编造条款号。无编造索赔额。无胜诉或必然支持。")
+        lines.append("")
+    lines.append("SG：Building and Construction Industry Security of Payment Act 只写全名，时限 UNSPECIFIED。PSSCOC-lite 2025 / Clause 23 Procedure for Claims 只写条名。")
+    lines.append("CN：GF-2017-0201 索赔意向/报告天数以用户合同为准。发改投资〔2015〕482 号只写全名。GB 50500 只出现在 CN 栏。")
     lines.append("")
     return "\n".join(lines)
 
@@ -829,6 +931,33 @@ def _run_exclusive(
             "files": files,
             "tools_run": ran,
             "reply": "已出变更签证草稿。金额 TBD。submit_blocked=true。",
+            "submit_blocked": True,
+        }
+
+    if expert.id == "claim":
+        md = _claim_notice_md(text)
+        from packing_assistant.tools.tender_review import forbidden_hits
+
+        hits = forbidden_hits(md)
+        if hits:
+            return {
+                "wrote": False,
+                "hitl_pending": False,
+                "files": [],
+                "tools_run": [],
+                "reply": "禁语扫描命中，未报成功：" + "、".join(hits),
+                "submit_blocked": True,
+            }
+        path = out_dir / "claim__notice.md"
+        guarded_write_text(path, md)
+        files.append({"name": path.name, "path": str(path), "tool": "claim__notice"})
+        ran.append("claim__notice")
+        return {
+            "wrote": True,
+            "hitl_pending": False,
+            "files": files,
+            "tools_run": ran,
+            "reply": "已出索赔意向草稿。条款原文待贴。工期金额 TBD。submit_blocked=true。",
             "submit_blocked": True,
         }
 

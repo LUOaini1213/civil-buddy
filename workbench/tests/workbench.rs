@@ -691,6 +691,20 @@ fn test_claim_and_mix_sg_titles() {
     let ct = std::fs::read_to_string(c.out_dir.join("索赔意向草稿.md")).unwrap();
     assert!(ct.contains("SG") && ct.contains("Security of Payment"), "{ct}");
     assert!(ct.contains("TBD") || ct.contains("[A001]") || ct.contains("UNSPECIFIED"), "{ct}");
+    assert!(ct.contains("意向通知必备"), "{ct}");
+    assert!(ct.contains("证据清单"), "{ct}");
+    assert!(ct.contains("条款原文待贴") || ct.contains("待贴"), "{ct}");
+    assert!(!ct.contains("可以开工"), "{ct}");
+    let mut ev = ToolCtx::new(p.clone(), "claim", "commercial", "low", true, "iter-claim-ev");
+    let evo = packs::execute(
+        &mut ev,
+        "claim__notice",
+        &json!({"event":"late drawings","evidence":"监理通知 NCR-1；停工令 8月1日","jurisdiction":"SG"}),
+    );
+    assert!(evo.contains("已写入"), "{evo}");
+    let et = std::fs::read_to_string(ev.out_dir.join("索赔意向草稿.md")).unwrap();
+    assert!(et.contains("NCR-1"), "{et}");
+    assert!(et.contains("停工令"), "{et}");
     assert!(packs::execute(
         &mut ToolCtx::new(p.clone(), "cost", "commercial", "low", true, "iter-claim-sib"),
         "claim__notice",
