@@ -630,6 +630,33 @@ _WB_SKIP = {
     "待填",
 }
 
+_PD_CHAPTERS = (
+    "报头",
+    "天气",
+    "部位",
+    "形象进度",
+    "出勤",
+    "人机料",
+    "安全质量记事",
+    "明日拟安排",
+)
+
+_PD_SKIP = {
+    "草稿提纲",
+    "项目日报",
+    "项目日报草稿",
+    "日报",
+    "工程日志",
+    "待填",
+}
+
+_PD_WEATHER_RE = re.compile(
+    r"(晴|多云|阴|雨|雪|雾|台风|暴雨|fine|rainy|cloudy|overcast)",
+    re.I,
+)
+
+_PD_LABOR_RE = re.compile(r"(\d+\s*人|出勤|木工|钢筋工|砼工|架子工|电焊|普工)")
+
 _MM_RE = re.compile(r"(\d+(?:\.\d+)?)\s*(mm|毫米)", re.I)
 
 _MILESTONE_KEYS = ("桩基", "±0", "封顶", "砌筑", "机电", "装饰", "竣工")
@@ -3279,6 +3306,99 @@ def _worker_brief_md(text: str) -> str:
     return "\n".join(lines)
 
 
+def _pd_site(blob: str) -> str:
+    t = (blob or "").strip()
+    t = re.sub(r"^写一份\S*\s*", "", t).strip()
+    t = re.sub(r"^(项目日报草稿|项目日报|工程日志|日报)\s*", "", t).strip()
+    for piece in t.replace("；", "\n").replace(";", "\n").splitlines():
+        p = piece.strip()
+        if not p or p in _PD_SKIP or p.lower() in _PD_SKIP:
+            continue
+        if p.startswith("#") or p.startswith("内部"):
+            continue
+        if p in {"JGJ", "SAC", "CN", "SG", "DUAL", "住建部"}:
+            continue
+        p = re.sub(r"\s+", " ", p)
+        p = re.sub(r"\d+(?:\.\d+)?\s*%", "", p).strip()
+        if not p:
+            continue
+        return p[:80]
+    return "[A001] 待填部位"
+
+
+def _pd_weather(blob: str) -> str:
+    m = _PD_WEATHER_RE.search(blob or "")
+    if not m:
+        return "天气待填"
+    return f"用户口述：{m.group(1)}。非气象站记录。"
+
+
+def _pd_labor(blob: str) -> str:
+    m = _PD_LABOR_RE.search(blob or "")
+    if not m:
+        return "出勤待填"
+    return f"用户给出的出勤记事：{m.group(1)}。未给的工种不编人数。"
+
+
+def _pm_daily_md(text: str) -> str:
+    blob = text or ""
+    zone = _mix_zone(blob)
+    site = _pd_site(blob)
+    weather = _pd_weather(blob)
+    labor = _pd_labor(blob)
+    four = (
+        "| 栏 | 本稿 |\n"
+        "| --- | --- |\n"
+        f"| 天气 | {weather} |\n"
+        f"| 部位 | {site} |\n"
+        "| 形象 | 只写部位，不写百分比 |\n"
+        f"| 出勤 | {labor} |\n"
+    )
+    lines = [
+        "# 项目日报草稿（AI 草稿 · 内部讨论）",
+        "",
+        DISCLAIMER,
+        "",
+        "项目办日清。不是施工日志签认件，不是监理日志。不下开工结论。",
+        "",
+        f"- 辖区：{zone}",
+        "",
+        "## 用户原文",
+        "",
+        blob.strip() or "（未提供）",
+        "",
+        four,
+        "",
+    ]
+    for i, title in enumerate(_PD_CHAPTERS, 1):
+        lines.append(f"## {i} {title}")
+        lines.append("")
+        if i == 1:
+            lines.append("项目名称待填。日期待填。填报人空栏。审核人空栏。按单位工程分篇。")
+        elif i == 2:
+            lines.append(weather)
+        elif i == 3:
+            lines.append(site)
+        elif i == 4:
+            lines.append(f"今日作业位置：{site}。只写看得见的位置，不写百分比，不编完成率。")
+        elif i == 5:
+            lines.append(labor)
+        elif i == 6:
+            lines.append("机、料无过磅单不编吨数。无盘点不编盈亏。数量 TBD。")
+        elif i == 7:
+            lines.append("用户未提供巡查事实则本栏不编。隐患未改就写未改。不签发合格。班前是否开过只摘事实。")
+        else:
+            lines.append("继续哪段视书面交底与现场防护。条件未知不编全面铺开。本稿不下开工结论。")
+        lines.append("")
+    lines.append("[A001] 天气无记录则待填。出勤无点名则待填。形象不写百分比。本稿不是监理日志。")
+    if zone in ("SG", "DUAL"):
+        lines.append("SG：BCA Construction site records / site record book 只写标题。本岗不是这份法定现场簿。")
+    if zone in ("CN", "DUAL"):
+        lines.append("CN：施工日志只写习惯名。本稿不是监理日志。")
+    lines.append("")
+    return "\n".join(lines)
+
+
 def _dispatch_daily_md(text: str) -> str:
     jobs = _copy_sensitive_jobs(text)
     sensitive = (
@@ -4489,6 +4609,33 @@ def _run_exclusive_body(
             "submit_blocked": True,
         }
 
+    if expert.id == "pm-daily":
+        md = _pm_daily_md(text)
+        from packing_assistant.tools.tender_review import forbidden_hits
+
+        hits = forbidden_hits(md)
+        if hits:
+            return {
+                "wrote": False,
+                "hitl_pending": False,
+                "files": [],
+                "tools_run": [],
+                "reply": "禁语扫描命中，未报成功：" + "、".join(hits),
+                "submit_blocked": True,
+            }
+        path = out_dir / "pm-daily__log.md"
+        guarded_write_text(path, md)
+        files.append({"name": path.name, "path": str(path), "tool": "pm-daily__log"})
+        ran.append("pm-daily__log")
+        return {
+            "wrote": True,
+            "hitl_pending": False,
+            "files": files,
+            "tools_run": ran,
+            "reply": "已出项目日报草稿。天气待填｜部位｜形象不写百分比｜出勤待填。不是监理日志。submit_blocked=true。",
+            "submit_blocked": True,
+        }
+
     if expert.id == "cost":
         md = (
             f"# 工程量拆分表（AI 草稿）\n\n{DISCLAIMER}\n\n"
@@ -4622,6 +4769,13 @@ def run_named_exclusive(name: str, args: Optional[Dict[str, Any]] = None) -> Dic
         "watchouts",
         "note",
         "notes",
+        "progress",
+        "weather",
+        "labor",
+        "site",
+        "attendance",
+        "resources",
+        "hse",
     ):
         v = args.get(k)
         if v:

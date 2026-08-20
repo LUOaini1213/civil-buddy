@@ -925,4 +925,4 @@
 - qa：已有 · people__scan_forbidden
 - kb：已有 · 分层 KB + search_kb/read_kb（demo/kb）
 - write：已有 · 独有 pm-daily__log；chat 不写盘
-- 下一刀：pm-daily__log 出天气待填|部位|形象（禁编百分比）|出勤待填。
+- 下一刀：已做 T039 pm-daily。pm-daily__log 出天气待填|部位|形象（不编百分比）|出勤待填。不是监理日志。

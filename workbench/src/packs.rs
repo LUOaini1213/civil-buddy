@@ -1067,10 +1067,13 @@ fn pack_tools(pack: &str) -> Vec<ToolDef> {
             },
             ToolDef {
                 name: "pm-daily__log",
-                description: "项目日报：形象进度、人机料、安全质量记事。",
+                description: "项目日报：天气待填、部位、形象（不编百分比）、出勤待填。不是监理日志。",
                 parameters: obj(
                     json!({
                         "progress": {"type": "string"},
+                        "weather": {"type": "string"},
+                        "site": {"type": "string"},
+                        "labor": {"type": "string"},
                         "resources": {"type": "string"},
                         "hse": {"type": "string"}
                     }),
@@ -3754,19 +3757,118 @@ fn worker_brief(ctx: &mut ToolCtx, args: &Value) -> String {
     }
 }
 
+fn pd_site(blob: &str) -> String {
+    for raw in blob.replace('；', "\n").replace(';', "\n").lines() {
+        let mut t = raw.trim().to_string();
+        if let Some(rest) = t.strip_prefix("写一份") {
+            t = rest.trim().to_string();
+        }
+        for p in ["项目日报草稿", "项目日报", "工程日志", "日报"] {
+            if let Some(rest) = t.strip_prefix(p) {
+                t = rest.trim().to_string();
+                break;
+            }
+        }
+        if t.is_empty()
+            || matches!(
+                t.as_str(),
+                "草稿提纲" | "待填" | "SG" | "CN" | "DUAL" | "住建部" | "项目日报" | "日报"
+            )
+        {
+            continue;
+        }
+        if t.starts_with('#') || t.starts_with("内部") {
+            continue;
+        }
+        let stripped: String = regex::Regex::new(r"\d+(?:\.\d+)?\s*%")
+            .expect("pct")
+            .replace_all(&t, "")
+            .to_string();
+        let t = stripped.split_whitespace().collect::<Vec<_>>().join(" ");
+        if t.is_empty() {
+            continue;
+        }
+        return t.chars().take(80).collect();
+    }
+    "[A001] 待填部位".into()
+}
+
+fn pd_weather(blob: &str) -> String {
+    for k in ["晴", "多云", "阴", "雨", "雪", "雾", "台风", "暴雨"] {
+        if blob.contains(k) {
+            return format!("用户口述：{k}。非气象站记录。");
+        }
+    }
+    let low = blob.to_ascii_lowercase();
+    for k in ["fine", "rainy", "cloudy", "overcast"] {
+        if low.contains(k) {
+            return format!("用户口述：{k}。非气象站记录。");
+        }
+    }
+    "天气待填".into()
+}
+
+fn pd_labor(blob: &str) -> String {
+    for k in ["出勤", "木工", "钢筋工", "砼工", "架子工", "电焊", "普工"] {
+        if blob.contains(k) {
+            return format!("用户给出的出勤记事：{k}。未给的工种不编人数。");
+        }
+    }
+    if let Some(idx) = blob.find('人') {
+        let start = idx.saturating_sub(6);
+        let piece: String = blob[start..].chars().take(12).collect();
+        if piece.chars().any(|c| c.is_ascii_digit()) {
+            return format!("用户给出的出勤记事：{}。未给的工种不编人数。", piece.trim());
+        }
+    }
+    "出勤待填".into()
+}
+
 fn pm_daily(ctx: &mut ToolCtx, args: &Value) -> String {
     let (jur, banner) = zone_banner(args);
+    let blob = format!(
+        "{}\n{}\n{}\n{}\n{}\n{}\n{}\n{}",
+        s(args, "progress"),
+        s(args, "site"),
+        s(args, "weather"),
+        s(args, "labor"),
+        s(args, "resources"),
+        s(args, "hse"),
+        s(args, "notes"),
+        s(args, "note")
+    );
+    let site = {
+        let from_arg = s(args, "site");
+        if from_arg.is_empty() {
+            pd_site(&blob)
+        } else {
+            from_arg
+        }
+    };
+    let weather = {
+        let from_arg = s(args, "weather");
+        if from_arg.is_empty() {
+            pd_weather(&blob)
+        } else {
+            format!("用户口述：{from_arg}。非气象站记录。")
+        }
+    };
+    let labor = {
+        let from_arg = s(args, "labor");
+        if from_arg.is_empty() {
+            pd_labor(&blob)
+        } else {
+            format!("用户给出的出勤记事：{from_arg}。未给的工种不编人数。")
+        }
+    };
+    let four = format!(
+        "| 栏 | 本稿 |\n| --- | --- |\n| 天气 | {weather} |\n| 部位 | {site} |\n| 形象 | 只写部位，不写百分比 |\n| 出勤 | {labor} |"
+    );
     let md = format!(
-        "{}{banner}\n## 形象进度\n{}\n\n## 人机料\n{}\n\n## 安全质量记事\n{}\n\n{}本日报不是监理日志。\n",
+        "{}{banner}项目办日清。不是施工日志签认件，不是监理日志。不下开工结论。\n\n{four}\n\n## 1 报头\n项目名称待填。日期待填。填报人空栏。审核人空栏。按单位工程分篇。\n\n## 2 天气\n{weather}\n\n## 3 部位\n{site}\n\n## 4 形象进度\n今日作业位置：{site}。只写看得见的位置，不写百分比，不编完成率。\n\n## 5 出勤\n{labor}\n\n## 6 人机料\n机、料无过磅单不编吨数。无盘点不编盈亏。数量 TBD。\n\n## 7 安全质量记事\n用户未提供巡查事实则本栏不编。隐患未改就写未改。不签发合格。班前是否开过只摘事实。\n\n## 8 明日拟安排\n继续哪段视书面交底与现场防护。条件未知不编全面铺开。本稿不下开工结论。\n\n[A001] 天气无记录则待填。出勤无点名则待填。形象不写百分比。本稿不是监理日志。\n{}{}\n",
         header("项目日报草稿"),
-        nonempty(&s(args, "progress"), "待填"),
-        nonempty(&s(args, "resources"), "待填"),
-        nonempty(&s(args, "hse"), "待填"),
-        format!(
-            "{}{}",
-            sg_only(&jur, "SG：BCA construction site records 只写标题。"),
-            cn_only(&jur, "CN：施工日志只写习惯名，不是监理日志。"),
-        ),
+        sg_only(&jur, "SG：BCA Construction site records / site record book 只写标题。本岗不是这份法定现场簿。"),
+        cn_only(&jur, "CN：施工日志只写习惯名。本稿不是监理日志。"),
     );
     match ctx.write_md("项目日报草稿.md", &md) {
         Ok(m) => m,
