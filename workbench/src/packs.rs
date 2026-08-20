@@ -799,11 +799,14 @@ fn pack_tools(pack: &str) -> Vec<ToolDef> {
             },
             ToolDef {
                 name: "plan-resource__peak",
-                description: "资源独有：人机料峰值表头。无定额不编工日台班。",
+                description: "资源独有：劳动力|机具|材料三表。无定额不编工日台班，数量待填。",
                 parameters: obj(
                     json!({
                         "trades": {"type": "string"},
                         "window": {"type": "string"},
+                        "equipment": {"type": "string"},
+                        "items": {"type": "string"},
+                        "material": {"type": "string"},
                         "jurisdiction": {"type": "string"}
                     }),
                     &["trades"],
@@ -3408,15 +3411,176 @@ fn bim_deliver_lod(ctx: &mut ToolCtx, args: &Value) -> String {
     )
 }
 
+fn resource_skip(t: &str) -> bool {
+    matches!(
+        t,
+        "草稿提纲"
+            | "资源负荷"
+            | "资源计划"
+            | "资源负荷表"
+            | "峰值"
+            | "待填"
+            | "四周"
+            | "master"
+            | "lookahead"
+    ) || (t.starts_with('W') && t.chars().skip(1).all(|c| c.is_ascii_digit()))
+}
+
+fn resource_kind(t: &str) -> &'static str {
+    let low = t.to_lowercase();
+    const PLANT: &[&str] = &[
+        "塔吊", "泵车", "挖机", "吊车", "机械", "机具", "台班", "crane", "excavator", "pump", "tower",
+    ];
+    const MAT: &[&str] = &[
+        "周转", "水泥", "砂", "材料", "rebar", "concrete", "钢筋", "模板", "混凝土",
+    ];
+    if PLANT.iter().any(|k| t.contains(k) || low.contains(k)) {
+        return "plant";
+    }
+    if t.contains('工') || t.contains("班组") || t.contains("劳动力") {
+        return "labor";
+    }
+    if MAT.iter().any(|k| t.contains(k) || low.contains(k)) {
+        return "mat";
+    }
+    if low.contains("formwork") {
+        return "labor";
+    }
+    "labor"
+}
+
+fn split_resource_qty(line: &str) -> (String, String, String) {
+    const UNITS: &[&str] = &["工日", "台班", "m³", "m3", "吨", "kg", "人", "台"];
+    for u in UNITS {
+        if let Some(pos) = line.find(u) {
+            let before = line[..pos].trim_end();
+            let mut digits = String::new();
+            for c in before.chars().rev() {
+                if c.is_ascii_digit() || c == '.' {
+                    digits.push(c);
+                } else if c == ' ' && digits.is_empty() {
+                    continue;
+                } else {
+                    break;
+                }
+            }
+            if digits.is_empty() {
+                continue;
+            }
+            let qty: String = digits.chars().rev().collect();
+            let cut = before.trim_end_matches(|c: char| c.is_ascii_digit() || c == '.' || c == ' ');
+            let name = format!("{}{}", cut, &line[pos + u.len()..])
+                .split_whitespace()
+                .collect::<Vec<_>>()
+                .join(" ");
+            if name.is_empty() {
+                continue;
+            }
+            return (name, format!("{qty}{u}"), "用户给定".into());
+        }
+    }
+    (line.trim().to_string(), "TBD".into(), "待填".into())
+}
+
+fn parse_resource_items(blob: &str) -> (Vec<(String, String, String)>, Vec<(String, String, String)>, Vec<(String, String, String)>) {
+    let mut labor = Vec::new();
+    let mut plant = Vec::new();
+    let mut mat = Vec::new();
+    for raw in blob.replace('；', "\n").replace(';', "\n").lines() {
+        let mut t = raw.trim().to_string();
+        if let Some(rest) = t.strip_prefix("写一份") {
+            t = rest.trim().to_string();
+        }
+        if t.is_empty() || resource_skip(&t) {
+            continue;
+        }
+        if t.starts_with('#') || t.starts_with("内部") {
+            continue;
+        }
+        if t.chars().count() > 80 {
+            t = t.chars().take(80).collect();
+        }
+        let (name, qty, src) = split_resource_qty(&t);
+        if name.is_empty() || resource_skip(&name) {
+            continue;
+        }
+        let row = (name, qty, src);
+        match resource_kind(&t) {
+            "plant" => plant.push(row),
+            "mat" => mat.push(row),
+            _ => labor.push(row),
+        }
+    }
+    (labor, plant, mat)
+}
+
+fn resource_table(kind: &str, rows: &[(String, String, String)]) -> String {
+    match kind {
+        "labor" => {
+            let mut out = String::from("| 工种 | 工作 | 计划时段 | 需用人数 | 来源 | 峰值周 | 可否错峰 |\n| --- | --- | --- | --- | --- | --- | --- |\n");
+            if rows.is_empty() {
+                out.push_str("| [A001] | 待填 | 待填 | TBD | 待填 | 待填 | 待填 |\n");
+            } else {
+                for (n, q, s) in rows {
+                    out.push_str(&format!("| {n} | 待填 | 待填 | {q} | {s} | 待填 | 待填 |\n"));
+                }
+            }
+            out
+        }
+        "plant" => {
+            let mut out = String::from("| 机械名称 | 规格 | 进场日 | 退场日 | 台班或台数 | 对应工作 | 证件 |\n| --- | --- | --- | --- | --- | --- | --- |\n");
+            if rows.is_empty() {
+                out.push_str("| [A001] | 待填 | 待填 | 待填 | TBD | 待填 | 待核 |\n");
+            } else {
+                for (n, q, _) in rows {
+                    out.push_str(&format!("| {n} | 待填 | 待填 | 待填 | {q} | 待填 | 待核 |\n"));
+                }
+            }
+            out
+        }
+        _ => {
+            let mut out = String::from("| 名称 | 需用窗口 | 计划进场 | 计划耗尽 | 堆场 | 甲指或自采 | 数量 |\n| --- | --- | --- | --- | --- | --- | --- |\n");
+            if rows.is_empty() {
+                out.push_str("| [A001] | 待填 | 待填 | 待填 | 待填 | 待填 | TBD |\n");
+            } else {
+                for (n, q, _) in rows {
+                    out.push_str(&format!("| {n} | 待填 | 待填 | 待填 | 待填 | 待填 | {q} |\n"));
+                }
+            }
+            out
+        }
+    }
+}
+
 fn plan_resource_peak(ctx: &mut ToolCtx, args: &Value) -> String {
-    expert_outline(
-        ctx,
-        "资源峰值表头.md",
-        "资源峰值表头",
-        args,
-        &[("trades", "工种/机械"), ("window", "窗口")],
-        "- 无定额、劳务/租赁计划不编工日、台班、吨数。\n- C-Score 不是劳动力需用计划。\n- 禁止写已满足施工需要。\n- SG：Code of Practice on Buildability 只写标题，最低分 UNSPECIFIED。\n- CN：施工组织设计规范 / 劳动定额只写全名，不编工日。",
-    )
+    let (jur, banner) = zone_banner(args);
+    let window = nonempty(&s(args, "window"), "待填");
+    let blob = format!(
+        "{}\n{window}\n{}\n{}\n{}\n{}\n{}",
+        s(args, "trades"),
+        s(args, "equipment"),
+        s(args, "items"),
+        s(args, "material"),
+        s(args, "materials"),
+        s(args, "package"),
+    );
+    let (labor, plant, mat) = parse_resource_items(&blob);
+    let labor_tbl = resource_table("labor", &labor);
+    let plant_tbl = resource_table("plant", &plant);
+    let mat_tbl = resource_table("mat", &mat);
+    let md = format!(
+        "{}{banner}\n默认交付是表头和口径说明，不是劳动力需用计划定案，也不是采购订单。本表不报价。窗口：{window}。\n\n## 1 封面与声明\n对应总控版本、计划期、资源种类范围待填。[A001] 无定额、无劳务计划、无设备台账、无材料需用表时，数量列全部待填。\n\n## 2 输入清单\n须核对：总控或四周窗口、分部分项工程量来源、定额或企业消耗指标、劳务班组编制、机械台账与证件、甲指/自采划分、堆场与宿舍上限。缺哪一项，对应资源列不填数。\n\n## 3 劳动力负荷表头\n{labor_tbl}\n只汇总用户已给的人数。来源为定额工日或用户给定；否则待填。禁止按经验编人数。\n\n## 4 施工机具负荷表头\n{plant_tbl}\n特种设备证件待核。无证件不得列入进场安排。数量来自施工部署或用户台账，不来自本岗估算。\n\n## 5 主要材料与周转料表头\n{mat_tbl}\n数量来自需用计划或清单。本岗不算量、不组价。到货价改召唤采购；收发存改召唤仓管或现场材料。\n\n## 6 峰值与错峰\n横轴为周或旬，纵轴为数量（有数才画）。峰值时段待填。错峰口径：总工期不变，利用非关键工作时差削峰填谷。禁止为削峰压缩关键工作持续时间。\n\n## 7 冲突提示栏\n| 项 | 提示 |\n| --- | --- |\n| 宿舍/食堂容量 | 可能冲突，待用户给上限 |\n| 塔吊台班窗口 | 可能冲突，待用户给上限 |\n| 混凝土日供应 | 可能冲突，待用户给上限 |\n| 作业面人数密度 | 可能冲突，待用户给上限 |\n| 夜间施工许可 | 可能冲突，待用户给上限 |\n\n只标可能冲突。不写已经超标或已经合规。\n\n## 8 与周月、采购、资金的接口\n四周滚动看本表「这周人机料是否同时具备」；采购看需用窗口和提前期栏；资金看大额进场时点栏，金额待填，改召唤资金或验工计价。\n\n## 9 优化记录\n未做均衡，仅列表头。未计算时差，不写移动了哪些非关键工作。\n\n## 10 禁令\n不编工日、台班、吨数、综合单价、市场价。禁止宣称资源已经够用。无证件设备不列入进场安排。关键线路资源缺口必须回写总控，不得只在本表删掉该工作。\n\n{}\n",
+        header("资源峰值表头"),
+        format!(
+            "{}{}",
+            sg_only(&jur, "SG：Code of Practice on Buildability 只写标题，最低分 UNSPECIFIED。C-Score 不是劳动力需用计划。"),
+            cn_only(&jur, "CN：施工组织设计规范 / 劳动定额只写全名，不编工日。"),
+        ),
+    );
+    match ctx.write_md("资源峰值表头.md", &md) {
+        Ok(m) => m,
+        Err(e) => e,
+    }
 }
 
 fn proc_vendor_eval(ctx: &mut ToolCtx, args: &Value) -> String {

@@ -92,7 +92,7 @@ _NEXT = {
     "bim-deliver": "bim-deliver__lod 一次写出坐标系/拆分/命名/LOD 表头，不宣称报审。",
     "plan-master": "plan-master__network 固定 WBS|紧前|里程碑待填|关键线路=待计算。",
     "plan-lookahead": "已做 T032 plan-lookahead。plan-lookahead__week 出四周表；制约未清不得写入本周承诺。",
-    "plan-resource": "plan-resource__peak 拆劳动力|机具|材料三表，数量待填。",
+    "plan-resource": "已做 T032 plan-resource。plan-resource__peak 拆劳动力|机具|材料三表，数量待填。",
     "construction": "run_expert_steps 在 scheme_draft 之后调用 fill_scheme_docx，不再跳过；仍是讨论提纲。",
     "method-hazard": "重写 judge-card.md 默认 SG WSH/PTW + 信息不足；37 号令只放 CN 栏。",
     "survey": "survey__record 读本会话附件，只抄已给点号坐标；都无则表头+[A001]。",

@@ -221,6 +221,62 @@ _LOOKAHEAD_SKIP = {
 
 _LOOKAHEAD_BLOCK = ("未清", "未到", "未交", "无图", "未发", "过期")
 
+_PLAN_RESOURCE_CHAPTERS = (
+    "封面与声明",
+    "输入清单",
+    "劳动力负荷表头",
+    "施工机具负荷表头",
+    "主要材料与周转料表头",
+    "峰值与错峰",
+    "冲突提示栏",
+    "与周月、采购、资金的接口",
+    "优化记录",
+    "禁令",
+)
+
+_RESOURCE_SKIP = {
+    "草稿提纲",
+    "资源负荷",
+    "资源计划",
+    "资源负荷表",
+    "峰值",
+    "待填",
+    "四周",
+    "master",
+    "lookahead",
+}
+
+_PLANT_KEYS = (
+    "塔吊",
+    "泵车",
+    "挖机",
+    "吊车",
+    "机械",
+    "机具",
+    "台班",
+    "crane",
+    "excavator",
+    "pump",
+    "tower",
+)
+
+_MAT_KEYS = (
+    "周转",
+    "水泥",
+    "砂",
+    "材料",
+    "rebar",
+    "concrete",
+    "钢筋",
+    "模板",
+    "混凝土",
+)
+
+_RES_QTY = re.compile(
+    r"(?P<qty>\d+(?:\.\d+)?)\s*(?P<unit>人|工日|台班|台|t|吨|kg|m3|m³)",
+    re.I,
+)
+
 _MILESTONE_KEYS = ("桩基", "±0", "封顶", "砌筑", "机电", "装饰", "竣工")
 
 _QTY_RE = re.compile(
@@ -875,6 +931,165 @@ def _plan_lookahead_md(text: str) -> str:
         lines.append("")
     lines.append("SG：Last Planner lookahead 只写方法名，不是合同工期变更。")
     lines.append("CN：周月计划不是工期签证。")
+    lines.append("")
+    return "\n".join(lines)
+
+
+def _resource_kind(line: str) -> str:
+    t = line or ""
+    low = t.lower()
+    if any(k in t or k in low for k in _PLANT_KEYS):
+        return "plant"
+    if any(k in t for k in ("工", "班组", "劳动力")):
+        return "labor"
+    if any(k in t or k in low for k in _MAT_KEYS):
+        return "mat"
+    if "formwork" in low:
+        return "labor"
+    return "labor"
+
+
+def _split_resource_qty(line: str) -> tuple:
+    t = (line or "").strip()
+    m = _RES_QTY.search(t)
+    if not m:
+        return t, "TBD", "待填"
+    name = (t[: m.start()] + t[m.end() :]).strip(" ，,;；") or t
+    return name, f"{m.group('qty')}{m.group('unit')}", "用户给定"
+
+
+def _parse_resource_items(blob: str) -> tuple:
+    labor: List[tuple] = []
+    plant: List[tuple] = []
+    mat: List[tuple] = []
+    for piece in (blob or "").replace("；", "\n").replace(";", "\n").splitlines():
+        t = piece.strip()
+        t = re.sub(r"^写一份\S*\s*", "", t).strip()
+        if not t or t in _RESOURCE_SKIP:
+            continue
+        if t.startswith("#") or t.startswith("内部"):
+            continue
+        if re.match(r"^W\d+$", t, re.I):
+            continue
+        if len(t) > 80:
+            t = t[:80]
+        name, qty, src = _split_resource_qty(t)
+        if not name or name in _RESOURCE_SKIP:
+            continue
+        kind = _resource_kind(t)
+        row = (name, qty, src)
+        if kind == "plant":
+            plant.append(row)
+        elif kind == "mat":
+            mat.append(row)
+        else:
+            labor.append(row)
+    return labor, plant, mat
+
+
+def _resource_table(kind: str, rows: List[tuple]) -> str:
+    if kind == "labor":
+        head = (
+            "| 工种 | 工作 | 计划时段 | 需用人数 | 来源 | 峰值周 | 可否错峰 |\n"
+            "| --- | --- | --- | --- | --- | --- | --- |\n"
+        )
+        if not rows:
+            return head + "| [A001] | 待填 | 待填 | TBD | 待填 | 待填 | 待填 |\n"
+        return head + "".join(
+            f"| {n} | 待填 | 待填 | {q} | {s} | 待填 | 待填 |\n" for n, q, s in rows
+        )
+    if kind == "plant":
+        head = (
+            "| 机械名称 | 规格 | 进场日 | 退场日 | 台班或台数 | 对应工作 | 证件 |\n"
+            "| --- | --- | --- | --- | --- | --- | --- |\n"
+        )
+        if not rows:
+            return head + "| [A001] | 待填 | 待填 | 待填 | TBD | 待填 | 待核 |\n"
+        return head + "".join(
+            f"| {n} | 待填 | 待填 | 待填 | {q} | 待填 | 待核 |\n" for n, q, s in rows
+        )
+    head = (
+        "| 名称 | 需用窗口 | 计划进场 | 计划耗尽 | 堆场 | 甲指或自采 | 数量 |\n"
+        "| --- | --- | --- | --- | --- | --- | --- |\n"
+    )
+    if not rows:
+        return head + "| [A001] | 待填 | 待填 | 待填 | 待填 | 待填 | TBD |\n"
+    return head + "".join(
+        f"| {n} | 待填 | 待填 | 待填 | 待填 | 待填 | {q} |\n" for n, q, s in rows
+    )
+
+
+def _plan_resource_md(text: str) -> str:
+    labor, plant, mat = _parse_resource_items(text)
+    lines = [
+        "# 资源负荷表（AI 草稿 · 内部讨论）",
+        "",
+        DISCLAIMER,
+        "",
+        "默认交付是表头和口径说明，不是劳动力需用计划定案，也不是采购订单。本表不报价。",
+        "",
+        "## 用户原文",
+        "",
+        (text or "").strip() or "（未提供）",
+        "",
+    ]
+    for i, title in enumerate(_PLAN_RESOURCE_CHAPTERS, 1):
+        lines.append(f"## {i} {title}")
+        lines.append("")
+        if i == 1:
+            lines.append(
+                "对应总控版本、计划期、资源种类范围待填。[A001] "
+                "无定额、无劳务计划、无设备台账、无材料需用表时，数量列全部待填。"
+            )
+        elif i == 2:
+            lines.append(
+                "须核对：总控或四周窗口、分部分项工程量来源、定额或企业消耗指标、"
+                "劳务班组编制、机械台账与证件、甲指/自采划分、堆场与宿舍上限。缺哪一项，对应资源列不填数。"
+            )
+        elif i == 3:
+            lines.append(_resource_table("labor", labor))
+            lines.append("")
+            lines.append("只汇总用户已给的人数。来源为定额工日或用户给定；否则待填。禁止按经验编人数。")
+        elif i == 4:
+            lines.append(_resource_table("plant", plant))
+            lines.append("")
+            lines.append("特种设备证件待核。无证件不得列入进场安排。数量来自施工部署或用户台账，不来自本岗估算。")
+        elif i == 5:
+            lines.append(_resource_table("mat", mat))
+            lines.append("")
+            lines.append("数量来自需用计划或清单。本岗不算量、不组价。到货价改召唤采购；收发存改召唤仓管或现场材料。")
+        elif i == 6:
+            lines.append(
+                "横轴为周或旬，纵轴为数量（有数才画）。峰值时段待填。"
+                "错峰口径：总工期不变，利用非关键工作时差削峰填谷。禁止为削峰压缩关键工作持续时间。"
+            )
+        elif i == 7:
+            lines.append(
+                "| 项 | 提示 |\n| --- | --- |\n"
+                "| 宿舍/食堂容量 | 可能冲突，待用户给上限 |\n"
+                "| 塔吊台班窗口 | 可能冲突，待用户给上限 |\n"
+                "| 混凝土日供应 | 可能冲突，待用户给上限 |\n"
+                "| 作业面人数密度 | 可能冲突，待用户给上限 |\n"
+                "| 夜间施工许可 | 可能冲突，待用户给上限 |"
+            )
+            lines.append("")
+            lines.append("只标可能冲突。不写已经超标或已经合规。")
+        elif i == 8:
+            lines.append(
+                "四周滚动看本表「这周人机料是否同时具备」；采购看需用窗口和提前期栏；"
+                "资金看大额进场时点栏，金额待填，改召唤资金或验工计价。"
+            )
+        elif i == 9:
+            lines.append("未做均衡，仅列表头。未计算时差，不写移动了哪些非关键工作。")
+        else:
+            lines.append(
+                "不编工日、台班、吨数、综合单价、市场价。"
+                "禁止宣称资源已经够用。无证件设备不列入进场安排。"
+                "关键线路资源缺口必须回写总控，不得只在本表删掉该工作。"
+            )
+        lines.append("")
+    lines.append("SG：Code of Practice on Buildability 只写标题，最低分 UNSPECIFIED。C-Score 不是劳动力需用计划。")
+    lines.append("CN：施工组织设计规范 / 劳动定额只写全名，不编工日。")
     lines.append("")
     return "\n".join(lines)
 
@@ -1543,6 +1758,33 @@ def _run_exclusive(
             "submit_blocked": True,
         }
 
+    if expert.id == "plan-resource":
+        md = _plan_resource_md(text)
+        from packing_assistant.tools.tender_review import forbidden_hits
+
+        hits = forbidden_hits(md)
+        if hits:
+            return {
+                "wrote": False,
+                "hitl_pending": False,
+                "files": [],
+                "tools_run": [],
+                "reply": "禁语扫描命中，未报成功：" + "、".join(hits),
+                "submit_blocked": True,
+            }
+        path = out_dir / "plan-resource__peak.md"
+        guarded_write_text(path, md)
+        files.append({"name": path.name, "path": str(path), "tool": "plan-resource__peak"})
+        ran.append("plan-resource__peak")
+        return {
+            "wrote": True,
+            "hitl_pending": False,
+            "files": files,
+            "tools_run": ran,
+            "reply": "已出资源负荷三表。数量待填。submit_blocked=true。",
+            "submit_blocked": True,
+        }
+
     if expert.id == "cost":
         md = (
             f"# 工程量拆分表（AI 草稿）\n\n{DISCLAIMER}\n\n"
@@ -1642,7 +1884,21 @@ def run_named_exclusive(name: str, args: Optional[Dict[str, Any]] = None) -> Dic
             "tools_run": [],
         }
     bits = [str(args.get("text") or args.get("task") or "").strip()]
-    for k in ("window", "constraints", "works", "jobs", "milestones"):
+    for k in (
+        "window",
+        "constraints",
+        "works",
+        "jobs",
+        "milestones",
+        "trades",
+        "labor",
+        "plant",
+        "equipment",
+        "material",
+        "materials",
+        "items",
+        "package",
+    ):
         v = args.get(k)
         if v:
             bits.append(str(v).strip())

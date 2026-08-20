@@ -1662,6 +1662,57 @@ fn test_plan_lookahead_week_exclusive() {
 }
 
 #[test]
+fn test_plan_resource_peak_exclusive() {
+    let p = paths();
+    assert!(packs::visible_tool_names("plan-resource").iter().any(|n| n == "plan-resource__peak"));
+    assert!(!packs::visible_tool_names("plan-master").iter().any(|n| n == "plan-resource__peak"));
+    let mut ctx = ToolCtx::new(p.clone(), "plan-resource", "planning", "low", true, "iter-pr");
+    let out = packs::execute(
+        &mut ctx,
+        "plan-resource__peak",
+        &json!({
+            "trades": "木工",
+            "equipment": "塔吊",
+            "items": "钢筋",
+            "window": "W32",
+            "jurisdiction": "SG"
+        }),
+    );
+    assert!(out.contains("已写入"), "{out}");
+    let text = std::fs::read_to_string(ctx.out_dir.join("资源峰值表头.md")).unwrap();
+    assert!(text.contains("SG"), "{text}");
+    assert!(text.contains("劳动力负荷表头"), "{text}");
+    assert!(text.contains("施工机具负荷表头"), "{text}");
+    assert!(text.contains("主要材料与周转料表头"), "{text}");
+    let labor = text.split("## 3 劳动力负荷表头").nth(1).unwrap().split("## 4").next().unwrap();
+    let plant = text.split("## 4 施工机具负荷表头").nth(1).unwrap().split("## 5").next().unwrap();
+    let mat = text.split("## 5 主要材料与周转料表头").nth(1).unwrap().split("## 6").next().unwrap();
+    assert!(labor.contains("木工"), "{labor}");
+    assert!(plant.contains("塔吊"), "{plant}");
+    assert!(mat.contains("钢筋"), "{mat}");
+    assert!(labor.contains("TBD"), "{labor}");
+    assert!(text.contains("C-Score") || text.contains("Buildability"), "{text}");
+    assert!(!text.contains("可以开工"), "{text}");
+    assert!(!text.contains("已满足施工需要"), "{text}");
+    assert!(!text.contains("已安排进场"), "{text}");
+    let mut ctx2 = ToolCtx::new(p.clone(), "plan-resource", "planning", "low", true, "iter-pr-qty");
+    let out2 = packs::execute(
+        &mut ctx2,
+        "plan-resource__peak",
+        &json!({"trades": "木工20人", "jurisdiction": "CN"}),
+    );
+    assert!(out2.contains("已写入"), "{out2}");
+    let text2 = std::fs::read_to_string(ctx2.out_dir.join("资源峰值表头.md")).unwrap();
+    let labor2 = text2.split("## 3 劳动力负荷表头").nth(1).unwrap().split("## 4").next().unwrap();
+    assert!(labor2.contains("木工"), "{labor2}");
+    assert!(labor2.contains("20人"), "{labor2}");
+    assert!(labor2.contains("用户给定"), "{labor2}");
+    assert!(text2.contains("劳动定额") || text2.contains("不编工日"), "{text2}");
+    let mut sib = ToolCtx::new(p, "plan-lookahead", "planning", "low", true, "iter-pr-sib");
+    assert!(packs::execute(&mut sib, "plan-resource__peak", &json!({"trades":"x"})).contains("拒绝"));
+}
+
+#[test]
 fn test_bid_compliance_exclusive_and_scan_sg_mix() {
     let p = paths();
     assert!(packs::visible_tool_names("bid-compliance").iter().any(|n| n == "bid-compliance__gaps"));

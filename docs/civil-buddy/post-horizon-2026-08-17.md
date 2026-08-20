@@ -406,7 +406,7 @@
 - qa：已有 · planning__scan_forbidden
 - kb：已有 · 分层 KB + search_kb/read_kb（demo/kb）
 - write：已有 · 独有 plan-resource__peak；chat 不写盘
-- 下一刀：plan-resource__peak 拆劳动力|机具|材料三表，数量待填。
+- 下一刀：已做 T032 plan-resource。plan-resource__peak 拆劳动力|机具|材料三表，数量待填。
 
 
 ## 大类 `construction` · 车道 `lane-construction`
