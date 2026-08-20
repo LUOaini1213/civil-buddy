@@ -642,7 +642,7 @@
 - qa：已有 · plant__scan_forbidden + 高风险确认句
 - kb：已有 · 分层 KB + search_kb/read_kb（demo/kb）
 - write：已有 · 独有 equip__ledger；chat 不写盘
-- 下一刀：expert_turn 用 equip__ledger 写出与 Rust 同表头台账，只抄用户设备名与已给证件。
+- 下一刀：已做 T036 equip。equip__ledger 写出与 Rust 同表头台账，只抄用户设备名与已给证件。
 
 ### warehouse
 

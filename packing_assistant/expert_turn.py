@@ -438,6 +438,29 @@ _EMERGENCY_HINTS = (
     ("疫情", "疫情或突发环境事件"),
 )
 
+_EQUIP_CHAPTERS = (
+    "封面与草稿声明",
+    "设备清单表头",
+    "进场验收",
+    "租赁与台班",
+    "维保计划",
+    "证件与检验台账",
+    "退场与结算附件目录",
+    "资料目录",
+    "禁令",
+)
+
+_EQUIP_SKIP = {
+    "草稿提纲",
+    "设备台账",
+    "维保计划",
+    "待填",
+}
+
+_CERT_COPY = re.compile(
+    r"(合格证|使用登记|作业人员证件|作业证)[:：\s]*([A-Za-z0-9][\w\-./]{2,})"
+)
+
 _MILESTONE_KEYS = ("桩基", "±0", "封顶", "砌筑", "机电", "装饰", "竣工")
 
 _QTY_RE = re.compile(
@@ -1965,6 +1988,134 @@ def _emergency_md(text: str) -> str:
     return "\n".join(lines)
 
 
+def _parse_equip_names(blob: str) -> List[str]:
+    rows: List[str] = []
+    for piece in (blob or "").replace("；", "\n").replace(";", "\n").splitlines():
+        t = piece.strip()
+        t = re.sub(r"^写一份\S*\s*", "", t).strip()
+        for key in ("合格证", "使用登记", "作业人员证件", "作业证"):
+            if key in t:
+                t = t.split(key)[0].strip()
+        if not t or t in _EQUIP_SKIP:
+            continue
+        if t.startswith("#") or t.startswith("内部"):
+            continue
+        if t in {"JGJ", "SAC", "CN", "SG", "DUAL", "MOM"}:
+            continue
+        if len(t) > 80:
+            t = t[:80]
+        if t not in rows:
+            rows.append(t)
+    return rows
+
+
+def _copy_equip_certs(blob: str) -> List[tuple]:
+    found = []
+    for m in _CERT_COPY.finditer(blob or ""):
+        found.append((m.group(1), m.group(2)))
+    return found
+
+
+def _equip_md(text: str) -> str:
+    blob = text or ""
+    zone = _mix_zone(blob)
+    if "特种设备安全法" in blob:
+        zone = "CN" if zone == "SG" else zone
+    names = _parse_equip_names(blob)
+    certs = _copy_equip_certs(blob)
+    cert_cell = "特种设备证件待核"
+    if certs:
+        cert_cell = "；".join(f"{n} {c}（用户给定）" for n, c in certs)
+    if names:
+        inv = (
+            "| 名称 | 规格型号 | 厂编号或备案号 | 自有或租赁 | 计划进退场 | 当前状态 |\n"
+            "| --- | --- | --- | --- | --- | --- |\n"
+            + "".join(
+                f"| {n} | 待填 | 待填 | 待填 | 待填 | 待进场 |\n" for n in names
+            )
+        )
+        gate = (
+            "| 设备 | 进场验收 | 证件 | 维保 |\n"
+            "| --- | --- | --- | --- |\n"
+            + "".join(
+                f"| {n} | 待做 | {cert_cell} | 待排 |\n" for n in names
+            )
+        )
+    else:
+        inv = (
+            "| 名称 | 规格型号 | 厂编号或备案号 | 自有或租赁 | 计划进退场 | 当前状态 |\n"
+            "| --- | --- | --- | --- | --- | --- |\n"
+            "| [A001] | 待填 | 待填 | 待填 | 待填 | 待进场 |\n"
+        )
+        gate = (
+            "| 设备 | 进场验收 | 证件 | 维保 |\n"
+            "| --- | --- | --- | --- |\n"
+            f"| 待填 | 待做 | {cert_cell} | 待排 |\n"
+        )
+    cert_tbl = (
+        "| 证书名称 | 编号 | 有效期 | 作业项目 | 状态 |\n"
+        "| --- | --- | --- | --- | --- |\n"
+    )
+    if certs:
+        cert_tbl += "".join(
+            f"| {n} | {c} | 待填 | 待填 | 用户给定 |\n" for n, c in certs
+        )
+    else:
+        cert_tbl += (
+            "| 产品合格证 | 待核 | 待填 | 待填 | 待核 |\n"
+            "| 使用登记 | 待核 | 待填 | 待填 | 待核 |\n"
+            "| 作业人员证件 | 待核 | 待填 | 待填 | 待核 |\n"
+        )
+    lines = [
+        "# 设备台账 / 维保计划（AI 草稿）",
+        "",
+        DISCLAIMER,
+        "",
+        "内部讨论。不构成特种设备使用登记、安装验收签认、法定专项方案或开工依据。签认栏留空。",
+        "",
+        f"- 辖区：{zone}",
+        "",
+        "## 用户原文",
+        "",
+        blob.strip() or "（未提供）",
+        "",
+    ]
+    for i, title in enumerate(_EQUIP_CHAPTERS, 1):
+        lines.append(f"## {i} {title}")
+        lines.append("")
+        if i == 1:
+            lines.append("标明内部讨论。签认栏留空。[A001]")
+        elif i == 2:
+            lines.append(inv)
+            lines.append("")
+            lines.append("无用户清单不编造机号和备案号。只抄用户设备名。")
+        elif i == 3:
+            lines.append(gate)
+            lines.append("")
+            lines.append("[A001] 无证件不编进场结论。缺一件写不得进场。本岗不签发使用登记。")
+        elif i == 4:
+            lines.append("合同要素：谁负责安拆、顶升附着、维保和检测费用；按台班还是包月。无报价则租金和合价 TBD。")
+        elif i == 5:
+            lines.append("按台分列日常点检、定期保养、故障修理。顶升和附着单独留栏。写过计划不等于已经保养，完成记录栏待填。")
+        elif i == 6:
+            lines.append(cert_tbl)
+            lines.append("")
+            lines.append("只抄用户已给证件。过期视同缺失。不编证号。")
+        elif i == 7:
+            lines.append("进退场单、台班单、维保和修理记录、检测报告复印件、租赁补充协议。金额待填。")
+        elif i == 8:
+            lines.append("资料目录交给资料监理专家闭合。本岗不宣称资料已闭合。安装拆卸方案交施工方案；是否危大交 method-hazard。")
+        else:
+            lines.append("不签发使用登记。不编租金、折旧率和综合单价。不宣称通过专家论证或可以投入使用。")
+        lines.append("")
+    if zone in ("SG", "DUAL"):
+        lines.append("SG：MOM lifting equipment / approved crane contractor 只写标题。")
+    if zone in ("CN", "DUAL"):
+        lines.append("CN：特种设备安全法只写全名。")
+    lines.append("")
+    return "\n".join(lines)
+
+
 def _dispatch_daily_md(text: str) -> str:
     jobs = _copy_sensitive_jobs(text)
     sensitive = (
@@ -2872,6 +3023,33 @@ def _run_exclusive(
             "submit_blocked": True,
         }
 
+    if expert.id == "equip":
+        md = _equip_md(text)
+        from packing_assistant.tools.tender_review import forbidden_hits
+
+        hits = forbidden_hits(md)
+        if hits:
+            return {
+                "wrote": False,
+                "hitl_pending": False,
+                "files": [],
+                "tools_run": [],
+                "reply": "禁语扫描命中，未报成功：" + "、".join(hits),
+                "submit_blocked": True,
+            }
+        path = out_dir / "equip__ledger.md"
+        guarded_write_text(path, md)
+        files.append({"name": path.name, "path": str(path), "tool": "equip__ledger"})
+        ran.append("equip__ledger")
+        return {
+            "wrote": True,
+            "hitl_pending": False,
+            "files": files,
+            "tools_run": ran,
+            "reply": "已出设备台账。只抄用户设备名与已给证件。无证件不编进场结论。submit_blocked=true。",
+            "submit_blocked": True,
+        }
+
     if expert.id == "cost":
         md = (
             f"# 工程量拆分表（AI 草稿）\n\n{DISCLAIMER}\n\n"
@@ -2995,6 +3173,7 @@ def run_named_exclusive(name: str, args: Optional[Dict[str, Any]] = None) -> Dic
         "site",
         "issues",
         "scenario",
+        "certs",
     ):
         v = args.get(k)
         if v:

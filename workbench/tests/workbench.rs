@@ -1487,11 +1487,28 @@ fn test_equip_ledger_exclusive() {
     let p = paths();
     assert!(packs::visible_tool_names("equip").iter().any(|n| n == "equip__ledger"));
     assert!(!packs::visible_tool_names("warehouse").iter().any(|n| n == "equip__ledger"));
+    let mut blocked = ToolCtx::new(p.clone(), "equip", "plant", "high", false, "iter-equip-hitl");
+    assert!(packs::execute(&mut blocked, "equip__ledger", &json!({"equipment":"tower crane"})).contains("拒绝"));
     let mut ctx = ToolCtx::new(p.clone(), "equip", "plant", "high", true, "iter-equip");
     let out = packs::execute(&mut ctx, "equip__ledger", &json!({"equipment":"tower crane"}));
     assert!(out.contains("已写入"), "{out}");
     let et = std::fs::read_to_string(ctx.out_dir.join("设备台账.md")).unwrap();
     assert!(et.contains("SG") && et.contains("MOM") && et.contains("[A001]"), "{et}");
+    assert!(et.contains("tower crane"), "{et}");
+    assert!(et.contains("进场验收") && et.contains("证件") && et.contains("维保"), "{et}");
+    assert!(et.contains("无证件不编进场结论"), "{et}");
+    assert!(!et.contains("可以开工"), "{et}");
+    let mut cert = ToolCtx::new(p.clone(), "equip", "plant", "high", true, "iter-equip-cert");
+    let co = packs::execute(
+        &mut cert,
+        "equip__ledger",
+        &json!({"equipment":"塔吊","certs":"合格证 TS-88","jurisdiction":"SG"}),
+    );
+    assert!(co.contains("已写入"), "{co}");
+    let ct = std::fs::read_to_string(cert.out_dir.join("设备台账.md")).unwrap();
+    assert!(ct.contains("塔吊"), "{ct}");
+    assert!(ct.contains("TS-88"), "{ct}");
+    assert!(ct.contains("用户给定"), "{ct}");
     let mut sib = ToolCtx::new(p, "warehouse", "plant", "low", true, "iter-equip-sib");
     assert!(packs::execute(&mut sib, "equip__ledger", &json!({"equipment":"x"})).contains("拒绝"));
 }

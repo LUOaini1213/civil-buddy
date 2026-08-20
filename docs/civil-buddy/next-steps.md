@@ -109,6 +109,9 @@
 35. **T035 emergency 一岗（T035 批次完）** ✅ 2026-08-20  
     emergency__plan 综合目录+点名专项+演练表头；电话医院待填。不编响应分钟数。高风险须确认句。主链头指针改为 **T036**（equip 先；pack-ship 已富跳过）。T036–T047 不得一行勾完。行业总判仍 **部分合格**。
 
+36. **T036 equip 一岗** ✅ 2026-08-20  
+    equip__ledger 只抄用户设备名与已给证件；无证件不编进场结论。高风险须确认句。T036 批次未完：下一岗 **warehouse**。不得把仓管/现场料一并勾完。行业总判仍 **部分合格**。
+
 平台内核见 [product-improvement-handbook.md](product-improvement-handbook.md)。岗独有写盘下一刀仍按 [post-horizon-2026-08-17.md](post-horizon-2026-08-17.md)。
 
 ## 有宿主再做
