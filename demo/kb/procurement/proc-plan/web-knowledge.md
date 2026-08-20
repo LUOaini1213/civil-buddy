@@ -15,7 +15,7 @@
 ## SG · 公共部门档位（不是现场钢筋单价）
 
 - MOF 流程四段（页更 2025-12-01）：Sourcing → Evaluation → Approval of Award → Contract Management。https://www.mof.gov.sg/policies/government-procurement/procurement-processes/
-- MOF 官方估算档（不含 GST、不含材料信息价）：Small Value Purchases 不超过 S$6,000；Quotation 不超过 S$90,000；Tender 超过 S$90,000。Tender Lite 为 Tender 子类，估算不超过 S$1 million。
+- MOF 官方估算档（不含 GST、不含材料信息价）：Small Value Purchases 不超过 S$6,000；Quotation 不超过 S$90,000；Tender 超过 S$90,000。Tender Lite 为 Tender 子类，估算不超过 S$1 million。GST 现行标准税率见 IRAS 页述 **9%**，本岗不代算税额。
 - Tender Lite 实施时点（以 GeBIZ FAQ 2026-08-14 打开页为准）：一般货物服务自 2024-04 末；施工自 2025-05；ICT 自 2026-04 末。MOF 流程页仍写 ICT「2025 年下半年分阶段、细节另告」——两页不一致时计划表写「以该标通知 / GeBIZ 分类为准」，不自行裁定已覆盖全部 ICT。https://www.gebiz.gov.sg/faq.html
 - GeBIZ Guide：该财政年（4 月至 3 月）indicative procurement opportunities；超过 S$200,000 的意向一般会列出。https://www.gebiz.gov.sg/singapore-government-procurement-regime.html
 - 公共工程施工投标须 BCA CRS（页更 2026-08-07）；公共工程建材/设备供应看 SY Registry（页更 2026-07-01）。等级对应投标限额只指向官方页标题，本库不转抄限额表金额：https://www1.bca.gov.sg/growth-and-transformation/procurement/registration-of-built-environment-firms/tendering-limits/crs-fm-and-sy-registries-tendering-limits/

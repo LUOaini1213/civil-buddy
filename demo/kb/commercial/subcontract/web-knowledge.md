@@ -21,7 +21,7 @@
 - **REDAS Design & Build Conditions of Sub-Contract 2nd Edition**。https://redas.com/resources/industry-guides/
 - 分包进度款同样可走 SOPA（BCA 页更 **2026-08-05**：主包、分包、供应商、顾问均受益）。https://www1.bca.gov.sg/growth-and-transformation/procurement/procurement-and-legal-frameworks/security-of-payment-act/
 - SSO 条文名：s.5 Entitlement to progress payments；s.9 Effect of "pay when paid provisions"；s.10 Payment claims；s.11 Payment responses, etc.。**时限 UNSPECIFIED**（本轮只抽条题）。https://sso.agc.gov.sg/Act/BCISPA2004
-- IRAS Construction：**letter of claim 不是 tax invoice**；须在 work done 核证后开 tax invoice。对下索赔函不能当进项凭据。https://www.iras.gov.sg/taxes/goods-services-tax-(gst)/specific-business-sectors/construction
+- IRAS Construction：**letter of claim 不是 tax invoice**；须在 work done 核证后开 tax invoice。对下索赔函不能当进项凭据。GST 现行标准税率见 IRAS 页述 **9%**，本岗不算税负。https://www.iras.gov.sg/taxes/goods-services-tax-(gst)/specific-business-sectors/construction
 
 ## 通用 禁令
 

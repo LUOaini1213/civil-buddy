@@ -1,5 +1,6 @@
 # Copy into ~/.grok/config.toml (or Cursor/Claude MCP config equivalent).
 # Run from the civil-buddy repo root. Do not put API keys in this file.
+# 16 packs = 16 categories in workbench/seed.json. Copy the lines you need; do not hang all 16 unless the Host can.
 
 [mcp_servers.civil-bid]
 command = "python"
@@ -12,6 +13,46 @@ args = ["demo/mcp_stdio.py", "--pack", "construction"]
 [mcp_servers.civil-commercial]
 command = "python"
 args = ["demo/mcp_stdio.py", "--pack", "commercial"]
+
+# [mcp_servers.civil-design]
+# command = "python"
+# args = ["demo/mcp_stdio.py", "--pack", "design"]
+# [mcp_servers.civil-bim]
+# command = "python"
+# args = ["demo/mcp_stdio.py", "--pack", "bim"]
+# [mcp_servers.civil-planning]
+# command = "python"
+# args = ["demo/mcp_stdio.py", "--pack", "planning"]
+# [mcp_servers.civil-hse]
+# command = "python"
+# args = ["demo/mcp_stdio.py", "--pack", "hse"]
+# [mcp_servers.civil-procurement]
+# command = "python"
+# args = ["demo/mcp_stdio.py", "--pack", "procurement"]
+# [mcp_servers.civil-plant]
+# command = "python"
+# args = ["demo/mcp_stdio.py", "--pack", "plant"]
+# [mcp_servers.civil-lab]
+# command = "python"
+# args = ["demo/mcp_stdio.py", "--pack", "lab"]
+# [mcp_servers.civil-finance]
+# command = "python"
+# args = ["demo/mcp_stdio.py", "--pack", "finance"]
+# [mcp_servers.civil-docs]
+# command = "python"
+# args = ["demo/mcp_stdio.py", "--pack", "docs"]
+# [mcp_servers.civil-hr]
+# command = "python"
+# args = ["demo/mcp_stdio.py", "--pack", "hr"]
+# [mcp_servers.civil-admin]
+# command = "python"
+# args = ["demo/mcp_stdio.py", "--pack", "admin"]
+# [mcp_servers.civil-it]
+# command = "python"
+# args = ["demo/mcp_stdio.py", "--pack", "it"]
+# [mcp_servers.civil-people]
+# command = "python"
+# args = ["demo/mcp_stdio.py", "--pack", "people"]
 
 [mcp_servers.civil-buddy]
 command = "python"

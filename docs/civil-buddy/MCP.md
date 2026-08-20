@@ -23,7 +23,29 @@ python demo/mcp_stdio.py --expert pack-ship
 
 `--pack` = 大类（如 `bid` `construction` `plant`）。`--expert` = 岗 id。pack=bid 的 `tools/list` 含 KB + 招标，**不含** `pack-ship__plan`。
 
-样例配置：[mcp-host.example.toml](mcp-host.example.toml)。
+样例配置：[mcp-host.example.toml](mcp-host.example.toml)。16 个 pack 都有可复制注释行，不要求一次全挂。
+
+### Grok（最小）
+
+把 `mcp-host.example.toml` 里 `civil-construction` 三行贴进 `~/.grok/config.toml` 的 MCP 段。工作目录为仓库根。本机已跑：`python demo/mcp_stdio.py --pack construction` 的 `tools/list` 含 `construction__scheme_draft`，不含 `pack-ship__plan`。
+
+### Cursor（最小）
+
+`.cursor/mcp.json`：
+
+```json
+{
+  "mcpServers": {
+    "civil-construction": {
+      "command": "python",
+      "args": ["demo/mcp_stdio.py", "--pack", "construction"],
+      "cwd": "C:\\\\Users\\\\LW\\\\civil-buddy"
+    }
+  }
+}
+```
+
+本机已跑同一命令。不要把 `DEEPSEEK_API_KEY` 写进该文件。
 
 ## HTTP（本机网关 / 工作台）
 

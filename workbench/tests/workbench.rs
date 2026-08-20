@@ -761,6 +761,8 @@ fn test_finance_tax_and_env_sg_titles() {
     let text = std::fs::read_to_string(tax.out_dir.join("税务检查表.md")).unwrap();
     assert!(text.contains("SG"), "{text}");
     assert!(text.contains("GST") && text.contains("IRAS"), "{text}");
+    assert!(text.contains("9%"), "{text}");
+    assert!(text.contains("申报期空栏") || text.contains("空栏"), "{text}");
     assert!(!text.contains("增值税"), "{text}");
     assert!(text.contains("辖区：SG"), "{text}");
 
@@ -3000,6 +3002,18 @@ fn test_construction_eleven_chapters() {
     }
     assert!(!text.contains("可以开工"), "{text}");
     assert!(text.contains("[A001]") || text.contains("UNSPECIFIED"), "{text}");
+    let fill = packs::execute(
+        &mut ctx,
+        "construction__fill_scheme_docx",
+        &json!({
+            "project_name": "滨河路人行道维修",
+            "jurisdiction": "SG"
+        }),
+    );
+    assert!(
+        fill.contains("fill_scheme") || fill.contains("docx_pending") || fill.contains("已写入"),
+        "{fill}"
+    );
 }
 
 #[test]

@@ -221,6 +221,27 @@ def main() -> int:
     finally:
         shutil.rmtree(fake, ignore_errors=True)
 
+    from packing_assistant.runtime.session_handoff import save_handoff
+
+    save_handoff(
+        "ag-ho-comp",
+        {"schema": "tender.handoff.v1", "scores": ["Quality 40%"], "extract_table_markdown": "Quality 40%"},
+    )
+    comp = run_agent(
+        "对照缺口出废标检查",
+        expert_id="bid-compliance",
+        session_id="ag-ho-comp",
+        force_intent="run",
+    )
+    assert comp.get("wrote") is True, comp
+    ho_path = ROOT / "demo" / "out" / "ag-ho-comp" / "tender.handoff.json"
+    assert ho_path.is_file()
+    assert "Quality 40%" in (comp.get("handoff") or {}).get("extract_table_markdown", "") or any(
+        "Quality 40%" in Path(f["path"]).read_text(encoding="utf-8")
+        for f in (comp.get("files") or [])
+        if Path(f["path"]).is_file()
+    )
+
     live = client.get("/api/eval/live")
     assert live.status_code == 200, live.text
     lj = live.json()

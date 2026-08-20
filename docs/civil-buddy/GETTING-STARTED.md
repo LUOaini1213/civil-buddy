@@ -35,13 +35,22 @@ cd C:\Users\LW\civil-buddy\workbench
 
 召唤专家后：提问不写盘；说「写一份」才出内部讨论草稿。可上传广联达/Excel 导出的 `xlsx`/`csv` 和招标 `docx`/`txt`，缺价标 `UNSPECIFIED`。
 
-本机刚跑过的冒烟：
+扫描件 PDF：产品默认拒绝（无文字层）。可选 `CIVIL_PARSE=auto` 走 MinerU/Docling；失败仍拒绝，不装 OCR 成功。不要把扫描 PDF 当已抽出招标。
+
+本机刚跑过的冒烟（刀后快闸）：
 
 ```powershell
 cd C:\Users\LW\civil-buddy
 python scripts/test_understand.py
 python scripts/test_agent_loop.py
 python scripts/test_mcp_stdio.py
+python scripts/test_mcp_surface.py
+python scripts/test_kb_schema.py
+python scripts/test_official_title_scan.py
+python scripts/test_memory_slot.py
+python scripts/test_tender_parse_engine.py
+python scripts/test_construction_skill_path.py
+python scripts/test_docs_completion.py
 ```
 
 ## 2. 先问一句（必须不写盘）

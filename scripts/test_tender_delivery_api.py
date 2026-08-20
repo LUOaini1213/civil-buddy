@@ -83,7 +83,13 @@ def main() -> int:
 
     rd = client.post(
         "/api/tender/delivery",
-        json={"text": SAMPLE, "run_delivery": True, "container_type": "40HQ", "max_containers": 2},
+        json={
+            "text": SAMPLE,
+            "run_delivery": True,
+            "container_type": "40HQ",
+            "max_containers": 2,
+            "session_id": "t052-copy",
+        },
     )
     assert rd.status_code == 200, rd.text
     jd = rd.json()
@@ -118,6 +124,20 @@ def main() -> int:
     assert "DRAFT" in bb and "NOT FOR" in bb
     assert "6. Logistics & Packing Evidence" in bb
     assert "can_fit" in bb
+
+    # T052: same session pack-ship copies delivery can_fit; xyz never invented.
+    pk = client.post(
+        "/api/turn",
+        json={
+            "text": "出一份装箱作业单 铁架",
+            "expert_id": "pack-ship",
+            "session_id": "t052-copy",
+        },
+    )
+    assert pk.status_code == 200, pk.text
+    plan = ((pk.json().get("pack_ship") or {}).get("plan") or {})
+    assert plan.get("can_fit") == ps.get("can_fit"), (plan.get("can_fit"), ps.get("can_fit"))
+    assert plan.get("xyz") == "UNSPECIFIED"
     assert "Harbourline Facade" in bb
     assert "Far East" not in bb
     # dedicated bidbook endpoint

@@ -11,7 +11,7 @@
 - REDAS 售卖（未抽出条文）：**REDAS Design & Build Conditions of Main Contract 4th Edition**；**REDAS Design & Build Conditions of Sub-Contract 2nd Edition**。https://redas.com/resources/industry-guides/
 - SOPA：**Building and Construction Industry Security of Payment Act 2004**（SSO 现行本 as at 14 Aug 2026）。条题：s.5 Entitlement to progress payments；s.9 Effect of "pay when paid provisions"；s.10 Payment claims；s.11 Payment responses, etc.；s.12 Entitlement to make adjudication applications。**时限 UNSPECIFIED**（本轮只抽到条题，未抽 s.10/s.11 正文天数）。https://sso.agc.gov.sg/Act/BCISPA2004
 - BCA 解说（页更 **2026-08-05**）：书面合同且已按合同施工或供货者可发 payment claim；对方须作 payment response；不服可向 ANB（现为 Singapore Mediation Centre）申请 adjudication。主包、分包、供应商、顾问均受益。https://www1.bca.gov.sg/growth-and-transformation/procurement/procurement-and-legal-frameworks/security-of-payment-act/
-- IRAS Construction：letter of claim **不是** tax invoice。https://www.iras.gov.sg/taxes/goods-services-tax-(gst)/specific-business-sectors/construction
+- IRAS Construction：letter of claim **不是** tax invoice。GST 现行标准税率见 IRAS 页述 **9%**，本岗不算税负。https://www.iras.gov.sg/taxes/goods-services-tax-(gst)/specific-business-sectors/construction
 - FIDIC 只写条款名（fidic.org 公开页未抽出天数，禁止编 28 天）：Clause 13 Variations and Adjustments；1999 Sub-Clause 20.1 Contractor's Claims / Clause 20 Claims, Disputes and Arbitration；2017 另列 Clause 21 Disputes。https://fidic.org/
 
 ## CN

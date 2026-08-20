@@ -21,7 +21,7 @@
 - SIA / REDAS 官网只售合同，索赔与 EOT 时限以用户纸本为准；营销博客「28 天」unverified。SIA：https://sia.org.sg/publications/ ；REDAS：https://redas.com/resources/industry-guides/
 - 进度款争议走 SOPA 裁决，不是合同索赔的替代。**Building and Construction Industry Security of Payment Act 2004**：条题 s.5 / s.10 / s.11 / s.12。**SOPA 时限 UNSPECIFIED**（本轮只抽到 SSO 条题，未抽正文天数）。https://sso.agc.gov.sg/Act/BCISPA2004 ；BCA 解说（页更 **2026-08-05**）：https://www1.bca.gov.sg/growth-and-transformation/procurement/procurement-and-legal-frameworks/security-of-payment-act/
 - FIDIC（fidic.org 只抽出名称）：1999 Clause 13 Variations and Adjustments；Sub-Clause 20.1 Contractor's Claims；Clause 20 Claims, Disputes and Arbitration。2017 另列 Clause 20 Claims 与 Clause 21 Disputes。官方页未抽出天数 → 禁止写 28 / 42 / 84 天。https://fidic.org/
-- IRAS：letter of claim 不能当 tax invoice，也不能作分包 input tax 凭据。https://www.iras.gov.sg/taxes/goods-services-tax-(gst)/specific-business-sectors/construction
+- IRAS：letter of claim 不能当 tax invoice，也不能作分包 input tax 凭据。GST 现行标准税率见 IRAS 页述 **9%**，本岗不算税负。https://www.iras.gov.sg/taxes/goods-services-tax-(gst)/specific-business-sectors/construction
 
 ## 通用
 禁令：不编索赔额。不把未送达的意向假装已经发出。不写「可以开工」「报审通过」「已失权」「必胜」。DUAL 分栏。GB 50500 只出现在 ## CN。

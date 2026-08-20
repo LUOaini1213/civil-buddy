@@ -9,6 +9,9 @@ from pathlib import Path
 from typing import Any, Dict, List, Optional
 from uuid import uuid4
 
+import subprocess
+import sys
+
 from packing_assistant.expert_roster import ExpertRec, exclusive_tools, get_expert, list_experts
 from packing_assistant.sandbox import guarded_write_text
 from packing_assistant.understand import understand
@@ -88,13 +91,97 @@ _SCHEME_CHAPTERS = (
 )
 
 
+def _try_fill_scheme_docx(out_dir: Path, project: str) -> Dict[str, Any]:
+    """T005: attempt skill fill_scheme_docx; fail → docx_pending."""
+    scripts = _ROOT / "skills" / "civil-buddy" / "scripts"
+    fill_py = scripts / "fill_scheme_template.py"
+    scan_py = scripts / "scan_forbidden_inventions.py"
+    template = _ROOT / "skills" / "civil-buddy" / "references" / "templates" / "scheme-cn-a4.docx"
+    draft = out_dir / "construction__scheme_draft.md"
+    if not fill_py.is_file() or not template.is_file() or not draft.is_file():
+        return {"docx_pending": True}
+    assumptions = out_dir / "assumptions.md"
+    citations = out_dir / "citations.md"
+    if not assumptions.is_file():
+        guarded_write_text(assumptions, "# 假设\n\n- [A001] 用户未提供的尺寸、荷载一律待填。\n")
+    if not citations.is_file():
+        guarded_write_text(
+            citations,
+            "# 已核实\n\n（无）\n\n# 未核实 / UNSPECIFIED\n\n未抽出规范原文。\n",
+        )
+    docx = out_dir / "专项施工方案-AI草稿.docx"
+    cmd = [
+        sys.executable,
+        str(fill_py),
+        "--template",
+        str(template),
+        "--draft",
+        str(draft),
+        "--assumptions",
+        str(assumptions),
+        "--citations",
+        str(citations),
+        "--jurisdiction",
+        "SG",
+        "--stamp",
+        "AI-DRAFT",
+        "--project-name",
+        (project or "未命名工程")[:80],
+        "--short-name",
+        (project or "工程")[:12],
+        "--out",
+        str(docx),
+    ]
+    try:
+        proc = subprocess.run(
+            cmd,
+            capture_output=True,
+            text=True,
+            timeout=45,
+            cwd=str(scripts),
+        )
+    except (OSError, subprocess.TimeoutExpired):
+        return {"docx_pending": True}
+    if proc.returncode != 0 or not docx.is_file():
+        return {"docx_pending": True}
+    if scan_py.is_file():
+        try:
+            scan = subprocess.run(
+                [
+                    sys.executable,
+                    str(scan_py),
+                    "--draft",
+                    str(draft),
+                    "--docx",
+                    str(docx),
+                    "--citations",
+                    str(citations),
+                    "--jurisdiction",
+                    "SG",
+                ],
+                capture_output=True,
+                text=True,
+                timeout=20,
+                cwd=str(scripts),
+            )
+        except (OSError, subprocess.TimeoutExpired):
+            return {"docx_pending": True, "docx": str(docx)}
+        if scan.returncode != 0:
+            return {
+                "docx_pending": True,
+                "docx": str(docx),
+                "p0_reject_scan": {"hits": (scan.stdout or scan.stderr or "")[:400]},
+            }
+    return {"docx_pending": False, "docx": str(docx)}
+
+
 def _construction_eleven(text: str) -> str:
     lines = [
         "# 专项施工方案讨论提纲（AI 草稿）",
         "",
         DISCLAIMER,
         "",
-        "不是法定专项方案，不是签认件。缺数 [A001]。条款 UNSPECIFIED。",
+        "不是法定专项方案，不是签认件。缺数 [A001]。条款 UNSPECIFIED。辖区：SG。",
         "",
         "## 用户原文",
         "",
@@ -341,6 +428,99 @@ def _run_exclusive(
             },
         }
 
+    if expert.id == "method-hazard":
+        blob = text or ""
+        sg = "JGJ" not in blob and "37 号令" not in blob
+        depth = "未提供"
+        height = "未提供"
+        md = (
+            f"# 危大判定书（AI 草稿）\n\n{DISCLAIMER}\n\n"
+            f"- 辖区：{'SG' if sg else 'CN'}\n"
+            f"- 作业名称：{blob[:80] or '未说明作业'}\n"
+            f"- 触发词：临边 / 开挖 / 起重（仅当用户写了才勾）\n"
+            f"- 是否危大：信息不足\n"
+            f"- 是否可能超规模需论证：信息不足\n"
+            f"- 高度 m：{height}\n- 开挖深度 m：{depth}\n"
+        )
+        if sg:
+            md += (
+                "- 依据：Workplace Safety and Health Act / WSH (Construction) Regulations 2007 PTW。"
+                "不套用中国危大工程规定。\n"
+                "- 建议下一步：交施工方案专家出讨论提纲。本岗不签发 PTW。\n"
+            )
+        else:
+            md += (
+                "- 依据：住建部令第 37 号要点 + 用户尺寸（无尺寸则信息不足）。\n"
+                "- 建议下一步：交施工方案专家出讨论提纲。\n"
+            )
+        md += "\n本岗不签发、不给开工许可。条款 UNSPECIFIED。\n"
+        from packing_assistant.tools.tender_review import forbidden_hits
+
+        hits = forbidden_hits(md)
+        if hits:
+            return {
+                "wrote": False,
+                "hitl_pending": False,
+                "files": [],
+                "tools_run": [],
+                "reply": "禁语扫描命中，未报成功：" + "、".join(hits),
+                "submit_blocked": True,
+            }
+        path = out_dir / "method-hazard__judge.md"
+        guarded_write_text(path, md)
+        files.append({"name": path.name, "path": str(path), "tool": "method-hazard__judge_hazard"})
+        ran.append("method-hazard__judge_hazard")
+        return {
+            "wrote": True,
+            "hitl_pending": False,
+            "files": files,
+            "tools_run": ran,
+            "reply": "已出判定讨论卡。不是签发件，submit_blocked=true。",
+            "submit_blocked": True,
+        }
+
+    if expert.id == "finance-tax":
+        md = (
+            f"# 税务日历/检查表（AI 草稿）\n\n{DISCLAIMER}\n\n"
+            "| 税种 | 申报期 | 税额 |\n| --- | --- | --- |\n"
+            "| GST（SG） | （空栏，待按 IRAS F5 当期） | 待填 |\n"
+            "| 企业所得税 | （空栏） | 待填 |\n\n"
+            "IRAS Current GST rates 页述现行标准税率 **9%**。税额待持证办税人员算。"
+            "禁止把 7%/8% 写成现行税率。不是税务意见书。\n"
+        )
+        path = out_dir / "finance-tax__calendar.md"
+        guarded_write_text(path, md)
+        files.append({"name": path.name, "path": str(path), "tool": "finance-tax__calendar"})
+        ran.append("finance-tax__calendar")
+        return {
+            "wrote": True,
+            "hitl_pending": False,
+            "files": files,
+            "tools_run": ran,
+            "reply": "已出税务日历草稿。页述 9%。税额待填。submit_blocked=true。",
+            "submit_blocked": True,
+        }
+
+    if expert.id == "cost":
+        md = (
+            f"# 工程量拆分表（AI 草稿）\n\n{DISCLAIMER}\n\n"
+            "| 分项 | 单位 | 数量 | 综合单价 | 合价 | 来源 |\n| --- | --- | --- | --- | --- | --- |\n"
+            f"| {text.strip()[:80] or '未提供分项 [A001]'} | TBD | TBD | UNSPECIFIED | UNSPECIFIED | 用户表 |\n\n"
+            "无清单/报价不编单价。条款 UNSPECIFIED。\n"
+        )
+        path = out_dir / "cost__takeoff.md"
+        guarded_write_text(path, md)
+        files.append({"name": path.name, "path": str(path), "tool": "cost__takeoff"})
+        ran.append("cost__takeoff")
+        return {
+            "wrote": True,
+            "hitl_pending": False,
+            "files": files,
+            "tools_run": ran,
+            "reply": "已出工程量拆分表。单价 UNSPECIFIED。submit_blocked=true。",
+            "submit_blocked": True,
+        }
+
     if expert.id == "construction":
         md = _construction_eleven(text)
         from packing_assistant.tools.tender_review import forbidden_hits
@@ -360,15 +540,29 @@ def _run_exclusive(
         guarded_write_text(path, md)
         files.append({"name": path.name, "path": str(path), "tool": "construction__scheme_draft"})
         ran.append("construction__scheme_draft")
-        return {
+        fill = _try_fill_scheme_docx(out_dir, (text or "").strip()[:40] or "未命名工程")
+        pending = bool(fill.get("docx_pending", True))
+        if fill.get("docx"):
+            dp = Path(str(fill["docx"]))
+            files.append({"name": dp.name, "path": str(dp), "tool": "construction__fill_scheme_docx"})
+            ran.append("construction__fill_scheme_docx")
+        reply = (
+            "已出十一章讨论提纲并填 docx。不是法定专项，submit_blocked=true。"
+            if not pending
+            else "已出十一章讨论提纲（docx_pending）。不是法定专项，submit_blocked=true。"
+        )
+        out: Dict[str, Any] = {
             "wrote": True,
             "hitl_pending": False,
             "files": files,
             "tools_run": ran,
-            "reply": "已出十一章讨论提纲（docx_pending）。不是法定专项，submit_blocked=true。",
+            "reply": reply,
             "submit_blocked": True,
-            "docx_pending": True,
+            "docx_pending": pending,
         }
+        if fill.get("p0_reject_scan"):
+            out["p0_reject_scan"] = fill["p0_reject_scan"]
+        return out
 
     if not tools:
         tools = [f"{expert.id}__draft"]
