@@ -317,6 +317,49 @@ def main() -> int:
     assert "不得写入本周承诺" not in sec_ok
     assert "可以复工" not in plo
 
+    pr_chat = run_expert_turn("资源负荷怎么编？", "plan-resource")
+    assert pr_chat["intent"] == "chat" and pr_chat["wrote"] is False
+    pr_empty = run_expert_turn(
+        "写一份资源负荷表",
+        "plan-resource",
+        force_intent="run",
+        session_id="t032-pr-empty",
+    )
+    assert pr_empty["wrote"] is True
+    assert "plan-resource__peak" in pr_empty["tools_run"]
+    pre = Path(pr_empty["files"][0]["path"]).read_text(encoding="utf-8")
+    for title in ("劳动力负荷表头", "施工机具负荷表头", "主要材料与周转料表头"):
+        assert title in pre, title
+    assert "TBD" in pre
+    assert "可以开工" not in pre
+    assert "已满足施工需要" not in pre
+    assert "已安排进场" not in pre
+    pr_ok = run_expert_turn(
+        "写一份资源负荷 木工；塔吊；钢筋",
+        "plan-resource",
+        force_intent="run",
+        session_id="t032-pr-rows",
+    )
+    pro = Path(pr_ok["files"][0]["path"]).read_text(encoding="utf-8")
+    labor_sec = pro.split("## 3 劳动力负荷表头")[1].split("## 4")[0]
+    plant_sec = pro.split("## 4 施工机具负荷表头")[1].split("## 5")[0]
+    mat_sec = pro.split("## 5 主要材料与周转料表头")[1].split("## 6")[0]
+    assert "木工" in labor_sec
+    assert "塔吊" in plant_sec
+    assert "钢筋" in mat_sec
+    assert "TBD" in labor_sec
+    pr_qty = run_expert_turn(
+        "写一份资源负荷 木工20人",
+        "plan-resource",
+        force_intent="run",
+        session_id="t032-pr-qty",
+    )
+    pq = Path(pr_qty["files"][0]["path"]).read_text(encoding="utf-8")
+    labor_q = pq.split("## 3 劳动力负荷表头")[1].split("## 4")[0]
+    assert "木工" in labor_q
+    assert "20人" in labor_q
+    assert "用户给定" in labor_q
+
     high = [e for e in roster if e.risk == "high"][0]
     blocked = run_expert_turn("写一份专项方案讨论提纲", high.id, confirm_ok=False)
     assert blocked["intent"] == "run"

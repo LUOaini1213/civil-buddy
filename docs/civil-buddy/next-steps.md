@@ -82,6 +82,9 @@
 26. **T032 plan-lookahead 一岗** ✅ 2026-08-20  
     plan-lookahead__week 出四周表；制约未清不得写入本周承诺。不编风速限值、不写可以复工。T032 批次未完：下一岗 **plan-resource**。不得把资源一并勾完。行业总判仍 **部分合格**。
 
+27. **T032 plan-resource 一岗（T032 批次完）** ✅ 2026-08-20  
+    plan-resource__peak 拆劳动力｜机具｜材料三表；无定额/需用计划数量待填。不写已满足施工需要、不把无证件设备列入进场。主链头指针改为 **T033**（lab-mix 先）。T033–T047 不得一行勾完。行业总判仍 **部分合格**。
+
 平台内核见 [product-improvement-handbook.md](product-improvement-handbook.md)。岗独有写盘下一刀仍按 [post-horizon-2026-08-17.md](post-horizon-2026-08-17.md)。
 
 ## 有宿主再做
