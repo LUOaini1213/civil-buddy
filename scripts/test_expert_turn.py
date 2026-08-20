@@ -245,6 +245,34 @@ def main() -> int:
     assert "120" in io
     assert "应付合价" in io or "不编应付" in io or "不编本期应付" in io
 
+    pm_chat = run_expert_turn("总控计划怎么编？", "plan-master")
+    assert pm_chat["intent"] == "chat" and pm_chat["wrote"] is False
+    pm_empty = run_expert_turn(
+        "写一份总进度计划草稿",
+        "plan-master",
+        force_intent="run",
+        session_id="t032-pm-empty",
+    )
+    assert pm_empty["wrote"] is True
+    assert "plan-master__network" in pm_empty["tools_run"]
+    pe = Path(pm_empty["files"][0]["path"]).read_text(encoding="utf-8")
+    for title in ("工作分解", "逻辑关系", "一级网络与里程碑", "关键线路"):
+        assert title in pe, title
+    assert "WBS" in pe
+    assert "紧前" in pe
+    assert "里程碑待填" in pe or "待填" in pe
+    assert "关键线路=待计算" in pe or "关键线路待计算" in pe
+    assert "可以开工" not in pe
+    pm_ok = run_expert_turn(
+        "写一份总控计划 主体结构；封顶",
+        "plan-master",
+        force_intent="run",
+        session_id="t032-pm-wbs",
+    )
+    po = Path(pm_ok["files"][0]["path"]).read_text(encoding="utf-8")
+    assert "主体结构" in po
+    assert "封顶" in po
+
 
     high = [e for e in roster if e.risk == "high"][0]
     blocked = run_expert_turn("写一份专项方案讨论提纲", high.id, confirm_ok=False)

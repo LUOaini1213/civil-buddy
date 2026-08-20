@@ -1586,6 +1586,31 @@ fn test_interim_measure_exclusive() {
 }
 
 #[test]
+fn test_plan_master_network_exclusive() {
+    let p = paths();
+    assert!(packs::visible_tool_names("plan-master").iter().any(|n| n == "plan-master__network"));
+    assert!(!packs::visible_tool_names("plan-lookahead").iter().any(|n| n == "plan-master__network"));
+    let mut ctx = ToolCtx::new(p.clone(), "plan-master", "planning", "low", true, "iter-pm");
+    let out = packs::execute(
+        &mut ctx,
+        "plan-master__network",
+        &json!({"level":"master","milestones":"主体结构；封顶","jurisdiction":"SG"}),
+    );
+    assert!(out.contains("已写入"), "{out}");
+    let text = std::fs::read_to_string(ctx.out_dir.join("计划骨架.md")).unwrap();
+    assert!(text.contains("SG"), "{text}");
+    assert!(text.contains("WBS") || text.contains("工作分解"), "{text}");
+    assert!(text.contains("紧前"), "{text}");
+    assert!(text.contains("主体结构"), "{text}");
+    assert!(text.contains("封顶"), "{text}");
+    assert!(text.contains("关键线路=待计算") || text.contains("关键线路待计算"), "{text}");
+    assert!(text.contains("PSSCOC"), "{text}");
+    assert!(!text.contains("可以开工"), "{text}");
+    let mut sib = ToolCtx::new(p, "plan-lookahead", "planning", "low", true, "iter-pm-sib");
+    assert!(packs::execute(&mut sib, "plan-master__network", &json!({"level":"master"})).contains("拒绝"));
+}
+
+#[test]
 fn test_bid_compliance_exclusive_and_scan_sg_mix() {
     let p = paths();
     assert!(packs::visible_tool_names("bid-compliance").iter().any(|n| n == "bid-compliance__gaps"));

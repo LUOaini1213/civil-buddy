@@ -2230,13 +2230,49 @@ fn qto_rules(ctx: &mut ToolCtx, args: &Value) -> String {
     }
 }
 
+fn parse_wbs_names(blob: &str) -> Vec<String> {
+    let mut rows = Vec::new();
+    for raw in blob.replace('；', "\n").replace(';', "\n").lines() {
+        let mut t = raw.trim().to_string();
+        if let Some(rest) = t.strip_prefix("写一份") {
+            t = rest.trim().to_string();
+        }
+        if t.is_empty() || t == "草稿提纲" || t == "总进度计划" || t == "总控计划" || t == "master" {
+            continue;
+        }
+        if t.starts_with('#') || t.starts_with("内部") {
+            continue;
+        }
+        if t.chars().count() <= 80 {
+            rows.push(t.chars().take(80).collect());
+        }
+    }
+    rows
+}
+
 fn plan_skeleton(ctx: &mut ToolCtx, args: &Value) -> String {
-    let level = nonempty(&s(args, "level"), "master");
     let (jur, banner) = zone_banner(args);
+    let milestones = nonempty(&s(args, "milestones"), "");
+    let level = nonempty(&s(args, "level"), "master");
+    let blob = format!("{milestones}\n{level}");
+    let names = parse_wbs_names(&blob);
+    let wbs = if names.is_empty() {
+        "| 编码 | 名称 | 责任单位 | 工程量来源 | 持续时间来源 | 紧前 |\n| --- | --- | --- | --- | --- | --- |\n| TBD | [A001] | TBD | 待填 | 待填 | 待填 |".to_string()
+    } else {
+        let mut out = String::from("| 编码 | 名称 | 责任单位 | 工程量来源 | 持续时间来源 | 紧前 |\n| --- | --- | --- | --- | --- | --- |\n");
+        for n in &names {
+            out.push_str(&format!("| TBD | {n} | TBD | 待填 | 待填 | 待填 |\n"));
+        }
+        out
+    };
+    let mile = if milestones.is_empty() || milestones == "待填" {
+        "| 里程碑 | 日期 |\n| --- | --- |\n| 桩基完成 / ±0.000 / 主体封顶（候选） | 里程碑待填 |".to_string()
+    } else {
+        format!("| 里程碑 | 日期 |\n| --- | --- |\n| {milestones} | 待填 |")
+    };
     let md = format!(
-        "{}{banner}\n## 层级\n{level}\n\n## 里程碑\n{}\n\n无定额不编人机料用量。关键线路待核。{}\n",
+        "{}{banner}\n## 1 封面与文件控制\n层级：{level}。项目名称/合同工期待填。签认栏留空。[A001]\n\n## 2 草稿声明\n不是监理批准件，也不是可据以开工的进度计划。禁止编持续时间和关键线路。\n\n## 3 编制依据\n只列用户已给名称。无定额或方案则依据栏待补。条款 UNSPECIFIED。\n\n## 4 开竣工口径提示\n开竣工日期争议提示查阅法释〔2020〕25 号第八条、第九条认定顺序。本岗不代法院认定日期。\n\n## 5 工作分解\n{wbs}\n\nWBS。无图纸清单则工程量与持续时间一律待填。\n\n## 6 逻辑关系\n紧前、紧后、搭接类型（FS/SS/FF/SF）只写用户确认的工艺顺序。禁止编虚工作逻辑。\n\n## 7 一级网络与里程碑\n{mile}\n\n未给定的里程碑名称可列候选，日期待填。\n\n## 8 关键线路\n关键线路=待计算。用户未提供网络参数时禁止本稿指定。\n\n## 9 表达方式\n本稿出表头+文字逻辑，不假装已出批准用网络图。\n\n## 10 检查与基线\n冻结基线版本。总时差待计算。\n\n## 11 进度变更\n是否关键线路、对里程碑的影响待填。金额改召唤索赔调概（claim）。\n\n## 12 待填与禁令\n无来源数字写待填。禁止断言计划合理、一定能按期竣工。\n\n无定额不编人机料用量。{}\n",
         header("计划骨架"),
-        nonempty(&s(args, "milestones"), "待填"),
         format!(
             "{}{}",
             sg_only(&jur, "SG：PSSCOC 工期条款只写族名。"),
