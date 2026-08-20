@@ -100,6 +100,13 @@ def default_profile() -> SandboxProfile:
     out_dir = (os.getenv("PACKING_OUTPUT_DIR") or "").strip()
     if out_dir:
         roots.append(Path(out_dir))
+    job = (os.getenv("CIVIL_JOB_ROOT") or "").strip()
+    if job:
+        jp = Path(job)
+        n = str(jp).replace("/", "\\").rstrip("\\").lower()
+        if n != "d:\\layout" and not n.startswith("d:\\layout\\"):
+            roots.append(jp)
+    roots.append(Path.cwd() / ".civil-buddy" / "out")
     return SandboxProfile(allowed_write_roots=roots)
 
 
@@ -230,6 +237,18 @@ def guarded_write_text(
     target = assert_write(path, profile=profile)
     target.parent.mkdir(parents=True, exist_ok=True)
     target.write_text(text, encoding=encoding)
+    return target
+
+
+def guarded_write_bytes(
+    path: Union[str, Path],
+    data: bytes,
+    *,
+    profile: Optional[SandboxProfile] = None,
+) -> Path:
+    target = assert_write(path, profile=profile)
+    target.parent.mkdir(parents=True, exist_ok=True)
+    target.write_bytes(data)
     return target
 
 

@@ -3489,7 +3489,56 @@ def _draft_markdown(expert: ExpertRec, tool: str, text: str) -> str:
     )
 
 
+def _attach_office(out: Dict[str, Any]) -> Dict[str, Any]:
+    """After a successful md write, also drop Excel into the authorized job folder."""
+    if not out.get("wrote"):
+        return out
+    from packing_assistant.office_job import export_md_to_xlsx
+
+    extra: List[Dict[str, str]] = []
+    for f in list(out.get("files") or []):
+        p = Path(str(f.get("path") or ""))
+        if p.suffix.lower() != ".md":
+            continue
+        try:
+            for xp in export_md_to_xlsx(p):
+                extra.append({"name": xp.name, "path": str(xp), "tool": "office__xlsx"})
+        except (OSError, PermissionError, RuntimeError):
+            continue
+    if extra:
+        files = list(out.get("files") or [])
+        files.extend(extra)
+        out["files"] = files
+        ran = list(out.get("tools_run") or [])
+        if "office__xlsx" not in ran:
+            ran.append("office__xlsx")
+        out["tools_run"] = ran
+        reply = str(out.get("reply") or "")
+        if "Excel" not in reply:
+            out["reply"] = (reply + " 已另存 Excel，可在作业根用 Excel 打开。").strip()
+    return out
+
+
 def _run_exclusive(
+    expert: ExpertRec,
+    text: str,
+    *,
+    confirm_ok: bool,
+    session_id: str,
+    packing_summary: Optional[Dict[str, Any]] = None,
+) -> Dict[str, Any]:
+    return _attach_office(
+        _run_exclusive_body(
+            expert,
+            text,
+            confirm_ok=confirm_ok,
+            session_id=session_id,
+            packing_summary=packing_summary,
+        )
+    )
+
+
+def _run_exclusive_body(
     expert: ExpertRec,
     text: str,
     *,

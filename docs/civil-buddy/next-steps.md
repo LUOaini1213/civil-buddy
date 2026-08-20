@@ -136,6 +136,9 @@
 44. **T039 worker-brief 一岗** ✅ 2026-08-20  
     worker-brief__talk 按 script 写三段口播；无尺寸不报毫米。不是书面交底签认件。T039 批次未完：下一岗 **pm-daily**。不得把日报一并勾完。行业总判仍 **部分合格**。
 
+45. **T064 作业根 Office** ✅ 2026-08-20  
+    有 markdown 表的岗 run 后另存 `.xlsx`（会话目录；若设 `CIVIL_JOB_ROOT` 再抄一份）。禁止默认 `D:\layout`。不是桌面壳、不是接管 Word 窗口。主链头指针仍 **T039 pm-daily**。行业总判仍 **部分合格**。
+
 平台内核见 [product-improvement-handbook.md](product-improvement-handbook.md)。岗独有写盘下一刀仍按 [post-horizon-2026-08-17.md](post-horizon-2026-08-17.md)。
 
 ## 有宿主再做
