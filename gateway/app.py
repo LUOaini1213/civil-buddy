@@ -449,6 +449,21 @@ def api_agent(body: dict = None):
     )
 
 
+@app.get("/api/context/{session_id}")
+def api_session_context(session_id: str):
+    """Session slots Civil Buddy owns. Not a DeepSeek transcript."""
+    from packing_assistant.runtime.memory import assemble_context, prompt_prefix
+
+    ctx = assemble_context(session_id)
+    return {
+        "ok": True,
+        "schema": "civil.session.context.v1",
+        "session_id": session_id,
+        "context": ctx,
+        "prompt_prefix": prompt_prefix(ctx),
+    }
+
+
 @app.get("/api/eval/live")
 def api_eval_live():
     """Offline official-title needles + agent/sandbox smoke. No IRAS scrape."""

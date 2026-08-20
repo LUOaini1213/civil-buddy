@@ -48,7 +48,7 @@ def _scrub(text: str) -> str:
     return reply
 
 
-def _explain(text: str, expert_id: str) -> str:
+def _explain(text: str, expert_id: str, prefix: str = "") -> str:
     eid = (expert_id or "").strip()
     if eid:
         from packing_assistant.expert_roster import get_expert
@@ -56,10 +56,12 @@ def _explain(text: str, expert_id: str) -> str:
 
         exp = get_expert(eid)
         if exp:
-            return explain_expert(exp, text)
+            body = explain_expert(exp, text)
+            return f"{prefix}\n{body}".strip() if prefix else body
     from packing_assistant.product_turn import explain
 
-    return explain(text)
+    body = explain(text)
+    return f"{prefix}\n{body}".strip() if prefix else body
 
 
 def _draft_md(expert_id: str, tool: str, text: str) -> str:
@@ -223,6 +225,17 @@ def run_agent(
             "submit_blocked": True,
         }
     sid = session_id or f"sess-{uuid4().hex[:8]}"
+    from packing_assistant.runtime.memory import assemble_context, prompt_prefix
+
+    ctx = assemble_context(
+        sid,
+        text=text,
+        project_name=project_name,
+        p0_confirmed=p0_confirmed,
+    )
+    p0_confirmed = bool(ctx.get("p0_confirmed"))
+    project_name = str(ctx.get("project") or project_name)
+    ctx_prefix = prompt_prefix(ctx)
     sched = scheduler or get_scheduler()
     engine = tools or get_engine()
     bus = get_bus()
@@ -268,6 +281,14 @@ def run_agent(
         "n_experts": len(list_experts()),
         "error_code": "",
         "agent_mode": "steps",
+        "context": {
+            "jurisdiction": ctx.get("jurisdiction"),
+            "project": ctx.get("project"),
+            "p0_confirmed": ctx.get("p0_confirmed"),
+            "compressed": ctx.get("compressed"),
+            "has_handoff": ctx.get("has_handoff"),
+            "has_packing": ctx.get("has_packing"),
+        },
     }
 
     def _finish(state_ok: bool = True) -> Dict[str, Any]:
@@ -283,14 +304,14 @@ def run_agent(
         out["submit_blocked"] = True
         out["duration_ms"] = run.duration_ms
         out["history"] = list(run.history)
-        from packing_assistant.runtime.memory import save_summary
+        from packing_assistant.runtime.memory import assemble_context
 
-        save_summary(
+        assemble_context(
             sid,
-            jurisdiction="SG",
-            project=project_name,
+            text=text,
+            project_name=project_name,
             p0_confirmed=p0_confirmed,
-            compressed=False,
+            compressed=bool(ctx.get("compressed")),
         )
         sched.release(sid)
         bus.emit(run.run_id, "run_ended", {"state": run.state, "wrote": out["wrote"]})
@@ -302,7 +323,7 @@ def run_agent(
             {"run_id": run.run_id, "intent": intent, "expert_id": eid, "node": "agent_loop"},
         ):
             if intent == "chat":
-                reply = _explain(text, eid)
+                reply = _explain(text, eid, ctx_prefix)
                 messages.append({"role": "assistant", "content": reply})
                 sched.transition(run, "done")
                 out["reply"] = reply
@@ -335,7 +356,7 @@ def run_agent(
                 out["reply"] = "无法进入 acting。"
                 return _finish()
 
-            explain_prefix = _explain(text, eid) if intent == "both" else ""
+            explain_prefix = _explain(text, eid, ctx_prefix) if intent == "both" else ""
             pack_ship: Dict[str, Any] = {}
             last_export_md = ""
             last_extract = ""

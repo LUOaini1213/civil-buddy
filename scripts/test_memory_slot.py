@@ -33,7 +33,37 @@ def main() -> int:
     assert run.get("wrote") is False
     disk = load_summary("mem-t010-run")
     assert disk and disk.get("project")
-    print("PASS memory_slot compressed_note")
+
+    from packing_assistant.runtime.memory import assemble_context
+
+    assemble_context("mem-sticky", text="滨河路人行道", project_name="滨河路", p0_confirmed=True)
+    second = run_agent(
+        "什么是 GST",
+        session_id="mem-sticky",
+        force_intent="chat",
+        project_name="幕墙项目投标应答（草稿）",
+    )
+    assert second.get("wrote") is False
+    assert (second.get("context") or {}).get("project") == "滨河路"
+    assert (second.get("context") or {}).get("p0_confirmed") is True
+    assert "9%" in (second.get("reply") or "")
+    sticky = load_summary("mem-sticky")
+    assert sticky and sticky["project"] == "滨河路"
+
+    save_summary("mem-compressed-chat", jurisdiction="SG", project="滨河路", compressed=True)
+    chat_c = run_agent("临边防护算不算危大？", session_id="mem-compressed-chat", force_intent="chat")
+    assert chat_c.get("wrote") is False
+    assert "假装" in (chat_c.get("reply") or "") or "不要假装" in (chat_c.get("reply") or "")
+    assert (chat_c.get("context") or {}).get("compressed") is True
+
+    from fastapi.testclient import TestClient
+    from gateway.app import app
+
+    client = TestClient(app)
+    got = client.get("/api/context/mem-sticky")
+    assert got.status_code == 200, got.text
+    assert got.json()["context"]["project"] == "滨河路"
+    print("PASS memory_slot compressed_note sticky_project")
     return 0
 
 

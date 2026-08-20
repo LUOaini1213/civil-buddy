@@ -56,7 +56,8 @@ python scripts/test_docs_completion.py
 
 ## 2. 先问一句（必须不写盘）
 
-默认面粘贴「什么是 GST」→ 意图 `chat`，回复含 IRAS 页述 **9%**，无矩阵文件。
+默认面粘贴「什么是 GST」→ 意图 `chat`，回复含 IRAS 页述 **9%**，无矩阵文件。  
+把 `session_id` 当工地/标段档案号一直带着；上下文在服务端槽里，不要把整段聊天再贴给 DeepSeek。只读槽：`GET /api/context/{session_id}`。
 
 或：
 
