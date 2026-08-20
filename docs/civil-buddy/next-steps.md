@@ -94,6 +94,9 @@
 30. **T033 lab-record 一岗（T033 批次完）** ✅ 2026-08-20  
     lab-record__ledger 加报告编号待核｜仪器检定｜结论待填。不编报告号。主链头指针改为 **T034**（supervision 先）。T034–T047 不得一行勾完。行业总判仍 **部分合格**。
 
+31. **T034 supervision 一岗（T034 批次完）** ✅ 2026-08-20  
+    supervision__reply 来文复述｜拟办｜证据目录；暂停/复工只出目录，不签发复工。主链头指针改为 **T035**（safety-brief 先）。T035–T047 不得一行勾完。行业总判仍 **部分合格**。
+
 平台内核见 [product-improvement-handbook.md](product-improvement-handbook.md)。岗独有写盘下一刀仍按 [post-horizon-2026-08-17.md](post-horizon-2026-08-17.md)。
 
 ## 有宿主再做

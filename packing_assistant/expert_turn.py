@@ -342,6 +342,20 @@ _RECORD_SKIP = {
     "待填",
 }
 
+_SUPERVISION_CHAPTERS = (
+    "文头",
+    "致",
+    "来文要点复述",
+    "原因分析",
+    "拟办",
+    "完成时限",
+    "证据目录",
+    "自检",
+    "签发",
+    "闭合台账行",
+    "禁令",
+)
+
 _MILESTONE_KEYS = ("桩基", "±0", "封顶", "砌筑", "机电", "装饰", "竣工")
 
 _QTY_RE = re.compile(
@@ -1483,6 +1497,85 @@ def _lab_record_md(text: str) -> str:
     return "\n".join(lines)
 
 
+def _supervision_md(text: str) -> str:
+    blob = text or ""
+    zone = _mix_zone(blob)
+    if any(k in blob for k in ("监理规范", "GB/T 50319", "归档规范")):
+        zone = "CN" if zone == "SG" else zone
+    notice = blob.strip() or "待填"
+    notice = re.sub(r"^写一份\S*\s*", "", notice).strip() or "待填"
+    if notice in {"草稿提纲", "监理回复", "待填"}:
+        notice = "待填"
+    stop_note = (
+        "暂停令、复工报审只出目录和拟办提纲。本岗不签发复工。"
+        if any(k in blob for k in ("暂停", "复工", "停工"))
+        else "若来文是暂停/复工，只出目录和拟办提纲。本岗不签发复工。"
+    )
+    lines = [
+        "# 监理通知回复草稿（AI 草稿）",
+        "",
+        DISCLAIMER,
+        "",
+        "本回复是资料草稿，不是监理指令。待持证人员审核签发后报出。",
+        "",
+        f"- 辖区：{zone}",
+        "",
+        "## 用户原文",
+        "",
+        blob.strip() or "（未提供）",
+        "",
+    ]
+    for i, title in enumerate(_SUPERVISION_CHAPTERS, 1):
+        lines.append(f"## {i} {title}")
+        lines.append("")
+        if i == 1:
+            lines.append("工程名称待填。回复编号待填。对应来文编号/日期待填。[A001]")
+        elif i == 2:
+            lines.append("致：项目监理机构。抄送栏待填。")
+        elif i == 3:
+            lines.append(notice[:400])
+            lines.append("")
+            lines.append("只复述用户提供的事由、部位、条数，不扩写没给的事实。")
+        elif i == 4:
+            lines.append("管理/工艺/材料/资料。缺事实则待填。[A001]")
+        elif i == 5:
+            lines.append("逐条对应来文，一条不漏。举一反三和预防只作栏目，不编造已培训记录。")
+            lines.append("")
+            lines.append(stop_note)
+        elif i == 6:
+            lines.append("从来文或合同抄，否则 [A001] 待填。")
+        elif i == 7:
+            lines.append(
+                "| 证据 | 本稿 |\n| --- | --- |\n"
+                "| 整改前后影像 | 待附 |\n"
+                "| 检查记录 | 待附 |\n"
+                "| 检测报告 | 待附 |\n"
+                "| 方案/交底目录 | 待附 |"
+            )
+        elif i == 8:
+            lines.append("项目技术/质量负责人栏空白。")
+        elif i == 9:
+            lines.append("本回复为 AI 草稿，待项目经理等持证人员审核签发后报出。")
+        elif i == 10:
+            lines.append(
+                "| 来文号 | 要求闭合日 | 实际回复日 | 复查意见 |\n"
+                "| --- | --- | --- | --- |\n"
+                "| 待填 | 待填 | 待填 | （空，复查属监理） |"
+            )
+        else:
+            lines.append(
+                "不写验收合格、资料已闭合可备案。不冒充总监签发。"
+                "不编报告编号、强度、闭合天数。暂停/复工只出目录。"
+            )
+        lines.append("")
+    if zone in ("SG", "DUAL"):
+        lines.append("SG：BCA construction site records / record structural plan C-forms 只写标题。")
+    if zone in ("CN", "DUAL"):
+        lines.append("CN：建设工程监理规范只写全名。")
+    lines.append("")
+    return "\n".join(lines)
+
+
 def _dispatch_daily_md(text: str) -> str:
     jobs = _copy_sensitive_jobs(text)
     sensitive = (
@@ -2252,6 +2345,33 @@ def _run_exclusive(
             "files": files,
             "tools_run": ran,
             "reply": "已出试验台账骨架。报告编号待核。结论待填。submit_blocked=true。",
+            "submit_blocked": True,
+        }
+
+    if expert.id == "supervision":
+        md = _supervision_md(text)
+        from packing_assistant.tools.tender_review import forbidden_hits
+
+        hits = forbidden_hits(md)
+        if hits:
+            return {
+                "wrote": False,
+                "hitl_pending": False,
+                "files": [],
+                "tools_run": [],
+                "reply": "禁语扫描命中，未报成功：" + "、".join(hits),
+                "submit_blocked": True,
+            }
+        path = out_dir / "supervision__reply.md"
+        guarded_write_text(path, md)
+        files.append({"name": path.name, "path": str(path), "tool": "supervision__reply"})
+        ran.append("supervision__reply")
+        return {
+            "wrote": True,
+            "hitl_pending": False,
+            "files": files,
+            "tools_run": ran,
+            "reply": "已出监理通知回复草稿。暂停/复工只出目录。submit_blocked=true。",
             "submit_blocked": True,
         }
 
