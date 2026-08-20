@@ -76,6 +76,9 @@
 24. **岗独有收进 ToolEngine** ✅ 2026-08-20  
     66 岗 exclusive 按名 `register`。agent_loop / MCP `tools/call` 调 `survey__record` 等，不再拿 `write_deliverable` 冒充。chat 与兄弟岗 `permission_denied`。验收：`python scripts/test_exclusive_engine.py`。主链头指针仍是 **T032 · plan-lookahead**。
 
+25. **API 会话槽装配** ✅ 2026-08-20  
+    DeepSeek 无会话。`assemble_context` 每轮读/写 `session.summary`：项目名粘滞、P0 粘滞、压缩提示进 chat。`GET /api/context/{session_id}`。默认幕墙项目名不得盖槽。验收：`python scripts/test_memory_slot.py`。T032 指针不变。
+
 平台内核见 [product-improvement-handbook.md](product-improvement-handbook.md)。岗独有写盘下一刀仍按 [post-horizon-2026-08-17.md](post-horizon-2026-08-17.md)。
 
 ## 有宿主再做

@@ -1459,6 +1459,11 @@ def run_expert_turn(
     from packing_assistant.runtime.scheduler import get_scheduler
 
     sid = session_id or f"turn-{uuid4().hex[:8]}"
+    from packing_assistant.runtime.memory import assemble_context, prompt_prefix
+
+    ctx = assemble_context(sid, text=text, p0_confirmed=confirm_ok)
+    confirm_ok = bool(confirm_ok) or bool(ctx.get("p0_confirmed"))
+    ctx_prefix = prompt_prefix(ctx)
     sched = get_scheduler()
     run = sched.create_run(sid, expert_id=exp.id, intent=intent)
     sched.transition(run, "planning")
@@ -1481,11 +1486,20 @@ def run_expert_turn(
         "run_id": run.run_id,
         "state": run.state,
         "session_id": sid,
+        "context": {
+            "jurisdiction": ctx.get("jurisdiction"),
+            "project": ctx.get("project"),
+            "p0_confirmed": ctx.get("p0_confirmed"),
+            "compressed": ctx.get("compressed"),
+            "has_handoff": ctx.get("has_handoff"),
+            "has_packing": ctx.get("has_packing"),
+        },
     }
     if intent == "chat":
         sched.transition(run, "done")
         sched.release(sid)
-        base["reply"] = explain_expert(exp, text)
+        body = explain_expert(exp, text)
+        base["reply"] = f"{ctx_prefix}\n{body}".strip() if ctx_prefix else body
         base["state"] = run.state
         return base
     ran = _run_exclusive(
@@ -1503,7 +1517,10 @@ def run_expert_turn(
             sched.transition(run, "done")
     sched.release(sid)
     if intent == "both" and not ran.get("hitl_pending"):
-        ran["reply"] = explain_expert(exp, text) + "\n\n" + str(ran.get("reply") or "")
+        explained = explain_expert(exp, text)
+        if ctx_prefix:
+            explained = f"{ctx_prefix}\n{explained}"
+        ran["reply"] = explained + "\n\n" + str(ran.get("reply") or "")
     base.update(ran)
     base["session_id"] = sid
     base["run_id"] = run.run_id

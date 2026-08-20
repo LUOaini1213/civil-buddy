@@ -12,6 +12,18 @@
 
 入口：`POST /api/agent`（完整循环）· `POST /api/turn`（兼容）· `POST /api/understand`（只分类）。
 
+## 会话上下文（Civil Buddy 管，不交给 DeepSeek）
+
+DeepSeek `chat/completions` 无会话。客户端把 `session_id` 当工地/标段档案号一直带着。服务端每轮从 `demo/out/<session>/` 装配短槽，不把 66 岗 KB 或聊天全文当事实：
+
+| 槽 | 文件 |
+|----|------|
+| 辖区 / 项目 / P0 / 压缩打标 | `session.summary.json` |
+| 招标交接 | `tender.handoff.json` |
+| 装箱投影 | `packing_summary.json` |
+
+`POST /api/agent` 响应带 `context`。只读：`GET /api/context/{session_id}`。压缩后 `dropped_note` 进回复，禁止假装读过被丢细节。默认项目名「幕墙项目投标应答（草稿）」不得盖掉槽里已有项目。
+
 ## 状态机
 
 `pending → planning → acting → waiting_tool → reflecting → done`  

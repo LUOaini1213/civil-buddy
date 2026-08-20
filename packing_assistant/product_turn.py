@@ -59,6 +59,12 @@ def run_turn(
     from uuid import uuid4
 
     sid = session_id or f"sess-{uuid4().hex[:8]}"
+    from packing_assistant.runtime.memory import assemble_context, prompt_prefix
+
+    ctx = assemble_context(sid, text=text, project_name=project_name, p0_confirmed=p0_confirmed)
+    p0_confirmed = bool(ctx.get("p0_confirmed"))
+    project_name = str(ctx.get("project") or project_name)
+    ctx_prefix = prompt_prefix(ctx)
     sched = get_scheduler()
     run = sched.create_run(sid, intent=intent)
     sched.transition(run, "planning")
@@ -74,11 +80,20 @@ def run_turn(
         "run_id": run.run_id,
         "state": run.state,
         "session_id": sid,
+        "context": {
+            "jurisdiction": ctx.get("jurisdiction"),
+            "project": ctx.get("project"),
+            "p0_confirmed": ctx.get("p0_confirmed"),
+            "compressed": ctx.get("compressed"),
+            "has_handoff": ctx.get("has_handoff"),
+            "has_packing": ctx.get("has_packing"),
+        },
     }
     if intent == "chat":
         sched.transition(run, "done")
         sched.release(sid)
-        out["reply"] = explain(text)
+        body = explain(text)
+        out["reply"] = f"{ctx_prefix}\n{body}".strip() if ctx_prefix else body
         out["state"] = run.state
         return out
 
