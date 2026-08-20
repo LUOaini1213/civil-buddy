@@ -570,6 +570,42 @@ def main() -> int:
     assert "可以开工" not in emt
     assert "演练合格" not in emt
 
+    eq_chat = run_expert_turn("特种设备证件怎么理解？", "equip")
+    assert eq_chat["intent"] == "chat" and eq_chat["wrote"] is False
+    eq_hitl = run_expert_turn(
+        "写一份设备台账 tower crane",
+        "equip",
+        confirm_ok=False,
+        force_intent="run",
+    )
+    assert eq_hitl["wrote"] is False and eq_hitl.get("hitl_pending") is True
+    eq_ok = run_expert_turn(
+        "写一份设备台账 tower crane",
+        "equip",
+        confirm_ok=True,
+        force_intent="run",
+        session_id="t036-eq",
+    )
+    assert eq_ok["wrote"] is True
+    assert "equip__ledger" in eq_ok["tools_run"]
+    eqt = Path(eq_ok["files"][0]["path"]).read_text(encoding="utf-8")
+    assert "tower crane" in eqt
+    assert "进场验收" in eqt and "证件" in eqt and "维保" in eqt
+    assert "无证件不编进场结论" in eqt
+    assert "[A001]" in eqt
+    assert "可以开工" not in eqt
+    eq_cert = run_expert_turn(
+        "写一份设备台账 塔吊 合格证 TS-88",
+        "equip",
+        confirm_ok=True,
+        force_intent="run",
+        session_id="t036-eq-cert",
+    )
+    eqc = Path(eq_cert["files"][0]["path"]).read_text(encoding="utf-8")
+    assert "塔吊" in eqc
+    assert "TS-88" in eqc
+    assert "用户给定" in eqc
+
     high = [e for e in roster if e.risk == "high"][0]
     blocked = run_expert_turn("写一份专项方案讨论提纲", high.id, confirm_ok=False)
     assert blocked["intent"] == "run"

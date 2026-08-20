@@ -861,8 +861,15 @@ fn pack_tools(pack: &str) -> Vec<ToolDef> {
             },
             ToolDef {
                 name: "equip__ledger",
-                description: "设备进场/维保台账口径。特种设备证件待核。",
-                parameters: obj(json!({"equipment": {"type": "string"}}), &["equipment"]),
+                description: "设备台账独有：只抄用户设备名与已给证件。无证件不编进场结论。",
+                parameters: obj(
+                    json!({
+                        "equipment": {"type": "string"},
+                        "certs": {"type": "string"},
+                        "jurisdiction": {"type": "string"}
+                    }),
+                    &["equipment"],
+                ),
             },
             ToolDef {
                 name: "warehouse__log",
@@ -2983,12 +2990,98 @@ fn env_list(ctx: &mut ToolCtx, args: &Value) -> String {
     }
 }
 
+fn parse_equip_names(blob: &str) -> Vec<String> {
+    let mut rows = Vec::new();
+    for raw in blob.replace('；', "\n").replace(';', "\n").lines() {
+        let mut t = raw.trim().to_string();
+        if let Some(rest) = t.strip_prefix("写一份") {
+            t = rest.trim().to_string();
+        }
+        for key in ["合格证", "使用登记", "作业人员证件", "作业证"] {
+            if let Some(pos) = t.find(key) {
+                t = t[..pos].trim().to_string();
+            }
+        }
+        if t.is_empty()
+            || matches!(t.as_str(), "草稿提纲" | "设备台账" | "维保计划" | "待填" | "MOM" | "SG" | "CN")
+        {
+            continue;
+        }
+        if t.starts_with('#') || t.starts_with("内部") {
+            continue;
+        }
+        if t.chars().count() > 80 {
+            t = t.chars().take(80).collect();
+        }
+        if !rows.iter().any(|n| n == &t) {
+            rows.push(t);
+        }
+    }
+    rows
+}
+
+fn copy_equip_certs(blob: &str) -> Vec<(String, String)> {
+    let mut out = Vec::new();
+    let keys = ["合格证", "使用登记", "作业人员证件", "作业证"];
+    for key in keys {
+        if let Some(pos) = blob.find(key) {
+            let rest = blob[pos + key.len()..].trim_start_matches([':', '：', ' ', '\t']);
+            let token: String = rest
+                .chars()
+                .take_while(|c| c.is_ascii_alphanumeric() || *c == '-' || *c == '_' || *c == '.' || *c == '/')
+                .collect();
+            if token.chars().count() >= 3 {
+                out.push((key.to_string(), token));
+            }
+        }
+    }
+    out
+}
+
 fn equip_ledger(ctx: &mut ToolCtx, args: &Value) -> String {
     let (jur, banner) = zone_banner(args);
+    let blob = format!("{}\n{}", s(args, "equipment"), s(args, "certs"));
+    let names = parse_equip_names(&s(args, "equipment"));
+    let certs = copy_equip_certs(&blob);
+    let cert_cell = if certs.is_empty() {
+        "特种设备证件待核".to_string()
+    } else {
+        certs
+            .iter()
+            .map(|(n, c)| format!("{n} {c}（用户给定）"))
+            .collect::<Vec<_>>()
+            .join("；")
+    };
+    let inv = if names.is_empty() {
+        "| 名称 | 规格型号 | 厂编号或备案号 | 自有或租赁 | 计划进退场 | 当前状态 |\n| --- | --- | --- | --- | --- | --- |\n| [A001] | 待填 | 待填 | 待填 | 待填 | 待进场 |".to_string()
+    } else {
+        let mut t = String::from("| 名称 | 规格型号 | 厂编号或备案号 | 自有或租赁 | 计划进退场 | 当前状态 |\n| --- | --- | --- | --- | --- | --- |\n");
+        for n in &names {
+            t.push_str(&format!("| {n} | 待填 | 待填 | 待填 | 待填 | 待进场 |\n"));
+        }
+        t
+    };
+    let gate = if names.is_empty() {
+        format!("| 设备 | 进场验收 | 证件 | 维保 |\n| --- | --- | --- | --- |\n| 待填 | 待做 | {cert_cell} | 待排 |")
+    } else {
+        let mut t = String::from("| 设备 | 进场验收 | 证件 | 维保 |\n| --- | --- | --- | --- |\n");
+        for n in &names {
+            t.push_str(&format!("| {n} | 待做 | {cert_cell} | 待排 |\n"));
+        }
+        t
+    };
+    let cert_tbl = if certs.is_empty() {
+        "| 证书名称 | 编号 | 有效期 | 作业项目 | 状态 |\n| --- | --- | --- | --- |\n| 产品合格证 | 待核 | 待填 | 待填 | 待核 |\n| 使用登记 | 待核 | 待填 | 待填 | 待核 |\n| 作业人员证件 | 待核 | 待填 | 待填 | 待核 |".to_string()
+    } else {
+        let mut t = String::from("| 证书名称 | 编号 | 有效期 | 作业项目 | 状态 |\n| --- | --- | --- | --- |\n");
+        for (n, c) in &certs {
+            t.push_str(&format!("| {n} | {c} | 待填 | 待填 | 用户给定 |\n"));
+        }
+        t
+    };
     let md = format!(
-        "{}{banner}\n| 设备 | 进场验收 | 证件 | 维保 |\n| --- | --- | --- | --- |\n| {} | 待做 | 特种设备证件待核 | 待排 |\n\n[A001] 无证件不编进场结论。{}\n",
+        "{}{banner}\n内部讨论。不构成特种设备使用登记、安装验收签认、法定专项方案或开工依据。签认栏留空。\n\n## 1 封面与草稿声明\n标明内部讨论。签认栏留空。[A001]\n\n## 2 设备清单表头\n{inv}\n\n无用户清单不编造机号和备案号。只抄用户设备名。\n\n## 3 进场验收\n{gate}\n\n[A001] 无证件不编进场结论。缺一件写不得进场。本岗不签发使用登记。\n\n## 4 租赁与台班\n合同要素：谁负责安拆、顶升附着、维保和检测费用；按台班还是包月。无报价则租金和合价 TBD。\n\n## 5 维保计划\n按台分列日常点检、定期保养、故障修理。顶升和附着单独留栏。写过计划不等于已经保养，完成记录栏待填。\n\n## 6 证件与检验台账\n{cert_tbl}\n\n只抄用户已给证件。过期视同缺失。不编证号。\n\n## 7 退场与结算附件目录\n进退场单、台班单、维保和修理记录、检测报告复印件、租赁补充协议。金额待填。\n\n## 8 资料目录\n资料目录交给资料监理专家闭合。本岗不宣称资料已闭合。安装拆卸方案交施工方案；是否危大交 method-hazard。\n\n## 9 禁令\n不签发使用登记。不编租金、折旧率和综合单价。不宣称通过专家论证或可以投入使用。\n\n{}\n",
         header("设备台账口径"),
-        nonempty(&s(args, "equipment"), "待填"),
         format!(
             "{}{}",
             sg_only(&jur, "SG：MOM lifting equipment / approved crane contractor 只写标题。"),
