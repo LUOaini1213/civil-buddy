@@ -1611,6 +1611,57 @@ fn test_plan_master_network_exclusive() {
 }
 
 #[test]
+fn test_plan_lookahead_week_exclusive() {
+    let p = paths();
+    assert!(packs::visible_tool_names("plan-lookahead").iter().any(|n| n == "plan-lookahead__week"));
+    assert!(!packs::visible_tool_names("plan-master").iter().any(|n| n == "plan-lookahead__week"));
+    let mut ctx = ToolCtx::new(p.clone(), "plan-lookahead", "planning", "low", true, "iter-pl");
+    let out = packs::execute(
+        &mut ctx,
+        "plan-lookahead__week",
+        &json!({
+            "window": "第1–4周",
+            "works": "3层砌筑",
+            "constraints": "塔吊未到",
+            "jurisdiction": "SG"
+        }),
+    );
+    assert!(out.contains("已写入"), "{out}");
+    let text = std::fs::read_to_string(ctx.out_dir.join("周月计划骨架.md")).unwrap();
+    assert!(text.contains("SG"), "{text}");
+    assert!(text.contains("第1周"), "{text}");
+    assert!(text.contains("第4周"), "{text}");
+    assert!(text.contains("3层砌筑"), "{text}");
+    assert!(text.contains("塔吊未到"), "{text}");
+    assert!(text.contains("制约未清") || text.contains("不得写入本周承诺"), "{text}");
+    let sec = text.split("## 5 周承诺").nth(1).unwrap().split("## 6").next().unwrap();
+    assert!(sec.contains("不得写入本周承诺"), "{sec}");
+    assert!(!sec.contains("3层砌筑"), "{sec}");
+    assert!(text.contains("Last Planner"), "{text}");
+    assert!(!text.contains("可以开工"), "{text}");
+    assert!(!text.contains("可以复工"), "{text}");
+    let mut ctx2 = ToolCtx::new(p.clone(), "plan-lookahead", "planning", "low", true, "iter-pl-ok");
+    let out2 = packs::execute(
+        &mut ctx2,
+        "plan-lookahead__week",
+        &json!({
+            "window": "四周",
+            "works": "3层砌筑",
+            "constraints": "制约已清",
+            "jurisdiction": "CN"
+        }),
+    );
+    assert!(out2.contains("已写入"), "{out2}");
+    let text2 = std::fs::read_to_string(ctx2.out_dir.join("周月计划骨架.md")).unwrap();
+    let sec2 = text2.split("## 5 周承诺").nth(1).unwrap().split("## 6").next().unwrap();
+    assert!(sec2.contains("3层砌筑"), "{sec2}");
+    assert!(!sec2.contains("不得写入本周承诺"), "{sec2}");
+    assert!(text2.contains("不是工期签证"), "{text2}");
+    let mut sib = ToolCtx::new(p, "plan-master", "planning", "low", true, "iter-pl-sib");
+    assert!(packs::execute(&mut sib, "plan-lookahead__week", &json!({"window":"x"})).contains("拒绝"));
+}
+
+#[test]
 fn test_bid_compliance_exclusive_and_scan_sg_mix() {
     let p = paths();
     assert!(packs::visible_tool_names("bid-compliance").iter().any(|n| n == "bid-compliance__gaps"));

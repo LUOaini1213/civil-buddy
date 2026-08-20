@@ -273,6 +273,49 @@ def main() -> int:
     assert "主体结构" in po
     assert "封顶" in po
 
+    pl_chat = run_expert_turn("周计划怎么编？", "plan-lookahead")
+    assert pl_chat["intent"] == "chat" and pl_chat["wrote"] is False
+    pl_empty = run_expert_turn(
+        "写一份四周滚动计划",
+        "plan-lookahead",
+        force_intent="run",
+        session_id="t032-pl-empty",
+    )
+    assert pl_empty["wrote"] is True
+    assert "plan-lookahead__week" in pl_empty["tools_run"]
+    ple = Path(pl_empty["files"][0]["path"]).read_text(encoding="utf-8")
+    for title in ("封面", "从总控抽取窗口", "近细远粗", "制约因素", "周承诺"):
+        assert title in ple, title
+    assert "第1周" in ple and "第4周" in ple
+    assert "制约未清" in ple
+    assert "不得写入本周承诺" in ple
+    assert "可以开工" not in ple
+    assert "可以复工" not in ple
+    assert "一定完成" not in ple
+    pl_block = run_expert_turn(
+        "写一份周计划 3层砌筑；塔吊未到",
+        "plan-lookahead",
+        force_intent="run",
+        session_id="t032-pl-block",
+    )
+    pb = Path(pl_block["files"][0]["path"]).read_text(encoding="utf-8")
+    assert "3层砌筑" in pb
+    assert "塔吊未到" in pb
+    sec_b = pb.split("## 5 周承诺")[1].split("## 6")[0]
+    assert "不得写入本周承诺" in sec_b
+    assert "3层砌筑" not in sec_b
+    pl_ok = run_expert_turn(
+        "写一份周计划 3层砌筑；制约已清",
+        "plan-lookahead",
+        force_intent="run",
+        session_id="t032-pl-ok",
+    )
+    plo = Path(pl_ok["files"][0]["path"]).read_text(encoding="utf-8")
+    assert "3层砌筑" in plo
+    sec_ok = plo.split("## 5 周承诺")[1].split("## 6")[0]
+    assert "3层砌筑" in sec_ok
+    assert "不得写入本周承诺" not in sec_ok
+    assert "可以复工" not in plo
 
     high = [e for e in roster if e.risk == "high"][0]
     blocked = run_expert_turn("写一份专项方案讨论提纲", high.id, confirm_ok=False)

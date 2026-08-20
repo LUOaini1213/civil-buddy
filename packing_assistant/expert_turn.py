@@ -189,6 +189,38 @@ _PLAN_MASTER_CHAPTERS = (
     "待填与禁令",
 )
 
+_PLAN_LOOKAHEAD_CHAPTERS = (
+    "封面",
+    "从总控抽取窗口",
+    "近细远粗",
+    "制约因素",
+    "周承诺",
+    "交叉作业",
+    "停工条件",
+    "与总控的回写",
+    "月度形象对照",
+    "待填与禁令",
+)
+
+_LOOKAHEAD_SKIP = {
+    "草稿提纲",
+    "总进度计划",
+    "总控计划",
+    "周计划",
+    "月计划",
+    "四周滚动",
+    "周月计划",
+    "四周滚动计划",
+    "master",
+    "lookahead",
+    "制约已清",
+    "条件已具备",
+    "待填",
+    "四周",
+}
+
+_LOOKAHEAD_BLOCK = ("未清", "未到", "未交", "无图", "未发", "过期")
+
 _MILESTONE_KEYS = ("桩基", "±0", "封顶", "砌筑", "机电", "装饰", "竣工")
 
 _QTY_RE = re.compile(
@@ -689,6 +721,160 @@ def _plan_master_md(text: str) -> str:
         lines.append("")
     lines.append("SG：PSSCOC 工期条款只写族名。Programme 提交以用户合同为准。")
     lines.append("CN：施工组织设计规范 / 工程网络计划技术规程只写全名，不编关键线路。")
+    lines.append("")
+    return "\n".join(lines)
+
+
+def _lookahead_blocked(line: str) -> bool:
+    t = line or ""
+    if any(m in t for m in _LOOKAHEAD_BLOCK):
+        return True
+    if "制约已清" in t or "条件已具备" in t:
+        return False
+    return "制约" in t
+
+
+def _clean_lookahead_job(line: str) -> str:
+    t = line or ""
+    for m in ("制约已清", "条件已具备"):
+        t = t.replace(m, "")
+    return re.sub(r"\s+", " ", t).strip(" ，,;；")
+
+
+def _parse_lookahead(blob: str) -> tuple:
+    """(window_jobs, blocked_jobs, can_promise). 制约未清不得写入本周承诺。"""
+    raw = blob or ""
+    any_cleared = "制约已清" in raw or "条件已具备" in raw
+    jobs: List[str] = []
+    blocked: List[str] = []
+    for piece in raw.replace("；", "\n").replace(";", "\n").splitlines():
+        t = piece.strip()
+        t = re.sub(r"^写一份\S*\s*", "", t).strip()
+        if not t or t in _LOOKAHEAD_SKIP:
+            continue
+        if t.startswith("#") or t.startswith("内部"):
+            continue
+        if t.startswith("第") and "周" in t[:8]:
+            continue
+        if len(t) > 80:
+            t = t[:80]
+        name = _clean_lookahead_job(t) or t
+        if not name or name in _LOOKAHEAD_SKIP:
+            continue
+        if _lookahead_blocked(t):
+            blocked.append(name)
+        elif name not in jobs:
+            jobs.append(name)
+    can_promise = bool(any_cleared and not blocked and jobs)
+    return jobs, blocked, can_promise
+
+
+def _plan_lookahead_md(text: str) -> str:
+    jobs, blocked, can_promise = _parse_lookahead(text)
+    week_jobs = "；".join(jobs) if jobs else "待填 [A001]"
+    week_block = "；".join(blocked) if blocked else ("制约未清" if not can_promise else "无未清制约")
+    four = (
+        "| 周次 | 粒度 | 作业 | 制约状态 |\n"
+        "| --- | --- | --- | --- |\n"
+        f"| 第1周 | 班组、工作面、日顺序 | {week_jobs} | {week_block} |\n"
+        f"| 第2周 | 分项与责任人 | {week_jobs} | {week_block} |\n"
+        f"| 第3周 | 分项与制约（较粗） | {week_jobs} | {week_block} |\n"
+        f"| 第4周 | 分项与制约（较粗） | {week_jobs} | {week_block} |\n"
+    )
+    if blocked:
+        cons = (
+            "| 工作 | 制约 | 责任人 | 计划清除日 |\n"
+            "| --- | --- | --- | --- |\n"
+            + "".join(f"| {n} | 未清 | 待填 | 待填 |\n" for n in blocked)
+        )
+    else:
+        cons = (
+            "| 工作 | 制约 | 责任人 | 计划清除日 |\n"
+            "| --- | --- | --- | --- |\n"
+            "| [A001] | 待填 | 待填 | 待填 |\n"
+        )
+    if can_promise:
+        promise = (
+            "| 作业 | 认领人 | 周末兑现 |\n"
+            "| --- | --- | --- |\n"
+            + "".join(f"| {n} | 待填 | 待对照 |\n" for n in jobs)
+        )
+        promise_note = "只列入用户已标明条件已具备的工作。工长认领栏待填。"
+    else:
+        promise = (
+            "| 作业 | 认领人 | 周末兑现 |\n"
+            "| --- | --- | --- |\n"
+            "| （空） | — | — |\n"
+        )
+        promise_note = "制约未清，不得写入本周承诺。"
+    lines = [
+        "# 四周滚动计划 / 月度计划（AI 草稿 · 内部讨论）",
+        "",
+        DISCLAIMER,
+        "",
+        "必须挂在总控里程碑下。禁止用周计划改合同工期。不是工期签证，不是复工许可。",
+        "",
+        "## 用户原文",
+        "",
+        (text or "").strip() or "（未提供）",
+        "",
+    ]
+    for i, title in enumerate(_PLAN_LOOKAHEAD_CHAPTERS, 1):
+        lines.append(f"## {i} {title}")
+        lines.append("")
+        if i == 1:
+            lines.append("计划期（哪四周或哪一自然月）待填。对应总控版本号待填。编制人栏空。内部讨论草稿。[A001]")
+        elif i == 2:
+            lines.append("把总控里落在未来约四周的工作拉到工长能认领的粒度。总控没有该窗口的工作，本栏写待补，不要发明作业。")
+            if jobs:
+                lines.append("")
+                lines.append("本轮点名作业：" + "；".join(jobs))
+        elif i == 3:
+            lines.append(four)
+            lines.append("")
+            lines.append("第 1 周量化到班组、工作面、日顺序；第 2 周到分项与责任人；第 3–4 周保留分项与制约，允许较粗。不编持续天数。")
+        elif i == 4:
+            lines.append(cons)
+            lines.append("")
+            lines.append("每条制约指定责任人和计划清除日。未清项不得列入第 5 节周承诺。")
+        elif i == 5:
+            lines.append(promise_note)
+            lines.append("")
+            lines.append(promise)
+            lines.append("")
+            lines.append("周末对照承诺兑现（完成项 / 承诺项）。未完成只记原因分类（图、料、人、机、面、天气、指令），不写处罚结论。")
+        elif i == 6:
+            lines.append(
+                "同一工作面或上下立体空间有两个及以上专业时，单列交叉窗口：谁先谁后、防护谁做、吊装禁区、噪音时段。"
+                "计划只排窗口。安全措施改召唤安全交底或施工方案，不在本稿编栏杆高度或吊装半径。"
+            )
+        elif i == 7:
+            lines.append(
+                "本月可能触发暂停的外部条件，日期待填：大风、暴雨暴雪、能见度不足、高温橙色以上、"
+                "冬期测温未达标、台风预警、政府停工令、危大方案未论证、特种设备证件过期。"
+                "停工后只列复工条件栏。本岗不签发复工许可，不编风速限值。"
+            )
+        elif i == 8:
+            lines.append(
+                "本周若拖的是关键工作或吃完总时差，必须回写总控版本，并提示索赔调概看时限。"
+                "非关键工作的小调整可留在四周窗口内，纪要写明未改总工期。"
+            )
+        elif i == 9:
+            lines.append(
+                "| 形象部位 | 计划形象 | 实际形象 | 偏差天数 | 原因 | 纠偏 |\n"
+                "| --- | --- | --- | --- | --- | --- |\n"
+                "| 待填 | 待填 | 待填 | 待填 | 待填 | 待填 |"
+            )
+            lines.append("")
+            lines.append("无现场反馈则实际栏待填。不要把照片描述写成已验收合格。")
+        else:
+            lines.append(
+                "无班组名单、无总控版本、无制约责任人，对应整节待填。"
+                "禁止断言本周计划必定兑现、交叉作业已安全、停工后即可实施。"
+            )
+        lines.append("")
+    lines.append("SG：Last Planner lookahead 只写方法名，不是合同工期变更。")
+    lines.append("CN：周月计划不是工期签证。")
     lines.append("")
     return "\n".join(lines)
 
@@ -1330,6 +1516,33 @@ def _run_exclusive(
             "submit_blocked": True,
         }
 
+    if expert.id == "plan-lookahead":
+        md = _plan_lookahead_md(text)
+        from packing_assistant.tools.tender_review import forbidden_hits
+
+        hits = forbidden_hits(md)
+        if hits:
+            return {
+                "wrote": False,
+                "hitl_pending": False,
+                "files": [],
+                "tools_run": [],
+                "reply": "禁语扫描命中，未报成功：" + "、".join(hits),
+                "submit_blocked": True,
+            }
+        path = out_dir / "plan-lookahead__week.md"
+        guarded_write_text(path, md)
+        files.append({"name": path.name, "path": str(path), "tool": "plan-lookahead__week"})
+        ran.append("plan-lookahead__week")
+        return {
+            "wrote": True,
+            "hitl_pending": False,
+            "files": files,
+            "tools_run": ran,
+            "reply": "已出四周滚动草稿。制约未清不得写入本周承诺。submit_blocked=true。",
+            "submit_blocked": True,
+        }
+
     if expert.id == "cost":
         md = (
             f"# 工程量拆分表（AI 草稿）\n\n{DISCLAIMER}\n\n"
@@ -1428,9 +1641,14 @@ def run_named_exclusive(name: str, args: Optional[Dict[str, Any]] = None) -> Dic
             "files": [],
             "tools_run": [],
         }
+    bits = [str(args.get("text") or args.get("task") or "").strip()]
+    for k in ("window", "constraints", "works", "jobs", "milestones"):
+        v = args.get(k)
+        if v:
+            bits.append(str(v).strip())
     return _run_exclusive(
         exp,
-        str(args.get("text") or args.get("task") or ""),
+        "\n".join(b for b in bits if b),
         confirm_ok=bool(args.get("confirm_ok") or args.get("p0_confirmed")),
         session_id=str(args.get("session_id") or "tool"),
         packing_summary=args.get("packing_summary") if isinstance(args.get("packing_summary"), dict) else None,
