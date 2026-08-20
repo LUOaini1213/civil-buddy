@@ -20,7 +20,7 @@
 - SIA Building Contract 2016：官网只售 With / Without Quantities、Design & Build，未抽出变更条文。营销博客条款号 unverified，以用户纸本为准。https://sia.org.sg/publications/
 - REDAS Design & Build Conditions of Main Contract 4th Edition：官网只售合同，未抽出 variation 天数。https://redas.com/resources/industry-guides/
 - FIDIC 只写条款名：Clause 13 Variations and Adjustments；13.1 Right to Vary；13.2 Value Engineering；13.3 Variation Procedure。官方页未抽出天数，禁止编「28 天」。https://fidic.org/
-- IRAS：letter of claim 不是 tax invoice；核证后开 tax invoice，并保留 certificate of work done。https://www.iras.gov.sg/taxes/goods-services-tax-(gst)/specific-business-sectors/construction
+- IRAS：letter of claim 不是 tax invoice；核证后开 tax invoice，并保留 certificate of work done。GST 现行标准税率见 IRAS 页述 **9%**，本岗不算税负。https://www.iras.gov.sg/taxes/goods-services-tax-(gst)/specific-business-sectors/construction
 
 ## 通用
 禁令：不编变更综合单价。不把监理「情况属实」写成已定价。不写「可以开工」「报审通过」。SG 不要套国内签证单表号。SIA / REDAS / FIDIC 时限未抽原文则只写条款名。DUAL 分栏。GB 50500 只出现在 ## CN。

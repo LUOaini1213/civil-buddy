@@ -1741,11 +1741,28 @@ fn fill_scheme_docx(ctx: &mut ToolCtx, args: &Value) -> String {
                     "expert": ctx.expert_id,
                     "name": "专项施工方案-AI草稿.docx",
                     "path": out_docx.to_string_lossy(),
+                    "docx_pending": false,
                 }));
+                format!("fill_scheme_docx: {out}")
+            } else {
+                ctx.deliverables.push(json!({
+                    "expert": ctx.expert_id,
+                    "name": "专项方案-AI草稿.md",
+                    "path": draft.to_string_lossy(),
+                    "docx_pending": true,
+                }));
+                format!("fill_scheme_docx: docx_pending; {out}")
             }
-            format!("fill_scheme_docx: {out}")
         }
-        Err(e) => e,
+        Err(e) => {
+            ctx.deliverables.push(json!({
+                "expert": ctx.expert_id,
+                "name": "专项方案-AI草稿.md",
+                "path": draft.to_string_lossy(),
+                "docx_pending": true,
+            }));
+            format!("fill_scheme_docx: docx_pending; {e}")
+        }
     }
 }
 
@@ -2483,16 +2500,16 @@ fn fund_plan(ctx: &mut ToolCtx, args: &Value) -> String {
 fn tax_calendar(ctx: &mut ToolCtx, args: &Value) -> String {
     let (jur, banner) = zone_banner(args);
     let rows = if jur == "DUAL" {
-        "| GST（SG 栏） | 待按 IRAS Construction 页核对 | 不是筹划意见；百分数不填 |\n| CPF（SG 栏） | 待核雇主义务 |  |\n| 增值税（另一辖区栏） | 待按主管机关核对 | 仅当另一辖区为 CN 时用此行 |"
+        "| GST（SG 栏） | 申报期空栏 | 页述现行 9%；税额待填 |\n| CPF（SG 栏） | 待核雇主义务 |  |\n| 增值税（另一辖区栏） | 待按主管机关核对 | 仅当另一辖区为 CN 时用此行 |"
     } else if jur == "SG" {
-        "| GST | 待按 IRAS Construction / Current GST rates 页核对 | 不是筹划意见；百分数不填 |\n| 企业所得税 | 待核 |  |\n| CPF | 待核雇主义务 |  |"
+        "| GST | 申报期空栏（IRAS F5 当期待填） | 页述现行 9%；税额待填；不是筹划意见 |\n| 企业所得税 | 申报期空栏 | 税额待填 |\n| CPF | 待核雇主义务 |  |"
     } else {
         "| 增值税 | 待按主管机关核对 | 不是筹划意见 |\n| 附加税费 | 待核 |  |\n| 企业所得税 | 待核 |  |"
     };
     let md = format!(
         "{}{banner}\n| 税种 | 申报节点 | 备注 |\n| --- | --- | --- |\n{rows}\n\n[A001] 税率与节点以主管机关原文为准，禁止编造条款号。{}{}\n",
         header("税务日历/检查表"),
-        sg_only(&jur, "SG 施工服务征 GST 以 IRAS Construction 页为准，境外土地零税率不代判。"),
+        sg_only(&jur, "SG 施工服务征 GST 以 IRAS Construction 页为准；Current GST rates 页述现行标准税率 9%。境外土地零税率不代判。禁止把 7%/8% 写成现行税率。"),
         if jur == "DUAL" {
             "DUAL 分栏，不得把另一辖区税种写进 SG 栏。"
         } else {

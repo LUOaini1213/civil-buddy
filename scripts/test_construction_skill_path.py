@@ -48,7 +48,12 @@ def main() -> int:
         assert f"## {i} {title}" in text, title
     assert "可以开工" not in text
     assert "可以投标" not in text
-    print("PASS construction_skill_path chapters=11")
+    if ok.get("docx_pending"):
+        assert ok["wrote"] is True
+    else:
+        assert any(str(f.get("name") or "").endswith(".docx") for f in (ok.get("files") or []))
+        assert "construction__fill_scheme_docx" in (ok.get("tools_run") or [])
+    print("PASS construction_skill_path chapters=11 docx_pending=", ok.get("docx_pending"))
     return 0
 
 

@@ -7,6 +7,7 @@ only orchestrates. submit_blocked stays true.
 
 from __future__ import annotations
 
+import json
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 from uuid import uuid4
@@ -131,6 +132,28 @@ def _plan_calls(
         )
         return {"hitl": False, "calls": calls, "out_dir": str(out_dir)}
 
+    if exp.id in {"bid-compliance", "bid-tech"}:
+        from packing_assistant.runtime.session_handoff import load_handoff
+
+        ho = load_handoff(session_id) or {}
+        blob = text
+        if ho:
+            blob = (str(ho.get("extract_table_markdown") or "") + "\n" + text).strip() or text
+        path = out_dir / f"{exp.exclusive[0] if exp.exclusive else exp.id}.md"
+        body = (
+            f"# {exp.name}\n\n内部讨论 AI 草稿。submit_blocked=true。\n\n"
+            f"## 本 session handoff\n\n{json.dumps(ho, ensure_ascii=False)[:4000] if ho else '（本 session 尚无 tender.handoff.json）'}\n\n"
+            f"## 用户原文\n\n{blob}\n"
+        )
+        calls.append(
+            {
+                "name": "write_deliverable",
+                "arguments": {"path": str(path), "text": body},
+                "tool_label": exp.exclusive[0] if exp.exclusive else f"{exp.id}__draft",
+            }
+        )
+        return {"hitl": False, "calls": calls, "out_dir": str(out_dir), "handoff": ho}
+
     tools = [t for t in (exp.exclusive or ()) if "fill_scheme" not in t] or [f"{exp.id}__draft"]
     for tool in tools:
         path = out_dir / f"{tool}.md"
@@ -244,6 +267,15 @@ def run_agent(
         out["submit_blocked"] = True
         out["duration_ms"] = run.duration_ms
         out["history"] = list(run.history)
+        from packing_assistant.runtime.memory import save_summary
+
+        save_summary(
+            sid,
+            jurisdiction="SG",
+            project=project_name,
+            p0_confirmed=p0_confirmed,
+            compressed=False,
+        )
         sched.release(sid)
         bus.emit(run.run_id, "run_ended", {"state": run.state, "wrote": out["wrote"]})
         return out
@@ -269,6 +301,8 @@ def run_agent(
                 packing_summary=packing_summary,
                 project_name=project_name,
             )
+            if planned.get("handoff"):
+                out["handoff"] = planned["handoff"]
             if planned.get("hitl"):
                 sched.transition(run, "waiting_hitl")
                 reply = str(planned.get("reply") or "高风险写盘须确认句。本轮未写盘。")

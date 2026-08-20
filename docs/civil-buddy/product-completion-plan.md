@@ -337,7 +337,7 @@ Grok skill **不**在 V1 里 `use_tool` 调 MCP（保持 skill 可离线出十�
 2. 栏位来自 outline.md / KB，缺数 `[A001]` / `UNSPECIFIED`；  
 3. `test_expert_turn.py` 对该 id 的 run 能断言 **至少一个栏位不是通用骨架句**。
 
-当前已达到：bid-parse / bid-compliance / bid-tech / pack-ship / construction 十一章 md + T001 / T021 / T023 / T003 五针 company。下一优先按 product-plan §15：T007 → T008 → T002 危大判定书。
+当前已达到：bid-parse / bid-compliance / bid-tech / pack-ship / construction 十一章+docx_pending / method-hazard 判定书 / finance-tax 日历 / cost takeoff + T001 / T021 / T023 / T003 / T007–T011 / T014 / T020 / T024 / T050 / T052 / T062。下一优先按 product-plan §15：**T030** survey/dispatch（T030–T047 不得一行勾完）。
 
 ---
 
@@ -374,7 +374,7 @@ GeBIZ 代交、法定签认、十万字写标、标书查重产品化、模型�
 | D1 GETTING-STARTED / PROTOCOL / MCP / SKILLS / KB | ✅ | `python scripts/test_docs_completion.py` |
 | D2 全量产品规划书 | ✅ | `docs/civil-buddy/product-plan.md` |
 | K1 66 岗目录契约 | ✅ | `python scripts/test_kb_schema.py` |
-| K2 门户标题单一来源 | 部分 | 五针已读 company（T003）；岗 GST 扫描 T007 |
+| K2 门户标题单一来源 | ✅ | 五针 company（T003）+ 岗 GST/CORENET 扫描（T007/T008） |
 | K3 kb:// 隔离 + 文件名检索闸 | 部分 | 扩 `test_mcp_surface.py` |
 | M1 Python stdio MCP | ✅ | `python scripts/test_mcp_stdio.py` |
 | M2 工具表（KB+招标+装箱+扫描） | ✅ | pack=bid 含 tender.parse，不含 pack-ship__plan |
@@ -392,4 +392,4 @@ P0 运行时、P1-1 handoff、Agent 循环+沙箱、pack-ship 投影：**已做*
 
 ## 8. 下一刀（读完本文立刻做的）
 
-全量任务号见 [product-plan.md](product-plan.md) §15。切片下一刀是 **T007**（岗写 GST 必须 9%）。T003 已 ✅。
+全量任务号见 [product-plan.md](product-plan.md) §15。切片下一刀是 **T030**（survey/dispatch）。平台刀 T007–T062（不含岗批次）已 ✅。

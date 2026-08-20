@@ -31,10 +31,53 @@ def main() -> int:
     hz = run_expert_turn("临边防护算不算危大？要不要专家论证？", "method-hazard")
     assert hz["intent"] == "chat" and hz["wrote"] is False
 
+    hz_block = run_expert_turn(
+        "写一份危大判定书 临边开挖",
+        "method-hazard",
+        confirm_ok=False,
+        force_intent="run",
+    )
+    assert hz_block["wrote"] is False and hz_block.get("hitl_pending") is True
+    hz_ok = run_expert_turn(
+        "写一份危大判定书 临边开挖",
+        "method-hazard",
+        confirm_ok=True,
+        force_intent="run",
+        session_id="t002-mh-sg",
+    )
+    assert hz_ok["wrote"] is True
+    hz_text = Path(hz_ok["files"][0]["path"]).read_text(encoding="utf-8")
+    assert "WSH" in hz_text and "PTW" in hz_text
+    assert "37 号令" not in hz_text
+    assert "可以开工" not in hz_text
+    assert "信息不足" in hz_text
+    hz_cn = run_expert_turn(
+        "写一份危大判定书 37 号令 基坑",
+        "method-hazard",
+        confirm_ok=True,
+        force_intent="run",
+        session_id="t002-mh-cn",
+    )
+    cn_text = Path(hz_cn["files"][0]["path"]).read_text(encoding="utf-8")
+    assert "37 号令" in cn_text
+    assert "可以开工" not in cn_text
+
     cal = run_expert_turn("出一份税务日历", "finance-tax")
     assert cal["intent"] == "run" and cal["wrote"] is True
     assert "finance-tax__calendar" in cal["tools_run"]
     assert cal["files"] and Path(cal["files"][0]["path"]).is_file()
+    cal_text = Path(cal["files"][0]["path"]).read_text(encoding="utf-8")
+    assert "9%" in cal_text
+    assert "空栏" in cal_text or "待按 IRAS" in cal_text
+    assert "待填" in cal_text
+
+    cost = run_expert_turn("写一份工程量拆分表 临边栏杆", "cost", session_id="t006-cost")
+    assert cost["wrote"] is True
+    assert "cost__takeoff" in cost["tools_run"]
+    cost_text = Path(cost["files"][0]["path"]).read_text(encoding="utf-8")
+    assert "综合单价" in cost_text and "合价" in cost_text
+    assert "UNSPECIFIED" in cost_text
+
 
     high = [e for e in roster if e.risk == "high"][0]
     blocked = run_expert_turn("写一份专项方案讨论提纲", high.id, confirm_ok=False)

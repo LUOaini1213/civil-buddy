@@ -527,11 +527,47 @@ def api_run_cancel(run_id: str):
     return {"ok": True, "run_id": run_id, "state": "cancelled"}
 
 
+def _tender_parse_via_engine(
+    *,
+    text: str,
+    source: str,
+    project_name: str,
+    p0_confirmed: bool,
+    packing_summary=None,
+    ingest=None,
+    intent: str = "run",
+) -> dict:
+    from packing_assistant.runtime.tool_engine import get_engine
+
+    result = get_engine().execute(
+        "tender.parse",
+        {
+            "text": text,
+            "source": source,
+            "project_name": project_name,
+            "p0_confirmed": p0_confirmed,
+            "packing_summary": packing_summary,
+            "ingest": ingest,
+        },
+        intent=intent,
+    )
+    if not result.get("ok"):
+        return {
+            "ok": False,
+            "product_mainline": "C_tender_delivery",
+            "error_code": result.get("error_code"),
+            "submit_blocked": True,
+            "wrote": False,
+            "matrix": None,
+        }
+    data = result.get("data") if isinstance(result.get("data"), dict) else result
+    return {"ok": True, "product_mainline": "C_tender_delivery", **(data or {})}
+
+
 @app.post("/api/tender/parse")
 def api_tender_parse(body: dict = None):
-    """招标文本 / 多节选 → requirements / checklist / response_matrix。"""
+    """招标文本 / 多节选 → requirements / checklist / response_matrix。走 ToolEngine。"""
     from packing_assistant.tools.tender_ingest import ingest_from_json
-    from packing_assistant.tools.tender_parse import run_tender_pipeline
 
     body = body or {}
     ingest = None
@@ -543,16 +579,15 @@ def api_tender_parse(body: dict = None):
     packing_summary = body.get("packing_summary")
     if packing_summary is not None and not isinstance(packing_summary, dict):
         packing_summary = None
-    project_name = str(body.get("project_name") or "幕墙项目投标应答（草稿）")
-    out = run_tender_pipeline(
-        text,
-        packing_summary=packing_summary,
+    return _tender_parse_via_engine(
+        text=text,
         source="api",
-        project_name=project_name,
+        project_name=str(body.get("project_name") or "幕墙项目投标应答（草稿）"),
         p0_confirmed=bool(body.get("p0_confirmed")),
+        packing_summary=packing_summary,
         ingest=ingest,
+        intent=str(body.get("intent") or "run"),
     )
-    return {"ok": bool(out.get("ok")), "product_mainline": "C_tender_delivery", **out}
 
 
 @app.post("/api/tender/parse/file")
@@ -564,18 +599,15 @@ async def api_tender_parse_file(
     """Upload one ITT excerpt: txt/md/csv/docx/xlsx. No scanned-PDF vision."""
     raw = await file.read()
     ingested = _tender_ingest_from_uploads([{"filename": file.filename, "bytes": raw}])
-    from packing_assistant.tools.tender_parse import run_tender_pipeline
-
-    out = run_tender_pipeline(
-        ingested["text"],
+    out = _tender_parse_via_engine(
+        text=ingested["text"],
         source="api-upload",
         project_name=project_name,
         p0_confirmed=str(p0_confirmed).lower() in {"1", "true", "yes"},
         ingest=ingested,
+        intent="run",
     )
     return {
-        "ok": bool(out.get("ok")),
-        "product_mainline": "C_tender_delivery",
         "filename": file.filename,
         "ingested_text": ingested["text"],
         **out,
@@ -597,18 +629,15 @@ async def api_tender_parse_files(
     for f in files:
         uploads.append({"filename": f.filename, "bytes": await f.read()})
     ingested = _tender_ingest_from_uploads(uploads)
-    from packing_assistant.tools.tender_parse import run_tender_pipeline
-
-    out = run_tender_pipeline(
-        ingested["text"],
+    out = _tender_parse_via_engine(
+        text=ingested["text"],
         source="api-uploads",
         project_name=project_name,
         p0_confirmed=str(p0_confirmed).lower() in {"1", "true", "yes"},
         ingest=ingested,
+        intent="run",
     )
     return {
-        "ok": bool(out.get("ok")),
-        "product_mainline": "C_tender_delivery",
         "ingested_text": ingested["text"],
         **out,
     }

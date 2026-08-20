@@ -275,11 +275,15 @@ def _spawn_helper(args: Dict[str, Any]) -> Any:
 def _tender_parse(args: Dict[str, Any]) -> Any:
     from packing_assistant.tools.tender_parse import run_tender_pipeline
 
+    packing = args.get("packing_summary")
+    ingest = args.get("ingest")
     return run_tender_pipeline(
         str(args.get("text") or ""),
         source=str(args.get("source") or "tool-engine"),
         project_name=str(args.get("project_name") or "幕墙项目投标应答（草稿）"),
         p0_confirmed=bool(args.get("p0_confirmed")),
+        packing_summary=packing if isinstance(packing, dict) else None,
+        ingest=ingest if isinstance(ingest, dict) else None,
     )
 
 

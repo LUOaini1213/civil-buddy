@@ -235,9 +235,9 @@ P0 不做：长期记忆、Go 重写、PDF OCR、66 岗全部富写盘。
 |----|--------|------|
 | **P1-1 投标三岗共用 handoff** ✅ | bid-parse 写 `tender.handoff.json`；compliance 读它出三列；tech 只按评分点排目录 | 无评分点不套模板；`submit_blocked` 仍 true |
 | **P1-2 Python eval/live** ✅ | `GET /api/eval/live`：understand 分流 + 官方标题针（GST 9%、Fire Code、CTU、GeBIZ≠评分）不绑 `link.exe` | 冷启动可跑；IRAS 针失败不得改口「官方没写 9%」除非打开页确实没有 |
-| **P1-3 Memory API** | `session.summary` + slot（辖区/项目/P0）；压缩可见；写入过 `scan_forbidden` | 压缩后提示不得假装读过被丢细节 |
-| **P1-4 Trace 回放** | `GET /api/runs/{run_id}` 返回 messages+steps+tools+duration；OTEL span 带同一 `run_id` | 两次 GET 同一 identity，非夹具 |
-| **P1-5 施工/危大** | scheme_draft 后可填 docx；judge-card 默认 SG WSH/PTW；确认句硬校验 | 未确认 0 份稿；正文无「可以开工」断言 |
+| **P1-3 Memory API** ✅ | `session.summary` + slot（辖区/项目/P0）；压缩可见；写入过 `scan_forbidden` | 压缩后提示不得假装读过被丢细节 |
+| **P1-4 Trace 回放** ✅ | `GET /api/runs/{run_id}` 返回 messages+steps+tools+duration；OTEL span 带同一 `run_id` | 两次 GET 同一 identity，非夹具 |
+| **P1-5 施工/危大** ✅ | scheme_draft 后可填 docx（失败 `docx_pending`）；judge-card 默认 SG WSH/PTW；确认句硬校验 | 未确认 0 份稿；正文无「可以开工」断言 |
 
 ### P2 · 体验与宿主（有余力）
 
@@ -426,4 +426,4 @@ P1：投标 handoff · Python eval · 回放 · 危大卡
 
 ## 12. 下一刀（手册执行入口）
 
-**P0 与 P1-1/P1-2/P1-4 已落地。** 开工 ID 以 [product-plan.md](product-plan.md) §11 为准（此刻 **T007**）。行业总判仍是 **部分合格**。过夜 sleep 环已废止。T001 / T021 / T023 / T003 已 ✅。
+**P0 与 P1-1…P1-5 已落地。** 开工 ID 以 [product-plan.md](product-plan.md) §11 为准（此刻 **T030**）。行业总判仍是 **部分合格**。过夜 sleep 环已废止。T001 / T021 / T023 / T003 / T007–T011 / T014 / T020 / T024 / T050 / T052 / T062 已 ✅。T030–T047 不得一行勾完。

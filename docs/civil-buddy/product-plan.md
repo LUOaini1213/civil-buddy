@@ -10,7 +10,7 @@
 | 纪律 | **不定时限 · 不准空转**。墙钟和睡眠评测环不是交付 |
 | 本文地位 | **产品规划唯一总入口**。切片文档只执行、不另开第三套「下一步」 |
 
-**怎么用：** 改产品前先读 §1 边界、§10 不做、§13 联网口径。开工只取 **§15 主链头指针**（此刻 = §11 的 T007）。岗栏位细节可读 post-horizon 该 id；已做/未做以 §7 / §15 为准。  
+**怎么用：** 改产品前先读 §1 边界、§10 不做、§13 联网口径。开工只取 **§15 主链头指针**（此刻 = §11 的 T030）。岗栏位细节可读 post-horizon 该 id；已做/未做以 §7 / §15 为准。  
 2026-08-19：§1–§15 各派一子代理对照现网，结论已并入本文。
 
 切片（从属于本文，不平行）：
@@ -78,7 +78,7 @@ pack-ship 岗 **不是第二套装箱**。它只投影本仓 solver 快照。断
 | 经营岗 / 投标助理 | 粘招标节选进矩阵、出交接、再审禁语 | 主线 C |
 | 施工员 / 方案讨论 | 临边十一章提纲 | 工作台 construction · Grok skill |
 | 物机 / 物流 | 铁架装柜证据 | pack-ship 投影；要真算去 /workbench |
-| 财务 | 问 GST / 税率 | 默认面或 finance-tax **chat**；日历栏仍骨架（T004） |
+| 财务 | 问 GST / 税率 | 默认面或 finance-tax **chat**；日历栏页述 9%、申报期空栏、税额待填（T004 ✅） |
 | 宿主（Grok/Cursor/Claude） | `tools/list` + `kb://` | `demo/mcp_stdio.py --pack …` |
 | 持证人员 | **不**用本产品代替签认 | 人在确认句之后仍要自己签 |
 
@@ -114,21 +114,21 @@ docs/                 装箱架构、主线 C、研究/归档
 
 | 面 | 约 | 已有 | 缺口 |
 |----|----|------|------|
-| 运行时 | 70% | Scheduler、ToolEngine、沙箱、`/api/agent`、Run 回放 | Memory slot；session 压缩可见 |
-| 主线 C | 75% | ingest/矩阵/handoff/再审/delivery | 扫描 PDF 默认拒绝；资格栏仍人填 |
+| 运行时 | 80% | Scheduler、ToolEngine、沙箱、`/api/agent`、Run 回放、Memory slot | 岗栏位仍多数骨架 |
+| 主线 C | 80% | ingest/矩阵/handoff/再审/delivery；parse 走 ToolEngine；扫描 PDF 默认拒绝 | 资格栏仍人填 |
 | 装箱引擎 | 80% | 大 Team A/B、3D、CoG、HITL | 非本规划主战场；禁止第二套 packer |
-| MCP | 65% | Python stdio；bid 可见 KB+招标；pack-ship 投影 | 默认 Host toml 挂 **3 大类**（bid/construction/commercial）；其余 **13** 未进样例；plant 仅 CLI。分页/订阅延期 |
-| Skill | 55% | SOP 与 66 岗关系写清；施工十一章接 turn | 其余 5 个 Grok 专家仍提纲；docx 填充未接 turn |
-| 岗 KB | 目录 100% / 写盘栏位 ~8% | **66/66** 四件套在盘；`test_kb_schema.py` 缺一即红 | outline 指针：construction→`scheme-11.md`，危大→`judge-card.md`。**真写盘仍 5/66** |
-| 工作台 66 岗 | 平台齐、栏位 5/66 | 同一套 chat/run | 其余 61 岗 `_draft_markdown` |
-| 技术文档 | 70% | GETTING-STARTED/PROTOCOL/MCP/SKILLS/KB | 研究笔记不得冒充必读 |
-| 评测 | 65% | 离线闸 + `GET /api/eval/live` 五针（company 页） | 岗 GST/CORENET 扫描是 T007/T008 |
+| MCP | 75% | Python stdio；bid 可见 KB+招标；pack-ship 投影；Host 样例 16 pack 可复制 | 默认仍挂 3 大类；分页/订阅延期 |
+| Skill | 65% | SOP 与 66 岗关系写清；施工十一章接 turn；fill_scheme 失败则 `docx_pending` | 其余 5 个 Grok 专家仍提纲 |
+| 岗 KB | 目录 100% / 写盘栏位 ~12% | **66/66** 四件套在盘；`test_kb_schema.py` 缺一即红 | outline 指针：construction→`scheme-11.md`，危大→`judge-card.md`。**真写盘 8/66**（bid×3 + pack-ship + construction + 危大 + tax + cost） |
+| 工作台 66 岗 | 平台齐、栏位 8/66 | 同一套 chat/run | 其余 ~58 岗 `_draft_markdown` |
+| 技术文档 | 80% | GETTING-STARTED/PROTOCOL/MCP/SKILLS/KB；Grok/Cursor 最小 Host；刀后快闸 | 研究笔记不得冒充必读 |
+| 评测 | 75% | 离线闸 + `GET /api/eval/live` 五针（company 页）+ 岗 GST/CORENET 扫描 | 行业总判仍部分合格 |
 
 行业评测总判保持 **部分合格**（[industry-agent-eval-2026-08-17.md](industry-agent-eval-2026-08-17.md)）。「合格 · 内部起草搭子」要默认面真装箱可抄 + 循环可回放 + eval/live **同时**成立，且由人改口，脚本不得改总判句。
 
 ### 3.3 已落地短刀（不要重做）
 
-P0 ToolEngine/Scheduler/pack-ship 快照 · P1-1 handoff · P1-2 eval/live · P1-4 Run 回放 · Agent 循环+沙箱 · D0 名册 66 · D1 五篇说明书 · M1–M4 Python stdio 与工具表 · S1–S4 skill 拆分与施工十一章 · T001/K1 四件套闸。
+P0 ToolEngine/Scheduler/pack-ship 快照 · P1-1 handoff · P1-2 eval/live · P1-3 Memory · P1-4 Run 回放 · P1-5 危大判定书 · Agent 循环+沙箱 · D0 名册 66 · D1 五篇说明书 · M1–M5 Python stdio 与 16-pack Host 样例 · S1–S5 施工十一章 + fill_scheme/`docx_pending` · T001/K1 四件套闸 · T003 五针 · T007/T008 岗口径扫描 · T011 parse 走引擎 · T014 agent_loop handoff · T050 PDF 拒绝句 · T052 同 session 抄 can_fit · T062 刀后快闸。
 
 ---
 
@@ -156,14 +156,14 @@ P0 ToolEngine/Scheduler/pack-ship 快照 · P1-1 handoff · P1-2 eval/live · P1
 **现网诚实画法（不是目标已落地）：**
 
 - **内核只在** `POST /api/agent`：`understand → Scheduler → ToolEngine.execute → 写盘沙箱 → audit_log + 进程内 Bus`。生产默认是 **steps 规划器**，不是 LLM 自由 tool-call。  
-- **Skill / 文档不进循环。** MCP `tender.parse` 与 `POST /api/tender/parse` **直调** `run_tender_pipeline`（T011 未做）。UI「仅解析矩阵」仍是这条捷径。  
+- **Skill / 文档不进循环。** MCP `tender.parse` 与 `POST /api/tender/parse`（含 `/file` `/files`）走 `ToolEngine.execute`（T011 ✅）。chat 意图拒写。  
 - **66 岗 exclusive 多数未 `register`。** 引擎现注册 pack-ship×4、`tender.parse/review`、`write_deliverable`、`spawn_helper`。其余岗是 `write_deliverable` 骨架 md。  
 - **装箱是兄弟路径：** `run_big_team` 在 /workbench 与 delivery；pack-ship **只投影快照**，禁止在 turn 里再算几何。  
 - **状态机已用边：** `pending→planning→acting⇄waiting_tool→done`，或 `planning→waiting_hitl`（本环不 resume 到 acting）。`reflecting` 合法但未用。  
 - **错误码谁发出：** ToolEngine 发 `ok/permission_denied/invalid_args/timeout/circuit_open`。`max_steps`/`illegal_edge`/`session_busy` 出 Scheduler。字段字面 `UNSPECIFIED` ≠ 崩溃码 `unspecified`。  
 - **回放两套：** `GET /api/runs/{id}` = Scheduler 内存身份；SSE `/replay` = 装箱 `trace.jsonl`。
 
-错误码表见 [PROTOCOL.md](PROTOCOL.md)。T011：把 parse/file/files 与 MCP `tender.parse` 收进 `ToolEngine.execute`。
+错误码表见 [PROTOCOL.md](PROTOCOL.md)。T011 ✅：parse/file/files 与 MCP `tender.parse` 收进 `ToolEngine.execute`。
 
 ---
 
@@ -236,7 +236,7 @@ xyz 只抄 solver。分页/订阅 = 有真 Host list/call 稳定之后（horizon
 | `lane-it` | IT | 3 | 运维/数据/应用草稿；禁止密钥进稿 | **0/3** |
 | `lane-people` | 项目与工人 | 2 | 工人白话交底 / 日报；与技术稿分开 | **0/2** |
 
-**富化总序（全量）：** 保持 chat/run → 投标三岗（已做）→ pack-ship（已做）→ construction（十一章已做，docx 未做）→ method-hazard 判定书 → cost takeoff → finance-tax 日历栏 → 计划/试验/监理 → 其余设计专业按 post-horizon。
+**富化总序（全量）：** 保持 chat/run → 投标三岗（已做）→ pack-ship（已做）→ construction（十一章 + fill_scheme/`docx_pending` 已做）→ method-hazard 判定书（已做）→ cost takeoff（已做）→ finance-tax 日历栏（已做）→ 计划/试验/监理（T030+）→ 其余设计专业按 post-horizon。
 
 每岗完成定义：
 
@@ -259,17 +259,17 @@ xyz 只抄 solver。分页/订阅 = 有真 Host list/call 稳定之后（horizon
 | RT-P1-1 | `tender.handoff.json` + 三列 + 评分点目录 | ✅ | `test_tender_handoff.py` |
 | RT-P1-2 | `GET /api/eval/live` | ✅ | 五针离线，只读 company/web-portals.md（T003） |
 | K1 | 66 岗目录四件套闸 | ✅ | 66/66；`scripts/test_kb_schema.py` |
-| K2 | 门户标题只从 company 页 | **部分** | 五针已收口 company；岗 GST 扫描是 T007 |
+| K2 | 门户标题只从 company 页 | ✅ | 五针 company（T003）+ 岗 GST/CORENET 扫描（T007/T008） |
 | K3 | kb 隔离 + 文件名检索当闸 | 部分 | 跨大类拒绝 T023 ✅；文件名检索仍 `test_kb_search_filename.py` |
 | K4 | 按车道每次 1 岗富 faq/outline | 进行中 | 岗 README 字段表 |
 | M1–M4 | stdio、工具表、Host、prompts | ✅ | `test_mcp_stdio.py` |
-| M5 | 其余大类 Host 样例 | 未做 | 现挂 3 pack；样例应可复制 16 行注释（T020） |
+| M5 | 其余大类 Host 样例 | ✅ | 现挂 3 pack；样例 16 行可复制（T020） |
 | M6 | kb:// 分页订阅 | 延期 | 真 Host 先 list/call |
 | S1–S4 | skill 拆分、十一章、对账 | ✅ | `test_construction_skill_path.py` |
-| S5 | construction 填 docx 模板 | 未做 | 无 docx 则 `docx_pending`；有则扫描 0 |
-| RT-P1-3 | Memory：辖区/项目/P0 slot | 未做 | 压缩可见、不装读过 |
+| S5 | construction 填 docx 模板 | ✅ | 无 docx 则 `docx_pending`；有则扫描 0（T005） |
+| RT-P1-3 | Memory：辖区/项目/P0 slot | ✅ | 压缩可见、不装读过（T010） |
 | RT-P1-4 | Run 回放 | ✅ | `GET /api/runs/{id}` 两次同 identity（messages/tools/artifacts）。装箱 SSE `/replay` 是另一套 |
-| RT-P1-5 | 危大判定书 + 确认句 | 未做 | `judge-card.md` 仍 CN/37 号令；Python turn 骨架（T002） |
+| RT-P1-5 | 危大判定书 + 确认句 | ✅ | 默认 SG WSH/PTW；37 号令只在 CN 栏；未确认 0 稿（T002） |
 | RT-P2 | MinerU 可选、Go 热路径、多用户 ACL | 延期 | 见 handbook P2 |
 
 ### 7.2 岗写盘（指向 horizon，不展开）
@@ -278,11 +278,11 @@ xyz 只抄 solver。分页/订阅 = 有真 Host list/call 稳定之后（horizon
 |------|----|------|
 | 1 | bid-parse / compliance / tech | ✅ handoff 三列 + 评分点目录 |
 | 2 | pack-ship | ✅ 投影 |
-| 3 | construction | ✅ 十一章 md；❌ docx |
-| 4 | method-hazard | 未做判定书栏 |
-| 5 | cost | 未做 takeoff 栏 |
-| 6 | finance-tax | KB 有 9%；日历栏未富 |
-| 7+ | 其余 61 岗 | 骨架；下一刀在 post-horizon（bid/pack-ship/construction 十一章已从「未做」划出） |
+| 3 | construction | ✅ 十一章 md；fill_scheme 失败则 `docx_pending` |
+| 4 | method-hazard | ✅ 判定书栏；默认 SG；HITL |
+| 5 | cost | ✅ takeoff 栏；无单价 UNSPECIFIED |
+| 6 | finance-tax | ✅ 日历栏页述 9%、申报期空栏 |
+| 7+ | 其余 ~58 岗 | 骨架；下一刀在 post-horizon（已富岗勿再当缺口） |
 
 ---
 
@@ -301,10 +301,11 @@ python scripts/test_mcp_surface.py
 python scripts/test_mcp_stdio.py
 python scripts/test_docs_completion.py
 python scripts/test_kb_schema.py
+python scripts/test_official_title_scan.py
 python scripts/test_industry_agent_eval.py # 断言总判仍「部分合格」
 ```
 
-刀相关：`test_construction_skill_path.py`（施工）· `test_expert_turn.py`（改 66 岗协议）· `test_tender_ingest.py`（招标进矩阵）· `test_kb_search_filename.py`（检索）。
+刀相关：`test_construction_skill_path.py`（施工）· `test_expert_turn.py`（改 66 岗协议）· `test_tender_ingest.py`（招标进矩阵）· `test_memory_slot.py`（Memory）· `test_tender_parse_engine.py`（parse 走引擎）· `test_kb_search_filename.py`（检索）。
 
 联网：只在改 GST / Fire Code / CTU / GeBIZ / APPBCA 口径后。失败保留 KB 9%。禁止 `fetch_failed` ⇒「官方没写 9%」。结果追加 §13，**不改** `industry-agent-eval-2026-08-17.md` 总判句。脚本只报 `offline_gate_pass/fail`，不得把行业总判改成合格。
 
@@ -322,7 +323,7 @@ python scripts/test_industry_agent_eval.py # 断言总判仍「部分合格」
 
 ```
 1. 取号：只取 §15 主链上第一个状态≠✅/延期 的 T 号。
-   当前指针见 §11（此刻 = T007）。
+   当前指针见 §11（此刻 = T030）。
    禁止 OR §7、切片勾选表、next-steps、post-horizon 原文、handbook「下一刀」。
    岗栏位细节可读 post-horizon 该 id；已做/未做以 §7/§15 为准。
 2. 改最少文件。绿之前必须指出新路径（代码 / KB / MCP / SKILL / 测试之一）。指不出 = 没做。
@@ -355,11 +356,11 @@ GeBIZ 代交 / 自动中标；法定专项方案 / PE·QP·RTO 签认件；十�
 
 ## 11. 下一刀（立刻）
 
-**T007 · 岗若写 GST 必须含 9%。**
+**T030 · construction 收尾：survey__record → dispatch__daily。**
 
-T003 ✅：`GET /api/eval/live` 五针只读 `demo/kb/company/web-portals.md`（GST 9% / Fire Code 2023 / CTU 2014 非强制 / GeBIZ≠评分 / APPBCA-2026-12）。CTU 权威句已抄进 company。验收：`python scripts/test_agent_loop.py`。
+平台刀 T007–T010 / T011 / T014 / T020 / T024 / T050 / T052 / T062 与岗栏 T002 / T004 / T005 / T006 已 ✅。T030–T047 仍是批次合同，**一行不得一次勾完**。
 
-T007：扫描岗 `web-knowledge.md`，出现 GST 必须含 `9%`；7%/8% 只可出现在「背景/历史升档」句。然后 T008（草稿不得写「全部新项目不论 GFA 强制」当现行）→ T002 危大判定书。
+T030：survey 只抄已给点号；dispatch 敏感作业交危大岗。chat 仍不写盘。验收：该岗 run 产物含 outline 栏位名。
 
 ---
 
@@ -397,7 +398,7 @@ T 号是开工 ID：K1=T001，P1-5=T002，K2=T003，P1-3=T010。handbook 不得�
 | [IRAS When to Charge GST](https://www.iras.gov.sg/taxes/goods-services-tax-(gst)/charging-gst-(output-tax)/when-to-charge-goods-and-services-tax-(gst)) | *prevailing rate of 9%*。少写 `and` 的 URL 是 **404**，不要用 | 写稿标「页述 9%」；此页 KB 未收、非五针 | 官方句对 |
 | [IRAS GST rate change](https://www.iras.gov.sg/taxes/goods-services-tax-(gst)/gst-rate-change/gst-rate-change-for-business/overview-of-gst-rate-change) | 2023-01-01：7%→8%；**2024-01-01：8%→9%** | 不把 7%/8% 写成现行税率 | **须在规划与 KB 标明「现行 9%，历史升档仅作背景」** |
 | [SCDF Fire Code 2023](https://www.scdf.gov.sg/fire-safety-services-listing/fire-code-2023) | 页题 *Fire Code 2023* / *Code of Practice for Fire Precautions in Buildings 2023* | 只列官方标题，条款 UNSPECIFIED | **抄对**。营销文「2026 Fire Code」或「仍是 2018」**不是**本仓口径 |
-| [IMO CTU Code](https://www.imo.org/en/OurWork/Safety/Pages/CTU-Code.aspx) | *IMO/ILO/UNECE CTU Code*，**2014**，**non-mandatory** | **company 页无此句**；在 pack-ship `web-knowledge.md` | 标题抄对。T003 须先抄进 company 再改针 |
+| [IMO CTU Code](https://www.imo.org/en/OurWork/Safety/Pages/CTU-Code.aspx) | *IMO/ILO/UNECE CTU Code*，**2014**，**non-mandatory** | company 页与 pack-ship 同句（T003） | 标题抄对 |
 | [GeBIZ](https://www.gebiz.gov.sg/) | 新加坡政府一站式电子采购门户；GTP 注册后投标 | 「门户不是评分办法」 | **抄对**。第三方指南里的 ITT 金额门槛 **不**当本仓默认数字 |
 | [MOF procurement processes](https://www.mof.gov.sg/policies/government-procurement/procurement-processes/) | Sourcing → Evaluation（按标书已公布标准）→ Approval of Award（授标公示上 GeBIZ） | 分值/PQM 只抄 ITT | **抄对** |
 | [URA DC26-08](https://www.ura.gov.sg/guidelines/circulars/dc26-08/) · 通告 PDF | **2026-07-23** APPBCA-2026-12：2026-10-01 起 **新项目 GFA≥5,000 m²** 强制 Gateway | company 有收窄句、挂 PDF | **抄对**。反例是旧 **DC25-07**（不是 DC25-01）「不论 GFA」 |
@@ -414,12 +415,12 @@ T 号是开工 ID：K1=T001，P1-5=T002，K2=T003，P1-3=T010。handbook 不得�
 |--------|------|------|
 | 设计车道 18 岗 | `seed.json` **design=20**（66=3+20+3+3+4+4+5+3+4+3+3+1+3+2+3+2） | §6 已改正 |
 | 「其余 57 岗」 | 已富约 5 岗（bid×3 + pack-ship + construction 十一章），其余 **61** | §7.2 已改正 |
-| K1「目录齐但无闸」 | 当时 64/66；只缺 construction 与 method-hazard 的 `outline.md` | 已做 T001 ✅；§11 现为 T007 |
+| K1「目录齐但无闸」 | 当时 64/66；只缺 construction 与 method-hazard 的 `outline.md` | 已做 T001 ✅；§11 现为 T030 |
 | post-horizon bid 三岗「下一刀=handoff/gaps/评分点」 | P1-1 **已做** | 以本文 §7 为准；horizon 文当历史下一刀 |
-| post-horizon construction「下一刀=十一章接 turn」 | S2 **已做** md；下一刀才是 fill_scheme_docx | T005 |
+| post-horizon construction「下一刀=十一章接 turn」 | S2 **已做** md；fill_scheme / `docx_pending` 已接（T005 ✅） | 岗栏下一刀 = T030 survey/dispatch |
 | 行业评测「缺 Python eval/live、MCP 几乎只有 pack-ship」 | 2026-08-19 已有 `GET /api/eval/live` 与 `mcp_stdio --pack bid` | 不改 08-17 历史总判日期；现网能力以本文 §3 为准 |
 | 营销博客「CORENET X 2026-10-01 全部新项目」 | 已被 APPBCA-2026-12 收窄为 GFA≥5,000 m² | §13 列为反例 |
-| §15「T030–T047 = 61 岗」 | 展开约 **59**（已扣 bid×3、pack-ship、construction、method-hazard、finance-tax） | 下表已改 |
+| §15「T030–T047 = 61 岗」 | 展开约 **58**（已扣 bid×3、pack-ship、construction、method-hazard、finance-tax、cost） | 下表已改 |
 | handbook §12「下一刀 P1-4」 | RT-P1-4 **已 ✅** | 以本文 §11 为准 |
 | completion-plan P 段仍写「下一优先 construction 十一章」 | S2 **已 ✅** | 以本文 §7 为准 |
 | T012 OTEL 同 run_id | `agent_loop` span + `test_otel_dashboard.py` 已有 | §15 标 ✅，不占主链 |
@@ -435,33 +436,33 @@ T 号是开工 ID：K1=T001，P1-5=T002，K2=T003，P1-3=T010。handbook 不得�
 | ID | 任务 | 产物 | 验收 | 状态 |
 |----|------|------|------|------|
 | T001 | K1：补 2 个 outline + `test_kb_schema.py` | 两路径 outline.md + 脚本 | 66 岗四件套全在 | ✅ |
-| T002 | method-hazard 判定书：默认 SG WSH/PTW；37 号令只在 CN 栏；信息不足不编 | `judge-card` 栏位写盘 | 未确认 0 稿；无「可以开工」 | 未做 |
+| T002 | method-hazard 判定书：默认 SG WSH/PTW；37 号令只在 CN 栏；信息不足不编 | `judge-card` 栏位写盘 | 未确认 0 稿；无「可以开工」 | ✅ |
 | T003 | K2：eval/live 针改读 `company/web-portals.md` | `eval_live.py` | GST/Fire/CTU/GeBIZ/APPBCA 五针 | ✅ |
-| T004 | finance-tax 日历栏：申报期空栏 + 页述 9% + 税额待填 | `finance-tax__calendar` 非骨架句 | 测试断言含 9% 且无自编税率 | 未做 |
-| T005 | construction `fill_scheme_docx`；失败则 `docx_pending` | skill 模板管道 | 扫描 0 才报成功 | 未做 |
-| T006 | cost takeoff 栏：工程量来自用户表；无清单不编单价 | `cost` 独有写盘 | 无单价则 TBD/UNSPECIFIED | 未做 |
-| T007 | 岗若写 GST 必须含 9%；禁止 7%/8% 当现行 | 扫描脚本或评测针 | 历史升档只可出现在「背景」句 | 未做 |
-| T008 | CORENET 反例测试：草稿不得写「全部新项目不论 GFA 强制」 | `scan` 或评测 | 只允许 APPBCA-2026-12 句 | 未做 |
+| T004 | finance-tax 日历栏：申报期空栏 + 页述 9% + 税额待填 | `finance-tax__calendar` 非骨架句 | 测试断言含 9% 且无自编税率 | ✅ |
+| T005 | construction `fill_scheme_docx`；失败则 `docx_pending` | skill 模板管道 | 扫描 0 才报成功 | ✅ |
+| T006 | cost takeoff 栏：工程量来自用户表；无清单不编单价 | `cost` 独有写盘 | 无单价则 TBD/UNSPECIFIED | ✅ |
+| T007 | 岗若写 GST 必须含 9%；禁止 7%/8% 当现行 | 扫描脚本或评测针 | 历史升档只可出现在「背景」句 | ✅ |
+| T008 | CORENET 反例测试：草稿不得写「全部新项目不论 GFA 强制」 | `scan` 或评测 | 只允许 APPBCA-2026-12 句 | ✅ |
 
 ### B. 运行时（平台可复用）
 
 | ID | 任务 | 产物 | 验收 | 状态 |
 |----|------|------|------|------|
-| T010 | Memory slot：辖区 / 项目名 / P0；压缩打标 | `session.summary` | 压缩后不得假装读过被丢细节 | 未做 |
-| T011 | `/api/tender/parse` 走同一 ToolEngine 鉴权 | gateway 调 engine | chat 意图拒写 | 未做 |
+| T010 | Memory slot：辖区 / 项目名 / P0；压缩打标 | `session.summary` | 压缩后不得假装读过被丢细节 | ✅ |
+| T011 | `/api/tender/parse` 走同一 ToolEngine 鉴权 | gateway 调 engine | chat 意图拒写 | ✅ |
 | T012 | OTEL span 带同一 `run_id` 与 agent_loop | `otel_hooks` | dashboard 能按 run_id 过滤 | ✅ |
 | T013 | 高风险 HITL 确认句硬校验（方法-危大+施工已有，扩到 scheme deliver） | allow() | 未打原句 0 份稿 | 部分 |
-| T014 | agent_loop 对 bid-compliance/tech 走与 expert_turn 同一 handoff | `agent_loop.py` | 同 session 读到 tender.handoff.json | 未做 |
+| T014 | agent_loop 对 bid-compliance/tech 走与 expert_turn 同一 handoff | `agent_loop.py` | 同 session 读到 tender.handoff.json | ✅ |
 
 ### C. MCP / Host
 
 | ID | 任务 | 产物 | 验收 | 状态 |
 |----|------|------|------|------|
-| T020 | Host 样例补齐 16 pack（可复制，不要求用户全挂） | `mcp-host.example.toml` | 每 pack 一行注释 | 未做 |
+| T020 | Host 样例补齐 16 pack（可复制，不要求用户全挂） | `mcp-host.example.toml` | 每 pack 一行注释 | ✅ |
 | T021 | `--pack construction` stdio：有 scheme_draft/scan；无 tender.parse、bid-parse__extract、pack-ship__plan、method-hazard__judge_hazard；prompt 不含危大 judge | `test_mcp_stdio.py` | 现仅测 bid pack | ✅ |
 | T022 | `write_deliverable` MCP `intent=chat` 拒绝 | 并进 T021 | engine 已拒；Host 面补测 | 并入 T021 |
 | T023 | kb:// 读 method-hazard 从 bid-parse 拒绝（已有 bid-tech 例，补跨大类） | `test_mcp_surface.py` | 拒绝句 | ✅ |
-| T024 | 真 Host 手册：Grok/Cursor 各贴一份最小配置 | MCP.md | 命令本机跑过 | 未做 |
+| T024 | 真 Host 手册：Grok/Cursor 各贴一份最小配置 | MCP.md | 命令本机跑过 | ✅ |
 | T025 | kb 分页/订阅 | 延期 | 有 Host 稳定 list/call 后再开 | 延期 |
 
 ### D. 车道批次（每岗一任务，栏位非骨架）
@@ -489,15 +490,15 @@ T 号是开工 ID：K1=T001，P1-5=T002，K2=T003，P1-3=T010。handbook 不得�
 | T046 | design 批次 3 | landscape → interior → intel-weak → civil-defense → hydraulic |
 | T047 | design 批次 4 | port → municipal → bridge → tunnel → traffic → design-coord |
 
-T030–T047 是**批次合同**（约 59 岗，已扣 bid×3 / pack-ship / construction / 危大 / tax）。**一行不得一次勾完**；每岗一 commit。细节读 post-horizon 该 id。
+T030–T047 是**批次合同**（约 **58** 岗，已扣 bid×3 / pack-ship / construction / 危大 / tax / cost）。**一行不得一次勾完**；每岗一 commit。细节读 post-horizon 该 id。
 
 ### E. 主线 C 与装箱（插件，不另起炉灶）
 
 | ID | 任务 | 验收 | 状态 |
 |----|------|------|------|
-| T050 | 扫描 PDF：产品默认拒绝；文档写清 MinerU 可选失败即拒 | GETTING-STARTED 一句 + 上传 PDF 返回拒绝 | 部分（行为已有，文档须钉） |
+| T050 | 扫描 PDF：产品默认拒绝；文档写清 MinerU 可选失败即拒 | GETTING-STARTED 一句 + 上传 PDF 返回拒绝 | ✅ |
 | T051 | 资格/★ P0 必须人确认才许「覆盖」态 | 矩阵 human_confirm | 已有窄实现 |
-| T052 | pack-ship 与 /workbench 同 session 必能抄 can_fit | 先 delivery 再 expert pack-ship | 已有快照；补一条 HTTP 联测 |
+| T052 | pack-ship 与 /workbench 同 session 必能抄 can_fit | 先 delivery 再 expert pack-ship | ✅ `test_tender_delivery_api.py` |
 | T053 | 禁止第二套 3D packer 出现在 agent_loop | 代码检索 `run_big_team` 不在 pack-ship turn | 纪律 |
 
 ### F. 文档与评测
@@ -506,11 +507,11 @@ T030–T047 是**批次合同**（约 59 岗，已扣 bid×3 / pack-ship / const
 |----|------|------|------|
 | T060 | 本文 D2 | 本文件 | ✅ |
 | T061 | post-horizon 文首加「已做刀以 product-plan §7 为准」 | 避免双下一刀 | ✅ 2026-08-19 |
-| T062 | 刀后快闸清单写入 GETTING-STARTED | 命令本机跑过 | 未做 |
+| T062 | 刀后快闸清单写入 GETTING-STARTED | 命令本机跑过 | ✅ |
 | T063 | 改官方口径时才联网；结果追加 §13 表，不改 08-17 历史总判句 | 部分合格保持 | 纪律 |
 
 **主链（不定时限；头指针 = 第一个非 ✅/延期）：**
 
-T001 → T021 → T023 → T003 → **T007** → T008 → T002 → T004 → T006 → T005 → T014 → T011 → T010 → T020+T024 → T030（仅 survey/dispatch）→ T031…T047 → T050 → T052 → T062。
+T001 → T021 → T023 → T003 → T007 → T008 → T002 → T004 → T006 → T005 → T014 → T011 → T010 → T020+T024 → **T030**（仅 survey/dispatch）→ T031…T047（T050 / T052 / T062 文档与联测已 ✅，不占岗栏）。
 
 T012/T060/T061/T051/T053 不占刀。中途红则停在该号，不准跳号。
