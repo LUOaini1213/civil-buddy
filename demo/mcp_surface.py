@@ -326,33 +326,18 @@ def call_tool(
         ok = not str(text).startswith("拒绝")
         return {"ok": ok, "name": tool, "text": text}
 
-    if tool == "tender.parse":
-        from packing_assistant.tools.tender_parse import run_tender_pipeline
-
-        pipe = run_tender_pipeline(str(args.get("text") or ""), source="mcp")
-        return {"ok": bool(pipe.get("ok", True)), "name": tool, "submit_blocked": True, **pipe}
-    if tool == "tender.review":
+    if tool in {"tender.parse", "tender.review", "write_deliverable"}:
         from packing_assistant.runtime.tool_engine import get_engine
 
-        return get_engine().execute("tender.review", args, expert_id=eid, intent=intent)
-    if tool == "write_deliverable":
-        from packing_assistant.runtime.tool_engine import get_engine
-
-        return get_engine().execute("write_deliverable", args, expert_id=eid, intent=intent)
+        return get_engine().execute(tool, args, expert_id=eid or "", intent=intent)
     if tool.endswith("__scan_forbidden") or tool == "scan_forbidden":
         from packing_assistant.tools.tender_review import forbidden_hits
 
         hits = forbidden_hits(str(args.get("text") or args.get("draft") or ""))
         return {"ok": True, "name": tool, "hits": hits, "n": len(hits)}
     if rec and tool in rec.exclusive:
-        from packing_assistant.expert_turn import run_expert_turn
+        from packing_assistant.runtime.tool_engine import get_engine
 
-        out = run_expert_turn(
-            str(args.get("text") or args.get("task") or ""),
-            rec.id,
-            confirm_ok=bool(args.get("confirm_ok")),
-            session_id=str(args.get("session_id") or "mcp"),
-            force_intent="run" if intent != "chat" else "chat",
-        )
-        return {"ok": bool(out.get("ok", True)), "name": tool, **out}
+        args.setdefault("session_id", "mcp")
+        return get_engine().execute(tool, args, expert_id=rec.id, intent=intent)
     return {"ok": False, "error": f"未知工具 {name}", "content": []}

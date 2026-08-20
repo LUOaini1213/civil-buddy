@@ -49,6 +49,7 @@ python scripts/test_kb_schema.py
 python scripts/test_official_title_scan.py
 python scripts/test_memory_slot.py
 python scripts/test_tender_parse_engine.py
+python scripts/test_exclusive_engine.py
 python scripts/test_construction_skill_path.py
 python scripts/test_docs_completion.py
 ```

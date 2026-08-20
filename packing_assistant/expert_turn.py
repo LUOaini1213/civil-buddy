@@ -1411,6 +1411,32 @@ def _run_exclusive(
     }
 
 
+def run_named_exclusive(name: str, args: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
+    """ToolEngine entry: exclusive name → that expert's writer. HITL stays here."""
+    from packing_assistant.expert_roster import exclusive_owner, get_expert
+
+    args = args or {}
+    owner = exclusive_owner(name)
+    exp = get_expert(owner or "")
+    if not exp:
+        return {
+            "ok": False,
+            "wrote": False,
+            "error_code": "invalid_args",
+            "reply": f"未知独有工具 {name}",
+            "submit_blocked": True,
+            "files": [],
+            "tools_run": [],
+        }
+    return _run_exclusive(
+        exp,
+        str(args.get("text") or args.get("task") or ""),
+        confirm_ok=bool(args.get("confirm_ok") or args.get("p0_confirmed")),
+        session_id=str(args.get("session_id") or "tool"),
+        packing_summary=args.get("packing_summary") if isinstance(args.get("packing_summary"), dict) else None,
+    )
+
+
 def run_expert_turn(
     text: str,
     expert_id: str,

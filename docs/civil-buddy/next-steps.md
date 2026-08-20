@@ -73,6 +73,9 @@
 23. **T032 plan-master 一岗** ✅ 2026-08-20  
     plan-master__network 固定 WBS｜紧前｜里程碑待填｜关键线路=待计算。不编持续天数。T032 批次未完：下一岗 **plan-lookahead**。不得把周月/资源一并勾完。
 
+24. **岗独有收进 ToolEngine** ✅ 2026-08-20  
+    66 岗 exclusive 按名 `register`。agent_loop / MCP `tools/call` 调 `survey__record` 等，不再拿 `write_deliverable` 冒充。chat 与兄弟岗 `permission_denied`。验收：`python scripts/test_exclusive_engine.py`。主链头指针仍是 **T032 · plan-lookahead**。
+
 平台内核见 [product-improvement-handbook.md](product-improvement-handbook.md)。岗独有写盘下一刀仍按 [post-horizon-2026-08-17.md](post-horizon-2026-08-17.md)。
 
 ## 有宿主再做

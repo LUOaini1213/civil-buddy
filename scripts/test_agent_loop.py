@@ -95,7 +95,8 @@ def main() -> int:
     assert "demo" in str(art).replace("\\", "/") and "out" in str(art).replace("\\", "/")
     body = art.read_text(encoding="utf-8")
     assert "可以开工" not in body or "不判定可以开工" in body
-    assert "write_deliverable" in tax["tools_used"]
+    assert "finance-tax__calendar" in (tax.get("tools_used") or tax.get("tools_run") or [])
+    assert "9%" in body
 
     # Pack-ship disconnected: UNSPECIFIED, still through engine
     pack = run_agent(
@@ -191,7 +192,7 @@ def main() -> int:
     assert any(m.get("role") == "user" for m in a["messages"])
     assert any(m.get("role") == "tool" for m in a["messages"])
     assert any(m.get("role") == "assistant" for m in a["messages"])
-    assert "write_deliverable" in (a.get("tools_used") or [])
+    assert "finance-tax__calendar" in (a.get("tools_used") or [])
     assert a.get("artifacts")
     assert a.get("history")
     assert a.get("tools") == a.get("tools_used")
