@@ -142,6 +142,9 @@
 46. **T065 作业根直接读本机文件** ✅ 2026-08-20  
     授权 `CIVIL_JOB_ROOT` 后，run 自动抄夹内 xlsx/docx/csv/txt，不必再点上传。`GET /api/job` 列出已看到的文件。禁止 `D:\layout`、禁止全盘搜索。主链头指针仍 **T039 pm-daily**。行业总判仍 **部分合格**。
 
+47. **T066 授权夹内改已有 Excel 草稿表** ✅ 2026-08-20  
+    点名作业根里已有的 `.xlsx` 时，只写入 `CB草稿-*` 工作表，业主原表不动。不是 COM 接管正在打开的 Excel。主链头指针仍 **T039 pm-daily**。行业总判仍 **部分合格**。
+
 平台内核见 [product-improvement-handbook.md](product-improvement-handbook.md)。岗独有写盘下一刀仍按 [post-horizon-2026-08-17.md](post-horizon-2026-08-17.md)。
 
 ## 有宿主再做
