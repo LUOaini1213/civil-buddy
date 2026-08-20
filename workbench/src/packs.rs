@@ -411,7 +411,7 @@ fn pack_tools(pack: &str) -> Vec<ToolDef> {
             },
             ToolDef {
                 name: "lab-mix__report",
-                description: "配合比独有：报告提纲。无试验数据不给施工配比。",
+                description: "配合比独有：四层目录。无试验数据则施工配比整节待填。",
                 parameters: obj(
                     json!({
                         "material": {"type": "string"},
@@ -2071,22 +2071,50 @@ fn claim(ctx: &mut ToolCtx, args: &Value) -> String {
     }
 }
 
+fn mix_has_trial(args: &Value) -> bool {
+    if let Some(b) = args.get("has_trial_data").and_then(|v| v.as_bool()) {
+        return b;
+    }
+    let blob = format!("{} {} {}", s(args, "material"), s(args, "notes"), s(args, "text"));
+    if blob.contains("无试验数据") {
+        return false;
+    }
+    ["已有试验数据", "试配记录", "试拌记录", "含水率已测", "试验室配合比已批"]
+        .iter()
+        .any(|k| blob.contains(k))
+}
+
 fn mix_outline(ctx: &mut ToolCtx, args: &Value) -> String {
-    let has = args.get("has_trial_data").and_then(|v| v.as_bool()).unwrap_or(false);
-    let line = if has {
-        "用户声明已有试验数据：可列报告提纲，施工配比数字仍须试验室签认。"
-    } else {
-        "无试验数据：不给施工配合比，只出报告提纲。"
-    };
+    let has = mix_has_trial(args);
     let (jur, banner) = zone_banner(args);
+    let material = nonempty(&s(args, "material"), "[A001] 待填");
+    let notes = nonempty(&s(args, "notes"), "无");
+    let kind = if material.contains('M') && !material.to_ascii_uppercase().contains('C') {
+        "砂浆"
+    } else if material.contains("砂浆") {
+        "砂浆"
+    } else {
+        "混凝土"
+    };
+    let layer4 = if has {
+        "用户声明已有试验数据：可列换算栏，施工配比数字仍须试验室签认。本稿不编 kg/m³。"
+    } else {
+        "无试验数据：不给施工配合比，整节待填。含水率未测不得换算湿料。"
+    };
+    let four = format!(
+        "| 层次 | 本稿 |\n| --- | --- |\n| 初步（理论）配合比 | 缺原材料密度、含水、需水量则停。用量待填。 |\n| 基准配合比 | 无试拌记录不锁基准。 |\n| 试验室配合比 | 强度与耐久性复核通过后才能作为换算起点。 |\n| 施工配合比 | {layer4} |"
+    );
+    let basis = if jur == "SG" {
+        "公开名称只写族名。条款 unspecified_clause。用户未提供文本则不得写入已核实块，不得摘条款。".to_string()
+    } else {
+        "公开名称，年份以项目现行有效版为准，状态 unverified / unspecified_clause。《普通混凝土配合比设计规程》JGJ 55；《砌筑砂浆配合比设计规程》JGJ/T 98；《混凝土质量控制标准》GB 50164；《混凝土结构工程施工质量验收规范》GB 50204；《预拌混凝土》GB/T 14902。用户未提供文本则不得写入已核实块，不得摘条款。".to_string()
+    };
     let md = format!(
-        "{}{banner}\n## 材料\n{}\n\n## 口径\n{line}\n\n## 备注\n{}\n\n[A001] 无试验单不编强度。{}\n",
+        "{}{banner}\n本提纲不是法定配合比报告，不是搅拌站开盘依据，不构成浇筑许可。种类：{kind}。\n\n## 1 封面与文件控制\n工程名称待填。部位待填。强度等级/砂浆等级：{material}。坍落度或稠度要求待填。全部只引用户或项目包。空签认栏。[A001]\n\n## 2 草稿声明\n不是法定配合比报告，不是搅拌站开盘依据。\n\n## 3 选用口径\n{four}\n\n只写层次，不写用量。砂浆与混凝土分开写，预拌与现场拌合分开写。\n\n## 4 原材料一致性\n水泥、掺合料、砂、石、外加剂、拌合水须与试配时同一品种、规格、产地口径。进场复试未出或异常，不得换算施工配比，也不得自行改砂率、水胶比、外加剂掺量。\n\n## 5 调整权限\n试验员可记录含水率和开盘观察，不得口头改配比。超出批准范围的调整要试验数据 + 试验室主任/技术负责人 + 监理/建设知情。本提纲不代批。\n\n## 6 编制依据\n{basis}\n\n## 7 与见证取样、台账的接口\n| 编号 | 本稿 |\n| --- | --- |\n| 原材料复试报告编号 | 待填 |\n| 试配记录编号 | 待填 |\n| 开盘鉴定记录编号 | 待填 |\n\n有则抄用户，无则待填。编号规则见 lab-record，本岗不编新号。\n\n## 8 资料目录\n试配申请、原材料报告、试拌记录、强度/耐久性试件、批准的试验室配合比、含水率测定、施工配合比通知单。开盘条件栏待核，本稿不下开盘结论。\n\n## 9 禁令\n不编水胶比、砂率、每立方米用量、水泥强度、外加剂掺量。不把搅拌站经验配比或网上例题当成工程配比。不因商务催省水泥而改单。\n\n备注：{notes}\n\n{}\n",
         header("配合比报告提纲"),
-        nonempty(&s(args, "material"), "待填"),
-        nonempty(&s(args, "notes"), "无"),
         format!(
             "{}{}",
-            sg_only(&jur, "SG：SAC laboratory accreditation / CT 06 Ready-Mixed Concrete Producers 只写标题。"),
+            sg_only(&jur, "SG：SAC laboratory accreditation / CT 06 Ready-Mixed Concrete Producers 只写标题。SS EN 206 / SS 544 只写族名。不得把已过时的 SS 289 / CP 65 当现行配比依据。"),
             cn_only(&jur, "CN：普通混凝土配合比设计规程只写全名，不给施工配比。"),
         ),
     );

@@ -85,6 +85,9 @@
 27. **T032 plan-resource 一岗（T032 批次完）** ✅ 2026-08-20  
     plan-resource__peak 拆劳动力｜机具｜材料三表；无定额/需用计划数量待填。不写已满足施工需要、不把无证件设备列入进场。主链头指针改为 **T033**（lab-mix 先）。T033–T047 不得一行勾完。行业总判仍 **部分合格**。
 
+28. **T033 lab-mix 一岗** ✅ 2026-08-20  
+    lab-mix__report 四层目录（初步/基准/试验室/施工）；无试验数据则施工配比整节待填。不编 kg/m³。高风险须确认句。T033 批次未完：下一岗 **lab-sample**。不得把取样/台账一并勾完。行业总判仍 **部分合格**。
+
 平台内核见 [product-improvement-handbook.md](product-improvement-handbook.md)。岗独有写盘下一刀仍按 [post-horizon-2026-08-17.md](post-horizon-2026-08-17.md)。
 
 ## 有宿主再做

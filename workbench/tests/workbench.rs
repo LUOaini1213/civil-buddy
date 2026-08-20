@@ -1713,6 +1713,52 @@ fn test_plan_resource_peak_exclusive() {
 }
 
 #[test]
+fn test_lab_mix_report_exclusive() {
+    let p = paths();
+    assert!(packs::visible_tool_names("lab-mix").iter().any(|n| n == "lab-mix__report"));
+    assert!(!packs::visible_tool_names("lab-sample").iter().any(|n| n == "lab-mix__report"));
+    let mut blocked = ToolCtx::new(p.clone(), "lab-mix", "lab", "high", false, "iter-mix-hitl");
+    assert!(packs::execute(
+        &mut blocked,
+        "lab-mix__report",
+        &json!({"material":"C40","has_trial_data":false}),
+    )
+    .contains("拒绝"));
+    let mut ctx = ToolCtx::new(p.clone(), "lab-mix", "lab", "high", true, "iter-mix-t033");
+    let out = packs::execute(
+        &mut ctx,
+        "lab-mix__report",
+        &json!({"material":"C40","has_trial_data":false,"jurisdiction":"SG"}),
+    );
+    assert!(out.contains("已写入"), "{out}");
+    let text = std::fs::read_to_string(ctx.out_dir.join("配比报告提纲.md")).unwrap();
+    assert!(text.contains("初步（理论）配合比"), "{text}");
+    assert!(text.contains("基准配合比"), "{text}");
+    assert!(text.contains("试验室配合比"), "{text}");
+    assert!(text.contains("施工配合比"), "{text}");
+    assert!(text.contains("C40"), "{text}");
+    assert!(text.contains("不给施工配合比"), "{text}");
+    assert!(text.contains("SAC"), "{text}");
+    assert!(!text.contains("JGJ"), "{text}");
+    assert!(!text.contains("GB 50"), "{text}");
+    assert!(!text.contains("可以开工"), "{text}");
+    assert!(!text.contains("已具备开盘条件"), "{text}");
+    let mut ctx2 = ToolCtx::new(p.clone(), "lab-mix", "lab", "high", true, "iter-mix-trial");
+    let out2 = packs::execute(
+        &mut ctx2,
+        "lab-mix__report",
+        &json!({"material":"C40","has_trial_data":true,"jurisdiction":"SG"}),
+    );
+    assert!(out2.contains("已写入"), "{out2}");
+    let t2 = std::fs::read_to_string(ctx2.out_dir.join("配比报告提纲.md")).unwrap();
+    let row = t2.split("| 施工配合比 |").nth(1).unwrap().split('\n').next().unwrap();
+    assert!(row.contains("试验室签认"), "{row}");
+    assert!(!row.contains("不给施工配合比"), "{row}");
+    let mut sib = ToolCtx::new(p, "lab-sample", "lab", "high", true, "iter-mix-sib");
+    assert!(packs::execute(&mut sib, "lab-mix__report", &json!({"material":"x"})).contains("拒绝"));
+}
+
+#[test]
 fn test_bid_compliance_exclusive_and_scan_sg_mix() {
     let p = paths();
     assert!(packs::visible_tool_names("bid-compliance").iter().any(|n| n == "bid-compliance__gaps"));

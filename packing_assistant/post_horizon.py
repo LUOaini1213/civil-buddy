@@ -113,7 +113,7 @@ _NEXT = {
     "warehouse": "warehouse__log 按行 parse 收发原文；有数只抄、无数 TBD；无盘点不编盈亏。",
     "pack-ship": "sidecar/packing_summary 快照抄进 pack-ship__plan/export；先 health；无则四字段字面 UNSPECIFIED；禁止重算 xyz。",
     "material-site": "material-site__recon 按行 parse 应耗/领料/盘点；算不出节超则 TBD。",
-    "lab-mix": "lab-mix__report 四层目录；无试验数据则施工配比整节待填。",
+    "lab-mix": "已做 T033 lab-mix。lab-mix__report 四层目录；无试验数据则施工配比整节待填。",
     "lab-sample": "lab-sample__list 出类别|部位|见证人空|升级路径；组数 [A001]。",
     "lab-record": "lab-record__ledger 加报告编号待核|仪器检定|结论待填。",
     "finance-book": "finance-book__check 出报销勾选+科目对照+对账缺口，金额 [A001]。",
