@@ -277,6 +277,21 @@ _RES_QTY = re.compile(
     re.I,
 )
 
+_LAB_MIX_CHAPTERS = (
+    "封面与文件控制",
+    "草稿声明",
+    "选用口径",
+    "原材料一致性",
+    "调整权限",
+    "编制依据",
+    "与见证取样、台账的接口",
+    "资料目录",
+    "禁令",
+)
+
+_MIX_TRIAL_YES = ("已有试验数据", "试配记录", "试拌记录", "含水率已测", "试验室配合比已批")
+_MIX_GRADE_RE = re.compile(r"([CM]\d{1,3})", re.I)
+
 _MILESTONE_KEYS = ("桩基", "±0", "封顶", "砌筑", "机电", "装饰", "竣工")
 
 _QTY_RE = re.compile(
@@ -1094,6 +1109,123 @@ def _plan_resource_md(text: str) -> str:
     return "\n".join(lines)
 
 
+def _mix_has_trial(blob: str) -> bool:
+    t = blob or ""
+    if "无试验数据" in t:
+        return False
+    return any(k in t for k in _MIX_TRIAL_YES)
+
+
+def _mix_zone(blob: str) -> str:
+    t = blob or ""
+    if "DUAL" in t:
+        return "DUAL"
+    if any(k in t for k in ("JGJ", "37 号令", "GB 50", "住建部", "配合比设计规程")):
+        return "CN"
+    return "SG"
+
+
+def _lab_mix_md(text: str) -> str:
+    blob = text or ""
+    has = _mix_has_trial(blob)
+    zone = _mix_zone(blob)
+    gm = _MIX_GRADE_RE.search(blob)
+    grade = gm.group(1).upper() if gm else "[A001] 待填"
+    kind = "砂浆" if ("砂浆" in blob or (gm and gm.group(1).upper().startswith("M"))) else "混凝土"
+    prep = "预拌" if "预拌" in blob else "现场拌合（待核）"
+    if has:
+        layer4 = "用户声明已有试验数据：可列换算栏，施工配比数字仍须试验室签认。本稿不编 kg/m³。"
+    else:
+        layer4 = "无试验数据：不给施工配合比，整节待填。含水率未测不得换算湿料。"
+    four = (
+        "| 层次 | 本稿 |\n| --- | --- |\n"
+        "| 初步（理论）配合比 | 缺原材料密度、含水、需水量则停。用量待填。 |\n"
+        "| 基准配合比 | 无试拌记录不锁基准。 |\n"
+        "| 试验室配合比 | 强度与耐久性复核通过后才能作为换算起点。 |\n"
+        f"| 施工配合比 | {layer4} |\n"
+    )
+    lines = [
+        "# 配比报告提纲（AI 草稿）",
+        "",
+        DISCLAIMER,
+        "",
+        "本提纲不是法定配合比报告，不是搅拌站开盘依据，不构成浇筑许可。",
+        "",
+        f"- 辖区：{zone}",
+        f"- 种类：{kind} / {prep}",
+        "",
+        "## 用户原文",
+        "",
+        blob.strip() or "（未提供）",
+        "",
+    ]
+    for i, title in enumerate(_LAB_MIX_CHAPTERS, 1):
+        lines.append(f"## {i} {title}")
+        lines.append("")
+        if i == 1:
+            lines.append(
+                f"工程名称待填。部位待填。强度等级/砂浆等级：{grade}。"
+                "坍落度或稠度要求待填。全部只引用户或项目包。空签认栏。[A001]"
+            )
+        elif i == 2:
+            lines.append(DISCLAIMER)
+            lines.append("")
+            lines.append("不是法定配合比报告，不是搅拌站开盘依据。")
+        elif i == 3:
+            lines.append(four)
+            lines.append("")
+            lines.append("只写层次，不写用量。砂浆与混凝土分开写，预拌与现场拌合分开写。")
+        elif i == 4:
+            lines.append(
+                "水泥、掺合料、砂、石、外加剂、拌合水须与试配时同一品种、规格、产地口径。"
+                "进场复试未出或异常，不得换算施工配比，也不得自行改砂率、水胶比、外加剂掺量。"
+            )
+        elif i == 5:
+            lines.append(
+                "试验员可记录含水率和开盘观察，不得口头改配比。"
+                "超出批准范围的调整要试验数据 + 试验室主任/技术负责人 + 监理/建设知情。本提纲不代批。"
+            )
+        elif i == 6:
+            if zone in ("CN", "DUAL"):
+                lines.append(
+                    "公开名称，年份以项目现行有效版为准，状态 unverified / unspecified_clause。"
+                    "《普通混凝土配合比设计规程》JGJ 55；《砌筑砂浆配合比设计规程》JGJ/T 98；"
+                    "《混凝土质量控制标准》GB 50164；《混凝土结构工程施工质量验收规范》GB 50204；"
+                    "《预拌混凝土》GB/T 14902。用户未提供文本则不得写入已核实块，不得摘条款。"
+                )
+            else:
+                lines.append(
+                    "公开名称只写族名。条款 unspecified_clause。"
+                    "用户未提供文本则不得写入已核实块，不得摘条款。"
+                )
+        elif i == 7:
+            lines.append(
+                "| 编号 | 本稿 |\n| --- | --- |\n"
+                "| 原材料复试报告编号 | 待填 |\n"
+                "| 试配记录编号 | 待填 |\n"
+                "| 开盘鉴定记录编号 | 待填 |"
+            )
+            lines.append("")
+            lines.append("有则抄用户，无则待填。编号规则见 lab-record，本岗不编新号。")
+        elif i == 8:
+            lines.append(
+                "试配申请、原材料报告、试拌记录、强度/耐久性试件、批准的试验室配合比、"
+                "含水率测定、施工配合比通知单。开盘条件栏待核，本稿不下开盘结论。"
+            )
+        else:
+            lines.append(
+                "不编水胶比、砂率、每立方米用量、水泥强度、外加剂掺量。"
+                "不把搅拌站经验配比或网上例题当成工程配比。不因商务催省水泥而改单。"
+            )
+        lines.append("")
+    if zone in ("SG", "DUAL"):
+        lines.append("SG：SAC laboratory accreditation / CT 06 Ready-Mixed Concrete Producers 只写标题。SS EN 206 / SS 544 只写族名。不得把已过时的 SS 289 / CP 65 当现行配比依据。")
+    if zone in ("CN", "DUAL"):
+        lines.append("CN：普通混凝土配合比设计规程只写全名，不给施工配比。")
+    lines.append("")
+    return "\n".join(lines)
+
+
 def _dispatch_daily_md(text: str) -> str:
     jobs = _copy_sensitive_jobs(text)
     sensitive = (
@@ -1785,6 +1917,33 @@ def _run_exclusive(
             "submit_blocked": True,
         }
 
+    if expert.id == "lab-mix":
+        md = _lab_mix_md(text)
+        from packing_assistant.tools.tender_review import forbidden_hits
+
+        hits = forbidden_hits(md)
+        if hits:
+            return {
+                "wrote": False,
+                "hitl_pending": False,
+                "files": [],
+                "tools_run": [],
+                "reply": "禁语扫描命中，未报成功：" + "、".join(hits),
+                "submit_blocked": True,
+            }
+        path = out_dir / "lab-mix__report.md"
+        guarded_write_text(path, md)
+        files.append({"name": path.name, "path": str(path), "tool": "lab-mix__report"})
+        ran.append("lab-mix__report")
+        return {
+            "wrote": True,
+            "hitl_pending": False,
+            "files": files,
+            "tools_run": ran,
+            "reply": "已出配比报告提纲。无试验数据不给施工配合比。submit_blocked=true。",
+            "submit_blocked": True,
+        }
+
     if expert.id == "cost":
         md = (
             f"# 工程量拆分表（AI 草稿）\n\n{DISCLAIMER}\n\n"
@@ -1902,6 +2061,10 @@ def run_named_exclusive(name: str, args: Optional[Dict[str, Any]] = None) -> Dic
         v = args.get(k)
         if v:
             bits.append(str(v).strip())
+    if args.get("has_trial_data") is True:
+        bits.append("已有试验数据")
+    elif args.get("has_trial_data") is False:
+        bits.append("无试验数据")
     return _run_exclusive(
         exp,
         "\n".join(b for b in bits if b),

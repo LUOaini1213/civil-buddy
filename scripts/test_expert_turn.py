@@ -360,6 +360,57 @@ def main() -> int:
     assert "20人" in labor_q
     assert "用户给定" in labor_q
 
+    mx_chat = run_expert_turn("施工配合比怎么换？", "lab-mix")
+    assert mx_chat["intent"] == "chat" and mx_chat["wrote"] is False
+    mx_hitl = run_expert_turn(
+        "写一份配比报告提纲 C40",
+        "lab-mix",
+        confirm_ok=False,
+        force_intent="run",
+    )
+    assert mx_hitl["wrote"] is False and mx_hitl.get("hitl_pending") is True
+    mx_empty = run_expert_turn(
+        "写一份配比报告提纲 C40",
+        "lab-mix",
+        confirm_ok=True,
+        force_intent="run",
+        session_id="t033-mx-empty",
+    )
+    assert mx_empty["wrote"] is True
+    assert "lab-mix__report" in mx_empty["tools_run"]
+    me = Path(mx_empty["files"][0]["path"]).read_text(encoding="utf-8")
+    for title in ("初步（理论）配合比", "基准配合比", "试验室配合比", "施工配合比"):
+        assert title in me, title
+    assert "C40" in me
+    assert "不给施工配合比" in me
+    assert "SAC" in me
+    assert "JGJ" not in me
+    assert "可以开工" not in me
+    assert "已具备开盘条件" not in me
+    mx_trial = run_expert_turn(
+        "写一份配比报告提纲 C40 已有试验数据",
+        "lab-mix",
+        confirm_ok=True,
+        force_intent="run",
+        session_id="t033-mx-trial",
+    )
+    mt = Path(mx_trial["files"][0]["path"]).read_text(encoding="utf-8")
+    assert "施工配比数字仍须试验室签认" in mt
+    sec4 = mt.split("| 施工配合比 |")[1].split("\n")[0]
+    assert "不给施工配合比" not in sec4
+    mx_cn = run_expert_turn(
+        "写一份配比报告提纲 JGJ C30",
+        "lab-mix",
+        confirm_ok=True,
+        force_intent="run",
+        session_id="t033-mx-cn",
+    )
+    mcn = Path(mx_cn["files"][0]["path"]).read_text(encoding="utf-8")
+    assert "辖区：CN" in mcn
+    assert "JGJ" in mcn
+    assert "SAC" not in mcn
+    assert "不给施工配合比" in mcn
+
     high = [e for e in roster if e.risk == "high"][0]
     blocked = run_expert_turn("写一份专项方案讨论提纲", high.id, confirm_ok=False)
     assert blocked["intent"] == "run"

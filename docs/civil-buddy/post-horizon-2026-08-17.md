@@ -699,7 +699,7 @@
 - qa：已有 · lab__scan_forbidden + 高风险确认句
 - kb：已有 · 分层 KB + search_kb/read_kb（demo/kb）
 - write：已有 · 独有 lab-mix__report；chat 不写盘
-- 下一刀：lab-mix__report 四层目录；无试验数据则施工配比整节待填。
+- 下一刀：已做 T033 lab-mix。lab-mix__report 四层目录；无试验数据则施工配比整节待填。
 
 ### lab-sample
 
