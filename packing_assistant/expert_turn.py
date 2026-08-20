@@ -4704,8 +4704,14 @@ def run_expert_turn(
         base["reply"] = f"{ctx_prefix}\n{body}".strip() if ctx_prefix else body
         base["state"] = run.state
         return base
+    from packing_assistant.office_job import job_files_blob
+
+    extra = job_files_blob(text)
+    run_text = f"{text}\n\n{extra}".strip() if extra else text
+    if extra:
+        base["job_files"] = True
     ran = _run_exclusive(
-        exp, text, confirm_ok=confirm_ok, session_id=sid, packing_summary=packing_summary
+        exp, run_text, confirm_ok=confirm_ok, session_id=sid, packing_summary=packing_summary
     )
     if ran.get("hitl_pending"):
         sched.transition(run, "waiting_hitl")

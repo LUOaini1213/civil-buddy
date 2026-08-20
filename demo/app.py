@@ -70,8 +70,36 @@ def index() -> FileResponse:
 @app.get("/api/health")
 def health() -> dict:
     from context import policy
+    from packing_assistant.office_job import job_root, job_root_granted, list_job_files
 
-    return {"ok": True, "deepseek": has_key(), "model": DEEPSEEK_MODEL, "context": policy()}
+    return {
+        "ok": True,
+        "deepseek": has_key(),
+        "model": DEEPSEEK_MODEL,
+        "context": policy(),
+        "job": {
+            "granted": job_root_granted(),
+            "root": str(job_root()) if job_root_granted() else "",
+            "n": len(list_job_files()),
+        },
+    }
+
+
+@app.get("/api/job")
+def job_listing() -> dict:
+    from packing_assistant.office_job import job_root, job_root_granted, list_job_files
+
+    return {
+        "ok": True,
+        "granted": job_root_granted(),
+        "root": str(job_root()) if job_root_granted() else "",
+        "files": list_job_files(),
+        "hint": (
+            "说「写一份」会自动抄作业根里的 xlsx/docx/csv/txt，不必再上传。"
+            if job_root_granted()
+            else "设 CIVIL_JOB_ROOT 为工程文件夹后，本岗直接读该目录，不必上传。禁止 D:\\layout。"
+        ),
+    }
 
 
 @app.get("/api/mcp/capabilities")

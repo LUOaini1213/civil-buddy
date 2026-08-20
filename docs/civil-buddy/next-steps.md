@@ -139,6 +139,9 @@
 45. **T064 作业根 Office** ✅ 2026-08-20  
     有 markdown 表的岗 run 后另存 `.xlsx`（会话目录；若设 `CIVIL_JOB_ROOT` 再抄一份）。禁止默认 `D:\layout`。不是桌面壳、不是接管 Word 窗口。主链头指针仍 **T039 pm-daily**。行业总判仍 **部分合格**。
 
+46. **T065 作业根直接读本机文件** ✅ 2026-08-20  
+    授权 `CIVIL_JOB_ROOT` 后，run 自动抄夹内 xlsx/docx/csv/txt，不必再点上传。`GET /api/job` 列出已看到的文件。禁止 `D:\layout`、禁止全盘搜索。主链头指针仍 **T039 pm-daily**。行业总判仍 **部分合格**。
+
 平台内核见 [product-improvement-handbook.md](product-improvement-handbook.md)。岗独有写盘下一刀仍按 [post-horizon-2026-08-17.md](post-horizon-2026-08-17.md)。
 
 ## 有宿主再做

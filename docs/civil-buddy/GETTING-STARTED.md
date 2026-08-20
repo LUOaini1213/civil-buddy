@@ -35,7 +35,13 @@ cd C:\Users\LW\civil-buddy\workbench
 
 召唤专家后：提问不写盘；说「写一份」才出内部讨论草稿。可上传广联达/Excel 导出的 `xlsx`/`csv` 和招标 `docx`/`txt`，缺价标 `UNSPECIFIED`。
 
-有表格的岗会在会话目录另存同名 `.xlsx`，用 Excel 直接打开。要把稿落到工程文件夹：设环境变量 `CIVIL_JOB_ROOT` 为该目录（须已存在、且加入沙箱可写根）。**禁止**把 `D:\layout` 当缺省作业根。construction 方案另有模板 `专项施工方案-AI草稿.docx`。这不是接管本机 Word/Excel 窗口。
+有表格的岗会在会话目录另存同名 `.xlsx`，用 Excel 直接打开。要把稿落到工程文件夹、并让专家**直接读该夹里的 Word/Excel**（不必再点上传）：
+
+```powershell
+$env:CIVIL_JOB_ROOT = "C:\Users\LW\Documents\某工地"
+```
+
+目录须已存在。说「写一份」会自动抄夹内 `.xlsx` / `.docx` / `.csv` / `.txt`。点名文件名则优先那一份。**禁止**把 `D:\layout` 当缺省作业根。construction 方案另有模板 `专项施工方案-AI草稿.docx`。这不是接管本机 Word/Excel 窗口，也不是全盘搜索。
 
 扫描件 PDF：产品默认拒绝（无文字层）。可选 `CIVIL_PARSE=auto` 走 MinerU/Docling；失败仍拒绝，不装 OCR 成功。不要把扫描 PDF 当已抽出招标。
 

@@ -9,7 +9,12 @@ from __future__ import annotations
 import os
 import re
 from pathlib import Path
-from typing import List, Tuple
+from typing import Any, Dict, List, Tuple
+
+JOB_EXTS = {".xlsx", ".csv", ".txt", ".md", ".json", ".docx", ".log"}
+JOB_MAX_FILES = 12
+JOB_FILE_CHARS = 8_000
+JOB_TOTAL_CHARS = 48_000
 
 FORBIDDEN_LAYOUT = ("d:\\layout", "d:/layout")
 
@@ -113,3 +118,110 @@ def export_md_to_xlsx(md_path: Path) -> List[Path]:
     except OSError:
         pass
     return written
+
+
+def job_root_granted() -> bool:
+    raw = (os.getenv("CIVIL_JOB_ROOT") or "").strip()
+    if not raw:
+        return False
+    p = Path(raw).expanduser()
+    return p.is_dir() and not is_forbidden_layout(p)
+
+
+def list_job_files() -> List[Dict[str, Any]]:
+    """Files in the authorized job folder. Empty if CIVIL_JOB_ROOT is unset."""
+    if not job_root_granted():
+        return []
+    root = job_root()
+    rows: List[Dict[str, Any]] = []
+    try:
+        names = sorted(root.iterdir(), key=lambda p: p.name.lower())
+    except OSError:
+        return []
+    for p in names:
+        if not p.is_file() or p.suffix.lower() not in JOB_EXTS:
+            continue
+        rows.append(
+            {
+                "name": p.name,
+                "path": str(p),
+                "suffix": p.suffix.lower(),
+                "bytes": p.stat().st_size if p.exists() else 0,
+            }
+        )
+        if len(rows) >= JOB_MAX_FILES:
+            break
+    return rows
+
+
+def _read_xlsx_text(path: Path, limit: int) -> str:
+    import openpyxl
+
+    wb = openpyxl.load_workbook(path, read_only=True, data_only=True)
+    lines: List[str] = []
+    for ws in wb.worksheets:
+        lines.append(f"# {ws.title}")
+        for row in ws.iter_rows(max_row=80, max_col=16, values_only=True):
+            cells = ["" if c is None else str(c).strip() for c in row]
+            if any(cells):
+                lines.append(" | ".join(cells))
+        if sum(len(x) for x in lines) >= limit:
+            break
+    wb.close()
+    return "\n".join(lines)[:limit]
+
+
+def _read_docx_text(path: Path, limit: int) -> str:
+    import zipfile
+    from xml.etree import ElementTree as ET
+
+    with zipfile.ZipFile(path) as z:
+        xml = z.read("word/document.xml")
+    root_el = ET.fromstring(xml)
+    ns = {"w": "http://schemas.openxmlformats.org/wordprocessingml/2006/main"}
+    texts = [t.text or "" for t in root_el.findall(".//w:t", ns)]
+    return " ".join(t.strip() for t in texts if t.strip())[:limit]
+
+
+def read_job_file(path: Path, limit: int = JOB_FILE_CHARS) -> str:
+    p = Path(path)
+    root = job_root().resolve()
+    try:
+        p = p.resolve()
+        p.relative_to(root)
+    except (OSError, ValueError) as e:
+        raise PermissionError("job file outside authorized root") from e
+    if is_forbidden_layout(p):
+        raise PermissionError("D:\\layout denied")
+    suf = p.suffix.lower()
+    if suf == ".xlsx":
+        return _read_xlsx_text(p, limit)
+    if suf == ".docx":
+        return _read_docx_text(p, limit)
+    return p.read_text(encoding="utf-8", errors="ignore")[:limit]
+
+
+def job_files_blob(query: str = "") -> str:
+    """Text of job-root files to prepend on run. Prefer names mentioned in query."""
+    files = list_job_files()
+    if not files:
+        return ""
+    q = (query or "").lower()
+    named = [f for f in files if f["name"].lower() in q or Path(f["name"]).stem.lower() in q]
+    pick = named or files
+    chunks: List[str] = ["## 作业根文件（授权文件夹，未再上传）"]
+    used = 0
+    for f in pick:
+        room = JOB_TOTAL_CHARS - used
+        if room < 80:
+            chunks.append(f"（还有 {f['name']} 未贴全文）")
+            continue
+        try:
+            body = read_job_file(Path(f["path"]), min(JOB_FILE_CHARS, room))
+        except (OSError, PermissionError, RuntimeError):
+            chunks.append(f"### {f['name']}\n（读失败）")
+            continue
+        block = f"### {f['name']}\n{body}"
+        chunks.append(block)
+        used += len(block)
+    return "\n\n".join(chunks)
