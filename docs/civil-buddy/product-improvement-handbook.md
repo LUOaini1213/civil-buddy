@@ -426,4 +426,4 @@ P1：投标 handoff · Python eval · 回放 · 危大卡
 
 ## 12. 下一刀（手册执行入口）
 
-**P0 与 P1-1…P1-5 已落地。** 开工 ID 以 [product-plan.md](product-plan.md) §11 为准（此刻 **T039 · pm-daily**）。行业总判仍是 **部分合格**。过夜 sleep 环已废止。T064 作业根 `.xlsx` 已 ✅。T068 可下载试用（LICENSE + 自带 API Key）已 ✅。T039 其余岗不得一行勾完。
+**P0 与 P1-1…P1-5 已落地。** 开工 ID 以 [product-plan.md](product-plan.md) §11 为准（此刻 **T040 · hr-recruit**）。行业总判仍是 **部分合格**。过夜 sleep 环已废止。T039 people 两岗已 ✅。T040 其余岗不得一行勾完。

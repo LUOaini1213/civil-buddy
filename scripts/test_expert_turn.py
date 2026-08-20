@@ -845,6 +845,56 @@ def main() -> int:
     assert "临边" in wbm
     assert "1200mm" in wbm
 
+    pd_chat = run_expert_turn("项目日报怎么理解？", "pm-daily")
+    assert pd_chat["intent"] == "chat" and pd_chat["wrote"] is False
+    pd_ok = run_expert_turn(
+        "写一份项目日报 临边防护",
+        "pm-daily",
+        force_intent="run",
+        session_id="t039-pmd",
+    )
+    assert pd_ok["wrote"] is True
+    assert "pm-daily__log" in pd_ok["tools_run"]
+    pdt = Path(pd_ok["files"][0]["path"]).read_text(encoding="utf-8")
+    assert "临边防护" in pdt
+    assert "天气待填" in pdt
+    assert "出勤待填" in pdt
+    img = pdt.split("## 4 形象进度")[1].split("## 5")[0]
+    assert "%" not in img
+    assert "BCA" in pdt or "site record" in pdt
+    assert "可以开工" not in pdt
+    assert "office__xlsx" in pd_ok["tools_run"]
+    pd_wx = run_expert_turn(
+        "写一份项目日报 临边 晴 木工",
+        "pm-daily",
+        force_intent="run",
+        session_id="t039-pmd-wx",
+    )
+    pdx = Path(pd_wx["files"][0]["path"]).read_text(encoding="utf-8")
+    wxsec = pdx.split("## 2 天气")[1].split("## 3")[0]
+    assert "晴" in wxsec and "天气待填" not in wxsec
+    lbsec = pdx.split("## 5 出勤")[1].split("## 6")[0]
+    assert "木工" in lbsec and "出勤待填" not in lbsec
+    pd_pct = run_expert_turn(
+        "写一份项目日报 临边 完成30%",
+        "pm-daily",
+        force_intent="run",
+        session_id="t039-pmd-pct",
+    )
+    pdp = Path(pd_pct["files"][0]["path"]).read_text(encoding="utf-8")
+    img2 = pdp.split("## 4 形象进度")[1].split("## 5")[0]
+    assert "%" not in img2
+    pd_cn = run_expert_turn(
+        "写一份项目日报 临边防护 住建部",
+        "pm-daily",
+        force_intent="run",
+        session_id="t039-pmd-cn",
+    )
+    pdc = Path(pd_cn["files"][0]["path"]).read_text(encoding="utf-8")
+    assert "辖区：CN" in pdc
+    assert "BCA" not in pdc
+    assert "site record" not in pdc
+
     high = [e for e in roster if e.risk == "high"][0]
     blocked = run_expert_turn("写一份专项方案讨论提纲", high.id, confirm_ok=False)
     assert blocked["intent"] == "run"

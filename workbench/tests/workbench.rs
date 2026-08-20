@@ -1797,6 +1797,65 @@ fn test_worker_brief_three_part_exclusive() {
 }
 
 #[test]
+fn test_pm_daily_weather_site_no_pct_labor() {
+    let p = paths();
+    assert!(packs::visible_tool_names("pm-daily").iter().any(|n| n == "pm-daily__log"));
+    assert!(!packs::visible_tool_names("worker-brief").iter().any(|n| n == "pm-daily__log"));
+    let mut ctx = ToolCtx::new(p.clone(), "pm-daily", "people", "low", true, "iter-pmd-t039");
+    let out = packs::execute(
+        &mut ctx,
+        "pm-daily__log",
+        &json!({"progress":"edge prep","jurisdiction":"SG"}),
+    );
+    assert!(out.contains("已写入"), "{out}");
+    let text = std::fs::read_to_string(ctx.out_dir.join("项目日报草稿.md")).unwrap();
+    assert!(text.contains("edge prep"), "{text}");
+    assert!(text.contains("天气待填"), "{text}");
+    assert!(text.contains("出勤待填"), "{text}");
+    let img = text.split("## 4 形象进度").nth(1).unwrap().split("## 5").next().unwrap();
+    assert!(!img.contains('%'), "{img}");
+    assert!(text.contains("BCA") && text.contains("site record"), "{text}");
+    assert!(!text.contains("可以开工"), "{text}");
+    let mut wx = ToolCtx::new(p.clone(), "pm-daily", "people", "low", true, "iter-pmd-wx");
+    let wo = packs::execute(
+        &mut wx,
+        "pm-daily__log",
+        &json!({"progress":"临边","weather":"晴","labor":"木工","jurisdiction":"SG"}),
+    );
+    assert!(wo.contains("已写入"), "{wo}");
+    let wt = std::fs::read_to_string(wx.out_dir.join("项目日报草稿.md")).unwrap();
+    let weather_sec = wt.split("## 2 天气").nth(1).unwrap().split("## 3").next().unwrap();
+    assert!(weather_sec.contains("晴"), "{weather_sec}");
+    assert!(!weather_sec.contains("天气待填"), "{weather_sec}");
+    let labor_sec = wt.split("## 5 出勤").nth(1).unwrap().split("## 6").next().unwrap();
+    assert!(labor_sec.contains("木工"), "{labor_sec}");
+    assert!(!labor_sec.contains("出勤待填"), "{labor_sec}");
+    let mut pct = ToolCtx::new(p.clone(), "pm-daily", "people", "low", true, "iter-pmd-pct");
+    let po = packs::execute(
+        &mut pct,
+        "pm-daily__log",
+        &json!({"progress":"临边 完成30%","jurisdiction":"SG"}),
+    );
+    assert!(po.contains("已写入"), "{po}");
+    let pt = std::fs::read_to_string(pct.out_dir.join("项目日报草稿.md")).unwrap();
+    let img2 = pt.split("## 4 形象进度").nth(1).unwrap().split("## 5").next().unwrap();
+    assert!(!img2.contains('%'), "{img2}");
+    let mut cn = ToolCtx::new(p.clone(), "pm-daily", "people", "low", true, "iter-pmd-cn");
+    let co = packs::execute(
+        &mut cn,
+        "pm-daily__log",
+        &json!({"progress":"临边","jurisdiction":"CN"}),
+    );
+    assert!(co.contains("已写入"), "{co}");
+    let ct = std::fs::read_to_string(cn.out_dir.join("项目日报草稿.md")).unwrap();
+    assert!(ct.contains("辖区：CN"), "{ct}");
+    assert!(!ct.contains("BCA"), "{ct}");
+    assert!(!ct.contains("site record"), "{ct}");
+    let mut sib = ToolCtx::new(p, "worker-brief", "people", "low", true, "iter-pmd-t039-sib");
+    assert!(packs::execute(&mut sib, "pm-daily__log", &json!({"progress":"x"})).contains("拒绝"));
+}
+
+#[test]
 fn test_variation_form_exclusive() {
     let p = paths();
     assert!(packs::visible_tool_names("variation").iter().any(|n| n == "variation__form"));
@@ -3312,6 +3371,14 @@ fn test_cn_writers_omit_sg_only_titles() {
             "班前白话稿.md",
             json!({"work_today": "rebar", "jurisdiction": "CN"}),
             &["toolbox"],
+        ),
+        (
+            "pm-daily",
+            "people",
+            "pm-daily__log",
+            "项目日报草稿.md",
+            json!({"progress": "edge", "jurisdiction": "CN"}),
+            &["BCA", "site record"],
         ),
         (
             "supervision",

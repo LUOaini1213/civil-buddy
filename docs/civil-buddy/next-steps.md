@@ -151,6 +151,9 @@
 49. **T068 可下载试用** ✅ 2026-08-20  
     仓库根 MIT LICENSE；工作台 OpenAI 兼容 Key（不必 DeepSeek）；`cargo build --release` 的 exe 打进 GitHub Release；一页 [给试用的人.md](../../给试用的人.md)（安装、填 Key、选作业根、点岗试「写一份」）。主链头指针仍 **T039 pm-daily**。行业总判仍 **部分合格**。
 
+50. **T039 pm-daily 一岗（T039 批次完）** ✅ 2026-08-20  
+    pm-daily__log 出天气待填｜部位｜形象（不编百分比）｜出勤待填。不是监理日志、不是施工日志签认件。主链头指针改为 **T040**（hr-recruit 先）。T040–T047 不得一行勾完。行业总判仍 **部分合格**。
+
 平台内核见 [product-improvement-handbook.md](product-improvement-handbook.md)。岗独有写盘下一刀仍按 [post-horizon-2026-08-17.md](post-horizon-2026-08-17.md)。
 
 ## 有宿主再做
