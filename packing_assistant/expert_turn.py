@@ -481,6 +481,28 @@ _WH_SKIP = {
     "待填",
 }
 
+_MS_CHAPTERS = (
+    "草稿声明",
+    "核算对象",
+    "应耗量口径",
+    "实耗量口径",
+    "节超口径",
+    "核算表头",
+    "原因类型",
+    "周转材料",
+    "节奏与会签",
+    "禁令",
+)
+
+_MS_SKIP = {
+    "草稿提纲",
+    "材料核算",
+    "材料核算表头",
+    "现场材料",
+    "待填",
+    "no stocktake",
+}
+
 _MILESTONE_KEYS = ("桩基", "±0", "封顶", "砌筑", "机电", "装饰", "竣工")
 
 _QTY_RE = re.compile(
@@ -2270,6 +2292,126 @@ def _warehouse_md(text: str) -> str:
     return "\n".join(lines)
 
 
+def _qty_after(key: str, line: str) -> str:
+    i = (line or "").find(key)
+    if i < 0:
+        return "TBD"
+    m = _RES_QTY.search(line[i + len(key) :])
+    if not m:
+        return "TBD"
+    return f"{m.group('qty')}{m.group('unit')}"
+
+
+def _parse_ms_rows(blob: str) -> List[tuple]:
+    rows: List[tuple] = []
+    for piece in (blob or "").replace("；", "\n").replace(";", "\n").splitlines():
+        t = piece.strip()
+        t = re.sub(r"^写一份\S*\s*", "", t).strip()
+        if not t or t.lower() in _MS_SKIP or t in _MS_SKIP:
+            continue
+        if t.startswith("#") or t.startswith("内部"):
+            continue
+        if t in {"JGJ", "SAC", "CN", "SG", "DUAL"}:
+            continue
+        should = _qty_after("应耗", t)
+        issued = _qty_after("领料", t)
+        counted = _qty_after("盘点", t)
+        actual = _qty_after("实耗", t)
+        variance = _qty_after("节超", t)
+        name = t
+        for key in ("应耗", "领料", "退料", "盘点", "实耗", "节超"):
+            name = name.replace(key, "")
+        name = _RES_QTY.sub("", name)
+        name = re.sub(r"\s+", " ", name).strip(" ，,;；") or t[:80]
+        if len(name) > 80:
+            name = name[:80]
+        rows.append((name, should, issued, counted, actual, variance))
+    return rows
+
+
+def _material_site_md(text: str) -> str:
+    blob = text or ""
+    zone = _mix_zone(blob)
+    rows = _parse_ms_rows(blob)
+    if not rows:
+        short = (
+            "| 材料 | 应耗 | 实耗 | 节超 | 备注 |\n"
+            "| --- | --- | --- | --- | --- |\n"
+            "| 待填 | TBD | TBD | TBD | 无盘点不编 |\n"
+        )
+        full = (
+            "| 分部或部位 | 材料 | 规格 | 单位 | 已完工程量 | 工程量来源 | 消耗指标 | 指标来源 | 应耗 | 领料 | 退料 | 盘点调整 | 实耗 | 节超 | 原因类型 | 单价 | 合价 |\n"
+            "| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |\n"
+            "| 待填 | 待填 | 待填 | 待填 | TBD | 待填 | TBD | 待填 | TBD | TBD | TBD | TBD | TBD | TBD | 待填 | TBD | TBD |\n"
+        )
+    else:
+        short = (
+            "| 材料 | 应耗 | 实耗 | 节超 | 备注 |\n"
+            "| --- | --- | --- | --- | --- |\n"
+            + "".join(
+                f"| {n} | {sh} | {ac if ac != 'TBD' else 'TBD'} | {va} | 算不出节超则 TBD |\n"
+                for n, sh, _iss, _c, ac, va in rows
+            )
+        )
+        full = (
+            "| 分部或部位 | 材料 | 规格 | 单位 | 已完工程量 | 工程量来源 | 消耗指标 | 指标来源 | 应耗 | 领料 | 退料 | 盘点调整 | 实耗 | 节超 | 原因类型 | 单价 | 合价 |\n"
+            "| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |\n"
+            + "".join(
+                f"| 待填 | {n} | 待填 | 待填 | TBD | 待填 | TBD | 待填 | {sh} | {iss} | TBD | {cnt} | TBD | {va} | 待填 | TBD | TBD |\n"
+                for n, sh, iss, cnt, _ac, va in rows
+            )
+        )
+    lines = [
+        "# 材料核算表头（AI 草稿）",
+        "",
+        DISCLAIMER,
+        "",
+        "耗用核算和节超分析口径。不是仓库收发，不是设备台班，也不是造价组价。",
+        "",
+        f"- 辖区：{zone}",
+        "",
+        "## 用户原文",
+        "",
+        blob.strip() or "（未提供）",
+        "",
+    ]
+    for i, title in enumerate(_MS_CHAPTERS, 1):
+        lines.append(f"## {i} {title}")
+        lines.append("")
+        if i == 1:
+            lines.append("内部讨论。无本周期盘点，不填盈亏。不给材料合格结论。")
+        elif i == 2:
+            lines.append("主要材料与周转材料分表。甲指、甲限、自采分列。")
+        elif i == 3:
+            lines.append("应耗 = 已完工程量 × 消耗指标。无工程量或无指标，应耗整列待填，不得用经验百分比填实。不写臆造的定额编号。")
+        elif i == 4:
+            lines.append("实耗 = 本期领料 − 退料 ± 经盘点确认的调整。无盘点不得把感觉少了写成盘亏。")
+        elif i == 5:
+            lines.append("本节约定：节超量 = 应耗 − 实耗。正数为节约，负数为超耗。缺应耗或实耗则节超 TBD，不演算。")
+        elif i == 6:
+            lines.append(short)
+            lines.append("")
+            lines.append(full)
+            lines.append("")
+            lines.append("按行只抄应耗、领料、盘点。算不出节超则 TBD。单价 TBD。合价 TBD。")
+        elif i == 7:
+            lines.append("指标未定、变更未计量、超领未退、盘点未做、浇筑与小票差、不合格隔离、雨损待估。不把超耗写成索赔已经成立。")
+        elif i == 8:
+            lines.append("进场、在用、维修、报废、退租分栏。摊销方法由财务或用户指定，本岗不编摊销率和会计分录。")
+        elif i == 9:
+            lines.append("月核算、季分析。工程量问施工或商务；库存问仓管；复试问试验室；单价问采购或造价。")
+        else:
+            lines.append("无盘点不编盈亏。无定额或指标不编应耗数字。不摘录定额全文。不给综合单价。")
+        lines.append("")
+    lines.append("[A001] 无盘点不编盈亏。无指标不编应耗百分比。禁止编造损耗率。")
+    if zone in ("SG", "DUAL"):
+        lines.append("SG：Factory Notification 不是损耗公式。")
+    if zone in ("CN", "DUAL"):
+        lines.append("CN：无指标不编应耗。不摘定额章节。")
+    lines.append("")
+    return "\n".join(lines)
+
+
 def _dispatch_daily_md(text: str) -> str:
     jobs = _copy_sensitive_jobs(text)
     sensitive = (
@@ -3231,6 +3373,33 @@ def _run_exclusive(
             "submit_blocked": True,
         }
 
+    if expert.id == "material-site":
+        md = _material_site_md(text)
+        from packing_assistant.tools.tender_review import forbidden_hits
+
+        hits = forbidden_hits(md)
+        if hits:
+            return {
+                "wrote": False,
+                "hitl_pending": False,
+                "files": [],
+                "tools_run": [],
+                "reply": "禁语扫描命中，未报成功：" + "、".join(hits),
+                "submit_blocked": True,
+            }
+        path = out_dir / "material-site__recon.md"
+        guarded_write_text(path, md)
+        files.append({"name": path.name, "path": str(path), "tool": "material-site__recon"})
+        ran.append("material-site__recon")
+        return {
+            "wrote": True,
+            "hitl_pending": False,
+            "files": files,
+            "tools_run": ran,
+            "reply": "已出材料核算表头。算不出节超则 TBD。submit_blocked=true。",
+            "submit_blocked": True,
+        }
+
     if expert.id == "cost":
         md = (
             f"# 工程量拆分表（AI 草稿）\n\n{DISCLAIMER}\n\n"
@@ -3357,6 +3526,7 @@ def run_named_exclusive(name: str, args: Optional[Dict[str, Any]] = None) -> Dic
         "certs",
         "item",
         "note",
+        "notes",
     ):
         v = args.get(k)
         if v:

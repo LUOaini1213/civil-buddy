@@ -919,7 +919,7 @@ fn pack_tools(pack: &str) -> Vec<ToolDef> {
             },
             ToolDef {
                 name: "material-site__recon",
-                description: "现场材料独有：耗用核算表头。无盘点不编盈亏。",
+                description: "现场材料独有：按行抄应耗/领料/盘点。算不出节超则 TBD。",
                 parameters: obj(
                     json!({
                         "items": {"type": "string"},
@@ -3871,23 +3871,90 @@ fn proc_vendor_eval(ctx: &mut ToolCtx, args: &Value) -> String {
     }
 }
 
+fn qty_after(key: &str, line: &str) -> String {
+    if let Some(pos) = line.find(key) {
+        let rest = line[pos + key.len()..].trim();
+        let (_, q, _) = split_resource_qty(rest);
+        if q != "TBD" {
+            return q;
+        }
+    }
+    "TBD".into()
+}
+
+fn parse_ms_rows(blob: &str) -> Vec<(String, String, String, String, String)> {
+    let mut rows = Vec::new();
+    for raw in blob.replace('；', "\n").replace(';', "\n").lines() {
+        let mut t = raw.trim().to_string();
+        if let Some(rest) = t.strip_prefix("写一份") {
+            t = rest.trim().to_string();
+        }
+        if t.is_empty()
+            || matches!(
+                t.as_str(),
+                "草稿提纲"
+                    | "材料核算"
+                    | "材料核算表头"
+                    | "现场材料"
+                    | "待填"
+                    | "no stocktake"
+                    | "SG"
+                    | "CN"
+            )
+        {
+            continue;
+        }
+        if t.starts_with('#') || t.starts_with("内部") {
+            continue;
+        }
+        let should = qty_after("应耗", &t);
+        let issued = qty_after("领料", &t);
+        let counted = qty_after("盘点", &t);
+        let variance = qty_after("节超", &t);
+        let mut name = t.clone();
+        for key in ["应耗", "领料", "退料", "盘点", "实耗", "节超"] {
+            name = name.replace(key, "");
+        }
+        let (n2, q2, _) = split_resource_qty(&name);
+        if q2 != "TBD" {
+            name = n2;
+        }
+        name = name.split_whitespace().collect::<Vec<_>>().join(" ");
+        if name.is_empty() {
+            name = t.chars().take(80).collect();
+        }
+        rows.push((name, should, issued, counted, variance));
+    }
+    rows
+}
+
 fn material_site_recon(ctx: &mut ToolCtx, args: &Value) -> String {
-    let items = split_lines(&s(args, "items"));
-    let notes = nonempty(&s(args, "notes"), "待填");
     let (jur, banner) = zone_banner(args);
-    let mut md = format!(
-        "{}{banner}\n| 材料 | 应耗 | 实耗 | 节超 | 备注 |\n| --- | --- | --- | --- | --- |\n",
-        header("材料耗用核算表头")
+    let blob = format!("{}\n{}", s(args, "items"), s(args, "notes"));
+    let rows = parse_ms_rows(&blob);
+    let (short, full) = if rows.is_empty() {
+        (
+            "| 材料 | 应耗 | 实耗 | 节超 | 备注 |\n| --- | --- | --- | --- | --- |\n| 待填 | TBD | TBD | TBD | 无盘点不编 |".to_string(),
+            "| 分部或部位 | 材料 | 规格 | 单位 | 已完工程量 | 工程量来源 | 消耗指标 | 指标来源 | 应耗 | 领料 | 退料 | 盘点调整 | 实耗 | 节超 | 原因类型 | 单价 | 合价 |\n| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |\n| 待填 | 待填 | 待填 | 待填 | TBD | 待填 | TBD | 待填 | TBD | TBD | TBD | TBD | TBD | TBD | 待填 | TBD | TBD |".to_string(),
+        )
+    } else {
+        let mut short = String::from("| 材料 | 应耗 | 实耗 | 节超 | 备注 |\n| --- | --- | --- | --- | --- |\n");
+        let mut full = String::from("| 分部或部位 | 材料 | 规格 | 单位 | 已完工程量 | 工程量来源 | 消耗指标 | 指标来源 | 应耗 | 领料 | 退料 | 盘点调整 | 实耗 | 节超 | 原因类型 | 单价 | 合价 |\n| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |\n");
+        for (n, sh, iss, cnt, va) in &rows {
+            short.push_str(&format!("| {n} | {sh} | TBD | {va} | 算不出节超则 TBD |\n"));
+            full.push_str(&format!("| 待填 | {n} | 待填 | 待填 | TBD | 待填 | TBD | 待填 | {sh} | {iss} | TBD | {cnt} | TBD | {va} | 待填 | TBD | TBD |\n"));
+        }
+        (short, full)
+    };
+    let md = format!(
+        "{}{banner}\n耗用核算和节超分析口径。不是仓库收发，不是设备台班，也不是造价组价。\n\n## 1 草稿声明\n内部讨论。无本周期盘点，不填盈亏。不给材料合格结论。\n\n## 2 核算对象\n主要材料与周转材料分表。甲指、甲限、自采分列。\n\n## 3 应耗量口径\n应耗 = 已完工程量 × 消耗指标。无工程量或无指标，应耗整列待填，不得用经验百分比填实。不写臆造的定额编号。\n\n## 4 实耗量口径\n实耗 = 本期领料 − 退料 ± 经盘点确认的调整。无盘点不得把感觉少了写成盘亏。\n\n## 5 节超口径\n本节约定：节超量 = 应耗 − 实耗。正数为节约，负数为超耗。缺应耗或实耗则节超 TBD，不演算。\n\n## 6 核算表头\n{short}\n\n{full}\n\n按行只抄应耗、领料、盘点。算不出节超则 TBD。单价 TBD。合价 TBD。\n\n## 7 原因类型\n指标未定、变更未计量、超领未退、盘点未做、浇筑与小票差、不合格隔离、雨损待估。不把超耗写成索赔已经成立。\n\n## 8 周转材料\n进场、在用、维修、报废、退租分栏。摊销方法由财务或用户指定，本岗不编摊销率和会计分录。\n\n## 9 节奏与会签\n月核算、季分析。工程量问施工或商务；库存问仓管；复试问试验室；单价问采购或造价。\n\n## 10 禁令\n无盘点不编盈亏。无定额或指标不编应耗数字。不摘录定额全文。不给综合单价。\n\n[A001] 无盘点不编盈亏。无指标不编应耗百分比。禁止编造损耗率。{}\n",
+        header("材料耗用核算表头"),
+        format!(
+            "{}{}",
+            sg_only(&jur, "SG：Factory Notification 不是损耗公式。"),
+            cn_only(&jur, "CN：无指标不编应耗。不摘定额章节。"),
+        ),
     );
-    if items.is_empty() {
-        md.push_str("| 待填 | TBD | TBD | TBD | 无盘点不编 |\n");
-    }
-    for it in items {
-        md.push_str(&format!("| {it} | TBD | TBD | TBD | {notes} |\n"));
-    }
-    md.push_str("\n[A001] 无盘点不编盈亏。无指标不编应耗百分比。禁止编造损耗率。");
-    md.push_str(&sg_only(&jur, "SG：Factory Notification 不是损耗公式。"));
-    md.push('\n');
     match ctx.write_md("材料耗用核算表头.md", &md) {
         Ok(m) => m,
         Err(e) => e,
