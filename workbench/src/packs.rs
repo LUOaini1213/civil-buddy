@@ -1056,7 +1056,7 @@ fn pack_tools(pack: &str) -> Vec<ToolDef> {
             },
             ToolDef {
                 name: "worker-brief__talk",
-                description: "3 分钟班前口播稿，给一线工人，禁止断言可以开工。",
+                description: "班前白话：三段口播。无尺寸不报未给的毫米。禁止断言可以开工。",
                 parameters: obj(
                     json!({
                         "work_today": {"type": "string"},
@@ -3669,13 +3669,79 @@ fn backup_policy(ctx: &mut ToolCtx, args: &Value) -> String {
     }
 }
 
+fn wb_job(blob: &str) -> String {
+    for raw in blob.replace('；', "\n").replace(';', "\n").lines() {
+        let mut t = raw.trim().to_string();
+        if let Some(rest) = t.strip_prefix("写一份") {
+            t = rest.trim().to_string();
+        }
+        for p in ["班前白话稿", "班前白话", "口播"] {
+            if let Some(rest) = t.strip_prefix(p) {
+                t = rest.trim().to_string();
+                break;
+            }
+        }
+        if t.is_empty()
+            || matches!(
+                t.as_str(),
+                "草稿提纲" | "待填" | "SG" | "CN" | "DUAL" | "班前白话" | "口播"
+            )
+        {
+            continue;
+        }
+        if t.starts_with('#') || t.starts_with("内部") {
+            continue;
+        }
+        return t.chars().take(80).collect();
+    }
+    "[A001] 待填部位".into()
+}
+
+fn wb_mm(blob: &str) -> String {
+    let re = regex::Regex::new(r"(\d+(?:\.\d+)?)\s*(mm|毫米)").expect("mm re");
+    if let Some(c) = re.captures(blob) {
+        return format!("{}{}", &c[1], &c[2]);
+    }
+    String::new()
+}
+
 fn worker_brief(ctx: &mut ToolCtx, args: &Value) -> String {
     let (jur, banner) = zone_banner(args);
+    let blob = format!(
+        "{}\n{}\n{}\n{}",
+        s(args, "work_today"),
+        s(args, "watchouts"),
+        s(args, "notes"),
+        s(args, "note")
+    );
+    let job = {
+        let from_arg = s(args, "work_today");
+        if from_arg.is_empty() {
+            wb_job(&blob)
+        } else {
+            from_arg
+        }
+    };
+    let mm = wb_mm(&blob);
+    let size_line = if mm.is_empty() {
+        "尺寸按书面交底，口播不报未给的尺寸。".to_string()
+    } else {
+        format!("用户给的尺寸：{mm}。只抄这一处，别的尺寸仍按书面交底。")
+    };
+    let mut hazards = Vec::new();
+    for k in ["临边", "洞口", "吊", "电", "基坑", "有限空间", "动火", "交叉"] {
+        if blob.contains(k) {
+            hazards.push(k);
+        }
+    }
+    let hazard_line = if hazards.is_empty() {
+        "临边、洞口、吊物下、用电：用户没点名的危险源不编，只点到为止。".to_string()
+    } else {
+        format!("{}。先讲会死的，再讲会受伤的。用户没点名的危险源不编。", hazards.join("、"))
+    };
     let md = format!(
-        "{}{banner}\n今天干什么：{}\n\n盯什么：{}\n\n口头三分钟。不要讲已经能作业。数字没有就说还没量，别猜。{}\n",
+        "{}{banner}\n3 分钟口播讨论稿。不是交底签认件，不能代替书面安全技术交底和班组签字。\n\n## 1 今天干什么\n今天：{job}。一两句人话。禁止全面推进主体结构。\n\n## 2 哪儿会掉、会砸、会淹\n{hazard_line}\n\n{size_line}\n\n## 3 三步怎么干\n先看防护齐不齐。再干活。活完盖好、清场、断电。特殊工种无证不干。起重信号不明不吊。高处：帽、带、挂点。\n\n{size_line}\n\n## 4 谁喊停、找谁\n防护没了、指挥乱了、身体不舒服、看不懂，先停。班组长可以喊停全班。找不到人就看门口告示牌。电话待填。\n\n## 5 结束\n没听懂再问，不丢人。问完再上。口播代替不了书面交底和签字。\n\n[A001] 缺部位待填。无尺寸不报未给的尺寸。本稿不是交底签认件。{}\n",
         header("班前白话稿"),
-        nonempty(&s(args, "work_today"), "待填"),
-        nonempty(&s(args, "watchouts"), "临边、洞口、吊装、用电"),
         format!(
             "{}{}",
             sg_only(&jur, "SG：toolbox meeting 导则只写标题。"),
