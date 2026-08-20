@@ -600,7 +600,7 @@
 - qa：已有 · procurement__scan_forbidden
 - kb：已有 · 分层 KB + search_kb/read_kb（demo/kb）
 - write：已有 · 独有 proc-plan__schedule；chat 不写盘
-- 下一刀：proc-plan__schedule 先分甲供/甲指/自采再列表，提前期 UNSPECIFIED。
+- 下一刀：已做 T037 proc-plan。proc-plan__schedule 先分甲供/甲指/自采再列表；无供方周期则提前期 UNSPECIFIED。
 
 ### proc-compare
 

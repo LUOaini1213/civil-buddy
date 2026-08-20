@@ -1578,6 +1578,46 @@ fn test_material_site_recon_exclusive() {
 }
 
 #[test]
+fn test_purchase_plan_split_exclusive() {
+    let p = paths();
+    assert!(packs::visible_tool_names("proc-plan").iter().any(|n| n == "proc-plan__schedule"));
+    assert!(!packs::visible_tool_names("proc-compare").iter().any(|n| n == "proc-plan__schedule"));
+    let mut ctx = ToolCtx::new(p.clone(), "proc-plan", "procurement", "low", true, "iter-pp-t037");
+    let out = packs::execute(
+        &mut ctx,
+        "proc-plan__schedule",
+        &json!({"items":"rebar","jurisdiction":"SG"}),
+    );
+    assert!(out.contains("已写入"), "{out}");
+    let text = std::fs::read_to_string(ctx.out_dir.join("采购计划表.md")).unwrap();
+    assert!(text.contains("rebar"), "{text}");
+    assert!(text.contains("甲供") && text.contains("甲指") && text.contains("自采"), "{text}");
+    assert!(text.contains("待划"), "{text}");
+    assert!(text.contains("UNSPECIFIED"), "{text}");
+    assert!(text.contains("[A001]"), "{text}");
+    assert!(text.contains("CRS"), "{text}");
+    assert!(text.contains("GeBIZ"), "{text}");
+    assert!(!text.contains("可以开工"), "{text}");
+    assert!(!text.contains("一律提前"), "{text}");
+    let mut split = ToolCtx::new(p.clone(), "proc-plan", "procurement", "low", true, "iter-pp-split");
+    let so = packs::execute(
+        &mut split,
+        "proc-plan__schedule",
+        &json!({"items":"钢筋 甲供；水泥 自采","jurisdiction":"SG"}),
+    );
+    assert!(so.contains("已写入"), "{so}");
+    let st = std::fs::read_to_string(split.out_dir.join("采购计划表.md")).unwrap();
+    assert!(st.contains("钢筋"), "{st}");
+    assert!(st.contains("水泥"), "{st}");
+    let gong = st.split("### 甲供").nth(1).unwrap().split("###").next().unwrap();
+    let zi = st.split("### 自采").nth(1).unwrap().split("###").next().unwrap();
+    assert!(gong.contains("钢筋"), "{gong}");
+    assert!(zi.contains("水泥"), "{zi}");
+    let mut sib = ToolCtx::new(p, "proc-compare", "procurement", "low", true, "iter-pp-t037-sib");
+    assert!(packs::execute(&mut sib, "proc-plan__schedule", &json!({"items":"x"})).contains("拒绝"));
+}
+
+#[test]
 fn test_variation_form_exclusive() {
     let p = paths();
     assert!(packs::visible_tool_names("variation").iter().any(|n| n == "variation__form"));
@@ -3133,6 +3173,14 @@ fn test_cn_writers_omit_sg_only_titles() {
             "材料耗用核算表头.md",
             json!({"items": "rebar", "jurisdiction": "CN"}),
             &["Factory Notification"],
+        ),
+        (
+            "proc-plan",
+            "procurement",
+            "proc-plan__schedule",
+            "采购计划表.md",
+            json!({"items": "rebar", "jurisdiction": "CN"}),
+            &["CRS", "GeBIZ"],
         ),
         (
             "interior",
