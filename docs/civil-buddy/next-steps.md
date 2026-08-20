@@ -67,6 +67,9 @@
 21. **T031 subcontract 一岗** ✅ 2026-08-20  
     subcontract__sheet 按行抄细目；无总包/业主确认金额 TBD。应付人工费与应付分包工程款分列。T031 批次未完：下一岗 **interim**。
 
+22. **T031 interim 一岗（T031 批次完）** ✅ 2026-08-20  
+    interim__measure 计量草表含开累/本期申报/监理审/业主核；无确认不编应付合价。主链头指针改为 **T032**（plan-master 先）。T032–T047 不得一行勾完。
+
 平台内核见 [product-improvement-handbook.md](product-improvement-handbook.md)。岗独有写盘下一刀仍按 [post-horizon-2026-08-17.md](post-horizon-2026-08-17.md)。
 
 ## 有宿主再做

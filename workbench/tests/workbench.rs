@@ -1558,6 +1558,34 @@ fn test_subcontract_sheet_exclusive() {
 }
 
 #[test]
+fn test_interim_measure_exclusive() {
+    let p = paths();
+    assert!(packs::visible_tool_names("interim").iter().any(|n| n == "interim__measure"));
+    assert!(!packs::visible_tool_names("cost").iter().any(|n| n == "interim__measure"));
+    let mut ctx = ToolCtx::new(p.clone(), "interim", "commercial", "low", true, "iter-int");
+    let out = packs::execute(
+        &mut ctx,
+        "interim__measure",
+        &json!({"period":"2026-08","qty_note":"模板 120m2","jurisdiction":"SG"}),
+    );
+    assert!(out.contains("已写入"), "{out}");
+    let text = std::fs::read_to_string(ctx.out_dir.join("验工计价草稿.md")).unwrap();
+    assert!(text.contains("SG"), "{text}");
+    assert!(text.contains("计量草表"), "{text}");
+    assert!(text.contains("上期末开累"), "{text}");
+    assert!(text.contains("监理审"), "{text}");
+    assert!(text.contains("业主核"), "{text}");
+    assert!(text.contains("模板"), "{text}");
+    assert!(text.contains("120"), "{text}");
+    assert!(text.contains("TBD"), "{text}");
+    assert!(text.contains("Security of Payment"), "{text}");
+    assert!(!text.contains("可以开工"), "{text}");
+    assert!(!text.contains("报审通过"), "{text}");
+    let mut sib = ToolCtx::new(p, "cost", "commercial", "low", true, "iter-int-sib");
+    assert!(packs::execute(&mut sib, "interim__measure", &json!({"period":"x"})).contains("拒绝"));
+}
+
+#[test]
 fn test_bid_compliance_exclusive_and_scan_sg_mix() {
     let p = paths();
     assert!(packs::visible_tool_names("bid-compliance").iter().any(|n| n == "bid-compliance__gaps"));
