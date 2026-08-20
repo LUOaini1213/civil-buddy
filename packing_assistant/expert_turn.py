@@ -323,6 +323,25 @@ _SAMPLE_SKIP = {
     "待填",
 }
 
+_LAB_RECORD_CHAPTERS = (
+    "封面",
+    "编号总则",
+    "建议分册",
+    "原始记录纪律",
+    "仪器三件事",
+    "公开名称备查",
+    "闭合检查表头",
+    "接口",
+    "禁令",
+)
+
+_RECORD_SKIP = {
+    "草稿提纲",
+    "试验台账",
+    "试验台账骨架",
+    "待填",
+}
+
 _MILESTONE_KEYS = ("桩基", "±0", "封顶", "砌筑", "机电", "装饰", "竣工")
 
 _QTY_RE = re.compile(
@@ -1357,6 +1376,113 @@ def _lab_sample_md(text: str) -> str:
     return "\n".join(lines)
 
 
+def _parse_record_samples(blob: str) -> List[str]:
+    rows: List[str] = []
+    for piece in (blob or "").replace("；", "\n").replace(";", "\n").splitlines():
+        t = piece.strip()
+        t = re.sub(r"^写一份\S*\s*", "", t).strip()
+        if not t or t in _RECORD_SKIP or t in _SAMPLE_SKIP:
+            continue
+        if t.startswith("#") or t.startswith("内部"):
+            continue
+        if t in {"JGJ", "SAC", "CN", "SG", "DUAL"}:
+            continue
+        if len(t) > 80:
+            t = t[:80]
+        if t not in rows:
+            rows.append(t)
+    return rows
+
+
+def _lab_record_md(text: str) -> str:
+    blob = text or ""
+    zone = _mix_zone(blob)
+    samples = _parse_record_samples(blob)
+    if samples:
+        table = (
+            "| 试样 | 试验项 | 报告编号 | 仪器检定 | 结论 |\n"
+            "| --- | --- | --- | --- | --- |\n"
+            + "".join(f"| {s} | 待填 | 待核 | 待核 | 待填 |\n" for s in samples)
+        )
+    else:
+        table = (
+            "| 试样 | 试验项 | 报告编号 | 仪器检定 | 结论 |\n"
+            "| --- | --- | --- | --- | --- |\n"
+            "| 待填 | 待填 | 待核 | 待核 | 待填 |\n"
+        )
+    lines = [
+        "# 试验台账骨架（AI 草稿）",
+        "",
+        DISCLAIMER,
+        "",
+        "内部讨论用，不是 CMA/CNAS 证书，不是竣工归档正本。不填检测数据，不给合格结论。",
+        "",
+        f"- 辖区：{zone}",
+        "",
+        "## 用户原文",
+        "",
+        blob.strip() or "（未提供）",
+        "",
+    ]
+    for i, title in enumerate(_LAB_RECORD_CHAPTERS, 1):
+        lines.append(f"## {i} {title}")
+        lines.append("")
+        if i == 1:
+            lines.append("工程或试验室名称、年度、台账种类待填。[A001]")
+        elif i == 2:
+            lines.append(
+                "检测合同、委托单、原始记录、检测报告按年度统一编号，编号连续，不得随意抽撤、涂改。"
+                "用户未给现行编号规则则只出表头 + [A001] 待填，不发明一套工程代号。"
+            )
+        elif i == 3:
+            lines.append(
+                "- 原材料进场复试台账\n"
+                "- 混凝土 / 砂浆试配与施工配合比通知台账（只登记编号与日期，用量见 lab-mix）\n"
+                "- 试件成型、养护、试压台账\n"
+                "- 见证取样送检台账\n"
+                "- 检测结果不合格项目台账（单独建册）\n"
+                "- 仪器设备台账与检定/校准/期间核查计划\n"
+                "- 标准物质与试模、养护室温湿度记录"
+            )
+            lines.append("")
+            lines.append(table)
+        elif i == 4:
+            lines.append("记录真实、按年连续编号。严禁涂改，笔误杠改并签改人改期。记录、报告、影像与样品标识对同一唯一号。")
+        elif i == 5:
+            lines.append(
+                "检定：对照法定要求给出合格与否，属法制计量。未检、逾期、不合格不得使用。"
+                "校准：给出示值误差和不确定度，用于溯源和修正，不等于法定检定。"
+                "期间核查：两次检定或校准之间的运行检查，不是再做一次检定。"
+                "仪器超检定期不得使用，不得继续出具数据。追溯清单待用户提供，不编报告号。"
+            )
+        elif i == 6:
+            if zone in ("CN", "DUAL"):
+                lines.append("《建设工程质量检测管理办法》；《中华人民共和国计量法》。试验方法标准只写名称，正文禁止摘步骤。")
+            else:
+                lines.append("公开名称只写族名。试验方法标准只写名称，正文禁止摘步骤。条款 unspecified_clause。")
+        elif i == 7:
+            lines.append(
+                "| 检查 | 状态 |\n| --- | --- |\n"
+                "| 有取样计划是否有委托单 | 待核 |\n"
+                "| 有委托单是否有报告 | 待核 |\n"
+                "| 有不合格是否有 24 小时上报和处置 | 待核 |\n"
+                "| 有仪器是否在有效期内 | 待核 |"
+            )
+            lines.append("")
+            lines.append("缺一项标缺口。本稿不下归档结论。")
+        elif i == 8:
+            lines.append("配合比通知单编号给 lab-mix；见证委托单给 lab-sample；资料总目录给 supervision；账物隔离给 warehouse。")
+        else:
+            lines.append("不编造已完成的检定证书号、报告号、温湿度曲线。不把校准证书改写成法定检定。")
+        lines.append("")
+    if zone in ("SG", "DUAL"):
+        lines.append("SG：SAC laboratory accreditation 只写标题。")
+    if zone in ("CN", "DUAL"):
+        lines.append("CN：建设工程质量检测管理办法只写全名。")
+    lines.append("")
+    return "\n".join(lines)
+
+
 def _dispatch_daily_md(text: str) -> str:
     jobs = _copy_sensitive_jobs(text)
     sensitive = (
@@ -2102,6 +2228,33 @@ def _run_exclusive(
             "submit_blocked": True,
         }
 
+    if expert.id == "lab-record":
+        md = _lab_record_md(text)
+        from packing_assistant.tools.tender_review import forbidden_hits
+
+        hits = forbidden_hits(md)
+        if hits:
+            return {
+                "wrote": False,
+                "hitl_pending": False,
+                "files": [],
+                "tools_run": [],
+                "reply": "禁语扫描命中，未报成功：" + "、".join(hits),
+                "submit_blocked": True,
+            }
+        path = out_dir / "lab-record__ledger.md"
+        guarded_write_text(path, md)
+        files.append({"name": path.name, "path": str(path), "tool": "lab-record__ledger"})
+        ran.append("lab-record__ledger")
+        return {
+            "wrote": True,
+            "hitl_pending": False,
+            "files": files,
+            "tools_run": ran,
+            "reply": "已出试验台账骨架。报告编号待核。结论待填。submit_blocked=true。",
+            "submit_blocked": True,
+        }
+
     if expert.id == "cost":
         md = (
             f"# 工程量拆分表（AI 草稿）\n\n{DISCLAIMER}\n\n"
@@ -2215,6 +2368,15 @@ def run_named_exclusive(name: str, args: Optional[Dict[str, Any]] = None) -> Dic
         "materials",
         "items",
         "package",
+        "samples",
+        "notice",
+        "reply_points",
+        "work_item",
+        "hazards",
+        "controls",
+        "inspection_lot",
+        "site",
+        "issues",
     ):
         v = args.get(k)
         if v:

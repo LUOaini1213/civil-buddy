@@ -434,7 +434,7 @@ fn pack_tools(pack: &str) -> Vec<ToolDef> {
             },
             ToolDef {
                 name: "lab-record__ledger",
-                description: "试验台账独有：记录骨架。无试验单不编结论。",
+                description: "试验台账独有：报告编号待核|仪器检定|结论待填。",
                 parameters: obj(json!({"samples": {"type": "string"}}), &["samples"]),
             },
         ],
@@ -3667,20 +3667,29 @@ fn material_site_recon(ctx: &mut ToolCtx, args: &Value) -> String {
 fn lab_record_ledger(ctx: &mut ToolCtx, args: &Value) -> String {
     let samples = split_lines(&s(args, "samples"));
     let (jur, banner) = zone_banner(args);
-    let mut md = format!(
-        "{}{banner}\n| 试样 | 试验项 | 结果 | 结论 |\n| --- | --- | --- | --- |\n",
-        header("试验台账骨架")
+    let table = if samples.is_empty() {
+        "| 试样 | 试验项 | 报告编号 | 仪器检定 | 结论 |\n| --- | --- | --- | --- | --- |\n| 待填 | 待填 | 待核 | 待核 | 待填 |".to_string()
+    } else {
+        let mut out = String::from("| 试样 | 试验项 | 报告编号 | 仪器检定 | 结论 |\n| --- | --- | --- | --- | --- |\n");
+        for s0 in &samples {
+            out.push_str(&format!("| {s0} | 待填 | 待核 | 待核 | 待填 |\n"));
+        }
+        out
+    };
+    let basis = if jur == "SG" {
+        "公开名称只写族名。试验方法标准只写名称，正文禁止摘步骤。条款 unspecified_clause。".to_string()
+    } else {
+        "《建设工程质量检测管理办法》；《中华人民共和国计量法》。试验方法标准只写名称，正文禁止摘步骤。".to_string()
+    };
+    let md = format!(
+        "{}{banner}\n内部讨论用，不是 CMA/CNAS 证书，不是竣工归档正本。不填检测数据，不给合格结论。\n\n## 1 封面\n工程或试验室名称、年度、台账种类待填。[A001]\n\n## 2 编号总则\n检测合同、委托单、原始记录、检测报告按年度统一编号，编号连续，不得随意抽撤、涂改。用户未给现行编号规则则只出表头 + [A001] 待填，不发明一套工程代号。\n\n## 3 建议分册\n- 原材料进场复试台账\n- 混凝土 / 砂浆试配与施工配合比通知台账（只登记编号与日期，用量见 lab-mix）\n- 试件成型、养护、试压台账\n- 见证取样送检台账\n- 检测结果不合格项目台账（单独建册）\n- 仪器设备台账与检定/校准/期间核查计划\n- 标准物质与试模、养护室温湿度记录\n\n{table}\n\n## 4 原始记录纪律\n记录真实、按年连续编号。严禁涂改，笔误杠改并签改人改期。\n\n## 5 仪器三件事\n检定：对照法定要求给出合格与否，属法制计量。未检、逾期、不合格不得使用。校准：给出示值误差和不确定度，不等于法定检定。期间核查：两次检定或校准之间的运行检查。仪器超检定期不得使用。追溯清单待用户提供，不编报告号。\n\n## 6 公开名称备查\n{basis}\n\n## 7 闭合检查表头\n| 检查 | 状态 |\n| --- | --- |\n| 有取样计划是否有委托单 | 待核 |\n| 有委托单是否有报告 | 待核 |\n| 有不合格是否有 24 小时上报和处置 | 待核 |\n| 有仪器是否在有效期内 | 待核 |\n\n缺一项标缺口。本稿不下归档结论。\n\n## 8 接口\n配合比通知单编号给 lab-mix；见证委托单给 lab-sample；资料总目录给 supervision；账物隔离给 warehouse。\n\n## 9 禁令\n不编造已完成的检定证书号、报告号、温湿度曲线。不把校准证书改写成法定检定。\n\n{}\n",
+        header("试验台账骨架"),
+        format!(
+            "{}{}",
+            sg_only(&jur, "SG：SAC laboratory accreditation 只写标题。"),
+            cn_only(&jur, "CN：建设工程质量检测管理办法只写全名。"),
+        ),
     );
-    if samples.is_empty() {
-        md.push_str("| 待填 | 待填 | TBD | 无试验单不编 |\n");
-    }
-    for s0 in samples {
-        md.push_str(&format!("| {s0} | 待填 | TBD | 无试验单不编 |\n"));
-    }
-    md.push_str("\n[A001] 无试验单不编强度和合格结论。");
-    md.push_str(&sg_only(&jur, "SG：SAC laboratory accreditation 只写标题。"));
-    md.push_str(&cn_only(&jur, "CN：建设工程质量检测管理办法只写全名。"));
-    md.push('\n');
     match ctx.write_md("试验台账骨架.md", &md) {
         Ok(m) => m,
         Err(e) => e,
