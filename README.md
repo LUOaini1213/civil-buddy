@@ -9,6 +9,8 @@
 
 原独立仓 packing-agent 与 civil-buddy 已并入本树：https://github.com/LUOaini1213/civil-buddy
 
+试用（别人可下载 exe）：[给试用的人.md](给试用的人.md) · LICENSE：MIT · 工作台包在 [GitHub Releases](https://github.com/LUOaini1213/civil-buddy/releases)。API Key **自带**，不必 DeepSeek。
+
 ---
 
 ## 两套入口
@@ -23,7 +25,7 @@
 
 ```powershell
 cd workbench
-# DeepSeek 写在 gitignored 的 demo/.env
+# API Key 写在 gitignored 的 demo/.env（CIVIL_API_KEY / OPENAI_API_KEY / DEEPSEEK_API_KEY）
 cargo run --release --bin civil-workbench
 ```
 
@@ -86,7 +88,10 @@ python scripts/run_hard_fail_cases.py --smoke
 
 | 变量 | 说明 |
 |------|------|
-| `DEEPSEEK_API_KEY` | Civil Buddy 成稿 / 装箱 llm_toolcall |
+| `CIVIL_API_KEY` / `OPENAI_API_KEY` / `DEEPSEEK_API_KEY` | 成稿用的 Chat Completions Key（自选；DeepSeek 可选） |
+| `CIVIL_API_BASE` / `OPENAI_BASE_URL` | 兼容网关，例 `https://api.openai.com/v1` |
+| `CIVIL_MODEL` / `LLM_MODEL` | 模型名，须与网关一致 |
+| `CIVIL_JOB_ROOT` | 授权作业文件夹（禁止 `D:\layout`） |
 | `PACKING_AGENT_URL` | 装箱网关（可选） |
 | `PACKING_AGENT_ROOT` | 默认本仓根，一般不用设 |
 | `CIVIL_PORT` | 工作台端口，默认 8765 |

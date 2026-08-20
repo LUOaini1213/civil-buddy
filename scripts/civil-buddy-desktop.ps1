@@ -45,14 +45,21 @@ function Test-PortOpen {
 
 $already = Test-PortOpen -ListenPort $usePort
 if (-not $already) {
+    $exeCandidates = @(
+        (Join-Path $Repo "workbench\target\release\civil-workbench.exe"),
+        (Join-Path $Repo "civil-workbench.exe")
+    )
+    $exe = $exeCandidates | Where-Object { Test-Path $_ } | Select-Object -First 1
     $wb = Join-Path $Repo "workbench\run.ps1"
     $py = Join-Path $Repo "demo\run.ps1"
-    if (Test-Path $wb) {
+    if ($exe) {
+        Start-Process -FilePath $exe -WorkingDirectory $Repo -WindowStyle Minimized
+    } elseif (Test-Path $wb) {
         Start-Process -FilePath "powershell.exe" -ArgumentList "-NoProfile","-ExecutionPolicy","Bypass","-File",$wb -WorkingDirectory (Join-Path $Repo "workbench") -WindowStyle Minimized
     } elseif (Test-Path $py) {
         Start-Process -FilePath "powershell.exe" -ArgumentList "-NoProfile","-ExecutionPolicy","Bypass","-File",$py -WorkingDirectory (Join-Path $Repo "demo") -WindowStyle Minimized
     } else {
-        throw "Missing workbench\run.ps1 and demo\run.ps1"
+        throw "Missing civil-workbench.exe, workbench\run.ps1 and demo\run.ps1"
     }
     $n = 0
     while (-not (Test-PortOpen -ListenPort $usePort)) {

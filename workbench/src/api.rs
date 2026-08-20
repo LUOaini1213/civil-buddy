@@ -1,6 +1,6 @@
 use crate::agent::{self, LlmMode};
 use crate::attach;
-use crate::config::{deepseek_model, Paths};
+use crate::config::{llm_model, Paths};
 use crate::kbio::{self, MAX_FILE_BYTES};
 use crate::llm;
 use crate::rag::list_kb;
@@ -95,10 +95,12 @@ async fn index(State(st): State<Arc<AppState>>) -> Response {
 }
 
 async fn health(State(st): State<Arc<AppState>>) -> Json<Value> {
+    let keyed = st.has_key();
     Json(json!({
         "ok": true,
-        "deepseek": st.has_key(),
-        "model": deepseek_model(),
+        "has_key": keyed,
+        "deepseek": keyed,
+        "model": llm_model(),
         "context": crate::context::Policy::from_env().to_value(),
         "harness": crate::harness::architecture(),
         "parse": crate::parse::probe(),
@@ -582,7 +584,10 @@ async fn chat(State(st): State<Arc<AppState>>, Json(body): Json<ChatIn>) -> Resu
             }
         }
         if intent == crate::agent::Intent::Chat {
-            return Err(err(StatusCode::BAD_REQUEST, "未配置 DEEPSEEK_API_KEY"));
+            return Err(err(
+                StatusCode::BAD_REQUEST,
+                "未配置 API Key。在 demo/.env 写入 CIVIL_API_KEY / OPENAI_API_KEY / DEEPSEEK_API_KEY。",
+            ));
         }
         // Run/Both: exclusive steps do not need a live model.
     }

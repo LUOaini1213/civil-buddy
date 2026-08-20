@@ -1,4 +1,4 @@
-use crate::config::{deepseek_api_key, deepseek_base_url, deepseek_model};
+use crate::config::{llm_api_key, llm_config, llm_uses_thinking};
 use serde_json::{json, Value};
 use thiserror::Error;
 
@@ -11,10 +11,10 @@ pub fn has_key() -> bool {
 }
 
 fn headers() -> Result<reqwest::header::HeaderMap, LlmError> {
-    let key = deepseek_api_key();
+    let key = llm_api_key();
     if key.is_empty() {
         return Err(LlmError(
-            "未配置 DEEPSEEK_API_KEY。在 demo/.env 写入后重启。".into(),
+            "未配置 API Key。在 demo/.env 写入 CIVIL_API_KEY / OPENAI_API_KEY / DEEPSEEK_API_KEY 后重启。".into(),
         ));
     }
     let mut h = reqwest::header::HeaderMap::new();
@@ -58,28 +58,30 @@ fn http_client() -> Result<reqwest::Client, LlmError> {
 fn http_err(status: reqwest::StatusCode, body: &str) -> LlmError {
     if status.as_u16() == 401 {
         return LlmError(
-            "DeepSeek 401：API Key 无效。请更新 demo/.env 的 DEEPSEEK_API_KEY 后重启工作台。".into(),
+            "API Key 401：无效。请更新 demo/.env 后重启工作台。".into(),
         );
     }
     let cut: String = body.chars().take(400).collect();
-    LlmError(format!("DeepSeek {status}: {cut}"))
+    LlmError(format!("LLM {status}: {cut}"))
 }
 
 pub async fn chat(messages: &[Value], tools: Option<&[Value]>, temperature: f32) -> Result<Value, LlmError> {
-    let thinking = thinking_on(tools.is_some());
+    let cfg = llm_config();
+    let thinking = llm_uses_thinking(&cfg.base_url) && thinking_on(tools.is_some());
     let mut payload = json!({
-        "model": deepseek_model(),
+        "model": cfg.model,
         "messages": messages,
-        "thinking": { "type": if thinking { "enabled" } else { "disabled" } },
     });
-    if !thinking {
+    if thinking {
+        payload["thinking"] = json!({ "type": "enabled" });
+    } else {
         payload["temperature"] = json!(temperature);
     }
     if let Some(tools) = tools {
         payload["tools"] = json!(tools);
         payload["tool_choice"] = json!("auto");
     }
-    let url = format!("{}/chat/completions", deepseek_base_url());
+    let url = format!("{}/chat/completions", cfg.base_url);
     let r = http_client()?
         .post(url)
         .headers(headers()?)
@@ -99,24 +101,26 @@ pub async fn chat(messages: &[Value], tools: Option<&[Value]>, temperature: f32)
     let v: Value = serde_json::from_str(&body).map_err(|e| LlmError(e.to_string()))?;
     v.pointer("/choices/0/message")
         .cloned()
-        .ok_or_else(|| LlmError("DeepSeek 响应缺少 message".into()))
+        .ok_or_else(|| LlmError("LLM 响应缺少 message".into()))
 }
 
 pub async fn stream_plain<F>(messages: &[Value], temperature: f32, mut on_piece: F) -> Result<(), LlmError>
 where
     F: FnMut(&str),
 {
-    let thinking = thinking_on(false);
+    let cfg = llm_config();
+    let thinking = llm_uses_thinking(&cfg.base_url) && thinking_on(false);
     let mut payload = json!({
-        "model": deepseek_model(),
+        "model": cfg.model,
         "messages": messages,
         "stream": true,
-        "thinking": { "type": if thinking { "enabled" } else { "disabled" } },
     });
-    if !thinking {
+    if thinking {
+        payload["thinking"] = json!({ "type": "enabled" });
+    } else {
         payload["temperature"] = json!(temperature);
     }
-    let url = format!("{}/chat/completions", deepseek_base_url());
+    let url = format!("{}/chat/completions", cfg.base_url);
     let mut r = http_client()?
         .post(url)
         .headers(headers()?)

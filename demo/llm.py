@@ -6,7 +6,7 @@ from typing import Any
 
 import httpx
 
-from config import DEEPSEEK_API_KEY, DEEPSEEK_BASE_URL, DEEPSEEK_MODEL
+from config import llm_api_key, llm_base_url, llm_model
 
 
 class LLMError(RuntimeError):
@@ -14,14 +14,17 @@ class LLMError(RuntimeError):
 
 
 def has_key() -> bool:
-    return bool(DEEPSEEK_API_KEY)
+    return bool(llm_api_key())
 
 
 def _headers() -> dict[str, str]:
-    if not DEEPSEEK_API_KEY:
-        raise LLMError("未配置 DEEPSEEK_API_KEY。在 demo/.env 写入后重启。")
+    key = llm_api_key()
+    if not key:
+        raise LLMError(
+            "未配置 API Key。在 demo/.env 写入 CIVIL_API_KEY / OPENAI_API_KEY / DEEPSEEK_API_KEY 后重启。"
+        )
     return {
-        "Authorization": f"Bearer {DEEPSEEK_API_KEY}",
+        "Authorization": f"Bearer {key}",
         "Content-Type": "application/json",
     }
 
@@ -33,7 +36,7 @@ def chat(
     temperature: float = 0.3,
 ) -> dict[str, Any]:
     payload: dict[str, Any] = {
-        "model": DEEPSEEK_MODEL,
+        "model": llm_model(),
         "messages": messages,
         "temperature": temperature,
     }
@@ -42,18 +45,18 @@ def chat(
         payload["tool_choice"] = "auto"
     with httpx.Client(timeout=120.0) as client:
         r = client.post(
-            f"{DEEPSEEK_BASE_URL}/chat/completions",
+            f"{llm_base_url()}/chat/completions",
             headers=_headers(),
             json=payload,
         )
         if r.status_code >= 400:
-            raise LLMError(f"DeepSeek {r.status_code}: {r.text[:400]}")
+            raise LLMError(f"LLM {r.status_code}: {r.text[:400]}")
         return r.json()["choices"][0]["message"]
 
 
 def stream_plain(messages: list[dict[str, Any]], temperature: float = 0.6) -> Iterator[str]:
     payload = {
-        "model": DEEPSEEK_MODEL,
+        "model": llm_model(),
         "messages": messages,
         "temperature": temperature,
         "stream": True,
@@ -61,13 +64,13 @@ def stream_plain(messages: list[dict[str, Any]], temperature: float = 0.6) -> It
     with httpx.Client(timeout=120.0) as client:
         with client.stream(
             "POST",
-            f"{DEEPSEEK_BASE_URL}/chat/completions",
+            f"{llm_base_url()}/chat/completions",
             headers=_headers(),
             json=payload,
         ) as r:
             if r.status_code >= 400:
                 body = r.read().decode("utf-8", errors="ignore")
-                raise LLMError(f"DeepSeek {r.status_code}: {body[:400]}")
+                raise LLMError(f"LLM {r.status_code}: {body[:400]}")
             for line in r.iter_lines():
                 if not line:
                     continue

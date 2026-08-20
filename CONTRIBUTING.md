@@ -71,5 +71,6 @@ Use GitHub templates:
 
 ## License / scope
 
+MIT. See [LICENSE](LICENSE).  
 Portfolio + research prototype. Not a warranty of production packing accuracy.  
 By contributing you agree your patches may be redistributed with the project.

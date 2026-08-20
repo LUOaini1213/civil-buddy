@@ -4,6 +4,7 @@ const state = {
   summoned: new Set(),
   history: [],
   session: crypto.randomUUID().slice(0, 12),
+  modelName: "",
   attachments: [],
   context: {
     limit: 1000000,
@@ -20,15 +21,21 @@ const $ = (id) => document.getElementById(id);
 async function boot() {
   const health = await fetch("/api/health").then((r) => r.json());
   const badge = $("keyBadge");
-  if (health.deepseek) {
-    badge.textContent = "已配置 DEEPSEEK_API_KEY";
+  if (health.has_key || health.deepseek) {
+    badge.textContent = "已配置 API Key";
     badge.className = "pill ok";
   } else {
-    badge.textContent = "缺少 DEEPSEEK_API_KEY";
+    badge.textContent = "缺少 API Key";
     badge.className = "pill warn";
   }
+  if (health.model) {
+    state.modelName = health.model;
+  }
   if (health.model && $("modelBadge")) {
-    $("modelBadge").textContent = `模型 ${health.model} · 1M 上下文`;
+    const lim = health.context && health.context.limit;
+    $("modelBadge").textContent = lim
+      ? `模型 ${health.model} · 上下文 ${lim}`
+      : `模型 ${health.model}`;
   }
   if (health.harness && $("harnessBadge")) {
     $("harnessBadge").textContent =
@@ -114,7 +121,7 @@ function renderSummon() {
   });
   $("summonBar").innerHTML = names.length
     ? `当前召唤：<em>${names.join(" · ")}</em>（先理解 · 能聊能跑 · 各自独立收工）`
-    : "当前：<em>未召唤 · 普通 DeepSeek</em>（点左侧专家才能按岗位库聊或出稿）";
+    : "当前：<em>未召唤 · 普通对话</em>（点左侧专家才能按岗位库聊或出稿）";
 }
 
 $("clearExperts").addEventListener("click", () => {
@@ -272,7 +279,7 @@ $("form").addEventListener("submit", async (ev) => {
 });
 
 function namesOrPlain() {
-  if (!state.summoned.size) return "DeepSeek";
+  if (!state.summoned.size) return state.modelName || "模型";
   return [...state.summoned]
     .map((id) => state.experts.find((e) => e.id === id)?.name || id)
     .join(" / ");

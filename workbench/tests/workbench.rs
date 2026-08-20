@@ -333,6 +333,8 @@ async fn test_health_exposes_context_policy() {
     assert!(v["context"]["limit"].as_u64().unwrap_or(0) >= 1000);
     assert!(v["context"]["compress_at"].as_u64().unwrap_or(0) > 0);
     assert_eq!(v["context"]["compress_pct"].as_u64(), Some(70));
+    assert!(v["has_key"].is_boolean(), "{body}");
+    assert_eq!(v["has_key"], v["deepseek"]);
     assert_eq!(v["harness"]["default_mode"].as_str(), Some("steps"));
     assert_eq!(v["harness"]["expert_runtime"].as_str(), Some("understand"));
     assert_eq!(v["harness"]["summoned_default"].as_str(), Some("chat"));
