@@ -5,6 +5,7 @@ Writes only exclusive tools (or HITL pending). No 66 personality prompts.
 
 from __future__ import annotations
 
+import re
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 from uuid import uuid4
@@ -89,6 +90,151 @@ _SCHEME_CHAPTERS = (
     "验收与资料",
     "附录",
 )
+
+_SURVEY_CHAPTERS = (
+    "封面与文件控制",
+    "草稿与责任声明",
+    "任务范围与部位",
+    "已知起算",
+    "控制网与加密",
+    "放样内容",
+    "竖向传递",
+    "复测与检核",
+    "仪器与人员",
+    "停测与异常",
+    "附录",
+)
+
+_DISPATCH_CHAPTERS = (
+    "报头",
+    "草稿声明",
+    "计划接口",
+    "当日实际",
+    "人机料动态",
+    "指令栏",
+    "交叉作业与工作面交接",
+    "停复工与异常",
+    "危大/高处/临边等敏感作业清单",
+    "明日条件与待决策",
+    "附件表头",
+)
+
+_POINT_RE = re.compile(r"(?i)\b(?:CP|BM|PT|TP|GC|SP)[-_]?\d+[A-Za-z]?\b")
+_SENSITIVE_KEYS = (
+    "危大",
+    "临边",
+    "基坑",
+    "开挖",
+    "起重",
+    "脚手架",
+    "模板",
+    "有限空间",
+    "拆除",
+    "爆破",
+    "高处",
+    "PTW",
+    "excavation",
+    "lifting",
+    "scaffold",
+)
+
+
+def _copy_survey_points(blob: str) -> List[str]:
+    rows: List[str] = []
+    for line in (blob or "").splitlines():
+        t = line.strip()
+        if not t or "用户未提供" in t:
+            continue
+        if "点号" in t or "控制点" in t or _POINT_RE.search(t):
+            rows.append(t[:200])
+    return rows
+
+
+def _copy_sensitive_jobs(blob: str) -> List[str]:
+    hits: List[str] = []
+    for line in (blob or "").replace("；", "\n").replace(";", "\n").splitlines():
+        t = line.strip()
+        if not t:
+            continue
+        if any(k.lower() in t.lower() for k in _SENSITIVE_KEYS):
+            hits.append(t[:120])
+    return hits
+
+
+def _survey_record_md(text: str) -> str:
+    points = _copy_survey_points(text)
+    known = (
+        "\n".join(f"- {p}" for p in points)
+        if points
+        else "| 点号 | 东坐标 | 北坐标 | 高程 | 来源 |\n| --- | --- | --- | --- | --- |\n| [A001] | [A001] | [A001] | [A001] | 用户未给 |"
+    )
+    lines = [
+        "# 测量方案/记录表（AI 草稿）",
+        "",
+        DISCLAIMER,
+        "",
+        "不是复测签认件。只抄用户已给点号/坐标。缺数 [A001]。条款 UNSPECIFIED。辖区：SG。",
+        "",
+        "## 用户原文",
+        "",
+        (text or "").strip() or "（未提供）",
+        "",
+    ]
+    for i, title in enumerate(_SURVEY_CHAPTERS, 1):
+        lines.append(f"## {i} {title}")
+        lines.append("")
+        if i == 2:
+            lines.append(DISCLAIMER)
+        elif i == 3:
+            lines.append((text or "").strip()[:200] or "整节待填。[A001]")
+        elif i == 4:
+            lines.append(known)
+            lines.append("")
+            lines.append("禁止编造坐标或点号。无用户坐标不编点号。")
+        else:
+            lines.append("待按用户点号/图纸填写。[A001]")
+        lines.append("")
+    lines.append("SG：SVY21 / SHD 只写坐标系统名。CN：工程测量标准只写全名。本记录不是施工依据。")
+    lines.append("")
+    return "\n".join(lines)
+
+
+def _dispatch_daily_md(text: str) -> str:
+    jobs = _copy_sensitive_jobs(text)
+    sensitive = (
+        "\n".join(f"- {j}（只列名称；判定交 method-hazard）" for j in jobs)
+        if jobs
+        else "- （本轮用户未点名敏感作业。判定仍交 method-hazard，本岗不判危大。）"
+    )
+    lines = [
+        "# 调度日报草稿（AI）",
+        "",
+        DISCLAIMER,
+        "",
+        "不是调度令、停复工令或工期承诺。缺数 [A001]。本日报不是开工许可。",
+        "",
+        "## 用户原文",
+        "",
+        (text or "").strip() or "（未提供）",
+        "",
+    ]
+    for i, title in enumerate(_DISPATCH_CHAPTERS, 1):
+        lines.append(f"## {i} {title}")
+        lines.append("")
+        if i == 2:
+            lines.append(DISCLAIMER)
+        elif i == 4:
+            lines.append((text or "").strip()[:200] or "待填。[A001]")
+        elif i == 9:
+            lines.append(sensitive)
+            lines.append("")
+            lines.append("敏感作业只列名称与时段。是否危大、要否 PTW 交 method-hazard。本岗不签发。")
+        else:
+            lines.append("待按现场记录填写。[A001] 不编产量、工日、台班。")
+        lines.append("")
+    lines.append("CN：调度日报不是危大文件。SG：BCA construction site records 只写标题。")
+    lines.append("")
+    return "\n".join(lines)
 
 
 def _try_fill_scheme_docx(out_dir: Path, project: str) -> Dict[str, Any]:
@@ -498,6 +644,60 @@ def _run_exclusive(
             "files": files,
             "tools_run": ran,
             "reply": "已出税务日历草稿。页述 9%。税额待填。submit_blocked=true。",
+            "submit_blocked": True,
+        }
+
+    if expert.id == "survey":
+        md = _survey_record_md(text)
+        from packing_assistant.tools.tender_review import forbidden_hits
+
+        hits = forbidden_hits(md)
+        if hits:
+            return {
+                "wrote": False,
+                "hitl_pending": False,
+                "files": [],
+                "tools_run": [],
+                "reply": "禁语扫描命中，未报成功：" + "、".join(hits),
+                "submit_blocked": True,
+            }
+        path = out_dir / "survey__record.md"
+        guarded_write_text(path, md)
+        files.append({"name": path.name, "path": str(path), "tool": "survey__record"})
+        ran.append("survey__record")
+        return {
+            "wrote": True,
+            "hitl_pending": False,
+            "files": files,
+            "tools_run": ran,
+            "reply": "已出测量记录草稿。只抄已给点号。submit_blocked=true。",
+            "submit_blocked": True,
+        }
+
+    if expert.id == "dispatch":
+        md = _dispatch_daily_md(text)
+        from packing_assistant.tools.tender_review import forbidden_hits
+
+        hits = forbidden_hits(md)
+        if hits:
+            return {
+                "wrote": False,
+                "hitl_pending": False,
+                "files": [],
+                "tools_run": [],
+                "reply": "禁语扫描命中，未报成功：" + "、".join(hits),
+                "submit_blocked": True,
+            }
+        path = out_dir / "dispatch__daily.md"
+        guarded_write_text(path, md)
+        files.append({"name": path.name, "path": str(path), "tool": "dispatch__daily"})
+        ran.append("dispatch__daily")
+        return {
+            "wrote": True,
+            "hitl_pending": False,
+            "files": files,
+            "tools_run": ran,
+            "reply": "已出调度日报草稿。敏感作业交 method-hazard。submit_blocked=true。",
             "submit_blocked": True,
         }
 

@@ -448,7 +448,7 @@
 - qa：已有 · construction__scan_forbidden + 高风险确认句
 - kb：已有 · 分层 KB + search_kb/read_kb（demo/kb）
 - write：已有 · 独有 survey__record；chat 不写盘
-- 下一刀：survey__record 读本会话附件，只抄已给点号坐标；都无则表头+[A001]。
+- 下一刀：已做 T030。survey__record 只抄已给点号/坐标；都无则表头+[A001]。
 
 ### dispatch
 
@@ -461,7 +461,7 @@
 - qa：已有 · construction__scan_forbidden
 - kb：已有 · 分层 KB + search_kb/read_kb（demo/kb）
 - write：已有 · 独有 dispatch__daily；chat 不写盘
-- 下一刀：dispatch__daily 按 outline 十一章落表头；敏感作业只列名，判定交 method-hazard。
+- 下一刀：已做 T030。dispatch__daily 按 outline 十一章落表头；敏感作业只列名，判定交 method-hazard。
 
 
 ## 大类 `hse` · 车道 `lane-hse`

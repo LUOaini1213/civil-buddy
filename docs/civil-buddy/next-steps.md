@@ -55,6 +55,9 @@
 17. **平台刀 T007–T062（不含 T030–T047 岗批次）** ✅ 2026-08-20  
     T007/T008 岗 GST 9% 与 CORENET 反例扫描；T002 危大判定书默认 SG WSH/PTW；T004 税务日历 9% 空栏；T006 cost takeoff UNSPECIFIED；T005 fill_scheme / `docx_pending`；T014 agent_loop 读 handoff；T011 parse/file/files 走 ToolEngine（chat 拒写）；T010 `session.summary`；T020 16-pack Host 样例；T024 Grok/Cursor 最小配置；T050 PDF 拒绝句；T052 同 session 抄 can_fit；T062 刀后快闸。主链头指针改为 **T030**。T030–T047 不得一行勾完。行业总判仍 **部分合格**。
 
+18. **T030 construction 收尾 survey + dispatch** ✅ 2026-08-20  
+    survey__record 只抄已给点号/坐标（会话附件+原文），都无则表头+[A001]。dispatch__daily 按 outline 十一章落表头；敏感作业只列名，判定交 method-hazard。chat 仍不写盘。验收：`python scripts/test_expert_turn.py` · `cargo test --test workbench survey_record dispatch_daily`。主链头指针改为 **T031**。T031–T047 不得一行勾完。
+
 平台内核见 [product-improvement-handbook.md](product-improvement-handbook.md)。岗独有写盘下一刀仍按 [post-horizon-2026-08-17.md](post-horizon-2026-08-17.md)。
 
 ## 有宿主再做

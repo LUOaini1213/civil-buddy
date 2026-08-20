@@ -2184,13 +2184,97 @@ fn purchase_plan(ctx: &mut ToolCtx, args: &Value) -> String {
     }
 }
 
+fn extract_survey_points(blob: &str) -> Vec<String> {
+    let re = regex::Regex::new(r"(?i)\b(?:CP|BM|PT|TP|GC|SP)[-_]?\d+[A-Za-z]?\b").expect("point re");
+    let mut rows = Vec::new();
+    for line in blob.lines() {
+        let t = line.trim();
+        if t.is_empty() || t.contains("用户未提供") {
+            continue;
+        }
+        if t.contains("点号") || t.contains("控制点") || re.is_match(t) {
+            rows.push(t.chars().take(200).collect());
+        }
+    }
+    rows
+}
+
+fn extract_sensitive_jobs(blob: &str) -> Vec<String> {
+    const KEYS: &[&str] = &[
+        "危大",
+        "临边",
+        "基坑",
+        "开挖",
+        "起重",
+        "脚手架",
+        "模板",
+        "有限空间",
+        "拆除",
+        "爆破",
+        "高处",
+        "PTW",
+        "excavation",
+        "lifting",
+        "scaffold",
+    ];
+    let mut hits = Vec::new();
+    for raw in blob.replace('；', "\n").replace(';', "\n").lines() {
+        let t = raw.trim();
+        if t.is_empty() {
+            continue;
+        }
+        let lower = t.to_ascii_lowercase();
+        if KEYS.iter().any(|k| t.contains(k) || lower.contains(&k.to_ascii_lowercase())) {
+            hits.push(t.chars().take(120).collect());
+        }
+    }
+    hits
+}
+
+fn gather_survey_blob(ctx: &ToolCtx, args: &Value) -> String {
+    let mut parts = Vec::new();
+    for key in [
+        "known_points",
+        "work_item",
+        "text",
+        "brief",
+        "description",
+        "points",
+    ] {
+        let v = s(args, key);
+        if v.is_empty() || v == "用户未提供坐标/点号" || v == "待填作业" {
+            continue;
+        }
+        parts.push(v);
+    }
+    for f in crate::attach::list_uploads(&ctx.paths, &ctx.session_id) {
+        let Some(id) = f.get("id").and_then(|v| v.as_str()) else {
+            continue;
+        };
+        if let Ok(body) = crate::attach::read_upload(&ctx.paths, &ctx.session_id, id, 0, 8_000) {
+            parts.push(body);
+        }
+    }
+    parts.join("\n")
+}
+
 fn dispatch_daily(ctx: &mut ToolCtx, args: &Value) -> String {
     let (jur, banner) = zone_banner(args);
+    let progress = nonempty(&s(args, "progress"), "待填");
+    let issues = nonempty(&s(args, "issues"), "待填");
+    let blob = format!("{progress}\n{issues}");
+    let jobs = extract_sensitive_jobs(&blob);
+    let sensitive = if jobs.is_empty() {
+        "- （本轮用户未点名敏感作业。判定仍交 method-hazard，本岗不判危大。）".to_string()
+    } else {
+        jobs.iter()
+            .map(|j| format!("- {j}（只列名称；判定交 method-hazard）"))
+            .collect::<Vec<_>>()
+            .join("\n")
+    };
     let md = format!(
-        "{}{banner}\n## 形象进度\n{}\n\n## 问题\n{}\n\n[A001] 百分比、工日、台班无现场记录则待填。本日报不是开工许可。{}\n",
+        "{}{banner}\n## 1 报头\n待填项目/日期/班次。[A001]\n\n## 2 草稿声明\n{DISCLAIMER}\n\n## 3 计划接口\n无计划文件则整表待填，不编节点日期。[A001]\n\n## 4 当日实际\n{progress}\n\n## 5 人机料动态\n待按台账填写。[A001] 不编产量、工日、台班。\n\n## 6 指令栏\n下达人/接收人/内容空栏。签认空着。\n\n## 7 交叉作业与工作面交接\n用户说了才写。[A001]\n\n## 8 停复工与异常\n{issues}\n\n## 9 危大/高处/临边等敏感作业清单\n{sensitive}\n\n敏感作业只列名称与时段。是否危大、要否 PTW 交 method-hazard。本岗不签发。\n\n## 10 明日条件与待决策\n待填。[A001]\n\n## 11 附件表头\n旁站/交底/验收标识由用户确认，不替他们下合格结论。\n\n本日报不是调度令或工期承诺。{}\n",
         header("调度日报草稿"),
-        nonempty(&s(args, "progress"), "待填"),
-        nonempty(&s(args, "issues"), "待填"),
         format!(
             "{}{}",
             sg_only(&jur, "SG：BCA construction site records 只写标题，本日报不是法定现场簿。"),
@@ -2301,9 +2385,19 @@ fn structure_calc(ctx: &mut ToolCtx, args: &Value) -> String {
 fn survey_record(ctx: &mut ToolCtx, args: &Value) -> String {
     let (jur, banner) = zone_banner(args);
     let item = nonempty(&s(args, "work_item"), "待填作业");
-    let pts = nonempty(&s(args, "known_points"), "用户未提供坐标/点号");
+    let blob = gather_survey_blob(ctx, args);
+    let copied = extract_survey_points(&blob);
+    let known = if copied.is_empty() {
+        "| 点号 | 东坐标 | 北坐标 | 高程 | 来源 |\n| --- | --- | --- | --- | --- |\n| [A001] | [A001] | [A001] | [A001] | 用户未给 |".to_string()
+    } else {
+        copied
+            .iter()
+            .map(|p| format!("- {p}"))
+            .collect::<Vec<_>>()
+            .join("\n")
+    };
     let md = format!(
-        "{}{banner}\n## 作业\n{item}\n\n## 已知点\n{pts}\n\n## 口径\n- 控制点/放样记录只抄用户给出的点号与坐标。\n- [A001] 未提供的坐标、高程、闭合差一律待填。\n- 规范只写全名，条款 UNSPECIFIED。\n{}\n禁止编造坐标或条款号。本记录不是复测签认件。\n",
+        "{}{banner}\n## 1 封面与文件控制\n空签认栏。内部讨论草稿。\n\n## 2 草稿与责任声明\n{DISCLAIMER}\n\n## 3 任务范围与部位\n{item}\n\n## 4 已知起算\n{known}\n\n禁止编造坐标或点号。无用户坐标不编点号。\n\n## 5 控制网与加密\n方法名称由用户定。[A001]\n\n## 6 放样内容\n图号必须来自用户清单。[A001]\n\n## 7 竖向传递\n无图纸不指定孔位。[A001]\n\n## 8 复测与检核\n闭合差栏待填。不写复测合格。\n\n## 9 仪器与人员\n证书编号待填。[A001]\n\n## 10 停测与异常\n点位破坏/超限升级路径待填。\n\n## 11 附录\n点之记/观测手簿表头。无数据不填示范数。\n\n- [A001] 未提供的坐标、高程、闭合差一律待填。\n- 规范只写全名，条款 UNSPECIFIED。\n{}\n本记录不是复测签认件，不可以当作施工依据。\n",
         header("测量记录口径"),
         format!(
             "{}{}",

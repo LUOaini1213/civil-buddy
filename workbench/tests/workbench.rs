@@ -1393,7 +1393,20 @@ fn test_dispatch_daily_exclusive() {
     let text = std::fs::read_to_string(ctx.out_dir.join("调度日报草稿.md")).unwrap();
     assert!(text.contains("SG"), "{text}");
     assert!(text.contains("[A001]"));
+    assert!(text.contains("## 1 报头"), "{text}");
+    assert!(text.contains("危大/高处/临边等敏感作业清单"), "{text}");
+    assert!(text.contains("method-hazard"), "{text}");
     assert!(!text.contains("可以开工"));
+    let mut hot = ToolCtx::new(p.clone(), "dispatch", "construction", "low", true, "iter-dispatch-edge");
+    let hout = packs::execute(
+        &mut hot,
+        "dispatch__daily",
+        &json!({"progress":"临边防护白班","jurisdiction":"SG"}),
+    );
+    assert!(hout.contains("已写入"), "{hout}");
+    let ht = std::fs::read_to_string(hot.out_dir.join("调度日报草稿.md")).unwrap();
+    assert!(ht.contains("临边"), "{ht}");
+    assert!(ht.contains("method-hazard"), "{ht}");
     let mut sib = ToolCtx::new(p, "construction", "construction", "high", true, "iter-dispatch-sib");
     assert!(packs::execute(&mut sib, "dispatch__daily", &json!({"progress":"x"})).contains("拒绝"));
 }
@@ -1415,7 +1428,29 @@ fn test_survey_record_exclusive() {
     assert!(text.contains("SG"), "{text}");
     assert!(text.contains("[A001]") || text.contains("UNSPECIFIED"));
     assert!(text.contains("SVY21") || text.contains("SHD"), "{text}");
+    assert!(text.contains("## 4 已知起算"), "{text}");
+    assert!(text.contains("## 11 附录"), "{text}");
+    assert!(!text.contains("CP99"), "{text}");
     assert!(!text.contains("可以开工"));
+    let sid = "wb-survey-cp01";
+    civil_workbench::attach::save_upload(
+        &p,
+        sid,
+        "points.txt",
+        "控制点 CP01 东 12345.67 北 23456.89\n".as_bytes(),
+    )
+    .unwrap();
+    let mut with_pt = ToolCtx::new(p.clone(), "survey", "construction", "high", true, sid);
+    let pout = packs::execute(
+        &mut with_pt,
+        "survey__record",
+        &json!({"work_item":"slab opening set-out","jurisdiction":"SG"}),
+    );
+    assert!(pout.contains("已写入"), "{pout}");
+    let pt = std::fs::read_to_string(with_pt.out_dir.join("测量记录口径.md")).unwrap();
+    assert!(pt.contains("CP01"), "{pt}");
+    assert!(pt.contains("12345.67"), "{pt}");
+    assert!(pt.contains("23456.89"), "{pt}");
     let mut blocked = ToolCtx::new(p.clone(), "survey", "construction", "high", false, "iter-survey-gate");
     assert!(packs::execute(
         &mut blocked,
