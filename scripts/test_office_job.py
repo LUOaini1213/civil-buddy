@@ -57,6 +57,37 @@ def main() -> int:
     assert "6 报销勾选" in wb.sheetnames
     assert wb["6 报销勾选"]["A2"].value == "发票查验"
     assert wb["6 报销勾选"]["B2"].value == "待核"
+    ledger = job / "现场台账.xlsx"
+    import openpyxl
+
+    wb2 = openpyxl.Workbook()
+    ws = wb2.active
+    ws.title = "收发"
+    ws["A1"] = "物资"
+    ws["B1"] = "入库"
+    ws["A2"] = "钢筋"
+    ws["B2"] = "12吨"
+    wb2.save(ledger)
+    from packing_assistant.office_job import job_files_blob, list_job_files
+
+    listed = list_job_files()
+    assert any(f["name"] == "现场台账.xlsx" for f in listed), listed
+    blob = job_files_blob("写一份收发存 现场台账")
+    assert "作业根文件" in blob
+    assert "钢筋" in blob
+    assert "12吨" in blob
+    from packing_assistant.expert_turn import run_expert_turn
+
+    wh = run_expert_turn(
+        "写一份收发存 现场台账",
+        "warehouse",
+        force_intent="run",
+        session_id="t065-wh-job",
+    )
+    assert wh["wrote"] is True
+    wt = Path(wh["files"][0]["path"]).read_text(encoding="utf-8")
+    assert "钢筋" in wt
+    assert "12吨" in wt
     print("PASS office_job")
     return 0
 

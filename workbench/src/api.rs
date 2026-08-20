@@ -63,6 +63,7 @@ pub fn app(state: AppState) -> Router {
         )
         .route("/api/attachments", get(attachments))
         .route("/api/local", post(import_local))
+        .route("/api/job", get(job_listing))
         .route("/api/firm/bid", post(firm_bid))
         .route("/api/architecture", get(architecture))
         .route("/api/eval/shadow", post(eval_shadow))
@@ -433,8 +434,62 @@ struct LocalIn {
     path: String,
 }
 
+async fn job_listing() -> Json<Value> {
+    let raw = std::env::var("CIVIL_JOB_ROOT").unwrap_or_default();
+    let p = std::path::PathBuf::from(raw.trim());
+    let lower = p.to_string_lossy().to_ascii_lowercase().replace('/', "\\");
+    let denied = lower == "d:\\layout" || lower.starts_with("d:\\layout\\");
+    if raw.trim().is_empty() || denied || !p.is_dir() {
+        return Json(json!({
+            "ok": true,
+            "granted": false,
+            "root": "",
+            "files": [],
+            "hint": "设 CIVIL_JOB_ROOT 为工程文件夹后直接读本机 xlsx/docx，不必上传。禁止 D:\\layout。",
+        }));
+    }
+    let mut files = Vec::new();
+    if let Ok(rd) = std::fs::read_dir(&p) {
+        let mut names: Vec<_> = rd.flatten().map(|e| e.path()).collect();
+        names.sort();
+        for f in names {
+            if !f.is_file() {
+                continue;
+            }
+            let ext = f
+                .extension()
+                .and_then(|s| s.to_str())
+                .unwrap_or("")
+                .to_ascii_lowercase();
+            if !matches!(ext.as_str(), "xlsx" | "csv" | "txt" | "md" | "json" | "docx" | "log") {
+                continue;
+            }
+            files.push(json!({
+                "name": f.file_name().and_then(|s| s.to_str()).unwrap_or(""),
+                "path": f.to_string_lossy(),
+                "suffix": format!(".{ext}"),
+            }));
+            if files.len() >= 12 {
+                break;
+            }
+        }
+    }
+    Json(json!({
+        "ok": true,
+        "granted": true,
+        "root": p.to_string_lossy(),
+        "files": files,
+        "hint": "说「写一份」会自动抄作业根文件，不必再上传。",
+    }))
+}
+
 async fn import_local(State(st): State<Arc<AppState>>, Json(body): Json<LocalIn>) -> Result<Json<Value>, ApiError> {
-    let files = attach::import_local(&st.paths, &body.session_id, &body.path)
+    let path = if body.path.trim().is_empty() {
+        std::env::var("CIVIL_JOB_ROOT").unwrap_or_default()
+    } else {
+        body.path.clone()
+    };
+    let files = attach::import_local(&st.paths, &body.session_id, &path)
         .map_err(|e| err(StatusCode::BAD_REQUEST, e))?;
     Ok(Json(json!({"ok": true, "files": files})))
 }

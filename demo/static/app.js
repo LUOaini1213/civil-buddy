@@ -41,6 +41,27 @@ async function boot() {
   }
   paintContext(estimateLocalContext());
   await reloadCatalog();
+  await loadJobRoot();
+}
+
+async function loadJobRoot() {
+  try {
+    const job = await fetch("/api/job").then((r) => r.json());
+    const box = $("attaches");
+    if (!box) return;
+    if (!job.granted) {
+      addStatus(job.hint || "未授权作业根。设 CIVIL_JOB_ROOT 后可直接读本机文件。");
+      return;
+    }
+    addStatus(`作业根 ${job.root} · 已看到 ${(job.files || []).length} 个文件，说「写一份」会自动抄，不必再上传。`);
+    for (const f of job.files || []) {
+      if (state.attachments.some((a) => a.id === `job:${f.name}`)) continue;
+      state.attachments.push({ id: `job:${f.name}`, name: f.name, layer: "job" });
+    }
+    renderAttaches();
+  } catch (e) {
+    addStatus(String(e));
+  }
 }
 
 async function reloadCatalog() {
@@ -136,6 +157,7 @@ function layerName(layer) {
   if (layer === "category") return "大类共享";
   if (layer === "web") return "网上检索";
   if (layer === "upload") return "用户上传";
+  if (layer === "job") return "作业根";
   return "公司规则";
 }
 
@@ -266,7 +288,9 @@ async function streamChat(message, bodyEl) {
       expert_ids: [...state.summoned],
       confirm_ok: $("confirmOk").checked,
       session_id: state.session,
-      attachments: state.attachments.map((a) => a.id),
+      attachments: state.attachments
+        .filter((a) => !String(a.id || "").startsWith("job:"))
+        .map((a) => a.id),
     }),
   });
   if (!res.ok) {

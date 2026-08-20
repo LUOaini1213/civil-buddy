@@ -537,6 +537,7 @@ T030–T047 是**批次合同**（T030–T038 ✅、T039 worker-brief ✅ 后约
 | T062 | 刀后快闸清单写入 GETTING-STARTED | 命令本机跑过 | ✅ |
 | T063 | 改官方口径时才联网；结果追加 §13 表，不改 08-17 历史总判句 | 部分合格保持 | 纪律 |
 | T064 | 作业根 Office：有表的岗另存 `.xlsx`，可 Excel 打开 | `CIVIL_JOB_ROOT`（禁 `D:\layout`）+ sibling xlsx | ✅ |
+| T065 | 作业根直接读本机 xlsx/docx/csv/txt，不必再上传 | `GET /api/job` + run 时注入 | ✅ |
 
 **主链（不定时限；头指针 = 第一个非 ✅/延期）：**
 
