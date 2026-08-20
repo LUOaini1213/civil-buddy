@@ -356,6 +356,20 @@ _SUPERVISION_CHAPTERS = (
     "禁令",
 )
 
+_SAFETY_BRIEF_CHAPTERS = (
+    "封面",
+    "草稿声明",
+    "作业部位与范围",
+    "作业内容和工序步骤",
+    "危险源",
+    "防护要点",
+    "个人防护",
+    "禁止事项与喊停条件",
+    "应急要点",
+    "依据",
+    "签字栏",
+)
+
 _MILESTONE_KEYS = ("桩基", "±0", "封顶", "砌筑", "机电", "装饰", "竣工")
 
 _QTY_RE = re.compile(
@@ -1576,6 +1590,64 @@ def _supervision_md(text: str) -> str:
     return "\n".join(lines)
 
 
+def _safety_brief_md(text: str) -> str:
+    blob = text or ""
+    zone = _mix_zone(blob)
+    work = re.sub(r"^写一份\S*\s*", "", blob.strip()).strip() or "待填。[A001]"
+    if work in {"草稿提纲", "安全交底", "待填"}:
+        work = "待填。[A001]"
+    lines = [
+        "# 安全技术交底草稿（AI 草稿 · 内部讨论）",
+        "",
+        DISCLAIMER,
+        "",
+        "给现场技术员的讨论用交底草稿，不是工人口播，也不是签认件。须持证人员按正式文本复核签字后才可实施。",
+        "",
+        f"- 辖区：{zone}",
+        "",
+        "## 用户原文",
+        "",
+        blob.strip() or "（未提供）",
+        "",
+    ]
+    for i, title in enumerate(_SAFETY_BRIEF_CHAPTERS, 1):
+        lines.append(f"## {i} {title}")
+        lines.append("")
+        if i == 1:
+            lines.append("工程名称待填。作业部位、工序待填。交底日期待填。交底人/接受人空栏。[A001]")
+        elif i == 2:
+            lines.append(DISCLAIMER)
+        elif i == 3:
+            lines.append(work[:200])
+            lines.append("")
+            lines.append("轴线、楼层、基坑侧未给则 [A001]。禁止虚构图号。")
+        elif i == 4:
+            lines.append("只列用户或方案里出现的步骤。未给则待填。[A001]")
+        elif i == 5:
+            lines.append("只写本部位可能碰到的：临边坠落、洞口、物体打击、坍塌、触电、起重碰撞、有限空间、火灾。不抄全集充数。")
+        elif i == 6:
+            lines.append("栏杆、盖板、安全带挂点、通道、警戒、湿法、通风检测。高度、间距、荷载一律 [A001]，不编毫米数。")
+        elif i == 7:
+            lines.append("帽、鞋、镜、手套、安全带、呼吸防护。规格待填。[A001]")
+        elif i == 8:
+            lines.append("无防护不作业；酒后/带病不上高；有限空间未通风检测不进；指挥信号不清不起吊。")
+        elif i == 9:
+            lines.append("就近撤离方向待填。急救原则：高坠不乱搬、触电先断电。报告对象待填。电话 [A001]。")
+        elif i == 10:
+            lines.append("用户点名的规范全名。未提供文本则未核实表 + 条款 UNSPECIFIED。")
+        else:
+            lines.append("| 交底人 | 接受班组 | 安全员 | 日期 |\n| --- | --- | --- | --- |\n| （空） | （空） | （空） | 待填 |")
+            lines.append("")
+            lines.append("不预填姓名。本稿不下交底完毕结论。")
+        lines.append("")
+    if zone in ("SG", "DUAL"):
+        lines.append("SG：WSH Council toolbox meeting 导则只写标题。")
+    if zone in ("CN", "DUAL"):
+        lines.append("CN：安全技术交底按专项方案实施程序只写标题，本岗不签认。")
+    lines.append("")
+    return "\n".join(lines)
+
+
 def _dispatch_daily_md(text: str) -> str:
     jobs = _copy_sensitive_jobs(text)
     sensitive = (
@@ -2372,6 +2444,33 @@ def _run_exclusive(
             "files": files,
             "tools_run": ran,
             "reply": "已出监理通知回复草稿。暂停/复工只出目录。submit_blocked=true。",
+            "submit_blocked": True,
+        }
+
+    if expert.id == "safety-brief":
+        md = _safety_brief_md(text)
+        from packing_assistant.tools.tender_review import forbidden_hits
+
+        hits = forbidden_hits(md)
+        if hits:
+            return {
+                "wrote": False,
+                "hitl_pending": False,
+                "files": [],
+                "tools_run": [],
+                "reply": "禁语扫描命中，未报成功：" + "、".join(hits),
+                "submit_blocked": True,
+            }
+        path = out_dir / "safety-brief__talk.md"
+        guarded_write_text(path, md)
+        files.append({"name": path.name, "path": str(path), "tool": "safety-brief__talk"})
+        ran.append("safety-brief__talk")
+        return {
+            "wrote": True,
+            "hitl_pending": False,
+            "files": files,
+            "tools_run": ran,
+            "reply": "已出安全交底草稿。毫米/电话 [A001]。submit_blocked=true。",
             "submit_blocked": True,
         }
 

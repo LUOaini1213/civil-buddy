@@ -482,6 +482,31 @@ def main() -> int:
     assert "只出目录" in sst
     assert "可以复工" not in sst
 
+    sb_chat = run_expert_turn("安全技术交底怎么理解？", "safety-brief")
+    assert sb_chat["intent"] == "chat" and sb_chat["wrote"] is False
+    sb_hitl = run_expert_turn(
+        "写一份安全交底 临边",
+        "safety-brief",
+        confirm_ok=False,
+        force_intent="run",
+    )
+    assert sb_hitl["wrote"] is False and sb_hitl.get("hitl_pending") is True
+    sb_ok = run_expert_turn(
+        "写一份安全交底 临边",
+        "safety-brief",
+        confirm_ok=True,
+        force_intent="run",
+        session_id="t035-sb",
+    )
+    assert sb_ok["wrote"] is True
+    assert "safety-brief__talk" in sb_ok["tools_run"]
+    sbt = Path(sb_ok["files"][0]["path"]).read_text(encoding="utf-8")
+    for title in ("封面", "危险源", "防护要点", "应急要点", "签字栏"):
+        assert title in sbt, title
+    assert "[A001]" in sbt
+    assert "电话" in sbt
+    assert "可以开工" not in sbt
+
     high = [e for e in roster if e.risk == "high"][0]
     blocked = run_expert_turn("写一份专项方案讨论提纲", high.id, confirm_ok=False)
     assert blocked["intent"] == "run"

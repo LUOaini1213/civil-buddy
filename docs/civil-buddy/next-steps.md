@@ -97,6 +97,9 @@
 31. **T034 supervision 一岗（T034 批次完）** ✅ 2026-08-20  
     supervision__reply 来文复述｜拟办｜证据目录；暂停/复工只出目录，不签发复工。主链头指针改为 **T035**（safety-brief 先）。T035–T047 不得一行勾完。行业总判仍 **部分合格**。
 
+32. **T035 safety-brief 一岗** ✅ 2026-08-20  
+    safety-brief__talk 11 栏；毫米/电话 [A001]。高风险须确认句。T035 批次未完：下一岗 **quality**。不得把质量/环保/应急一并勾完。行业总判仍 **部分合格**。
+
 平台内核见 [product-improvement-handbook.md](product-improvement-handbook.md)。岗独有写盘下一刀仍按 [post-horizon-2026-08-17.md](post-horizon-2026-08-17.md)。
 
 ## 有宿主再做

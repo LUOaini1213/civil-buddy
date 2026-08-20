@@ -446,7 +446,7 @@ fn pack_tools(pack: &str) -> Vec<ToolDef> {
             },
             ToolDef {
                 name: "safety-brief__talk",
-                description: "安全交底独有：给现场技术员的交底草稿，不是签认件。",
+                description: "安全交底独有：11 栏。毫米/电话 [A001]。确认句后才写盘。",
                 parameters: obj(
                     json!({
                         "work_item": {"type": "string"},
@@ -2164,12 +2164,12 @@ fn sample_list(ctx: &mut ToolCtx, args: &Value) -> String {
 
 fn safety_brief(ctx: &mut ToolCtx, args: &Value) -> String {
     let (jur, banner) = zone_banner(args);
+    let work = nonempty(&s(args, "work_item"), "待填。[A001]");
+    let hazards = nonempty(&s(args, "hazards"), "待辨识");
+    let controls = nonempty(&s(args, "controls"), "待填");
     let md = format!(
-        "{}{banner}\n## 作业\n{}\n\n## 危险源\n{}\n\n## 控制措施\n{}\n\n交底对象：现场技术员。工人签认栏留空。禁止写开工许可或审图结论。{}\n",
+        "{}{banner}\n给现场技术员的讨论用交底草稿，不是工人口播，也不是签认件。须持证人员按正式文本复核签字后才可实施。\n\n## 1 封面\n工程名称待填。作业部位、工序待填。交底日期待填。交底人/接受人空栏。[A001]\n\n## 2 草稿声明\n须持证人员按正式文本复核签字后才可实施。\n\n## 3 作业部位与范围\n{work}\n\n轴线、楼层未给则 [A001]。禁止虚构图号。\n\n## 4 作业内容和工序步骤\n只列用户或方案里出现的步骤。未给则待填。[A001]\n\n## 5 危险源\n{hazards}\n\n只写本部位可能碰到的，不抄全集充数。\n\n## 6 防护要点\n{controls}\n\n栏杆、盖板、安全带挂点、通道、警戒。高度、间距、荷载一律 [A001]，不编毫米数。\n\n## 7 个人防护\n帽、鞋、镜、手套、安全带、呼吸防护。规格待填。[A001]\n\n## 8 禁止事项与喊停条件\n无防护不作业；酒后/带病不上高；有限空间未通风检测不进；指挥信号不清不起吊。\n\n## 9 应急要点\n就近撤离方向待填。急救原则：高坠不乱搬、触电先断电。报告对象待填。电话 [A001]。\n\n## 10 依据\n用户点名的规范全名。未提供文本则未核实表 + 条款 UNSPECIFIED。\n\n## 11 签字栏\n| 交底人 | 接受班组 | 安全员 | 日期 |\n| --- | --- | --- | --- |\n| （空） | （空） | （空） | 待填 |\n\n不预填姓名。本稿不下交底完毕结论。\n\n{}\n",
         header("安全交底草稿"),
-        nonempty(&s(args, "work_item"), "待填"),
-        nonempty(&s(args, "hazards"), "待辨识"),
-        nonempty(&s(args, "controls"), "待填"),
         format!(
             "{}{}",
             sg_only(&jur, "SG：WSH Council toolbox meeting 导则只写标题。"),

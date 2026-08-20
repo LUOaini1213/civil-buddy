@@ -1856,6 +1856,41 @@ fn test_supervision_reply_exclusive() {
 }
 
 #[test]
+fn test_safety_brief_talk_exclusive() {
+    let p = paths();
+    assert!(packs::visible_tool_names("safety-brief").iter().any(|n| n == "safety-brief__talk"));
+    let mut blocked = ToolCtx::new(p.clone(), "safety-brief", "hse", "high", false, "iter-sb-hitl");
+    assert!(packs::execute(&mut blocked, "safety-brief__talk", &json!({"work_item":"临边"})).contains("拒绝"));
+    let mut ctx = ToolCtx::new(p.clone(), "safety-brief", "hse", "high", true, "iter-sb");
+    let out = packs::execute(
+        &mut ctx,
+        "safety-brief__talk",
+        &json!({"work_item":"临边","jurisdiction":"SG"}),
+    );
+    assert!(out.contains("已写入"), "{out}");
+    let text = std::fs::read_to_string(ctx.out_dir.join("安全交底草稿.md")).unwrap();
+    assert!(text.contains("## 1 封面"), "{text}");
+    assert!(text.contains("## 11 签字栏"), "{text}");
+    assert!(text.contains("临边"), "{text}");
+    assert!(text.contains("[A001]"), "{text}");
+    assert!(text.contains("电话"), "{text}");
+    assert!(text.contains("toolbox"), "{text}");
+    assert!(!text.contains("可以开工"), "{text}");
+    let mut cn = ToolCtx::new(p.clone(), "safety-brief", "hse", "high", true, "iter-sb-cn");
+    let co = packs::execute(
+        &mut cn,
+        "safety-brief__talk",
+        &json!({"work_item":"临边","jurisdiction":"CN"}),
+    );
+    assert!(co.contains("已写入"), "{co}");
+    let ct = std::fs::read_to_string(cn.out_dir.join("安全交底草稿.md")).unwrap();
+    assert!(ct.contains("安全技术交底"), "{ct}");
+    assert!(!ct.contains("toolbox"), "{ct}");
+    let mut sib = ToolCtx::new(p, "quality", "hse", "high", true, "iter-sb-sib");
+    assert!(packs::execute(&mut sib, "safety-brief__talk", &json!({"work_item":"x"})).contains("拒绝"));
+}
+
+#[test]
 fn test_bid_compliance_exclusive_and_scan_sg_mix() {
     let p = paths();
     assert!(packs::visible_tool_names("bid-compliance").iter().any(|n| n == "bid-compliance__gaps"));
