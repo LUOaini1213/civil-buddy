@@ -1690,6 +1690,42 @@ fn test_vendor_eval_access_exclusive() {
 }
 
 #[test]
+fn test_finance_book_check_exclusive() {
+    let p = paths();
+    assert!(packs::visible_tool_names("finance-book").iter().any(|n| n == "finance-book__check"));
+    assert!(!packs::visible_tool_names("finance-fund").iter().any(|n| n == "finance-book__check"));
+    let mut ctx = ToolCtx::new(p.clone(), "finance-book", "finance", "low", true, "iter-fb-t038");
+    let out = packs::execute(
+        &mut ctx,
+        "finance-book__check",
+        &json!({"period":"2026-08","jurisdiction":"SG"}),
+    );
+    assert!(out.contains("已写入"), "{out}");
+    let text = std::fs::read_to_string(ctx.out_dir.join("核算检查表.md")).unwrap();
+    assert!(text.contains("2026-08"), "{text}");
+    assert!(text.contains("报销勾选") && text.contains("科目对照") && text.contains("对账缺口"), "{text}");
+    assert!(text.contains("[A001]"), "{text}");
+    assert!(text.contains("发票查验"), "{text}");
+    assert!(text.contains("人工费"), "{text}");
+    assert!(text.contains("GST") || text.contains("IRAS"), "{text}");
+    assert!(!text.contains("增值税"), "{text}");
+    assert!(!text.contains("可以开工"), "{text}");
+    assert!(!text.contains("账已平"), "{text}");
+    let mut gap = ToolCtx::new(p.clone(), "finance-book", "finance", "low", true, "iter-fb-gap");
+    let go = packs::execute(
+        &mut gap,
+        "finance-book__check",
+        &json!({"period":"2026-08","notes":"收发存未盘点","jurisdiction":"SG"}),
+    );
+    assert!(go.contains("已写入"), "{go}");
+    let gt = std::fs::read_to_string(gap.out_dir.join("核算检查表.md")).unwrap();
+    assert!(gt.contains("收发存"), "{gt}");
+    assert!(gt.contains("不编盈亏"), "{gt}");
+    let mut sib = ToolCtx::new(p, "finance-fund", "finance", "low", true, "iter-fb-t038-sib");
+    assert!(packs::execute(&mut sib, "finance-book__check", &json!({"period":"x"})).contains("拒绝"));
+}
+
+#[test]
 fn test_variation_form_exclusive() {
     let p = paths();
     assert!(packs::visible_tool_names("variation").iter().any(|n| n == "variation__form"));

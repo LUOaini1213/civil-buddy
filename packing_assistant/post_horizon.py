@@ -116,7 +116,7 @@ _NEXT = {
     "lab-mix": "已做 T033 lab-mix。lab-mix__report 四层目录；无试验数据则施工配比整节待填。",
     "lab-sample": "已做 T033 lab-sample。lab-sample__list 出类别|部位|见证人空|升级路径；组数 [A001]。",
     "lab-record": "已做 T033 lab-record。lab-record__ledger 加报告编号待核|仪器检定|结论待填。",
-    "finance-book": "finance-book__check 出报销勾选+科目对照+对账缺口，金额 [A001]。",
+    "finance-book": "已做 T038 finance-book。finance-book__check 出报销勾选+科目对照+对账缺口，金额 [A001]。",
     "finance-fund": "finance-fund__plan 出收入/支出窗口，金额 TBD，不当付款指令。",
     "finance-tax": "finance-tax__calendar 加税种|节点|资料是否齐全；税率空白，只可抄 IRAS 页述 9%。",
     "supervision": "已做 T034 supervision。supervision__reply：来文复述|拟办|证据目录；暂停/复工只出目录，不写复工许可。",
