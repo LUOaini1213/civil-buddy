@@ -725,7 +725,7 @@
 - qa：已有 · lab__scan_forbidden
 - kb：已有 · 分层 KB + search_kb/read_kb（demo/kb）
 - write：已有 · 独有 lab-record__ledger；chat 不写盘
-- 下一刀：lab-record__ledger 加报告编号待核|仪器检定|结论待填。
+- 下一刀：已做 T033 lab-record。lab-record__ledger 加报告编号待核|仪器检定|结论待填。
 
 
 ## 大类 `finance` · 车道 `lane-finance`

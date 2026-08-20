@@ -1788,6 +1788,40 @@ fn test_lab_sample_list_exclusive() {
 }
 
 #[test]
+fn test_lab_record_ledger_exclusive() {
+    let p = paths();
+    assert!(packs::visible_tool_names("lab-record").iter().any(|n| n == "lab-record__ledger"));
+    assert!(!packs::visible_tool_names("lab-sample").iter().any(|n| n == "lab-record__ledger"));
+    let mut ctx = ToolCtx::new(p.clone(), "lab-record", "lab", "low", true, "iter-lr");
+    let out = packs::execute(
+        &mut ctx,
+        "lab-record__ledger",
+        &json!({"samples":"cube-1","jurisdiction":"SG"}),
+    );
+    assert!(out.contains("已写入"), "{out}");
+    let text = std::fs::read_to_string(ctx.out_dir.join("试验台账骨架.md")).unwrap();
+    assert!(text.contains("报告编号"), "{text}");
+    assert!(text.contains("仪器检定"), "{text}");
+    assert!(text.contains("结论"), "{text}");
+    assert!(text.contains("cube-1"), "{text}");
+    assert!(text.contains("待核"), "{text}");
+    assert!(text.contains("SAC"), "{text}");
+    assert!(!text.contains("可以开工"), "{text}");
+    let mut cn = ToolCtx::new(p.clone(), "lab-record", "lab", "low", true, "iter-lr-cn");
+    let co = packs::execute(
+        &mut cn,
+        "lab-record__ledger",
+        &json!({"samples":"cube-1","jurisdiction":"CN"}),
+    );
+    assert!(co.contains("已写入"), "{co}");
+    let ct = std::fs::read_to_string(cn.out_dir.join("试验台账骨架.md")).unwrap();
+    assert!(ct.contains("质量检测"), "{ct}");
+    assert!(!ct.contains("SAC"), "{ct}");
+    let mut sib = ToolCtx::new(p, "lab-sample", "lab", "high", true, "iter-lr-sib");
+    assert!(packs::execute(&mut sib, "lab-record__ledger", &json!({"samples":"x"})).contains("拒绝"));
+}
+
+#[test]
 fn test_bid_compliance_exclusive_and_scan_sg_mix() {
     let p = paths();
     assert!(packs::visible_tool_names("bid-compliance").iter().any(|n| n == "bid-compliance__gaps"));

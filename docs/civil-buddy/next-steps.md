@@ -91,6 +91,9 @@
 29. **T033 lab-sample 一岗** ✅ 2026-08-20  
     lab-sample__list 出类别｜部位｜见证人空｜升级路径；组数 [A001]。不编合格结论。高风险须确认句。T033 批次未完：下一岗 **lab-record**。行业总判仍 **部分合格**。
 
+30. **T033 lab-record 一岗（T033 批次完）** ✅ 2026-08-20  
+    lab-record__ledger 加报告编号待核｜仪器检定｜结论待填。不编报告号。主链头指针改为 **T034**（supervision 先）。T034–T047 不得一行勾完。行业总判仍 **部分合格**。
+
 平台内核见 [product-improvement-handbook.md](product-improvement-handbook.md)。岗独有写盘下一刀仍按 [post-horizon-2026-08-17.md](post-horizon-2026-08-17.md)。
 
 ## 有宿主再做

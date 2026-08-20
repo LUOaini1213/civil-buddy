@@ -438,6 +438,24 @@ def main() -> int:
     assert "可以开工" not in lst
     assert "已取样合格" not in lst
 
+    lr_chat = run_expert_turn("试验台账怎么建？", "lab-record")
+    assert lr_chat["intent"] == "chat" and lr_chat["wrote"] is False
+    lr_ok = run_expert_turn(
+        "写一份试验台账 cube-1",
+        "lab-record",
+        force_intent="run",
+        session_id="t033-lr",
+    )
+    assert lr_ok["wrote"] is True
+    assert "lab-record__ledger" in lr_ok["tools_run"]
+    lrt = Path(lr_ok["files"][0]["path"]).read_text(encoding="utf-8")
+    for col in ("报告编号", "仪器检定", "结论"):
+        assert col in lrt, col
+    assert "cube-1" in lrt
+    assert "待核" in lrt
+    assert "待填" in lrt
+    assert "可以开工" not in lrt
+
     high = [e for e in roster if e.risk == "high"][0]
     blocked = run_expert_turn("写一份专项方案讨论提纲", high.id, confirm_ok=False)
     assert blocked["intent"] == "run"
