@@ -423,7 +423,7 @@ fn pack_tools(pack: &str) -> Vec<ToolDef> {
             },
             ToolDef {
                 name: "lab-sample__list",
-                description: "见证取样/送检清单。",
+                description: "见证取样独有：类别|部位|见证人空|升级路径。组数 [A001]。",
                 parameters: obj(
                     json!({
                         "materials": {"type": "string"},
@@ -2126,21 +2126,36 @@ fn mix_outline(ctx: &mut ToolCtx, args: &Value) -> String {
 
 fn sample_list(ctx: &mut ToolCtx, args: &Value) -> String {
     let (jur, banner) = zone_banner(args);
-    let mats = split_lines(&s(args, "materials"));
-    let mut md = format!(
-        "{}{banner}\n| 材料 | 批次/部位 | 取样 | 送检 | 备注 |\n| --- | --- | --- | --- | --- |\n",
-        header("见证取样送检清单")
-    );
-    for m in mats {
-        md.push_str(&format!("| {m} | 待填 | 待做 | 待送 | {} |\n", nonempty(&s(args, "lot_notes"), "")));
+    let mut mats = split_lines(&s(args, "materials"));
+    if mats.is_empty() {
+        mats = vec![
+            "承重结构混凝土试块".into(),
+            "承重墙体砌筑砂浆试块".into(),
+            "承重结构钢筋及连接接头试件".into(),
+            "承重墙的砖和混凝土小型砌块".into(),
+            "拌制混凝土和砌筑砂浆的水泥".into(),
+            "承重结构混凝土用掺加剂".into(),
+            "地下、屋面、厕浴间防水材料".into(),
+            "国家规定的其他项目（地方加长项待核）".into(),
+        ];
     }
-    md.push_str("\n[A001] 无试验单不编结论。");
-    md.push_str(&sg_only(
-        &jur,
-        "SG：SAC laboratory accreditation / BCA construction site records 只写标题。",
-    ));
-    md.push_str(&cn_only(&jur, "CN：见证取样和送检的规定只写全名。"));
-    md.push('\n');
+    let mut table = String::from(
+        "| 类别 | 部位 | 见证人 | 组数 | 升级路径 |\n| --- | --- | --- | --- | --- |\n",
+    );
+    for m in &mats {
+        table.push_str(&format!(
+            "| {m} | 待填 | （空） | [A001] | 不合格 24 小时上报；停止相关使用；隔离待处置 |\n"
+        ));
+    }
+    let md = format!(
+        "{}{banner}\n本清单只排计划与缺口，不判定材料合格，不编组数。不是工程质量验收资料。\n\n## 1 封面\n工程名称、施工段、计划周期、检测机构名称待填（须用户给出且为建设委托）。空签认栏。[A001]\n\n## 2 角色\n取样员属施工单位；见证人属建设单位或监理。取样员与见证人不得写成同一人同一单位。建设委托的检测，施工人员须在见证下现场取样。\n\n## 3 必须纳入见证取样的类别\n{table}\n全国公开底线只列名称。地方加长项待核，不编造地方条款。\n\n## 4 比例口径\n涉及结构安全的试块、试件和材料，见证取样和送检比例不得低于有关技术标准规定应取样数量的 30%。30% 是下限。具体每批组数缺则 [A001]，禁止估算组数。\n\n## 5 现场动作提纲\n按计划取样 → 标识封志 → 共同送检 → 填委托单 → 检测机构核封志。试样损伤、超时、掉封不得当见证样。\n\n## 6 不合格升级\n样品或报告不合格：24 小时内上报，停止相关加工与使用，书面通知监理/建设，隔离待处置。本清单不代做复检结论。\n\n## 7 报告效力\n见证取样检测报告须加盖见证取样检测专用章。非建设单位委托的检测报告不得作为工程质量验收资料。出厂合格证不能替代见证送检。\n\n## 8 与配比、台账、仓管、资料的接口\n未复试或不合格的原材料，lab-mix 不得出施工配比；报告编号连续登记走 lab-record；实物隔离走 warehouse；资料目录走 supervision。\n\n## 9 禁令\n不写取样合格结论。不编检测数据。不把监督抽检、企业试验室自检、见证取样混成一种报告。\n\n{}\n",
+        header("见证取样送检清单"),
+        format!(
+            "{}{}",
+            sg_only(&jur, "SG：SAC laboratory accreditation / BCA construction site records 只写标题。"),
+            cn_only(&jur, "CN：见证取样和送检的规定 / 建设工程质量检测管理办法只写全名。建建〔2000〕211 号只列名称。"),
+        ),
+    );
     match ctx.write_md("取样送检清单.md", &md) {
         Ok(m) => m,
         Err(e) => e,

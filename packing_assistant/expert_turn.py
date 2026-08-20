@@ -292,6 +292,37 @@ _LAB_MIX_CHAPTERS = (
 _MIX_TRIAL_YES = ("已有试验数据", "试配记录", "试拌记录", "含水率已测", "试验室配合比已批")
 _MIX_GRADE_RE = re.compile(r"([CM]\d{1,3})", re.I)
 
+_LAB_SAMPLE_CHAPTERS = (
+    "封面",
+    "角色",
+    "必须纳入见证取样的类别",
+    "比例口径",
+    "现场动作提纲",
+    "不合格升级",
+    "报告效力",
+    "与配比、台账、仓管、资料的接口",
+    "禁令",
+)
+
+_SAMPLE_DEFAULT = (
+    "承重结构混凝土试块",
+    "承重墙体砌筑砂浆试块",
+    "承重结构钢筋及连接接头试件",
+    "承重墙的砖和混凝土小型砌块",
+    "拌制混凝土和砌筑砂浆的水泥",
+    "承重结构混凝土用掺加剂",
+    "地下、屋面、厕浴间防水材料",
+    "国家规定的其他项目（地方加长项待核）",
+)
+
+_SAMPLE_SKIP = {
+    "草稿提纲",
+    "取样送检清单",
+    "见证取样",
+    "送检清单",
+    "待填",
+}
+
 _MILESTONE_KEYS = ("桩基", "±0", "封顶", "砌筑", "机电", "装饰", "竣工")
 
 _QTY_RE = re.compile(
@@ -1226,6 +1257,106 @@ def _lab_mix_md(text: str) -> str:
     return "\n".join(lines)
 
 
+def _parse_sample_cats(blob: str) -> List[str]:
+    rows: List[str] = []
+    for piece in (blob or "").replace("；", "\n").replace(";", "\n").splitlines():
+        t = piece.strip()
+        t = re.sub(r"^写一份\S*\s*", "", t).strip()
+        if not t or t in _SAMPLE_SKIP:
+            continue
+        if t.startswith("#") or t.startswith("内部"):
+            continue
+        if t in {"JGJ", "SAC", "CN", "SG", "DUAL"}:
+            continue
+        if len(t) > 80:
+            t = t[:80]
+        if t not in rows:
+            rows.append(t)
+    return rows
+
+
+def _lab_sample_md(text: str) -> str:
+    blob = text or ""
+    zone = _mix_zone(blob)
+    cats = _parse_sample_cats(blob)
+    if not cats:
+        cats = list(_SAMPLE_DEFAULT)
+    table = (
+        "| 类别 | 部位 | 见证人 | 组数 | 升级路径 |\n"
+        "| --- | --- | --- | --- | --- |\n"
+        + "".join(
+            f"| {c} | 待填 | （空） | [A001] | 不合格 24 小时上报；停止相关使用；隔离待处置 |\n"
+            for c in cats
+        )
+    )
+    lines = [
+        "# 取样送检清单（AI 草稿）",
+        "",
+        DISCLAIMER,
+        "",
+        "本清单只排计划与缺口，不判定材料合格，不编组数。不是工程质量验收资料。",
+        "",
+        f"- 辖区：{zone}",
+        "",
+        "## 用户原文",
+        "",
+        blob.strip() or "（未提供）",
+        "",
+    ]
+    for i, title in enumerate(_LAB_SAMPLE_CHAPTERS, 1):
+        lines.append(f"## {i} {title}")
+        lines.append("")
+        if i == 1:
+            lines.append("工程名称、施工段、计划周期、检测机构名称待填（须用户给出且为建设委托）。空签认栏。[A001]")
+        elif i == 2:
+            lines.append(
+                "取样员属施工单位；见证人属建设单位或监理。取样员与见证人不得写成同一人同一单位。"
+                "建设委托的检测，施工人员须在见证下现场取样；委托单须送检人、见证人签字。"
+            )
+        elif i == 3:
+            lines.append(table)
+            lines.append("")
+            lines.append("全国公开底线只列名称。地方加长项待核，不编造地方条款。")
+        elif i == 4:
+            lines.append(
+                "涉及结构安全的试块、试件和材料，见证取样和送检比例不得低于有关技术标准规定应取样数量的 30%。"
+                "30% 是下限。具体每批组数按该项现行标准 + 用户计划，缺则 [A001]，禁止估算组数。"
+            )
+        elif i == 5:
+            lines.append(
+                "按计划取样 → 标识封志 → 共同送检 → 填委托单 → 检测机构核封志。"
+                "试样损伤、超时、掉封不得当见证样。"
+            )
+        elif i == 6:
+            lines.append(
+                "样品或报告不合格：24 小时内上报，停止相关加工与使用，书面通知监理/建设，隔离待处置。"
+                "本清单不代做复检结论。项目试验室负责把报告送达路径写进清单，不冒充主管部门。"
+            )
+        elif i == 7:
+            lines.append(
+                "见证取样检测报告须加盖见证取样检测专用章。"
+                "非建设单位委托的检测报告不得作为工程质量验收资料。"
+                "出厂合格证、供方自检不能替代见证送检。"
+            )
+        elif i == 8:
+            lines.append(
+                "未复试或不合格的原材料，lab-mix 不得出施工配比；报告编号连续登记走 lab-record；"
+                "实物隔离走 warehouse；资料目录走 supervision。本岗只留接口栏。"
+            )
+        else:
+            lines.append(
+                "不写取样合格结论。不编检测数据。"
+                "不把监督抽检、企业试验室自检、见证取样混成一种报告。"
+            )
+        lines.append("")
+    if zone in ("SG", "DUAL"):
+        lines.append("SG：SAC laboratory accreditation / BCA construction site records 只写标题。")
+    if zone in ("CN", "DUAL"):
+        lines.append("CN：见证取样和送检的规定 / 建设工程质量检测管理办法只写全名。建建〔2000〕211 号只列名称。")
+    lines.append("")
+    return "\n".join(lines)
+
+
 def _dispatch_daily_md(text: str) -> str:
     jobs = _copy_sensitive_jobs(text)
     sensitive = (
@@ -1941,6 +2072,33 @@ def _run_exclusive(
             "files": files,
             "tools_run": ran,
             "reply": "已出配比报告提纲。无试验数据不给施工配合比。submit_blocked=true。",
+            "submit_blocked": True,
+        }
+
+    if expert.id == "lab-sample":
+        md = _lab_sample_md(text)
+        from packing_assistant.tools.tender_review import forbidden_hits
+
+        hits = forbidden_hits(md)
+        if hits:
+            return {
+                "wrote": False,
+                "hitl_pending": False,
+                "files": [],
+                "tools_run": [],
+                "reply": "禁语扫描命中，未报成功：" + "、".join(hits),
+                "submit_blocked": True,
+            }
+        path = out_dir / "lab-sample__list.md"
+        guarded_write_text(path, md)
+        files.append({"name": path.name, "path": str(path), "tool": "lab-sample__list"})
+        ran.append("lab-sample__list")
+        return {
+            "wrote": True,
+            "hitl_pending": False,
+            "files": files,
+            "tools_run": ran,
+            "reply": "已出取样送检清单。见证人空栏。组数 [A001]。submit_blocked=true。",
             "submit_blocked": True,
         }
 
