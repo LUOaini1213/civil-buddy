@@ -1759,6 +1759,35 @@ fn test_lab_mix_report_exclusive() {
 }
 
 #[test]
+fn test_lab_sample_list_exclusive() {
+    let p = paths();
+    assert!(packs::visible_tool_names("lab-sample").iter().any(|n| n == "lab-sample__list"));
+    assert!(!packs::visible_tool_names("lab-record").iter().any(|n| n == "lab-sample__list"));
+    let mut blocked = ToolCtx::new(p.clone(), "lab-sample", "lab", "high", false, "iter-ls-hitl");
+    assert!(packs::execute(&mut blocked, "lab-sample__list", &json!({"materials":"钢筋"})).contains("拒绝"));
+    let mut ctx = ToolCtx::new(p.clone(), "lab-sample", "lab", "high", true, "iter-ls");
+    let out = packs::execute(
+        &mut ctx,
+        "lab-sample__list",
+        &json!({"materials":"钢筋","jurisdiction":"SG"}),
+    );
+    assert!(out.contains("已写入"), "{out}");
+    let text = std::fs::read_to_string(ctx.out_dir.join("取样送检清单.md")).unwrap();
+    assert!(text.contains("类别"), "{text}");
+    assert!(text.contains("部位"), "{text}");
+    assert!(text.contains("见证人"), "{text}");
+    assert!(text.contains("升级路径"), "{text}");
+    assert!(text.contains("钢筋"), "{text}");
+    assert!(text.contains("[A001]"), "{text}");
+    assert!(text.contains("（空）"), "{text}");
+    assert!(text.contains("SAC"), "{text}");
+    assert!(!text.contains("可以开工"), "{text}");
+    assert!(!text.contains("已取样合格"), "{text}");
+    let mut sib = ToolCtx::new(p, "lab-mix", "lab", "high", true, "iter-ls-sib");
+    assert!(packs::execute(&mut sib, "lab-sample__list", &json!({"materials":"x"})).contains("拒绝"));
+}
+
+#[test]
 fn test_bid_compliance_exclusive_and_scan_sg_mix() {
     let p = paths();
     assert!(packs::visible_tool_names("bid-compliance").iter().any(|n| n == "bid-compliance__gaps"));

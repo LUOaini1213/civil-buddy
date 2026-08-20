@@ -411,6 +411,33 @@ def main() -> int:
     assert "SAC" not in mcn
     assert "不给施工配合比" in mcn
 
+    ls_chat = run_expert_turn("见证取样要哪些？", "lab-sample")
+    assert ls_chat["intent"] == "chat" and ls_chat["wrote"] is False
+    ls_hitl = run_expert_turn(
+        "写一份取样送检清单",
+        "lab-sample",
+        confirm_ok=False,
+        force_intent="run",
+    )
+    assert ls_hitl["wrote"] is False and ls_hitl.get("hitl_pending") is True
+    ls_ok = run_expert_turn(
+        "写一份取样送检清单 钢筋",
+        "lab-sample",
+        confirm_ok=True,
+        force_intent="run",
+        session_id="t033-ls",
+    )
+    assert ls_ok["wrote"] is True
+    assert "lab-sample__list" in ls_ok["tools_run"]
+    lst = Path(ls_ok["files"][0]["path"]).read_text(encoding="utf-8")
+    for col in ("类别", "部位", "见证人", "升级路径"):
+        assert col in lst, col
+    assert "钢筋" in lst
+    assert "[A001]" in lst
+    assert "（空）" in lst
+    assert "可以开工" not in lst
+    assert "已取样合格" not in lst
+
     high = [e for e in roster if e.risk == "high"][0]
     blocked = run_expert_turn("写一份专项方案讨论提纲", high.id, confirm_ok=False)
     assert blocked["intent"] == "run"

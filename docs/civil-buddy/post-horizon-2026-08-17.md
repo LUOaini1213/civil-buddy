@@ -712,7 +712,7 @@
 - qa：已有 · lab__scan_forbidden + 高风险确认句
 - kb：已有 · 分层 KB + search_kb/read_kb（demo/kb）
 - write：已有 · 独有 lab-sample__list；chat 不写盘
-- 下一刀：lab-sample__list 出类别|部位|见证人空|升级路径；组数 [A001]。
+- 下一刀：已做 T033 lab-sample。lab-sample__list 出类别|部位|见证人空|升级路径；组数 [A001]。
 
 ### lab-record
 
