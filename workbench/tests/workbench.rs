@@ -1655,6 +1655,41 @@ fn test_compare_table_multi_col_exclusive() {
 }
 
 #[test]
+fn test_vendor_eval_access_exclusive() {
+    let p = paths();
+    assert!(packs::visible_tool_names("proc-vendor").iter().any(|n| n == "proc-vendor__eval"));
+    assert!(!packs::visible_tool_names("proc-compare").iter().any(|n| n == "proc-vendor__eval"));
+    let mut ctx = ToolCtx::new(p.clone(), "proc-vendor", "procurement", "low", true, "iter-pv-t037");
+    let out = packs::execute(
+        &mut ctx,
+        "proc-vendor__eval",
+        &json!({"vendor":"local fab","jurisdiction":"SG"}),
+    );
+    assert!(out.contains("已写入"), "{out}");
+    let text = std::fs::read_to_string(ctx.out_dir.join("供方评价表头.md")).unwrap();
+    assert!(text.contains("local fab"), "{text}");
+    assert!(text.contains("准入") && text.contains("考察") && text.contains("短名单"), "{text}");
+    assert!(text.contains("待核"), "{text}");
+    assert!(text.contains("分数"), "{text}");
+    assert!(text.contains("GeBIZ"), "{text}");
+    assert!(text.contains("[A001]"), "{text}");
+    assert!(!text.contains("可以开工"), "{text}");
+    assert!(!text.contains("中标"), "{text}");
+    let mut two = ToolCtx::new(p.clone(), "proc-vendor", "procurement", "low", true, "iter-pv-two");
+    let to = packs::execute(
+        &mut two,
+        "proc-vendor__eval",
+        &json!({"vendor":"甲；乙","jurisdiction":"SG"}),
+    );
+    assert!(to.contains("已写入"), "{to}");
+    let tt = std::fs::read_to_string(two.out_dir.join("供方评价表头.md")).unwrap();
+    let acc = tt.split("## 3 准入").nth(1).unwrap().split("## 4").next().unwrap();
+    assert!(acc.contains("甲") && acc.contains("乙"), "{acc}");
+    let mut sib = ToolCtx::new(p, "proc-compare", "procurement", "low", true, "iter-pv-t037-sib");
+    assert!(packs::execute(&mut sib, "proc-vendor__eval", &json!({"vendor":"x"})).contains("拒绝"));
+}
+
+#[test]
 fn test_variation_form_exclusive() {
     let p = paths();
     assert!(packs::visible_tool_names("variation").iter().any(|n| n == "variation__form"));
@@ -3226,6 +3261,14 @@ fn test_cn_writers_omit_sg_only_titles() {
             "比价表草稿.md",
             json!({"item": "rebar", "vendors": "A", "jurisdiction": "CN"}),
             &["GeBIZ", "PQM"],
+        ),
+        (
+            "proc-vendor",
+            "procurement",
+            "proc-vendor__eval",
+            "供方评价表头.md",
+            json!({"vendor": "local fab", "jurisdiction": "CN"}),
+            &["GeBIZ", "GTP"],
         ),
         (
             "interior",

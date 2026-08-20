@@ -843,7 +843,7 @@ fn pack_tools(pack: &str) -> Vec<ToolDef> {
             },
             ToolDef {
                 name: "proc-vendor__eval",
-                description: "供方独有：评价表头。不编分数和中标结论。",
+                description: "供方独有：准入/考察/短名单。分数结论待核。不下成交结论。",
                 parameters: obj(
                     json!({
                         "vendor": {"type": "string"},
@@ -4119,14 +4119,130 @@ fn plan_resource_peak(ctx: &mut ToolCtx, args: &Value) -> String {
     }
 }
 
+fn parse_pv_names(blob: &str, vendor_arg: &str) -> Vec<String> {
+    let mut names = Vec::new();
+    let src = if vendor_arg.trim().is_empty() {
+        blob.to_string()
+    } else {
+        vendor_arg.to_string()
+    };
+    for raw in src.replace('；', "\n").replace(';', "\n").lines() {
+        let mut t = raw.trim().to_string();
+        if let Some(rest) = t.strip_prefix("写一份") {
+            t = rest.trim().to_string();
+        }
+        for p in [
+            "供方评价表头",
+            "供应商评价表",
+            "供方评价",
+            "供应商评价",
+            "评价表",
+            "准入考察",
+        ] {
+            if let Some(rest) = t.strip_prefix(p) {
+                t = rest.trim().to_string();
+                break;
+            }
+        }
+        for p in ["供方", "供应商"] {
+            if let Some(rest) = t.strip_prefix(p) {
+                t = rest.trim().to_string();
+                break;
+            }
+        }
+        if t.is_empty()
+            || matches!(
+                t.as_str(),
+                "草稿提纲"
+                    | "待填"
+                    | "SG"
+                    | "CN"
+                    | "DUAL"
+                    | "准入"
+                    | "考察"
+                    | "短名单"
+                    | "供方评价"
+                    | "供应商"
+            )
+        {
+            continue;
+        }
+        if t.starts_with('#') || t.starts_with("内部") {
+            continue;
+        }
+        let name: String = t.chars().take(80).collect();
+        if !names.iter().any(|n| n == &name) {
+            names.push(name);
+        }
+    }
+    names
+}
+
+fn pv_table(names: &[String], kind: &str) -> String {
+    let rows: Vec<&str> = if names.is_empty() {
+        vec!["待填供方"]
+    } else {
+        names.iter().map(|s| s.as_str()).collect()
+    };
+    match kind {
+        "access" => {
+            let mut out = String::from("| 供方 | 执照 | 许可 | 业绩 | 有效期 | 初审 |\n| --- | --- | --- | --- | --- | --- |\n");
+            for n in &rows {
+                out.push_str(&format!("| {n} | 未提供 | 许可种类待核对 | 待填 | 待核 | 待核 |\n"));
+            }
+            out
+        }
+        "visit" => {
+            let mut out = String::from("| 供方 | 厂址与库容 | 产线与样品 | 检测设备 | 考察人日期 | 结论 |\n| --- | --- | --- | --- | --- | --- |\n");
+            for n in &rows {
+                out.push_str(&format!("| {n} | 待填 | 待填 | 待填 | 待填 | 待核 |\n"));
+            }
+            out
+        }
+        "short" => {
+            let mut out = String::from("| 供方 | 口径 | 来源 | 结论 |\n| --- | --- | --- | --- |\n");
+            for n in &rows {
+                out.push_str(&format!("| {n} | 待核（拟入名录 / 仅本项目短名单 / 观察期） | 待填 | 待核 |\n"));
+            }
+            out
+        }
+        _ => {
+            let mut out = String::from("| 供方 | 供货批次 | 规格符合 | 到货及时 | 资料齐全 | 售后 | 取样复试 | 安全文明 | 书面报价 | 分数 | 结论 |\n| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |\n");
+            for n in &rows {
+                out.push_str(&format!("| {n} | 待填 | 待核 | 待核 | 待核 | 待核 | 待核 | 待核 | 无书面报价 | 待核 | 待核 |\n"));
+            }
+            out
+        }
+    }
+}
+
 fn proc_vendor_eval(ctx: &mut ToolCtx, args: &Value) -> String {
-    let vendor = nonempty(&s(args, "vendor"), "待填供方");
-    let criteria = nonempty(&s(args, "criteria"), "资质 / 业绩 / 交期（待核）");
     let (jur, banner) = zone_banner(args);
+    let blob = format!(
+        "{}\n{}\n{}\n{}",
+        s(args, "vendor"),
+        s(args, "vendors"),
+        s(args, "criteria"),
+        s(args, "notes")
+    );
+    let names = parse_pv_names(&blob, &s(args, "vendor"));
+    let shown = if names.is_empty() {
+        "待填供方".to_string()
+    } else {
+        names.join("、")
+    };
+    let access = pv_table(&names, "access");
+    let visit = pv_table(&names, "visit");
+    let short = pv_table(&names, "short");
+    let score = pv_table(&names, "score");
     let md = format!(
-        "{}{banner}\n## 供方\n{vendor}\n\n## 评价项\n{criteria}\n\n| 项 | 结果 |\n| --- | --- |\n| 主体资格 | 待核 |\n| 业绩 | 待核 |\n| 交期 | 待核 |\n| 报价 | 无报价不编价 |\n\n[A001] 不编分数和中标结论。本表不是定标决议。{}\n",
+        "{}{banner}\n供方建档口径。不是成交通知，不是合格证，也不是进场许可。缺证照就待填，不编证书号和业绩额。\n\n- 供方：{shown}\n\n## 1 封面与目的\n本次是新供方准入、既有名录复评、项目短名单，还是退出建议，待用户标明。项目、品类、编制人空栏。[A001]\n\n## 2 草稿声明\n内部讨论。无履约事实不打分。权重待企业制度。本稿不下成交结论。\n\n## 3 准入\n有原件/复印件/系统截图才勾。没有就写未提供。不编许可证号。未提供自愿性证书不写已通过。\n\n{access}\n\n## 4 初审\n证照是否在有效期、经营范围是否覆盖本包，只记录用户出示的名单名称。不联网查询后认定。\n\n## 5 考察\n去了才填。没去就整节待填。考察人、日期、照片编号留空给用户。\n\n{visit}\n\n## 6 短名单\n列拟入名录 / 仅本项目短名单 / 观察期。名录规则待企业制度。不新造黑名单栏目当已生效文件。\n\n{short}\n\n## 7 评价表头\n无履约事实不打分。价格只作有无书面报价，不填金额。禁止发明权重。\n\n{score}\n\n## 8 动态与退出\n质量事故、虚假资料、无故断供、拒绝配合复试：只列事实和证据编号。退出写提请按企业制度审议，不写已清退出库。\n\n## 9 接口栏\n未准入是否允许被询价按企业制度，制度待填。甲指供方仍要资料建档。厂家报告交试验室，取样结论不由本岗改写。\n\n## 10 禁令\n不编业绩和证书编号。不因关系户省略考察栏。能进名录不等于已经成交。评价不打价格分。不替代特种设备或危化品许可本身。\n\n[A001] 分数待核。结论待核。不编证书号和业绩额。禁止编造成交结论。{}\n",
         header("供方评价表头"),
-        sg_only(&jur, "SG：GeBIZ / BCA CRS 只写门户标题。"),
+        format!(
+            "{}{}",
+            sg_only(&jur, "SG：GeBIZ / BCA CRS 只写门户标题。GTP 不等于执照。"),
+            cn_only(&jur, "CN：无证照不编已准入。国资采购管理工作指导意见只写全名。"),
+        ),
     );
     match ctx.write_md("供方评价表头.md", &md) {
         Ok(m) => m,
