@@ -100,6 +100,12 @@
 32. **T035 safety-brief 一岗** ✅ 2026-08-20  
     safety-brief__talk 11 栏；毫米/电话 [A001]。高风险须确认句。T035 批次未完：下一岗 **quality**。不得把质量/环保/应急一并勾完。行业总判仍 **部分合格**。
 
+33. **T035 quality 一岗** ✅ 2026-08-20  
+    quality__lot 主控｜一般｜隐蔽三表，结果=未检。不给合格结论。T035 批次未完：下一岗 **env**。
+
+34. **T035 env 一岗** ✅ 2026-08-20  
+    env__list 扬尘/弃土/污水/夜间/市容五行，限值 UNSPECIFIED。T035 批次未完：下一岗 **emergency**。不得把应急一并勾完。行业总判仍 **部分合格**。
+
 平台内核见 [product-improvement-handbook.md](product-improvement-handbook.md)。岗独有写盘下一刀仍按 [post-horizon-2026-08-17.md](post-horizon-2026-08-17.md)。
 
 ## 有宿主再做

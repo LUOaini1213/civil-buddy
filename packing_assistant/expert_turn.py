@@ -370,6 +370,32 @@ _SAFETY_BRIEF_CHAPTERS = (
     "签字栏",
 )
 
+_QUALITY_CHAPTERS = (
+    "封面与声明",
+    "划分说明",
+    "进场与依据",
+    "主控项目检查栏",
+    "一般项目检查栏",
+    "隐蔽专项",
+    "通病防治核对",
+    "不符合时的处理路径栏目",
+    "资料闭合",
+    "签字栏",
+)
+
+_ENV_CHAPTERS = (
+    "封面",
+    "声明",
+    "扬尘",
+    "弃土与建筑垃圾",
+    "污水与泥浆",
+    "噪声与夜间",
+    "文明施工市容",
+    "与商务接口",
+    "停工与升级",
+    "签字栏",
+)
+
 _MILESTONE_KEYS = ("桩基", "±0", "封顶", "砌筑", "机电", "装饰", "竣工")
 
 _QTY_RE = re.compile(
@@ -1648,6 +1674,156 @@ def _safety_brief_md(text: str) -> str:
     return "\n".join(lines)
 
 
+def _parse_qc_items(blob: str) -> List[str]:
+    rows: List[str] = []
+    for piece in (blob or "").replace("；", "\n").replace(";", "\n").splitlines():
+        t = piece.strip()
+        t = re.sub(r"^写一份\S*\s*", "", t).strip()
+        if not t or t in {"草稿提纲", "质量检查表", "检验批", "待填"}:
+            continue
+        if t.startswith("#") or t.startswith("内部"):
+            continue
+        if t in {"JGJ", "SAC", "CN", "SG", "DUAL", "CONQUAS"}:
+            continue
+        if len(t) > 80:
+            t = t[:80]
+        if t not in rows:
+            rows.append(t)
+    return rows
+
+
+def _qc_table(title_row: str, items: List[str], empty: str) -> str:
+    head = "| 检查内容 | 设计或标准要求 | 实测或观察 | 结果 | 处理意见 |\n| --- | --- | --- | --- | --- |\n"
+    if not items:
+        return head + f"| {empty} | 待填 | 待填 | 未检 | （空） |\n"
+    return head + "".join(
+        f"| {it} | 待填 | 待填 | 未检 | （空） |\n" for it in items
+    )
+
+
+def _quality_md(text: str) -> str:
+    blob = text or ""
+    zone = _mix_zone(blob)
+    items = _parse_qc_items(blob)
+    lot = items[0] if items else "待填"
+    lines = [
+        "# 质量检查表（AI 草稿 · 内部讨论）",
+        "",
+        DISCLAIMER,
+        "",
+        "检验批、隐蔽验收、通病防治的检查栏目。不给合格结论，不替代监理组织验收。",
+        "",
+        f"- 辖区：{zone}",
+        f"- 检验批部位：{lot}",
+        "",
+        "## 用户原文",
+        "",
+        blob.strip() or "（未提供）",
+        "",
+    ]
+    for i, title in enumerate(_QUALITY_CHAPTERS, 1):
+        lines.append(f"## {i} {title}")
+        lines.append("")
+        if i == 1:
+            lines.append("工程/楼栋/检验批部位待填。对应分项名称待填。检查表编号待填。[A001]")
+        elif i == 2:
+            lines.append("本表覆盖哪一段、哪一层、哪一批待填。用户未给批量、抽样数量则 [A001]，不编最小抽样。")
+        elif i == 3:
+            lines.append("图纸图号仅用户清单。施工方案讨论稿名称待填。材料报告编号空则待填。禁止自造图号。")
+        elif i == 4:
+            lines.append(_qc_table("主控", items, "待列主控项 [A001]"))
+            lines.append("")
+            lines.append("对安全、节能、环保和主要使用功能起决定作用的项。结果=未检。")
+        elif i == 5:
+            lines.append(_qc_table("一般", [], "待列一般项 [A001]"))
+            lines.append("")
+            lines.append("外观、尺寸偏差。同样不预填合格。结果=未检。")
+        elif i == 6:
+            lines.append(_qc_table("隐蔽", [], "待列隐蔽项 [A001]"))
+            lines.append("")
+            lines.append("隐蔽前通知、影像、旁站记录栏目。未验收不建议进入下道，但不写开工令。")
+        elif i == 7:
+            lines.append("楼板裂缝、填充墙裂缝、外墙/屋面/门窗渗漏、回填下沉、保护层、线管叠放、抹灰空鼓。只列易发部位和预防动作。")
+        elif i == 8:
+            lines.append("返工返修后重新检查。检测鉴定、设计核算等路径只列名称，结论待有资质单位。")
+        elif i == 9:
+            lines.append("施工记录、测量、材料/试块报告与试验室台账是否对得上。缺报告写缺口，不编强度。")
+        else:
+            lines.append("| 质检员 | 工长 | 技术负责人 | 监理 |\n| --- | --- | --- | --- |\n| （空） | （空） | （空） | （空） |")
+            lines.append("")
+            lines.append("禁止预填同意验收。")
+        lines.append("")
+    if zone in ("SG", "DUAL"):
+        lines.append("SG：CONQUAS 只写标题，不是本表评分。")
+    if zone in ("CN", "DUAL"):
+        lines.append("CN：建筑工程施工质量验收统一标准只写全名。条款 UNSPECIFIED。")
+    lines.append("")
+    return "\n".join(lines)
+
+
+def _env_md(text: str) -> str:
+    blob = text or ""
+    zone = _mix_zone(blob)
+    site = re.sub(r"^写一份\S*\s*", "", blob.strip()).strip() or "待填工地"
+    if site in {"草稿提纲", "环保文明清单", "待填"}:
+        site = "待填工地"
+    rows = (
+        "| 项 | 措施栏 | 限值 |\n| --- | --- | --- |\n"
+        "| 扬尘 | 围挡、道路硬化冲洗、裸土覆盖、粉料入库存罐 | UNSPECIFIED |\n"
+        "| 弃土 | 分类堆放、联单或核准去向待填 | UNSPECIFIED |\n"
+        "| 污水 | 沉淀/洗车台排水去向待填，不得直排 | UNSPECIFIED |\n"
+        "| 夜间 | 属地夜间限制段待核，连续作业报批单另附 | UNSPECIFIED |\n"
+        "| 市容 | 大门、公示牌、堆码、人车分流 | UNSPECIFIED |\n"
+    )
+    lines = [
+        "# 环保文明清单（AI 草稿 · 内部讨论）",
+        "",
+        DISCLAIMER,
+        "",
+        "覆盖扬尘、弃土、污水、噪声/夜间施工、市容围挡。不是排污许可，也不是城管销号证明。",
+        "",
+        f"- 辖区：{zone}",
+        f"- 工地：{site[:80]}",
+        "",
+        "## 用户原文",
+        "",
+        blob.strip() or "（未提供）",
+        "",
+    ]
+    for i, title in enumerate(_ENV_CHAPTERS, 1):
+        lines.append(f"## {i} {title}")
+        lines.append("")
+        if i == 1:
+            lines.append("项目、标段、清单日期、责任人空栏、属地区县待填。[A001]")
+        elif i == 2:
+            lines.append("AI 草稿。措施落实与是否达标由现场和属地监管确认。")
+        elif i == 3:
+            lines.append(rows)
+            lines.append("")
+            lines.append("风速阈值用户给才写。监测设备以属地是否要求为准。")
+        elif i == 4:
+            lines.append("产生部位、暂存点、分类、运输单位、消纳单位、联单编号全部待填。禁止写可随意外运。")
+        elif i == 5:
+            lines.append("沉淀池/洗车台排水去向待填。不得直排市政管或河道。容量、排放口编号待填。")
+        elif i == 6:
+            lines.append("昼间/夜间作业时段以属地公告为准。敏感点距离用户给才写。限值 UNSPECIFIED。")
+        elif i == 7:
+            lines.append("大门、公示牌（建设/监理/施工扬尘责任人和投诉电话）、材料堆码、人员通道与车辆分流。")
+        elif i == 8:
+            lines.append("安全文明施工费、扬尘防治增加费只列措施事实和影像、验收单名称。费率 TBD，交商务。")
+        elif i == 9:
+            lines.append("重污染天气、大风、投诉、执法检查——列接到哪一级指令停哪一类作业。本岗不下停工令。")
+        else:
+            lines.append("| 环保员 | 生产经理 | 资料员 |\n| --- | --- | --- |\n| （空） | （空） | （空） |")
+        lines.append("")
+    if zone in ("SG", "DUAL"):
+        lines.append("SG：NEA Construction Noise Control / Sundays and PH / Noise Management Plan；PUB Earth Control Measures。只列标题，限值 UNSPECIFIED。")
+    if zone in ("CN", "DUAL"):
+        lines.append("CN：噪声法/扬尘口径只列名称。不编 TSP 限值。")
+    lines.append("")
+    return "\n".join(lines)
+
+
 def _dispatch_daily_md(text: str) -> str:
     jobs = _copy_sensitive_jobs(text)
     sensitive = (
@@ -2471,6 +2647,60 @@ def _run_exclusive(
             "files": files,
             "tools_run": ran,
             "reply": "已出安全交底草稿。毫米/电话 [A001]。submit_blocked=true。",
+            "submit_blocked": True,
+        }
+
+    if expert.id == "quality":
+        md = _quality_md(text)
+        from packing_assistant.tools.tender_review import forbidden_hits
+
+        hits = forbidden_hits(md)
+        if hits:
+            return {
+                "wrote": False,
+                "hitl_pending": False,
+                "files": [],
+                "tools_run": [],
+                "reply": "禁语扫描命中，未报成功：" + "、".join(hits),
+                "submit_blocked": True,
+            }
+        path = out_dir / "quality__lot.md"
+        guarded_write_text(path, md)
+        files.append({"name": path.name, "path": str(path), "tool": "quality__lot"})
+        ran.append("quality__lot")
+        return {
+            "wrote": True,
+            "hitl_pending": False,
+            "files": files,
+            "tools_run": ran,
+            "reply": "已出质量检查表。主控/一般/隐蔽结果=未检。submit_blocked=true。",
+            "submit_blocked": True,
+        }
+
+    if expert.id == "env":
+        md = _env_md(text)
+        from packing_assistant.tools.tender_review import forbidden_hits
+
+        hits = forbidden_hits(md)
+        if hits:
+            return {
+                "wrote": False,
+                "hitl_pending": False,
+                "files": [],
+                "tools_run": [],
+                "reply": "禁语扫描命中，未报成功：" + "、".join(hits),
+                "submit_blocked": True,
+            }
+        path = out_dir / "env__list.md"
+        guarded_write_text(path, md)
+        files.append({"name": path.name, "path": str(path), "tool": "env__list"})
+        ran.append("env__list")
+        return {
+            "wrote": True,
+            "hitl_pending": False,
+            "files": files,
+            "tools_run": ran,
+            "reply": "已出环保文明清单。五行限值 UNSPECIFIED。submit_blocked=true。",
             "submit_blocked": True,
         }
 

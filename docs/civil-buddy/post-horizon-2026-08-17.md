@@ -490,7 +490,7 @@
 - qa：已有 · hse__scan_forbidden + 高风险确认句
 - kb：已有 · 分层 KB + search_kb/read_kb（demo/kb）
 - write：已有 · 独有 quality__lot；chat 不写盘
-- 下一刀：quality__lot 出主控|一般|隐蔽三表，结果=未检；写盘后 hse__scan_forbidden。
+- 下一刀：已做 T035 quality。quality__lot 出主控|一般|隐蔽三表，结果=未检；写盘后 hse__scan_forbidden。
 
 ### env
 
@@ -503,7 +503,7 @@
 - qa：已有 · hse__scan_forbidden
 - kb：已有 · 分层 KB + search_kb/read_kb（demo/kb）
 - write：已有 · 独有 env__list；chat 不写盘
-- 下一刀：env__list 拆扬尘/弃土/污水/夜间/市容五行，限值 UNSPECIFIED。
+- 下一刀：已做 T035 env。env__list 拆扬尘/弃土/污水/夜间/市容五行，限值 UNSPECIFIED。
 
 ### emergency
 
