@@ -115,6 +115,9 @@
 37. **T036 warehouse 一岗** ✅ 2026-08-20  
     warehouse__log 按行抄收发原文；有数只抄、无数 TBD；无盘点不编盈亏。T036 批次未完：下一岗 **material-site**。不得把现场料一并勾完。行业总判仍 **部分合格**。
 
+38. **T036 material-site 一岗（T036 批次完）** ✅ 2026-08-20  
+    material-site__recon 按行抄应耗/领料/盘点；算不出节超则 TBD。无盘点不编盈亏。主链头指针改为 **T037**（proc-plan 先）。T037–T047 不得一行勾完。行业总判仍 **部分合格**。
+
 平台内核见 [product-improvement-handbook.md](product-improvement-handbook.md)。岗独有写盘下一刀仍按 [post-horizon-2026-08-17.md](post-horizon-2026-08-17.md)。
 
 ## 有宿主再做

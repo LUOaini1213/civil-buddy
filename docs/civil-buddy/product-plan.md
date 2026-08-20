@@ -10,7 +10,7 @@
 | 纪律 | **不定时限 · 不准空转**。墙钟和睡眠评测环不是交付 |
 | 本文地位 | **产品规划唯一总入口**。切片文档只执行、不另开第三套「下一步」 |
 
-**怎么用：** 改产品前先读 §1 边界、§10 不做、§13 联网口径。开工只取 **§15 主链头指针**（此刻 = §11 的 T036）。岗栏位细节可读 post-horizon 该 id；已做/未做以 §7 / §15 为准。  
+**怎么用：** 改产品前先读 §1 边界、§10 不做、§13 联网口径。开工只取 **§15 主链头指针**（此刻 = §11 的 T037）。岗栏位细节可读 post-horizon 该 id；已做/未做以 §7 / §15 为准。  
 2026-08-19：§1–§15 各派一子代理对照现网，结论已并入本文。
 
 切片（从属于本文，不平行）：
@@ -119,8 +119,8 @@ docs/                 装箱架构、主线 C、研究/归档
 | 装箱引擎 | 80% | 大 Team A/B、3D、CoG、HITL | 非本规划主战场；禁止第二套 packer |
 | MCP | 75% | Python stdio；bid 可见 KB+招标；pack-ship 投影；Host 样例 16 pack 可复制 | 默认仍挂 3 大类；分页/订阅延期 |
 | Skill | 65% | SOP 与 66 岗关系写清；施工十一章接 turn；fill_scheme 失败则 `docx_pending` | 其余 5 个 Grok 专家仍提纲 |
-| 岗 KB | 目录 100% / 写盘栏位 ~41% | **66/66** 四件套在盘；`test_kb_schema.py` 缺一即红 | outline 指针：construction→`scheme-11.md`，危大→`judge-card.md`。**真写盘 27/66**（+ warehouse） |
-| 工作台 66 岗 | 平台齐、栏位 27/66 | 同一套 chat/run | 其余 ~39 岗 `_draft_markdown` |
+| 岗 KB | 目录 100% / 写盘栏位 ~42% | **66/66** 四件套在盘；`test_kb_schema.py` 缺一即红 | outline 指针：construction→`scheme-11.md`，危大→`judge-card.md`。**真写盘 28/66**（+ material-site） |
+| 工作台 66 岗 | 平台齐、栏位 28/66 | 同一套 chat/run | 其余 ~38 岗 `_draft_markdown` |
 | 技术文档 | 80% | GETTING-STARTED/PROTOCOL/MCP/SKILLS/KB；Grok/Cursor 最小 Host；刀后快闸 | 研究笔记不得冒充必读 |
 | 评测 | 75% | 离线闸 + `GET /api/eval/live` 五针（company 页）+ 岗 GST/CORENET 扫描 | 行业总判仍部分合格 |
 
@@ -227,7 +227,7 @@ xyz 只抄 solver。分页/订阅 = 有真 Host list/call 稳定之后（horizon
 | `lane-hse` | 安质环 | 4 | 交底/质量/环保/应急草稿；SG 走 WSH 标题 | **4/4** |
 | `lane-commercial` | 商务造价 | 5 | 造价 takeoff 栏、变更/索赔/分包/报量；无单价不编 | **0/5** |
 | `lane-procurement` | 采购 | 3 | 计划/比价/合格名录栏；GeBIZ 只当门户 | **0/3** |
-| `lane-plant` | 物机 | 4 | pack-ship 投影 solver；设备/仓/现场料栏 | **3/4** pack-ship + equip + warehouse |
+| `lane-plant` | 物机 | 4 | pack-ship 投影 solver；设备/仓/现场料栏 | **4/4** |
 | `lane-lab` | 试验室 | 3 | 配比/取样/台账栏；无报告号不编 | **3/3** |
 | `lane-finance` | 财务 | 3 | 税务日历抄 9%；记账/资金栏待填 | **0/3**（KB 有 9%；日历栏未富） |
 | `lane-docs` | 资料监理 | 1 | 闭合目录；不代替监理指令 | **1/1** supervision |
@@ -299,8 +299,9 @@ xyz 只抄 solver。分页/订阅 = 有真 Host list/call 稳定之后（horizon
 | 21 | env | ✅ 扬尘/弃土/污水/夜间/市容五行，限值 UNSPECIFIED |
 | 22 | emergency | ✅ 综合目录+点名专项+演练表头；电话医院待填（T035 ✅） |
 | 23 | equip | ✅ 只抄设备名与已给证件；无证件不编进场结论 |
-| 24 | warehouse | ✅ 按行抄收发；无数 TBD；无盘点不编盈亏（T036 进行中） |
-| 25+ | 其余 ~39 岗 | 骨架；下一刀在 post-horizon（已富岗勿再当缺口） |
+| 24 | warehouse | ✅ 按行抄收发；无数 TBD；无盘点不编盈亏 |
+| 25 | material-site | ✅ 抄应耗/领料/盘点；算不出节超则 TBD（T036 ✅） |
+| 26+ | 其余 ~38 岗 | 骨架；下一刀在 post-horizon（已富岗勿再当缺口） |
 
 ---
 
@@ -341,7 +342,7 @@ python scripts/test_industry_agent_eval.py # 断言总判仍「部分合格」
 
 ```
 1. 取号：只取 §15 主链上第一个状态≠✅/延期 的 T 号。
-   当前指针见 §11（此刻 = T036）。
+   当前指针见 §11（此刻 = T037）。
    禁止 OR §7、切片勾选表、next-steps、post-horizon 原文、handbook「下一刀」。
    岗栏位细节可读 post-horizon 该 id；已做/未做以 §7/§15 为准。
 2. 改最少文件。绿之前必须指出新路径（代码 / KB / MCP / SKILL / 测试之一）。指不出 = 没做。
@@ -355,7 +356,7 @@ python scripts/test_industry_agent_eval.py # 断言总判仍「部分合格」
 5. 红：修好或回滚到本刀起点。禁止带着红测试停手、睡眠再测、跳号。
 ```
 
-K4「进行中」不是可抢的下一号。P 车道（T036+）不得在主链头指针未走到 T036 时开工。T001 / T030–T035 已 ✅。
+K4「进行中」不是可抢的下一号。P 车道（T037+）不得在主链头指针未走到 T037 时开工。T001 / T030–T036 已 ✅。
 
 ---
 
@@ -374,11 +375,11 @@ GeBIZ 代交 / 自动中标；法定专项方案 / PE·QP·RTO 签认件；十�
 
 ## 11. 下一刀（立刻）
 
-**T036 · plant 进行中：下一岗 material-site__recon。**
+**T037 · procurement 进行中：下一岗 proc-plan__schedule。**
 
-warehouse ✅：按行抄收发原文；有数只抄、无数 TBD；无盘点不编盈亏。chat 仍不写盘。T036 其余岗 material-site **未做**（pack-ship 已富跳过），不得一行勾完。
+T036 ✅：equip / warehouse / material-site 均已做（pack-ship 已富跳过）。chat 仍不写盘。T037 起不得一行勾完。
 
-T036 下一岗：material-site 按行抄应耗/领料/盘点；算不出节超则 TBD。
+T037 下一岗：proc-plan 先分甲供/甲指/自采再列表，提前期 UNSPECIFIED。
 
 ---
 
@@ -433,9 +434,9 @@ T 号是开工 ID：K1=T001，P1-5=T002，K2=T003，P1-3=T010。handbook 不得�
 |--------|------|------|
 | 设计车道 18 岗 | `seed.json` **design=20**（66=3+20+3+3+4+4+5+3+4+3+3+1+3+2+3+2） | §6 已改正 |
 | 「其余 57 岗」 | 已富约 5 岗（bid×3 + pack-ship + construction 十一章），其余 **61** | §7.2 已改正 |
-| K1「目录齐但无闸」 | 当时 64/66；只缺 construction 与 method-hazard 的 `outline.md` | 已做 T001 ✅；§11 现为 T036 |
+| K1「目录齐但无闸」 | 当时 64/66；只缺 construction 与 method-hazard 的 `outline.md` | 已做 T001 ✅；§11 现为 T037 |
 | post-horizon bid 三岗「下一刀=handoff/gaps/评分点」 | P1-1 **已做** | 以本文 §7 为准；horizon 文当历史下一刀 |
-| post-horizon construction「下一刀=十一章接 turn」 | S2 **已做** md；fill_scheme / `docx_pending` 已接（T005 ✅） | 岗栏下一刀 = T036 material-site（warehouse ✅） |
+| post-horizon construction「下一刀=十一章接 turn」 | S2 **已做** md；fill_scheme / `docx_pending` 已接（T005 ✅） | 岗栏下一刀 = T037 proc-plan（T036 ✅） |
 | 行业评测「缺 Python eval/live、MCP 几乎只有 pack-ship」 | 2026-08-19 已有 `GET /api/eval/live` 与 `mcp_stdio --pack bid` | 不改 08-17 历史总判日期；现网能力以本文 §3 为准 |
 | 营销博客「CORENET X 2026-10-01 全部新项目」 | 已被 APPBCA-2026-12 收窄为 GFA≥5,000 m² | §13 列为反例 |
 | §15「T030–T047 = 61 岗」 | 展开约 **56**（已扣 bid×3、pack-ship、construction、method-hazard、finance-tax、cost、survey、dispatch） | 下表已改 |
@@ -495,7 +496,7 @@ T 号是开工 ID：K1=T001，P1-5=T002，K2=T003，P1-3=T010。handbook 不得�
 | T033 | lab | lab-mix ✅ → lab-sample ✅ → lab-record ✅ |
 | T034 | docs | supervision 闭合目录（不代替监理指令） ✅ |
 | T035 | hse | safety-brief ✅ → quality ✅ → env ✅ → emergency ✅ |
-| T036 | plant 非装箱 | equip ✅ → warehouse ✅ → material-site（pack-ship 已富，跳过） |
+| T036 | plant 非装箱 | equip ✅ → warehouse ✅ → material-site ✅（pack-ship 已富，跳过） |
 | T037 | procurement | proc-plan → proc-compare → proc-vendor（金额门槛不默写） |
 | T038 | finance 其余 | finance-book → finance-fund（tax 见 T004） |
 | T039 | people | worker-brief 白话 ≠ 技术稿 → pm-daily |
@@ -508,7 +509,7 @@ T 号是开工 ID：K1=T001，P1-5=T002，K2=T003，P1-3=T010。handbook 不得�
 | T046 | design 批次 3 | landscape → interior → intel-weak → civil-defense → hydraulic |
 | T047 | design 批次 4 | port → municipal → bridge → tunnel → traffic → design-coord |
 
-T030–T047 是**批次合同**（T030–T035 ✅、equip ✅、warehouse ✅ 后约 **39** 岗）。**一行不得一次勾完**；每岗一 commit。细节读 post-horizon 该 id。
+T030–T047 是**批次合同**（T030–T036 ✅ 后约 **38** 岗）。**一行不得一次勾完**；每岗一 commit。细节读 post-horizon 该 id。
 
 ### E. 主线 C 与装箱（插件，不另起炉灶）
 
@@ -530,6 +531,6 @@ T030–T047 是**批次合同**（T030–T035 ✅、equip ✅、warehouse ✅ �
 
 **主链（不定时限；头指针 = 第一个非 ✅/延期）：**
 
-T001 → T021 → T023 → T003 → T007 → T008 → T002 → T004 → T006 → T005 → T014 → T011 → T010 → T020+T024 → T030 → T031 → T032 ✅ → T033 ✅ → T034 ✅ → T035 ✅ → **T036**（equip ✅，warehouse ✅，下一岗 material-site；pack-ship 已富跳过）→ T037…T047（T050 / T052 / T062 文档与联测已 ✅，不占岗栏）。
+T001 → T021 → T023 → T003 → T007 → T008 → T002 → T004 → T006 → T005 → T014 → T011 → T010 → T020+T024 → T030 → T031 → T032 ✅ → T033 ✅ → T034 ✅ → T035 ✅ → T036 ✅ → **T037**（下一岗 proc-plan）→ T038…T047（T050 / T052 / T062 文档与联测已 ✅，不占岗栏）。
 
 T012/T060/T061/T051/T053 不占刀。中途红则停在该号，不准跳号。

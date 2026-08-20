@@ -631,6 +631,35 @@ def main() -> int:
     assert "钢筋" in whq
     assert "12吨" in whq
 
+    ms_chat = run_expert_turn("节超怎么理解？", "material-site")
+    assert ms_chat["intent"] == "chat" and ms_chat["wrote"] is False
+    ms_ok = run_expert_turn(
+        "写一份材料核算 rebar",
+        "material-site",
+        force_intent="run",
+        session_id="t036-ms",
+    )
+    assert ms_ok["wrote"] is True
+    assert "material-site__recon" in ms_ok["tools_run"]
+    mst = Path(ms_ok["files"][0]["path"]).read_text(encoding="utf-8")
+    assert "rebar" in mst
+    assert "应耗" in mst and "领料" in mst and "节超" in mst
+    assert "TBD" in mst
+    assert "无盘点不编盈亏" in mst
+    assert "可以开工" not in mst
+    ms_qty = run_expert_turn(
+        "写一份材料核算 钢筋 应耗 10吨 领料 12吨",
+        "material-site",
+        force_intent="run",
+        session_id="t036-ms-qty",
+    )
+    msq = Path(ms_qty["files"][0]["path"]).read_text(encoding="utf-8")
+    assert "钢筋" in msq
+    assert "10吨" in msq
+    assert "12吨" in msq
+    sec = msq.split("## 6 核算表头")[1].split("## 7")[0]
+    assert "TBD" in sec
+
     high = [e for e in roster if e.risk == "high"][0]
     blocked = run_expert_turn("写一份专项方案讨论提纲", high.id, confirm_ok=False)
     assert blocked["intent"] == "run"

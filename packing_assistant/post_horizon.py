@@ -112,7 +112,7 @@ _NEXT = {
     "equip": "已做 T036 equip。equip__ledger 写出与 Rust 同表头台账，只抄用户设备名与已给证件。",
     "warehouse": "已做 T036 warehouse。warehouse__log 按行 parse 收发原文；有数只抄、无数 TBD；无盘点不编盈亏。",
     "pack-ship": "sidecar/packing_summary 快照抄进 pack-ship__plan/export；先 health；无则四字段字面 UNSPECIFIED；禁止重算 xyz。",
-    "material-site": "material-site__recon 按行 parse 应耗/领料/盘点；算不出节超则 TBD。",
+    "material-site": "已做 T036 material-site。material-site__recon 按行 parse 应耗/领料/盘点；算不出节超则 TBD。",
     "lab-mix": "已做 T033 lab-mix。lab-mix__report 四层目录；无试验数据则施工配比整节待填。",
     "lab-sample": "已做 T033 lab-sample。lab-sample__list 出类别|部位|见证人空|升级路径；组数 [A001]。",
     "lab-record": "已做 T033 lab-record。lab-record__ledger 加报告编号待核|仪器检定|结论待填。",

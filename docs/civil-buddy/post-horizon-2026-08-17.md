@@ -683,7 +683,7 @@
 - qa：已有 · plant__scan_forbidden
 - kb：已有 · 分层 KB + search_kb/read_kb（demo/kb）
 - write：已有 · 独有 material-site__recon；chat 不写盘
-- 下一刀：material-site__recon 按行 parse 应耗/领料/盘点；算不出节超则 TBD。
+- 下一刀：已做 T036 material-site。material-site__recon 按行 parse 应耗/领料/盘点；算不出节超则 TBD。
 
 
 ## 大类 `lab` · 车道 `lane-lab`

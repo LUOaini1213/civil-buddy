@@ -1542,6 +1542,42 @@ fn test_warehouse_log_exclusive() {
 }
 
 #[test]
+fn test_material_site_recon_exclusive() {
+    let p = paths();
+    assert!(packs::visible_tool_names("material-site").iter().any(|n| n == "material-site__recon"));
+    assert!(!packs::visible_tool_names("warehouse").iter().any(|n| n == "material-site__recon"));
+    let mut ctx = ToolCtx::new(p.clone(), "material-site", "plant", "low", true, "iter-ms-t036");
+    let out = packs::execute(
+        &mut ctx,
+        "material-site__recon",
+        &json!({"items":"rebar","jurisdiction":"SG"}),
+    );
+    assert!(out.contains("已写入"), "{out}");
+    let text = std::fs::read_to_string(ctx.out_dir.join("材料耗用核算表头.md")).unwrap();
+    assert!(text.contains("rebar"), "{text}");
+    assert!(text.contains("应耗"), "{text}");
+    assert!(text.contains("领料"), "{text}");
+    assert!(text.contains("节超"), "{text}");
+    assert!(text.contains("TBD"), "{text}");
+    assert!(text.contains("无盘点不编盈亏"), "{text}");
+    assert!(text.contains("Factory Notification"), "{text}");
+    assert!(!text.contains("可以开工"), "{text}");
+    let mut qty = ToolCtx::new(p.clone(), "material-site", "plant", "low", true, "iter-ms-qty");
+    let qo = packs::execute(
+        &mut qty,
+        "material-site__recon",
+        &json!({"items":"钢筋 应耗 10吨 领料 12吨","jurisdiction":"SG"}),
+    );
+    assert!(qo.contains("已写入"), "{qo}");
+    let qt = std::fs::read_to_string(qty.out_dir.join("材料耗用核算表头.md")).unwrap();
+    assert!(qt.contains("钢筋"), "{qt}");
+    assert!(qt.contains("10吨"), "{qt}");
+    assert!(qt.contains("12吨"), "{qt}");
+    let mut sib = ToolCtx::new(p, "warehouse", "plant", "low", true, "iter-ms-sib");
+    assert!(packs::execute(&mut sib, "material-site__recon", &json!({"items":"x"})).contains("拒绝"));
+}
+
+#[test]
 fn test_variation_form_exclusive() {
     let p = paths();
     assert!(packs::visible_tool_names("variation").iter().any(|n| n == "variation__form"));
