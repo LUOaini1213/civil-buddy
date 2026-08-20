@@ -516,7 +516,7 @@
 - qa：已有 · hse__scan_forbidden + 高风险确认句
 - kb：已有 · 分层 KB + search_kb/read_kb（demo/kb）
 - write：已有 · 独有 emergency__plan；chat 不写盘
-- 下一刀：emergency__plan 出综合目录+用户点名专项+演练表头，电话医院待填。
+- 下一刀：已做 T035 emergency。emergency__plan 出综合目录+用户点名专项+演练表头，电话医院待填。
 
 
 ## 大类 `commercial` · 车道 `lane-commercial`

@@ -396,6 +396,48 @@ _ENV_CHAPTERS = (
     "签字栏",
 )
 
+_EMERGENCY_CHAPTERS = (
+    "封面与声明",
+    "编制说明",
+    "综合预案目录",
+    "专项预案目录",
+    "现场处置方案",
+    "应急处置卡",
+    "信息报告",
+    "演练计划与记录表头",
+    "附件",
+    "备案与评估节点",
+    "禁令",
+)
+
+_EMERGENCY_SPECIALS = (
+    "高处坠落",
+    "物体打击",
+    "坍塌",
+    "触电",
+    "起重机械",
+    "火灾爆炸",
+    "中毒窒息/有限空间",
+    "车辆伤害",
+    "疫情或突发环境事件",
+)
+
+_EMERGENCY_HINTS = (
+    ("火灾", "火灾爆炸"),
+    ("fire", "火灾爆炸"),
+    ("爆炸", "火灾爆炸"),
+    ("坠落", "高处坠落"),
+    ("高处", "高处坠落"),
+    ("打击", "物体打击"),
+    ("坍塌", "坍塌"),
+    ("触电", "触电"),
+    ("起重", "起重机械"),
+    ("有限空间", "中毒窒息/有限空间"),
+    ("中毒", "中毒窒息/有限空间"),
+    ("车辆", "车辆伤害"),
+    ("疫情", "疫情或突发环境事件"),
+)
+
 _MILESTONE_KEYS = ("桩基", "±0", "封顶", "砌筑", "机电", "装饰", "竣工")
 
 _QTY_RE = re.compile(
@@ -1824,6 +1866,105 @@ def _env_md(text: str) -> str:
     return "\n".join(lines)
 
 
+def _named_emergency_specials(blob: str) -> List[str]:
+    t = (blob or "").lower()
+    raw = blob or ""
+    named: List[str] = []
+    for hint, spec in _EMERGENCY_HINTS:
+        if hint.lower() in t or hint in raw:
+            if spec not in named:
+                named.append(spec)
+    return named
+
+
+def _emergency_md(text: str) -> str:
+    blob = text or ""
+    zone = _mix_zone(blob)
+    named = _named_emergency_specials(blob)
+    special_rows = "| 专项 | 本稿 |\n| --- | --- |\n"
+    for spec in _EMERGENCY_SPECIALS:
+        if spec in named:
+            special_rows += f"| {spec} | 本轮点名。只列名称，不展开假场景。 |\n"
+        else:
+            special_rows += f"| {spec} | 常见名。用户未点名不展开。 |\n"
+    drill = (
+        "| 时间 | 科目 | 参演单位 | 评估人 | 发现问题 | 修订意见 |\n"
+        "| --- | --- | --- | --- | --- | --- |\n"
+        "| 待填 | 待填 | 待填 | 待填 | 待填 | 待填 |\n"
+    )
+    lines = [
+        "# 生产安全事故应急预案提纲（AI 草稿 · 内部讨论）",
+        "",
+        DISCLAIMER,
+        "",
+        "只出目录、演练记录表头和待填附件。不签发预案。联系人通讯录全部 [A001]。",
+        "",
+        f"- 辖区：{zone}",
+        "",
+        "## 用户原文",
+        "",
+        blob.strip() or "（未提供）",
+        "",
+    ]
+    for i, title in enumerate(_EMERGENCY_CHAPTERS, 1):
+        lines.append(f"## {i} {title}")
+        lines.append("")
+        if i == 1:
+            lines.append("单位/项目待填。预案名称待填。版本待填。签署人空栏。联系人通讯录全部 [A001]。")
+        elif i == 2:
+            lines.append(
+                "风险辨识结论栏待填。应急资源调查清单栏：队伍、车辆、担架、灭火器、洗消、医院。"
+                "无现场盘点不编数量。医院名称和电话待填。"
+            )
+        elif i == 3:
+            lines.append(
+                "1. 组织机构与职责\n"
+                "2. 预案体系\n"
+                "3. 风险描述\n"
+                "4. 预警与信息报告\n"
+                "5. 响应分级\n"
+                "6. 保障\n"
+                "7. 培训演练与管理"
+            )
+        elif i == 4:
+            lines.append(special_rows)
+            lines.append("")
+            lines.append("用户没点名则只列常见名、不展开假场景。")
+        elif i == 5:
+            lines.append("按场所：基坑、脚手架、配电房、食堂、宿舍、桩机区。含职责、措施、注意事项。未给场所则待填。")
+        elif i == 6:
+            lines.append("一岗一卡，短步骤 + 联络人待填。电话 [A001]。")
+        elif i == 7:
+            lines.append("内部升级顺序待填。向属地应急和行业主管部门报告的内容栏待填。不编已报告结论。")
+        elif i == 8:
+            lines.append(drill)
+            lines.append("")
+            lines.append("评估、问题、修订意见待填。本稿不下演练结论。")
+        elif i == 9:
+            lines.append(
+                "| 附件 | 本稿 |\n| --- | --- |\n"
+                "| 通讯录 | 待填；电话 [A001] |\n"
+                "| 物资台账 | 待填 |\n"
+                "| 医院路线 | 医院名称待填；电话 [A001] |\n"
+                "| 周边告知 | 待填 |"
+            )
+        elif i == 10:
+            lines.append("公布日、拟备案机关、评估年待用户填。备案条件栏待核，本稿不下备案结论。")
+        else:
+            lines.append(
+                "不编医院名称和电话，不编响应时间分钟数。"
+                "有限空间救援强调禁止盲目进入。"
+                "本稿不下演练通过结论。"
+            )
+        lines.append("")
+    if zone in ("SG", "DUAL"):
+        lines.append("SG：SCDF Emergency Response Plan 只写标题。")
+    if zone in ("CN", "DUAL"):
+        lines.append("CN：生产安全事故应急预案管理办法只写标题。")
+    lines.append("")
+    return "\n".join(lines)
+
+
 def _dispatch_daily_md(text: str) -> str:
     jobs = _copy_sensitive_jobs(text)
     sensitive = (
@@ -2704,6 +2845,33 @@ def _run_exclusive(
             "submit_blocked": True,
         }
 
+    if expert.id == "emergency":
+        md = _emergency_md(text)
+        from packing_assistant.tools.tender_review import forbidden_hits
+
+        hits = forbidden_hits(md)
+        if hits:
+            return {
+                "wrote": False,
+                "hitl_pending": False,
+                "files": [],
+                "tools_run": [],
+                "reply": "禁语扫描命中，未报成功：" + "、".join(hits),
+                "submit_blocked": True,
+            }
+        path = out_dir / "emergency__plan.md"
+        guarded_write_text(path, md)
+        files.append({"name": path.name, "path": str(path), "tool": "emergency__plan"})
+        ran.append("emergency__plan")
+        return {
+            "wrote": True,
+            "hitl_pending": False,
+            "files": files,
+            "tools_run": ran,
+            "reply": "已出应急预案提纲。电话医院待填。submit_blocked=true。",
+            "submit_blocked": True,
+        }
+
     if expert.id == "cost":
         md = (
             f"# 工程量拆分表（AI 草稿）\n\n{DISCLAIMER}\n\n"
@@ -2826,6 +2994,7 @@ def run_named_exclusive(name: str, args: Optional[Dict[str, Any]] = None) -> Dic
         "inspection_lot",
         "site",
         "issues",
+        "scenario",
     ):
         v = args.get(k)
         if v:

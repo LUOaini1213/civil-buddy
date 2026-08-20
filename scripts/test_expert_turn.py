@@ -541,6 +541,35 @@ def main() -> int:
     assert "UNSPECIFIED" in et
     assert "可以开工" not in et
 
+    em_chat = run_expert_turn("应急预案怎么理解？", "emergency")
+    assert em_chat["intent"] == "chat" and em_chat["wrote"] is False
+    em_hitl = run_expert_turn(
+        "写一份应急预案 fire",
+        "emergency",
+        confirm_ok=False,
+        force_intent="run",
+    )
+    assert em_hitl["wrote"] is False and em_hitl.get("hitl_pending") is True
+    em_ok = run_expert_turn(
+        "写一份应急预案 fire",
+        "emergency",
+        confirm_ok=True,
+        force_intent="run",
+        session_id="t035-em",
+    )
+    assert em_ok["wrote"] is True
+    assert "emergency__plan" in em_ok["tools_run"]
+    emt = Path(em_ok["files"][0]["path"]).read_text(encoding="utf-8")
+    for title in ("综合预案目录", "专项预案目录", "演练计划与记录表头"):
+        assert title in emt, title
+    assert "火灾爆炸" in emt
+    assert "本轮点名" in emt
+    assert "[A001]" in emt
+    assert "电话" in emt
+    assert "医院" in emt
+    assert "可以开工" not in emt
+    assert "演练合格" not in emt
+
     high = [e for e in roster if e.risk == "high"][0]
     blocked = run_expert_turn("写一份专项方案讨论提纲", high.id, confirm_ok=False)
     assert blocked["intent"] == "run"
