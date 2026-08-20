@@ -97,7 +97,7 @@ _NEXT = {
     "method-hazard": "重写 judge-card.md 默认 SG WSH/PTW + 信息不足；37 号令只放 CN 栏。",
     "survey": "survey__record 读本会话附件，只抄已给点号坐标；都无则表头+[A001]。",
     "dispatch": "dispatch__daily 按 outline 十一章落表头；敏感作业只列名，判定交 method-hazard。",
-    "safety-brief": "safety-brief__talk 按 outline 写全 11 栏；毫米/电话 [A001]；确认句后才写盘。",
+    "safety-brief": "已做 T035 safety-brief。safety-brief__talk 按 outline 写全 11 栏；毫米/电话 [A001]；确认句后才写盘。",
     "quality": "quality__lot 出主控|一般|隐蔽三表，结果=未检；写盘后 hse__scan_forbidden。",
     "env": "env__list 拆扬尘/弃土/污水/夜间/市容五行，限值 UNSPECIFIED。",
     "emergency": "emergency__plan 出综合目录+用户点名专项+演练表头，电话医院待填。",

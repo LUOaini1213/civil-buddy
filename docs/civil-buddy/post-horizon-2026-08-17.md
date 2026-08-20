@@ -477,7 +477,7 @@
 - qa：已有 · hse__scan_forbidden + 高风险确认句
 - kb：已有 · 分层 KB + search_kb/read_kb（demo/kb）
 - write：已有 · 独有 safety-brief__talk；chat 不写盘
-- 下一刀：safety-brief__talk 按 outline 写全 11 栏；毫米/电话 [A001]；确认句后才写盘。
+- 下一刀：已做 T035 safety-brief。safety-brief__talk 按 outline 写全 11 栏；毫米/电话 [A001]；确认句后才写盘。
 
 ### quality
 
