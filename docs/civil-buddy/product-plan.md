@@ -10,7 +10,7 @@
 | 纪律 | **不定时限 · 不准空转**。墙钟和睡眠评测环不是交付 |
 | 本文地位 | **产品规划唯一总入口**。切片文档只执行、不另开第三套「下一步」 |
 
-**怎么用：** 改产品前先读 §1 边界、§10 不做、§13 联网口径。开工只取 **§15 主链头指针**（此刻 = §11 的 T003）。岗栏位细节可读 post-horizon 该 id；已做/未做以 §7 / §15 为准。  
+**怎么用：** 改产品前先读 §1 边界、§10 不做、§13 联网口径。开工只取 **§15 主链头指针**（此刻 = §11 的 T007）。岗栏位细节可读 post-horizon 该 id；已做/未做以 §7 / §15 为准。  
 2026-08-19：§1–§15 各派一子代理对照现网，结论已并入本文。
 
 切片（从属于本文，不平行）：
@@ -63,7 +63,7 @@ pack-ship 岗 **不是第二套装箱**。它只投影本仓 solver 快照。断
 - 岗 **66**，大类 **16**（`workbench/seed.json`）。  
 - 确认句：`我明白，将由持证人员签认`。闸是 `confirm_ok` / `p0_confirmed` **布尔**，只挡 **high** 写盘；不是从用户正文抽句。  
 - GST：抄 IRAS 页述 **9%**。抓门户失败不得改口「官方没写 9%」。7%/8% 只可当历史升档。  
-- GeBIZ **不是**评分办法。Fire Code **2023**。CTU Code **2014** 非强制（权威句现网在 `demo/kb/plant/pack-ship/web-knowledge.md`，company 页尚未收）。  
+- GeBIZ **不是**评分办法。Fire Code **2023**。CTU Code **2014** 非强制（权威句在 `demo/kb/company/web-portals.md`；pack-ship 岗页链同一句）。  
 - CORENET X 2026-10-01 强制范围以 APPBCA-2026-12 为准（GFA≥5,000 m²）。  
 - pack-ship 断线四字段：`utilization` / `can_fit` / `mid50` / `系固待办` 字面 `UNSPECIFIED`。`xyz` 恒不投影。  
 - 易标五段：parse → outline → qa → kb → write（`yibiao-map.json`）。不 fork AGPL。  
@@ -122,7 +122,7 @@ docs/                 装箱架构、主线 C、研究/归档
 | 岗 KB | 目录 100% / 写盘栏位 ~8% | **66/66** 四件套在盘；`test_kb_schema.py` 缺一即红 | outline 指针：construction→`scheme-11.md`，危大→`judge-card.md`。**真写盘仍 5/66** |
 | 工作台 66 岗 | 平台齐、栏位 5/66 | 同一套 chat/run | 其余 61 岗 `_draft_markdown` |
 | 技术文档 | 70% | GETTING-STARTED/PROTOCOL/MCP/SKILLS/KB | 研究笔记不得冒充必读 |
-| 评测 | 60% | 离线闸 + `GET /api/eval/live` 四针 | 针未收口到 company 页；无 APPBCA 针 |
+| 评测 | 65% | 离线闸 + `GET /api/eval/live` 五针（company 页） | 岗 GST/CORENET 扫描是 T007/T008 |
 
 行业评测总判保持 **部分合格**（[industry-agent-eval-2026-08-17.md](industry-agent-eval-2026-08-17.md)）。「合格 · 内部起草搭子」要默认面真装箱可抄 + 循环可回放 + eval/live **同时**成立，且由人改口，脚本不得改总判句。
 
@@ -183,7 +183,7 @@ P0 ToolEngine/Scheduler/pack-ship 快照 · P1-1 handoff · P1-2 eval/live · P1
 | 引擎库 | `knowledge_base/` | solver/harness；不并进岗库 |
 
 每岗契约：`README.md` `faq.md` `outline.md` `web-knowledge.md`（T001 ✅；construction `outline.md` 指针到 `scheme-11.md`，method-hazard 指针到 `judge-card.md`）。  
-门户权威句目标在 `demo/kb/company/web-portals.md`（GST 9% / Fire Code 2023 / GeBIZ≠评分 / APPBCA-2026-12）。**CTU 2014 现网只在 pack-ship 岗页**，T003 先抄进 company 再改针。  
+门户权威句在 `demo/kb/company/web-portals.md`（GST 9% / Fire Code 2023 / CTU 2014 非强制 / GeBIZ≠评分 / APPBCA-2026-12）。T003 ✅ 五针只读该页。  
 规范全文不进仓。缺数不编条款号。
 
 ### 5.3 MCP（动作）
@@ -257,9 +257,9 @@ xyz 只抄 solver。分页/订阅 = 有真 Host list/call 稳定之后（horizon
 | D2 | 本文全量规划书 | ✅（本文件） | 存在且为总入口 |
 | RT-P0-1/2/3 | pack-ship 快照 · ToolEngine · Scheduler | ✅ | `test_runtime_p0.py` |
 | RT-P1-1 | `tender.handoff.json` + 三列 + 评分点目录 | ✅ | `test_tender_handoff.py` |
-| RT-P1-2 | `GET /api/eval/live` | ✅ | 四针离线；收口到 company 是 T003 |
+| RT-P1-2 | `GET /api/eval/live` | ✅ | 五针离线，只读 company/web-portals.md（T003） |
 | K1 | 66 岗目录四件套闸 | ✅ | 66/66；`scripts/test_kb_schema.py` |
-| K2 | 门户标题只从 company 页 | **部分** | live 已有；针仍散落且无 APPBCA（T003） |
+| K2 | 门户标题只从 company 页 | **部分** | 五针已收口 company；岗 GST 扫描是 T007 |
 | K3 | kb 隔离 + 文件名检索当闸 | 部分 | 跨大类拒绝 T023 ✅；文件名检索仍 `test_kb_search_filename.py` |
 | K4 | 按车道每次 1 岗富 faq/outline | 进行中 | 岗 README 字段表 |
 | M1–M4 | stdio、工具表、Host、prompts | ✅ | `test_mcp_stdio.py` |
@@ -322,7 +322,7 @@ python scripts/test_industry_agent_eval.py # 断言总判仍「部分合格」
 
 ```
 1. 取号：只取 §15 主链上第一个状态≠✅/延期 的 T 号。
-   当前指针见 §11（此刻 = T003）。
+   当前指针见 §11（此刻 = T007）。
    禁止 OR §7、切片勾选表、next-steps、post-horizon 原文、handbook「下一刀」。
    岗栏位细节可读 post-horizon 该 id；已做/未做以 §7/§15 为准。
 2. 改最少文件。绿之前必须指出新路径（代码 / KB / MCP / SKILL / 测试之一）。指不出 = 没做。
@@ -355,13 +355,11 @@ GeBIZ 代交 / 自动中标；法定专项方案 / PE·QP·RTO 签认件；十�
 
 ## 11. 下一刀（立刻）
 
-**T003 · eval/live 针改读 `company/web-portals.md`。**
+**T007 · 岗若写 GST 必须含 9%。**
 
-T023 ✅：bid-parse 读 `kb://construction/method-hazard/outline.md` 拒绝句，不是空 404。`POST /api/mcp/resources/read` + `python scripts/test_mcp_surface.py`。
+T003 ✅：`GET /api/eval/live` 五针只读 `demo/kb/company/web-portals.md`（GST 9% / Fire Code 2023 / CTU 2014 非强制 / GeBIZ≠评分 / APPBCA-2026-12）。CTU 权威句已抄进 company。验收：`python scripts/test_agent_loop.py`。
 
-T003：`GET /api/eval/live` 五针 GST 9% / Fire Code 2023 / CTU 2014 / GeBIZ≠评分 / APPBCA-2026-12 只从 `demo/kb/company/web-portals.md` 取权威句。CTU 须先抄进 company 再改针。
-
-再 T007/T008 → T002 危大判定书。
+T007：扫描岗 `web-knowledge.md`，出现 GST 必须含 `9%`；7%/8% 只可出现在「背景/历史升档」句。然后 T008（草稿不得写「全部新项目不论 GFA 强制」当现行）→ T002 危大判定书。
 
 ---
 
@@ -416,7 +414,7 @@ T 号是开工 ID：K1=T001，P1-5=T002，K2=T003，P1-3=T010。handbook 不得�
 |--------|------|------|
 | 设计车道 18 岗 | `seed.json` **design=20**（66=3+20+3+3+4+4+5+3+4+3+3+1+3+2+3+2） | §6 已改正 |
 | 「其余 57 岗」 | 已富约 5 岗（bid×3 + pack-ship + construction 十一章），其余 **61** | §7.2 已改正 |
-| K1「目录齐但无闸」 | 当时 64/66；只缺 construction 与 method-hazard 的 `outline.md` | 已做 T001 ✅；§11 现为 T003 |
+| K1「目录齐但无闸」 | 当时 64/66；只缺 construction 与 method-hazard 的 `outline.md` | 已做 T001 ✅；§11 现为 T007 |
 | post-horizon bid 三岗「下一刀=handoff/gaps/评分点」 | P1-1 **已做** | 以本文 §7 为准；horizon 文当历史下一刀 |
 | post-horizon construction「下一刀=十一章接 turn」 | S2 **已做** md；下一刀才是 fill_scheme_docx | T005 |
 | 行业评测「缺 Python eval/live、MCP 几乎只有 pack-ship」 | 2026-08-19 已有 `GET /api/eval/live` 与 `mcp_stdio --pack bid` | 不改 08-17 历史总判日期；现网能力以本文 §3 为准 |
@@ -438,7 +436,7 @@ T 号是开工 ID：K1=T001，P1-5=T002，K2=T003，P1-3=T010。handbook 不得�
 |----|------|------|------|------|
 | T001 | K1：补 2 个 outline + `test_kb_schema.py` | 两路径 outline.md + 脚本 | 66 岗四件套全在 | ✅ |
 | T002 | method-hazard 判定书：默认 SG WSH/PTW；37 号令只在 CN 栏；信息不足不编 | `judge-card` 栏位写盘 | 未确认 0 稿；无「可以开工」 | 未做 |
-| T003 | K2：eval/live 针改读 `company/web-portals.md` | `eval_live.py` | GST/Fire/CTU/GeBIZ/APPBCA 五针 | 未做 |
+| T003 | K2：eval/live 针改读 `company/web-portals.md` | `eval_live.py` | GST/Fire/CTU/GeBIZ/APPBCA 五针 | ✅ |
 | T004 | finance-tax 日历栏：申报期空栏 + 页述 9% + 税额待填 | `finance-tax__calendar` 非骨架句 | 测试断言含 9% 且无自编税率 | 未做 |
 | T005 | construction `fill_scheme_docx`；失败则 `docx_pending` | skill 模板管道 | 扫描 0 才报成功 | 未做 |
 | T006 | cost takeoff 栏：工程量来自用户表；无清单不编单价 | `cost` 独有写盘 | 无单价则 TBD/UNSPECIFIED | 未做 |
@@ -513,6 +511,6 @@ T030–T047 是**批次合同**（约 59 岗，已扣 bid×3 / pack-ship / const
 
 **主链（不定时限；头指针 = 第一个非 ✅/延期）：**
 
-T001 → T021 → T023 → **T003**（含 T007/T008 官方口径）→ T002 → T004 → T006 → T005 → T014 → T011 → T010 → T020+T024 → T030（仅 survey/dispatch）→ T031…T047 → T050 → T052 → T062。
+T001 → T021 → T023 → T003 → **T007** → T008 → T002 → T004 → T006 → T005 → T014 → T011 → T010 → T020+T024 → T030（仅 survey/dispatch）→ T031…T047 → T050 → T052 → T062。
 
 T012/T060/T061/T051/T053 不占刀。中途红则停在该号，不准跳号。

@@ -228,8 +228,17 @@ def main() -> int:
     assert lj.get("live_web") is False
     assert lj.get("ok") is True, lj.get("gates")
     ids = {n["id"] for n in lj.get("needles") or []}
-    assert {"gst-9", "fire-code", "ctu-2014", "gebiz-not-scoring"} <= ids
+    assert {
+        "gst-9",
+        "fire-code",
+        "ctu-2014",
+        "gebiz-not-scoring",
+        "appbca-2026-12",
+    } <= ids
     assert all(n.get("found") for n in lj["needles"]), lj["needles"]
+    assert all(
+        n.get("path") == "demo/kb/company/web-portals.md" for n in lj["needles"]
+    ), lj["needles"]
 
     index = (ROOT / "frontend" / "index.html").read_text(encoding="utf-8")
     assert "/api/agent" in index
