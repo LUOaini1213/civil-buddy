@@ -174,6 +174,23 @@ _INTERIM_CHAPTERS = (
     "自检",
 )
 
+_PLAN_MASTER_CHAPTERS = (
+    "封面与文件控制",
+    "草稿声明",
+    "编制依据",
+    "开竣工口径提示",
+    "工作分解",
+    "逻辑关系",
+    "一级网络与里程碑",
+    "关键线路",
+    "表达方式",
+    "检查与基线",
+    "进度变更",
+    "待填与禁令",
+)
+
+_MILESTONE_KEYS = ("桩基", "±0", "封顶", "砌筑", "机电", "装饰", "竣工")
+
 _QTY_RE = re.compile(
     r"(?P<qty>\d+(?:\.\d+)?)\s*(?P<unit>m2|m²|m3|t|吨|kg|工日|项)?",
     re.I,
@@ -586,6 +603,92 @@ def _interim_measure_md(text: str) -> str:
         lines.append("")
     lines.append("SG：Security of Payment Act payment claim 只写标题，时限 UNSPECIFIED。")
     lines.append("CN：验工计价按用户合同，金额 TBD。GB 50500 只出现在 CN 栏。")
+    lines.append("")
+    return "\n".join(lines)
+
+
+def _parse_wbs_names(blob: str) -> List[str]:
+    rows: List[str] = []
+    for raw in (blob or "").replace("；", "\n").replace(";", "\n").splitlines():
+        t = raw.strip()
+        t = re.sub(r"^写一份\S*\s*", "", t).strip()
+        if not t or t in {"草稿提纲", "总进度计划", "总控计划"}:
+            continue
+        if t.startswith("#") or t.startswith("内部"):
+            continue
+        if len(t) <= 80:
+            rows.append(t[:80])
+    return rows
+
+
+def _plan_master_md(text: str) -> str:
+    names = _parse_wbs_names(text)
+    if names:
+        wbs = "| 编码 | 名称 | 责任单位 | 工程量来源 | 持续时间来源 | 紧前 |\n| --- | --- | --- | --- | --- | --- |\n"
+        wbs += "".join(
+            f"| TBD | {n} | TBD | 待填 | 待填 | 待填 |\n" for n in names
+        )
+    else:
+        wbs = (
+            "| 编码 | 名称 | 责任单位 | 工程量来源 | 持续时间来源 | 紧前 |\n"
+            "| --- | --- | --- | --- | --- | --- |\n"
+            "| TBD | [A001] | TBD | 待填 | 待填 | 待填 |\n"
+        )
+    blob = text or ""
+    miles = [k for k in _MILESTONE_KEYS if k in blob]
+    if miles:
+        mile_tbl = "| 里程碑 | 日期 |\n| --- | --- |\n" + "".join(f"| {m} | 待填 |\n" for m in miles)
+    else:
+        mile_tbl = (
+            "| 里程碑 | 日期 |\n| --- | --- |\n"
+            "| 桩基完成 / ±0.000 / 主体封顶（候选） | 里程碑待填 |\n"
+        )
+    lines = [
+        "# 施工总进度计划（AI 草稿 · 内部讨论）",
+        "",
+        DISCLAIMER,
+        "",
+        "不是监理批准件，也不是可据以开工的进度计划。禁止编持续时间和关键线路。",
+        "",
+        "## 用户原文",
+        "",
+        (text or "").strip() or "（未提供）",
+        "",
+    ]
+    for i, title in enumerate(_PLAN_MASTER_CHAPTERS, 1):
+        lines.append(f"## {i} {title}")
+        lines.append("")
+        if i == 1:
+            lines.append("项目名称/合同工期/计划开工竣工待填。签认栏留空。[A001]")
+        elif i == 2:
+            lines.append(DISCLAIMER)
+        elif i == 3:
+            lines.append("只列用户已给名称。无定额或方案则依据栏待补。不默写定额号。条款 UNSPECIFIED。")
+        elif i == 4:
+            lines.append("开竣工日期争议提示查阅法释〔2020〕25 号第八条、第九条认定顺序。本岗不代法院认定日期。")
+        elif i == 5:
+            lines.append(wbs)
+            lines.append("")
+            lines.append("WBS。无图纸清单则工程量与持续时间一律待填。")
+        elif i == 6:
+            lines.append("紧前、紧后、搭接类型（FS/SS/FF/SF）只写用户确认的工艺顺序。禁止编虚工作逻辑。")
+        elif i == 7:
+            lines.append(mile_tbl)
+            lines.append("")
+            lines.append("未给定的里程碑名称可列候选，日期待填。")
+        elif i == 8:
+            lines.append("关键线路=待计算。用户未提供网络参数时禁止本稿指定。关键线路上的作业变更必须回写本总控。")
+        elif i == 9:
+            lines.append("本稿出表头+文字逻辑，不假装已出批准用网络图。软件名、图号须来自用户。")
+        elif i == 10:
+            lines.append("冻结基线版本。偏差先对照总时差，再判断是否动总工期。总时差待计算。")
+        elif i == 11:
+            lines.append("变更原因、是否关键线路、对里程碑的影响待填。金额与意向书改召唤索赔调概（claim）。")
+        else:
+            lines.append("无来源数字写待填。禁止断言计划合理、一定能按期竣工。")
+        lines.append("")
+    lines.append("SG：PSSCOC 工期条款只写族名。Programme 提交以用户合同为准。")
+    lines.append("CN：施工组织设计规范 / 工程网络计划技术规程只写全名，不编关键线路。")
     lines.append("")
     return "\n".join(lines)
 
@@ -1197,6 +1300,33 @@ def _run_exclusive(
             "files": files,
             "tools_run": ran,
             "reply": "已出验工计价草稿。监理审/业主核空栏。不编应付合价。submit_blocked=true。",
+            "submit_blocked": True,
+        }
+
+    if expert.id == "plan-master":
+        md = _plan_master_md(text)
+        from packing_assistant.tools.tender_review import forbidden_hits
+
+        hits = forbidden_hits(md)
+        if hits:
+            return {
+                "wrote": False,
+                "hitl_pending": False,
+                "files": [],
+                "tools_run": [],
+                "reply": "禁语扫描命中，未报成功：" + "、".join(hits),
+                "submit_blocked": True,
+            }
+        path = out_dir / "plan-master__network.md"
+        guarded_write_text(path, md)
+        files.append({"name": path.name, "path": str(path), "tool": "plan-master__network"})
+        ran.append("plan-master__network")
+        return {
+            "wrote": True,
+            "hitl_pending": False,
+            "files": files,
+            "tools_run": ran,
+            "reply": "已出总控计划草稿。关键线路=待计算。submit_blocked=true。",
             "submit_blocked": True,
         }
 

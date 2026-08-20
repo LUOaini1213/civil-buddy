@@ -380,7 +380,7 @@
 - qa：已有 · planning__scan_forbidden
 - kb：已有 · 分层 KB + search_kb/read_kb（demo/kb）
 - write：已有 · 独有 plan-master__network；chat 不写盘
-- 下一刀：plan-master__network 固定 WBS|紧前|里程碑待填|关键线路=待计算。
+- 下一刀：已做 T032 plan-master。plan-master__network 固定 WBS|紧前|里程碑待填|关键线路=待计算。
 
 ### plan-lookahead
 
