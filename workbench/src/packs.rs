@@ -947,7 +947,7 @@ fn pack_tools(pack: &str) -> Vec<ToolDef> {
             },
             ToolDef {
                 name: "finance-book__check",
-                description: "核算独有：账套检查表头。不编分录。",
+                description: "核算独有：报销勾选、科目对照、对账缺口。金额 [A001]。不编分录。",
                 parameters: obj(json!({"period": {"type": "string"}}), &["period"]),
             },
         ],
@@ -4372,15 +4372,56 @@ fn lab_record_ledger(ctx: &mut ToolCtx, args: &Value) -> String {
     }
 }
 
+fn fb_period(blob: &str, period_arg: &str) -> String {
+    let src = if period_arg.trim().is_empty() {
+        blob
+    } else {
+        period_arg
+    };
+    let re = regex::Regex::new(r"(20\d{2})[-./年](\d{1,2})").expect("period re");
+    if let Some(c) = re.captures(src) {
+        let y = &c[1];
+        let m: u32 = c[2].parse().unwrap_or(0);
+        if (1..=12).contains(&m) {
+            return format!("{y}-{m:02}");
+        }
+    }
+    nonempty(period_arg, "待填")
+}
+
 fn finance_book_check(ctx: &mut ToolCtx, args: &Value) -> String {
-    expert_outline(
-        ctx,
-        "核算检查表.md",
-        "核算检查表",
-        args,
-        &[("period", "周期")],
-        "- 不编会计分录和税率。\n- SG：GST / 账套口径以 IRAS / ACRA 原文为准。\n- CN：增值税法 / 会计法只写全名。\n- 本表不是审计意见。",
-    )
+    let (jur, banner) = zone_banner(args);
+    let blob = format!(
+        "{}\n{}\n{}",
+        s(args, "period"),
+        s(args, "notes"),
+        s(args, "note")
+    );
+    let period = fb_period(&blob, &s(args, "period"));
+    let mut named = Vec::new();
+    for k in ["收发存", "盘点", "分包", "台班", "工资专户", "发票"] {
+        if blob.contains(k) {
+            named.push(k);
+        }
+    }
+    let gap_note = if named.is_empty() {
+        "缺哪边台账就列缺口。无盘点不编盈亏。".to_string()
+    } else {
+        format!("用户点名：{}。缺哪边台账就列缺口，不编盈亏。", named.join("、"))
+    };
+    let md = format!(
+        "{}{banner}\n内部讨论。不构成记账凭证、审计结论或税务意见。不编会计分录。\n\n- 报告期：{period}\n\n## 1 封面\n项目名称待填。账套主体待填。报告期：{period}。编制人空栏。[A001]\n\n## 2 草稿声明\n内部讨论。不构成记账凭证、审计结论或税务意见。本稿不下平账结论。\n\n## 3 核算对象\n以施工合同或内部承包责任书为对象。用户未给合同编号则对象待填。\n\n## 4 科目对照\n只列科目与成本项目名称，不写借贷。企业现行账套不同则以用户科目表为准，禁止擅自改账。\n\n| 成本项目 | 账套科目名称 | 金额 |\n| --- | --- | --- |\n| 人工费 | 待核 | [A001] |\n| 材料费 | 待核 | [A001] |\n| 机械使用费 | 待核 | [A001] |\n| 其他直接费 | 待核 | [A001] |\n| 间接费用 | 待核 | [A001] |\n| 工程结算 | 待核 | [A001] |\n\n## 5 商务口径\n验工计价确认的形象进度不是自动入账依据。无业主/监理签认的结算单则工程结算侧待填。\n\n## 6 报销勾选\n逐票或逐单勾选。缺一项即退回业务部门，不代补。税额栏不由核算岗计算。\n\n| 检查项 | 本稿 |\n| --- | --- |\n| 发票查验 | 待核 |\n| 票面与业务 | 待核 |\n| 审批链 | 待核 |\n| 附件 | 待核 |\n| 重复报 / 与项目无关 | 待核 |\n| 专款范围 | 待核 |\n\n## 7 安全生产费用\n专项核算、不得挤占挪用。只问是否落在使用范围名称内。提取比例、分录待用户或制度文本，此处不填数字。\n\n## 8 对账缺口\n{gap_note}\n\n| 台账 | 本稿 |\n| --- | --- |\n| 物资收发存 | 缺口待列 |\n| 分包对上对下 | 缺口待列 |\n| 机械租赁台班 | 缺口待列 |\n| 农民工工资专户代发回单 | 缺口待列 |\n\n无仓库盘点表不编盈亏。金额 [A001]。\n\n## 9 自检\n无来源金额一律 [A001]。未写任何借贷分录。本稿不下平账结论，也不下入账结论。\n\n## 10 禁令\n不编会计分录。不编税负。无合同、无计量单、无发票原件的金额栏全部 [A001]。\n\n[A001] 无来源金额待填。不编分录。禁止编造平账结论。{}\n",
+        header("核算检查表"),
+        format!(
+            "{}{}",
+            sg_only(&jur, "SG：GST / 账套口径以 IRAS / ACRA 原文为准。"),
+            cn_only(&jur, "CN：增值税法 / 会计法只写全名。施工企业会计核算办法只写全名。"),
+        ),
+    );
+    match ctx.write_md("核算检查表.md", &md) {
+        Ok(m) => m,
+        Err(e) => e,
+    }
 }
 
 fn hr_train_plan(ctx: &mut ToolCtx, args: &Value) -> String {

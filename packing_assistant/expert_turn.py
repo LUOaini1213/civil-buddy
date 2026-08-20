@@ -579,6 +579,21 @@ _PV_SKIP = {
     "待填",
 }
 
+_FB_CHAPTERS = (
+    "封面",
+    "草稿声明",
+    "核算对象",
+    "科目对照",
+    "商务口径",
+    "报销勾选",
+    "安全生产费用",
+    "对账缺口",
+    "自检",
+    "禁令",
+)
+
+_FB_PERIOD = re.compile(r"(20\d{2})[-./年](\d{1,2})")
+
 _MILESTONE_KEYS = ("桩基", "±0", "封顶", "砌筑", "机电", "装饰", "竣工")
 
 _QTY_RE = re.compile(
@@ -2903,6 +2918,110 @@ def _vendor_eval_md(text: str) -> str:
     return "\n".join(lines)
 
 
+def _fb_period(blob: str) -> str:
+    m = _FB_PERIOD.search(blob or "")
+    if not m:
+        return "待填"
+    return f"{m.group(1)}-{int(m.group(2)):02d}"
+
+
+def _finance_book_md(text: str) -> str:
+    blob = text or ""
+    zone = _mix_zone(blob)
+    period = _fb_period(blob)
+    named = []
+    for k in ("收发存", "盘点", "分包", "台班", "工资专户", "发票"):
+        if k in blob:
+            named.append(k)
+    gap_note = (
+        "用户点名：" + "、".join(named) + "。缺哪边台账就列缺口，不编盈亏。"
+        if named
+        else "缺哪边台账就列缺口。无盘点不编盈亏。"
+    )
+    subjects = (
+        "| 成本项目 | 账套科目名称 | 金额 |\n"
+        "| --- | --- | --- |\n"
+        "| 人工费 | 待核 | [A001] |\n"
+        "| 材料费 | 待核 | [A001] |\n"
+        "| 机械使用费 | 待核 | [A001] |\n"
+        "| 其他直接费 | 待核 | [A001] |\n"
+        "| 间接费用 | 待核 | [A001] |\n"
+        "| 工程结算 | 待核 | [A001] |\n"
+    )
+    reimb = (
+        "| 检查项 | 本稿 |\n"
+        "| --- | --- |\n"
+        "| 发票查验 | 待核 |\n"
+        "| 票面与业务 | 待核 |\n"
+        "| 审批链 | 待核 |\n"
+        "| 附件 | 待核 |\n"
+        "| 重复报 / 与项目无关 | 待核 |\n"
+        "| 专款范围 | 待核 |\n"
+    )
+    gaps = (
+        "| 台账 | 本稿 |\n"
+        "| --- | --- |\n"
+        "| 物资收发存 | 缺口待列 |\n"
+        "| 分包对上对下 | 缺口待列 |\n"
+        "| 机械租赁台班 | 缺口待列 |\n"
+        "| 农民工工资专户代发回单 | 缺口待列 |\n"
+    )
+    lines = [
+        "# 项目部核算检查表（AI 草稿）",
+        "",
+        DISCLAIMER,
+        "",
+        "内部讨论。不构成记账凭证、审计结论或税务意见。不编会计分录。",
+        "",
+        f"- 辖区：{zone}",
+        f"- 报告期：{period}",
+        "",
+        "## 用户原文",
+        "",
+        blob.strip() or "（未提供）",
+        "",
+    ]
+    for i, title in enumerate(_FB_CHAPTERS, 1):
+        lines.append(f"## {i} {title}")
+        lines.append("")
+        if i == 1:
+            lines.append(f"项目名称待填。账套主体待填。报告期：{period}。编制人空栏。[A001]")
+        elif i == 2:
+            lines.append("内部讨论。不构成记账凭证、审计结论或税务意见。本稿不下平账结论。")
+        elif i == 3:
+            lines.append("以施工合同或内部承包责任书为对象。用户未给合同编号则对象待填。")
+        elif i == 4:
+            lines.append("只列科目与成本项目名称，不写借贷。企业现行账套不同则以用户科目表为准，禁止擅自改账。")
+            lines.append("")
+            lines.append(subjects)
+        elif i == 5:
+            lines.append("验工计价确认的形象进度不是自动入账依据。无业主/监理签认的结算单则工程结算侧待填。")
+        elif i == 6:
+            lines.append("逐票或逐单勾选。缺一项即退回业务部门，不代补。税额栏不由核算岗计算。")
+            lines.append("")
+            lines.append(reimb)
+        elif i == 7:
+            lines.append("专项核算、不得挤占挪用。只问是否落在使用范围名称内。提取比例、分录待用户或制度文本，此处不填数字。")
+        elif i == 8:
+            lines.append(gap_note)
+            lines.append("")
+            lines.append(gaps)
+            lines.append("")
+            lines.append("无仓库盘点表不编盈亏。金额 [A001]。")
+        elif i == 9:
+            lines.append("无来源金额一律 [A001]。未写任何借贷分录。本稿不下平账结论，也不下入账结论。")
+        else:
+            lines.append("不编会计分录。不编税负。无合同、无计量单、无发票原件的金额栏全部 [A001]。")
+        lines.append("")
+    lines.append("[A001] 无来源金额待填。不编分录。禁止编造平账结论。")
+    if zone in ("SG", "DUAL"):
+        lines.append("SG：GST / 账套口径以 IRAS / ACRA 原文为准。")
+    if zone in ("CN", "DUAL"):
+        lines.append("CN：增值税法 / 会计法只写全名。施工企业会计核算办法只写全名。")
+    lines.append("")
+    return "\n".join(lines)
+
+
 def _dispatch_daily_md(text: str) -> str:
     jobs = _copy_sensitive_jobs(text)
     sensitive = (
@@ -3983,6 +4102,33 @@ def _run_exclusive(
             "submit_blocked": True,
         }
 
+    if expert.id == "finance-book":
+        md = _finance_book_md(text)
+        from packing_assistant.tools.tender_review import forbidden_hits
+
+        hits = forbidden_hits(md)
+        if hits:
+            return {
+                "wrote": False,
+                "hitl_pending": False,
+                "files": [],
+                "tools_run": [],
+                "reply": "禁语扫描命中，未报成功：" + "、".join(hits),
+                "submit_blocked": True,
+            }
+        path = out_dir / "finance-book__check.md"
+        guarded_write_text(path, md)
+        files.append({"name": path.name, "path": str(path), "tool": "finance-book__check"})
+        ran.append("finance-book__check")
+        return {
+            "wrote": True,
+            "hitl_pending": False,
+            "files": files,
+            "tools_run": ran,
+            "reply": "已出核算检查表。报销勾选/科目对照/对账缺口。金额 [A001]。submit_blocked=true。",
+            "submit_blocked": True,
+        }
+
     if expert.id == "cost":
         md = (
             f"# 工程量拆分表（AI 草稿）\n\n{DISCLAIMER}\n\n"
@@ -4111,6 +4257,7 @@ def run_named_exclusive(name: str, args: Optional[Dict[str, Any]] = None) -> Dic
         "vendors",
         "vendor",
         "criteria",
+        "period",
         "note",
         "notes",
     ):

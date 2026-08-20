@@ -755,6 +755,36 @@ def main() -> int:
     acc = pvv.split("## 3 准入")[1].split("## 4")[0]
     assert "甲" in acc and "乙" in acc
 
+    fb_chat = run_expert_turn("报销怎么理解？", "finance-book")
+    assert fb_chat["intent"] == "chat" and fb_chat["wrote"] is False
+    fb_ok = run_expert_turn(
+        "写一份核算检查 2026-08",
+        "finance-book",
+        force_intent="run",
+        session_id="t038-fb",
+    )
+    assert fb_ok["wrote"] is True
+    assert "finance-book__check" in fb_ok["tools_run"]
+    fbt = Path(fb_ok["files"][0]["path"]).read_text(encoding="utf-8")
+    assert "2026-08" in fbt
+    assert "报销勾选" in fbt and "科目对照" in fbt and "对账缺口" in fbt
+    assert "[A001]" in fbt
+    assert "发票查验" in fbt
+    assert "人工费" in fbt
+    assert "GST" in fbt or "IRAS" in fbt
+    assert "可以开工" not in fbt
+    assert "账已平" not in fbt
+    assert "已具备入账条件" not in fbt
+    fb_gap = run_expert_turn(
+        "写一份核算检查 2026-08 收发存未盘点",
+        "finance-book",
+        force_intent="run",
+        session_id="t038-fb-gap",
+    )
+    fbg = Path(fb_gap["files"][0]["path"]).read_text(encoding="utf-8")
+    assert "收发存" in fbg
+    assert "不编盈亏" in fbg
+
     high = [e for e in roster if e.risk == "high"][0]
     blocked = run_expert_turn("写一份专项方案讨论提纲", high.id, confirm_ok=False)
     assert blocked["intent"] == "run"

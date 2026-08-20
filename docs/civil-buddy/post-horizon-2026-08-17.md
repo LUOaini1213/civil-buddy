@@ -741,7 +741,7 @@
 - qa：已有 · finance__scan_forbidden
 - kb：已有 · 分层 KB + search_kb/read_kb（demo/kb）
 - write：已有 · 独有 finance-book__check；chat 不写盘
-- 下一刀：finance-book__check 出报销勾选+科目对照+对账缺口，金额 [A001]。
+- 下一刀：已做 T038 finance-book。finance-book__check 出报销勾选+科目对照+对账缺口，金额 [A001]。
 
 ### finance-fund
 

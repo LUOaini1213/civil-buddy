@@ -127,6 +127,9 @@
 41. **T037 proc-vendor 一岗（T037 批次完）** ✅ 2026-08-20  
     proc-vendor__eval 出准入｜考察｜短名单；分数/结论待核；禁止成交结论。不编证书号和业绩额。主链头指针改为 **T038**（finance-book 先）。T038–T047 不得一行勾完。行业总判仍 **部分合格**。
 
+42. **T038 finance-book 一岗** ✅ 2026-08-20  
+    finance-book__check 出报销勾选｜科目对照｜对账缺口；金额 [A001]。不编分录、不编盈亏。T038 批次未完：下一岗 **finance-fund**。不得把资金岗一并勾完。行业总判仍 **部分合格**。
+
 平台内核见 [product-improvement-handbook.md](product-improvement-handbook.md)。岗独有写盘下一刀仍按 [post-horizon-2026-08-17.md](post-horizon-2026-08-17.md)。
 
 ## 有宿主再做
