@@ -571,7 +571,7 @@
 - qa：已有 · commercial__scan_forbidden
 - kb：已有 · 分层 KB + search_kb/read_kb（demo/kb）
 - write：已有 · 独有 subcontract__sheet；chat 不写盘
-- 下一刀：subcontract__sheet 按行 parse 细目；无总包/业主确认不编金额。
+- 下一刀：已做 T031 subcontract。subcontract__sheet 按行 parse 细目；无总包/业主确认不编金额。
 
 ### interim
 

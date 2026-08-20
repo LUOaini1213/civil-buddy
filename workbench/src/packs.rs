@@ -2391,12 +2391,51 @@ fn dispatch_daily(ctx: &mut ToolCtx, args: &Value) -> String {
     }
 }
 
+fn parse_subcontract_lines(blob: &str) -> Vec<(String, String, String)> {
+    let qty_re = regex::Regex::new(r"(?i)(?P<qty>\d+(?:\.\d+)?)\s*(?P<unit>m2|m²|m3|t|吨|kg|工日|项)?").expect("qty re");
+    let mut rows = Vec::new();
+    for raw in blob.replace('；', "\n").replace(';', "\n").lines() {
+        let mut t = raw.trim().to_string();
+        if let Some(rest) = t.strip_prefix("写一份") {
+            t = rest.trim().to_string();
+        }
+        if t.is_empty() || t == "待填分包" || t == "待计量" || t == "草稿提纲" {
+            continue;
+        }
+        if t.starts_with('#') || t.starts_with("内部") {
+            continue;
+        }
+        if let Some(m) = qty_re.find(&t) {
+            let qty = qty_re.captures(&t).and_then(|c| c.name("qty")).map(|x| x.as_str().to_string()).unwrap_or_else(|| "TBD".into());
+            let unit = qty_re.captures(&t).and_then(|c| c.name("unit")).map(|x| x.as_str().to_string()).unwrap_or_else(|| "TBD".into());
+            let name = format!("{}{}", &t[..m.start()], &t[m.end()..]).trim_matches(|c: char| c == ' ' || c == '，' || c == ',').to_string();
+            let name = if name.is_empty() { t.chars().take(80).collect() } else { name.chars().take(80).collect() };
+            rows.push((name, unit, qty));
+        } else if t.chars().count() <= 80 {
+            rows.push((t.chars().take(80).collect(), "TBD".into(), "TBD".into()));
+        }
+    }
+    rows
+}
+
 fn subcontract_sheet(ctx: &mut ToolCtx, args: &Value) -> String {
-    let pkg = nonempty(&s(args, "package"), "待填分包");
-    let qty = nonempty(&s(args, "qty_note"), "待计量");
+    let pkg = nonempty(&s(args, "package"), "");
+    let qty_note = nonempty(&s(args, "qty_note"), "");
+    let items = nonempty(&s(args, "items"), "");
+    let blob = format!("{pkg}\n{qty_note}\n{items}");
+    let parsed = parse_subcontract_lines(&blob);
+    let table = if parsed.is_empty() {
+        "| 分项 | 单位 | 数量 | 合同单价 | 合价 | 来源 |\n| --- | --- | --- | --- | --- | --- |\n| [A001] | TBD | TBD | TBD | TBD | 用户未给细目 |".to_string()
+    } else {
+        let mut out = String::from("| 分项 | 单位 | 数量 | 合同单价 | 合价 | 来源 |\n| --- | --- | --- | --- | --- | --- |\n");
+        for (n, u, q) in parsed {
+            out.push_str(&format!("| {n} | {u} | {q} | TBD | TBD | 用户细目 |\n"));
+        }
+        out
+    };
     let (jur, banner) = zone_banner(args);
     let md = format!(
-        "{}{banner}\n| 分包 | 验工 | 扣款 | 结算 | 备注 |\n| --- | --- | --- | --- | --- |\n| {pkg} | TBD | TBD | TBD | {qty} |\n\n[A001] 无业主/总包确认不编金额。禁止编造综合单价。{}\n",
+        "{}{banner}\n## 1 封面与草稿声明\n内部对下结算讨论稿，不是已生效结算协议。无总包/业主确认不编金额。\n\n## 2 合同关系\n专业分包或劳务分包待用户指定。禁止把违法转包写成合法分包。合同编号/计价方式待贴。[A001]\n\n## 3 本期完成\n{table}\n\n量只抄用户任务单或实测。禁止用形象百分比空估。对上未批则本期待填。\n\n## 4 合同内价款栏\n数量 × 合同单价。无合同单价、无总包/业主确认则合价 TBD。\n\n## 5 合同外\n洽商、签证另表。无签认不进结算。\n\n## 6 扣款表头\n| 扣款项 | 金额 |\n| --- | --- |\n| 甲供材领用 / 水电 / 周转料具损坏 | TBD |\n| 质量/安全罚款（须书面通知） | TBD |\n| 预付款抵扣 / 前期末扣清 | TBD |\n| 其他 | TBD |\n\n没有凭证不编扣款。\n\n## 7 质量与质保\n缺陷责任期内预留质量保证金。预留比例待按建质〔2017〕138 号与用户合同核对，不另编百分比当结算结论。\n\n## 8 农民工工资专节\n| 栏 | 金额 |\n| --- | --- |\n| 应付人工费 | TBD |\n| 应付分包工程款 | TBD |\n\n两栏分列，不混。\n\n## 9 会签栏\n| 部门 | 意见 |\n| --- | --- |\n| 现场工长核量 | 未会签 |\n| 工程部 / 安质 / 物资 / 商务 | 未会签 |\n| 项目经理 | 未会签 |\n\n## 10 与对上验工、财务接口\n对下累计原则上不超过对上已计价对应份额。付款申请交 finance-fund，发票税目交 finance-tax。\n\n## 11 自检\n无编造工日单价。本表不下发放结论。\n\n{}\n",
         header("分包结算表头"),
         format!(
             "{}{}",

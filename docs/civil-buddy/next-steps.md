@@ -64,6 +64,9 @@
 20. **T031 claim 一岗** ✅ 2026-08-20  
     claim__notice 出意向栏+证据行+条款原文待贴；工期金额 TBD。不把未送达意向假装已发出。T031 批次未完：下一岗 **subcontract**。不得把 subcontract/interim 一并勾完。
 
+21. **T031 subcontract 一岗** ✅ 2026-08-20  
+    subcontract__sheet 按行抄细目；无总包/业主确认金额 TBD。应付人工费与应付分包工程款分列。T031 批次未完：下一岗 **interim**。
+
 平台内核见 [product-improvement-handbook.md](product-improvement-handbook.md)。岗独有写盘下一刀仍按 [post-horizon-2026-08-17.md](post-horizon-2026-08-17.md)。
 
 ## 有宿主再做

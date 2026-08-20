@@ -1532,6 +1532,32 @@ fn test_variation_form_exclusive() {
 }
 
 #[test]
+fn test_subcontract_sheet_exclusive() {
+    let p = paths();
+    assert!(packs::visible_tool_names("subcontract").iter().any(|n| n == "subcontract__sheet"));
+    assert!(!packs::visible_tool_names("cost").iter().any(|n| n == "subcontract__sheet"));
+    let mut ctx = ToolCtx::new(p.clone(), "subcontract", "commercial", "low", true, "iter-sub");
+    let out = packs::execute(
+        &mut ctx,
+        "subcontract__sheet",
+        &json!({"package":"模板 120m2","qty_note":"钢筋 2.5t","jurisdiction":"SG"}),
+    );
+    assert!(out.contains("已写入"), "{out}");
+    let text = std::fs::read_to_string(ctx.out_dir.join("分包结算表头.md")).unwrap();
+    assert!(text.contains("SG"), "{text}");
+    assert!(text.contains("本期完成"), "{text}");
+    assert!(text.contains("模板"), "{text}");
+    assert!(text.contains("120"), "{text}");
+    assert!(text.contains("钢筋"), "{text}");
+    assert!(text.contains("2.5"), "{text}");
+    assert!(text.contains("TBD"), "{text}");
+    assert!(text.contains("PSSCOC") || text.contains("SOP Act"), "{text}");
+    assert!(!text.contains("可以开工"), "{text}");
+    let mut sib = ToolCtx::new(p, "cost", "commercial", "low", true, "iter-sub-sib");
+    assert!(packs::execute(&mut sib, "subcontract__sheet", &json!({"package":"x"})).contains("拒绝"));
+}
+
+#[test]
 fn test_bid_compliance_exclusive_and_scan_sg_mix() {
     let p = paths();
     assert!(packs::visible_tool_names("bid-compliance").iter().any(|n| n == "bid-compliance__gaps"));
