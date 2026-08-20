@@ -119,8 +119,8 @@ docs/                 装箱架构、主线 C、研究/归档
 | 装箱引擎 | 80% | 大 Team A/B、3D、CoG、HITL | 非本规划主战场；禁止第二套 packer |
 | MCP | 75% | Python stdio；bid 可见 KB+招标；pack-ship 投影；Host 样例 16 pack 可复制 | 默认仍挂 3 大类；分页/订阅延期 |
 | Skill | 65% | SOP 与 66 岗关系写清；施工十一章接 turn；fill_scheme 失败则 `docx_pending` | 其余 5 个 Grok 专家仍提纲 |
-| 岗 KB | 目录 100% / 写盘栏位 ~17% | **66/66** 四件套在盘；`test_kb_schema.py` 缺一即红 | outline 指针：construction→`scheme-11.md`，危大→`judge-card.md`。**真写盘 11/66**（+ variation） |
-| 工作台 66 岗 | 平台齐、栏位 11/66 | 同一套 chat/run | 其余 ~55 岗 `_draft_markdown` |
+| 岗 KB | 目录 100% / 写盘栏位 ~18% | **66/66** 四件套在盘；`test_kb_schema.py` 缺一即红 | outline 指针：construction→`scheme-11.md`，危大→`judge-card.md`。**真写盘 12/66**（+ claim） |
+| 工作台 66 岗 | 平台齐、栏位 12/66 | 同一套 chat/run | 其余 ~54 岗 `_draft_markdown` |
 | 技术文档 | 80% | GETTING-STARTED/PROTOCOL/MCP/SKILLS/KB；Grok/Cursor 最小 Host；刀后快闸 | 研究笔记不得冒充必读 |
 | 评测 | 75% | 离线闸 + `GET /api/eval/live` 五针（company 页）+ 岗 GST/CORENET 扫描 | 行业总判仍部分合格 |
 
@@ -283,8 +283,9 @@ xyz 只抄 solver。分页/订阅 = 有真 Host list/call 稳定之后（horizon
 | 5 | cost | ✅ takeoff 栏；无单价 UNSPECIFIED |
 | 6 | finance-tax | ✅ 日历栏页述 9%、申报期空栏 |
 | 7 | survey / dispatch | ✅ 点号只抄；敏感作业交危大岗（T030） |
-| 8 | variation | ✅ 文种判定 + 事实/依据/签认空栏（T031 进行中） |
-| 9+ | 其余 ~55 岗 | 骨架；下一刀在 post-horizon（已富岗勿再当缺口） |
+| 8 | variation | ✅ 文种判定 + 事实/依据/签认空栏 |
+| 9 | claim | ✅ 意向栏+证据行+条款原文待贴（T031 进行中） |
+| 10+ | 其余 ~54 岗 | 骨架；下一刀在 post-horizon（已富岗勿再当缺口） |
 
 ---
 
@@ -358,11 +359,11 @@ GeBIZ 代交 / 自动中标；法定专项方案 / PE·QP·RTO 签认件；十�
 
 ## 11. 下一刀（立刻）
 
-**T031 · commercial 进行中：下一岗 claim__notice。**
+**T031 · commercial 进行中：下一岗 subcontract__sheet。**
 
-variation ✅：先判定文种再出事实|依据|签认空栏；无变更编号则依据待填、禁止引用未提供的图号。金额 TBD。chat 仍不写盘。T031 其余岗 claim → subcontract → interim **未做**，不得一行勾完。
+variation ✅：文种判定 + 事实/依据/签认空栏。claim ✅：意向栏+证据行+条款原文待贴；工期金额 TBD。chat 仍不写盘。T031 其余岗 subcontract → interim **未做**，不得一行勾完。
 
-T031 下一岗：claim 出意向栏+证据行+条款原文待贴；工期金额 TBD。
+T031 下一岗：subcontract 按行 parse 细目；无总包/业主确认不编金额。
 
 ---
 
@@ -474,7 +475,7 @@ T 号是开工 ID：K1=T001，P1-5=T002，K2=T003，P1-3=T010。handbook 不得�
 | ID | 车道 | 岗（按序） |
 |----|------|------------|
 | T030 | construction 收尾 | survey__record（只抄已给点号）→ dispatch__daily（敏感作业交危大岗）✅ |
-| T031 | commercial | variation ✅ → claim → subcontract → interim（cost 见 T006） |
+| T031 | commercial | variation ✅ → claim ✅ → subcontract → interim（cost 见 T006） |
 | T032 | planning | plan-master → plan-lookahead → plan-resource |
 | T033 | lab | lab-mix → lab-sample → lab-record |
 | T034 | docs | supervision 闭合目录（不代替监理指令） |
@@ -492,7 +493,7 @@ T 号是开工 ID：K1=T001，P1-5=T002，K2=T003，P1-3=T010。handbook 不得�
 | T046 | design 批次 3 | landscape → interior → intel-weak → civil-defense → hydraulic |
 | T047 | design 批次 4 | port → municipal → bridge → tunnel → traffic → design-coord |
 
-T030–T047 是**批次合同**（T030 ✅、variation ✅ 后约 **55** 岗）。**一行不得一次勾完**；每岗一 commit。细节读 post-horizon 该 id。
+T030–T047 是**批次合同**（T030 ✅、variation/claim ✅ 后约 **54** 岗）。**一行不得一次勾完**；每岗一 commit。细节读 post-horizon 该 id。
 
 ### E. 主线 C 与装箱（插件，不另起炉灶）
 
@@ -514,6 +515,6 @@ T030–T047 是**批次合同**（T030 ✅、variation ✅ 后约 **55** 岗）�
 
 **主链（不定时限；头指针 = 第一个非 ✅/延期）：**
 
-T001 → T021 → T023 → T003 → T007 → T008 → T002 → T004 → T006 → T005 → T014 → T011 → T010 → T020+T024 → T030 → **T031**（variation ✅，下一岗 claim）→ T032…T047（T050 / T052 / T062 文档与联测已 ✅，不占岗栏）。
+T001 → T021 → T023 → T003 → T007 → T008 → T002 → T004 → T006 → T005 → T014 → T011 → T010 → T020+T024 → T030 → **T031**（variation/claim ✅，下一岗 subcontract）→ T032…T047（T050 / T052 / T062 文档与联测已 ✅，不占岗栏）。
 
 T012/T060/T061/T051/T053 不占刀。中途红则停在该号，不准跳号。

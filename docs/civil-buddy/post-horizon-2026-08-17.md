@@ -558,7 +558,7 @@
 - qa：已有 · commercial__scan_forbidden
 - kb：已有 · 分层 KB + search_kb/read_kb（demo/kb）
 - write：已有 · 独有 claim__notice；chat 不写盘
-- 下一刀：claim__notice 出意向栏+证据行+条款原文待贴；工期金额 TBD。
+- 下一刀：已做 T031 claim。claim__notice 出意向栏+证据行+条款原文待贴；工期金额 TBD。
 
 ### subcontract
 
