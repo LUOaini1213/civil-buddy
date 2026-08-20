@@ -148,6 +148,9 @@
 48. **T067 本机桌面窗口** ✅ 2026-08-20  
     `scripts/civil-buddy-desktop.ps1` 起本机工作台并用 Edge/Chrome `--app` 开窗口。不是腾讯桌面壳、不是 IM 遥控。禁止 `D:\layout`。主链头指针仍 **T039 pm-daily**。行业总判仍 **部分合格**。
 
+49. **T068 可下载试用** ✅ 2026-08-20  
+    仓库根 MIT LICENSE；工作台 OpenAI 兼容 Key（不必 DeepSeek）；`cargo build --release` 的 exe 打进 GitHub Release；一页 [给试用的人.md](../../给试用的人.md)（安装、填 Key、选作业根、点岗试「写一份」）。主链头指针仍 **T039 pm-daily**。行业总判仍 **部分合格**。
+
 平台内核见 [product-improvement-handbook.md](product-improvement-handbook.md)。岗独有写盘下一刀仍按 [post-horizon-2026-08-17.md](post-horizon-2026-08-17.md)。
 
 ## 有宿主再做

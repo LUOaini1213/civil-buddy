@@ -1,4 +1,4 @@
-"""统一 LLM 客户端（OpenAI 兼容，默认 DeepSeek Flash）。"""
+"""统一 LLM 客户端（OpenAI 兼容 Chat Completions；DeepSeek 可选）。"""
 
 from __future__ import annotations
 
@@ -8,33 +8,41 @@ import re
 from typing import Any, Dict, List, Optional
 
 
+def _first(*names: str) -> str:
+    for name in names:
+        val = (os.getenv(name) or "").strip()
+        if val:
+            return val
+    return ""
+
+
 def llm_config() -> Dict[str, str]:
     """
+    OpenAI 兼容 Chat Completions。试用者自带 Key，不必 DeepSeek。
+
     优先级：
-    1) DEEPSEEK_API_KEY + 官方 base
+    1) CIVIL_API_KEY + CIVIL_API_BASE + CIVIL_MODEL
     2) OPENAI_API_KEY / LLM_API_KEY + OPENAI_BASE_URL
+    3) DEEPSEEK_API_KEY + 官方 base（仍可用）
     """
-    deepseek_key = os.getenv("DEEPSEEK_API_KEY") or ""
-    api_key = (
-        deepseek_key
-        or os.getenv("OPENAI_API_KEY")
-        or os.getenv("LLM_API_KEY")
-        or ""
+    api_key = _first("CIVIL_API_KEY", "OPENAI_API_KEY", "LLM_API_KEY", "DEEPSEEK_API_KEY")
+    explicit_base = _first(
+        "CIVIL_API_BASE", "OPENAI_BASE_URL", "LLM_BASE_URL", "DEEPSEEK_BASE_URL"
     )
-    if deepseek_key and not os.getenv("OPENAI_BASE_URL") and not os.getenv("LLM_BASE_URL"):
-        base_url = os.getenv("DEEPSEEK_BASE_URL") or "https://api.deepseek.com"
+    generic = bool(_first("CIVIL_API_KEY", "OPENAI_API_KEY", "LLM_API_KEY"))
+    if explicit_base:
+        base_url = explicit_base
+    elif generic:
+        base_url = "https://api.openai.com/v1"
     else:
-        base_url = (
-            os.getenv("OPENAI_BASE_URL")
-            or os.getenv("LLM_BASE_URL")
-            or os.getenv("DEEPSEEK_BASE_URL")
-            or "https://api.deepseek.com"
+        base_url = "https://api.deepseek.com"
+    model = _first("CIVIL_MODEL", "LLM_MODEL", "DEEPSEEK_MODEL", "OPENAI_MODEL")
+    if not model:
+        model = (
+            "deepseek-v4-flash"
+            if "deepseek" in base_url.lower()
+            else "gpt-4o-mini"
         )
-    model = (
-        os.getenv("LLM_MODEL")
-        or os.getenv("DEEPSEEK_MODEL")
-        or "deepseek-v4-flash"
-    )
     return {"api_key": api_key, "base_url": base_url.rstrip("/"), "model": model}
 
 

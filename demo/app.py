@@ -11,7 +11,7 @@ from pydantic import BaseModel, Field
 
 from agent import run_expert, run_plain
 from catalog import catalog_payload, get_expert, resolve_mentions
-from config import DEMO_ROOT, DEEPSEEK_MODEL, OUT_ROOT
+from config import DEMO_ROOT, OUT_ROOT, llm_model
 from kbio import MAX_FILE_BYTES, create_file, delete_file, format_bytes, read_text, write_text
 from llm import LLMError, has_key
 from rag import list_kb
@@ -74,8 +74,9 @@ def health() -> dict:
 
     return {
         "ok": True,
+        "has_key": has_key(),
         "deepseek": has_key(),
-        "model": DEEPSEEK_MODEL,
+        "model": llm_model(),
         "context": policy(),
         "job": {
             "granted": job_root_granted(),
@@ -282,7 +283,10 @@ def studio_limit(body: LimitIn) -> dict:
 @app.post("/api/chat")
 def chat(body: ChatIn) -> StreamingResponse:
     if not has_key():
-        raise HTTPException(400, "未配置 DEEPSEEK_API_KEY")
+        raise HTTPException(
+            400,
+            "未配置 API Key。在 demo/.env 写入 CIVIL_API_KEY / OPENAI_API_KEY / DEEPSEEK_API_KEY。",
+        )
 
     session = body.session_id or uuid.uuid4().hex[:12]
     OUT_ROOT.mkdir(parents=True, exist_ok=True)

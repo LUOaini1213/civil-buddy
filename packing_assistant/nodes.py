@@ -38,21 +38,22 @@ from packing_assistant.tools import (
 
 def _get_llm():
     """懒加载 ChatOpenAI；未配置 API Key 时返回 None。"""
-    api_key = os.getenv("OPENAI_API_KEY") or os.getenv("LLM_API_KEY")
+    from packing_assistant.llm import llm_config
+
+    cfg = llm_config()
+    api_key = cfg.get("api_key") or ""
     if not api_key:
         return None
     try:
         from langchain_openai import ChatOpenAI
 
-        base_url = os.getenv("OPENAI_BASE_URL") or os.getenv("LLM_BASE_URL")
-        model = os.getenv("LLM_MODEL", "gpt-4o-mini")
         kwargs: Dict[str, Any] = {
-            "model": model,
+            "model": cfg.get("model") or "gpt-4o-mini",
             "temperature": 0.2,
             "api_key": api_key,
         }
-        if base_url:
-            kwargs["base_url"] = base_url
+        if cfg.get("base_url"):
+            kwargs["base_url"] = cfg["base_url"]
         return ChatOpenAI(**kwargs)
     except Exception:
         return None

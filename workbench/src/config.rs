@@ -83,7 +83,8 @@ fn detect_demo_root() -> PathBuf {
         }
     }
     if let Ok(exe) = env::current_exe() {
-        if let Some(found) = find_demo_upwards(&exe) {
+        let start = exe.parent().unwrap_or(&exe);
+        if let Some(found) = find_demo_upwards(start) {
             return found;
         }
     }
@@ -91,31 +92,129 @@ fn detect_demo_root() -> PathBuf {
     find_demo_upwards(&cwd).unwrap_or(cwd)
 }
 
-/// cwd `.env` fills gaps; `demo/.env` overrides a stale User-level key.
+/// cwd `.env` fills gaps; exe-dir and repo `.env` next; `demo/.env` overrides a stale User-level key.
 pub fn load_env() {
-    let demo_env = Paths::detect().demo_root.join(".env");
     let _ = dotenvy::dotenv();
+    if let Ok(exe) = env::current_exe() {
+        if let Some(dir) = exe.parent() {
+            let p = dir.join(".env");
+            if p.is_file() {
+                let _ = dotenvy::from_path(&p);
+            }
+        }
+    }
+    let paths = Paths::detect();
+    let root_env = paths.repo_root.join(".env");
+    if root_env.is_file() {
+        let _ = dotenvy::from_path(&root_env);
+    }
+    let demo_env = paths.demo_root.join(".env");
     if demo_env.is_file() {
         let _ = dotenvy::from_path_override(&demo_env);
     }
 }
 
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct LlmConfig {
+    pub api_key: String,
+    pub base_url: String,
+    pub model: String,
+}
+
+fn pick_env<F>(get: &F, names: &[&str]) -> String
+where
+    F: Fn(&str) -> Option<String>,
+{
+    for n in names {
+        if let Some(v) = get(n) {
+            let t = v.trim();
+            if !t.is_empty() {
+                return t.to_string();
+            }
+        }
+    }
+    String::new()
+}
+
+/// OpenAI-compatible Chat Completions. Testers bring any key; DeepSeek is optional.
+pub fn llm_from_env_map<F>(get: F) -> LlmConfig
+where
+    F: Fn(&str) -> Option<String>,
+{
+    let api_key = pick_env(
+        &get,
+        &[
+            "CIVIL_API_KEY",
+            "OPENAI_API_KEY",
+            "LLM_API_KEY",
+            "DEEPSEEK_API_KEY",
+        ],
+    );
+    let explicit_base = pick_env(
+        &get,
+        &[
+            "CIVIL_API_BASE",
+            "OPENAI_BASE_URL",
+            "LLM_BASE_URL",
+            "DEEPSEEK_BASE_URL",
+        ],
+    );
+    let generic_key = pick_env(&get, &["CIVIL_API_KEY", "OPENAI_API_KEY", "LLM_API_KEY"]);
+    let base_url = if !explicit_base.is_empty() {
+        explicit_base.trim_end_matches('/').to_string()
+    } else if !generic_key.is_empty() {
+        "https://api.openai.com/v1".into()
+    } else {
+        "https://api.deepseek.com".into()
+    };
+    let model_explicit = pick_env(
+        &get,
+        &["CIVIL_MODEL", "LLM_MODEL", "DEEPSEEK_MODEL", "OPENAI_MODEL"],
+    );
+    let model = if !model_explicit.is_empty() {
+        model_explicit
+    } else if base_url.to_ascii_lowercase().contains("deepseek") {
+        "deepseek-v4-flash".into()
+    } else {
+        "gpt-4o-mini".into()
+    };
+    LlmConfig {
+        api_key,
+        base_url,
+        model,
+    }
+}
+
+pub fn llm_config() -> LlmConfig {
+    llm_from_env_map(|k| env::var(k).ok())
+}
+
+pub fn llm_uses_thinking(base_url: &str) -> bool {
+    base_url.to_ascii_lowercase().contains("deepseek")
+}
+
+pub fn llm_api_key() -> String {
+    llm_config().api_key
+}
+
+pub fn llm_base_url() -> String {
+    llm_config().base_url
+}
+
+pub fn llm_model() -> String {
+    llm_config().model
+}
+
 pub fn deepseek_api_key() -> String {
-    env::var("DEEPSEEK_API_KEY")
-        .unwrap_or_default()
-        .trim()
-        .to_string()
+    llm_api_key()
 }
 
 pub fn deepseek_base_url() -> String {
-    env::var("DEEPSEEK_BASE_URL")
-        .unwrap_or_else(|_| "https://api.deepseek.com".into())
-        .trim_end_matches('/')
-        .to_string()
+    llm_base_url()
 }
 
 pub fn deepseek_model() -> String {
-    env::var("DEEPSEEK_MODEL").unwrap_or_else(|_| "deepseek-v4-flash".into())
+    llm_model()
 }
 
 pub fn max_agent_steps() -> usize {
@@ -126,5 +225,52 @@ pub fn max_agent_steps() -> usize {
 }
 
 pub fn has_key() -> bool {
-    !deepseek_api_key().is_empty()
+    !llm_api_key().is_empty()
+}
+
+#[cfg(test)]
+mod llm_env_tests {
+    use super::*;
+    use std::collections::HashMap;
+
+    fn from_map(m: &HashMap<&str, &str>) -> LlmConfig {
+        llm_from_env_map(|k| m.get(k).map(|s| (*s).to_string()))
+    }
+
+    #[test]
+    fn openai_key_does_not_need_deepseek() {
+        let mut m = HashMap::new();
+        m.insert("OPENAI_API_KEY", "sk-test");
+        m.insert("LLM_MODEL", "gpt-4o-mini");
+        let c = from_map(&m);
+        assert_eq!(c.api_key, "sk-test");
+        assert!(c.base_url.contains("openai.com"), "{}", c.base_url);
+        assert_eq!(c.model, "gpt-4o-mini");
+        assert!(!llm_uses_thinking(&c.base_url));
+    }
+
+    #[test]
+    fn deepseek_only_still_works() {
+        let mut m = HashMap::new();
+        m.insert("DEEPSEEK_API_KEY", "sk-ds");
+        let c = from_map(&m);
+        assert_eq!(c.api_key, "sk-ds");
+        assert!(c.base_url.contains("deepseek"), "{}", c.base_url);
+        assert_eq!(c.model, "deepseek-v4-flash");
+        assert!(llm_uses_thinking(&c.base_url));
+    }
+
+    #[test]
+    fn civil_key_wins_over_deepseek() {
+        let mut m = HashMap::new();
+        m.insert("CIVIL_API_KEY", "sk-civil");
+        m.insert("DEEPSEEK_API_KEY", "sk-ds");
+        m.insert("CIVIL_API_BASE", "https://api.moonshot.cn/v1");
+        m.insert("CIVIL_MODEL", "moonshot-v1-8k");
+        let c = from_map(&m);
+        assert_eq!(c.api_key, "sk-civil");
+        assert!(c.base_url.contains("moonshot"), "{}", c.base_url);
+        assert_eq!(c.model, "moonshot-v1-8k");
+        assert!(!llm_uses_thinking(&c.base_url));
+    }
 }

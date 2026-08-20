@@ -3,6 +3,7 @@
 产品：内部讨论 AI 草稿。不判定可投标，不判定可以开工。岗数 **66**。`submit_blocked` 默认 true。
 
 全量规划：[product-plan.md](product-plan.md)。切片：[product-completion-plan.md](product-completion-plan.md)。  
+试用（下载 exe、自带 API Key）：仓库根 [给试用的人.md](../../给试用的人.md)。  
 必读链：本文 → [PROTOCOL.md](PROTOCOL.md) · [MCP.md](MCP.md) · [SKILLS.md](SKILLS.md) · [KB.md](KB.md)。Skill = 怎么写；MCP = 能调什么。
 
 ## 1. 起两个入口
@@ -16,7 +17,7 @@ python -m uvicorn gateway.app:app --host 127.0.0.1 --port 8000
 
 ```powershell
 cd C:\Users\LW\civil-buddy\demo
-# 若无 demo/.env：copy .env.example .env ，填 DEEPSEEK_API_KEY（不要提交）
+# 若无 demo/.env：copy .env.example .env ，填 CIVIL_API_KEY / OPENAI_API_KEY / DEEPSEEK_API_KEY（不要提交）
 python -m uvicorn app:app --host 127.0.0.1 --port 8765
 ```
 
@@ -73,12 +74,14 @@ python scripts/test_construction_skill_path.py
 python scripts/test_docs_completion.py
 python scripts/test_office_job.py
 python scripts/test_desktop_launcher.py
+python scripts/test_llm_byok.py
+python scripts/test_trial_pack.py
 ```
 
 ## 2. 先问一句（必须不写盘）
 
 默认面粘贴「什么是 GST」→ 意图 `chat`，回复含 IRAS 页述 **9%**，无矩阵文件。  
-把 `session_id` 当工地/标段档案号一直带着；上下文在服务端槽里，不要把整段聊天再贴给 DeepSeek。只读槽：`GET /api/context/{session_id}`。
+把 `session_id` 当工地/标段档案号一直带着；上下文在服务端槽里，不要把整段聊天再贴给模型。只读槽：`GET /api/context/{session_id}`。
 
 或：
 

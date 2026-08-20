@@ -63,6 +63,7 @@ demo/data/
 workbench/target/
 workbench/out/
 .civil-buddy/out/
+/dist/
 
 # --- session / tool caches ---
 .grok/

@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import os
+import sys
 from pathlib import Path
 
 from dotenv import load_dotenv
@@ -11,11 +12,36 @@ KB_ROOT = DEMO_ROOT / "kb"
 OUT_ROOT = DEMO_ROOT / "out"
 SKILL_HARD_RULES = REPO_ROOT / "skills" / "civil-buddy" / "references" / "hard-rules.md"
 
+if str(REPO_ROOT) not in sys.path:
+    sys.path.insert(0, str(REPO_ROOT))
+
 load_dotenv()
 # demo/.env wins so a stale machine-wide key will not shadow the workbench
 load_dotenv(DEMO_ROOT / ".env", override=True)
 
-DEEPSEEK_API_KEY = os.environ.get("DEEPSEEK_API_KEY", "").strip()
-DEEPSEEK_BASE_URL = os.environ.get("DEEPSEEK_BASE_URL", "https://api.deepseek.com").rstrip("/")
-DEEPSEEK_MODEL = os.environ.get("DEEPSEEK_MODEL", "deepseek-v4-flash")
+from packing_assistant.llm import llm_config as _llm_config  # noqa: E402
+
+
+def llm_api_key() -> str:
+    return _llm_config().get("api_key") or ""
+
+
+def llm_base_url() -> str:
+    return (_llm_config().get("base_url") or "").rstrip("/")
+
+
+def llm_model() -> str:
+    return _llm_config().get("model") or ""
+
+
+def __getattr__(name: str):
+    if name == "DEEPSEEK_API_KEY":
+        return llm_api_key()
+    if name == "DEEPSEEK_BASE_URL":
+        return llm_base_url()
+    if name == "DEEPSEEK_MODEL":
+        return llm_model()
+    raise AttributeError(name)
+
+
 MAX_AGENT_STEPS = int(os.environ.get("CIVIL_MAX_AGENT_STEPS", "8"))

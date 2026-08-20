@@ -1,6 +1,6 @@
 # Civil Buddy 工作台 Demo（WorkBuddy 用法）
 
-- **不召唤专家**：普通 DeepSeek，无知识库、无出稿工具。
+- **不召唤专家**：普通对话（你配置的模型），无知识库、无出稿工具。
 - **召唤专家**：该专家独立走完「理解 → 检索私库+大类共享库 → 成稿 → 自检」，像易标的一个模块。
 - **一类专家共享** `kb/<大类>/_shared/`，**每个专家另有私库** `kb/<大类>/<专家id>/`，公司规则在 `kb/company/`。
 
@@ -9,7 +9,7 @@
 ```powershell
 cd C:\Users\LW\civil-buddy\demo
 copy .env.example .env
-# 编辑 .env，填入 DEEPSEEK_API_KEY
+# 编辑 .env，填入 CIVIL_API_KEY / OPENAI_API_KEY / DEEPSEEK_API_KEY（自选模型，不必 DeepSeek）
 python -m pip install -r requirements.txt
 python -m uvicorn app:app --reload --host 127.0.0.1 --port 8765
 ```
