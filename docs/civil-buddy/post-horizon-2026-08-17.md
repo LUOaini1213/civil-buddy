@@ -754,7 +754,7 @@
 - qa：已有 · finance__scan_forbidden
 - kb：已有 · 分层 KB + search_kb/read_kb（demo/kb）
 - write：已有 · 独有 finance-fund__plan；chat 不写盘
-- 下一刀：finance-fund__plan 出收入/支出窗口，金额 TBD，不当付款指令。
+- 下一刀：已做 T038 finance-fund。finance-fund__plan 出收入/支出窗口，金额 TBD，不当付款指令。
 
 ### finance-tax
 

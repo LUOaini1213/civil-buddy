@@ -1726,6 +1726,43 @@ fn test_finance_book_check_exclusive() {
 }
 
 #[test]
+fn test_finance_fund_windows_exclusive() {
+    let p = paths();
+    assert!(packs::visible_tool_names("finance-fund").iter().any(|n| n == "finance-fund__plan"));
+    assert!(!packs::visible_tool_names("finance-book").iter().any(|n| n == "finance-fund__plan"));
+    let mut ctx = ToolCtx::new(p.clone(), "finance-fund", "finance", "low", true, "iter-ff-t038");
+    let out = packs::execute(
+        &mut ctx,
+        "finance-fund__plan",
+        &json!({"period":"2026-08","jurisdiction":"SG"}),
+    );
+    assert!(out.contains("已写入"), "{out}");
+    let text = std::fs::read_to_string(ctx.out_dir.join("资金计划草稿.md")).unwrap();
+    assert!(text.contains("2026-08"), "{text}");
+    assert!(text.contains("收入栏") && text.contains("支出栏"), "{text}");
+    assert!(text.contains("TBD"), "{text}");
+    assert!(text.contains("不构成付款指令"), "{text}");
+    assert!(text.contains("无法试算"), "{text}");
+    assert!(text.contains("CPF"), "{text}");
+    assert!(!text.contains("可以开工"), "{text}");
+    assert!(!text.contains("资金充足"), "{text}");
+    let mut io = ToolCtx::new(p.clone(), "finance-fund", "finance", "low", true, "iter-ff-io");
+    let ioo = packs::execute(
+        &mut io,
+        "finance-fund__plan",
+        &json!({"period":"2026-08","notes":"收入 业主进度款；支出 钢筋","jurisdiction":"SG"}),
+    );
+    assert!(ioo.contains("已写入"), "{ioo}");
+    let iot = std::fs::read_to_string(io.out_dir.join("资金计划草稿.md")).unwrap();
+    let inc = iot.split("## 5 收入栏").nth(1).unwrap().split("## 6").next().unwrap();
+    let exp = iot.split("## 6 支出栏").nth(1).unwrap().split("## 7").next().unwrap();
+    assert!(inc.contains("业主进度款"), "{inc}");
+    assert!(exp.contains("钢筋"), "{exp}");
+    let mut sib = ToolCtx::new(p, "finance-book", "finance", "low", true, "iter-ff-t038-sib");
+    assert!(packs::execute(&mut sib, "finance-fund__plan", &json!({"period":"x"})).contains("拒绝"));
+}
+
+#[test]
 fn test_variation_form_exclusive() {
     let p = paths();
     assert!(packs::visible_tool_names("variation").iter().any(|n| n == "variation__form"));
@@ -3345,6 +3382,14 @@ fn test_cn_writers_omit_sg_only_titles() {
             "核算检查表.md",
             json!({"period": "2026-08", "jurisdiction": "CN"}),
             &["GST", "IRAS"],
+        ),
+        (
+            "finance-fund",
+            "finance",
+            "finance-fund__plan",
+            "资金计划草稿.md",
+            json!({"period": "2026-08", "jurisdiction": "CN"}),
+            &["CPF", "GST"],
         ),
         (
             "civil-defense",
