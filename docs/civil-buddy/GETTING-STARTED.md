@@ -33,6 +33,17 @@ cd C:\Users\LW\civil-buddy\workbench
 .\run.ps1
 ```
 
+本机桌面窗口（Edge/Chrome 应用窗，不是腾讯壳；服务仍在 127.0.0.1）：
+
+```powershell
+cd C:\Users\LW\civil-buddy
+.\scripts\civil-buddy-desktop.ps1
+# 或指定作业根：
+.\scripts\civil-buddy-desktop.ps1 -JobRoot "C:\Users\LW\Documents\某工地"
+```
+
+也可双击 `scripts\civil-buddy-desktop.bat`。禁止 `-JobRoot D:\layout`。
+
 召唤专家后：提问不写盘；说「写一份」才出内部讨论草稿。可上传广联达/Excel 导出的 `xlsx`/`csv` 和招标 `docx`/`txt`，缺价标 `UNSPECIFIED`。
 
 有表格的岗会在会话目录另存同名 `.xlsx`，用 Excel 直接打开。要把稿落到工程文件夹、并让专家**直接读该夹里的 Word/Excel**（不必再点上传）：
@@ -61,6 +72,7 @@ python scripts/test_exclusive_engine.py
 python scripts/test_construction_skill_path.py
 python scripts/test_docs_completion.py
 python scripts/test_office_job.py
+python scripts/test_desktop_launcher.py
 ```
 
 ## 2. 先问一句（必须不写盘）

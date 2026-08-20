@@ -539,6 +539,7 @@ T030–T047 是**批次合同**（T030–T038 ✅、T039 worker-brief ✅ 后约
 | T064 | 作业根 Office：有表的岗另存 `.xlsx`，可 Excel 打开 | `CIVIL_JOB_ROOT`（禁 `D:\layout`）+ sibling xlsx | ✅ |
 | T065 | 作业根直接读本机 xlsx/docx/csv/txt，不必再上传 | `GET /api/job` + run 时注入 | ✅ |
 | T066 | 点名已有 xlsx 时写入 `CB草稿-*` 表，保留业主表 | 授权夹内原地改草稿表 | ✅ |
+| T067 | 本机桌面窗口：启动器打开 127.0.0.1 应用窗 | `scripts/civil-buddy-desktop.ps1` | ✅ |
 
 **主链（不定时限；头指针 = 第一个非 ✅/延期）：**
 

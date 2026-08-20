@@ -145,6 +145,9 @@
 47. **T066 授权夹内改已有 Excel 草稿表** ✅ 2026-08-20  
     点名作业根里已有的 `.xlsx` 时，只写入 `CB草稿-*` 工作表，业主原表不动。不是 COM 接管正在打开的 Excel。主链头指针仍 **T039 pm-daily**。行业总判仍 **部分合格**。
 
+48. **T067 本机桌面窗口** ✅ 2026-08-20  
+    `scripts/civil-buddy-desktop.ps1` 起本机工作台并用 Edge/Chrome `--app` 开窗口。不是腾讯桌面壳、不是 IM 遥控。禁止 `D:\layout`。主链头指针仍 **T039 pm-daily**。行业总判仍 **部分合格**。
+
 平台内核见 [product-improvement-handbook.md](product-improvement-handbook.md)。岗独有写盘下一刀仍按 [post-horizon-2026-08-17.md](post-horizon-2026-08-17.md)。
 
 ## 有宿主再做

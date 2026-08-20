@@ -337,7 +337,7 @@ Grok skill **不**在 V1 里 `use_tool` 调 MCP（保持 skill 可离线出十�
 2. 栏位来自 outline.md / KB，缺数 `[A001]` / `UNSPECIFIED`；  
 3. `test_expert_turn.py` 对该 id 的 run 能断言 **至少一个栏位不是通用骨架句**。
 
-当前已达到：… + T030–T038 + T039 worker-brief + T064–T066 作业根 Office。下一优先按 product-plan §15：**T039 · pm-daily**（T039 其余岗与 T040–T047 不得一行勾完）。
+当前已达到：… + T030–T038 + T039 worker-brief + T064–T067 作业根/本机窗。下一优先按 product-plan §15：**T039 · pm-daily**（T039 其余岗与 T040–T047 不得一行勾完）。
 
 ---
 
