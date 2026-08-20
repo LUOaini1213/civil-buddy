@@ -693,6 +693,39 @@ def main() -> int:
     assert "钢筋" in gong
     assert "水泥" in zi
 
+    pc_chat = run_expert_turn("询价和比价怎么理解？", "proc-compare")
+    assert pc_chat["intent"] == "chat" and pc_chat["wrote"] is False
+    pc_ok = run_expert_turn(
+        "写一份比价表 rebar",
+        "proc-compare",
+        force_intent="run",
+        session_id="t037-pc",
+    )
+    assert pc_ok["wrote"] is True
+    assert "proc-compare__table" in pc_ok["tools_run"]
+    assert "procurement__scan_forbidden" in pc_ok["tools_run"]
+    pct = Path(pc_ok["files"][0]["path"]).read_text(encoding="utf-8")
+    assert "rebar" in pct
+    assert "规格响应" in pct and "到货期" in pct and "质保" in pct and "付款" in pct
+    assert "TBD" in pct
+    assert "待制度定" in pct
+    assert "GeBIZ" in pct
+    assert "[A001]" in pct
+    assert "可以开工" not in pct
+    assert "现定标" not in pct
+    assert "报审通过" not in pct
+    pc_v = run_expert_turn(
+        "写一份比价表 钢筋 甲；乙",
+        "proc-compare",
+        force_intent="run",
+        session_id="t037-pc-v",
+    )
+    pcv = Path(pc_v["files"][0]["path"]).read_text(encoding="utf-8")
+    assert "甲" in pcv and "乙" in pcv
+    assert "不足三家" in pcv
+    sec = pcv.split("## 5 比价表")[1].split("## 6")[0]
+    assert "甲" in sec and "乙" in sec
+
     high = [e for e in roster if e.risk == "high"][0]
     blocked = run_expert_turn("写一份专项方案讨论提纲", high.id, confirm_ok=False)
     assert blocked["intent"] == "run"

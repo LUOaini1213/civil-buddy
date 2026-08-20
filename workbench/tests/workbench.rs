@@ -1618,6 +1618,43 @@ fn test_purchase_plan_split_exclusive() {
 }
 
 #[test]
+fn test_compare_table_multi_col_exclusive() {
+    let p = paths();
+    assert!(packs::visible_tool_names("proc-compare").iter().any(|n| n == "proc-compare__table"));
+    assert!(!packs::visible_tool_names("proc-plan").iter().any(|n| n == "proc-compare__table"));
+    let mut ctx = ToolCtx::new(p.clone(), "proc-compare", "procurement", "low", true, "iter-cmp-t037");
+    let out = packs::execute(
+        &mut ctx,
+        "proc-compare__table",
+        &json!({"item":"rebar","vendors":"A","jurisdiction":"SG"}),
+    );
+    assert!(out.contains("已写入"), "{out}");
+    assert!(out.contains("扫描通过"), "{out}");
+    let text = std::fs::read_to_string(ctx.out_dir.join("比价表草稿.md")).unwrap();
+    assert!(text.contains("rebar"), "{text}");
+    assert!(text.contains("| A |"), "{text}");
+    assert!(text.contains("规格响应") && text.contains("到货期") && text.contains("质保") && text.contains("付款"), "{text}");
+    assert!(text.contains("TBD"), "{text}");
+    assert!(text.contains("待制度定"), "{text}");
+    assert!(text.contains("GeBIZ"), "{text}");
+    assert!(text.contains("[A001]"), "{text}");
+    assert!(!text.contains("可以开工"), "{text}");
+    assert!(!text.contains("现定标"), "{text}");
+    let mut two = ToolCtx::new(p.clone(), "proc-compare", "procurement", "low", true, "iter-cmp-vendors");
+    let to = packs::execute(
+        &mut two,
+        "proc-compare__table",
+        &json!({"item":"钢筋","vendors":"甲；乙","jurisdiction":"SG"}),
+    );
+    assert!(to.contains("已写入"), "{to}");
+    let tt = std::fs::read_to_string(two.out_dir.join("比价表草稿.md")).unwrap();
+    assert!(tt.contains("甲") && tt.contains("乙"), "{tt}");
+    assert!(tt.contains("不足三家"), "{tt}");
+    let mut sib = ToolCtx::new(p, "proc-plan", "procurement", "low", true, "iter-cmp-t037-sib");
+    assert!(packs::execute(&mut sib, "proc-compare__table", &json!({"item":"x"})).contains("拒绝"));
+}
+
+#[test]
 fn test_variation_form_exclusive() {
     let p = paths();
     assert!(packs::visible_tool_names("variation").iter().any(|n| n == "variation__form"));
@@ -3181,6 +3218,14 @@ fn test_cn_writers_omit_sg_only_titles() {
             "采购计划表.md",
             json!({"items": "rebar", "jurisdiction": "CN"}),
             &["CRS", "GeBIZ"],
+        ),
+        (
+            "proc-compare",
+            "procurement",
+            "proc-compare__table",
+            "比价表草稿.md",
+            json!({"item": "rebar", "vendors": "A", "jurisdiction": "CN"}),
+            &["GeBIZ", "PQM"],
         ),
         (
             "interior",
