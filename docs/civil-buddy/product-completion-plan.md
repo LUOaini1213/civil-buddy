@@ -337,7 +337,7 @@ Grok skill **不**在 V1 里 `use_tool` 调 MCP（保持 skill 可离线出十�
 2. 栏位来自 outline.md / KB，缺数 `[A001]` / `UNSPECIFIED`；  
 3. `test_expert_turn.py` 对该 id 的 run 能断言 **至少一个栏位不是通用骨架句**。
 
-当前已达到：… + T030–T034 + T035 safety-brief。下一优先按 product-plan §15：**T035 · quality**（T035 其余岗与 T036–T047 不得一行勾完）。
+当前已达到：… + T030–T034 + T035 brief/quality/env。下一优先按 product-plan §15：**T035 · emergency**（T035 其余岗与 T036–T047 不得一行勾完）。
 
 ---
 
@@ -392,4 +392,4 @@ P0 运行时、P1-1 handoff、Agent 循环+沙箱、pack-ship 投影：**已做*
 
 ## 8. 下一刀（读完本文立刻做的）
 
-全量任务号见 [product-plan.md](product-plan.md) §15。切片下一刀是 **T035 · quality**。safety-brief ✅。T035 其余岗不得一行勾完。
+全量任务号见 [product-plan.md](product-plan.md) §15。切片下一刀是 **T035 · emergency**。quality / env ✅。T035 其余岗不得一行勾完。

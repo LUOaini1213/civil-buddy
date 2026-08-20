@@ -507,6 +507,40 @@ def main() -> int:
     assert "电话" in sbt
     assert "可以开工" not in sbt
 
+    q_chat = run_expert_turn("检验批怎么检查？", "quality")
+    assert q_chat["intent"] == "chat" and q_chat["wrote"] is False
+    q_ok = run_expert_turn(
+        "写一份质量检查表 cover",
+        "quality",
+        confirm_ok=True,
+        force_intent="run",
+        session_id="t035-q",
+    )
+    assert q_ok["wrote"] is True
+    assert "quality__lot" in q_ok["tools_run"]
+    qt = Path(q_ok["files"][0]["path"]).read_text(encoding="utf-8")
+    for col in ("主控项目检查栏", "一般项目检查栏", "隐蔽专项"):
+        assert col in qt, col
+    assert "未检" in qt
+    assert "cover" in qt
+    assert "可以开工" not in qt
+
+    env_chat = run_expert_turn("扬尘怎么管？", "env")
+    assert env_chat["intent"] == "chat" and env_chat["wrote"] is False
+    env_ok = run_expert_turn(
+        "写一份环保文明清单 Tuas",
+        "env",
+        force_intent="run",
+        session_id="t035-env",
+    )
+    assert env_ok["wrote"] is True
+    assert "env__list" in env_ok["tools_run"]
+    et = Path(env_ok["files"][0]["path"]).read_text(encoding="utf-8")
+    for row in ("扬尘", "弃土", "污水", "夜间", "市容"):
+        assert row in et, row
+    assert "UNSPECIFIED" in et
+    assert "可以开工" not in et
+
     high = [e for e in roster if e.risk == "high"][0]
     blocked = run_expert_turn("写一份专项方案讨论提纲", high.id, confirm_ok=False)
     assert blocked["intent"] == "run"

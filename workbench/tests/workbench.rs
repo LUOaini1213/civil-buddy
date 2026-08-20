@@ -1891,6 +1891,56 @@ fn test_safety_brief_talk_exclusive() {
 }
 
 #[test]
+fn test_quality_lot_exclusive() {
+    let p = paths();
+    assert!(packs::visible_tool_names("quality").iter().any(|n| n == "quality__lot"));
+    let mut blocked = ToolCtx::new(p.clone(), "quality", "hse", "high", false, "iter-q-hitl");
+    assert!(packs::execute(&mut blocked, "quality__lot", &json!({"inspection_lot":"slab","items":"cover"})).contains("拒绝"));
+    let mut ctx = ToolCtx::new(p.clone(), "quality", "hse", "high", true, "iter-q-t035");
+    let out = packs::execute(
+        &mut ctx,
+        "quality__lot",
+        &json!({"inspection_lot":"slab-1","items":"cover","jurisdiction":"SG"}),
+    );
+    assert!(out.contains("已写入"), "{out}");
+    let text = std::fs::read_to_string(ctx.out_dir.join("质量检查表.md")).unwrap();
+    assert!(text.contains("主控项目检查栏"), "{text}");
+    assert!(text.contains("一般项目检查栏"), "{text}");
+    assert!(text.contains("隐蔽专项"), "{text}");
+    assert!(text.contains("未检"), "{text}");
+    assert!(text.contains("cover"), "{text}");
+    assert!(text.contains("CONQUAS"), "{text}");
+    assert!(!text.contains("可以开工"), "{text}");
+    let mut sib = ToolCtx::new(p, "env", "hse", "low", true, "iter-q-sib");
+    assert!(packs::execute(&mut sib, "quality__lot", &json!({"inspection_lot":"x"})).contains("拒绝"));
+}
+
+#[test]
+fn test_env_list_exclusive() {
+    let p = paths();
+    assert!(packs::visible_tool_names("env").iter().any(|n| n == "env__list"));
+    let mut ctx = ToolCtx::new(p.clone(), "env", "hse", "low", true, "iter-env-t035");
+    let out = packs::execute(
+        &mut ctx,
+        "env__list",
+        &json!({"site":"Tuas","jurisdiction":"SG"}),
+    );
+    assert!(out.contains("已写入"), "{out}");
+    let text = std::fs::read_to_string(ctx.out_dir.join("环保文明清单.md")).unwrap();
+    assert!(text.contains("扬尘"), "{text}");
+    assert!(text.contains("弃土"), "{text}");
+    assert!(text.contains("污水"), "{text}");
+    assert!(text.contains("夜间"), "{text}");
+    assert!(text.contains("市容"), "{text}");
+    assert!(text.contains("UNSPECIFIED"), "{text}");
+    assert!(text.contains("NEA"), "{text}");
+    assert!(text.contains("Earth Control"), "{text}");
+    assert!(!text.contains("可以开工"), "{text}");
+    let mut sib = ToolCtx::new(p, "quality", "hse", "high", true, "iter-env-t035-sib");
+    assert!(packs::execute(&mut sib, "env__list", &json!({"site":"x"})).contains("拒绝"));
+}
+
+#[test]
 fn test_bid_compliance_exclusive_and_scan_sg_mix() {
     let p = paths();
     assert!(packs::visible_tool_names("bid-compliance").iter().any(|n| n == "bid-compliance__gaps"));

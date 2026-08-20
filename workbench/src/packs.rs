@@ -458,7 +458,7 @@ fn pack_tools(pack: &str) -> Vec<ToolDef> {
             },
             ToolDef {
                 name: "quality__lot",
-                description: "质量独有：检验批检查表。不给合格结论。",
+                description: "质量独有：主控|一般|隐蔽三表，结果=未检。",
                 parameters: obj(
                     json!({
                         "inspection_lot": {"type": "string"},
@@ -474,7 +474,7 @@ fn pack_tools(pack: &str) -> Vec<ToolDef> {
             },
             ToolDef {
                 name: "env__list",
-                description: "环保独有：扬尘/噪声/弃土清单。不编排放限值。",
+                description: "环保独有：扬尘/弃土/污水/夜间/市容五行，限值 UNSPECIFIED。",
                 parameters: obj(
                     json!({
                         "site": {"type": "string"},
@@ -2184,21 +2184,28 @@ fn safety_brief(ctx: &mut ToolCtx, args: &Value) -> String {
 
 fn quality_checklist(ctx: &mut ToolCtx, args: &Value) -> String {
     let (jur, banner) = zone_banner(args);
+    let lot = nonempty(&s(args, "inspection_lot"), "待填");
     let items = split_lines(&s(args, "items"));
-    let mut md = format!(
-        "{}{banner}\n检验批：{}\n\n| 检查项 | 结果 | 备注 |\n| --- | --- | --- |\n",
+    let main = if items.is_empty() {
+        "| 检查内容 | 设计或标准要求 | 实测或观察 | 结果 | 处理意见 |\n| --- | --- | --- | --- | --- |\n| 待列主控项 [A001] | 待填 | 待填 | 未检 | （空） |".to_string()
+    } else {
+        let mut out = String::from("| 检查内容 | 设计或标准要求 | 实测或观察 | 结果 | 处理意见 |\n| --- | --- | --- | --- | --- |\n");
+        for it in &items {
+            out.push_str(&format!("| {it} | 待填 | 待填 | 未检 | （空） |\n"));
+        }
+        out
+    };
+    let gen = "| 检查内容 | 设计或标准要求 | 实测或观察 | 结果 | 处理意见 |\n| --- | --- | --- | --- | --- |\n| 待列一般项 [A001] | 待填 | 待填 | 未检 | （空） |";
+    let hid = "| 检查内容 | 设计或标准要求 | 实测或观察 | 结果 | 处理意见 |\n| --- | --- | --- | --- | --- |\n| 待列隐蔽项 [A001] | 待填 | 待填 | 未检 | （空） |";
+    let md = format!(
+        "{}{banner}\n检验批、隐蔽验收、通病防治的检查栏目。不给合格结论，不替代监理组织验收。检验批：{lot}。\n\n## 1 封面与声明\n工程/楼栋/检验批部位待填。对应分项名称待填。检查表编号待填。[A001]\n\n## 2 划分说明\n本表覆盖哪一段、哪一层、哪一批待填。用户未给批量、抽样数量则 [A001]，不编最小抽样。\n\n## 3 进场与依据\n图纸图号仅用户清单。施工方案讨论稿名称待填。材料报告编号空则待填。禁止自造图号。\n\n## 4 主控项目检查栏\n{main}\n\n对安全、节能、环保和主要使用功能起决定作用的项。结果=未检。\n\n## 5 一般项目检查栏\n{gen}\n\n外观、尺寸偏差。同样不预填合格。结果=未检。\n\n## 6 隐蔽专项\n{hid}\n\n隐蔽前通知、影像、旁站记录栏目。未验收不建议进入下道，但不写开工令。\n\n## 7 通病防治核对\n楼板裂缝、填充墙裂缝、外墙/屋面/门窗渗漏、回填下沉、保护层、线管叠放、抹灰空鼓。只列易发部位和预防动作。\n\n## 8 不符合时的处理路径栏目\n返工返修后重新检查。检测鉴定、设计核算等路径只列名称，结论待有资质单位。\n\n## 9 资料闭合\n施工记录、测量、材料/试块报告与试验室台账是否对得上。缺报告写缺口，不编强度。\n\n## 10 签字栏\n| 质检员 | 工长 | 技术负责人 | 监理 |\n| --- | --- | --- | --- |\n| （空） | （空） | （空） | （空） |\n\n禁止预填同意验收。\n\n{}\n",
         header("质量检查表"),
-        nonempty(&s(args, "inspection_lot"), "待填")
+        format!(
+            "{}{}",
+            sg_only(&jur, "SG：CONQUAS 只写标题，不是本表评分。"),
+            cn_only(&jur, "CN：建筑工程施工质量验收统一标准只写全名。条款 UNSPECIFIED。"),
+        ),
     );
-    if items.is_empty() {
-        md.push_str("| 待列 | 未检 | 不给合格结论 |\n");
-    }
-    for it in items {
-        md.push_str(&format!("| {it} | 未检 | 不给合格结论 |\n"));
-    }
-    md.push_str("\n[A001] 不给合格结论。");
-    md.push_str(&sg_only(&jur, "SG：CONQUAS 只写标题，不是本表评分。"));
-    md.push('\n');
     match ctx.write_md("质量检查表.md", &md) {
         Ok(m) => m,
         Err(e) => e,
@@ -2908,10 +2915,13 @@ fn env_list(ctx: &mut ToolCtx, args: &Value) -> String {
     let site = nonempty(&s(args, "site"), "待填工地");
     let issues = nonempty(&s(args, "issues"), "扬尘 / 噪声 / 弃土（待辨识）");
     let md = format!(
-        "{}{banner}\n## 工地\n{site}\n\n## 事项\n{issues}\n\n## 口径\n{}{}- [A001] 无监测数据不编 dB 或浓度。\n\n本清单不是排放许可。\n",
+        "{}{banner}\n覆盖扬尘、弃土、污水、噪声/夜间施工、市容围挡。不是排污许可，也不是城管销号证明。工地：{site}。事项：{issues}。\n\n## 1 封面\n项目、标段、清单日期、责任人空栏、属地区县待填。[A001]\n\n## 2 声明\nAI 草稿。措施落实与是否达标由现场和属地监管确认。\n\n## 3 扬尘\n| 项 | 措施栏 | 限值 |\n| --- | --- | --- |\n| 扬尘 | 围挡、道路硬化冲洗、裸土覆盖、粉料入库存罐 | UNSPECIFIED |\n| 弃土 | 分类堆放、联单或核准去向待填 | UNSPECIFIED |\n| 污水 | 沉淀/洗车台排水去向待填，不得直排 | UNSPECIFIED |\n| 夜间 | 属地夜间限制段待核，连续作业报批单另附 | UNSPECIFIED |\n| 市容 | 大门、公示牌、堆码、人车分流 | UNSPECIFIED |\n\n风速阈值用户给才写。无监测数据不编 dB 或浓度。[A001]\n\n## 4 弃土与建筑垃圾\n产生部位、暂存点、分类、运输单位、消纳单位、联单编号全部待填。\n\n## 5 污水与泥浆\n沉淀池/洗车台排水去向待填。不得直排市政管或河道。容量、排放口编号待填。\n\n## 6 噪声与夜间\n昼间/夜间作业时段以属地公告为准。敏感点距离用户给才写。限值 UNSPECIFIED。\n\n## 7 文明施工市容\n大门、公示牌、材料堆码、人员通道与车辆分流。\n\n## 8 与商务接口\n安全文明施工费、扬尘防治增加费只列措施事实。费率 TBD，交商务。\n\n## 9 停工与升级\n重污染天气、大风、投诉、执法检查——列接到哪一级指令停哪一类作业。本岗不下停工令。\n\n## 10 签字栏\n| 环保员 | 生产经理 | 资料员 |\n| --- | --- | --- |\n| （空） | （空） | （空） |\n\n本清单不是排放许可。\n\n{}\n",
         header("环保文明清单"),
-        sg_only(&jur, "- SG：NEA Construction Noise Control / Sundays and PH / Noise Management Plan；PUB Earth Control Measures。只列标题，限值 UNSPECIFIED。\n"),
-        cn_only(&jur, "- CN：噪声法/扬尘口径只列名称。\n"),
+        format!(
+            "{}{}",
+            sg_only(&jur, "SG：NEA Construction Noise Control / Sundays and PH / Noise Management Plan；PUB Earth Control Measures。只列标题，限值 UNSPECIFIED。"),
+            cn_only(&jur, "CN：噪声法/扬尘口径只列名称。不编 TSP 限值。"),
+        ),
     );
     match ctx.write_md("环保文明清单.md", &md) {
         Ok(m) => m,
