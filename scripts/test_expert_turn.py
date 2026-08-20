@@ -136,6 +136,34 @@ def main() -> int:
     assert "method-hazard" in dp_text
     assert "可以开工" not in dp_text
 
+    var_chat = run_expert_turn("签证单怎么填？", "variation")
+    assert var_chat["intent"] == "chat" and var_chat["wrote"] is False
+    var_empty = run_expert_turn(
+        "写一份变更签证草稿",
+        "variation",
+        force_intent="run",
+        session_id="t031-var-empty",
+    )
+    assert var_empty["wrote"] is True
+    assert "variation__form" in var_empty["tools_run"]
+    ve = Path(var_empty["files"][0]["path"]).read_text(encoding="utf-8")
+    for title in ("文件类型判定", "事实栏", "依据栏", "签认栏", "自检"):
+        assert title in ve, title
+    assert "工程签证" in ve
+    assert "变更编号待填" in ve or "待填" in ve
+    assert "见图" not in ve
+    assert "TBD" in ve
+    assert "可以开工" not in ve
+    var_no = run_expert_turn(
+        "写一份变更签证 临边栏杆 变更编号 VO-12",
+        "variation",
+        force_intent="run",
+        session_id="t031-var-vo",
+    )
+    vn = Path(var_no["files"][0]["path"]).read_text(encoding="utf-8")
+    assert "VO-12" in vn
+    assert "见图" not in vn
+
 
     high = [e for e in roster if e.risk == "high"][0]
     blocked = run_expert_turn("写一份专项方案讨论提纲", high.id, confirm_ok=False)

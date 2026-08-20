@@ -1432,15 +1432,21 @@ fn test_survey_record_exclusive() {
     assert!(text.contains("## 11 附录"), "{text}");
     assert!(!text.contains("CP99"), "{text}");
     assert!(!text.contains("可以开工"));
-    let sid = "wb-survey-cp01";
+    let sid = format!(
+        "wb-sv-{}",
+        std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .unwrap()
+            .as_millis()
+    );
     civil_workbench::attach::save_upload(
         &p,
-        sid,
+        &sid,
         "points.txt",
         "控制点 CP01 东 12345.67 北 23456.89\n".as_bytes(),
     )
     .unwrap();
-    let mut with_pt = ToolCtx::new(p.clone(), "survey", "construction", "high", true, sid);
+    let mut with_pt = ToolCtx::new(p.clone(), "survey", "construction", "high", true, &sid);
     let pout = packs::execute(
         &mut with_pt,
         "survey__record",
@@ -1491,7 +1497,22 @@ fn test_variation_form_exclusive() {
     let text = std::fs::read_to_string(ctx.out_dir.join("签证单草稿.md")).unwrap();
     assert!(text.contains("TBD") || text.contains("待填") || text.contains("UNSPECIFIED"));
     assert!(text.contains("PSSCOC") || text.contains("UNSPECIFIED"), "{text}");
+    assert!(text.contains("文件类型判定"), "{text}");
+    assert!(text.contains("签认栏"), "{text}");
+    assert!(text.contains("变更编号待填") || text.contains("依据"), "{text}");
+    assert!(!text.contains("见图"), "{text}");
     assert!(!text.contains("可以开工"));
+    let mut numbered = ToolCtx::new(p.clone(), "variation", "commercial", "low", true, "iter-var-vo");
+    let nout = packs::execute(
+        &mut numbered,
+        "variation__form",
+        &json!({"event_facts":"临边栏杆 变更编号 VO-12","jurisdiction":"SG"}),
+    );
+    assert!(nout.contains("已写入"), "{nout}");
+    let nt = std::fs::read_to_string(numbered.out_dir.join("签证单草稿.md")).unwrap();
+    assert!(nt.contains("VO-12"), "{nt}");
+    assert!(nt.contains("工程签证"), "{nt}");
+    assert!(!nt.contains("见图"), "{nt}");
     let mut sib = ToolCtx::new(p, "cost", "commercial", "low", true, "iter-var-sib");
     assert!(packs::execute(&mut sib, "variation__form", &json!({"event_facts":"x"})).contains("拒绝"));
 }
@@ -3054,7 +3075,13 @@ fn test_construction_eleven_chapters() {
 #[test]
 fn test_bid_parse_from_attached_tender() {
     let p = paths();
-    let sid = "wb-bid-attach-01";
+    let sid = format!(
+        "wb-bid-{}",
+        std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .unwrap()
+            .as_millis()
+    );
     let needle = "Quality 41% — Jurong tank farm method statement for working at height";
     let body = format!(
         "INVITATION TO TENDER — Jurong Island tank farm\n\
@@ -3064,8 +3091,8 @@ Evaluation criteria (PQM):\n\
 Required: 临边防护专项方案\n\
 Time for Completion: 150 days\n"
     );
-    civil_workbench::attach::save_upload(&p, sid, "jurong-itt.txt", body.as_bytes()).unwrap();
-    let mut ctx = ToolCtx::new(p.clone(), "bid-parse", "bid", "low", true, sid);
+    civil_workbench::attach::save_upload(&p, &sid, "jurong-itt.txt", body.as_bytes()).unwrap();
+    let mut ctx = ToolCtx::new(p.clone(), "bid-parse", "bid", "low", true, &sid);
     let out = packs::execute(
         &mut ctx,
         "bid-parse__extract",
@@ -3109,11 +3136,17 @@ fn test_pack_ship_disconnected_unspecified() {
 #[test]
 fn test_civil_spreadsheet_ingest_no_invented_price() {
     let p = paths();
-    let sid = "wb-xlsx-cost-01";
+    let sid = format!(
+        "wb-xlsx-{}",
+        std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .unwrap()
+            .as_millis()
+    );
     let needle = "C30临边梁 C-LN-01";
     let xlsx = civil_workbench::attach::pack_minimal_xlsx(&[needle, "12m"]).expect("xlsx");
-    civil_workbench::attach::save_upload(&p, sid, "广联达导出.xlsx", &xlsx).unwrap();
-    let mut ctx = ToolCtx::new(p, "cost", "commercial", "low", true, sid);
+    civil_workbench::attach::save_upload(&p, &sid, "广联达导出.xlsx", &xlsx).unwrap();
+    let mut ctx = ToolCtx::new(p, "cost", "commercial", "low", true, &sid);
     let out = packs::execute(
         &mut ctx,
         "cost__takeoff",
