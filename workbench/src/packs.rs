@@ -838,7 +838,7 @@ fn pack_tools(pack: &str) -> Vec<ToolDef> {
             },
             ToolDef {
                 name: "proc-plan__schedule",
-                description: "采购计划表：甲指/自采、提前期。",
+                description: "采购计划表：先分甲供/甲指/自采再列表。提前期无供方周期则 UNSPECIFIED。",
                 parameters: obj(json!({"items": {"type": "string"}}), &["items"]),
             },
             ToolDef {
@@ -2425,16 +2425,162 @@ fn compare_table(ctx: &mut ToolCtx, args: &Value) -> String {
     }
 }
 
+fn supply_kind(line: &str) -> &'static str {
+    if line.contains("甲供") {
+        "甲供"
+    } else if line.contains("甲指") {
+        "甲指"
+    } else if line.contains("甲限") || line.contains("甲控") {
+        "甲限"
+    } else if line.contains("自采") || line.contains("乙供") {
+        "自采"
+    } else {
+        "待划"
+    }
+}
+
+fn lead_after(line: &str) -> String {
+    let re = regex::Regex::new(r"(\d+(?:\.\d+)?)\s*(工日|天|周|日)").expect("lead re");
+    for key in ["提前期", "周期", "提前"] {
+        if let Some(pos) = line.find(key) {
+            let rest = &line[pos + key.len()..];
+            if let Some(c) = re.captures(rest) {
+                return format!("{}{}", &c[1], &c[2]);
+            }
+        }
+    }
+    "UNSPECIFIED".into()
+}
+
+fn pp_qty(line: &str) -> String {
+    let mut cut = line.to_string();
+    for key in ["提前期", "周期", "提前"] {
+        if let Some(pos) = cut.find(key) {
+            cut = cut[..pos].to_string();
+        }
+    }
+    let (_, q, _) = split_resource_qty(&cut);
+    if q != "TBD" {
+        q
+    } else {
+        "[A001]".into()
+    }
+}
+
+fn pp_node(line: &str) -> String {
+    if let Some(pos) = line.find("到货") {
+        let rest: String = line[pos + "到货".len()..]
+            .chars()
+            .take(40)
+            .collect();
+        let rest = rest.trim().trim_matches(|c: char| matches!(c, ' ' | ':' | '：' | '，' | ','));
+        if rest.is_empty() {
+            "待填".into()
+        } else {
+            rest.to_string()
+        }
+    } else {
+        "待填".into()
+    }
+}
+
+fn parse_pp_rows(blob: &str) -> Vec<(String, String, String, String, String)> {
+    let mut rows = Vec::new();
+    for raw in blob.replace('；', "\n").replace(';', "\n").lines() {
+        let mut t = raw.trim().to_string();
+        if let Some(rest) = t.strip_prefix("写一份") {
+            t = rest.trim().to_string();
+        }
+        for p in ["采购计划表", "采购计划"] {
+            if let Some(rest) = t.strip_prefix(p) {
+                t = rest.trim().to_string();
+                break;
+            }
+        }
+        if t.is_empty()
+            || matches!(
+                t.as_str(),
+                "草稿提纲" | "采购计划" | "采购计划表" | "待填" | "SG" | "CN" | "DUAL"
+            )
+        {
+            continue;
+        }
+        if t.starts_with('#') || t.starts_with("内部") {
+            continue;
+        }
+        let kind = supply_kind(&t);
+        let lead = lead_after(&t);
+        let qty = pp_qty(&t);
+        let node = pp_node(&t);
+        let mut name = t.clone();
+        for key in ["甲供", "甲指", "甲限", "甲控", "自采", "乙供", "提前期", "周期", "提前", "到货"] {
+            name = name.replace(key, "");
+        }
+        let (n2, q2, _) = split_resource_qty(&name);
+        if q2 != "TBD" {
+            name = n2;
+        }
+        name = name.split_whitespace().collect::<Vec<_>>().join(" ");
+        if name.is_empty() {
+            name = t.chars().take(80).collect();
+        }
+        if matches!(name.as_str(), "草稿提纲" | "采购计划" | "采购计划表" | "待填") {
+            continue;
+        }
+        rows.push((name, kind.to_string(), qty, lead, node));
+    }
+    rows
+}
+
+fn pp_group_table(rows: &[(String, String, String, String, String)], kind: &str) -> String {
+    let picked: Vec<_> = rows.iter().filter(|r| r.1 == kind).collect();
+    let mut out = format!(
+        "### {kind}\n\n| 物资 | 数量 | 提前期 | 到货节点 | 来源 |\n| --- | --- | --- | --- | --- |\n"
+    );
+    if picked.is_empty() {
+        out.push_str("| 待填 | [A001] | UNSPECIFIED | 待填 | 未划 |\n");
+    } else {
+        for r in picked {
+            out.push_str(&format!("| {} | {} | {} | {} | 用户原文 |\n", r.0, r.2, r.3, r.4));
+        }
+    }
+    out
+}
+
 fn purchase_plan(ctx: &mut ToolCtx, args: &Value) -> String {
     let (jur, banner) = zone_banner(args);
-    let items = split_lines(&s(args, "items"));
-    let mut md = format!("{}{banner}\n| 物资 | 甲指/自采 | 提前期 | 到货节点 |\n| --- | --- | --- | --- |\n", header("采购计划表"));
-    for it in items {
-        md.push_str(&format!("| {it} | 待划 | 待填 | 待填 |\n"));
-    }
-    md.push_str("\n[A001] 提前期待填。");
-    md.push_str(&sg_only(&jur, "SG：BCA CRS 投标限额只写门户标题。"));
-    md.push('\n');
+    let blob = format!(
+        "{}\n{}\n{}\n{}",
+        s(args, "items"),
+        s(args, "item"),
+        s(args, "notes"),
+        s(args, "note")
+    );
+    let rows = parse_pp_rows(&blob);
+    let combined = if rows.is_empty() {
+        "| 物资 | 供应方式 | 提前期 | 到货节点 |\n| --- | --- | --- | --- |\n| 待填 | 待划 | UNSPECIFIED | 待填 |\n"
+            .to_string()
+    } else {
+        let mut out = String::from("| 物资 | 供应方式 | 提前期 | 到货节点 |\n| --- | --- | --- | --- |\n");
+        for (n, k, _, lead, node) in &rows {
+            out.push_str(&format!("| {n} | {k} | {lead} | {node} |\n"));
+        }
+        out
+    };
+    let groups = ["甲供", "甲指", "自采", "甲限", "待划"]
+        .iter()
+        .map(|k| pp_group_table(&rows, k))
+        .collect::<Vec<_>>()
+        .join("\n");
+    let md = format!(
+        "{}{banner}\n物资采购计划。不是采购合同、招标文件或付款指令。先分供应方式，再列表。\n\n## 1 封面与文件控制\n项目、标段、编制人空栏、日期、版本待填。[A001] 标明内部讨论，不是签认件。\n\n## 2 草稿声明\n本表只供内部讨论，不构成采购合同、招标文件或付款指令。\n\n## 3 合同供应方式分列\n必须先分甲供 / 甲指 / 自采，再列表。用户未写供应方式的进待划，禁止猜成自采。\n\n{groups}\n\n{combined}\n\n按行只抄用户已写的供应方式。未写则待划。提前期无供方周期则 UNSPECIFIED。\n\n## 4 需用计划来源\n数量来源写图纸 / 需用单编号 / 用户口述。无需用计划不得臆造数量，缺则 [A001]。\n\n## 5 物资分类\n主材、构配件、周转材料（买或租分开）、辅材、劳保、危化品（单独行）、小型机具。办公后勤不进本表。\n\n## 6 提前期倒排\n提前期 = 提需审批 + 寻源询价或招标程序时间 + 供方生产 + 运输 + 进场验收。用户未给供方周期则提前期 UNSPECIFIED。禁止编造提前天数。\n\n## 7 到货节点\n只写用户或计划岗已给的形象节点。对不齐就标注进度节点待计划岗确认。不编关键线路。\n\n## 8 采购方式初判\n只列询比 / 竞价 / 谈判 / 直接采购 / 招标程序名称。金额门槛不默写。制度未提供则采购方式待企业制度。本表不裁定必须招标。\n\n## 9 接口栏\n仓储卸货条件、试验复试批次、资金计划月份、危大方案是否占用该批材料：只留表头，不替别岗填数。\n\n## 10 禁令\n不编综合单价和市场价。不把甲供数量写成自采。不把周转租赁写成购置。无需用计划不编工程量。本稿不是下单指令。\n\n[A001] 无需用计划不编数量。无供方周期则提前期 UNSPECIFIED。禁止编造提前天数。{}\n",
+        header("采购计划表"),
+        format!(
+            "{}{}",
+            sg_only(&jur, "SG：BCA CRS 投标限额只写门户标题。GeBIZ 只当门户。"),
+            cn_only(&jur, "CN：无需用计划不编数量。必须招标的工程项目规定只写全名。"),
+        ),
+    );
     match ctx.write_md("采购计划表.md", &md) {
         Ok(m) => m,
         Err(e) => e,

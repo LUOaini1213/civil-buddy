@@ -106,7 +106,7 @@ _NEXT = {
     "claim": "claim__notice 出意向栏+证据行+条款原文待贴；工期金额 TBD。",
     "subcontract": "subcontract__sheet 按行 parse 细目；无总包/业主确认不编金额。",
     "interim": "interim__measure 出开累/本期/监理审/业主核空表；无确认不编应付合价。",
-    "proc-plan": "proc-plan__schedule 先分甲供/甲指/自采再列表，提前期 UNSPECIFIED。",
+    "proc-plan": "已做 T037 proc-plan。proc-plan__schedule 先分甲供/甲指/自采再列表；无供方周期则提前期 UNSPECIFIED。",
     "proc-compare": "proc-compare__table 一行一家多列；定商标待制度定；写盘后 scan_forbidden。",
     "proc-vendor": "proc-vendor__eval 出准入|考察|短名单，分数/结论待核，禁止中标结论。",
     "equip": "已做 T036 equip。equip__ledger 写出与 Rust 同表头台账，只抄用户设备名与已给证件。",

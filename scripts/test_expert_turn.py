@@ -660,6 +660,39 @@ def main() -> int:
     sec = msq.split("## 6 核算表头")[1].split("## 7")[0]
     assert "TBD" in sec
 
+    pp_chat = run_expert_turn("提前期怎么理解？", "proc-plan")
+    assert pp_chat["intent"] == "chat" and pp_chat["wrote"] is False
+    pp_ok = run_expert_turn(
+        "写一份采购计划 rebar",
+        "proc-plan",
+        force_intent="run",
+        session_id="t037-pp",
+    )
+    assert pp_ok["wrote"] is True
+    assert "proc-plan__schedule" in pp_ok["tools_run"]
+    ppt = Path(pp_ok["files"][0]["path"]).read_text(encoding="utf-8")
+    assert "rebar" in ppt
+    assert "甲供" in ppt and "甲指" in ppt and "自采" in ppt
+    assert "待划" in ppt
+    assert "UNSPECIFIED" in ppt
+    assert "[A001]" in ppt
+    assert "CRS" in ppt
+    assert "可以开工" not in ppt
+    assert "一律提前" not in ppt
+    pp_split = run_expert_turn(
+        "写一份采购计划 钢筋 甲供；水泥 自采",
+        "proc-plan",
+        force_intent="run",
+        session_id="t037-pp-split",
+    )
+    pps = Path(pp_split["files"][0]["path"]).read_text(encoding="utf-8")
+    assert "钢筋" in pps
+    assert "水泥" in pps
+    gong = pps.split("### 甲供")[1].split("###")[0]
+    zi = pps.split("### 自采")[1].split("###")[0]
+    assert "钢筋" in gong
+    assert "水泥" in zi
+
     high = [e for e in roster if e.risk == "high"][0]
     blocked = run_expert_turn("写一份专项方案讨论提纲", high.id, confirm_ok=False)
     assert blocked["intent"] == "run"

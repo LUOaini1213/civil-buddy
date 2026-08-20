@@ -503,6 +503,31 @@ _MS_SKIP = {
     "no stocktake",
 }
 
+_PP_CHAPTERS = (
+    "封面与文件控制",
+    "草稿声明",
+    "合同供应方式分列",
+    "需用计划来源",
+    "物资分类",
+    "提前期倒排",
+    "到货节点",
+    "采购方式初判",
+    "接口栏",
+    "禁令",
+)
+
+_PP_SKIP = {
+    "草稿提纲",
+    "采购计划",
+    "采购计划表",
+    "待填",
+}
+
+_LEAD_QTY = re.compile(
+    r"(?P<qty>\d+(?:\.\d+)?)\s*(?P<unit>工日|天|周|日)",
+    re.I,
+)
+
 _MILESTONE_KEYS = ("桩基", "±0", "封顶", "砌筑", "机电", "装饰", "竣工")
 
 _QTY_RE = re.compile(
@@ -2412,6 +2437,177 @@ def _material_site_md(text: str) -> str:
     return "\n".join(lines)
 
 
+def _pp_kind(line: str) -> str:
+    if "甲供" in line:
+        return "甲供"
+    if "甲指" in line:
+        return "甲指"
+    if "甲限" in line or "甲控" in line:
+        return "甲限"
+    if "自采" in line or "乙供" in line:
+        return "自采"
+    return "待划"
+
+
+def _lead_after(line: str) -> str:
+    for key in ("提前期", "周期", "提前"):
+        i = (line or "").find(key)
+        if i < 0:
+            continue
+        m = _LEAD_QTY.search(line[i + len(key) :])
+        if m:
+            return f"{m.group('qty')}{m.group('unit')}"
+    return "UNSPECIFIED"
+
+
+def _pp_qty(line: str) -> str:
+    cut = line or ""
+    for key in ("提前期", "周期", "提前"):
+        i = cut.find(key)
+        if i >= 0:
+            cut = cut[:i]
+    m = _RES_QTY.search(cut)
+    if not m:
+        return "[A001]"
+    return f"{m.group('qty')}{m.group('unit')}"
+
+
+def _pp_node(line: str) -> str:
+    i = (line or "").find("到货")
+    if i < 0:
+        return "待填"
+    rest = line[i + len("到货") :].strip(" ：:，,")
+    rest = rest[:40].strip()
+    return rest or "待填"
+
+
+def _parse_pp_rows(blob: str) -> List[tuple]:
+    rows: List[tuple] = []
+    for piece in (blob or "").replace("；", "\n").replace(";", "\n").splitlines():
+        t = piece.strip()
+        t = re.sub(r"^写一份\S*\s*", "", t).strip()
+        t = re.sub(r"^(采购计划表|采购计划)\s*", "", t).strip()
+        if not t or t.lower() in _PP_SKIP or t in _PP_SKIP:
+            continue
+        if t.startswith("#") or t.startswith("内部"):
+            continue
+        if t in {"JGJ", "SAC", "CN", "SG", "DUAL"}:
+            continue
+        kind = _pp_kind(t)
+        lead = _lead_after(t)
+        qty = _pp_qty(t)
+        node = _pp_node(t)
+        name = t
+        for key in ("甲供", "甲指", "甲限", "甲控", "自采", "乙供", "提前期", "周期", "提前", "到货"):
+            name = name.replace(key, "")
+        name = _RES_QTY.sub("", name)
+        name = _LEAD_QTY.sub("", name)
+        name = re.sub(r"\s+", " ", name).strip(" ，,;；") or t[:80]
+        if len(name) > 80:
+            name = name[:80]
+        if not name or name in _PP_SKIP:
+            continue
+        rows.append((name, kind, qty, lead, node))
+    return rows
+
+
+def _pp_group_table(rows: List[tuple], kind: str) -> str:
+    picked = [r for r in rows if r[1] == kind]
+    lines = [
+        f"### {kind}",
+        "",
+        "| 物资 | 数量 | 提前期 | 到货节点 | 来源 |",
+        "| --- | --- | --- | --- | --- |",
+    ]
+    if not picked:
+        lines.append("| 待填 | [A001] | UNSPECIFIED | 待填 | 未划 |")
+    else:
+        for n, _k, q, lead, node in picked:
+            lines.append(f"| {n} | {q} | {lead} | {node} | 用户原文 |")
+    return "\n".join(lines)
+
+
+def _proc_plan_md(text: str) -> str:
+    blob = text or ""
+    zone = _mix_zone(blob)
+    rows = _parse_pp_rows(blob)
+    if not rows:
+        combined = (
+            "| 物资 | 供应方式 | 提前期 | 到货节点 |\n"
+            "| --- | --- | --- | --- |\n"
+            "| 待填 | 待划 | UNSPECIFIED | 待填 |\n"
+        )
+    else:
+        combined = (
+            "| 物资 | 供应方式 | 提前期 | 到货节点 |\n"
+            "| --- | --- | --- | --- |\n"
+            + "".join(f"| {n} | {k} | {lead} | {node} |\n" for n, k, _q, lead, node in rows)
+        )
+    groups = "\n\n".join(
+        _pp_group_table(rows, kind) for kind in ("甲供", "甲指", "自采", "甲限", "待划")
+    )
+    lines = [
+        "# 采购计划表（AI 草稿）",
+        "",
+        DISCLAIMER,
+        "",
+        "物资采购计划。不是采购合同、招标文件或付款指令。先分供应方式，再列表。",
+        "",
+        f"- 辖区：{zone}",
+        "",
+        "## 用户原文",
+        "",
+        blob.strip() or "（未提供）",
+        "",
+    ]
+    for i, title in enumerate(_PP_CHAPTERS, 1):
+        lines.append(f"## {i} {title}")
+        lines.append("")
+        if i == 1:
+            lines.append("项目、标段、编制人空栏、日期、版本待填。[A001] 标明内部讨论，不是签认件。")
+        elif i == 2:
+            lines.append("本表只供内部讨论，不构成采购合同、招标文件或付款指令。")
+        elif i == 3:
+            lines.append("必须先分甲供 / 甲指 / 自采，再列表。用户未写供应方式的进待划，禁止猜成自采。")
+            lines.append("")
+            lines.append(groups)
+            lines.append("")
+            lines.append(combined)
+            lines.append("")
+            lines.append("按行只抄用户已写的供应方式。未写则待划。提前期无供方周期则 UNSPECIFIED。")
+        elif i == 4:
+            lines.append("数量来源写图纸 / 需用单编号 / 用户口述。无需用计划不得臆造数量，缺则 [A001]。")
+        elif i == 5:
+            lines.append("主材、构配件、周转材料（买或租分开）、辅材、劳保、危化品（单独行）、小型机具。办公后勤不进本表。")
+        elif i == 6:
+            lines.append(
+                "提前期 = 提需审批 + 寻源询价或招标程序时间 + 供方生产 + 运输 + 进场验收。"
+                "用户未给供方周期则提前期 UNSPECIFIED。禁止编造提前天数。"
+            )
+        elif i == 7:
+            lines.append("只写用户或计划岗已给的形象节点。对不齐就标注进度节点待计划岗确认。不编关键线路。")
+        elif i == 8:
+            lines.append(
+                "只列询比 / 竞价 / 谈判 / 直接采购 / 招标程序名称。"
+                "金额门槛不默写。制度未提供则采购方式待企业制度。本表不裁定必须招标。"
+            )
+        elif i == 9:
+            lines.append("仓储卸货条件、试验复试批次、资金计划月份、危大方案是否占用该批材料：只留表头，不替别岗填数。")
+        else:
+            lines.append(
+                "不编综合单价和市场价。不把甲供数量写成自采。不把周转租赁写成购置。"
+                "无需用计划不编工程量。本稿不是下单指令。"
+            )
+        lines.append("")
+    lines.append("[A001] 无需用计划不编数量。无供方周期则提前期 UNSPECIFIED。禁止编造提前天数。")
+    if zone in ("SG", "DUAL"):
+        lines.append("SG：BCA CRS 投标限额只写门户标题。GeBIZ 只当门户。")
+    if zone in ("CN", "DUAL"):
+        lines.append("CN：无需用计划不编数量。必须招标的工程项目规定只写全名。")
+    lines.append("")
+    return "\n".join(lines)
+
+
 def _dispatch_daily_md(text: str) -> str:
     jobs = _copy_sensitive_jobs(text)
     sensitive = (
@@ -3397,6 +3593,33 @@ def _run_exclusive(
             "files": files,
             "tools_run": ran,
             "reply": "已出材料核算表头。算不出节超则 TBD。submit_blocked=true。",
+            "submit_blocked": True,
+        }
+
+    if expert.id == "proc-plan":
+        md = _proc_plan_md(text)
+        from packing_assistant.tools.tender_review import forbidden_hits
+
+        hits = forbidden_hits(md)
+        if hits:
+            return {
+                "wrote": False,
+                "hitl_pending": False,
+                "files": [],
+                "tools_run": [],
+                "reply": "禁语扫描命中，未报成功：" + "、".join(hits),
+                "submit_blocked": True,
+            }
+        path = out_dir / "proc-plan__schedule.md"
+        guarded_write_text(path, md)
+        files.append({"name": path.name, "path": str(path), "tool": "proc-plan__schedule"})
+        ran.append("proc-plan__schedule")
+        return {
+            "wrote": True,
+            "hitl_pending": False,
+            "files": files,
+            "tools_run": ran,
+            "reply": "已出采购计划表。先分甲供/甲指/自采。提前期 UNSPECIFIED。submit_blocked=true。",
             "submit_blocked": True,
         }
 
