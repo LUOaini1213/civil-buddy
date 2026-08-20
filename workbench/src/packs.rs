@@ -2489,11 +2489,23 @@ fn plan_lookahead(ctx: &mut ToolCtx, args: &Value) -> String {
 
 fn interim_measure(ctx: &mut ToolCtx, args: &Value) -> String {
     let (jur, banner) = zone_banner(args);
+    let period = nonempty(&s(args, "period"), "待填");
+    let qty_note = nonempty(&s(args, "qty_note"), "");
+    let items = nonempty(&s(args, "items"), "");
+    let blob = format!("{qty_note}\n{items}");
+    let parsed = parse_subcontract_lines(&blob);
+    let table = if parsed.is_empty() {
+        "| 清单编码 | 名称 | 单位 | 合同量 | 上期末开累 | 本期申报 | 监理审 | 业主核 | 单价 | 本期价 |\n| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |\n| TBD | [A001] | TBD | TBD | TBD | TBD | TBD | TBD | TBD | TBD |".to_string()
+    } else {
+        let mut out = String::from("| 清单编码 | 名称 | 单位 | 合同量 | 上期末开累 | 本期申报 | 监理审 | 业主核 | 单价 | 本期价 |\n| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |\n");
+        for (n, u, q) in parsed {
+            out.push_str(&format!("| TBD | {n} | {u} | TBD | TBD | {q} | TBD | TBD | TBD | TBD |\n"));
+        }
+        out
+    };
     let md = format!(
-        "{}{banner}\n| 周期 | 形象 | 工程量 | 金额 |\n| --- | --- | --- | --- |\n| {} | 待填 | {} | TBD |\n\n[A001] 无业主确认不编金额。禁止编造综合单价。{}\n",
+        "{}{banner}\n## 1 封面与草稿声明\n内部报审讨论稿，不是已核准验工报表，不是付款指令。无业主确认不编本期应付。\n\n## 2 原则\n有实物工作量的先验工、后计价。不合格、未履行变更程序、超出合同的，不予计价。\n\n## 3 本期范围\n期次：{period}。开累与本期分列。起止日期待填。[A001]\n\n## 4 计量依据\n已标价清单及计算规则；经审核施工图及批准变更；质量合格证明。条款原文待贴。\n\n## 5 计量草表\n{table}\n\n监理审、业主核、单价、本期价无确认则 TBD。不编应付合价。\n\n## 6 变更、物价、索赔\n只列入已批准文件对应金额或「已批文号 + 金额待填」。未批变更不得计价。\n\n## 7 过程结算与进度款\n预付款 / 进度款 / 竣工结算只写财建〔2004〕369 号全名。进度款比例待按财建〔2022〕183 号与用户合同核对，不另编百分比。\n\n## 8 农民工工资列示\n| 栏 | 金额 |\n| --- | --- |\n| 用于支付农民工工资的工程款 | TBD |\n\n## 9 扣减与预留\n| 项 | 金额 |\n| --- | --- |\n| 预付款抵扣 / 甲供材 / 质保金 / 违约金 | TBD |\n\n有合同和凭证才列。\n\n## 10 不予计价警示\n无开工报告、质量不合格、超图未变、重复计量、超前报量且长期未实施：本期不计价。不作指控。\n\n## 11 报审签认\n承包人编制 → 监理审核 → 建设单位核准。缺一环不写付款结论。\n\n## 12 自检\n无业主确认不编应付合价。价税分开表头保留。\n\n{}\n",
         header("验工计价草稿"),
-        nonempty(&s(args, "period"), "待填"),
-        nonempty(&s(args, "qty_note"), "待计量"),
         format!(
             "{}{}",
             sg_only(&jur, "SG：Security of Payment Act payment claim 只写标题，时限 UNSPECIFIED。"),

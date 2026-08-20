@@ -584,7 +584,7 @@
 - qa：已有 · commercial__scan_forbidden
 - kb：已有 · 分层 KB + search_kb/read_kb（demo/kb）
 - write：已有 · 独有 interim__measure；chat 不写盘
-- 下一刀：interim__measure 出开累/本期/监理审/业主核空表；无确认不编应付合价。
+- 下一刀：已做 T031 interim。interim__measure 出开累/本期/监理审/业主核空表；无确认不编应付合价。
 
 
 ## 大类 `procurement` · 车道 `lane-procurement`

@@ -159,6 +159,21 @@ _SUBCONTRACT_CHAPTERS = (
     "自检",
 )
 
+_INTERIM_CHAPTERS = (
+    "封面与草稿声明",
+    "原则",
+    "本期范围",
+    "计量依据",
+    "计量草表",
+    "变更、物价、索赔",
+    "过程结算与进度款",
+    "农民工工资列示",
+    "扣减与预留",
+    "不予计价警示",
+    "报审签认",
+    "自检",
+)
+
 _QTY_RE = re.compile(
     r"(?P<qty>\d+(?:\.\d+)?)\s*(?P<unit>m2|m²|m3|t|吨|kg|工日|项)?",
     re.I,
@@ -505,6 +520,72 @@ def _subcontract_sheet_md(text: str) -> str:
         lines.append("")
     lines.append("SG：PSSCOC Nominated Sub-Contract / SOP Act 只写全名。")
     lines.append("CN：保障农民工工资支付条例只写全名，金额 TBD。GB 50500 只出现在 CN 栏。")
+    lines.append("")
+    return "\n".join(lines)
+
+
+def _interim_measure_md(text: str) -> str:
+    items = _parse_subcontract_lines(text)
+    header_row = (
+        "| 清单编码 | 名称 | 单位 | 合同量 | 上期末开累 | 本期申报 | 监理审 | 业主核 | 单价 | 本期价 |\n"
+        "| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |\n"
+    )
+    if items:
+        table = header_row + "".join(
+            f"| TBD | {n} | {u} | TBD | TBD | {q} | TBD | TBD | TBD | TBD |\n" for n, u, q in items
+        )
+    else:
+        table = header_row + "| TBD | [A001] | TBD | TBD | TBD | TBD | TBD | TBD | TBD | TBD |\n"
+    period = "待填"
+    blob = text or ""
+    if "月" in blob or "季" in blob or "期" in blob:
+        period = blob.strip()[:80] or "待填"
+    lines = [
+        "# 对上验工计价草稿（AI 草稿）",
+        "",
+        DISCLAIMER,
+        "",
+        "内部报审讨论稿，不是已核准验工报表，不是付款指令。无业主确认不编本期应付。",
+        "",
+        "## 用户原文",
+        "",
+        (text or "").strip() or "（未提供）",
+        "",
+    ]
+    for i, title in enumerate(_INTERIM_CHAPTERS, 1):
+        lines.append(f"## {i} {title}")
+        lines.append("")
+        if i == 1:
+            lines.append(DISCLAIMER)
+        elif i == 2:
+            lines.append("有实物工作量的先验工、后计价。不合格、未履行变更程序、超出合同的，不予计价。")
+        elif i == 3:
+            lines.append(f"期次：{period}。开累与本期分列。起止日期待填。[A001]")
+        elif i == 4:
+            lines.append("已标价清单及计算规则；经审核施工图及批准变更；质量合格证明。条款原文待贴。")
+        elif i == 5:
+            lines.append(table)
+            lines.append("")
+            lines.append("监理审、业主核、单价、本期价无确认则 TBD。不编应付合价。")
+        elif i == 6:
+            lines.append("只列入已批准文件对应金额或「已批文号 + 金额待填」。未批变更不得计价。")
+        elif i == 7:
+            lines.append("预付款 / 进度款 / 竣工结算只写财建〔2004〕369 号全名。进度款比例待按财建〔2022〕183 号与用户合同核对，不另编百分比。")
+        elif i == 8:
+            lines.append("| 栏 | 金额 |\n| --- | --- |\n| 用于支付农民工工资的工程款 | TBD |")
+        elif i == 9:
+            lines.append("| 项 | 金额 |\n| --- | --- |\n| 预付款抵扣 / 甲供材 / 质保金 / 违约金 | TBD |")
+            lines.append("")
+            lines.append("有合同和凭证才列。质保金比例待按办法与用户合同核对。")
+        elif i == 10:
+            lines.append("无开工报告、质量不合格、超图未变、重复计量、超前报量且长期未实施：本期不计价。不作指控。")
+        elif i == 11:
+            lines.append("承包人编制 → 监理审核 → 建设单位核准。缺一环不写付款结论。")
+        else:
+            lines.append("无业主确认不编应付合价。价税分开表头保留。")
+        lines.append("")
+    lines.append("SG：Security of Payment Act payment claim 只写标题，时限 UNSPECIFIED。")
+    lines.append("CN：验工计价按用户合同，金额 TBD。GB 50500 只出现在 CN 栏。")
     lines.append("")
     return "\n".join(lines)
 
@@ -1089,6 +1170,33 @@ def _run_exclusive(
             "files": files,
             "tools_run": ran,
             "reply": "已出分包结算表头。无总包/业主确认金额 TBD。submit_blocked=true。",
+            "submit_blocked": True,
+        }
+
+    if expert.id == "interim":
+        md = _interim_measure_md(text)
+        from packing_assistant.tools.tender_review import forbidden_hits
+
+        hits = forbidden_hits(md)
+        if hits:
+            return {
+                "wrote": False,
+                "hitl_pending": False,
+                "files": [],
+                "tools_run": [],
+                "reply": "禁语扫描命中，未报成功：" + "、".join(hits),
+                "submit_blocked": True,
+            }
+        path = out_dir / "interim__measure.md"
+        guarded_write_text(path, md)
+        files.append({"name": path.name, "path": str(path), "tool": "interim__measure"})
+        ran.append("interim__measure")
+        return {
+            "wrote": True,
+            "hitl_pending": False,
+            "files": files,
+            "tools_run": ran,
+            "reply": "已出验工计价草稿。监理审/业主核空栏。不编应付合价。submit_blocked=true。",
             "submit_blocked": True,
         }
 

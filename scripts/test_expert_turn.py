@@ -218,6 +218,33 @@ def main() -> int:
     assert "2.5" in so
     assert so.count("TBD") >= 2
 
+    it_chat = run_expert_turn("验工计价怎么填？", "interim")
+    assert it_chat["intent"] == "chat" and it_chat["wrote"] is False
+    it_empty = run_expert_turn(
+        "写一份验工计价草稿",
+        "interim",
+        force_intent="run",
+        session_id="t031-it-empty",
+    )
+    assert it_empty["wrote"] is True
+    assert "interim__measure" in it_empty["tools_run"]
+    ie = Path(it_empty["files"][0]["path"]).read_text(encoding="utf-8")
+    for title in ("本期范围", "计量草表", "监理审", "业主核", "报审签认"):
+        assert title in ie, title
+    assert "TBD" in ie
+    assert "可以开工" not in ie
+    assert "报审通过" not in ie
+    it_ok = run_expert_turn(
+        "写一份验工计价 模板 120m2",
+        "interim",
+        force_intent="run",
+        session_id="t031-it-row",
+    )
+    io = Path(it_ok["files"][0]["path"]).read_text(encoding="utf-8")
+    assert "模板" in io
+    assert "120" in io
+    assert "应付合价" in io or "不编应付" in io or "不编本期应付" in io
+
 
     high = [e for e in roster if e.risk == "high"][0]
     blocked = run_expert_turn("写一份专项方案讨论提纲", high.id, confirm_ok=False)
