@@ -134,27 +134,43 @@ def _plan_calls(
 
     if exp.id in {"bid-compliance", "bid-tech"}:
         from packing_assistant.runtime.session_handoff import load_handoff
+        from packing_assistant.runtime.tool_engine import get_engine
 
         ho = load_handoff(session_id) or {}
-        blob = text
-        if ho:
-            blob = (str(ho.get("extract_table_markdown") or "") + "\n" + text).strip() or text
-        path = out_dir / f"{exp.exclusive[0] if exp.exclusive else exp.id}.md"
-        body = (
-            f"# {exp.name}\n\n内部讨论 AI 草稿。submit_blocked=true。\n\n"
-            f"## 本 session handoff\n\n{json.dumps(ho, ensure_ascii=False)[:4000] if ho else '（本 session 尚无 tender.handoff.json）'}\n\n"
-            f"## 用户原文\n\n{blob}\n"
-        )
-        calls.append(
-            {
-                "name": "write_deliverable",
-                "arguments": {"path": str(path), "text": body},
-                "tool_label": exp.exclusive[0] if exp.exclusive else f"{exp.id}__draft",
-            }
-        )
-        return {"hitl": False, "calls": calls, "out_dir": str(out_dir), "handoff": ho}
+        primary = (exp.exclusive[0] if exp.exclusive else "") or f"{exp.id}__draft"
+        if primary in get_engine().tools:
+            calls.append(
+                {
+                    "name": primary,
+                    "arguments": {
+                        "text": text,
+                        "session_id": session_id,
+                        "confirm_ok": p0_confirmed,
+                    },
+                    "tool_label": primary,
+                }
+            )
+            return {"hitl": False, "calls": calls, "out_dir": str(out_dir), "handoff": ho}
 
     tools = [t for t in (exp.exclusive or ()) if "fill_scheme" not in t] or [f"{exp.id}__draft"]
+    from packing_assistant.runtime.tool_engine import get_engine
+
+    eng = get_engine()
+    primary = tools[0]
+    if primary in eng.tools:
+        calls.append(
+            {
+                "name": primary,
+                "arguments": {
+                    "text": text,
+                    "session_id": session_id,
+                    "confirm_ok": p0_confirmed,
+                    "packing_summary": packing_summary,
+                },
+                "tool_label": primary,
+            }
+        )
+        return {"hitl": False, "calls": calls}
     for tool in tools:
         path = out_dir / f"{tool}.md"
         calls.append(
@@ -373,7 +389,8 @@ def run_agent(
                 out["tools_run"].append(label)
                 if result.get("sandbox"):
                     out["sandbox"].append(result["sandbox"])
-                path = (result.get("data") or {}).get("path") if isinstance(result.get("data"), dict) else result.get("path")
+                data = result.get("data") if isinstance(result.get("data"), dict) else result
+                path = data.get("path") if isinstance(data, dict) else None
                 if result.get("ok") and path:
                     out["artifacts"].append(str(path))
                     out["wrote"] = True
@@ -384,6 +401,30 @@ def run_agent(
                             "tool": label,
                         }
                     )
+                if result.get("ok") and isinstance(data, dict):
+                    for f in data.get("files") or []:
+                        if not isinstance(f, dict):
+                            continue
+                        fp = str(f.get("path") or "")
+                        if not fp:
+                            continue
+                        out["artifacts"].append(fp)
+                        out["wrote"] = True
+                        out["files"].append(
+                            {
+                                "name": str(f.get("name") or Path(fp).name),
+                                "path": fp,
+                                "tool": str(f.get("tool") or label),
+                            }
+                        )
+                    if data.get("handoff"):
+                        out["handoff"] = data["handoff"]
+                    if data.get("docx_pending") is not None:
+                        out["docx_pending"] = data["docx_pending"]
+                    if data.get("tools_run"):
+                        for t in data["tools_run"]:
+                            if t not in out["tools_run"]:
+                                out["tools_run"].append(t)
                 if name == "tender.parse" and result.get("ok"):
                     _merge_pipe(out, result)
                     data = result.get("data") if isinstance(result.get("data"), dict) else result

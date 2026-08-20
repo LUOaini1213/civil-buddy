@@ -301,6 +301,35 @@ def _tender_review(args: Dict[str, Any]) -> Any:
     )
 
 
+def _exclusive_handler(name: str):
+    def _h(args: Dict[str, Any]) -> Any:
+        from packing_assistant.expert_turn import run_named_exclusive
+
+        return run_named_exclusive(name, args)
+
+    return _h
+
+
+def _register_exclusives(eng: ToolEngine) -> None:
+    from packing_assistant.expert_roster import list_experts
+
+    skip = set(eng.tools)
+    for exp in list_experts():
+        for name in exp.exclusive:
+            if name in skip:
+                continue
+            writes = not name.endswith(("__list", "__health", "__scan_forbidden"))
+            timeout = 60.0 if "fill_scheme" in name or name.endswith("scheme_draft") else 30.0
+            eng.register(
+                name,
+                _exclusive_handler(name),
+                expert_id=exp.id,
+                writes=writes,
+                timeout_s=timeout,
+            )
+            skip.add(name)
+
+
 def default_engine() -> ToolEngine:
     eng = ToolEngine()
     eng.register("pack-ship__list", _pack_handler("pack-ship__list"), expert_id="pack-ship", writes=False)
@@ -316,6 +345,7 @@ def default_engine() -> ToolEngine:
         writes=True,
     )
     eng.register("spawn_helper", _spawn_helper, writes=True)
+    _register_exclusives(eng)
     return eng
 
 

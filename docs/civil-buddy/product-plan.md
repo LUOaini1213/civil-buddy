@@ -157,7 +157,7 @@ P0 ToolEngine/Scheduler/pack-ship 快照 · P1-1 handoff · P1-2 eval/live · P1
 
 - **内核只在** `POST /api/agent`：`understand → Scheduler → ToolEngine.execute → 写盘沙箱 → audit_log + 进程内 Bus`。生产默认是 **steps 规划器**，不是 LLM 自由 tool-call。  
 - **Skill / 文档不进循环。** MCP `tender.parse` 与 `POST /api/tender/parse`（含 `/file` `/files`）走 `ToolEngine.execute`（T011 ✅）。chat 意图拒写。  
-- **66 岗 exclusive 多数未 `register`。** 引擎现注册 pack-ship×4、`tender.parse/review`、`write_deliverable`、`spawn_helper`。其余岗是 `write_deliverable` 骨架 md。  
+- **66 岗 exclusive 已 `register` 进 ToolEngine。** pack-ship×4 仍投影 solver；其余独有名走 `run_named_exclusive`（HITL 仍在写盘前）。chat 调写盘 `permission_denied`。兄弟岗调独有同样拒绝。`write_deliverable` 只作沙箱底盘，agent_loop 默认调岗名工具。  
 - **装箱是兄弟路径：** `run_big_team` 在 /workbench 与 delivery；pack-ship **只投影快照**，禁止在 turn 里再算几何。  
 - **状态机已用边：** `pending→planning→acting⇄waiting_tool→done`，或 `planning→waiting_hitl`（本环不 resume 到 acting）。`reflecting` 合法但未用。  
 - **错误码谁发出：** ToolEngine 发 `ok/permission_denied/invalid_args/timeout/circuit_open`。`max_steps`/`illegal_edge`/`session_busy` 出 Scheduler。字段字面 `UNSPECIFIED` ≠ 崩溃码 `unspecified`。  

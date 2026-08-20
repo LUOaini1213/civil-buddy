@@ -82,6 +82,16 @@ def exclusive_tools(expert_id: str) -> List[str]:
     return list(exp.exclusive) if exp else []
 
 
+def exclusive_owner(name: str) -> Optional[str]:
+    n = (name or "").strip()
+    if not n:
+        return None
+    for e in _load():
+        if n in e.exclusive:
+            return e.id
+    return None
+
+
 def resolve_expert(blob: str) -> Optional[str]:
     """Only @id / @中文名. Aliases are too wide for the default tender box."""
     t = blob or ""

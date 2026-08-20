@@ -68,4 +68,4 @@ python demo/mcp_stdio.py --expert pack-ship
 | `pack-ship__list/plan/export/health` | 仅 pack-ship / plant |
 | `*__scan_forbidden` | 本大类 |
 
-`kb://` 越权返回「拒绝：…」，不装成空库。chat 调写盘 → `permission_denied`。xyz 只抄 solver 或 `UNSPECIFIED`。
+`kb://` 越权返回「拒绝：…」，不装成空库。chat 调写盘 → `permission_denied`。xyz 只抄 solver 或 `UNSPECIFIED`。岗独有（`survey__record` 等）是 ToolEngine 工具名，Host `tools/call` 走同一鉴权，不是 `write_deliverable` 贴标签。
