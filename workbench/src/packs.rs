@@ -469,8 +469,14 @@ fn pack_tools(pack: &str) -> Vec<ToolDef> {
             },
             ToolDef {
                 name: "emergency__plan",
-                description: "应急独有：预案提纲，联系人待填。",
-                parameters: obj(json!({"scenario": {"type": "string"}}), &["scenario"]),
+                description: "应急独有：综合目录+点名专项+演练表头。电话医院待填。",
+                parameters: obj(
+                    json!({
+                        "scenario": {"type": "string"},
+                        "jurisdiction": {"type": "string"}
+                    }),
+                    &["scenario"],
+                ),
             },
             ToolDef {
                 name: "env__list",
@@ -2212,12 +2218,60 @@ fn quality_checklist(ctx: &mut ToolCtx, args: &Value) -> String {
     }
 }
 
+fn named_emergency_specials(blob: &str) -> Vec<&'static str> {
+    let low = blob.to_lowercase();
+    let mut named = Vec::new();
+    let hints: &[(&str, &str)] = &[
+        ("火灾", "火灾爆炸"),
+        ("fire", "火灾爆炸"),
+        ("爆炸", "火灾爆炸"),
+        ("坠落", "高处坠落"),
+        ("高处", "高处坠落"),
+        ("打击", "物体打击"),
+        ("坍塌", "坍塌"),
+        ("触电", "触电"),
+        ("起重", "起重机械"),
+        ("有限空间", "中毒窒息/有限空间"),
+        ("中毒", "中毒窒息/有限空间"),
+        ("车辆", "车辆伤害"),
+        ("疫情", "疫情或突发环境事件"),
+    ];
+    for (hint, spec) in hints {
+        if low.contains(&hint.to_lowercase()) || blob.contains(hint) {
+            if !named.contains(spec) {
+                named.push(*spec);
+            }
+        }
+    }
+    named
+}
+
 fn emergency(ctx: &mut ToolCtx, args: &Value) -> String {
     let (jur, banner) = zone_banner(args);
+    let scenario = nonempty(&s(args, "scenario"), "待填");
+    let named = named_emergency_specials(&scenario);
+    const SPECS: &[&str] = &[
+        "高处坠落",
+        "物体打击",
+        "坍塌",
+        "触电",
+        "起重机械",
+        "火灾爆炸",
+        "中毒窒息/有限空间",
+        "车辆伤害",
+        "疫情或突发环境事件",
+    ];
+    let mut special = String::from("| 专项 | 本稿 |\n| --- | --- |\n");
+    for spec in SPECS {
+        if named.iter().any(|n| n == spec) {
+            special.push_str(&format!("| {spec} | 本轮点名。只列名称，不展开假场景。 |\n"));
+        } else {
+            special.push_str(&format!("| {spec} | 常见名。用户未点名不展开。 |\n"));
+        }
+    }
     let md = format!(
-        "{}{banner}\n## 情景\n{}\n\n## 目录\n1. 组织与职责（联系人待填）\n2. 预警\n3. 响应步骤\n4. 资源\n5. 演练记录\n\n联系人/电话一律待填，禁止编造。{}\n",
+        "{}{banner}\n只出目录、演练记录表头和待填附件。不签发预案。联系人通讯录全部 [A001]。情景：{scenario}。\n\n## 1 封面与声明\n单位/项目待填。预案名称待填。版本待填。签署人空栏。联系人通讯录全部 [A001]。\n\n## 2 编制说明\n风险辨识结论栏待填。应急资源调查清单栏：队伍、车辆、担架、灭火器、洗消、医院。无现场盘点不编数量。医院名称和电话待填。\n\n## 3 综合预案目录\n1. 组织机构与职责\n2. 预案体系\n3. 风险描述\n4. 预警与信息报告\n5. 响应分级\n6. 保障\n7. 培训演练与管理\n\n## 4 专项预案目录\n{special}\n用户没点名则只列常见名、不展开假场景。\n\n## 5 现场处置方案\n按场所：基坑、脚手架、配电房、食堂、宿舍、桩机区。含职责、措施、注意事项。未给场所则待填。\n\n## 6 应急处置卡\n一岗一卡，短步骤 + 联络人待填。电话 [A001]。\n\n## 7 信息报告\n内部升级顺序待填。向属地应急和行业主管部门报告的内容栏待填。不编已报告结论。\n\n## 8 演练计划与记录表头\n| 时间 | 科目 | 参演单位 | 评估人 | 发现问题 | 修订意见 |\n| --- | --- | --- | --- | --- | --- |\n| 待填 | 待填 | 待填 | 待填 | 待填 | 待填 |\n\n评估、问题、修订意见待填。本稿不下演练结论。\n\n## 9 附件\n| 附件 | 本稿 |\n| --- | --- |\n| 通讯录 | 待填；电话 [A001] |\n| 物资台账 | 待填 |\n| 医院路线 | 医院名称待填；电话 [A001] |\n| 周边告知 | 待填 |\n\n## 10 备案与评估节点\n公布日、拟备案机关、评估年待用户填。备案条件栏待核，本稿不下备案结论。\n\n## 11 禁令\n不编医院名称和电话，不编响应时间分钟数。有限空间救援强调禁止盲目进入。本稿不下演练通过结论。\n\n{}\n",
         header("应急预案提纲"),
-        nonempty(&s(args, "scenario"), "待填"),
         format!(
             "{}{}",
             sg_only(&jur, "SG：SCDF Emergency Response Plan 只写标题。"),

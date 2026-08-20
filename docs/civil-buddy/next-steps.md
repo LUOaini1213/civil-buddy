@@ -106,6 +106,9 @@
 34. **T035 env 一岗** ✅ 2026-08-20  
     env__list 扬尘/弃土/污水/夜间/市容五行，限值 UNSPECIFIED。T035 批次未完：下一岗 **emergency**。不得把应急一并勾完。行业总判仍 **部分合格**。
 
+35. **T035 emergency 一岗（T035 批次完）** ✅ 2026-08-20  
+    emergency__plan 综合目录+点名专项+演练表头；电话医院待填。不编响应分钟数。高风险须确认句。主链头指针改为 **T036**（equip 先；pack-ship 已富跳过）。T036–T047 不得一行勾完。行业总判仍 **部分合格**。
+
 平台内核见 [product-improvement-handbook.md](product-improvement-handbook.md)。岗独有写盘下一刀仍按 [post-horizon-2026-08-17.md](post-horizon-2026-08-17.md)。
 
 ## 有宿主再做

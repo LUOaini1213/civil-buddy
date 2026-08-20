@@ -1941,6 +1941,44 @@ fn test_env_list_exclusive() {
 }
 
 #[test]
+fn test_emergency_plan_exclusive() {
+    let p = paths();
+    assert!(packs::visible_tool_names("emergency").iter().any(|n| n == "emergency__plan"));
+    assert!(!packs::visible_tool_names("env").iter().any(|n| n == "emergency__plan"));
+    let mut blocked = ToolCtx::new(p.clone(), "emergency", "hse", "high", false, "iter-em-hitl");
+    assert!(packs::execute(&mut blocked, "emergency__plan", &json!({"scenario":"fire"})).contains("拒绝"));
+    let mut ctx = ToolCtx::new(p.clone(), "emergency", "hse", "high", true, "iter-em-t035");
+    let out = packs::execute(
+        &mut ctx,
+        "emergency__plan",
+        &json!({"scenario":"fire","jurisdiction":"SG"}),
+    );
+    assert!(out.contains("已写入"), "{out}");
+    let text = std::fs::read_to_string(ctx.out_dir.join("应急预案提纲.md")).unwrap();
+    assert!(text.contains("综合预案目录"), "{text}");
+    assert!(text.contains("专项预案目录"), "{text}");
+    assert!(text.contains("演练计划与记录表头"), "{text}");
+    assert!(text.contains("火灾爆炸"), "{text}");
+    assert!(text.contains("本轮点名"), "{text}");
+    assert!(text.contains("[A001]"), "{text}");
+    assert!(text.contains("SCDF"), "{text}");
+    assert!(!text.contains("可以开工"), "{text}");
+    assert!(!text.contains("演练合格"), "{text}");
+    let mut cn = ToolCtx::new(p.clone(), "emergency", "hse", "high", true, "iter-em-cn-t035");
+    let co = packs::execute(
+        &mut cn,
+        "emergency__plan",
+        &json!({"scenario":"fire","jurisdiction":"CN"}),
+    );
+    assert!(co.contains("已写入"), "{co}");
+    let ct = std::fs::read_to_string(cn.out_dir.join("应急预案提纲.md")).unwrap();
+    assert!(ct.contains("应急预案"), "{ct}");
+    assert!(!ct.contains("SCDF"), "{ct}");
+    let mut sib = ToolCtx::new(p, "env", "hse", "low", true, "iter-em-sib");
+    assert!(packs::execute(&mut sib, "emergency__plan", &json!({"scenario":"x"})).contains("拒绝"));
+}
+
+#[test]
 fn test_bid_compliance_exclusive_and_scan_sg_mix() {
     let p = paths();
     assert!(packs::visible_tool_names("bid-compliance").iter().any(|n| n == "bid-compliance__gaps"));
