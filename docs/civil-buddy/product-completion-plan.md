@@ -374,7 +374,7 @@ GeBIZ 代交、法定签认、十万字写标、标书查重产品化、模型�
 | D1 GETTING-STARTED / PROTOCOL / MCP / SKILLS / KB | ✅ | `python scripts/test_docs_completion.py` |
 | D2 全量产品规划书 | ✅ | `docs/civil-buddy/product-plan.md` |
 | K1 66 岗目录契约 | ✅ | `python scripts/test_kb_schema.py` |
-| K2 门户标题单一来源 | 未做 | eval/live 读 company 页 |
+| K2 门户标题单一来源 | 部分 | 五针已读 company（T003）；岗 GST 扫描 T007 |
 | K3 kb:// 隔离 + 文件名检索闸 | 部分 | 扩 `test_mcp_surface.py` |
 | M1 Python stdio MCP | ✅ | `python scripts/test_mcp_stdio.py` |
 | M2 工具表（KB+招标+装箱+扫描） | ✅ | pack=bid 含 tender.parse，不含 pack-ship__plan |
