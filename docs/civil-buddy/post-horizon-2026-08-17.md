@@ -545,7 +545,7 @@
 - qa：已有 · commercial__scan_forbidden
 - kb：已有 · 分层 KB + search_kb/read_kb（demo/kb）
 - write：已有 · 独有 variation__form；chat 不写盘
-- 下一刀：variation__form 先判定文种再出事实|依据|签认空栏；无变更编号则依据待填。
+- 下一刀：已做 T031 variation。variation__form 先判定文种再出事实|依据|签认空栏；无变更编号则依据待填。
 
 ### claim
 

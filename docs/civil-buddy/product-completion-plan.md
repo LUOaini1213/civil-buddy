@@ -337,7 +337,7 @@ Grok skill **不**在 V1 里 `use_tool` 调 MCP（保持 skill 可离线出十�
 2. 栏位来自 outline.md / KB，缺数 `[A001]` / `UNSPECIFIED`；  
 3. `test_expert_turn.py` 对该 id 的 run 能断言 **至少一个栏位不是通用骨架句**。
 
-当前已达到：bid-parse / bid-compliance / bid-tech / pack-ship / construction 十一章+docx_pending / method-hazard 判定书 / finance-tax 日历 / cost takeoff / survey 点号只抄 / dispatch 十一章 + T001 / T021 / T023 / T003 / T007–T011 / T014 / T020 / T024 / T030 / T050 / T052 / T062。下一优先按 product-plan §15：**T031** variation（T031–T047 不得一行勾完）。
+当前已达到：… + T030 survey/dispatch + T031 variation。下一优先按 product-plan §15：**T031 · claim**（T031 其余岗与 T032–T047 不得一行勾完）。
 
 ---
 
@@ -392,4 +392,4 @@ P0 运行时、P1-1 handoff、Agent 循环+沙箱、pack-ship 投影：**已做*
 
 ## 8. 下一刀（读完本文立刻做的）
 
-全量任务号见 [product-plan.md](product-plan.md) §15。切片下一刀是 **T031**（variation 先）。T030 ✅。T031–T047 不得一行勾完。
+全量任务号见 [product-plan.md](product-plan.md) §15。切片下一刀是 **T031 · claim**。variation ✅。T031 其余岗不得一行勾完。

@@ -119,6 +119,21 @@ _DISPATCH_CHAPTERS = (
     "附件表头",
 )
 
+_VARIATION_CHAPTERS = (
+    "封面与草稿声明",
+    "文件类型判定",
+    "事实栏",
+    "依据栏",
+    "工程量栏",
+    "价款调整方法",
+    "签认栏",
+    "与索赔、验工的接口",
+    "附件目录",
+    "自检",
+)
+
+_VAR_NO_RE = re.compile(r"(?i)\b(?:VO|SI|DC|VAR)[-_./]?\d+[A-Za-z]?\b")
+
 _POINT_RE = re.compile(r"(?i)\b(?:CP|BM|PT|TP|GC|SP)[-_]?\d+[A-Za-z]?\b")
 _SENSITIVE_KEYS = (
     "危大",
@@ -195,6 +210,95 @@ def _survey_record_md(text: str) -> str:
             lines.append("待按用户点号/图纸填写。[A001]")
         lines.append("")
     lines.append("SG：SVY21 / SHD 只写坐标系统名。CN：工程测量标准只写全名。本记录不是施工依据。")
+    lines.append("")
+    return "\n".join(lines)
+
+
+def _classify_variation_kind(blob: str) -> str:
+    t = blob or ""
+    low = t.lower()
+    hits: List[str] = []
+    if "设计变更" in t or "design change" in low:
+        hits.append("设计变更")
+    if "工程签证" in t or "签证" in t or "variation" in low:
+        hits.append("工程签证")
+    if "洽商" in t:
+        hits.append("工程洽商")
+    if "联系单" in t:
+        hits.append("工程联系单")
+    if "工程量确认" in t or "qty confirm" in low:
+        hits.append("工程量确认单")
+    uniq = list(dict.fromkeys(hits))
+    if len(uniq) > 1:
+        return "混写，须拆开。本表不混写，待用户指定一类。"
+    if len(uniq) == 1:
+        return uniq[0]
+    return "信息不足，待用户指定一类（设计变更 / 工程签证 / 工程洽商 / 工程联系单 / 工程量确认单）。"
+
+
+def _copy_variation_no(blob: str) -> str:
+    rows: List[str] = []
+    for line in (blob or "").splitlines():
+        t = line.strip()
+        if not t:
+            continue
+        if "变更编号" in t or _VAR_NO_RE.search(t):
+            rows.append(t[:160])
+    if rows:
+        return "\n".join(f"- {r}" for r in rows)
+    return "变更编号待填。禁止引用未提供的图号。条款号 UNSPECIFIED。"
+
+
+def _variation_form_md(text: str) -> str:
+    kind = _classify_variation_kind(text)
+    basis_no = _copy_variation_no(text)
+    facts = (text or "").strip()[:240] or "整节待填。[A001]"
+    lines = [
+        "# 工程签证 / 设计变更费用口径草稿（AI 草稿）",
+        "",
+        DISCLAIMER,
+        "",
+        "不构成已签认签证，不替代设计变更通知单。金额 TBD。条款 UNSPECIFIED。",
+        "",
+        "## 用户原文",
+        "",
+        (text or "").strip() or "（未提供）",
+        "",
+    ]
+    for i, title in enumerate(_VARIATION_CHAPTERS, 1):
+        lines.append(f"## {i} {title}")
+        lines.append("")
+        if i == 1:
+            lines.append(DISCLAIMER)
+        elif i == 2:
+            lines.append(f"本表文种：**{kind}**。只选一类。")
+        elif i == 3:
+            lines.append(facts)
+            lines.append("")
+            lines.append("时间/部位/事由/谁提出：用户未给的格子待填。[A001]")
+        elif i == 4:
+            lines.append(basis_no)
+            lines.append("")
+            lines.append("合同条款只写名称，不编条款号。无用户变更编号则依据待填。")
+        elif i == 5:
+            lines.append("计算式或现场实测待填。单位待填。与原清单对应编码无则新建项待定。[A001]")
+        elif i == 6:
+            lines.append(
+                "只写路径，不填数：有适用单价则用该单价；只有类似单价则参照并说明差异；都没有则协商，人材机口径单价 TBD。"
+            )
+        elif i == 7:
+            lines.append("| 角色 | 姓名 | 日期 |\n| --- | --- | --- |\n| 监理对事实 |  |  |\n| 造价对价款 |  |  |")
+            lines.append("")
+            lines.append("空栏，不代签。不把现场确认写成已定价。")
+        elif i == 8:
+            lines.append("指令内调价走本节。指令外损失、逾期失权风险走索赔调概（claim）。当期计量走验工计价（interim）。")
+        elif i == 9:
+            lines.append("照片/实测草图/变更单扫描/原清单摘录：有则列名，无则写用户未提供。")
+        else:
+            lines.append("无金额编造。无事后补签装成当时签。不编无来源限额。")
+        lines.append("")
+    lines.append("SG：PSSCOC 2020 / PSSCOC-lite 2025 / SIA / REDAS 只写合同族名，条款 UNSPECIFIED。")
+    lines.append("CN：GF-2017-0201 / GB/T 50500-2024 只写全名；财建〔2004〕369 号程序是否适用看用户合同，不编确认天数。")
     lines.append("")
     return "\n".join(lines)
 
@@ -698,6 +802,33 @@ def _run_exclusive(
             "files": files,
             "tools_run": ran,
             "reply": "已出调度日报草稿。敏感作业交 method-hazard。submit_blocked=true。",
+            "submit_blocked": True,
+        }
+
+    if expert.id == "variation":
+        md = _variation_form_md(text)
+        from packing_assistant.tools.tender_review import forbidden_hits
+
+        hits = forbidden_hits(md)
+        if hits:
+            return {
+                "wrote": False,
+                "hitl_pending": False,
+                "files": [],
+                "tools_run": [],
+                "reply": "禁语扫描命中，未报成功：" + "、".join(hits),
+                "submit_blocked": True,
+            }
+        path = out_dir / "variation__form.md"
+        guarded_write_text(path, md)
+        files.append({"name": path.name, "path": str(path), "tool": "variation__form"})
+        ran.append("variation__form")
+        return {
+            "wrote": True,
+            "hitl_pending": False,
+            "files": files,
+            "tools_run": ran,
+            "reply": "已出变更签证草稿。金额 TBD。submit_blocked=true。",
             "submit_blocked": True,
         }
 

@@ -1930,15 +1930,79 @@ fn takeoff(ctx: &mut ToolCtx, args: &Value) -> String {
     }
 }
 
+fn classify_variation_kind(blob: &str) -> String {
+    let low = blob.to_ascii_lowercase();
+    let mut hits: Vec<&str> = Vec::new();
+    if blob.contains("设计变更") || low.contains("design change") {
+        hits.push("设计变更");
+    }
+    if blob.contains("工程签证") || blob.contains("签证") || low.contains("variation") {
+        hits.push("工程签证");
+    }
+    if blob.contains("洽商") {
+        hits.push("工程洽商");
+    }
+    if blob.contains("联系单") {
+        hits.push("工程联系单");
+    }
+    if blob.contains("工程量确认") || low.contains("qty confirm") {
+        hits.push("工程量确认单");
+    }
+    hits.dedup();
+    if hits.len() > 1 {
+        "混写，须拆开。本表不混写，待用户指定一类。".into()
+    } else if hits.len() == 1 {
+        hits[0].to_string()
+    } else {
+        "信息不足，待用户指定一类（设计变更 / 工程签证 / 工程洽商 / 工程联系单 / 工程量确认单）。".into()
+    }
+}
+
+fn copy_variation_no(blob: &str) -> String {
+    let re = regex::Regex::new(r"(?i)\b(?:VO|SI|DC|VAR)[-_./]?\d+[A-Za-z]?\b").expect("vo re");
+    let mut rows = Vec::new();
+    for line in blob.lines() {
+        let t = line.trim();
+        if t.is_empty() {
+            continue;
+        }
+        if t.contains("变更编号") || re.is_match(t) {
+            rows.push(t.chars().take(160).collect::<String>());
+        }
+    }
+    if rows.is_empty() {
+        "变更编号待填。禁止引用未提供的图号。条款号 UNSPECIFIED。".into()
+    } else {
+        rows.iter().map(|r| format!("- {r}")).collect::<Vec<_>>().join("\n")
+    }
+}
+
 fn variation(ctx: &mut ToolCtx, args: &Value) -> String {
     let (jur, banner) = zone_banner(args);
+    let facts = nonempty(&s(args, "event_facts"), "");
+    let facts = if facts.is_empty() {
+        nonempty(&s(args, "event"), "整节待填。[A001]")
+    } else {
+        facts
+    };
+    let basis = nonempty(&s(args, "basis"), "");
+    let qty = nonempty(&s(args, "qty_note"), "待计量");
+    let blob = format!("{facts}\n{basis}\n{qty}");
+    let kind = classify_variation_kind(&blob);
+    let mut no_blob = blob.clone();
+    if basis != "待填 / UNSPECIFIED" && !basis.is_empty() {
+        no_blob.push('\n');
+        no_blob.push_str(&basis);
+    }
+    let var_no = copy_variation_no(&no_blob);
     let md = format!(
-        "{}{banner}\n## 事实\n{}\n\n## 依据\n{}\n\n## 工程量\n{}\n\n## 金额\nTBD（无业主确认不编）\n\n{}\n",
+        "{}{banner}\n## 1 封面与草稿声明\n不构成已签认签证，不替代设计变更通知单。金额 TBD。\n\n## 2 文件类型判定\n本表文种：**{kind}**。只选一类。\n\n## 3 事实栏\n{facts}\n\n时间/部位/事由/谁提出：用户未给的格子待填。[A001]\n\n## 4 依据栏\n{var_no}\n\n合同条款只写名称，不编条款号。无用户变更编号则依据待填。\n\n## 5 工程量栏\n{qty}\n\n计算式或现场实测待填。与原清单对应编码无则新建项待定。[A001]\n\n## 6 价款调整方法\n只写路径，不填数：有适用单价则用该单价；只有类似单价则参照并说明差异；都没有则协商，人材机口径单价 TBD。\n\n## 7 签认栏\n| 角色 | 姓名 | 日期 |\n| --- | --- | --- |\n| 监理对事实 |  |  |\n| 造价对价款 |  |  |\n\n空栏，不代签。不把现场确认写成已定价。\n\n## 8 与索赔、验工的接口\n指令内调价走本节。指令外损失走索赔调概（claim）。当期计量走验工计价（interim）。\n\n## 9 附件目录\n照片/实测草图/变更单扫描/原清单摘录：有则列名，无则写用户未提供。\n\n## 10 自检\n无金额编造。无事后补签装成当时签。不编无来源限额。\n\n{}\n",
         header("变更签证单草稿"),
-        nonempty(&s(args, "event_facts"), "待填"),
-        nonempty(&s(args, "basis"), "待填 / UNSPECIFIED"),
-        nonempty(&s(args, "qty_note"), "待计量"),
-        sg_only(&jur, "SG：PSSCOC 2020 / PSSCOC-lite 2025 / SIA / REDAS 只写合同族名，条款 UNSPECIFIED。"),
+        format!(
+            "{}{}",
+            sg_only(&jur, "SG：PSSCOC 2020 / PSSCOC-lite 2025 / SIA / REDAS 只写合同族名，条款 UNSPECIFIED。"),
+            cn_only(&jur, "CN：GF-2017-0201 / GB/T 50500-2024 只写全名；财建〔2004〕369 号程序是否适用看用户合同，不编确认天数。"),
+        ),
     );
     match ctx.write_md("签证单草稿.md", &md) {
         Ok(m) => m,

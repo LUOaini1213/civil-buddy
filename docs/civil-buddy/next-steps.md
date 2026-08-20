@@ -58,6 +58,9 @@
 18. **T030 construction 收尾 survey + dispatch** ✅ 2026-08-20  
     survey__record 只抄已给点号/坐标（会话附件+原文），都无则表头+[A001]。dispatch__daily 按 outline 十一章落表头；敏感作业只列名，判定交 method-hazard。chat 仍不写盘。验收：`python scripts/test_expert_turn.py` · `cargo test --test workbench survey_record dispatch_daily`。主链头指针改为 **T031**。T031–T047 不得一行勾完。
 
+19. **T031 variation 一岗** ✅ 2026-08-20  
+    variation__form 先判定文种再出事实|依据|签认空栏；无变更编号则依据待填。金额 TBD。chat 仍不写盘。T031 批次未完：下一岗 **claim**。不得把 claim/subcontract/interim 一并勾完。行业总判仍 **部分合格**。
+
 平台内核见 [product-improvement-handbook.md](product-improvement-handbook.md)。岗独有写盘下一刀仍按 [post-horizon-2026-08-17.md](post-horizon-2026-08-17.md)。
 
 ## 有宿主再做
