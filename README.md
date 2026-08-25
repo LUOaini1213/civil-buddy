@@ -9,15 +9,16 @@
 
 ### Agent Middleware（赛道 1）
 
-权限 / 沙箱 / HITL / 审计 / 成本控制跑在 **Runtime**，不在 prompt。  
-一页架构 + 3 分钟演示：[docs/civil-buddy/agent-middleware.md](docs/civil-buddy/agent-middleware.md)
+Runtime 只深做两层：**策略引擎**（谁/工具/成本/生产数据，拒绝弹原因）和 **失败恢复**（超时重试 → 降级 UNSPECIFIED → 审计链）。  
+剧本写死：正常下单 → 越权被拒 → 工具挂掉自动恢复 → 成本超限熔断。  
+一页架构：[docs/civil-buddy/agent-middleware.md](docs/civil-buddy/agent-middleware.md)
 
 ```powershell
 python scripts/demo_agent_middleware.py
 npm run check
 ```
 
-`npm run check` 必须过：密钥扫描 + 正常问 GST + 未确认 0 稿 + 装箱 `UNSPECIFIED` + 拒写 `.env`。不得把 API Key 提交进仓。
+`npm run check` 必须过。不得把 API Key 提交进仓。
 
 原独立仓 packing-agent 与 civil-buddy 已并入本树：https://github.com/LUOaini1213/civil-buddy
 

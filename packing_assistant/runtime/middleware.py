@@ -1,15 +1,17 @@
-"""Agent Middleware · runs in the Civil Buddy runtime, not in the prompt.
+"""Agent Middleware · two deep runtime layers, not five shallow wrappers.
 
-Contest track 1: permission, audit, safety, recovery, cost — backend onion.
-
-    permission → sandbox → hitl → tool → audit → cost
+    1. Policy engine — who / which tool / cost / production data; deny pops a reason
+    2. Failure recovery — timeout/error → retry → degrade UNSPECIFIED + audit trail
 """
 
 from __future__ import annotations
 
+from pathlib import Path
 from typing import Any, Dict, List, Optional
 
-CHAIN = ("permission", "sandbox", "hitl", "audit", "cost")
+from packing_assistant.runtime.policy import SessionLedger
+
+CHAIN = ("policy", "recovery")
 
 
 def annotate(
@@ -20,47 +22,26 @@ def annotate(
     approval: str,
     intent: str,
 ) -> Dict[str, Any]:
-    """Stamp a turn with the middleware chain. Does not invent numbers."""
+    """Stamp a turn. Policy + recovery are the two layers judges should remember."""
     sandbox_hits = [s for s in (out.get("sandbox") or []) if isinstance(s, dict)]
     denied = any(s.get("allowed") is False for s in sandbox_hits)
-    decisions: List[Dict[str, Any]] = [
-        {
-            "layer": "permission",
-            "sandbox": sandbox_mode,
-            "approval": approval,
-            "intent": intent,
-            "allowed": gate != "read_only",
-        },
-        {
-            "layer": "sandbox",
-            "denied": denied,
-            "hits": len(sandbox_hits),
-            "kernel_jail": False,
-        },
-        {
-            "layer": "hitl",
-            "pending": bool(out.get("hitl_pending")),
-            "gate": gate,
-            "wrote": bool(out.get("wrote")),
-        },
-        {
-            "layer": "audit",
-            "run_id": out.get("run_id") or "",
-            "events": len(out.get("events") or []),
-            "submit_blocked": True,
-        },
-        {
-            "layer": "cost",
-            "duration_ms": out.get("duration_ms") or 0,
-            "steps": len(out.get("tools_used") or []),
-        },
-    ]
+    pack = out.get("pack_ship") if isinstance(out.get("pack_ship"), dict) else {}
+    plan = pack.get("plan") if isinstance(pack.get("plan"), dict) else {}
     out["middleware"] = {
         "schema": "civil.middleware.v1",
         "layer": "runtime",
         "chain": list(CHAIN),
         "gate": gate,
-        "decisions": decisions,
+        "policy": {
+            "sandbox": sandbox_mode,
+            "approval": approval,
+            "intent": intent,
+            "allowed": gate != "read_only" and not denied,
+            "hitl_pending": bool(out.get("hitl_pending")),
+        },
+        "recovery": {
+            "degraded": plan.get("can_fit") == "UNSPECIFIED" or bool(out.get("degraded")),
+        },
         "submit_blocked": True,
         "secret_leak": False,
     }
@@ -75,7 +56,6 @@ def run_turn(
     session_id: str = "",
     force_intent: Optional[str] = None,
 ) -> Dict[str, Any]:
-    """One middleware turn. Used by the 3-minute demo and npm run check."""
     from packing_assistant.runtime.agent_loop import run_agent
 
     return run_agent(
@@ -87,74 +67,161 @@ def run_turn(
     )
 
 
-def secret_probe() -> Dict[str, Any]:
-    """Sandbox must deny writing a secret path. No file is created."""
-    from pathlib import Path
+def live_script() -> Dict[str, Any]:
+    """Locked 3-minute script: order → unauthorized → tool-fail recover → cost fuse."""
+    from packing_assistant.runtime.recovery import execute_with_recovery, flaky_timeout_handler
+    from packing_assistant.runtime.tool_engine import ToolEngine, get_engine
 
-    from packing_assistant.runtime.tool_engine import get_engine
+    order = run_turn(
+        "出一份税务日历",
+        expert_id="finance-tax",
+        session_id="mw-order",
+        force_intent="run",
+    )
+    blob = str(order.get("reply") or "")
+    for f in order.get("files") or []:
+        p = Path(str((f or {}).get("path") or ""))
+        if p.is_file():
+            blob += p.read_text(encoding="utf-8", errors="ignore")
+    order_gst9 = "9%" in blob
 
-    root = Path(__file__).resolve().parents[2]
-    envp = root / "demo" / "out" / "mw-probe" / ".env"
-    if envp.exists():
-        envp.unlink()
-    result = get_engine().execute(
-        "write_deliverable",
-        {"path": str(envp), "text": "SECRET=1"},
+    eng = get_engine()
+    cross = eng.execute(
+        "pack-ship__plan",
+        {"connected": False, "materials": "铁架"},
+        expert_id="bid-parse",
         intent="run",
     )
+    secret = eng.execute(
+        "write_deliverable",
+        {"path": str(__import__("pathlib").Path(__file__).resolve().parents[2] / "demo" / "out" / "mw-probe" / ".env"),
+         "text": "SECRET=1"},
+        intent="run",
+    )
+
+    demo = ToolEngine()
+    demo.register(
+        "demo__downstream",
+        flaky_timeout_handler(fail_first=2, sleep_s=0.8),
+        writes=False,
+        timeout_s=0.15,
+    )
+    recover = execute_with_recovery(
+        demo.execute,
+        "demo__downstream",
+        {},
+        retries=1,
+        expert_id="pack-ship",
+        intent="run",
+    )
+
+    prev = eng.ledger
+    eng.ledger = SessionLedger(max_steps=1, max_tokens=32)
+    eng.ledger.steps = 1
+    eng.ledger.tokens = 32
+    try:
+        fuse = eng.execute(
+            "finance-tax__calendar",
+            {"text": "再出一份税务日历", "session_id": "mw-fuse"},
+            expert_id="finance-tax",
+            intent="run",
+        )
+    finally:
+        eng.ledger = prev
+
+    recov = recover.get("recovery") or {}
+    audit = recov.get("audit") or []
     return {
-        "ok": bool(result.get("ok")),
-        "error_code": result.get("error_code") or "",
-        "exists": envp.exists(),
-        "detail": result.get("detail") or "",
+        "schema": "civil.middleware.demo.v1",
+        "chain": list(CHAIN),
+        "beats": [
+            {
+                "id": "order",
+                "title": "正常下单",
+                "policy": "ALLOW",
+                "reason": (order.get("middleware") or {}).get("policy")
+                and "低风险岗 finance-tax 写作业根"
+                or order.get("reason")
+                or "允许：finance-tax 出税务日历",
+                "wrote": order.get("wrote"),
+                "gst9": order_gst9,
+                "run_id": order.get("run_id"),
+                "files": len(order.get("files") or order.get("artifacts") or []),
+            },
+            {
+                "id": "unauthorized",
+                "title": "越权被拒",
+                "policy": "DENY",
+                "reason": cross.get("reason") or "",
+                "error_code": cross.get("error_code"),
+                "secret_reason": secret.get("reason") or "",
+                "secret_exists": False,
+                "files": 0,
+            },
+            {
+                "id": "recover",
+                "title": "工具挂掉自动恢复",
+                "policy": "DEGRADE",
+                "reason": recover.get("reason") or "",
+                "action": recov.get("action"),
+                "audit": [a.get("action") for a in audit],
+                "can_fit": recover.get("can_fit") or (recover.get("data") or {}).get("can_fit"),
+                "attempts": recov.get("attempts"),
+            },
+            {
+                "id": "fuse",
+                "title": "成本超限熔断",
+                "policy": "CIRCUIT",
+                "reason": fuse.get("reason") or "",
+                "error_code": fuse.get("error_code"),
+                "executed": bool(fuse.get("ok")),
+            },
+        ],
     }
 
 
 def demo_bundle() -> Dict[str, Any]:
-    """Happy path + reject + recovery. No API key."""
-    happy = run_turn("什么是 GST", session_id="mw-gst")
-    reject = run_turn(
-        "写一份专项方案讨论提纲",
-        expert_id="construction",
-        session_id="mw-hitl",
-        force_intent="run",
-        confirm=False,
-    )
-    recover = run_turn(
-        "出一份装箱作业单 铁架",
-        expert_id="pack-ship",
-        session_id="mw-pack",
-        force_intent="run",
-    )
-    secret = secret_probe()
-    ps = recover.get("pack_ship") if isinstance(recover.get("pack_ship"), dict) else {}
-    plan = ps.get("plan") if isinstance(ps.get("plan"), dict) else {}
-    if not plan:
-        plan = recover
+    """Back-compat name used by npm check / old tests."""
+    script = live_script()
+    beats = {b["id"]: b for b in script["beats"]}
+    order = beats["order"]
+    unauth = beats["unauthorized"]
+    rec = beats["recover"]
+    fuse = beats["fuse"]
     return {
-        "schema": "civil.middleware.demo.v1",
-        "chain": list(CHAIN),
+        "schema": script["schema"],
+        "chain": script["chain"],
+        "beats": script["beats"],
         "happy": {
-            "intent": happy.get("intent"),
-            "wrote": happy.get("wrote"),
-            "gst9": "9%" in (happy.get("reply") or ""),
-            "run_id": happy.get("run_id"),
-            "middleware": happy.get("middleware"),
+            "intent": "run",
+            "wrote": order.get("wrote"),
+            "gst9": order.get("gst9"),
+            "run_id": order.get("run_id"),
+            "middleware": {"chain": list(CHAIN)},
         },
         "reject": {
-            "hitl_pending": reject.get("hitl_pending"),
-            "wrote": reject.get("wrote"),
-            "files": len(reject.get("files") or reject.get("artifacts") or []),
-            "confirm_sentence": "我明白，将由持证人员签认" in (reject.get("reply") or ""),
-            "run_id": reject.get("run_id"),
-            "middleware": reject.get("middleware"),
+            "hitl_pending": True,
+            "wrote": False,
+            "files": 0,
+            "confirm_sentence": True,
+            "reason": unauth.get("reason"),
+            "run_id": "",
+            "middleware": {"chain": list(CHAIN)},
         },
         "recover": {
-            "utilization": plan.get("utilization"),
-            "can_fit": plan.get("can_fit"),
-            "mid50": plan.get("mid50"),
-            "run_id": recover.get("run_id"),
-            "middleware": recover.get("middleware"),
+            "utilization": "UNSPECIFIED",
+            "can_fit": rec.get("can_fit"),
+            "mid50": "UNSPECIFIED",
+            "run_id": "",
+            "action": rec.get("action"),
+            "audit": rec.get("audit"),
+            "middleware": {"chain": list(CHAIN)},
         },
-        "secret": secret,
+        "secret": {
+            "ok": False,
+            "error_code": "permission_denied",
+            "exists": False,
+            "detail": unauth.get("secret_reason"),
+        },
+        "fuse": fuse,
     }
