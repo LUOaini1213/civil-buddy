@@ -169,6 +169,9 @@
 55. **H4 面可见 skill 来源** ✅ 2026-08-25  
     工作台回复旁标 `$id · 显式|规则选用|未点名`。TUI `/status` 同样。主链头指针改回 **T040**（hr-recruit）。行业总判仍 **部分合格**。
 
+56. **MW1 赛道 1 Agent Middleware** ✅ 2026-08-25  
+    Runtime 洋葱：permission → sandbox → hitl → tool → audit → cost。`npm run check` 过。一页架构 [agent-middleware.md](agent-middleware.md)。3 分钟：GST 不写盘 / 未确认 0 稿 / 装箱 UNSPECIFIED。不泄密钥。主链头指针仍 **T040**。
+
 平台内核见 [product-improvement-handbook.md](product-improvement-handbook.md)。岗独有写盘下一刀仍按 [post-horizon-2026-08-17.md](post-horizon-2026-08-17.md)。
 
 ## 有宿主再做

@@ -74,6 +74,8 @@ $env:CIVIL_JOB_ROOT = "C:\Users\LW\Documents\某工地"
 
 ```powershell
 cd C:\Users\LW\civil-buddy
+npm run check
+python scripts/demo_agent_middleware.py
 python scripts/test_understand.py
 python scripts/test_agent_loop.py
 python scripts/test_mcp_stdio.py

@@ -7,6 +7,18 @@
 > 内部讨论草稿，不是法定专项方案、不是签认件。  
 > 高风险写盘前确认句：`我明白，将由持证人员签认`。
 
+### Agent Middleware（赛道 1）
+
+权限 / 沙箱 / HITL / 审计 / 成本控制跑在 **Runtime**，不在 prompt。  
+一页架构 + 3 分钟演示：[docs/civil-buddy/agent-middleware.md](docs/civil-buddy/agent-middleware.md)
+
+```powershell
+python scripts/demo_agent_middleware.py
+npm run check
+```
+
+`npm run check` 必须过：密钥扫描 + 正常问 GST + 未确认 0 稿 + 装箱 `UNSPECIFIED` + 拒写 `.env`。不得把 API Key 提交进仓。
+
 原独立仓 packing-agent 与 civil-buddy 已并入本树：https://github.com/LUOaini1213/civil-buddy
 
 试用（别人可下载 exe）：[给试用的人.md](给试用的人.md) · LICENSE：MIT · 工作台包在 [GitHub Releases](https://github.com/LUOaini1213/civil-buddy/releases)。API Key **自带**，不必 DeepSeek。
