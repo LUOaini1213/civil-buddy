@@ -350,7 +350,7 @@ python scripts/test_civil_codex.py
 python scripts/test_docs_completion.py
 python scripts/test_kb_schema.py
 python scripts/test_official_title_scan.py
-python scripts/test_industry_agent_eval.py # 断言总判仍「部分合格」
+python scripts/test_industry_agent_eval.py # 08-17 历史「部分合格」保留；现网见 08-25 人改口
 ```
 
 刀相关：`test_construction_skill_path.py`（施工）· `test_expert_turn.py`（改 66 岗协议）· `test_tender_ingest.py`（招标进矩阵）· `test_memory_slot.py`（Memory）· `test_tender_parse_engine.py`（parse 走引擎）· `test_kb_search_filename.py`（检索）。
@@ -359,8 +359,9 @@ python scripts/test_industry_agent_eval.py # 断言总判仍「部分合格」
 
 | 总判 | 条件 |
 |------|------|
-| 部分合格（现在） | 护栏在；多数岗骨架；不做签认 |
-| 合格 · 内部起草搭子 | 默认面 chat/run + 真装箱可抄 + 回放 + eval/live + 施工/投标/装箱三条路径名实相符 |
+| 部分合格（08-17 历史页） | 当日记录，**不改那一句** |
+| 合格 · 内部起草搭子（2026-08-25 人改口） | 默认面 chat/run + 真装箱可抄 + 回放 + eval/live + 施工/投标/装箱三条路径名实相符 |
+| 赛道 1 Agent Middleware 完全合格 | [track1-qualified.md](track1-qualified.md) · `npm run check` |
 | 不合格 · 签认/递交 | **永远不要追求** |
 
 ---

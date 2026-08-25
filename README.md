@@ -7,11 +7,12 @@
 > 内部讨论草稿，不是法定专项方案、不是签认件。  
 > 高风险写盘前确认句：`我明白，将由持证人员签认`。
 
-### Agent Middleware（赛道 1）
+### Agent Middleware（赛道 1 · 完全合格）
 
-Runtime 只深做两层：**策略引擎**（谁/工具/成本/生产数据，拒绝弹原因）和 **失败恢复**（超时重试 → 降级 UNSPECIFIED → 审计链）。  
+对照表：[docs/civil-buddy/track1-qualified.md](docs/civil-buddy/track1-qualified.md)。  
+Runtime 只深做两层：**策略引擎**（拒绝弹原因）和 **失败恢复**（retry → `UNSPECIFIED` 审计链）。  
 剧本写死：正常下单 → 越权被拒 → 工具挂掉自动恢复 → 成本超限熔断。  
-一页架构：[docs/civil-buddy/agent-middleware.md](docs/civil-buddy/agent-middleware.md)
+行业现网总判（人改口）：[industry-agent-eval-2026-08-25.md](docs/civil-buddy/industry-agent-eval-2026-08-25.md) — 内部起草搭子 **合格**；签认/投标 **不合格**。
 
 ```powershell
 python scripts/demo_agent_middleware.py
