@@ -74,6 +74,7 @@ class ToolEngine:
     _fail_streak: Dict[str, int] = field(default_factory=dict)
     circuit_threshold: int = 3
     audit_log: List[Audit] = field(default_factory=list)
+    ledger: Any = None
 
     def register(
         self,
@@ -150,48 +151,49 @@ class ToolEngine:
     ) -> Dict[str, Any]:
         t0 = time.perf_counter()
         args = arguments or {}
-        denied = self.allow(name, expert_id=expert_id, intent=intent, cancelled=cancelled)
-        if denied:
-            rec = Audit(name=name, error_code=denied, duration_ms=0, expert_id=expert_id)
+        spec = self.tools.get(name)
+        from packing_assistant.runtime.policy import evaluate as policy_evaluate
+
+        pol = policy_evaluate(
+            tool=name,
+            spec=spec,
+            expert_id=expert_id,
+            intent=intent,
+            args=args,
+            cancelled=cancelled,
+            ledger=self.ledger,
+            fail_streak=self._fail_streak.get(name, 0),
+            circuit_threshold=self.circuit_threshold,
+        )
+        if not pol.allow:
+            rec = Audit(name=name, error_code=pol.err, duration_ms=0, expert_id=expert_id)
             self.audit_log.append(rec)
-            return {"ok": False, "error_code": denied, "name": name}
-        spec = self.tools[name]
+            out = {
+                "ok": False,
+                "error_code": pol.err,
+                "name": name,
+                "reason": pol.reason,
+                "policy": pol.to_dict(),
+            }
+            if pol.sandbox:
+                out["sandbox"] = pol.sandbox
+                out["detail"] = pol.reason
+            return out
+        assert spec is not None
         for key in spec.schema_keys:
             if key not in args:
                 rec = Audit(name=name, error_code=ERR_INVALID, duration_ms=0, expert_id=expert_id)
                 self.audit_log.append(rec)
-                return {"ok": False, "error_code": ERR_INVALID, "name": name, "missing": key}
-        from packing_assistant.sandbox import check_write, request_spawn
-
-        sandbox_info: Optional[Dict[str, Any]] = None
-        path = _write_path(args)
-        if spec.writes and path:
-            decision = check_write(path)
-            sandbox_info = decision.to_dict()
-            if not decision.allowed:
-                rec = Audit(name=name, error_code=ERR_DENIED, duration_ms=0, expert_id=expert_id)
-                self.audit_log.append(rec)
                 return {
                     "ok": False,
-                    "error_code": ERR_DENIED,
+                    "error_code": ERR_INVALID,
                     "name": name,
-                    "sandbox": sandbox_info,
-                    "detail": decision.reason,
+                    "missing": key,
+                    "reason": f"拒绝：工具 {name} 缺少参数 {key}。",
                 }
-        cmd, kind = _spawn_cmd(args)
-        if cmd is not None:
-            decision = request_spawn(cmd, kind=kind)
-            sandbox_info = decision.to_dict()
-            if not decision.allowed:
-                rec = Audit(name=name, error_code=ERR_DENIED, duration_ms=0, expert_id=expert_id)
-                self.audit_log.append(rec)
-                return {
-                    "ok": False,
-                    "error_code": ERR_DENIED,
-                    "name": name,
-                    "sandbox": sandbox_info,
-                    "detail": decision.reason,
-                }
+        sandbox_info: Optional[Dict[str, Any]] = pol.sandbox
+        if self.ledger is not None:
+            self.ledger.charge(steps=1, tokens=pol.token_cost)
         box: Dict[str, Any] = {}
 
         def _run() -> None:
@@ -208,7 +210,13 @@ class ToolEngine:
         if th.is_alive():
             self._fail_streak[name] = self._fail_streak.get(name, 0) + 1
             self.audit_log.append(Audit(name=name, error_code=ERR_TIMEOUT, duration_ms=ms, expert_id=expert_id))
-            return {"ok": False, "error_code": ERR_TIMEOUT, "name": name, "duration_ms": ms}
+            return {
+                "ok": False,
+                "error_code": ERR_TIMEOUT,
+                "name": name,
+                "duration_ms": ms,
+                "reason": f"失败：工具 {name} 下游超时（{spec.timeout_s}s）。",
+            }
         if box.get("err") is not None:
             err = box["err"]
             if isinstance(err, PermissionError):
@@ -225,11 +233,25 @@ class ToolEngine:
                 return denied
             self._fail_streak[name] = self._fail_streak.get(name, 0) + 1
             self.audit_log.append(Audit(name=name, error_code=ERR_INVALID, duration_ms=ms, expert_id=expert_id))
-            return {"ok": False, "error_code": ERR_INVALID, "name": name, "detail": str(err)[:200]}
+            return {
+                "ok": False,
+                "error_code": ERR_INVALID,
+                "name": name,
+                "detail": str(err)[:200],
+                "reason": f"失败：工具 {name} 报错 {str(err)[:120]}",
+            }
         self._fail_streak[name] = 0
         data = box.get("data")
         self.audit_log.append(Audit(name=name, error_code=ERR_OK, duration_ms=ms, expert_id=expert_id))
-        out: Dict[str, Any] = {"ok": True, "error_code": ERR_OK, "name": name, "data": data, "duration_ms": ms}
+        out: Dict[str, Any] = {
+            "ok": True,
+            "error_code": ERR_OK,
+            "name": name,
+            "data": data,
+            "duration_ms": ms,
+            "reason": pol.reason,
+            "policy": pol.to_dict(),
+        }
         if sandbox_info:
             out["sandbox"] = sandbox_info
         if isinstance(data, dict):
