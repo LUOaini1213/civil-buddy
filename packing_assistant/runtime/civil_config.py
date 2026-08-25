@@ -134,6 +134,17 @@ def load_config() -> CivilConfig:
     return cfg
 
 
+def high_risk_unconfirmed(*, risk: str, confirmed: bool) -> bool:
+    """High-risk write needs the confirm sentence. Chat is not a write."""
+    return (risk or "low") == "high" and not bool(confirmed)
+
+
+def hitl_reply(who: str = "") -> str:
+    label = (who or "").strip()
+    prefix = f"高风险岗 {label} " if label else "高风险岗 "
+    return f"{prefix}写盘须确认句「{CONFIRM}」。本轮未写盘。"
+
+
 def decide_gate(
     *,
     intent: str,
@@ -151,6 +162,6 @@ def decide_gate(
         return "go"
     if c.approval == "untrusted":
         return "hitl"
-    if (risk or "low") == "high":
+    if high_risk_unconfirmed(risk=risk, confirmed=confirmed):
         return "hitl"
     return "go"

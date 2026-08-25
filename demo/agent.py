@@ -242,8 +242,10 @@ def execute_tool(
         rel, text = got
         return f"# {rel}\n\n{text[:8000]}"
     if name == "write_deliverable":
-        if expert.risk == "high" and not confirm_ok:
-            return "拒绝写盘：高风险稿需要用户确认句「我明白，将由持证人员签认」。"
+        from packing_assistant.runtime.civil_config import CONFIRM, high_risk_unconfirmed
+
+        if high_risk_unconfirmed(risk=expert.risk, confirmed=confirm_ok):
+            return f"拒绝写盘：高风险稿需要用户确认句「{CONFIRM}」。"
         raw_name = Path(str(args.get("filename") or "draft.md")).name
         if not raw_name.endswith((".md", ".txt")):
             raw_name += ".md"

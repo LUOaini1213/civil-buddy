@@ -17,7 +17,10 @@ NAME_RE = re.compile(r"^[a-z0-9](?:[a-z0-9-]{0,62}[a-z0-9])?$")
 def main() -> int:
     from catalog_seed import EXPERTS
     from packing_assistant.runtime.expert_skills import (
+        CATALOG_BUDGET,
         SKILLS_DIR,
+        catalog_preamble,
+        format_catalog_listing,
         list_expert_skill_ids,
         load_skill,
         prompt_suffix,
@@ -62,7 +65,7 @@ def main() -> int:
     bid = load_skill("bid-parse")
     assert bid and "submit_blocked" in bid["body"]
 
-    from agent import build_expert_prompt
+    from agent import build_expert_prompt, _plain_system
     from catalog_seed import EXPERTS as E
 
     construction = next(x for x in E if x.id == "construction")
@@ -74,6 +77,22 @@ def main() -> int:
     assert "本岗 Skill" in prompt
     assert "construction__scheme_draft" in prompt
     assert prompt_suffix("construction") in prompt
+
+    pre = catalog_preamble()
+    assert len(pre) <= CATALOG_BUDGET, len(pre)
+    assert "$construction" in pre
+    assert "不要一次加载全部专家" in pre
+    listing = format_catalog_listing("construction")
+    assert "$construction" in listing
+    assert len(listing) <= CATALOG_BUDGET, len(listing)
+    router = _plain_system()
+    assert "本岗 Skill" not in router
+    assert prompt_suffix("construction") not in router
+    assert "construction__scheme_draft" not in router
+    loop_src = (ROOT / "packing_assistant" / "runtime" / "agent_loop.py").read_text(encoding="utf-8")
+    agent_src = (ROOT / "demo" / "agent.py").read_text(encoding="utf-8")
+    assert "catalog_preamble" not in loop_src
+    assert "catalog_preamble" not in agent_src
 
     print("PASS test_codex_expert_skills experts=66")
     return 0
