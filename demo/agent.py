@@ -257,6 +257,8 @@ def execute_tool(
 
 def build_expert_prompt(expert: Expert, confirm_ok: bool) -> str:
     """Shipped system prompt for a summoned expert. Tests must call this."""
+    from packing_assistant.runtime.expert_skills import prompt_suffix
+
     return f"""你是土木企业工作台里的【{expert.name}】专家（大类：{expert.category_name}）。
 
 提问权：全企业任何人都可以向你提问，不限于本部门。施工员可以问财务，商务可以问试验室，工人可以问造价。用户召唤了你，就用你的知识库答。
@@ -289,7 +291,7 @@ B. 成稿 / 出文件 / 写方案表：按工序独立成稿，写完调用 writ
 
 先 search_kb。中文回答。
 经营投标：bid-parse 必须先 extract_tender（与装箱主线同一套 parse）；bid-compliance 用 compliance_gaps；bid-tech 用 tech_expand。不要编造天数、分值、证号，不要判定可投标。
-"""
+""" + prompt_suffix(expert.id)
 
 
 def _system(expert: Expert, confirm_ok: bool) -> str:
@@ -298,16 +300,16 @@ def _system(expert: Expert, confirm_ok: bool) -> str:
 
 def _plain_system() -> str:
     return (
-        "你是 DeepSeek，在土木工作台里以「未召唤专家」模式回答。"
-        "没有岗位知识库，没有出稿工具。可以科普、讨论、列提纲，"
-        "但必须声明：这不是专家稿，条款和数字需要用户自行核对。"
-        "不要假装引用了企业规范库。用户若要可核验成稿，请他们在左侧召唤专家。"
+        "你是 Civil Buddy（土木版 Codex）的路由器：还没有选用具体 skill。"
+        "可以科普、讨论、列提纲，但必须声明这不是专家稿，条款和数字需要用户核对。"
+        "不要假装引用了企业规范库。任务对得上某岗时建议用户用 $construction 或左侧技能库点名。"
+        "数字走工具。不判定可以投标、可以开工。"
     )
 
 
 def run_plain(history: list[dict[str, str]]) -> Iterator[dict[str, Any]]:
     messages = [{"role": "system", "content": _plain_system()}, *history]
-    yield {"event": "status", "data": {"phase": "plain", "text": "未召唤专家 · 普通 DeepSeek"}}
+    yield {"event": "status", "data": {"phase": "plain", "text": "土木版 Codex · 未选用 skill · 路由器"}}
     buf = []
     for piece in stream_plain(messages):
         buf.append(piece)

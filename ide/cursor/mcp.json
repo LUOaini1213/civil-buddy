@@ -1,0 +1,12 @@
+{
+  "mcpServers": {
+    "civil-construction": {
+      "command": "python",
+      "args": ["-m", "packing_assistant.civil", "mcp", "--pack", "construction"]
+    },
+    "civil-bid": {
+      "command": "python",
+      "args": ["-m", "packing_assistant.civil", "mcp", "--pack", "bid"]
+    }
+  }
+}

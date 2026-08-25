@@ -395,6 +395,29 @@ def _tender_ingest_from_uploads(uploads: list) -> dict:
         raise HTTPException(400, str(e)) from e
 
 
+@app.get("/api/skills")
+def api_skills():
+    from packing_assistant.runtime.expert_skills import catalog
+
+    rows = catalog()
+    return {"ok": True, "n": len(rows), "skills": rows, "host": "civil-buddy", "product": "civil-codex"}
+
+
+@app.get("/api/config")
+def api_config():
+    from packing_assistant.runtime.civil_config import load_config
+
+    return {"ok": True, **load_config().to_dict()}
+
+
+@app.get("/api/threads")
+def api_threads():
+    from packing_assistant.runtime.threads import list_threads
+
+    rows = [t.to_dict() for t in list_threads()]
+    return {"ok": True, "n": len(rows), "threads": rows}
+
+
 @app.get("/api/experts")
 def api_experts():
     from packing_assistant.expert_roster import list_experts

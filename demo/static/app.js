@@ -6,6 +6,8 @@ const state = {
   session: crypto.randomUUID().slice(0, 12),
   modelName: "",
   attachments: [],
+  threadId: "",
+  policy: { sandbox: "workspace-write", approval: "on-request" },
   context: {
     limit: 1000000,
     reserve: 16384,
@@ -49,6 +51,116 @@ async function boot() {
   paintContext(estimateLocalContext());
   await reloadCatalog();
   await loadJobRoot();
+  await loadPolicy();
+  await loadThreads();
+}
+
+async function loadPolicy() {
+  try {
+    const cfg = await fetch("/api/config").then((r) => r.json());
+    state.policy = cfg;
+    if ($("sandboxBadge")) $("sandboxBadge").textContent = `sandbox ${cfg.sandbox || ""}`;
+    if ($("approvalBadge")) $("approvalBadge").textContent = `approval ${cfg.approval || ""}`;
+  } catch (e) {
+    addStatus(String(e));
+  }
+}
+
+async function loadThreads() {
+  const box = $("threadList");
+  if (!box) return;
+  try {
+    const data = await fetch("/api/threads").then((r) => r.json());
+    box.innerHTML = "";
+    for (const t of data.threads || []) {
+      const b = document.createElement("button");
+      b.type = "button";
+      b.className = "thread-row" + (t.thread_id === state.threadId ? " on" : "");
+      b.textContent = `${t.thread_id} · ${t.state} · ${t.title || ""}`;
+      b.addEventListener("click", () => {
+        state.threadId = t.thread_id;
+        state.session = t.session_id || t.thread_id;
+        loadThreads();
+        addStatus(`thread ${t.thread_id}`);
+      });
+      box.appendChild(b);
+    }
+  } catch (e) {
+    box.textContent = "";
+  }
+}
+
+if ($("btnNewThread")) {
+  $("btnNewThread").addEventListener("click", async () => {
+    const data = await fetch("/api/threads", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ title: "新对话" }),
+    }).then((r) => r.json());
+    state.threadId = data.thread_id;
+    state.session = data.session_id || data.thread_id;
+    await loadThreads();
+    addStatus(`/new ${data.thread_id}`);
+  });
+}
+if ($("btnBg")) {
+  $("btnBg").addEventListener("click", async () => {
+    const text = $("input").value.trim();
+    if (!text) {
+      addStatus("/bg 先在输入框写任务");
+      return;
+    }
+    $("input").value = "";
+    const data = await fetch("/api/threads", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ text, background: true, confirm_ok: $("confirmOk").checked }),
+    }).then((r) => r.json());
+    addStatus(`并行 thread ${data.thread_id} ${data.state || "running"}`);
+    await loadThreads();
+  });
+}
+
+async function handleSlash(message) {
+  const parts = message.slice(1).split(/\s+/);
+  const cmd = (parts[0] || "").toLowerCase();
+  const arg = parts.slice(1).join(" ");
+  if (cmd === "skills") {
+    const data = await fetch("/api/skills").then((r) => r.json());
+    const q = arg.toLowerCase();
+    const rows = (data.skills || []).filter((s) => !q || `${s.name} ${s.description}`.toLowerCase().includes(q));
+    addStatus(`${rows.length} skills`);
+    addMsg("assistant", "skills", rows.slice(0, 20).map((s) => `$${s.name}  ${s.description}`).join("\n"));
+    return true;
+  }
+  if (cmd === "new") {
+    $("btnNewThread") && $("btnNewThread").click();
+    return true;
+  }
+  if (cmd === "bg") {
+    $("input").value = arg;
+    $("btnBg") && $("btnBg").click();
+    return true;
+  }
+  if (cmd === "sandbox" || cmd === "approvals" || cmd === "approval") {
+    const body = cmd === "sandbox" ? { sandbox: arg } : { approval: arg };
+    if (arg) {
+      await fetch("/api/config", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
+    }
+    await loadPolicy();
+    addStatus(`${cmd} ${arg || (cmd === "sandbox" ? state.policy.sandbox : state.policy.approval)}`);
+    return true;
+  }
+  if (cmd === "threads") {
+    await loadThreads();
+    addStatus("threads 已刷新");
+    return true;
+  }
+  if (cmd === "help") {
+    addMsg("assistant", "help", "/skills /new /bg /threads /sandbox /approvals\n全企业可问任意专家。确认句：我明白，将由持证人员签认");
+    return true;
+  }
+  return false;
 }
 
 async function loadJobRoot() {
@@ -84,13 +196,22 @@ window.reloadCatalog = reloadCatalog;
 
 function renderWall(cat) {
   const wall = $("wall");
+  if (!wall || !cat) return;
+  const q = (($("skillQ") && $("skillQ").value) || "").trim().toLowerCase();
   wall.innerHTML = "";
   for (const c of cat.categories) {
+    const experts = cat.experts.filter((x) => {
+      if (x.category !== c.id) return false;
+      if (!q) return true;
+      const blob = `${x.name} ${x.id} ${(x.aliases || []).join(" ")} ${x.delivers || ""}`.toLowerCase();
+      return blob.includes(q);
+    });
+    if (!experts.length) continue;
     const h = document.createElement("div");
     h.className = "cat";
     h.textContent = c.name;
     wall.appendChild(h);
-    for (const e of cat.experts.filter((x) => x.category === c.id)) {
+    for (const e of experts) {
       const b = document.createElement("button");
       b.type = "button";
       b.className = "exp";
@@ -102,6 +223,7 @@ function renderWall(cat) {
       wall.appendChild(b);
     }
   }
+  renderSummon();
 }
 
 function toggle(id) {
@@ -120,8 +242,14 @@ function renderSummon() {
     return e ? `${e.category_name}/${e.name}` : id;
   });
   $("summonBar").innerHTML = names.length
-    ? `当前召唤：<em>${names.join(" · ")}</em>（先理解 · 能聊能跑 · 各自独立收工）`
-    : "当前：<em>未召唤 · 普通对话</em>（点左侧专家才能按岗位库聊或出稿）";
+    ? `当前：<em>${names.join(" · ")}</em>`
+    : "当前：<em>未点名岗位</em> · 直接下任务即可";
+}
+
+if ($("skillQ")) {
+  $("skillQ").addEventListener("input", () => {
+    if (state.catalog) renderWall(state.catalog);
+  });
 }
 
 $("clearExperts").addEventListener("click", () => {
@@ -263,6 +391,20 @@ $("form").addEventListener("submit", async (ev) => {
   const message = $("input").value.trim();
   if (!message) return;
   $("input").value = "";
+  if (message.startsWith("/")) {
+    const welcome = document.querySelector(".welcome");
+    if (welcome) welcome.remove();
+    addMsg("user", "你", message);
+    try {
+      const ok = await handleSlash(message);
+      if (!ok) addStatus(`未知命令 ${message}。/help`);
+    } catch (err) {
+      addStatus(String(err.message || err));
+    }
+    return;
+  }
+  const welcome = document.querySelector(".welcome");
+  if (welcome) welcome.remove();
   addMsg("user", "你", message);
   state.history.push({ role: "user", content: message });
   paintContext(estimateLocalContext());

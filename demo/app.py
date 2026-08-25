@@ -74,6 +74,9 @@ def health() -> dict:
 
     return {
         "ok": True,
+        "product": "civil-codex",
+        "product_name": "Civil Buddy",
+        "tagline": "土木版 Codex",
         "has_key": has_key(),
         "deepseek": has_key(),
         "model": llm_model(),
@@ -187,6 +190,86 @@ def mcp_tool_call(body: McpToolIn) -> dict:
     return {"ok": True, **call_tool(body.name, body.arguments, expert_id=body.expert_id or None)}
 
 
+@app.get("/api/skills")
+def skills() -> dict:
+    from packing_assistant.runtime.expert_skills import catalog
+
+    rows = catalog()
+    return {"ok": True, "n": len(rows), "skills": rows, "host": "civil-buddy"}
+
+
+@app.get("/api/config")
+def get_config() -> dict:
+    from packing_assistant.runtime.civil_config import load_config
+
+    return {"ok": True, **load_config().to_dict()}
+
+
+class PolicyIn(BaseModel):
+    sandbox: str = ""
+    approval: str = ""
+
+
+@app.post("/api/config")
+def set_config(body: PolicyIn) -> dict:
+    import os
+
+    from packing_assistant.runtime.civil_config import SANDBOX_MODES, APPROVAL_MODES, load_config
+
+    if body.sandbox:
+        os.environ["CIVIL_SANDBOX"] = body.sandbox
+    if body.approval:
+        os.environ["CIVIL_APPROVAL"] = body.approval
+    cfg = load_config()
+    if body.sandbox and cfg.sandbox not in SANDBOX_MODES:
+        raise HTTPException(400, "bad sandbox")
+    if body.approval and cfg.approval not in APPROVAL_MODES:
+        raise HTTPException(400, "bad approval")
+    return {"ok": True, **cfg.to_dict()}
+
+
+@app.get("/api/threads")
+def threads_list() -> dict:
+    from packing_assistant.runtime.threads import list_threads
+
+    rows = [t.to_dict() for t in list_threads()]
+    return {"ok": True, "n": len(rows), "threads": rows}
+
+
+class ThreadIn(BaseModel):
+    text: str = ""
+    title: str = ""
+    skill: str = ""
+    confirm_ok: bool = False
+    background: bool = False
+    thread_id: str = ""
+
+
+@app.post("/api/threads")
+def threads_run(body: ThreadIn) -> dict:
+    from packing_assistant.runtime.threads import new_thread, run_on_thread, spawn
+
+    if body.background and body.text.strip():
+        return spawn(body.text, skill=body.skill, confirm=body.confirm_ok, title=body.title or body.text[:40])
+    tid = (body.thread_id or "").strip()
+    if not tid:
+        th = new_thread(body.title or body.text[:40] or "新对话", confirm=body.confirm_ok)
+        tid = th.thread_id
+        if not body.text.strip():
+            return {"ok": True, **th.to_dict()}
+    return run_on_thread(tid, body.text, skill=body.skill, confirm=body.confirm_ok, background=body.background)
+
+
+@app.get("/api/threads/{thread_id}")
+def thread_one(thread_id: str) -> dict:
+    from packing_assistant.runtime.threads import thread_status
+
+    got = thread_status(thread_id)
+    if not got.get("ok"):
+        raise HTTPException(404, "unknown thread")
+    return got
+
+
 @app.get("/api/catalog")
 def catalog() -> dict:
     return catalog_payload()
@@ -293,6 +376,12 @@ def chat(body: ChatIn) -> StreamingResponse:
     ids = [i for i in body.expert_ids if get_expert(i)]
     if not ids:
         ids = resolve_mentions(body.message)
+    if not ids:
+        from packing_assistant.runtime.expert_skills import match_skill
+
+        hit = match_skill(body.message)
+        if hit and get_expert(hit):
+            ids = [hit]
 
     history = []
     for item in body.history[-80:]:

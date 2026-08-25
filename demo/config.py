@@ -15,8 +15,9 @@ SKILL_HARD_RULES = REPO_ROOT / "skills" / "civil-buddy" / "references" / "hard-r
 if str(REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(REPO_ROOT))
 
+# repo-root .env first (shared DeepSeek/OpenAI keys), then demo/.env wins
+load_dotenv(REPO_ROOT / ".env")
 load_dotenv()
-# demo/.env wins so a stale machine-wide key will not shadow the workbench
 load_dotenv(DEMO_ROOT / ".env", override=True)
 
 from packing_assistant.llm import llm_config as _llm_config  # noqa: E402

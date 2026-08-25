@@ -214,6 +214,12 @@ def run_agent(
 
     intent = force_intent if force_intent in {"chat", "run", "both"} else understand(text)
     eid = (expert_id or "").strip()
+    skill_source = "given" if eid else ""
+    if not eid:
+        from packing_assistant.runtime.expert_skills import match_skill
+
+        eid = match_skill(text) or ""
+        skill_source = "matched" if eid else ""
     exp = get_expert(eid) if eid else None
     if eid and not exp:
         return {
@@ -224,6 +230,17 @@ def run_agent(
             "wrote": False,
             "submit_blocked": True,
         }
+    from packing_assistant.runtime.civil_config import CONFIRM, decide_gate, load_config
+
+    cfg = load_config()
+    if cfg.auto_confirm():
+        p0_confirmed = True
+    gate = decide_gate(
+        intent=intent,
+        risk=(exp.risk if exp else "low"),
+        confirmed=p0_confirmed,
+        cfg=cfg,
+    )
     sid = session_id or f"sess-{uuid4().hex[:8]}"
     from packing_assistant.runtime.memory import assemble_context, prompt_prefix
 
@@ -269,6 +286,10 @@ def run_agent(
         "session_id": sid,
         "expert_id": eid,
         "expert_name": exp.name if exp else "",
+        "skill": eid,
+        "skill_source": skill_source,
+        "sandbox_mode": cfg.sandbox,
+        "approval": cfg.approval,
         "messages": messages,
         "tools_used": [],
         "tools_run": [],
@@ -328,6 +349,28 @@ def run_agent(
                 sched.transition(run, "done")
                 out["reply"] = reply
                 out["state"] = run.state
+                return _finish()
+
+            if gate == "read_only":
+                reply = (
+                    f"sandbox=read-only：本 thread 只读，不成稿。"
+                    f"改用 /sandbox workspace-write，或 CIVIL_SANDBOX=workspace-write。"
+                )
+                messages.append({"role": "assistant", "content": reply})
+                sched.transition(run, "done")
+                out["reply"] = reply
+                out["wrote"] = False
+                return _finish()
+
+            if gate == "hitl":
+                sched.transition(run, "waiting_hitl")
+                who = f"{exp.name} " if exp else ""
+                reply = f"approval={cfg.approval}：{who}写盘须确认句「{CONFIRM}」。本轮未写盘。"
+                messages.append({"role": "assistant", "content": reply})
+                bus.emit(run.run_id, "hitl", {"required": True})
+                out["reply"] = reply
+                out["hitl_pending"] = True
+                out["wrote"] = False
                 return _finish()
 
             planned = _plan_calls(

@@ -1,0 +1,12 @@
+# Copy to civil.toml or .civil-buddy/config.toml
+# Same knobs as Codex: sandbox (what it may write) + approval (when to ask).
+
+[civil]
+sandbox = "workspace-write"   # read-only | workspace-write
+approval = "on-request"       # untrusted | on-request | never
+max_steps = 8
+max_parallel = 4
+
+[workspace]
+# job_root = "C:/Users/LW/Documents/某工地"
+# 禁止 D:\layout

@@ -31,9 +31,24 @@
 
 ### 1.1 一句话
 
-土木企业用的 **内部讨论 AI 起草搭子 + 交付证据工作台**：模型理解与编排，工具算数与抽原文，运行时决定谁跑、何时停、谁确认、留下痕迹。
+**土木版 Codex。** Codex 坐在软件仓库里改代码；Civil Buddy 坐在工地/标段作业根里出内部草稿。
+
+回路同一套：任务 → 选用 skill（66 岗，一岗一份 `SKILL.md`）→ 工具算数 / 抽原文 → 沙箱写盘 → 高风险审批 → 留下 traces。模型只路由，不发明 xyz / 条款号 / 综合单价。
 
 默认产出永远是 **AI 草稿**。`submit_blocked=true`。不判定可投标。不判定可以开工。
+
+技能是程序记忆，不是 66 份人格戏服。先只把 name + description 放进上下文，选中后再加载该岗 `SKILL.md` 全文。显式 `$construction` / `@施工方案`；隐式按任务对 description。左侧技能库是可选点名，不是先召唤才能说话。
+
+完整产品面（对照 Codex CLI / App / IDE）：
+
+| 面 | 入口 |
+|----|------|
+| 终端 TUI | `python -m packing_assistant.civil` |
+| 一次性 exec | `python -m packing_assistant.civil "任务"` |
+| 应用 | `python -m packing_assistant.civil app` → :8765 工作台（threads / 审批 / 技能） |
+| IDE | `ide/cursor/mcp.json` · `ide/vscode/mcp.json` · `civil mcp --pack construction` |
+| 并行 | `/bg` 或 `POST /api/threads` `background: true`（同 session 仍串行） |
+| 沙箱 / 审批 | `read-only` \| `workspace-write` · `untrusted` \| `on-request` \| `never` |
 
 对照腾讯云 WorkBuddy（2026-08-20 官网 [intl.cloud.tencent.com/products/workbuddy](https://intl.cloud.tencent.com/products/workbuddy) · [codebuddy.cn/work](https://www.codebuddy.cn/work/)）：它卖「自然语言 → 规划步骤 → **授权文件夹里读写 Word/Excel** → 成品」，另加桌面壳、IM、100+ 通岗、云端托管。本仓对齐 **同一条回路里的本地成稿**：作业根（`CIVIL_JOB_ROOT`）里读本机表、另存 `.xlsx`，点名已有工作簿时只改 `CB草稿-*` 表；construction 模板 `.docx`。**不**做桌面壳、IM、100 个办公专家、云端 7×24、接管 Word/Excel 窗口、默认 `D:\layout`。成品永远是内部讨论草稿，不是可直接验收的签认件。
 
