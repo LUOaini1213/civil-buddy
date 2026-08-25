@@ -14,9 +14,16 @@ sys.path.insert(0, str(ROOT))
 def main() -> int:
     from packing_assistant.civil import list_skills, main as civil_main, run_task
     from packing_assistant.civil_tui import handle_slash, TuiState
+    from packing_assistant.expert_roster import list_experts
+    from packing_assistant.expert_turn import run_named_exclusive
     from packing_assistant.runtime.agent_loop import run_agent
-    from packing_assistant.runtime.civil_config import decide_gate, load_config
-    from packing_assistant.runtime.expert_skills import match_skill, parse_explicit
+    from packing_assistant.runtime.civil_config import CONFIRM, decide_gate, load_config
+    from packing_assistant.runtime.expert_skills import (
+        CATALOG_BUDGET,
+        catalog_preamble,
+        match_skill,
+        parse_explicit,
+    )
     from packing_assistant.runtime.threads import list_threads, new_thread, run_on_thread, spawn
 
     os.environ.pop("CIVIL_SANDBOX", None)
@@ -27,6 +34,7 @@ def main() -> int:
     assert match_skill("写临边防护方案讨论提纲") == "construction"
     assert match_skill("出一份税务日历") == "finance-tax"
     assert len(list_skills()) == 66
+    assert len(catalog_preamble()) <= CATALOG_BUDGET
 
     cfg = load_config()
     assert cfg.sandbox == "workspace-write"
@@ -52,6 +60,40 @@ def main() -> int:
     assert tax.get("skill") == "finance-tax"
     assert tax["wrote"] is True
 
+    scheme = run_agent("写临边防护方案讨论提纲", session_id="cx-scheme")
+    assert scheme.get("skill") == "construction"
+    assert scheme.get("skill_source") == "matched"
+
+    highs = [e for e in list_experts() if e.risk == "high"]
+    assert len(highs) >= 10, len(highs)
+    for e in highs:
+        blocked = run_agent(
+            f"写一份{e.name}草稿提纲",
+            expert_id=e.id,
+            session_id=f"h2-{e.id}",
+            force_intent="run",
+            p0_confirmed=False,
+        )
+        assert blocked.get("wrote") is False, e.id
+        assert blocked.get("hitl_pending") is True, e.id
+        assert CONFIRM in (blocked.get("reply") or ""), e.id
+        assert not (blocked.get("artifacts") or blocked.get("files")), e.id
+        chat = run_agent(
+            "这是什么意思，先别写",
+            expert_id=e.id,
+            session_id=f"h2c-{e.id}",
+            force_intent="chat",
+        )
+        assert chat.get("wrote") is False, e.id
+        exclusive = (e.exclusive or [""])[0]
+        if exclusive:
+            named = run_named_exclusive(
+                exclusive,
+                {"text": "写一份草稿提纲", "confirm_ok": False, "session_id": f"h2x-{e.id}"},
+            )
+            assert named.get("wrote") is False, (e.id, exclusive)
+            assert named.get("hitl_pending") is True, (e.id, exclusive)
+
     th = new_thread("测")
     got = run_on_thread(th.thread_id, "什么是 GST")
     assert got.get("thread_id") == th.thread_id
@@ -67,7 +109,12 @@ def main() -> int:
     assert "/skills" in (help_txt or "")
     sk = handle_slash("/skills construction", st)
     assert "$construction" in (sk or "")
-    assert "sandbox" in (handle_slash("/status", st) or "")
+    st.last_skill = "construction"
+    st.last_skill_source = "matched"
+    status = handle_slash("/status", st) or ""
+    assert "sandbox" in status
+    assert "$construction" in status
+    assert "规则选用" in status
     msg = handle_slash("/sandbox read-only", st)
     assert "read-only" in (msg or "")
     os.environ.pop("CIVIL_SANDBOX", None)

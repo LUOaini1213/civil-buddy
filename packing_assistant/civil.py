@@ -165,9 +165,9 @@ def main(argv: Optional[List[str]] = None) -> int:
         if args.json:
             print(json.dumps(rows, ensure_ascii=False, indent=2))
         else:
-            print(f"{len(rows)} skills")
-            for row in rows:
-                print(f"  ${row['name']}\t{row['description'][:88]}")
+            from packing_assistant.runtime.expert_skills import format_catalog_listing
+
+            print(format_catalog_listing())
         return 0
     if verb == "help":
         from packing_assistant.civil_tui import HELP

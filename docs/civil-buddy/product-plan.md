@@ -286,6 +286,10 @@ xyz 只抄 solver。分页/订阅 = 有真 Host list/call 稳定之后（horizon
 | RT-P1-4 | Run 回放 | ✅ | `GET /api/runs/{id}` 两次同 identity（messages/tools/artifacts）。装箱 SSE `/replay` 是另一套 |
 | RT-P1-5 | 危大判定书 + 确认句 | ✅ | 默认 SG WSH/PTW；37 号令只在 CN 栏；未确认 0 稿（T002） |
 | RT-P2 | MinerU 可选、Go 热路径、多用户 ACL | 延期 | 见 handbook P2 |
+| H1 | 技能目录预算闸（≤8000 字） | ✅ | `catalog_preamble` ≤8000；未选用不灌 66 SOP |
+| H2 | HITL T013 收口 | ✅ | high 岗未确认 0 稿 |
+| H3 | MCP 假宿主 JSON-RPC 联测 | ✅ | `test_mcp_host_client.py` list/call |
+| H4 | 面可见 skill_source | ✅ | 显式 / 规则选用 / 未点名 |
 
 ### 7.2 岗写盘（指向 horizon，不展开）
 
@@ -340,6 +344,8 @@ python scripts/test_tender_handoff.py
 python scripts/test_tender_review.py
 python scripts/test_mcp_surface.py
 python scripts/test_mcp_stdio.py
+python scripts/test_mcp_host_client.py
+python scripts/test_civil_codex.py
 python scripts/test_docs_completion.py
 python scripts/test_kb_schema.py
 python scripts/test_official_title_scan.py
@@ -378,7 +384,7 @@ python scripts/test_industry_agent_eval.py # 断言总判仍「部分合格」
 5. 红：修好或回滚到本刀起点。禁止带着红测试停手、睡眠再测、跳号。
 ```
 
-K4「进行中」不是可抢的下一号。P 车道（T040+）不得在主链头指针未走到 T040 时开工。T001 / T030–T039 已 ✅。
+K4「进行中」不是可抢的下一号。H1–H4 插在 T040 之前。P 车道（T040+）不得在主链头指针未走到 T040 时开工。T001 / T030–T039 已 ✅。
 
 ---
 
@@ -399,11 +405,9 @@ GeBIZ 代交 / 自动中标；法定专项方案 / PE·QP·RTO 签认件；十�
 
 **T040 · hr 进行中：下一岗 hr-recruit。**
 
-T039 ✅：worker-brief / pm-daily 均已做。chat 仍不写盘。T040 其余岗不得一行勾完。
+H1–H4 ✅（08-25 宿主短块）：目录预算闸、全部 high 岗 HITL、MCP 假宿主 list/call、面上标 skill 来源。不做 Seatbelt / 原生 App / 商店扩展。
 
-T039 已做：pm-daily 天气待填｜部位｜形象不编百分比｜出勤待填。不是监理日志。
-
-T040 下一岗：hr-recruit 出职责|任职|面试问法；薪资仅当用户给数才抄。
+T040 下一岗：hr-recruit 出职责|任职|面试问法；薪资仅当用户给数才抄。T040 其余岗不得一行勾完。
 
 ---
 
@@ -494,7 +498,7 @@ T 号是开工 ID：K1=T001，P1-5=T002，K2=T003，P1-3=T010。handbook 不得�
 | T010 | Memory slot：辖区 / 项目名 / P0；压缩打标 | `session.summary` | 压缩后不得假装读过被丢细节 | ✅ |
 | T011 | `/api/tender/parse` 走同一 ToolEngine 鉴权 | gateway 调 engine | chat 意图拒写 | ✅ |
 | T012 | OTEL span 带同一 `run_id` 与 agent_loop | `otel_hooks` | dashboard 能按 run_id 过滤 | ✅ |
-| T013 | 高风险 HITL 确认句硬校验（方法-危大+施工已有，扩到 scheme deliver） | allow() | 未打原句 0 份稿 | 部分 |
+| T013 | 高风险 HITL 确认句硬校验（方法-危大+施工已有，扩到 scheme deliver） | allow() | 未打原句 0 份稿 | ✅ H2 |
 | T014 | agent_loop 对 bid-compliance/tech 走与 expert_turn 同一 handoff | `agent_loop.py` | 同 session 读到 tender.handoff.json | ✅ |
 
 ### C. MCP / Host
@@ -558,8 +562,18 @@ T030–T047 是**批次合同**（T030–T039 ✅ 后约 **31** 岗）。**一�
 | T067 | 本机桌面窗口：启动器打开 127.0.0.1 应用窗 | `scripts/civil-buddy-desktop.ps1` | ✅ |
 | T068 | 可下载试用：LICENSE + 自带 API Key + 工作台 Release + 给试用的人.md | MIT · OpenAI 兼容 Key · `cargo build --release` 上 Releases | ✅ |
 
+### G. 土木版 Codex 宿主短块（08-25 评测）
+
+| ID | 任务 | 产物 | 验收 | 状态 |
+|----|------|------|------|------|
+| H1 | 技能目录预算闸 | `expert_skills.catalog_preamble` · `format_catalog_listing` | ≤8000 字；路由器不含 66 SOP | ✅ |
+| H2 | HITL T013 收口 | high 岗写盘闸 | 未确认 0 稿；chat 仍放行 | ✅ |
+| H3 | MCP 假宿主联测 | `scripts/test_mcp_host_client.py` | stdio list/call；无 tender.parse | ✅ |
+| H4 | 面可见 skill 来源 | 工作台 + TUI `/status` | `given` / `matched` / 空 | ✅ |
+| H5 | 可选模型隐式选用 | 默认关 | 延期；禁止 66 全表进 prompt | 延期 |
+
 **主链（不定时限；头指针 = 第一个非 ✅/延期）：**
 
-T001 → T021 → T023 → T003 → T007 → T008 → T002 → T004 → T006 → T005 → T014 → T011 → T010 → T020+T024 → T030 → T031 → T032 ✅ → T033 ✅ → T034 ✅ → T035 ✅ → T036 ✅ → T037 ✅ → T038 ✅ → T039 ✅ → **T040**（下一岗 hr-recruit）→ T041…T047（T050 / T052 / T062 / T064–T068 文档与平台已 ✅，不占岗栏）。
+T001 → T021 → T023 → T003 → T007 → T008 → T002 → T004 → T006 → T005 → T014 → T011 → T010 → T020+T024 → T030 → T031 → T032 ✅ → T033 ✅ → T034 ✅ → T035 ✅ → T036 ✅ → T037 ✅ → T038 ✅ → T039 ✅ → H1 ✅ → H2 ✅ → H3 ✅ → H4 ✅ → **T040**（hr-recruit）→ T041…T047（T050 / T052 / T062 / T064–T068 文档与平台已 ✅，不占岗栏。H5 延期）。
 
 T012/T060/T061/T051/T053 不占刀。中途红则停在该号，不准跳号。

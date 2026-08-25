@@ -154,6 +154,21 @@
 50. **T039 pm-daily 一岗（T039 批次完）** ✅ 2026-08-20  
     pm-daily__log 出天气待填｜部位｜形象（不编百分比）｜出勤待填。不是监理日志、不是施工日志签认件。主链头指针改为 **T040**（hr-recruit 先）。T040–T047 不得一行勾完。行业总判仍 **部分合格**。
 
+51. **H 块插入主链（08-25 联网评估）** 2026-08-25  
+    评测后不仿 Codex Rust 壳。主链头指针改为 **H1**（目录预算闸）→ H2 HITL → H3 MCP 假宿主 → H4 skill 来源可见 → 再回 T040。H5 模型隐式选用延期。行业总判仍 **部分合格**。
+
+52. **H1 技能目录预算闸** ✅ 2026-08-25  
+    `catalog_preamble` / `format_catalog_listing` 超 8000 字先缩短 description 再省略尾部。`civil skills` 与 `/skills` 走同一函数。`agent_loop` 与路由器 prompt 不灌 66 份 SOP。验收：`python scripts/test_codex_expert_skills.py` · `python scripts/test_civil_codex.py`。主链头指针改为 **H2**。行业总判仍 **部分合格**。
+
+53. **H2 HITL T013 收口** ✅ 2026-08-25  
+    `high_risk_unconfirmed` 统一 agent_loop / exclusive / write_deliverable。全部 high 岗未确认 0 份稿；chat 仍放行。验收：`python scripts/test_civil_codex.py`。
+
+54. **H3 MCP 假宿主联测** ✅ 2026-08-25  
+    `scripts/test_mcp_host_client.py` 对 `civil mcp --pack construction` 发 initialize / tools/list / tools/call search_kb。无 tender.parse、无 pack-ship__plan。
+
+55. **H4 面可见 skill 来源** ✅ 2026-08-25  
+    工作台回复旁标 `$id · 显式|规则选用|未点名`。TUI `/status` 同样。主链头指针改回 **T040**（hr-recruit）。行业总判仍 **部分合格**。
+
 平台内核见 [product-improvement-handbook.md](product-improvement-handbook.md)。岗独有写盘下一刀仍按 [post-horizon-2026-08-17.md](post-horizon-2026-08-17.md)。
 
 ## 有宿主再做

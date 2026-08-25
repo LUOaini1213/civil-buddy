@@ -373,15 +373,21 @@ def chat(body: ChatIn) -> StreamingResponse:
 
     session = body.session_id or uuid.uuid4().hex[:12]
     OUT_ROOT.mkdir(parents=True, exist_ok=True)
+    skill_source = ""
     ids = [i for i in body.expert_ids if get_expert(i)]
+    if ids:
+        skill_source = "given"
     if not ids:
         ids = resolve_mentions(body.message)
+        if ids:
+            skill_source = "given"
     if not ids:
         from packing_assistant.runtime.expert_skills import match_skill
 
         hit = match_skill(body.message)
         if hit and get_expert(hit):
             ids = [hit]
+            skill_source = "matched"
 
     history = []
     for item in body.history[-80:]:
@@ -402,6 +408,9 @@ def chat(body: ChatIn) -> StreamingResponse:
             if not ids:
                 gen = run_plain(history)
                 for ev in gen:
+                    if ev.get("event") == "done" and isinstance(ev.get("data"), dict):
+                        ev["data"]["skill"] = ""
+                        ev["data"]["skill_source"] = ""
                     yield _sse(ev)
                 return
             n = len(ids)
@@ -417,6 +426,9 @@ def chat(body: ChatIn) -> StreamingResponse:
                         }
                     )
                 for ev in run_expert(exp, history, confirm_ok=body.confirm_ok, session_id=session):
+                    if ev.get("event") == "done" and isinstance(ev.get("data"), dict):
+                        ev["data"]["skill"] = eid
+                        ev["data"]["skill_source"] = skill_source or "given"
                     yield _sse(ev)
         except LLMError as exc:
             yield _sse({"event": "error", "data": {"text": str(exc)}})

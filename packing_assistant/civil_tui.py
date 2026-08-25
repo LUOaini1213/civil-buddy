@@ -54,6 +54,8 @@ class TuiState:
         self.cfg = load_config()
         self.thread = new_thread("主对话")
         self.confirm = self.cfg.auto_confirm()
+        self.last_skill = ""
+        self.last_skill_source = ""
 
 
 def _banner(st: TuiState) -> None:
@@ -100,22 +102,9 @@ def _print_out(out: Dict[str, Any]) -> None:
 
 
 def _slash_skills(q: str) -> str:
-    from packing_assistant.runtime.expert_skills import catalog
+    from packing_assistant.runtime.expert_skills import format_catalog_listing
 
-    q = (q or "").strip().lower()
-    rows = catalog()
-    lines = [f"{len(rows)} skills（只展示 name+description；选用后才加载 SKILL.md）"]
-    n = 0
-    for row in rows:
-        blob = f"{row['name']} {row['description']}".lower()
-        if q and q not in blob:
-            continue
-        lines.append(f"  ${row['name']}\t{row['description'][:88]}")
-        n += 1
-        if n >= 30:
-            lines.append("  … 收窄关键词或 /skills construction")
-            break
-    return "\n".join(lines)
+    return format_catalog_listing(q, limit=30)
 
 
 def _slash_mcp() -> str:
@@ -142,8 +131,12 @@ def handle_slash(line: str, st: TuiState) -> Optional[str]:
         from packing_assistant.runtime.memory import assemble_context, prompt_prefix
 
         ctx = assemble_context(st.thread.session_id)
+        src = st.last_skill_source
+        how = "显式" if src == "given" else "规则选用" if src == "matched" else "未点名"
+        skill = f"${st.last_skill}" if st.last_skill else "（未点名）"
         return (
             f"thread {st.thread.thread_id}\n"
+            f"skill {skill} · {how}\n"
             f"sandbox {st.cfg.sandbox}\n"
             f"approval {st.cfg.approval}\n"
             f"confirm {st.confirm}\n"
@@ -253,5 +246,7 @@ def run_tui() -> int:
         fresh = load_thread(st.thread.thread_id)
         if fresh:
             st.thread = fresh
+        st.last_skill = str(out.get("skill") or out.get("expert_id") or "")
+        st.last_skill_source = str(out.get("skill_source") or "")
         _print_out(out)
     return 0

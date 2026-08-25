@@ -21,6 +21,14 @@ python -m packing_assistant.civil mcp --expert pack-ship
 
 `--pack bid` 看得见招标工具，看不见 `pack-ship__plan`。
 
+本机假宿主烟测（不要求已装 Cursor）：
+
+```powershell
+python scripts/test_mcp_host_client.py
+```
+
+该脚本对 `civil mcp --pack construction` 发 JSON-RPC `initialize` / `tools/list` / `tools/call search_kb`。Cursor 仍拷 `ide/cursor/mcp.json`。
+
 ## 和 CLI / 应用的关系
 
 | 面 | 命令 |

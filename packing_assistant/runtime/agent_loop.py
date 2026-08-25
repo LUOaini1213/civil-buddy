@@ -89,11 +89,13 @@ def _plan_calls(
     from packing_assistant.expert_roster import get_expert
 
     exp = get_expert(expert_id) if expert_id else None
-    if exp and exp.risk == "high" and not p0_confirmed:
+    from packing_assistant.runtime.civil_config import high_risk_unconfirmed, hitl_reply
+
+    if exp and high_risk_unconfirmed(risk=exp.risk, confirmed=p0_confirmed):
         return {
             "hitl": True,
             "calls": [],
-            "reply": f"高风险岗 {exp.name} 写盘须确认句「{CONFIRM}」。本轮未写盘。",
+            "reply": hitl_reply(exp.name),
         }
     sid = _safe_sid(session_id)
     out_dir = _OUT / sid / (exp.id if exp else "ops")

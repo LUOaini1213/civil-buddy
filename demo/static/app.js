@@ -420,11 +420,16 @@ $("form").addEventListener("submit", async (ev) => {
   }
 });
 
+function skillWho(id, source) {
+  if (!id) return "未点名岗位";
+  const name = (state.experts.find((e) => e.id === id) || {}).name || id;
+  const how = source === "given" ? "显式" : source === "matched" ? "规则选用" : "未点名";
+  return `$${id} · ${name} · ${how}`;
+}
+
 function namesOrPlain() {
-  if (!state.summoned.size) return state.modelName || "模型";
-  return [...state.summoned]
-    .map((id) => state.experts.find((e) => e.id === id)?.name || id)
-    .join(" / ");
+  if (!state.summoned.size) return "未点名岗位";
+  return [...state.summoned].map((id) => skillWho(id, "given")).join(" / ");
 }
 
 async function streamChat(message, bodyEl) {
@@ -472,7 +477,7 @@ async function streamChat(message, bodyEl) {
         if (data.phase === "summon" && acc) {
           state.history.push({ role: "assistant", content: acc });
           acc = "";
-          bodyEl = addMsg("assistant", data.expert || "专家", "");
+          bodyEl = addMsg("assistant", skillWho(data.expert || "", "given"), "");
         }
       }
       if (eventName === "token") {
@@ -484,6 +489,8 @@ async function streamChat(message, bodyEl) {
       if (eventName === "done") {
         acc = data.text || acc;
         bodyEl.textContent = acc;
+        const whoEl = bodyEl.parentElement && bodyEl.parentElement.querySelector(".who");
+        if (whoEl) whoEl.textContent = skillWho(data.skill || data.expert || "", data.skill_source || "");
         if (acc) state.history.push({ role: "assistant", content: acc });
         if (data.context) paintContext(data.context);
         else paintContext(estimateLocalContext());

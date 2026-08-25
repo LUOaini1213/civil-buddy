@@ -138,6 +138,10 @@ _STRONG = (
 )
 
 
+CATALOG_BUDGET = 8000
+CATALOG_DESC_SHORT = 88
+
+
 def catalog() -> List[Dict[str, str]]:
     """Metadata only — what Codex puts in the first 2% of context."""
     rows: List[Dict[str, str]] = []
@@ -155,8 +159,8 @@ def catalog() -> List[Dict[str, str]]:
     return rows
 
 
-def catalog_preamble() -> str:
-    lines = [
+def _catalog_header() -> List[str]:
+    return [
         "Civil Buddy 是土木版 Codex：在作业根里下任务，按 skill 干活。",
         "先只看下面的 name + description。选中后再读该 SKILL.md 全文。不要一次加载全部专家。",
         "显式：`$construction` / `@施工方案` / `召唤危大识别`。隐式：任务对上 description 才选用。",
@@ -164,8 +168,118 @@ def catalog_preamble() -> str:
         "",
         "技能目录：",
     ]
+
+
+def fit_catalog_lines(
+    rows: List[Dict[str, str]],
+    *,
+    budget: int = CATALOG_BUDGET,
+    desc_cap: int = CATALOG_DESC_SHORT,
+    prefix: str = "- $",
+    sep: str = ": ",
+    header: Optional[List[str]] = None,
+) -> tuple[List[str], int]:
+    """Fit name+description lines into budget. Shorten first, then omit tail.
+
+    Returns (lines including header, omitted_count). Never dumps 66 long SOP bodies.
+    """
+    cap = max(24, int(desc_cap))
+    kept = list(rows or [])
+    omitted = 0
+    heads = list(header) if header is not None else []
+    warn_tmpl = "（省略 {n} 个 skill，请用 $id 或 /skills 词 收窄。）"
+
+    def render(items: List[Dict[str, str]], dcap: int, omit: int) -> List[str]:
+        out = list(heads)
+        for row in items:
+            name = str(row.get("name") or "")
+            desc = str(row.get("description") or "")[:dcap]
+            out.append(f"{prefix}{name}{sep}{desc}")
+        if omit:
+            out.append(warn_tmpl.format(n=omit))
+        return out
+
+    lines = render(kept, cap, omitted)
+    text = "\n".join(lines)
+    if len(text) <= budget:
+        return lines, omitted
+    for dcap in (48, 32, 24):
+        if dcap >= cap:
+            continue
+        cap = dcap
+        lines = render(kept, cap, omitted)
+        if len("\n".join(lines)) <= budget:
+            return lines, omitted
+    while kept and len("\n".join(render(kept, cap, omitted))) > budget:
+        kept.pop()
+        omitted += 1
+        if not kept:
+            break
+    lines = render(kept, cap, omitted)
+    text = "\n".join(lines)
+    if len(text) > budget:
+        cut = text[: max(0, budget - 8)].rstrip() + "\n（截断）"
+        return cut.splitlines(), omitted + max(0, len(rows) - len(kept))
+    return lines, omitted
+
+
+def catalog_preamble(*, budget: int = CATALOG_BUDGET) -> str:
+    """Model-facing catalog. Caps at ~8,000 chars (Codex 2%/8k rule)."""
+    lines, _omitted = fit_catalog_lines(
+        catalog(),
+        budget=budget,
+        desc_cap=160,
+        prefix="- $",
+        sep=": ",
+        header=_catalog_header(),
+    )
+    return "\n".join(lines)
+
+
+def format_catalog_listing(
+    query: str = "",
+    *,
+    limit: int = 0,
+    budget: int = CATALOG_BUDGET,
+    desc_cap: int = CATALOG_DESC_SHORT,
+) -> str:
+    """Human listing for `civil skills` / `/skills`. Same budget as the model catalog."""
+    q = (query or "").strip().lower()
+    rows: List[Dict[str, str]] = []
     for row in catalog():
-        lines.append(f"- ${row['name']}: {row['description']}")
+        blob = f"{row['name']} {row['description']}".lower()
+        if q and q not in blob:
+            continue
+        rows.append(row)
+        if limit and len(rows) >= limit:
+            break
+    total = len(catalog())
+    matched = 0 if not q else sum(
+        1
+        for row in catalog()
+        if q in f"{row['name']} {row['description']}".lower()
+    )
+    header = [
+        f"{total} skills（只展示 name+description；选用后才加载 SKILL.md）",
+    ]
+    if q:
+        header.append(f"筛选 {query!r} · 命中 {matched}")
+    extra_omit = 0
+    if limit and matched > limit:
+        extra_omit = matched - limit
+        header.append("… 收窄关键词或 /skills construction")
+    lines, omitted = fit_catalog_lines(
+        rows,
+        budget=budget,
+        desc_cap=desc_cap,
+        prefix="  $",
+        sep="\t",
+        header=header,
+    )
+    if extra_omit and omitted == 0:
+        pass
+    elif omitted:
+        pass
     return "\n".join(lines)
 
 

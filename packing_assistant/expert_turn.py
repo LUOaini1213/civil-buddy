@@ -3667,13 +3667,15 @@ def _run_exclusive_body(
     packing_summary: Optional[Dict[str, Any]] = None,
 ) -> Dict[str, Any]:
     tools = _write_tools(expert)
-    if expert.risk == "high" and not confirm_ok:
+    from packing_assistant.runtime.civil_config import high_risk_unconfirmed, hitl_reply
+
+    if high_risk_unconfirmed(risk=expert.risk, confirmed=confirm_ok):
         return {
             "wrote": False,
             "hitl_pending": True,
             "files": [],
             "tools_run": [],
-            "reply": f"高风险岗 {expert.name} 写盘须确认句「{CONFIRM}」。本轮未写盘。",
+            "reply": hitl_reply(expert.name),
             "submit_blocked": True,
         }
     out_dir = _OUT / session_id / expert.id

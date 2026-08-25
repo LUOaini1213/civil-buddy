@@ -77,6 +77,7 @@ cd C:\Users\LW\civil-buddy
 python scripts/test_understand.py
 python scripts/test_agent_loop.py
 python scripts/test_mcp_stdio.py
+python scripts/test_mcp_host_client.py
 python scripts/test_mcp_surface.py
 python scripts/test_kb_schema.py
 python scripts/test_official_title_scan.py
