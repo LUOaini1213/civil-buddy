@@ -172,6 +172,9 @@
 56. **MW1 赛道 1 Agent Middleware** ✅ 2026-08-25  
     深做两层：策略引擎（拒绝弹原因）+ 失败恢复（timeout→retry→UNSPECIFIED 审计链）。现场四拍：下单 → 越权 → 降级 → 成本熔断。`npm run check` 过。主链头指针仍 **T040**。
 
+57. **人改口 2026-08-25**  
+    赛道 1 **完全合格**（track1-qualified.md）。内部起草搭子 **合格**。签认/可投标/可开工仍 **不合格**。08-17「总判：部分合格。」历史句不改。
+
 平台内核见 [product-improvement-handbook.md](product-improvement-handbook.md)。岗独有写盘下一刀仍按 [post-horizon-2026-08-17.md](post-horizon-2026-08-17.md)。
 
 ## 有宿主再做

@@ -27,9 +27,15 @@ def main() -> int:
     assert rows and all(r.get("exact_text") for r in rows), rows
     assert (pipe.get("p0_reject_scan") or {}).get("human_confirm_required") is True
     assert (pipe.get("review") or {}).get("业绩") == []
-    doc = (ROOT / "docs" / "civil-buddy" / "industry-agent-eval-2026-08-17.md").read_text(encoding="utf-8")
-    assert "部分合格" in doc
-    assert "中标率" not in doc.split("产品能力")[0] or "不当" in doc or "禁止" in doc
+    hist = (ROOT / "docs" / "civil-buddy" / "industry-agent-eval-2026-08-17.md").read_text(encoding="utf-8")
+    assert "**总判：部分合格。**" in hist
+    now = (ROOT / "docs" / "civil-buddy" / "industry-agent-eval-2026-08-25.md").read_text(encoding="utf-8")
+    assert "合格" in now and "内部起草搭子" in now
+    assert "完全合格" in now
+    assert "可以投标" not in now.split("禁止")[0] or "禁止" in now
+    track = (ROOT / "docs" / "civil-buddy" / "track1-qualified.md").read_text(encoding="utf-8")
+    assert "完全合格" in track
+    assert "可以开工" not in track or "禁止" in track
     kb = (ROOT / "demo" / "kb" / "finance" / "finance-tax" / "web-knowledge.md").read_text(encoding="utf-8")
     assert "9%" in kb and "Current GST rates" in kb
     bid = (ROOT / "demo" / "kb" / "bid" / "bid-parse" / "web-knowledge.md").read_text(encoding="utf-8")
@@ -48,7 +54,7 @@ def main() -> int:
     r = client.post("/api/tender/parse", json={"text": SAMPLE})
     assert r.status_code == 200, r.text
     assert r.json().get("submit_blocked") is True
-    print("PASS industry_agent_eval blocked=1 exact=1 unspecified=1 verdict=部分合格")
+    print("PASS industry_agent_eval blocked=1 exact=1 unspecified=1 hist=部分合格 now=合格-内部起草搭子 track1=完全合格")
     return 0
 
 
