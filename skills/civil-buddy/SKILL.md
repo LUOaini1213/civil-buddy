@@ -23,8 +23,9 @@ metadata:
 
 Skill 根目录 = 本文件所在目录。硬规则、引用格式、辖区只读对应 `references/` 文件，不要把它们再抄进 expert 文件。
 
-本 skill 是 **SOP**（怎么起草、何时停、确认句）。**MCP 是动作**（KB、招标解析、solver 投影），见 `docs/civil-buddy/product-completion-plan.md`。  
-Grok skill **V1 专家路由只有 6 个 id**（`references/experts/`），其中 **construction 写满**。工作台是 **66 岗**，走 `demo/` / `workbench/`，不要把 66 份人格塞进本文件。  
+本 skill 是 **SOP 总控**（怎么起草、何时停、确认句）。**MCP 是动作**（KB、招标解析、solver 投影），见 `docs/civil-buddy/product-completion-plan.md`。  
+**每个工作台专家是一份独立 Codex skill**：`.agents/skills/<id>/SKILL.md`（共 66 岗 + 路由器 `civil-buddy`）。选岗之后 **只读那一份**，不要把 66 份人格塞进本文件。  
+`references/experts/` 仍是 Grok V1 的 6 个提纲卡片（construction 写满）；与 66 岗 Codex skill 不是同一套名册。  
 V1 离线可完成 construction 草稿，不依赖 MCP。工作台 / Host 要 KB 或装箱数字时走 MCP；禁止把 xyz / 柜数写进本 skill 正文。
 
 装箱/拼柜：工作台召唤 **pack-ship**，数字只抄 packing-agent（`PACKING_AGENT_URL` 或 `PACKING_AGENT_ROOT`）。见仓库 `docs/packing-agent.md`。禁止在草稿里手写柜数或 xyz。
@@ -64,7 +65,7 @@ mode: inline | workflow_deliver | workflow_audit
 confirm_gate: pending | accepted | not_required
 ```
 
-专家 id 只能是：`construction` `structural-geotech` `municipal` `cost` `supervision` `traffic`。读 `references/experts/<id>.md`。V1 只把 `construction` 写满。
+工作台专家 id 以 `.agents/skills/<id>/SKILL.md` 为准（66 岗）。Grok V1 离线起草仍可读 `references/experts/<id>.md`，id 为：`construction` `structural-geotech` `municipal` `cost` `supervision` `traffic`。V1 只把 `construction` 写满。选定工作台岗后，再读对应 Codex skill，不要把两套名册混进一次上下文。
 
 `cost` / `checklist` 在 spreadsheet 路径存在前只出 md。
 

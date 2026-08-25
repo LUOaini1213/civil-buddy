@@ -3,8 +3,8 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>Civil Buddy · 土木工作台</title>
-  <link rel="stylesheet" href="/static/styles.css?v=workbuddy1" />
+  <title>Civil Buddy</title>
+  <link rel="stylesheet" href="/static/styles.css?v=ui2" />
 </head>
 <body>
   <header class="top">
@@ -12,52 +12,65 @@
       <span class="mark">CB</span>
       <div>
         <strong>Civil Buddy</strong>
-        <small>先理解再出稿 · 内部讨论 AI 草稿 · 不是签认件</small>
+        <small>内部讨论草稿 · 不是签认件</small>
       </div>
     </div>
     <div class="top-meta">
       <span id="keyBadge" class="pill warn">检查 API Key…</span>
-      <span class="pill" id="modelBadge">模型未配置</span>
-      <span class="pill ok" id="harnessBadge">Harness steps</span>
-      <button type="button" id="openStudio" class="top-btn">设计专家 / 知识库</button>
+      <span class="pill quiet" id="modelBadge">模型未配置</span>
+      <span class="pill quiet" id="harnessBadge">Harness steps</span>
+      <span class="pill quiet" id="sandboxBadge">sandbox</span>
+      <span class="pill quiet" id="approvalBadge">approval</span>
+      <button type="button" id="openStudio" class="top-btn">知识库</button>
     </div>
   </header>
 
   <main class="layout">
     <aside class="rail">
-      <p class="rail-lead">点选岗位即召唤。提问只聊天；说「写一份」才落盘。本岗知识只有这位专家先读。</p>
-      <button type="button" id="clearExperts" class="ghost">取消全部召唤</button>
+      <p class="rail-lead">全企业任何人可问任意专家。提问不写盘；说「写一份」才出草稿。</p>
+      <div class="thread-box">
+        <div class="thread-head">
+          <span>对话</span>
+          <button type="button" id="btnNewThread" class="ghost tiny">新建</button>
+          <button type="button" id="btnBg" class="ghost tiny">并行</button>
+        </div>
+        <div id="threadList"></div>
+      </div>
+      <input id="skillQ" class="skill-q" type="search" placeholder="搜索岗位…" autocomplete="off" />
+      <button type="button" id="clearExperts" class="ghost">不指定岗位</button>
       <div id="wall"></div>
     </aside>
 
     <section class="stage">
-      <div class="summon-bar" id="summonBar">当前：<em>未召唤 · 普通对话</em></div>
+      <div class="summon-bar" id="summonBar">当前：<em>未点名岗位</em> · 直接下任务即可</div>
       <div class="ctx-bar" id="ctxBar" data-zone="room">
         <div class="ctx-meter" aria-hidden="true"><i id="ctxFill"></i></div>
-        <p class="ctx-text" id="ctxText">上下文 0 / 1,000,000 · 用到 70% 会把更早对话压成摘要</p>
+        <p class="ctx-text" id="ctxText"></p>
       </div>
-      <div id="log" class="log"></div>
+      <div id="log" class="log">
+        <p class="welcome">问一句，或写一份草稿。高风险成稿前勾选确认句。</p>
+      </div>
       <form id="form" class="composer">
         <label class="confirm">
           <input type="checkbox" id="confirmOk" />
-          我明白，将由持证人员签认（高风险专家写盘前勾选）
+          我明白，将由持证人员签认
         </label>
-        <textarea id="input" rows="3" placeholder="先点左侧岗位。提问不写盘；说「写一份」才出内部讨论草稿。设 CIVIL_JOB_ROOT 后直接读该文件夹，不必上传。"></textarea>
+        <textarea id="input" rows="3" placeholder="输入任务，例如：写临边专项方案讨论提纲"></textarea>
         <div class="local-row">
-          <input id="localPath" type="text" placeholder="本机路径，例 C:\Users\LW\Desktop\T5-ITT.pdf（不要填 D:\layout）" />
-          <button type="button" id="btnLocal">导入本机</button>
-          <button type="button" id="btnFirm">一人公司 · 成套投标</button>
+          <input id="localPath" type="text" placeholder="本机文件路径（不要填 D:\layout）" />
+          <button type="button" id="btnLocal">导入</button>
+          <button type="button" id="btnFirm">成套投标</button>
         </div>
         <div id="attaches" class="attaches"></div>
         <div class="row">
           <div class="hints">
             <input type="file" id="filePick" hidden multiple accept=".pdf,.docx,.xlsx,.txt,.md,.csv,.json" />
-            <button type="button" id="btnUpload">上传副本</button>
-            <button type="button" data-fill="什么是 GST">问 GST</button>
-            <button type="button" data-fill="临边防护算不算危大？要不要专家论证？">危大判定</button>
+            <button type="button" id="btnUpload">上传</button>
+            <button type="button" data-fill="什么是 GST">GST</button>
+            <button type="button" data-fill="临边防护算不算危大？要不要专家论证？">危大</button>
             <button type="button" data-fill="按虚构滨河路人行道维修，写临边与洞口防护专项方案讨论提纲。高度未提供。">施工方案</button>
-            <button type="button" data-fill="把临边防护编成工友班前三分钟白话。">工友白话</button>
-            <button type="button" data-fill="从下面这段招标里抽出评分点和必须编制的专项：某市政人行道维修，要求编制高处作业/临边专项方案，技术标 40 分。">招标解析</button>
+            <button type="button" data-fill="把临边防护编成工友班前三分钟白话。">白话</button>
+            <button type="button" data-fill="从下面这段招标里抽出评分点和必须编制的专项：某市政人行道维修，要求编制高处作业/临边专项方案，技术标 40 分。">招标</button>
           </div>
           <button type="submit" id="send">发送</button>
         </div>
@@ -65,13 +78,11 @@
     </section>
 
     <aside class="side">
-      <h2>本轮读过</h2>
-      <p class="muted">本岗知识（这位专家）· 大类共享（同部门）· 公司规则（所有人）</p>
+      <h2>依据</h2>
       <ul id="cites"></ul>
-      <h2>交付物</h2>
+      <h2>文件</h2>
       <ul id="files"></ul>
-      <h2>这位专家能读的库</h2>
-      <p class="muted">显示中文篇名。鼠标悬停可看文件路径。点开可改。</p>
+      <h2>本岗库</h2>
       <ul id="kblist"></ul>
     </aside>
   </main>
@@ -131,7 +142,7 @@
       </div>
     </div>
   </div>
-  <script src="/static/app.js?v=workbuddy1"></script>
-  <script src="/static/studio.js?v=workbuddy1"></script>
+  <script src="/static/app.js?v=ui2"></script>
+  <script src="/static/studio.js?v=ui2"></script>
 </body>
 </html>

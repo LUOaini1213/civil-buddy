@@ -32,10 +32,7 @@
     body {
       font-family: var(--font);
       color: var(--ink);
-      background:
-        radial-gradient(900px 420px at 0% 0%, #dbeafe 0%, transparent 55%),
-        radial-gradient(700px 380px at 100% 0%, #e0e7ff 0%, transparent 50%),
-        var(--bg);
+      background: var(--bg);
       -webkit-font-smoothing: antialiased;
     }
     .app {
@@ -311,9 +308,9 @@
   <div id="app" class="app">
     <header class="top">
       <div class="brand">
-        <span class="pill">主线 C · 先理解再聊或跑</span>
-        <h1>项目投标应答 · 交付链路</h1>
-        <p>先判断是提问还是成稿。提问只解释、不写盘。成稿才进矩阵。内部讨论 AI 草稿，不可递交。</p>
+        <span class="pill">主线 C</span>
+        <h1>投标应答</h1>
+        <p>提问只解释、不写盘。成稿才进矩阵。内部讨论草稿，不可递交。</p>
       </div>
       <div class="links">
         <a href="/workbench">工程装柜台</a>
@@ -373,7 +370,7 @@
             <button class="ghost" :disabled="busy || !tenderText.trim()" @click="runDelivery">解析并生成交付证据</button>
             <button class="ghost" :disabled="busy" @click="loadSample">填入样例</button>
           </div>
-          <p class="hint">提问只解释，不写投标应答或专项稿。成稿才进矩阵，原文进 exact_text。扫描 PDF 不解析。★/资格/废标走 P0。内部讨论 AI 草稿，系统不判定可投标，不可递交。默认面走完整 Agent 循环 POST /api/agent（调度 + 工具引擎 + 沙箱）；兼容入口 POST /api/turn。</p>
+          <p class="hint">扫描 PDF 不解析。系统不判定可投标。默认 POST /api/agent，兼容 POST /api/turn。</p>
           <p class="hint" v-if="turnIntent">本轮意图：{{ turnIntent }}{{ wrote ? ' · 已写盘/进矩阵' : ' · 未写盘' }}<span v-if="agentRunId"> · run {{ agentRunId }} · {{ agentState }}</span></p>
           <p class="hint" v-if="toolsUsed.length">工具：{{ toolsUsed.join(' · ') }}</p>
           <div class="hint" v-if="chatReply" style="white-space:pre-wrap;color:var(--ink)">{{ chatReply }}</div>

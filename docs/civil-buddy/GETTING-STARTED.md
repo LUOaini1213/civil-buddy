@@ -1,6 +1,19 @@
 # 从零跑起来
 
-产品：内部讨论 AI 草稿。不判定可投标，不判定可以开工。岗数 **66**。`submit_blocked` 默认 true。
+产品：**土木版 Codex**（完整面：TUI · exec · app · IDE/MCP · 并行 thread）。内部讨论 AI 草稿。不判定可投标，不判定可以开工。岗数 **66**（每个是一份 skill）。`submit_blocked` 默认 true。
+
+```powershell
+python -m packing_assistant.civil
+python -m packing_assistant.civil "什么是 GST"
+python -m packing_assistant.civil exec --confirm "写临边专项方案讨论提纲"
+python -m packing_assistant.civil app
+python -m packing_assistant.civil mcp --pack construction
+python -m packing_assistant.civil skills
+python -m packing_assistant.civil --sandbox read-only "出一份税务日历"
+```
+
+TUI 斜杠：`/skills` `/new` `/bg` `/threads` `/resume` `/approvals` `/sandbox` `/confirm` `/files` `/mcp` `/status` `/help`。  
+配置：`civil.toml.example` → `civil.toml`。IDE：`ide/README.md`。
 
 全量规划：[product-plan.md](product-plan.md)。切片：[product-completion-plan.md](product-completion-plan.md)。  
 试用（下载 exe、自带 API Key）：仓库根 [给试用的人.md](../../给试用的人.md)。  
@@ -68,6 +81,8 @@ python scripts/test_mcp_surface.py
 python scripts/test_kb_schema.py
 python scripts/test_official_title_scan.py
 python scripts/test_memory_slot.py
+python scripts/test_codex_expert_skills.py
+python scripts/test_civil_codex.py
 python scripts/test_tender_parse_engine.py
 python scripts/test_exclusive_engine.py
 python scripts/test_construction_skill_path.py

@@ -29,6 +29,8 @@ python demo/mcp_stdio.py --expert pack-ship
 
 把 `mcp-host.example.toml` 里 `civil-construction` 三行贴进 `~/.grok/config.toml` 的 MCP 段。工作目录为仓库根。本机已跑：`python demo/mcp_stdio.py --pack construction` 的 `tools/list` 含 `construction__scheme_draft`，不含 `pack-ship__plan`。
 
+仓库内可复制配置：`ide/cursor/mcp.json` · `ide/vscode/mcp.json`。说明见 [ide/README.md](../../ide/README.md)。也可 `python -m packing_assistant.civil mcp --pack construction`。
+
 ### Cursor（最小）
 
 `.cursor/mcp.json`：

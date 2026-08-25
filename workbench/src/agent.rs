@@ -6,6 +6,7 @@ use crate::llm::{self, LlmError};
 use crate::packs::{self, ToolCtx};
 use serde_json::{json, Value};
 use std::fs;
+use std::path::{Path, PathBuf};
 
 const READ_ONLY_TOOLS: &[&str] = &[
     "search_kb",
@@ -17,8 +18,81 @@ const READ_ONLY_TOOLS: &[&str] = &[
     "read_attachment",
 ];
 
+fn skill_id_ok(id: &str) -> bool {
+    let b = id.as_bytes();
+    if b.is_empty() || b.len() > 64 || b[0] == b'-' || b[b.len() - 1] == b'-' {
+        return false;
+    }
+    if id.contains("--") {
+        return false;
+    }
+    id.chars()
+        .all(|c| c.is_ascii_lowercase() || c.is_ascii_digit() || c == '-')
+}
+
+fn strip_skill_frontmatter(raw: &str) -> &str {
+    let t = raw.trim_start();
+    if !t.starts_with("---") {
+        return raw;
+    }
+    let rest = &t[3..];
+    if let Some(end) = rest.find("\n---") {
+        rest[end + 4..].trim_start()
+    } else {
+        raw
+    }
+}
+
+fn load_expert_skill_body(expert_id: &str) -> String {
+    if !skill_id_ok(expert_id) {
+        return String::new();
+    }
+    let mut cands: Vec<PathBuf> = Vec::new();
+    if let Ok(m) = std::env::var("CARGO_MANIFEST_DIR") {
+        cands.push(
+            PathBuf::from(m)
+                .join("..")
+                .join(".agents")
+                .join("skills")
+                .join(expert_id)
+                .join("SKILL.md"),
+        );
+    }
+    if let Ok(cwd) = std::env::current_dir() {
+        cands.push(
+            cwd.join(".agents")
+                .join("skills")
+                .join(expert_id)
+                .join("SKILL.md"),
+        );
+        cands.push(
+            cwd.join("..")
+                .join(".agents")
+                .join("skills")
+                .join(expert_id)
+                .join("SKILL.md"),
+        );
+    }
+    for p in cands {
+        let p = Path::new(&p);
+        if let Ok(raw) = fs::read_to_string(p) {
+            let body = strip_skill_frontmatter(&raw).trim();
+            if !body.is_empty() {
+                return body.to_string();
+            }
+        }
+    }
+    String::new()
+}
+
 pub fn build_expert_prompt(expert: &Expert, confirm_ok: bool) -> String {
     let pack = packs::pack_help(&expert.id, &expert.category);
+    let skill = load_expert_skill_body(&expert.id);
+    let skill_block = if skill.is_empty() {
+        String::new()
+    } else {
+        format!("\n本岗 Skill（程序记忆，选用本岗才加载全文）：\n{skill}\n")
+    };
     format!(
         r#"你是土木企业工作台里的【{name}】专家（大类：{cat}）。
 
@@ -57,7 +131,7 @@ B. 成稿 / 出文件 / 写方案表：按工序独立成稿，写完调用本�
 现行口径（税率、门户、通告年份）必须 web_search，命中后再 web_open 官方页；搜索摘要不是条文。
 
 先看上传，再 search_kb；要现行网页就 web_search。中文回答。
-"#,
+{skill_block}"#,
         name = expert.name,
         cat = expert.category_name,
         title = expert.title,
@@ -68,6 +142,7 @@ B. 成稿 / 出文件 / 写方案表：按工序独立成稿，写完调用本�
         id = expert.id,
         confirm_ok = confirm_ok,
         pack = pack,
+        skill_block = skill_block,
     )
 }
 

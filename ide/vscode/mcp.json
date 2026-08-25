@@ -1,0 +1,14 @@
+{
+  "servers": {
+    "civil-construction": {
+      "type": "stdio",
+      "command": "python",
+      "args": ["-m", "packing_assistant.civil", "mcp", "--pack", "construction"]
+    },
+    "civil-bid": {
+      "type": "stdio",
+      "command": "python",
+      "args": ["-m", "packing_assistant.civil", "mcp", "--pack", "bid"]
+    }
+  }
+}

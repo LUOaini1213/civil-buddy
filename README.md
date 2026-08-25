@@ -1,6 +1,6 @@
 # Civil Buddy
 
-土木企业工作台：**16 大类 / 66 岗** · Rust 工作台 + MCP · 成稿走 steps。  
+土木企业工作台 = **土木版 Codex**：**16 大类 / 66 岗 skill** · 任务选用 SOP · 工具算数 · 沙箱写盘。  
 装箱 / 拼柜是其中一岗（**pack-ship**）：硬数字只走本仓的 packing 引擎，模型不写 xyz、不拍柜数。  
 投标主线 C：招标文本 → 条款级响应矩阵 → 装柜 tools 作交付证据 → 经营岗交接（bid-tech / bid-compliance）。P0 资格/★/废标须人确认，**不**自动判定可投标。
 
@@ -31,7 +31,7 @@ cargo run --release --bin civil-workbench
 
 Python 参考实现：`demo/`（`uvicorn app:app --host 127.0.0.1 --port 8765`）。
 
-Grok skill（怎么起草）：`skills/civil-buddy`。MCP（能调什么）：`python demo/mcp_stdio.py --pack <大类>`。  
+产品 CLI（土木版 Codex）：`python -m packing_assistant.civil`（TUI）· `civil app` · `civil mcp --pack construction`。技能一岗一份：`.agents/skills/<id>/SKILL.md`。IDE：`ide/README.md`。Grok 总控：`skills/civil-buddy`。  
 **全量产品规划书**：[docs/civil-buddy/product-plan.md](docs/civil-buddy/product-plan.md)。切片执行：[product-completion-plan.md](docs/civil-buddy/product-completion-plan.md)。
 
 ### 2) 装箱引擎（pack-ship 的计算器）
@@ -57,7 +57,8 @@ PACKING_AGENT_URL=http://127.0.0.1:8000
 ```
 workbench/           # Civil Buddy Rust 工作台 + MCP
 demo/                # 专家知识库 kb/ + Python 参考实现
-skills/civil-buddy/  # Grok skill
+.agents/skills/      # Codex：66 岗各一份 SKILL.md
+skills/civil-buddy/  # Grok 总控 SOP
 packing_assistant/   # 装箱 harness（Team A 成箱 + Team B 拼柜）
 gateway/ + frontend/ # 装箱 HTTP / UI
 docs/civil-buddy/    # 工作台设计、专家名册

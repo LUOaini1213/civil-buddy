@@ -110,8 +110,8 @@ def catalog_payload() -> dict:
 
     company = folder_stats(KB_ROOT / "company", "company", "company")
     return {
-        "mode_plain": "不召唤专家 = 普通 DeepSeek，无知识库、无出稿工具",
-        "mode_expert": "召唤后该专家独立完成整件事（理解→检索本库+大类库→成稿→自检）",
+        "mode_plain": "未选用 skill = 土木版 Codex 路由器，无本岗库、无出稿工具",
+        "mode_expert": "选用 skill 后该岗独立完成（理解→检索本库+大类库→成稿→自检）",
         "categories": all_categories(),
         "experts": experts,
         "kb_soft_limit_kb": limit,
