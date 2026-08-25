@@ -290,6 +290,7 @@ xyz 只抄 solver。分页/订阅 = 有真 Host list/call 稳定之后（horizon
 | H2 | HITL T013 收口 | ✅ | high 岗未确认 0 稿 |
 | H3 | MCP 假宿主 JSON-RPC 联测 | ✅ | `test_mcp_host_client.py` list/call |
 | H4 | 面可见 skill_source | ✅ | 显式 / 规则选用 / 未点名 |
+| MW1 | 赛道 1 Agent Middleware 交卷面 | ✅ | `npm run check`；一页架构；3 分钟 GST+HITL+UNSPECIFIED |
 
 ### 7.2 岗写盘（指向 horizon，不展开）
 

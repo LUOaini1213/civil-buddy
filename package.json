@@ -1,0 +1,9 @@
+{
+  "name": "civil-buddy",
+  "private": true,
+  "description": "Civil Buddy Agent Middleware — permission, sandbox, HITL, audit, cost. Runtime, not a prompt.",
+  "scripts": {
+    "check": "node scripts/npm-check.cjs",
+    "demo": "python scripts/demo_agent_middleware.py"
+  }
+}

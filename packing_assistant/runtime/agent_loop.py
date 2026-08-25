@@ -338,6 +338,15 @@ def run_agent(
         )
         sched.release(sid)
         bus.emit(run.run_id, "run_ended", {"state": run.state, "wrote": out["wrote"]})
+        from packing_assistant.runtime.middleware import annotate
+
+        annotate(
+            out,
+            gate=gate,
+            sandbox_mode=cfg.sandbox,
+            approval=cfg.approval,
+            intent=intent,
+        )
         return out
 
     try:
