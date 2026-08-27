@@ -1,0 +1,62 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Civil Buddy · 用户路径（演示）</title>
+<style>
+body{font-family:"Microsoft YaHei",sans-serif;max-width:920px;margin:24px auto;padding:0 16px;color:#1a1a1a}
+.note{color:#555;font-size:13px}
+.row{display:flex;flex-wrap:wrap;gap:8px;align-items:center;margin:14px 0}
+.box{border:1px solid #c5d0dc;background:#f4f7fb;padding:10px 12px;border-radius:8px;min-width:120px}
+.box.hitl{background:#fff6d6;border-color:#e6d89a}
+.box.stop{background:#fde8e8;border-color:#e8b4b4}
+.box.ok{background:#e7f6ee;border-color:#b7dcc6}
+.arrow{color:#667}
+h2{font-size:16px;margin:22px 0 8px}
+table{border-collapse:collapse;width:100%}
+td,th{border:1px solid #ccc;padding:6px 8px;text-align:left;font-size:14px}
+</style>
+</head>
+<body>
+<h1>Civil Buddy · 装箱用户路径</h1>
+<p class="note">产品原型 / 流程图。给 RoboX 岗对齐「用户路径、流程图、需求文档」。不是智能座舱，不是 RoboOS，不能投标。</p>
+
+<h2>1. 装箱主路径</h2>
+<div class="row">
+  <div class="box">物料表或一句话</div><span class="arrow">→</span>
+  <div class="box">意图 pack-ship</div><span class="arrow">→</span>
+  <div class="box">工具算柜数 / xyz</div>
+</div>
+<div class="row">
+  <span class="arrow">分叉</span>
+  <div class="box stop">拒绝：弹出原因<br>资格 / 废标 / 不能代投标</div>
+  <span class="arrow">或</span>
+  <div class="box">成箱方案</div><span class="arrow">→</span>
+  <div class="box hitl">人点确认 HITL</div><span class="arrow">→</span>
+  <div class="box ok">拼柜 3D / 重心</div>
+</div>
+<p class="note">未确认不拼柜。高风险写盘确认句：我明白，将由持证人员签认。</p>
+
+<h2>2. 工作台路径（66 岗）</h2>
+<div class="row">
+  <div class="box">选岗或自然语言</div><span class="arrow">→</span>
+  <div class="box">SOP / SKILL.md</div><span class="arrow">→</span>
+  <div class="box">工具算数，模型只路由</div><span class="arrow">→</span>
+  <div class="box hitl">高风险须人确认</div><span class="arrow">→</span>
+  <div class="box">内部草稿</div>
+</div>
+<p class="note">16 大类 / 66 岗。草稿不是签认件，不判定可开工。</p>
+
+<h2>3. 交付物对照</h2>
+<table>
+<tr><th>JD 要的</th><th>本页对应</th></tr>
+<tr><td>用户路径 / 功能逻辑</td><td>上面两条路径</td></tr>
+<tr><td>产品需求文档</td><td><code>prd-pack-ship.md</code></td></tr>
+<tr><td>流程图 / 原型</td><td>本 HTML</td></tr>
+<tr><td>平台能力产品化</td><td>66 岗 SOP + packing 工具链</td></tr>
+<tr><td>不写的</td><td>座舱语音、RoboOS、可投标</td></tr>
+</table>
+<p class="note">评测：128 次 pipeline（16×8）。仓库：github.com/LUOaini1213/civil-buddy</p>
+</body>
+</html>
