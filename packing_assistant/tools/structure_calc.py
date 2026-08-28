@@ -470,7 +470,6 @@ def run_structure_calc(
     """
     from packing_assistant.tools.design_facts import (
         apply_section_overrides,
-        has_detailed_facts,
         resolve_box_design,
     )
 

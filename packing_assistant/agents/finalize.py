@@ -50,7 +50,6 @@ def agent_finalize(state: PackingState) -> Dict[str, Any]:
     switch = end_review.get("suggest_switch")
 
     # 合规：仅 REJECT（硬阻断/装不下）打回；WARN 可讨论出运
-    risk_passed = bool(risk_report.get("passed"))
     risk_decision = str(risk_report.get("decision") or "")
     need_revision = bool(
         risk_report.get("need_revision")

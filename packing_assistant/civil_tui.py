@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import os
 import sys
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, Optional
 
 from packing_assistant.runtime.civil_config import CONFIRM, APPROVAL_MODES, SANDBOX_MODES, load_config
 

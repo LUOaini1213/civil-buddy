@@ -23,10 +23,7 @@ pub fn serve_stdio(paths: Paths, filter: McpFilter) -> io::Result<()> {
     let stdin = io::stdin();
     let mut lock = stdin.lock();
     let mut stdout = io::stdout();
-    loop {
-        let Some(msg) = read_message(&mut lock)? else {
-            break;
-        };
+    while let Some(msg) = read_message(&mut lock)? {
         if let Some(resp) = handle_rpc(&paths, &filter, msg) {
             write_message(&mut stdout, &resp)?;
         }
@@ -34,36 +31,48 @@ pub fn serve_stdio(paths: Paths, filter: McpFilter) -> io::Result<()> {
     Ok(())
 }
 
+/// Upper bound for one framed JSON-RPC message; a hostile Content-Length
+/// header must not be allowed to allocate arbitrary memory.
+const MAX_MESSAGE_BYTES: usize = 16 * 1024 * 1024;
+
 fn read_message(r: &mut impl BufRead) -> io::Result<Option<Value>> {
-    let mut first = String::new();
-    let n = r.read_line(&mut first)?;
-    if n == 0 {
-        return Ok(None);
-    }
-    let trimmed = first.trim();
-    if trimmed.is_empty() {
-        return read_message(r);
-    }
-    if trimmed.to_ascii_lowercase().starts_with("content-length:") {
-        let len: usize = trimmed
-            .split(':')
-            .nth(1)
-            .and_then(|s| s.trim().parse().ok())
-            .unwrap_or(0);
-        loop {
-            let mut line = String::new();
-            r.read_line(&mut line)?;
-            if line.trim().is_empty() {
-                break;
-            }
+    loop {
+        let mut first = String::new();
+        let n = r.read_line(&mut first)?;
+        if n == 0 {
+            return Ok(None);
         }
-        let mut buf = vec![0u8; len];
-        io::Read::read_exact(r, &mut buf)?;
-        let v = serde_json::from_slice(&buf).unwrap_or(json!({}));
+        let trimmed = first.trim();
+        if trimmed.is_empty() {
+            continue;
+        }
+        if trimmed.to_ascii_lowercase().starts_with("content-length:") {
+            let len: usize = trimmed
+                .split(':')
+                .nth(1)
+                .and_then(|s| s.trim().parse().ok())
+                .unwrap_or(0);
+            if len > MAX_MESSAGE_BYTES {
+                return Err(io::Error::new(
+                    io::ErrorKind::InvalidData,
+                    format!("Content-Length {len} exceeds {MAX_MESSAGE_BYTES}"),
+                ));
+            }
+            loop {
+                let mut line = String::new();
+                r.read_line(&mut line)?;
+                if line.trim().is_empty() {
+                    break;
+                }
+            }
+            let mut buf = vec![0u8; len];
+            io::Read::read_exact(r, &mut buf)?;
+            let v = serde_json::from_slice(&buf).unwrap_or(json!({}));
+            return Ok(Some(v));
+        }
+        let v = serde_json::from_str(trimmed).unwrap_or(json!({}));
         return Ok(Some(v));
     }
-    let v = serde_json::from_str(trimmed).unwrap_or(json!({}));
-    Ok(Some(v))
 }
 
 fn write_message(w: &mut impl Write, v: &Value) -> io::Result<()> {
@@ -396,4 +405,34 @@ fn get_prompt(filter: &McpFilter, msg: &Value) -> Value {
             "content": { "type": "text", "text": text }
         }]
     })
+}
+
+#[cfg(test)]
+mod framing_tests {
+    use super::read_message;
+    use std::io::BufReader;
+
+    #[test]
+    fn oversized_content_length_is_rejected_not_allocated() {
+        let input = format!("Content-Length: {}\r\n\r\n", usize::MAX);
+        let mut r = BufReader::new(input.as_bytes());
+        assert!(read_message(&mut r).is_err());
+    }
+
+    #[test]
+    fn blank_lines_then_json_line() {
+        let input = "\n\n\n{\"jsonrpc\":\"2.0\",\"method\":\"ping\",\"id\":1}\n";
+        let mut r = BufReader::new(input.as_bytes());
+        let msg = read_message(&mut r).unwrap().unwrap();
+        assert_eq!(msg["method"], "ping");
+    }
+
+    #[test]
+    fn content_length_framed_message() {
+        let body = r#"{"jsonrpc":"2.0","method":"ping","id":7}"#;
+        let input = format!("Content-Length: {}\r\n\r\n{}", body.len(), body);
+        let mut r = BufReader::new(input.as_bytes());
+        let msg = read_message(&mut r).unwrap().unwrap();
+        assert_eq!(msg["id"], 7);
+    }
 }

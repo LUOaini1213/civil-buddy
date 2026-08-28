@@ -16,7 +16,6 @@ dims_override.json 格式:
 from __future__ import annotations
 
 import json
-import re
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 
@@ -101,7 +100,6 @@ def try_load_excel_dims(excel_path: Path) -> Dict[str, Dict[str, float]]:
         c_l = find_col("长")
         c_w = find_col("宽")
         c_h = find_col("高")
-        c_wt = find_col("单件重量", "单重", "重量")
         if c_l is None and c_w is None:
             continue
         for row in ws.iter_rows(min_row=2, max_col=20, values_only=True):

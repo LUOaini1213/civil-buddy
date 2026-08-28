@@ -105,4 +105,4 @@ IDLE → TEAM_A_RUNNING → AWAIT_USER_CONFIRM
 
 - [`team-a-user-output-template.md`](./team-a-user-output-template.md) — **团队A 给用户的输出模板**  
 - [`api-spec.md`](./api-spec.md) — JSON 接口  
-- [`phase2-agent2-packer-api.md`](./phase2-agent2-packer-api.md) — skjolber  
+- [`phase2-agent2-packer-api.md`](./archive/phase2-agent2-packer-api.md) — skjolber  

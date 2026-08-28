@@ -20,6 +20,18 @@ class EventHub:
         # 最近事件环形缓冲，供晚订阅者 catch-up
         self._recent: Dict[str, List[Dict[str, Any]]] = {}
         self._recent_max = 200
+        # 缓冲键数上限：长跑进程防内存泄漏（无订阅者的最老键先淘汰）
+        self._recent_keys_max = 512
+
+    def _evict_stale_recent_locked(self) -> None:
+        """持锁调用：超出键数上限时，淘汰最老且无在线订阅者的键。"""
+        if len(self._recent) <= self._recent_keys_max:
+            return
+        for k in list(self._recent.keys()):
+            if len(self._recent) <= self._recent_keys_max:
+                break
+            if k not in self._subs:
+                self._recent.pop(k, None)
 
     def subscribe(self, key: str) -> queue.Queue:
         k = str(key or "default")
@@ -53,6 +65,7 @@ class EventHub:
             buf.append(ev)
             if len(buf) > self._recent_max:
                 del buf[: len(buf) - self._recent_max]
+            self._evict_stale_recent_locked()
             qs = list(self._subs.get(k, set()))
         n = 0
         for q in qs:
@@ -82,6 +95,7 @@ class EventHub:
             buf.append(ev)
             if len(buf) > self._recent_max:
                 del buf[: len(buf) - self._recent_max]
+            self._evict_stale_recent_locked()
         n = 0
         for q in qs:
             try:

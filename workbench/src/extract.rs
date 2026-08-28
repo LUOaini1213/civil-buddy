@@ -298,7 +298,7 @@ BCA workhead CW01";
         );
         assert!(f.quals.iter().any(|s| s.contains("CW01")), "{:?}", f.quals);
         assert!(
-            f.score_rows.iter().any(|r| r.label.to_ascii_lowercase() == "quality" && r.weight.contains("40")),
+            f.score_rows.iter().any(|r| r.label.eq_ignore_ascii_case("quality") && r.weight.contains("40")),
             "{:?}",
             f.score_rows
         );

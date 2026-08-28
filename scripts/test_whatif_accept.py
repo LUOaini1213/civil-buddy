@@ -58,7 +58,7 @@ def main() -> int:
             "cog_rebalance": True,
         },
     )
-    assert base.get("team_mode") == "single_closed_loop"
+    assert base.get("team_mode") == "big_team_a_b"
     plan = base.get("container_plan") or {}
     assert plan.get("can_fit") is True
     used = int(plan.get("containers_used") or 1)

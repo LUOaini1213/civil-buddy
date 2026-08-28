@@ -4,7 +4,10 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>装箱拼柜 · Team Mode</title>
-  <script src="https://cdn.jsdelivr.net/npm/vue@2.7.16/dist/vue.min.js"></script>
+  <script src="/static/vendor/vue.min.js"></script>
+  <script>/* 本地 vendor 加载失败时回退 CDN(如以 file:// 或非网关方式打开) */
+    if (typeof Vue === 'undefined') document.write('<scr' + 'ipt src="https://cdn.jsdelivr.net/npm/vue@2.7.16/dist/vue.min.js"><\/scr' + 'ipt>');
+  </script>
   <style>
     :root {
       /* Elevated dark palette — not pure black void */
@@ -2760,7 +2763,6 @@
           loadingStartedAt: 0,
           statusText: '就绪 · 可一键演示或生成方案',
           skjolberOk: false,
-          skjolberLabel: 'unknown',
           gatewayOk: false,
           llmKeyPresent: false,
           agentCount: 13,
@@ -3331,8 +3333,13 @@
       },
       beforeDestroy() {
         this.disconnectSessionWs();
+        if (this._drawTimer) clearTimeout(this._drawTimer);
       },
       watch: {
+        // session 切换（HITL 下发新 id / ?session= 加载 / checkpoint 恢复）时重连 WS
+        sessionId(sid, old) {
+          if (sid && sid !== old) this.connectSessionWs(sid);
+        },
         demoSimpleMode(on) {
           // 简洁且无结果：强制总览，避免停在可视化/装箱空页导致「中间一片空」
           if (on && !this.hasAnyResult) {
@@ -3494,22 +3501,14 @@
           if (steps.some((s) => s.status === 'error')) return 'err';
           return 'done';
         },
-        isLikelyNext(id) {
-          return this.liveNode === id;
-        },
-        async consumeSse(url, body) {
+        /** 读取一个 SSE Response，将每条 data: 事件交给 onStreamEvent。
+         *  期间置 sseActive，避免 WS 同时写入造成 steps 双份。 */
+        async pumpSseResponse(res) {
+          const reader = res.body.getReader();
+          const dec = new TextDecoder();
+          let buf = '';
           this.sseActive = true;
           try {
-            const res = await fetch(API + url, {
-              method: 'POST',
-              headers: { 'Content-Type': 'application/json', Accept: 'text/event-stream' },
-              body: JSON.stringify(body),
-            });
-            if (!res.ok || !res.body) throw new Error('SSE HTTP ' + res.status);
-            const reader = res.body.getReader();
-            const dec = new TextDecoder();
-            let buf = '';
-            let lastPublic = null;
             while (true) {
               const { value, done } = await reader.read();
               if (done) break;
@@ -3519,17 +3518,11 @@
               for (const chunk of parts) {
                 const line = chunk.split('\n').find((l) => l.startsWith('data:'));
                 if (!line) continue;
-                let ev;
                 try {
-                  ev = JSON.parse(line.slice(5).trim());
-                } catch (e) {
-                  continue;
-                }
-                this.onStreamEvent(ev);
-                if (ev.type === 'done' && ev.public) lastPublic = ev;
+                  this.onStreamEvent(JSON.parse(line.slice(5).trim()));
+                } catch (e) { /* 跳过坏块 */ }
               }
             }
-            return lastPublic;
           } finally {
             this.sseActive = false;
           }
@@ -3645,38 +3638,22 @@
         },
         async replayRun(runId) {
           if (!runId) return;
-          this.loading = true;
+          if (!this.beginWork('回放')) return;
           this.statusText = '回放 ' + runId + '…';
           this.mainTab = 'agents';
           try {
             const res = await fetch(API + '/api/runs/' + encodeURIComponent(runId) + '/replay?delay_ms=40');
             if (!res.ok || !res.body) throw new Error('replay HTTP ' + res.status);
-            const reader = res.body.getReader();
-            const dec = new TextDecoder();
-            let buf = '';
-            while (true) {
-              const { value, done } = await reader.read();
-              if (done) break;
-              buf += dec.decode(value, { stream: true });
-              const parts = buf.split('\n\n');
-              buf = parts.pop() || '';
-              for (const chunk of parts) {
-                const line = chunk.split('\n').find((l) => l.startsWith('data:'));
-                if (!line) continue;
-                try {
-                  this.onStreamEvent(JSON.parse(line.slice(5).trim()));
-                } catch (e) { /* skip */ }
-              }
-            }
+            await this.pumpSseResponse(res);
             this.statusText = '回放完成 ' + runId;
           } catch (e) {
-            this.statusText = '回放失败: ' + e;
+            this.statusText = '回放失败: ' + ((e && e.message) || e);
           } finally {
-            this.loading = false;
+            this.endWork();
           }
         },
         pct(v) {
-          if (v == null) return '—';
+          if (v == null || Number.isNaN(Number(v))) return '—';
           return (Number(v) * 100).toFixed(0) + '%';
         },
         mid50Tone(v) {
@@ -3690,10 +3667,6 @@
           if (x >= 0.60) return 'rgba(62,207,142,0.08)';
           if (x >= 0.40) return 'rgba(230,184,77,0.08)';
           return 'rgba(240,113,120,0.10)';
-        },
-        fmtNum(v) {
-          if (v == null || Number.isNaN(Number(v))) return '—';
-          return Math.round(Number(v));
         },
         viewTitle(key) {
           const v = (this.result.views || {})[key];
@@ -3741,13 +3714,6 @@
             if (el) el.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
           });
         },
-        scrollAgentConsole() {
-          this.mainTab = 'agents';
-          this.$nextTick(() => {
-            const el = this.$refs.agentConsole;
-            if (el) el.scrollIntoView({ behavior: 'smooth', block: 'start' });
-          });
-        },
         formatArtifacts(obj) {
           try {
             return JSON.stringify(obj);
@@ -3756,8 +3722,8 @@
           }
         },
         applyAgentSteps(payload) {
-          const body = payload.public || payload;
-          let steps = body.agent_steps || payload.steps || [];
+          const body = (payload && (payload.public || payload)) || {};
+          let steps = body.agent_steps || (payload && payload.steps) || [];
           if ((!steps || !steps.length) && body.messages && body.messages.length) {
             steps = body.messages
               .filter((m) => m && m.content)
@@ -3965,12 +3931,20 @@
           const ctrl = typeof AbortController !== 'undefined' ? new AbortController() : null;
           const timer = ctrl ? setTimeout(() => ctrl.abort(), ms) : null;
           try {
-            const r = await fetch(API + url, {
-              method: 'POST',
-              headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify(body || {}),
-              signal: ctrl ? ctrl.signal : undefined,
-            });
+            let r;
+            try {
+              r = await fetch(API + url, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(body || {}),
+                signal: ctrl ? ctrl.signal : undefined,
+              });
+            } catch (e) {
+              if (e && e.name === 'AbortError') {
+                throw new Error('请求超时（' + Math.round(ms / 1000) + 's）· 请稍后重试或点「强制解锁」');
+              }
+              throw new Error('网络请求失败：' + ((e && e.message) || e) + ' · 请确认网关已启动');
+            }
             let j = {};
             try {
               j = await r.json();
@@ -4006,9 +3980,6 @@
             const j = await r.json();
             this.gatewayOk = (j.gateway || '').toUpperCase() === 'UP';
             this.skjolberOk = !!(j.skjolber && j.skjolber.ok);
-            this.skjolberLabel = this.skjolberOk
-              ? 'UP ' + (j.skjolber_url || '')
-              : (j.skjolber && j.skjolber.reason) || '未连接（将用本地回退）';
             this.harnessVersion = j.harness_version || this.harnessVersion || '';
             this.agentCount = j.agent_count || this.agentCount || 13;
             this.llmKeyPresent = !!j.llm_key_present;
@@ -4028,7 +3999,6 @@
           } catch (e) {
             this.gatewayOk = false;
             this.skjolberOk = false;
-            this.skjolberLabel = '网关不可达';
             this.statusText = '预检失败: ' + e + ' · 请确认 uvicorn 已启动';
             this.preflightHints = [String(e)];
           }
@@ -4361,10 +4331,12 @@
             const ws = new WebSocket(this.wsUrl(sid));
             this.ws = ws;
             this.wsStatus = 'connecting';
-            ws.onopen = () => { this.wsStatus = 'live'; };
-            ws.onclose = () => { this.wsStatus = 'off'; };
-            ws.onerror = () => { this.wsStatus = 'err'; };
+            // 旧 socket 的回调不再改状态（切 session 重连时避免互相覆盖）
+            ws.onopen = () => { if (this.ws === ws) this.wsStatus = 'live'; };
+            ws.onclose = () => { if (this.ws === ws) this.wsStatus = 'off'; };
+            ws.onerror = () => { if (this.ws === ws) this.wsStatus = 'err'; };
             ws.onmessage = (msg) => {
+              if (this.ws !== ws) return;
               try {
                 const ev = JSON.parse(msg.data);
                 if (ev.type === 'ws_ping' || ev.type === 'ws_subscribed') return;
@@ -4397,7 +4369,7 @@
           }
         },
         async restoreCheckpoint(threadId) {
-          this.loading = true;
+          if (!this.beginWork('恢复 checkpoint')) return;
           this.checkpointBanner = '从磁盘恢复 ' + threadId + '…';
           try {
             // 先拉 public 到前端
@@ -4435,25 +4407,20 @@
             this.mainTab = this.hasViews || this.hasScene3d ? 'visual' : 'overview';
             this.loadPendingCheckpoints();
           } catch (e) {
-            this.checkpointBanner = 'resume 失败: ' + e;
+            this.checkpointBanner = 'resume 失败: ' + ((e && e.message) || e);
             this.statusText = this.checkpointBanner;
           } finally {
-            this.loading = false;
+            this.endWork();
           }
         },
         async runPdf() {
-          this.loading = true;
+          if (!this.beginWork('解析 PDF')) return;
           this.statusText = '解析 test PDF…';
           try {
-            const r = await fetch(API + '/api/run-pdf', {
-              method: 'POST',
-              headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({
-                container_type: this.containerType,
-                session_id: this.sessionId,
-              }),
-            });
-            const j = await r.json();
+            const j = await this.fetchJson('/api/run-pdf', {
+              container_type: this.containerType,
+              session_id: this.sessionId,
+            }, 90000);
             if (j.detail) {
               this.statusText = '失败: ' + (j.detail || JSON.stringify(j));
             } else {
@@ -4462,9 +4429,9 @@
               this.mainTab = 'overview';
             }
           } catch (e) {
-            this.statusText = '失败: ' + e;
+            this.statusText = '失败: ' + ((e && e.message) || e);
           } finally {
-            this.loading = false;
+            this.endWork();
           }
         },
         checkAllNsRequired() {
@@ -4548,12 +4515,6 @@
             this.endWork();
           }
         },
-        async revise() {
-          const note = prompt('调整说明（如：去掉 钢梁）', '去掉 连接板');
-          if (note == null) return;
-          this.nlInstruction = note;
-          await this.reviseNl();
-        },
         async reviseNl() {
           const instruction = (this.nlInstruction || '').trim();
           if (!instruction) {
@@ -4598,7 +4559,7 @@
             this.statusText = '已改方案 · 团队 A 已重算';
             this.mainTab = 'boxes';
             const rec = (this.containerOptions.find((o) => o.recommended) || {}).value;
-            if (j.container_type) this.containerType = j.containerType || j.container_type;
+            if (j.container_type) this.containerType = j.container_type;
             else if (rec) this.containerType = rec;
           } catch (e) {
             this.nlStatus = '失败: ' + e;
@@ -4608,12 +4569,18 @@
           }
         },
         async cancel() {
-          await fetch(API + '/api/confirm', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ session_id: this.sessionId, action: 'cancel' }),
-          });
-          this.statusText = '已取消';
+          if (!this.beginWork('取消确认')) return;
+          try {
+            await this.fetchJson('/api/confirm', {
+              session_id: this.sessionId,
+              action: 'cancel',
+            }, 30000);
+            this.statusText = '已取消本次确认';
+          } catch (e) {
+            this.statusText = '取消失败: ' + ((e && e.message) || e);
+          } finally {
+            this.endWork();
+          }
         },
         drawAllViews() {
           if (!this.hasViews) return;

@@ -7,7 +7,7 @@
 from __future__ import annotations
 
 from collections import Counter
-from typing import Any, Dict, List, Optional, Sequence
+from typing import Any, Dict, List, Sequence
 
 
 # LLM 调度白名单（agent_loop 可选手）

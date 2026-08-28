@@ -11,7 +11,7 @@ import json
 import os
 from copy import deepcopy
 from pathlib import Path
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, Optional
 
 _ROOT = Path(__file__).resolve().parents[2]
 _DEFAULT_PATH = _ROOT / "knowledge" / "structure_design_facts.json"

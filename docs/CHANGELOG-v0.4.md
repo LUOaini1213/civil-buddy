@@ -39,5 +39,5 @@ multi-round full × 2 → ALL_GREEN（8 项 STABLE）
 7. **COG 工具** `tools/cog.py`：毛重优先；risk + visualizer 共用；分柜 primary  
 8. **前端**：三视角 COG 红点/中心线 + **等轴测 3D**（拖拽旋转/滚轮缩放）  
 9. **引擎 A/B** `scripts/compare_pack_engines.py` → `output/engine_ab_report.json`  
-10. **同类对照** `docs/competitive-landscape.md`  
+10. **同类对照** `docs/research/competitive-landscape.md`  
 

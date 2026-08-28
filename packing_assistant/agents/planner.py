@@ -85,7 +85,6 @@ def agent_planner(state: PackingState) -> Dict[str, Any]:
     if any("需加固" in (b.get("special_attributes") or []) for b in boxes):
         rules.append("需加固箱注意垫木与绑扎")
 
-    gross = sum(float(b.get("gross_weight_kg") or 0) for b in boxes)
     comps = booking.get("n0_components") or {}
     rules.append(
         f"自主定柜 N0*={booking.get('n0') or max_c}："

@@ -7,7 +7,6 @@ only orchestrates. submit_blocked stays true.
 
 from __future__ import annotations
 
-import json
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 from uuid import uuid4
@@ -600,7 +599,6 @@ def run_agent(
                     sched.transition(run, "acting")
 
             if pack_ship:
-                plan = pack_ship.get("plan") or {}
                 connected = bool(planned.get("connected"))
                 out["pack_ship"] = {
                     "source": "solver" if connected else "disconnected",

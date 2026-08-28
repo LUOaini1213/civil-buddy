@@ -456,23 +456,6 @@ T 号是开工 ID：K1=T001，P1-5=T002，K2=T003，P1-3=T010。handbook 不得�
 
 行业总判：**部分合格**。本日联网 **未发现** 本仓把 9% 写错或把 GeBIZ 当评分公式。缺口仍是：多数岗骨架、扫描 PDF 拒绝、无代交。
 
-### 本日复核（2026-08-25 打开官方页；不改 08-17 总判）
-
-| 门户 | 本日仍见 | 相对 §13 上表 | 本仓 |
-|------|----------|----------------|------|
-| [IRAS Current GST rates](https://www.iras.gov.sg/taxes/goods-services-tax-(gst)/basics-of-gst/current-gst-rates) | 首句 *The current GST rate in Singapore is 9%.* MOF GST 页（更 2026-07-14）同写 2024 起 9% | 未改 | 继续抄 9%；7%/8% 只当历史升档 |
-| [SCDF Fire Code 2023](https://www.scdf.gov.sg/fire-safety-services-listing/fire-code-2023) | 页题仍 *Fire Code 2023* / *Code of Practice for Fire Precautions in Buildings 2023* | 未改 | 只写标题，条款 UNSPECIFIED |
-| [IMO CTU Code](https://www.imo.org/en/OurWork/Safety/Pages/CTU-Code.aspx) | *2014* IMO/ILO/UNECE CTU Code，**non-mandatory** | 未改 | 非强制；不编 xyz |
-| [GeBIZ](https://www.gebiz.gov.sg/) | Government Electronic Business；GTP 注册后投标 | 未改 | 门户不是评分办法 |
-| [MOF procurement processes](https://www.mof.gov.sg/policies/government-procurement/procurement-processes/) | 更 2025-12-01：Sourcing → Evaluation（**按标书已公布标准**）→ Award 公示上 GeBIZ。SVP / Quotation / Tender 门槛只在该页 | 未改 | 分值只抄 ITT；不把 SVP S$6,000 当本仓默认 |
-| [URA DC26-08 / APPBCA-2026-12](https://www.ura.gov.sg/guidelines/circulars/dc26-08/) | **2026-07-23** 仍在线：2026-10-01 起新项目 **GFA≥5,000 m²** 强制 Gateway；**<5,000 m² 可继续 CORENET 2.0** | 未改 | 博客仍转 DC25-07「不论 GFA」——当反例，不以博客改口 |
-| [BCA Construction site records](https://www1.bca.gov.sg/safety-and-standards/applications-and-licenses/permit-for-structural-works/construction-site-records/) | 更 2026-01-29；QP *site record book* + 试验须 SAC-SINGLAS | 标题仍对 | pm-daily 只写标题，不是这份法定现场簿 |
-| [MOM Fair Consideration Framework](https://www.mom.gov.sg/employment-practices/fair-consideration-framework) | EP/S Pass 前须在 MyCareersFuture 广告 **至少连续 14 日**；须公平考虑候选人 | 新增旁证（T040 招聘岗） | 只写门户标题；不编薪资、不编录用 |
-
-竞品旁证（不是合格线）：腾讯云 WorkBuddy 仍卖「自然语言 → 规划 → **授权文件夹读写** → 可验收成品」，另加 100+ 通岗、云端 7×24、移动端。本仓对齐本地成稿回路，不做桌面壳 / IM / 100 通岗 / 「可直接验收」。
-
-08-17 历史页「总判：部分合格。」**不改**。签认 / 可投标 / 可以开工仍不合格。官方五针本日未改口。
-
 ---
 
 ## 14. 规划书审阅发现（必须改口的内部错误）

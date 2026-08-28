@@ -146,6 +146,23 @@ B. 成稿 / 出文件 / 写方案表：按工序独立成稿，写完调用本�
     )
 }
 
+/// Split on char boundaries (the old byte-based chunking corrupted
+/// multi-byte Chinese characters at chunk edges into U+FFFD).
+fn chunk_by_chars(s: &str, n: usize) -> Vec<String> {
+    let mut out = Vec::new();
+    let mut buf = String::new();
+    for (count, c) in s.chars().enumerate() {
+        buf.push(c);
+        if (count + 1) % n == 0 {
+            out.push(std::mem::take(&mut buf));
+        }
+    }
+    if !buf.is_empty() {
+        out.push(buf);
+    }
+    out
+}
+
 fn user_blob(history: &[Value]) -> String {
     history
         .iter()
@@ -426,7 +443,6 @@ fn done_from_run(label: &str, expert_id: &str, run: &Run) -> EventOut {
                 "gate": run.hitl.gate,
             },
             "illegal_tool_calls": run.illegal_count(),
-            "intent": "run",
             "wrote": !run.files.is_empty(),
             "submit_blocked": true,
             "stamp": chrono::Local::now().format("%Y-%m-%dT%H-%M-%S").to_string(),
@@ -636,7 +652,15 @@ pub async fn run_expert(
         }
         Intent::Run | Intent::Both => {
             let ticket = ticket_from_chat(session_id, expert, &history, confirm_ok);
-            let run = harness::run_expert_steps(paths, expert, ticket);
+            let run = {
+                let paths2 = paths.clone();
+                let expert2 = expert.clone();
+                tokio::task::spawn_blocking(move || {
+                    harness::run_expert_steps(&paths2, &expert2, ticket)
+                })
+                .await
+                .map_err(|e| LlmError(format!("后台任务失败：{e}")))?
+            };
             events.extend(events_from_run(&expert.name, &expert.id, &run));
             match talk_after_run(paths, expert, &history, confirm_ok, session_id, &run).await {
                 Ok(talk) => events.extend(talk),
@@ -687,60 +711,21 @@ async fn run_expert_explain(
         context::inspect(&messages, &[]).to_value(),
     ));
 
-    let max_steps = max_agent_steps();
-    let mut final_text = String::new();
-    for step in 0..max_steps {
-        events.push((
-            "status".into(),
-            json!({"phase": "think", "text": format!("{} 解释 {}/{}", expert.name, step + 1, max_steps)}),
-        ));
-        let msg = llm::chat(&messages, Some(&tools), 0.3).await?;
-        let tool_calls = msg.get("tool_calls").and_then(|v| v.as_array()).cloned().unwrap_or_default();
-        if tool_calls.is_empty() {
-            final_text = msg.get("content").and_then(|v| v.as_str()).unwrap_or("").to_string();
-            break;
-        }
-        messages.push(msg);
-        for call in tool_calls {
-            let fnx = call.get("function").cloned().unwrap_or(json!({}));
-            let name = fnx.get("name").and_then(|v| v.as_str()).unwrap_or("").to_string();
-            let raw = fnx.get("arguments").cloned().unwrap_or(json!("{}"));
-            let args = match raw {
-                Value::String(s) => serde_json::from_str(&s).unwrap_or(json!({})),
-                other => other,
-            };
-            if !READ_ONLY_TOOLS.contains(&name.as_str()) {
-                messages.push(json!({
-                    "role": "tool",
-                    "tool_call_id": call.get("id").and_then(|v| v.as_str()).unwrap_or(&name),
-                    "content": "拒绝：解释模式只允许只读工具。成稿请直接下达作业，走 harness steps。",
-                }));
-                continue;
-            }
-            let hint = args
-                .get("query")
-                .or_else(|| args.get("path"))
-                .and_then(|v| v.as_str())
-                .unwrap_or("");
-            events.push((
-                "status".into(),
-                json!({"phase": name, "text": format!("{} · {} {}", expert.name, name, hint)}),
-            ));
-            let result = packs::execute(&mut ctx, &name, &args);
-            let cut: String = result.chars().take(12000).collect();
-            messages.push(json!({
-                "role": "tool",
-                "tool_call_id": call.get("id").and_then(|v| v.as_str()).unwrap_or(&name),
-                "content": cut,
-            }));
-        }
-    }
+    let mut final_text = read_only_tool_loop(
+        &mut ctx,
+        &tools,
+        &mut messages,
+        &mut events,
+        &expert.name,
+        "解释",
+        "拒绝：解释模式只允许只读工具。成稿请直接下达作业，走 harness steps。",
+    )
+    .await?;
     if final_text.is_empty() {
         final_text = "（达到步数上限，请把任务拆小或再发一次）".into();
     }
 
-    for chunk in final_text.as_bytes().chunks(40) {
-        let text = String::from_utf8_lossy(chunk).to_string();
+    for text in chunk_by_chars(&final_text, 20) {
         events.push(("token".into(), json!({"text": text})));
     }
 
@@ -772,6 +757,82 @@ async fn run_expert_explain(
         }),
     ));
     Ok(events)
+}
+
+/// Shared LLM loop for the two read-only phases (explain / talk-after-run):
+/// call the model with read-only tools, execute allowed calls, refuse writes
+/// with `refuse_msg`, and return the model's final plain-text answer
+/// (empty if the step budget ran out before one arrived).
+async fn read_only_tool_loop(
+    ctx: &mut ToolCtx,
+    tools: &[Value],
+    messages: &mut Vec<Value>,
+    events: &mut Vec<EventOut>,
+    expert_name: &str,
+    phase_verb: &str,
+    refuse_msg: &str,
+) -> Result<String, LlmError> {
+    let max_steps = max_agent_steps();
+    let mut final_text = String::new();
+    for step in 0..max_steps {
+        events.push((
+            "status".into(),
+            json!({"phase": "think", "text": format!("{expert_name} {phase_verb} {}/{}", step + 1, max_steps)}),
+        ));
+        let msg = llm::chat(messages, Some(tools), 0.3).await?;
+        let tool_calls = msg
+            .get("tool_calls")
+            .and_then(|v| v.as_array())
+            .cloned()
+            .unwrap_or_default();
+        if tool_calls.is_empty() {
+            final_text = msg
+                .get("content")
+                .and_then(|v| v.as_str())
+                .unwrap_or("")
+                .to_string();
+            break;
+        }
+        messages.push(msg);
+        for call in tool_calls {
+            let fnx = call.get("function").cloned().unwrap_or(json!({}));
+            let name = fnx
+                .get("name")
+                .and_then(|v| v.as_str())
+                .unwrap_or("")
+                .to_string();
+            let raw = fnx.get("arguments").cloned().unwrap_or(json!("{}"));
+            let args = match raw {
+                Value::String(s) => serde_json::from_str(&s).unwrap_or(json!({})),
+                other => other,
+            };
+            if !READ_ONLY_TOOLS.contains(&name.as_str()) {
+                messages.push(json!({
+                    "role": "tool",
+                    "tool_call_id": call.get("id").and_then(|v| v.as_str()).unwrap_or(&name),
+                    "content": refuse_msg,
+                }));
+                continue;
+            }
+            let hint = args
+                .get("query")
+                .or_else(|| args.get("path"))
+                .and_then(|v| v.as_str())
+                .unwrap_or("");
+            events.push((
+                "status".into(),
+                json!({"phase": name, "text": format!("{expert_name} · {name} {hint}")}),
+            ));
+            let result = packs::execute(ctx, &name, &args);
+            let cut: String = result.chars().take(12000).collect();
+            messages.push(json!({
+                "role": "tool",
+                "tool_call_id": call.get("id").and_then(|v| v.as_str()).unwrap_or(&name),
+                "content": cut,
+            }));
+        }
+    }
+    Ok(final_text)
 }
 
 fn read_run_grounding(run: &Run) -> String {
@@ -832,66 +893,16 @@ async fn talk_after_run(
         confirm_ok,
         session_id,
     );
-    let max_steps = max_agent_steps();
-    let mut final_text = String::new();
-    for step in 0..max_steps {
-        events.push((
-            "status".into(),
-            json!({"phase": "think", "text": format!("{} 说明 {}/{}", expert.name, step + 1, max_steps)}),
-        ));
-        let msg = llm::chat(&messages, Some(&tools), 0.3).await?;
-        let tool_calls = msg
-            .get("tool_calls")
-            .and_then(|v| v.as_array())
-            .cloned()
-            .unwrap_or_default();
-        if tool_calls.is_empty() {
-            final_text = msg
-                .get("content")
-                .and_then(|v| v.as_str())
-                .unwrap_or("")
-                .to_string();
-            break;
-        }
-        messages.push(msg);
-        for call in tool_calls {
-            let fnx = call.get("function").cloned().unwrap_or(json!({}));
-            let name = fnx
-                .get("name")
-                .and_then(|v| v.as_str())
-                .unwrap_or("")
-                .to_string();
-            let raw = fnx.get("arguments").cloned().unwrap_or(json!("{}"));
-            let args = match raw {
-                Value::String(s) => serde_json::from_str(&s).unwrap_or(json!({})),
-                other => other,
-            };
-            if !READ_ONLY_TOOLS.contains(&name.as_str()) {
-                messages.push(json!({
-                    "role": "tool",
-                    "tool_call_id": call.get("id").and_then(|v| v.as_str()).unwrap_or(&name),
-                    "content": "拒绝：说明阶段只读。写盘已由 harness steps 完成。",
-                }));
-                continue;
-            }
-            let hint = args
-                .get("query")
-                .or_else(|| args.get("path"))
-                .and_then(|v| v.as_str())
-                .unwrap_or("");
-            events.push((
-                "status".into(),
-                json!({"phase": name, "text": format!("{} · {} {}", expert.name, name, hint)}),
-            ));
-            let result = packs::execute(&mut ctx, &name, &args);
-            let cut: String = result.chars().take(12000).collect();
-            messages.push(json!({
-                "role": "tool",
-                "tool_call_id": call.get("id").and_then(|v| v.as_str()).unwrap_or(&name),
-                "content": cut,
-            }));
-        }
-    }
+    let mut final_text = read_only_tool_loop(
+        &mut ctx,
+        &tools,
+        &mut messages,
+        &mut events,
+        &expert.name,
+        "说明",
+        "拒绝：说明阶段只读。写盘已由 harness steps 完成。",
+    )
+    .await?;
     if final_text.trim().is_empty() {
         final_text = grounding;
     }
@@ -922,4 +933,26 @@ async fn talk_after_run(
         }),
     ));
     Ok(events)
+}
+
+#[cfg(test)]
+mod chunk_tests {
+    use super::chunk_by_chars;
+
+    #[test]
+    fn chinese_chunks_stay_valid_utf8() {
+        let text = "临边防护方案十一章，先做安全交底再验收。".repeat(5);
+        let chunks = chunk_by_chars(&text, 20);
+        assert!(chunks.len() > 1);
+        for c in &chunks {
+            assert!(!c.contains('\u{FFFD}'), "chunk corrupted: {c}");
+        }
+        assert_eq!(chunks.concat(), text);
+    }
+
+    #[test]
+    fn empty_and_short_inputs() {
+        assert!(chunk_by_chars("", 20).is_empty());
+        assert_eq!(chunk_by_chars("ab", 20), vec!["ab".to_string()]);
+    }
 }

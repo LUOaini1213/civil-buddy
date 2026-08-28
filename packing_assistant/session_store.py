@@ -78,8 +78,6 @@ def _checkpoint_status(state: Dict[str, Any]) -> str:
         return "cancelled"
     if phase in ("done", "team_b_done") or action == "confirm":
         # confirm 后可能仍在跑 B；finalize 后 phase 多为 done
-        if phase == "await_user_confirm":
-            return "interrupted"
         return "done" if phase in ("done", "cancelled") or state.get("final_response") else "resumed"
     if state.get("final_response") and phase not in ("await_user_confirm",):
         return "done"

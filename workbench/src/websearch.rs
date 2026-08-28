@@ -3,6 +3,7 @@
 use regex::Regex;
 use reqwest::Url;
 use serde_json::{json, Value};
+use std::io::Read as _;
 
 const UA: &str = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36 CivilBuddy/0.1";
 
@@ -65,8 +66,11 @@ fn search_ddg(query: &str) -> Result<Vec<Value>, String> {
 }
 
 pub fn parse_ddg(html: &str) -> Vec<Value> {
-    let re = Regex::new(r#"(?is)<a[^>]+class="[^"]*result__a[^"]*"[^>]+href="([^"]+)"[^>]*>(.*?)</a>"#)
-        .unwrap();
+    static RE: std::sync::LazyLock<Regex> = std::sync::LazyLock::new(|| {
+        Regex::new(r#"(?is)<a[^>]+class="[^"]*result__a[^"]*"[^>]+href="([^"]+)"[^>]*>(.*?)</a>"#)
+            .expect("ddg re")
+    });
+    let re = &*RE;
     let mut out = Vec::new();
     let mut seen = std::collections::HashSet::new();
     for cap in re.captures_iter(html) {
@@ -106,11 +110,20 @@ fn urlencoding_decode(s: &str) -> String {
     let bytes = s.as_bytes();
     let mut out = Vec::new();
     let mut i = 0;
+    // Work on bytes only: slicing `&s[i+1..i+3]` panicked when a multi-byte
+    // character followed the '%' (non-char-boundary slice).
+    let hex_val = |b: u8| -> Option<u8> {
+        match b {
+            b'0'..=b'9' => Some(b - b'0'),
+            b'a'..=b'f' => Some(b - b'a' + 10),
+            b'A'..=b'F' => Some(b - b'A' + 10),
+            _ => None,
+        }
+    };
     while i < bytes.len() {
         if bytes[i] == b'%' && i + 2 < bytes.len() {
-            let hex = &s[i + 1..i + 3];
-            if let Ok(v) = u8::from_str_radix(hex, 16) {
-                out.push(v);
+            if let (Some(h), Some(l)) = (hex_val(bytes[i + 1]), hex_val(bytes[i + 2])) {
+                out.push(h * 16 + l);
                 i += 3;
                 continue;
             }
@@ -126,8 +139,9 @@ fn urlencoding_decode(s: &str) -> String {
 }
 
 fn strip_tags(s: &str) -> String {
-    let re = Regex::new(r"<[^>]+>").unwrap();
-    collapse(re.replace_all(s, "").as_ref())
+    static RE: std::sync::LazyLock<Regex> =
+        std::sync::LazyLock::new(|| Regex::new(r"<[^>]+>").expect("tag re"));
+    collapse(RE.replace_all(s, "").as_ref())
 }
 
 fn collapse(s: &str) -> String {
@@ -153,18 +167,30 @@ fn fetch_text(url: &str) -> Result<String, String> {
     if ctype.contains("pdf") {
         return Err("这是 PDF。请下载后点「上传文件」，不要用 web_open 直接拆 PDF。".into());
     }
-    let html = resp.text().map_err(|e| e.to_string())?;
+    // Cap the body read: an arbitrary page must not be able to exhaust memory.
+    const MAX_FETCH_BYTES: u64 = 8 * 1024 * 1024;
+    let mut raw = Vec::new();
+    std::io::Read::take(resp, MAX_FETCH_BYTES)
+        .read_to_end(&mut raw)
+        .map_err(|e| e.to_string())?;
+    let html = String::from_utf8_lossy(&raw);
     Ok(html_to_text(&html))
 }
 
 pub fn html_to_text(html: &str) -> String {
+    static DROP_RES: std::sync::LazyLock<Vec<Regex>> = std::sync::LazyLock::new(|| {
+        ["script", "style", "noscript"]
+            .iter()
+            .map(|tag| Regex::new(&format!(r"(?is)<{tag}[^>]*>.*?</{tag}>")).expect("drop re"))
+            .collect()
+    });
+    static TAG_RE: std::sync::LazyLock<Regex> =
+        std::sync::LazyLock::new(|| Regex::new(r"(?is)<[^>]+>").expect("tag re"));
     let mut s = html.to_string();
-    for tag in ["script", "style", "noscript"] {
-        let re = Regex::new(&format!(r"(?is)<{tag}[^>]*>.*?</{tag}>")).unwrap();
+    for re in DROP_RES.iter() {
         s = re.replace_all(&s, " ").into_owned();
     }
-    let re = Regex::new(r"(?is)<[^>]+>").unwrap();
-    let text = decode_xml_lite(&re.replace_all(&s, " "));
+    let text = decode_xml_lite(&TAG_RE.replace_all(&s, " "));
     collapse(&text)
 }
 
@@ -224,6 +250,14 @@ mod tests {
     fn blocks_localhost() {
         assert!(check_url("http://127.0.0.1/x").is_err());
         assert!(check_url("https://www.bca.gov.sg/").is_ok());
+    }
+
+    #[test]
+    fn percent_decode_survives_multibyte_neighbors() {
+        // Used to panic: "%" followed by a multi-byte char sliced mid-boundary.
+        assert_eq!(urlencoding_decode("%中文"), "%中文");
+        assert_eq!(urlencoding_decode("%41%42+c"), "AB c");
+        assert_eq!(urlencoding_decode("https%3A%2F%2Fbca.gov.sg"), "https://bca.gov.sg");
     }
 
     #[test]

@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List
 
 
 def _as_cog(plan: Dict[str, Any], state: Dict[str, Any]) -> Dict[str, Any]:

@@ -5,7 +5,7 @@
 
 from __future__ import annotations
 
-from typing import Any, Callable, Dict, List, Optional, Tuple
+from typing import Any, Callable, Dict, List, Tuple
 
 AgentFn = Callable[[Dict[str, Any]], Dict[str, Any]]
 

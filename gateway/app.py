@@ -20,9 +20,9 @@ from typing import Any, Dict, List, Optional
 import asyncio
 import queue as queue_mod
 
-from fastapi import FastAPI, File, Form, HTTPException, UploadFile, WebSocket, WebSocketDisconnect
+from fastapi import FastAPI, File, Form, HTTPException, Request, UploadFile, WebSocket, WebSocketDisconnect
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import FileResponse, StreamingResponse
+from fastapi.responses import FileResponse, JSONResponse, StreamingResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
 
@@ -46,14 +46,12 @@ if (os.getenv("PACKING_SKIP_SKJOLBER") or "").strip() == "":
 
 from packing_assistant.config import HARNESS_VERSION, PRODUCT_NAME  # noqa: E402
 from packing_assistant.harness import (  # noqa: E402
-    apply_user_confirmation,
     iter_agent_pipeline,
     public_response,
     revise_plan_nl,
     run_agent_pipeline,
     run_pipeline,
     run_team_a,
-    run_team_b,
 )
 from packing_assistant.session_store import (  # noqa: E402
     delete_checkpoint,
@@ -83,6 +81,39 @@ def _store_session(session_id: str, state: Dict[str, Any]) -> None:
         pass
 
 
+def _load_session(session_id: str) -> Optional[Dict[str, Any]]:
+    """磁盘 checkpoint 安全读取：空 id / 读失败一律返回 None。"""
+    sid = str(session_id or "")
+    if not sid:
+        return None
+    try:
+        return load_session(sid)
+    except Exception:
+        return None
+
+
+def _as_int(value: Any, default: int, lo: int, hi: int) -> int:
+    """宽容地把请求字段转 int 并夹在 [lo, hi]，坏输入回退 default（避免 500）。"""
+    try:
+        n = int(value)
+    except (TypeError, ValueError):
+        n = default
+    return max(lo, min(n, hi))
+
+
+def _resolve_under(base: Path, raw: str, what: str = "path") -> Path:
+    """把用户传入的路径解析到 base 之下；越界（../ 或指向仓库外）直接 400。"""
+    p = Path(str(raw).strip())
+    if not p.is_absolute():
+        p = base / p
+    try:
+        rp = p.resolve()
+        rp.relative_to(base.resolve())
+    except (ValueError, OSError):
+        raise HTTPException(400, f"路径不合法（越出允许目录）: {what}")
+    return rp
+
+
 def _get_session(session_id: str) -> Optional[Dict[str, Any]]:
     sid = str(session_id or "")
     state = _SESSIONS.get(sid)
@@ -108,6 +139,20 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+@app.exception_handler(Exception)
+async def _unhandled_error_handler(request: Request, exc: Exception):
+    """兜底：未捕获异常返回中文 JSON，不给客户端回堆栈页。"""
+    return JSONResponse(
+        status_code=500,
+        content={
+            "ok": False,
+            "error": "服务器内部错误，请稍后重试或查看网关日志",
+            "detail": f"{type(exc).__name__}: {exc}",
+            "path": str(request.url.path),
+        },
+    )
+
 
 FRONTEND_DIR = ROOT / "frontend"
 if FRONTEND_DIR.exists():
@@ -362,7 +407,7 @@ def api_kb_search(body: dict = None):
     body = body or {}
     q = str(body.get("q") or body.get("query") or "")
     agent_id = str(body.get("agent_id") or "").strip()
-    limit = int(body.get("limit") or 5)
+    limit = _as_int(body.get("limit"), 5, 1, 50)
     if agent_id:
         return search_for_agent(agent_id, q, limit=limit)
     return search_knowledge(q, limit=limit)
@@ -381,6 +426,10 @@ def api_tools(team: str = ""):
         "tools": list_tools(team=t),
         "prompt_summary": tools_for_agent_prompt() if not t else None,
     }
+
+
+# 单文件上传上限（招标节选 / 材料表都远小于此；防误传大包拖死单进程网关）
+_MAX_UPLOAD_BYTES = 20 * 1024 * 1024
 
 
 def _tender_ingest_from_uploads(uploads: list) -> dict:
@@ -468,7 +517,7 @@ def api_agent(body: dict = None):
         force_intent=str(body.get("intent") or "") or None,
         packing_summary=body.get("packing_summary") if isinstance(body.get("packing_summary"), dict) else None,
         project_name=str(body.get("project_name") or "幕墙项目投标应答（草稿）"),
-        max_steps=max(1, min(int(body.get("max_steps") or 8), 32)),
+        max_steps=_as_int(body.get("max_steps"), 8, 1, 32),
     )
 
 
@@ -525,6 +574,28 @@ def _packing_disk_sidecar(run_id: str, include_trace: bool) -> Optional[Dict[str
     if include_trace:
         out["trace"] = read_trace_jsonl(run_id, limit=2000)
     return out
+
+
+@app.get("/api/runs/compare")
+def api_compare_runs(a: str, b: str):
+    """对比两次 run 的摘要指标（必须先于 /api/runs/{run_id} 注册，否则会被吞成 run_id）。"""
+    from packing_assistant.trace_events import RUNS_DIR
+
+    def load_idx(rid: str) -> Dict[str, Any]:
+        p = RUNS_DIR / rid / "index.json"
+        if not p.exists():
+            return {"run_id": rid, "error": "missing"}
+        try:
+            return json.loads(p.read_text(encoding="utf-8"))
+        except Exception as e:
+            return {"run_id": rid, "error": str(e)}
+
+    ia, ib = load_idx(a), load_idx(b)
+    keys = ("n0", "containers_used", "can_fit", "risk_decision")
+    diff = {}
+    for k in keys:
+        diff[k] = {"a": ia.get(k), "b": ib.get(k), "same": ia.get(k) == ib.get(k)}
+    return {"ok": True, "a": ia, "b": ib, "diff": diff}
 
 
 @app.get("/api/runs/{run_id}")
@@ -636,6 +707,8 @@ async def api_tender_parse_file(
 ):
     """Upload one ITT excerpt: txt/md/csv/docx/xlsx. No scanned-PDF vision."""
     raw = await file.read()
+    if len(raw) > _MAX_UPLOAD_BYTES:
+        raise HTTPException(413, f"文件过大（>{_MAX_UPLOAD_BYTES // (1024 * 1024)}MB）：{file.filename}")
     ingested = _tender_ingest_from_uploads([{"filename": file.filename, "bytes": raw}])
     out = _tender_parse_via_engine(
         text=ingested["text"],
@@ -665,7 +738,10 @@ async def api_tender_parse_files(
         raise HTTPException(400, "一次最多 8 个节选")
     uploads = []
     for f in files:
-        uploads.append({"filename": f.filename, "bytes": await f.read()})
+        raw = await f.read()
+        if len(raw) > _MAX_UPLOAD_BYTES:
+            raise HTTPException(413, f"文件过大（>{_MAX_UPLOAD_BYTES // (1024 * 1024)}MB）：{f.filename}")
+        uploads.append({"filename": f.filename, "bytes": raw})
     ingested = _tender_ingest_from_uploads(uploads)
     out = _tender_parse_via_engine(
         text=ingested["text"],
@@ -759,7 +835,7 @@ def api_tender_delivery(body: dict = None):
         run_delivery=bool(body.get("run_delivery", True)),
         materials=materials,
         container_type=str(body.get("container_type") or "40HQ"),
-        max_containers=int(body.get("max_containers") or 2),
+        max_containers=_as_int(body.get("max_containers"), 2, 0, 64),
         user_input=str(body.get("user_input") or "投标交付：按招标运输包装要求装柜"),
         session_id=str(body.get("session_id") or "tender-delivery"),
         project_name=str(body.get("project_name") or "幕墙项目投标应答（草稿）"),
@@ -779,7 +855,7 @@ def api_tender_bidbook(body: dict = None):
         str(body.get("text") or body.get("tender_text") or ""),
         run_delivery=bool(body.get("run_delivery", False)),
         container_type=str(body.get("container_type") or "40HQ"),
-        max_containers=int(body.get("max_containers") or 2),
+        max_containers=_as_int(body.get("max_containers"), 2, 0, 64),
         project_name=str(body.get("project_name") or "幕墙项目投标应答（草稿）"),
     )
     return {
@@ -959,7 +1035,7 @@ def api_intent(body: dict):
         user_input=str(body.get("user_input") or body.get("nl_query") or ""),
         materials=body.get("materials"),
         packing_options=body.get("packing_options"),
-        max_containers=int(body.get("max_containers") or 0),
+        max_containers=_as_int(body.get("max_containers"), 0, 0, 64),
         goal=str(body.get("goal") or "deliver_valid_pack_plan"),
         container_type=str(body.get("container_type") or ""),
         source=str(body.get("source") or "api"),
@@ -1319,11 +1395,11 @@ async def api_table_parse(
     try:
         if file is not None and getattr(file, "filename", None):
             raw = await file.read()
+            if len(raw) > _MAX_UPLOAD_BYTES:
+                raise HTTPException(413, f"文件过大（>{_MAX_UPLOAD_BYTES // (1024 * 1024)}MB）：{file.filename}")
             result = parse_table_bytes(raw, filename=file.filename or "upload.csv")
         elif (path or "").strip():
-            p = Path(path.strip())
-            if not p.is_absolute():
-                p = ROOT / p
+            p = _resolve_under(ROOT, path, what=path)
             if not p.exists():
                 raise HTTPException(404, f"table not found: {path}")
             result = parse_table_file(p)
@@ -1396,9 +1472,7 @@ def api_table_parse_json(body: TableParseJsonBody):
     if body.rows:
         result = parse_table_rows(body.rows, source="api_json_rows")
     elif (body.path or "").strip():
-        p = Path(body.path.strip())
-        if not p.is_absolute():
-            p = ROOT / p
+        p = _resolve_under(ROOT, body.path, what=body.path)
         if not p.exists():
             raise HTTPException(404, f"table not found: {body.path}")
         result = parse_table_file(p)
@@ -1450,7 +1524,7 @@ def api_whatif(body: WhatIfRequest):
     What-if：在 baseline state 上改 max_containers / 过滤材料 / packing_options，
     重跑 run_agent_pipeline，返回 before/after + plan_diff。
     """
-    from packing_assistant.session_store import load_session, save_session
+    from packing_assistant.session_store import save_session
     from packing_assistant.whatif import run_whatif
 
     base = _SESSIONS.get(body.session_id) or _load_session(body.session_id)
@@ -1621,7 +1695,7 @@ def api_nonstandard_inspect(body: dict):
     if body.get("ns_llm_enrich"):
         opts["ns_llm_enrich"] = True
         mats = enrich_materials(mats, force_llm=True)
-    elif opts.get("ns_llm_enrich") or __import__("os").environ.get("PACKING_NS_LLM", "").strip() in (
+    elif opts.get("ns_llm_enrich") or os.environ.get("PACKING_NS_LLM", "").strip() in (
         "1",
         "true",
         "TRUE",
@@ -1691,9 +1765,9 @@ def api_checklist(body: dict):
 def api_eval_run():
     """跑合成 tiny/20t 黄金评测（不依赖 t80 大文件）。"""
     from packing_assistant.eval_harness import run_eval_suite
-    from pathlib import Path
 
-    summary = run_eval_suite(out_path=Path("output/eval_harness_last.json"))
+    # 锚定仓库根，避免网关从其他 cwd 启动时把评测结果写到别处
+    summary = run_eval_suite(out_path=ROOT / "output" / "eval_harness_last.json")
     return {"ok": summary.get("ok"), **summary}
 
 
@@ -1937,7 +2011,7 @@ async def ws_session(websocket: WebSocket, session_id: str):
         while True:
             # 非阻塞取事件 + 心跳
             try:
-                ev = await asyncio.get_event_loop().run_in_executor(
+                ev = await asyncio.get_running_loop().run_in_executor(
                     None, lambda: q.get(timeout=15.0)
                 )
                 await websocket.send_json(ev)
@@ -2067,28 +2141,6 @@ def api_list_runs(limit: int = 30):
     return {"ok": True, "harness_version": HARNESS_VERSION, "runs": list_runs(limit=limit)}
 
 
-@app.get("/api/runs/compare")
-def api_compare_runs(a: str, b: str):
-    """对比两次 run 的摘要指标（须在 {run_id} 路由之前注册）。"""
-    from packing_assistant.trace_events import RUNS_DIR
-
-    def load_idx(rid: str) -> Dict[str, Any]:
-        p = RUNS_DIR / rid / "index.json"
-        if not p.exists():
-            return {"run_id": rid, "error": "missing"}
-        try:
-            return json.loads(p.read_text(encoding="utf-8"))
-        except Exception as e:
-            return {"run_id": rid, "error": str(e)}
-
-    ia, ib = load_idx(a), load_idx(b)
-    keys = ("n0", "containers_used", "can_fit", "risk_decision")
-    diff = {}
-    for k in keys:
-        diff[k] = {"a": ia.get(k), "b": ib.get(k), "same": ia.get(k) == ib.get(k)}
-    return {"ok": True, "a": ia, "b": ib, "diff": diff}
-
-
 @app.get("/api/runs/{run_id}/replay")
 def api_replay_run(run_id: str, delay_ms: int = 0):
     """
@@ -2126,8 +2178,6 @@ def api_replay_run(run_id: str, delay_ms: int = 0):
 def api_engine_ab(cases: str = "case_a_small_cartons_20gp,case_b_long_frames_40hq"):
     """轻量引擎 A/B（python-laff vs skjolber）。"""
     import subprocess
-    import sys
-    from pathlib import Path
 
     out_path = ROOT / "output" / "engine_ab_report.json"
     cmd = [
@@ -2217,7 +2267,10 @@ def api_test_shipments():
     p = ROOT / "output" / "test_shipments" / "summary.json"
     if not p.exists():
         return {"ok": False, "message": "尚未跑批，请先 python scripts/run_test_shipments.py"}
-    return json.loads(p.read_text(encoding="utf-8"))
+    try:
+        return json.loads(p.read_text(encoding="utf-8"))
+    except (OSError, ValueError) as e:
+        return {"ok": False, "message": f"summary.json 读取失败：{e}"}
 
 
 @app.get("/api/test-shipments/report")
@@ -2245,7 +2298,7 @@ def api_run_pdf(body: PdfRunRequest):
     test_dir = ROOT / "test"
     path = None
     if body.filename:
-        cand = test_dir / body.filename
+        cand = _resolve_under(test_dir, body.filename, what=body.filename)
         if cand.exists():
             path = cand
     if path is None:

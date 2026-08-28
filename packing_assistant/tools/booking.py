@@ -708,13 +708,12 @@ def pack_with_auto_containers(
     last_stats = _last_container_stats(last)
     used = int(last.get("containers_used") or 0)
     comps = booking.get("n0_components") or {}
-    # hard_lb：重量/体积硬下界；soft_lb：含底面（常偏紧，可尝试压到 hard_lb 以抬重量利用率）
+    # hard_lb：重量/体积硬下界（几何底面下界常偏紧，并回目标可压到 hard_lb 以抬重量利用率）
     hard_lb = max(
         1,
         int(comps.get("weight") or 0),
         int(comps.get("volume") or 0),
     )
-    soft_lb = max(hard_lb, int(comps.get("geom_floor") or 0))
     floor_lb = hard_lb  # 并回目标可压到重量/体积下界
     # 大票多并几轮；小票最多 4 轮
     max_merge_rounds = 10 if used >= 10 else 4
@@ -831,7 +830,6 @@ def pack_with_auto_containers(
     )
     mid_tgt = float(opts_pb.get("soft_budget_mid50") or 0.60)
     # 大票默认：若 used 明显高于 light，在 light..min(used, light+4) 内压柜
-    cur_mid0 = _plan_worst_mid50(last)
     # 只要 used > light 就扫 soft 带压柜（即使 mid 已够，也尝试更少柜）
     need_densify = (
         used_now >= 8
@@ -847,8 +845,6 @@ def pack_with_auto_containers(
         densify_pick = None  # 首个 can_fit
         best_ge55 = None  # mid≥0.55 最少柜
         best_ge60 = None  # mid≥目标 最少柜
-        best_mid_plan = None  # 区间内 mid 最高
-        best_mid_val = -1.0
         # 压柜对齐 Tool：无 priority + 轻量 opts（避免 lns/lateral 把 mid 打乱）
         densify_prio = None if opts_pb.get("drop_load_priority", True) else priority_order
         densify_opts = {
@@ -893,9 +889,6 @@ def pack_with_auto_containers(
                 continue
             if densify_pick is None:
                 densify_pick = full_n
-            if mid is not None and mid > best_mid_val:
-                best_mid_val = mid
-                best_mid_plan = full_n
             if mid is not None and mid + 1e-9 >= 0.55 and best_ge55 is None:
                 best_ge55 = full_n
                 best_ge55["density_mode"] = (

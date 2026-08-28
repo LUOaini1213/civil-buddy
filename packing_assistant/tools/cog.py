@@ -19,10 +19,19 @@ def container_inner_mm(container_type: str = "40HQ") -> Dict[str, float]:
     }
 
 
-def _item_mass(
+def _item_volume_mm3(item: Dict[str, Any]) -> float:
+    size = item.get("size") or {}
+    dx = max(float(size.get("dx") or 1), 1)
+    dy = max(float(size.get("dy") or 1), 1)
+    dz = max(float(size.get("dz") or 1), 1)
+    return dx * dy * dz
+
+
+def _item_known_weight(
     item: Dict[str, Any],
     weight_map: Dict[str, float],
-) -> float:
+) -> Optional[float]:
+    """已知毛重（kg）；无重量信息返回 None。"""
     bid = str(item.get("box_id") or "")
     w = weight_map.get(bid)
     if w is not None and w > 0:
@@ -31,12 +40,7 @@ def _item_mass(
     gw = item.get("gross_weight_kg")
     if gw is not None and float(gw) > 0:
         return float(gw)
-    size = item.get("size") or {}
-    dx = max(float(size.get("dx") or 1), 1)
-    dy = max(float(size.get("dy") or 1), 1)
-    dz = max(float(size.get("dz") or 1), 1)
-    # 体积代理（mm³ → 相对质量）
-    return dx * dy * dz
+    return None
 
 
 def cog_for_layout(
@@ -72,14 +76,37 @@ def cog_for_layout(
     dims = container_inner_mm(container_type)
     L, W, H = dims["L"], dims["W"], dims["H"]
 
+    # 质量口径：已知毛重用 kg；缺重箱按「已知箱平均密度 × 体积」估算，
+    # 避免 mm³ 体积代理（数量级 1e9）与 kg 混算把重心拉向缺重箱。
+    known_w = 0.0
+    known_vol = 0.0
+    any_missing = False
+    masses: List[float] = []
+    for p in items:
+        w = _item_known_weight(p, weight_map)
+        if w is None:
+            any_missing = True
+            masses.append(-1.0)  # 占位，稍后按密度补
+        else:
+            known_w += w
+            known_vol += _item_volume_mm3(p)
+            masses.append(w)
+    used_weight = known_w > 0
+    if any_missing:
+        if known_w > 0 and known_vol > 0:
+            density = known_w / known_vol  # kg/mm³
+            masses = [
+                m if m >= 0 else _item_volume_mm3(p) * density
+                for m, p in zip(masses, items)
+            ]
+        else:
+            # 全部缺重：纯体积代理（仅相对比例有意义）
+            masses = [_item_volume_mm3(p) for p in items]
+
     mx = my = mz = 0.0
     m_tot = 0.0
     m_mid50 = 0.0  # 质心 x 落在 [0.25L, 0.75L] 的质量（CTU 60/50 规则）
-    used_weight = False
-    for p in items:
-        m = _item_mass(p, weight_map)
-        if weight_map.get(str(p.get("box_id") or "")) or float(p.get("gross_weight_kg") or 0) > 0:
-            used_weight = True
+    for p, m in zip(items, masses):
         pos, size = p.get("position") or {}, p.get("size") or {}
         dx = max(float(size.get("dx") or 1), 1)
         dy = max(float(size.get("dy") or 1), 1)

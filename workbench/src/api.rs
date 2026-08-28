@@ -78,8 +78,29 @@ pub fn app(state: AppState) -> Router {
 
 type ApiError = (StatusCode, Json<Value>);
 
+/// Run CPU/disk-heavy synchronous harness work on the blocking pool so it
+/// does not stall the async executor serving other requests.
+async fn run_heavy<T, F>(f: F) -> Result<T, ApiError>
+where
+    T: Send + 'static,
+    F: FnOnce() -> T + Send + 'static,
+{
+    tokio::task::spawn_blocking(f)
+        .await
+        .map_err(|e| err(StatusCode::INTERNAL_SERVER_ERROR, format!("后台任务失败：{e}")))
+}
+
 fn err(status: StatusCode, msg: impl Into<String>) -> ApiError {
     (status, Json(json!({"detail": msg.into()})))
+}
+
+/// Use the client-provided session id, or mint a short random one.
+fn session_or_new(session_id: &str) -> String {
+    if session_id.is_empty() {
+        Uuid::new_v4().simple().to_string().chars().take(12).collect()
+    } else {
+        session_id.to_string()
+    }
 }
 
 async fn index(State(st): State<Arc<AppState>>) -> Response {
@@ -113,11 +134,7 @@ async fn architecture() -> Json<Value> {
 }
 
 async fn eval_shadow(State(st): State<Arc<AppState>>, Json(body): Json<FirmBidIn>) -> Result<Json<Value>, ApiError> {
-    let session = if body.session_id.is_empty() {
-        Uuid::new_v4().simple().to_string().chars().take(12).collect()
-    } else {
-        body.session_id.clone()
-    };
+    let session = session_or_new(&body.session_id);
     let args = json!({
         "project_name": body.project_name,
         "jurisdiction": body.jurisdiction,
@@ -127,7 +144,10 @@ async fn eval_shadow(State(st): State<Arc<AppState>>, Json(body): Json<FirmBidIn
         "confirm_ok": body.confirm_ok,
     });
     let ticket = crate::harness::Ticket::from_args(&session, &args);
-    Ok(Json(crate::harness::shadow_eval(&st.paths, ticket)))
+    let paths = st.paths.clone();
+    run_heavy(move || crate::harness::shadow_eval(&paths, ticket))
+        .await
+        .map(Json)
 }
 
 async fn harness_trace(
@@ -171,13 +191,12 @@ fn expert_ticket(session: &str, body: &ExpertRunIn) -> crate::harness::Ticket {
 async fn harness_expert(State(st): State<Arc<AppState>>, Json(body): Json<ExpertRunIn>) -> Result<Json<Value>, ApiError> {
     let exp = store::get_expert(&st.paths, &body.expert_id)
         .ok_or_else(|| err(StatusCode::NOT_FOUND, "unknown expert"))?;
-    let session = if body.session_id.is_empty() {
-        Uuid::new_v4().simple().to_string().chars().take(12).collect()
-    } else {
-        body.session_id.clone()
-    };
+    let session = session_or_new(&body.session_id);
     let ticket = expert_ticket(&session, &body);
-    Ok(Json(crate::harness::run_turn(&st.paths, &exp, ticket).to_value()))
+    let paths = st.paths.clone();
+    run_heavy(move || crate::harness::run_turn(&paths, &exp, ticket).to_value())
+        .await
+        .map(Json)
 }
 
 async fn eval_live(State(st): State<Arc<AppState>>) -> Json<Value> {
@@ -195,13 +214,12 @@ async fn eval_shadow_expert(
 ) -> Result<Json<Value>, ApiError> {
     let exp = store::get_expert(&st.paths, &body.expert_id)
         .ok_or_else(|| err(StatusCode::NOT_FOUND, "unknown expert"))?;
-    let session = if body.session_id.is_empty() {
-        Uuid::new_v4().simple().to_string().chars().take(12).collect()
-    } else {
-        body.session_id.clone()
-    };
+    let session = session_or_new(&body.session_id);
     let ticket = expert_ticket(&session, &body);
-    Ok(Json(crate::harness::shadow_eval_expert(&st.paths, &exp, ticket)))
+    let paths = st.paths.clone();
+    run_heavy(move || crate::harness::shadow_eval_expert(&paths, &exp, ticket))
+        .await
+        .map(Json)
 }
 
 async fn catalog(State(st): State<Arc<AppState>>) -> Json<Value> {
@@ -513,11 +531,7 @@ struct FirmBidIn {
 }
 
 async fn firm_bid(State(st): State<Arc<AppState>>, Json(body): Json<FirmBidIn>) -> Result<Json<Value>, ApiError> {
-    let session = if body.session_id.is_empty() {
-        Uuid::new_v4().simple().to_string().chars().take(12).collect()
-    } else {
-        body.session_id.clone()
-    };
+    let session = session_or_new(&body.session_id);
     let args = json!({
         "project_name": body.project_name,
         "jurisdiction": body.jurisdiction,
@@ -525,7 +539,8 @@ async fn firm_bid(State(st): State<Arc<AppState>>, Json(body): Json<FirmBidIn>) 
         "brief": body.brief,
         "confirm_ok": body.confirm_ok,
     });
-    let v = crate::firm::run_bid_job(&st.paths, &session, &args);
+    let paths = st.paths.clone();
+    let v = run_heavy(move || crate::firm::run_bid_job(&paths, &session, &args)).await?;
     if v.get("ok").and_then(|x| x.as_bool()) != Some(true) {
         let msg = v
             .get("error")
@@ -591,12 +606,7 @@ async fn chat(State(st): State<Arc<AppState>>, Json(body): Json<ChatIn>) -> Resu
         }
         // Run/Both: exclusive steps do not need a live model.
     }
-    let session = if body.session_id.is_empty() {
-        let raw = Uuid::new_v4().simple().to_string();
-        raw.chars().take(12).collect()
-    } else {
-        body.session_id.clone()
-    };
+    let session = session_or_new(&body.session_id);
     let _ = std::fs::create_dir_all(&st.paths.out_root);
     let mut ids: Vec<String> = body
         .expert_ids
@@ -674,7 +684,13 @@ async fn chat(State(st): State<Arc<AppState>>, Json(body): Json<ChatIn>) -> Resu
                     "project_name": last_user.chars().take(40).collect::<String>(),
                     "confirm_ok": confirm_ok,
                 });
-                let run_v = crate::firm::run_bid_job(&st2.paths, &session, &args);
+                let paths = st2.paths.clone();
+                let session2 = session.clone();
+                let run_v = tokio::task::spawn_blocking(move || {
+                    crate::firm::run_bid_job(&paths, &session2, &args)
+                })
+                .await
+                .unwrap_or_else(|e| json!({"ok": false, "error": format!("后台任务失败：{e}")}));
                 let evs = vec![
                     (
                         "status".into(),

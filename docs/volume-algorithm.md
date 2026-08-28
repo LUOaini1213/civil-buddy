@@ -121,4 +121,4 @@ python scripts/test_p2_volume_gates.py
 - `tools/booking.py` — N0 + auto 3D  
 - `tools/packing.py` / `adapters.py` / `schemas.py` — 箱体积字段  
 - `agents/loader.py` / `evaluator.py` / `visualizer.py` — 双率与评分  
-- `docs/architecture-update-plan.md` — 架构总览  
+- `docs/archive/architecture-update-plan.md` — 架构总览  

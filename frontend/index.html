@@ -4,7 +4,10 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>Civil Buddy · 投标应答 / 装箱</title>
-  <script src="https://cdn.jsdelivr.net/npm/vue@2.7.16/dist/vue.min.js"></script>
+  <script src="/static/vendor/vue.min.js"></script>
+  <script>/* 本地 vendor 加载失败时回退 CDN(如以 file:// 或非网关方式打开) */
+    if (typeof Vue === 'undefined') document.write('<scr' + 'ipt src="https://cdn.jsdelivr.net/npm/vue@2.7.16/dist/vue.min.js"><\/scr' + 'ipt>');
+  </script>
   <style>
     :root {
       --bg: #f4f6f9;
@@ -546,6 +549,30 @@
       </div>
     </section>
 
+    <!-- 有界辩论：critic ↔ planner 策略协商（tools 最终裁决，非 free swarm） -->
+    <section class="card" style="margin-top:18px" v-if="boundedDebate && boundedDebate.rounds">
+      <div class="card-h">
+        <h2>有界辩论 · critic ↔ planner</h2>
+        <span class="badge" :class="boundedDebate.improved ? 'ok' : 'warn'">
+          {{ boundedDebate.outcome || 'done' }} · {{ boundedDebate.rounds }} 轮
+        </span>
+      </div>
+      <div class="card-b">
+        <p class="hint" style="margin-top:0">
+          {{ boundedDebate.note || '策略协商后由 tools 裁决柜数/坐标' }}
+          <span v-if="boundedDebate.final_strategy"> · strategy={{ boundedDebate.final_strategy }}</span>
+        </p>
+        <ul class="todo-list" v-if="(boundedDebate.transcript || []).length">
+          <li v-for="(t, i) in boundedDebate.transcript" :key="'bd' + i">
+            <strong>{{ t.role || t.speaker }}</strong>
+            <span class="muted" v-if="t.stance"> · {{ t.stance }}</span>
+            <span class="muted" v-if="t.strategy"> · {{ t.strategy }}</span>
+            <div class="todo-action">{{ (t.reasons && t.reasons[0]) || t.accept_route || '' }}</div>
+          </li>
+        </ul>
+      </div>
+    </section>
+
     <section class="card" style="margin-top:18px" v-if="review">
       <div class="card-h">
         <h2>成稿后再审</h2>
@@ -644,6 +671,7 @@
         extractTable: '',
         matrixCsv: '',
         review: null,
+        boundedDebate: null,
         otelSpans: [],
         otelN: 0,
         turnIntent: '',
@@ -678,10 +706,12 @@
           this.error = '';
         },
         async onTenderFiles(ev) {
-          const list = ev.target && ev.target.files ? [...ev.target.files] : [];
+          const input = ev.target;
+          const list = input && input.files ? [...input.files] : [];
           if (!list.length) return;
           if (list.some((f) => /\.pdf$/i.test(f.name || ''))) {
             this.error = '不解析扫描 PDF。请用 .txt / .md / .csv / .docx / .xlsx 节选。';
+            if (input) input.value = '';
             return;
           }
           this.busy = true;
@@ -693,16 +723,29 @@
             const res = await fetch('/api/tender/parse/files', { method: 'POST', body: fd });
             const dat = await res.json().catch(() => ({}));
             if (!res.ok) {
-              this.error = (dat.detail && (dat.detail.msg || dat.detail)) || '上传解析失败';
+              this.error = this.extractErr(dat, res) || '上传解析失败';
               return;
             }
             this.tenderText = dat.ingested_text || this.tenderText;
             this.applyResult(dat);
           } catch (e) {
-            this.error = String(e && e.message || e);
+            this.error = '上传解析失败：' + String((e && e.message) || e);
           } finally {
             this.busy = false;
+            // 允许重新选择同一文件再次触发 change
+            if (input) input.value = '';
           }
+        },
+        /** 统一提取后端错误文案（兼容 FastAPI detail 字符串 / 对象 / 数组） */
+        extractErr(data, res) {
+          let detail = data && (data.detail || data.error || data.message);
+          if (Array.isArray(detail)) {
+            detail = detail.map((d) => (d && d.msg) || JSON.stringify(d)).join('; ');
+          } else if (detail && typeof detail === 'object') {
+            detail = detail.msg || JSON.stringify(detail);
+          }
+          if (detail) return String(detail);
+          return res ? ('请求失败（HTTP ' + res.status + '）') : '';
         },
         evidenceLabel(ev) {
           if (!ev) return '—';
@@ -729,7 +772,8 @@
           try {
             await navigator.clipboard.writeText(text);
             this.copied = flag;
-            setTimeout(() => { this.copied = ''; }, 2000);
+            if (this._copiedTimer) clearTimeout(this._copiedTimer);
+            this._copiedTimer = setTimeout(() => { this.copied = ''; }, 2000);
           } catch (e) {
             this.error = '复制失败：请手动选择导出内容';
           }
@@ -777,7 +821,7 @@
             this.otelSpans = dat.spans || [];
             this.otelN = dat.n || this.otelSpans.length;
           } catch (e) {
-            this.error = String(e && e.message || e);
+            this.error = 'OTEL 大盘加载失败：' + String((e && e.message) || e);
           }
         },
         applyResult(data) {
@@ -816,7 +860,12 @@
           this.submitBlockReason = data.submit_block_reason || '';
           this.extractTable = data.extract_table_markdown || '';
           this.matrixCsv = data.matrix_csv || '';
-          if (data.review) this.review = data.review;
+          // 重新解析后清掉旧审查结果，避免陈旧结论挂在新矩阵旁
+          this.review = data.review || null;
+          this.boundedDebate = data.bounded_debate
+            || (data.packing_summary && data.packing_summary.bounded_debate)
+            || (data.parse && data.parse.bounded_debate)
+            || null;
         },
         async callApi(path, body) {
           this.busy = true;
@@ -828,9 +877,9 @@
               headers: { 'Content-Type': 'application/json' },
               body: JSON.stringify(body),
             });
-            const data = await res.json();
-            if (!res.ok || data.ok === false && !(data.matrix && data.matrix.rows)) {
-              throw new Error(data.detail || data.message || ('HTTP ' + res.status));
+            const data = await res.json().catch(() => ({}));
+            if (!res.ok || (data.ok === false && !(data.matrix && data.matrix.rows))) {
+              throw new Error(this.extractErr(data, res) || ('HTTP ' + res.status));
             }
             this.applyResult(data);
           } catch (e) {

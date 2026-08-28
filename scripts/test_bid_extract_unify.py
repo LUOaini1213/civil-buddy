@@ -4,6 +4,7 @@
 from __future__ import annotations
 
 import json
+import os
 import subprocess
 import sys
 import tempfile
@@ -12,6 +13,13 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
 sys.path.insert(0, str(ROOT / "demo"))
+
+# 与 demo/tests/conftest.py 相同：把系统临时目录加进沙箱可写根，
+# 否则 TemporaryDirectory 写入被沙箱拒绝（standalone 直跑必需）。
+_roots = os.environ.get("CIVIL_SANDBOX_ROOTS", "")
+_tmp = tempfile.gettempdir()
+if _tmp not in _roots.split(os.pathsep):
+    os.environ["CIVIL_SANDBOX_ROOTS"] = (_roots + os.pathsep + _tmp).strip(os.pathsep)
 
 SAMPLE = """
 Harbourline Facade DEMO
@@ -52,7 +60,7 @@ def main() -> int:
         text=True,
         capture_output=True,
         cwd=str(ROOT),
-        env={**__import__("os").environ, "PACKING_AGENT_ROOT": str(ROOT)},
+        env={**os.environ, "PACKING_AGENT_ROOT": str(ROOT)},
         timeout=60,
     )
     assert proc.returncode == 0, proc.stderr or proc.stdout

@@ -28,7 +28,7 @@ Skill 根目录 = 本文件所在目录。硬规则、引用格式、辖区只�
 `references/experts/` 仍是 Grok V1 的 6 个提纲卡片（construction 写满）；与 66 岗 Codex skill 不是同一套名册。  
 V1 离线可完成 construction 草稿，不依赖 MCP。工作台 / Host 要 KB 或装箱数字时走 MCP；禁止把 xyz / 柜数写进本 skill 正文。
 
-装箱/拼柜：工作台召唤 **pack-ship**，数字只抄 packing-agent（`PACKING_AGENT_URL` 或 `PACKING_AGENT_ROOT`）。见仓库 `docs/packing-agent.md`。禁止在草稿里手写柜数或 xyz。
+装箱/拼柜：工作台召唤 **pack-ship**，数字只抄 packing-agent（`PACKING_AGENT_URL` 或 `PACKING_AGENT_ROOT`）。见仓库 `docs/civil-buddy/packing-agent.md`。禁止在草稿里手写柜数或 xyz。
 
 禁止把 `D:\layout` 当缺省作业根。
 

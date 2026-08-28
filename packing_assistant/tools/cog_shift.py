@@ -9,7 +9,6 @@ R1b：横向镜像（整坨绕柜宽中线翻转）——修左右偏心
 
 from __future__ import annotations
 
-from copy import deepcopy
 from typing import Any, Dict, List, Optional, Sequence, Tuple
 
 
@@ -195,11 +194,7 @@ def shift_layout_to_mass_center(
     min_offset_mm: float = 1.0,
 ) -> Dict[str, Any]:
     """R1a：每柜刚性平移，使质量重心靠近柜几何中心。"""
-    from packing_assistant.tools.cog import (
-        cog_for_layout,
-        compute_cog_bundle,
-        container_inner_mm,
-    )
+    from packing_assistant.tools.cog import cog_for_layout, container_inner_mm
 
     layout = list(plan.get("layout") or [])
     if not layout:
@@ -249,6 +244,10 @@ def shift_layout_to_mass_center(
         # 已贴一端墙且 mid50 OK：保持贴墙，只修横向
         wall_flush = min_x <= 1.0 or max_x >= L - 1.0
         if mid_ok and wall_flush:
+            do_long = False
+        # 分布式满舱货（跨度 ≥80% 柜长）贴端墙：平移最多 (L-span)/2，
+        # mid50 提升只是离散伪影，代价是端墙留出无支撑滑移间隙 → 保持贴墙
+        if wall_flush and (max_x - min_x) >= 0.80 * L:
             do_long = False
         sx = (L / 2.0 - gx) if do_long else 0.0
         sy = (W / 2.0 - gy) if shift_lateral else 0.0

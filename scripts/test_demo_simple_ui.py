@@ -1,7 +1,9 @@
 #!/usr/bin/env python3
 """Structural + shipped-path checks for frontend demo-simple first-glance mode.
 
-Drives the real frontend/index.html artifact (no re-implementation of UI logic).
+Drives the real frontend/workbench.html artifact (no re-implementation of UI
+logic). The packing workbench UI moved from index.html to workbench.html when
+index.html became the tender-delivery mainline entry.
 """
 
 from __future__ import annotations
@@ -11,7 +13,7 @@ import sys
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
-HTML = ROOT / "frontend" / "index.html"
+HTML = ROOT / "frontend" / "workbench.html"
 
 
 def main() -> int:

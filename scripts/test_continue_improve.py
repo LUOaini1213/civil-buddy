@@ -68,7 +68,7 @@ def main() -> int:
     pub = public_response(st)
     plan = pub.get("container_plan") or {}
     assert plan.get("can_fit") is True
-    assert pub.get("team_mode") == "single_closed_loop"
+    assert pub.get("team_mode") == "big_team_a_b"
 
     pm = pub.get("por_manifest") or build_por_manifest(
         plan, st.get("boxes") or [], mats

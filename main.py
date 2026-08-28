@@ -15,9 +15,12 @@ import argparse
 import json
 import sys
 
-from dotenv import load_dotenv
+try:
+    from dotenv import load_dotenv
 
-load_dotenv()
+    load_dotenv()
+except ImportError:
+    pass  # python-dotenv 未装也能跑（无 .env 自动加载）
 
 from packing_assistant.harness import (
     apply_user_confirmation,

@@ -87,7 +87,7 @@ def main() -> int:
             "balanced",
         ),
     )
-    assert st.get("team_mode") == "single_closed_loop"
+    assert st.get("team_mode") == "big_team_a_b"
     meta = export_shipment_xlsx(st, output_dir=ROOT / "output" / "exports")
     assert Path(meta["xlsx_path"]).exists()
     print("PASS export xlsx", meta["xlsx_path"])

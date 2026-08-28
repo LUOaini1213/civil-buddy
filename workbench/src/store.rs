@@ -13,6 +13,16 @@ pub fn catalog_lock() -> &'static Mutex<()> {
     &LOCK
 }
 
+/// Acquire the catalog mutex, recovering from poisoning: the guarded data
+/// lives on disk (user_catalog.json), so a panic while holding the lock
+/// leaves nothing in-memory to distrust. The previous `.lock().ok()` pattern
+/// silently DROPPED the guard on poison, letting writers race each other.
+fn catalog_guard() -> std::sync::MutexGuard<'static, ()> {
+    catalog_lock()
+        .lock()
+        .unwrap_or_else(|poisoned| poisoned.into_inner())
+}
+
 fn empty_user() -> Value {
     json!({
         "categories": [],
@@ -49,7 +59,12 @@ pub fn save_user(paths: &Paths, data: &Value) -> Result<(), String> {
         fs::create_dir_all(parent).map_err(|e| e.to_string())?;
     }
     let text = serde_json::to_string_pretty(data).map_err(|e| e.to_string())?;
-    fs::write(&paths.user_catalog, text).map_err(|e| e.to_string())
+    // Write-then-rename so a crash mid-write cannot leave a truncated
+    // user_catalog.json (load_user would silently fall back to defaults,
+    // losing every user-created expert/category).
+    let tmp = paths.user_catalog.with_extension("json.tmp");
+    fs::write(&tmp, text).map_err(|e| e.to_string())?;
+    fs::rename(&tmp, &paths.user_catalog).map_err(|e| e.to_string())
 }
 
 pub fn all_categories(paths: &Paths) -> Vec<Category> {
@@ -238,7 +253,7 @@ pub fn upsert_category(paths: &Paths, cid: &str, name: &str, blurb: &str) -> Res
     if !valid_id(cid) {
         return Err("大类 id：小写字母开头，字母数字连字符，2–32 位".into());
     }
-    let _g = catalog_lock().lock().ok();
+    let _g = catalog_guard();
     let mut user = load_user(paths);
     let cats: Vec<Value> = user
         .get("categories")
@@ -339,7 +354,7 @@ pub fn upsert_expert(paths: &Paths, payload: &Value) -> Result<Expert, String> {
         "builtin": false,
         "enabled": true
     });
-    let _g = catalog_lock().lock().ok();
+    let _g = catalog_guard();
     let mut user = load_user(paths);
     let is_seed = seed().experts.iter().any(|s| s.id == eid);
     if is_seed {
@@ -381,7 +396,7 @@ pub fn upsert_expert(paths: &Paths, payload: &Value) -> Result<Expert, String> {
 }
 
 pub fn disable_or_delete_expert(paths: &Paths, eid: &str, delete_kb: bool) -> Result<(), String> {
-    let _g = catalog_lock().lock().ok();
+    let _g = catalog_guard();
     let mut user = load_user(paths);
     if seed().experts.iter().any(|s| s.id == eid) {
         let mut dis: Vec<Value> = user
@@ -424,7 +439,7 @@ pub fn disable_or_delete_expert(paths: &Paths, eid: &str, delete_kb: bool) -> Re
 
 pub fn set_soft_limit(paths: &Paths, kb: i64) -> i64 {
     let kb = kb.clamp(8, 8192);
-    let _g = catalog_lock().lock().ok();
+    let _g = catalog_guard();
     let mut user = load_user(paths);
     user["kb_soft_limit_kb"] = json!(kb);
     let _ = save_user(paths, &user);

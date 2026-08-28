@@ -9,7 +9,7 @@ from __future__ import annotations
 import re
 from functools import lru_cache
 from pathlib import Path
-from typing import Any, Dict, List, Optional, Set
+from typing import Any, Dict, List, Optional
 
 _ROOT = Path(__file__).resolve().parents[1]
 _BINDINGS_PATH = (
@@ -28,70 +28,8 @@ def _parse_simple_yaml(text: str) -> Dict[str, Any]:
     except Exception:
         pass
 
-    root: Dict[str, Any] = {}
-    stack: List[tuple] = [(-1, root)]  # indent, container
-    list_key_stack: List[Optional[str]] = [None]
-    pending_key: Optional[str] = None
-    pending_indent = 0
-
-    def current_container():
-        return stack[-1][1]
-
-    for raw_line in text.splitlines():
-        if not raw_line.strip() or raw_line.lstrip().startswith("#"):
-            continue
-        indent = len(raw_line) - len(raw_line.lstrip(" "))
-        line = raw_line.strip()
-
-        # pop stack
-        while len(stack) > 1 and indent <= stack[-1][0]:
-            stack.pop()
-            if len(list_key_stack) > len(stack):
-                list_key_stack.pop()
-
-        # list item
-        if line.startswith("- "):
-            item = line[2:].strip()
-            cont = current_container()
-            if isinstance(cont, list):
-                if ":" in item and not item.startswith("["):
-                    # inline map start not supported in list of scalars; treat as scalar
-                    cont.append(_scalar(item))
-                else:
-                    cont.append(_scalar(item))
-            elif isinstance(cont, dict) and pending_key:
-                # shouldn't happen often
-                pass
-            continue
-
-        if ":" in line:
-            key, _, rest = line.partition(":")
-            key = key.strip()
-            rest = rest.strip()
-            cont = current_container()
-            if not isinstance(cont, dict):
-                continue
-            if rest == "" or rest == "|" or rest == ">":
-                # nested map or list follows
-                # peek: we create dict by default; list if next lines are -
-                cont[key] = {}
-                stack.append((indent, cont[key]))
-                pending_key = key
-                pending_indent = indent
-            elif rest.startswith("[") and rest.endswith("]"):
-                inner = rest[1:-1].strip()
-                if not inner:
-                    cont[key] = []
-                else:
-                    cont[key] = [_scalar(x.strip()) for x in inner.split(",")]
-            else:
-                cont[key] = _scalar(rest)
-        # convert empty dict to list if subsequent list items — handled below on next lines poorly
-        # fix: re-scan for list under empty dicts in postprocess
-
-    # Second pass: fix dicts that should be lists (children only came as "- " under wrong parent)
-    # Our parser creates {} for empty rest; list items with "- " need parent to be list.
-    # Re-parse with list-aware approach.
+    # 无 PyYAML：直接用 list-aware 解析器
+    # （历史上此处还有一遍手写缩进解析，结果从未被使用，已删除）
     return _parse_yaml_list_aware(text)
 
 

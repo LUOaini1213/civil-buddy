@@ -1,6 +1,6 @@
 # 二阶段架构：Agent4–8 + skjolber（Spring Boot）
 
-> **最终全貌见 [`overall-architecture.md`](./overall-architecture.md)（Agent0–8）**  
+> **最终全貌见 [`overall-architecture.md`](../overall-architecture.md)（Agent0–8）**  
 > 与一阶段衔接：材料 → 结构装箱 → **标准 boxes** → 本阶段拼柜（Java/skjolber）→ 风险 → 三视角可视化  
 >
 > 二阶段智能体：4 规划 · 5 skjolber 装载 · 6 评估 · 7 风险合规 · 8 可视化

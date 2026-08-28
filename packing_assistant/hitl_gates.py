@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List
 
 
 def evaluate_hitl_gates(state: Dict[str, Any]) -> Dict[str, Any]:

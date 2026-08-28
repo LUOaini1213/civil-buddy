@@ -175,9 +175,6 @@
 57. **人改口 2026-08-25**  
     赛道 1 **完全合格**（track1-qualified.md）。内部起草搭子 **合格**。签认/可投标/可开工仍 **不合格**。08-17「总判：部分合格。」历史句不改。
 
-58. **联网复核官方口径** 日志 2026-08-25  
-    IRAS 仍页述 9%；Fire Code 仍 2023；CTU 仍 2014 非强制；GeBIZ 仍是门户；APPBCA-2026-12 仍是 2026-10-01 起 GFA≥5,000 m²。BCA site records 标题未改。MOM FCF 广告 14 日只作 T040 旁证。**不改** 08-17 历史总判句。主链头指针仍 **T040 hr-recruit**。签认/可投标/可开工仍不合格。
-
 平台内核见 [product-improvement-handbook.md](product-improvement-handbook.md)。岗独有写盘下一刀仍按 [post-horizon-2026-08-17.md](post-horizon-2026-08-17.md)。
 
 ## 有宿主再做

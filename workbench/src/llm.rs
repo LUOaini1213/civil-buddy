@@ -134,35 +134,49 @@ where
         let body = String::from_utf8_lossy(&raw).into_owned();
         return Err(http_err(status, &body));
     }
+    // SSE lines (and multi-byte UTF-8 characters) can be split across
+    // network chunks; carry the incomplete tail as bytes so neither a broken
+    // `data:` line nor a half character is dropped or corrupted.
+    let mut carry: Vec<u8> = Vec::new();
+    let mut handle_line = |line: &str| -> bool {
+        let line = line.trim();
+        if line.is_empty() {
+            return false;
+        }
+        let data = line.strip_prefix("data: ").unwrap_or("");
+        if data.is_empty() {
+            return false;
+        }
+        if data.trim() == "[DONE]" {
+            return true;
+        }
+        if let Ok(chunk) = serde_json::from_str::<Value>(data) {
+            if let Some(piece) = chunk
+                .pointer("/choices/0/delta/content")
+                .and_then(|v| v.as_str())
+            {
+                if !piece.is_empty() {
+                    on_piece(piece);
+                }
+            }
+        }
+        false
+    };
     while let Some(chunk) = r
         .chunk()
         .await
         .map_err(|e| LlmError(format!("stream chunk: {e}")))?
     {
-        let text = String::from_utf8_lossy(&chunk);
-        for line in text.split('\n') {
-            let line = line.trim();
-            if line.is_empty() {
-                continue;
-            }
-            let data = line.strip_prefix("data: ").unwrap_or("");
-            if data.is_empty() {
-                continue;
-            }
-            if data.trim() == "[DONE]" {
+        carry.extend_from_slice(&chunk);
+        while let Some(pos) = carry.iter().position(|b| *b == b'\n') {
+            let line: Vec<u8> = carry.drain(..=pos).collect();
+            if handle_line(&String::from_utf8_lossy(&line)) {
                 return Ok(());
             }
-            if let Ok(chunk) = serde_json::from_str::<Value>(data) {
-                if let Some(piece) = chunk
-                    .pointer("/choices/0/delta/content")
-                    .and_then(|v| v.as_str())
-                {
-                    if !piece.is_empty() {
-                        on_piece(piece);
-                    }
-                }
-            }
         }
+    }
+    if handle_line(&String::from_utf8_lossy(&carry)) {
+        return Ok(());
     }
     Ok(())
 }

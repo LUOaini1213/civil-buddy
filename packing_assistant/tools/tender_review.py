@@ -6,7 +6,7 @@ Pure function over (draft, matrix, packing_summary).
 
 from __future__ import annotations
 
-from typing import Any, Dict, Iterable, List, Optional
+from typing import Any, Dict, List, Optional
 
 # Same assertive statutory phrases as skills/.../scan_forbidden_inventions.py
 ASSERTIVE = (

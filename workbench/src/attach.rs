@@ -163,8 +163,7 @@ fn extract_xlsx(bytes: &[u8]) -> Result<String, String> {
     let mut zip = zip::ZipArchive::new(Cursor::new(bytes)).map_err(|e| format!("xlsx 不是有效压缩包：{e}"))?;
     let mut shared = Vec::new();
     if let Ok(mut f) = zip.by_name("xl/sharedStrings.xml") {
-        let mut xml = String::new();
-        f.read_to_string(&mut xml).map_err(|e| e.to_string())?;
+        let xml = read_zip_text(&mut f)?;
         drop(f);
         shared = xlsx_shared_strings(&xml);
     }
@@ -180,11 +179,10 @@ fn extract_xlsx(bytes: &[u8]) -> Result<String, String> {
     sheet_names.sort();
     let mut rows = Vec::new();
     for name in sheet_names {
-        let mut xml = String::new();
-        {
+        let xml = {
             let mut f = zip.by_name(&name).map_err(|e| e.to_string())?;
-            f.read_to_string(&mut xml).map_err(|e| e.to_string())?;
-        }
+            read_zip_text(&mut f)?
+        };
         rows.extend(xlsx_sheet_text(&xml, &shared));
     }
     let text = rows.join("\n");
@@ -282,8 +280,7 @@ fn extract_docx(bytes: &[u8]) -> Result<String, String> {
     let mut file = zip
         .by_name("word/document.xml")
         .map_err(|_| "docx 缺少 word/document.xml".to_string())?;
-    let mut xml = String::new();
-    file.read_to_string(&mut xml).map_err(|e| e.to_string())?;
+    let xml = read_zip_text(&mut file)?;
     let re = Regex::new(r"<w:t[^>]*>([^<]*)</w:t>").unwrap();
     let mut out = String::new();
     for cap in re.captures_iter(&xml) {
@@ -345,11 +342,26 @@ fn extract_pdf(bytes: &[u8]) -> Result<String, String> {
     Ok(text)
 }
 
+/// Cap for one decompressed stream / OOXML part; a 20MB upload must not be
+/// able to inflate into gigabytes (zip bomb).
+const MAX_INFLATED_BYTES: u64 = 64 * 1024 * 1024;
+
 fn inflate(slice: &[u8]) -> Result<String, ()> {
-    let mut dec = ZlibDecoder::new(slice);
+    let dec = ZlibDecoder::new(slice);
     let mut buf = Vec::new();
-    dec.read_to_end(&mut buf).map_err(|_| ())?;
+    dec.take(MAX_INFLATED_BYTES)
+        .read_to_end(&mut buf)
+        .map_err(|_| ())?;
     Ok(String::from_utf8_lossy(&buf).into_owned())
+}
+
+/// Read one zip entry as UTF-8 text, bounded by MAX_INFLATED_BYTES.
+fn read_zip_text(f: &mut impl Read) -> Result<String, String> {
+    let mut raw = Vec::new();
+    f.take(MAX_INFLATED_BYTES)
+        .read_to_end(&mut raw)
+        .map_err(|e| e.to_string())?;
+    Ok(String::from_utf8_lossy(&raw).into_owned())
 }
 
 fn find_sub(hay: &[u8], needle: &[u8], from: usize) -> Option<usize> {

@@ -685,9 +685,10 @@ def _local_1d(boxes: List[Dict[str, Any]], ctype: str) -> Dict[str, Any]:
     overflow = set(detail.get("溢出箱号") or [])
     unpacked: List[str] = []
 
+    box_by_id = {str(b.get("box_id") or ""): b for b in boxes}
     for item in raw.get("布局") or []:
         bid = item.get("箱号") or ""
-        box = next((b for b in boxes if b.get("box_id") == bid), {})
+        box = box_by_id.get(str(bid), {})
         outer = box.get("outer_size_mm") or {}
         start_m = float(item.get("起始位置_m") or 0)
         length_m = float(item.get("长度_m") or 0)

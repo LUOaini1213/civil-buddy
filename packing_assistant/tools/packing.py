@@ -455,7 +455,6 @@ def _fit_outer_to_cargo(
     stack_module_h = 1100.0 if ct in ("20GP", "40GP") else 1200.0
     content_long = max((float(i["外尺寸_mm"]["长"]) for i in items), default=0)
     pad = 40.0
-    two_row_cap = _two_row_outer_cap(max_W)
 
     def _free_width(need_w: float) -> float:
         """两排优先 snappoint；prefer_single_row 时强制单排外宽。"""

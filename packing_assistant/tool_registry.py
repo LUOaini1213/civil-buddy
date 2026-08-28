@@ -6,7 +6,7 @@ Agent 选工具；数值由 tools 计算（禁止 LLM 写 xyz / 柜数拍脑袋�
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Any, Callable, Dict, List, Optional
+from typing import Any, Dict, List, Optional
 
 
 @dataclass(frozen=True)

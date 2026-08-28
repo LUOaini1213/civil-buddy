@@ -6,7 +6,7 @@ LLM 不得写入 placements 坐标；仅由 loader/bin3d 等确定性工具生�
 from __future__ import annotations
 
 from datetime import datetime, timezone
-from typing import Any, Dict, List, Optional, Sequence
+from typing import Any, Dict, List, Optional
 
 
 SCHEMA = "packing.plan.v1"

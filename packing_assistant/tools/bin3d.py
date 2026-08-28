@@ -870,9 +870,12 @@ def _strip_pack_floor(
         col_front[c] = x + dx
         placed_ids.add(it.box_id)
 
-    left.extend([it for it in items if it.box_id not in placed_ids and it not in left])
-    # 去重 left
-    seen = set()
+    # 汇总未装入项（按 box_id 去重，保持输入顺序）
+    left_ids = {it.box_id for it in left}
+    left.extend(
+        it for it in items if it.box_id not in placed_ids and it.box_id not in left_ids
+    )
+    seen: set = set()
     uniq_left = []
     for it in left:
         if it.box_id in placed_ids or it.box_id in seen:
@@ -988,14 +991,31 @@ def pack_items(
     max_containers: int = 1,
     packing_options: Optional[Dict[str, Any]] = None,
 ) -> Dict[str, Any]:
-    ctype = container_type if container_type in CONTAINER_INNER else "40HQ"
+    """按 Item3D 列表执行 3D 装柜（单策略）。
+
+    参数:
+        items: 待装箱件（尺寸 mm / 毛重 kg / 堆码属性）。
+        container_type: 柜型（20GP/40GP/40HQ/45HQ；未知回退 40HQ 并标注）。
+        max_containers: 允许开柜上限（≥1）。
+        packing_options: 堆码策略（clearance_mm / max_stack_layers /
+            prefer_stack / cog_aware 等，见 policy_from_options）。
+
+    返回:
+        与 pack_boxes_api 相同结构的 plan dict：can_fit / containers_used /
+        layout / unpacked_box_ids / space_utilization / stacking 等。
+    """
+    # 柜型大小写/空白归一；未知柜型回退 40HQ 并在结果中标注（不静默吞数据错误）
+    ctype = str(container_type or "").strip().upper()
+    unknown_ctype = ctype not in CONTAINER_INNER
+    if unknown_ctype:
+        ctype = "40HQ"
     spec = CONTAINER_INNER[ctype]
     max_c = max(1, int(max_containers or 1))
     # 注入堆码策略（max_stack_height_mm / max_stack_layers / prefer_stack / clearance …）
     prev_pol = get_active_policy()
     set_active_policy(policy_from_options(packing_options))
     try:
-        return _pack_items_core(
+        result = _pack_items_core(
             items,
             container_type=ctype,
             max_containers=max_c,
@@ -1003,6 +1023,13 @@ def pack_items(
         )
     finally:
         set_active_policy(prev_pol)
+    if unknown_ctype:
+        result["container_type_fallback"] = {
+            "requested": str(container_type),
+            "used": ctype,
+            "note": "未知柜型，按 40HQ 内尺寸计算",
+        }
+    return result
 
 
 def _pack_items_core(
@@ -1432,15 +1459,37 @@ def pack_boxes_api(
     priority_order: Optional[List[str]] = None,
     packing_options: Optional[Dict[str, Any]] = None,
 ) -> Dict[str, Any]:
-    """从 api-spec boxes[] 装载。packing_options 控制堆码限高/限层等。"""
+    """从 api-spec boxes[] 装载（多策略试装 + CoG 修理管道）。
+
+    参数:
+        boxes: api-spec 箱列表（outer_size_mm / gross_weight_kg /
+            stackable / prefer_bottom / special_attributes …）。
+        container_type: 柜型；未知回退 40HQ（结果带 container_type_fallback）。
+        max_containers: 开柜上限。
+        priority_order: 可选 box_id 优先序（None 用默认排序）。
+        packing_options: 堆码/重心策略开关（限高/限层/clearance、
+            r0_r1 / r2_slab / r4_repair / lns_worst / lateral_repair 等）。
+
+    返回:
+        plan dict：can_fit / containers_used / layout（每箱 mm 坐标）/
+        unpacked_box_ids / cog / cog_bundle / layout_quality / stacking。
+    """
     pol = policy_from_options(packing_options)
     items: List[Item3D] = []
+    input_warnings: List[str] = []
     for b in boxes:
         outer = b.get("outer_size_mm") or {}
         special = b.get("special_attributes") or []
         L = int(round(float(outer.get("length") or 1)))
         W = int(round(float(outer.get("width") or 1)))
         H = int(round(float(outer.get("height") or 1)))
+        if L <= 1 or W <= 1 or H <= 1:
+            # 尺寸缺失/非法：仍按 1mm 兜底参与装载（保持旧行为），但显式警告，
+            # 避免静默把缺数据箱当作可忽略小箱而误报 can_fit
+            input_warnings.append(
+                f"box {b.get('box_id')} 外尺寸缺失/非法: "
+                f"L={outer.get('length')} W={outer.get('width')} H={outer.get('height')}"
+            )
         btype = str(b.get("box_type") or "")
         # 超长/内容物超长：不任意 6 向转；铁架/笼默认禁止竖放
         longish = (
@@ -1611,7 +1660,10 @@ def pack_boxes_api(
             max_containers=max_containers,
             packing_options={**base_opts, "multi_start": False},
         )
-        return _finish(p0, "default")
+        p0 = _finish(p0, "default")
+        if input_warnings:
+            p0["input_warnings"] = input_warnings
+        return p0
 
     candidates: List[Tuple[str, Dict[str, Any]]] = []
     candidates.append(
@@ -1750,6 +1802,8 @@ def pack_boxes_api(
     best = {**best, "stacking": st, "engine": eng}
     if "layout_quality" not in best:
         best = _attach_layout_quality(best, boxes)
+    if input_warnings:
+        best["input_warnings"] = input_warnings
     # R1 已在 _finish / 各候选内做过；此处仅补全指标
     return best
 

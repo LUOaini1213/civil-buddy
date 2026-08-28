@@ -29,7 +29,7 @@
 | [competition-demo-script.md](./competition-demo-script.md) | **3 分钟评委演示脚本** |
 | [../knowledge_base/README.md](../knowledge_base/README.md) | **Agent 可检索知识库**（规则/工具/轨迹/多Agent · search + bindings） |
 | [research/knowledge-base-workteams.md](./research/knowledge-base-workteams.md) | 知识库 Workteams 评估与接线说明 |
-| [CHANGELOG-v0.5.md](./CHANGELOG-v0.5.md) | v0.5–v0.6 变更（含 0.6.2） |
+| [CHANGELOG-v0.5.md](./CHANGELOG-v0.5.md) | v0.5–v0.6 变更（至 0.6.4） |
 | [CHANGELOG-v0.4.md](./CHANGELOG-v0.4.md) | v0.4 历史 |
 | [skills/README.md](./skills/README.md) | Skills 契约表 |
 | [hitl-checkpoint.md](./hitl-checkpoint.md) | HITL / checkpoint |

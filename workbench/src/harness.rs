@@ -175,12 +175,17 @@ pub fn architecture() -> Value {
     })
 }
 
-pub fn run_bid_steps(paths: &Paths, ticket: Ticket) -> Run {
-    let run_id = format!(
-        "{}-{}",
+/// `{prefix}HHMMSS-xxxxxx` run identifier (time + short random suffix).
+fn new_run_id(prefix: &str) -> String {
+    format!(
+        "{prefix}{}-{}",
         Local::now().format("%H%M%S"),
         &Uuid::new_v4().simple().to_string()[..6]
-    );
+    )
+}
+
+pub fn run_bid_steps(paths: &Paths, ticket: Ticket) -> Run {
+    let run_id = new_run_id("");
     let run_dir = paths
         .out_root
         .join(&ticket.session)
@@ -260,12 +265,14 @@ pub fn run_bid_steps(paths: &Paths, ticket: Ticket) -> Run {
     exec_step(
         &mut run,
         paths,
-        "parse",
-        "bid-parse",
-        "bid",
-        "low",
-        true,
-        "bid-parse__extract",
+        StepSpec {
+            name: "parse",
+            expert: "bid-parse",
+            category: "bid",
+            risk: "low",
+            confirm: true,
+            tool: "bid-parse__extract",
+        },
         &json!({
             "project_name": ticket.project,
             "jurisdiction": ticket.jurisdiction,
@@ -291,12 +298,14 @@ pub fn run_bid_steps(paths: &Paths, ticket: Ticket) -> Run {
     exec_step(
         &mut run,
         paths,
-        "qa",
-        "bid-compliance",
-        "bid",
-        "low",
-        true,
-        "bid-compliance__gaps",
+        StepSpec {
+            name: "qa",
+            expert: "bid-compliance",
+            category: "bid",
+            risk: "low",
+            confirm: true,
+            tool: "bid-compliance__gaps",
+        },
         &json!({
             "required_items": required.join("\n"),
             "response_notes": ticket.brief,
@@ -311,12 +320,14 @@ pub fn run_bid_steps(paths: &Paths, ticket: Ticket) -> Run {
     exec_step(
         &mut run,
         paths,
-        "outline",
-        "bid-tech",
-        "bid",
-        "low",
-        true,
-        "bid-tech__expand",
+        StepSpec {
+            name: "outline",
+            expert: "bid-tech",
+            category: "bid",
+            risk: "low",
+            confirm: true,
+            tool: "bid-tech__expand",
+        },
         &json!({
             "project_name": ticket.project,
             "jurisdiction": ticket.jurisdiction,
@@ -327,15 +338,17 @@ pub fn run_bid_steps(paths: &Paths, ticket: Ticket) -> Run {
     if run.hitl.required && ticket.confirm_ok {
         let scope = facts.specials.join("；");
         exec_step(
-            &mut run,
-            paths,
-            "scheme",
-            "construction",
-            "construction",
-            "high",
-            true,
-            "construction__scheme_draft",
-            &json!({
+        &mut run,
+        paths,
+        StepSpec {
+            name: "scheme",
+            expert: "construction",
+            category: "construction",
+            risk: "high",
+            confirm: true,
+            tool: "construction__scheme_draft",
+        },
+        &json!({
                 "project_name": ticket.project,
                 "work_scope": scope,
                 "known_facts": source.chars().take(4000).collect::<String>(),
@@ -404,17 +417,26 @@ pub fn run_bid_steps(paths: &Paths, ticket: Ticket) -> Run {
     run
 }
 
-fn exec_step(
-    run: &mut Run,
-    paths: &Paths,
-    name: &str,
-    expert: &str,
-    category: &str,
-    risk: &str,
+/// Descriptive parameters of one harness step (who runs which tool, under
+/// what category/risk and confirmation state).
+struct StepSpec<'a> {
+    name: &'a str,
+    expert: &'a str,
+    category: &'a str,
+    risk: &'a str,
     confirm: bool,
-    tool: &str,
-    args: &Value,
-) {
+    tool: &'a str,
+}
+
+fn exec_step(run: &mut Run, paths: &Paths, spec: StepSpec<'_>, args: &Value) {
+    let StepSpec {
+        name,
+        expert,
+        category,
+        risk,
+        confirm,
+        tool,
+    } = spec;
     let owner = crate::tier_map::exclusive_owner(tool);
     let legal = owner.map(|o| o == expert).unwrap_or(true) || LEGAL_BID.contains(&tool);
     let mut ctx = ToolCtx::new(
@@ -567,11 +589,7 @@ pub fn fat_args(ticket: &Ticket, source: &str) -> Value {
 }
 
 pub fn run_expert_steps(paths: &Paths, expert: &crate::catalog::Expert, ticket: Ticket) -> Run {
-    let run_id = format!(
-        "e{}-{}",
-        Local::now().format("%H%M%S"),
-        &Uuid::new_v4().simple().to_string()[..6]
-    );
+    let run_id = new_run_id("e");
     let run_dir = paths
         .out_root
         .join(&ticket.session)
@@ -666,15 +684,17 @@ pub fn run_expert_steps(paths: &Paths, expert: &crate::catalog::Expert, ticket: 
             continue;
         }
         exec_step(
-            &mut run,
-            paths,
-            "exclusive",
-            &expert.id,
-            &expert.category,
-            &expert.risk,
+        &mut run,
+        paths,
+        StepSpec {
+            name: "exclusive",
+            expert: &expert.id,
+            category: &expert.category,
+            risk: &expert.risk,
             confirm,
-            &tool,
-            &args,
+            tool: &tool,
+        },
+        &args,
         );
         ran += 1;
     }
@@ -684,15 +704,17 @@ pub fn run_expert_steps(paths: &Paths, expert: &crate::catalog::Expert, ticket: 
             ticket.project, expert.name, ticket.jurisdiction, source
         );
         exec_step(
-            &mut run,
-            paths,
-            "write",
-            &expert.id,
-            &expert.category,
-            &expert.risk,
+        &mut run,
+        paths,
+        StepSpec {
+            name: "write",
+            expert: &expert.id,
+            category: &expert.category,
+            risk: &expert.risk,
             confirm,
-            "write_deliverable",
-            &json!({
+            tool: "write_deliverable",
+        },
+        &json!({
                 "filename": format!("{}-作业草稿.md", expert.name),
                 "markdown": md,
             }),
@@ -723,11 +745,7 @@ pub fn run_turn(paths: &Paths, expert: &crate::catalog::Expert, ticket: Ticket) 
 }
 
 fn explain_turn(paths: &Paths, expert: &crate::catalog::Expert, ticket: Ticket) -> Run {
-    let run_id = format!(
-        "c{}-{}",
-        Local::now().format("%H%M%S"),
-        &Uuid::new_v4().simple().to_string()[..6]
-    );
+    let run_id = new_run_id("c");
     let run_dir = paths
         .out_root
         .join(&ticket.session)

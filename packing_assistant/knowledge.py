@@ -6,7 +6,7 @@ import json
 import os
 from functools import lru_cache
 from pathlib import Path
-from typing import Any, Dict, List, Optional, Tuple
+from typing import Any, Dict, List, Optional
 
 _DEFAULT_PATH = Path(__file__).resolve().parents[1] / "knowledge" / "packing_knowledge_base.json"
 

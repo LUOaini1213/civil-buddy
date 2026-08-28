@@ -40,7 +40,7 @@ civil-buddy   土木企业：经营 + 技术 + 施工 + 安质环 + 商务 + 资
 
 土木体现在：工序对象、条款双表、辖区不混、无来源数字待填、工人稿和技术稿分开、高风险确认门。不是专家头像多。
 
-工具可见性是三级（通用 / 大类共享 / 专家独有），对照表见 `docs/yibiao-mcp-map.md` 与 `workbench/yibiao-map.json`。本轮只对齐施工方案专家，默认新加坡工地 SG。
+工具可见性是三级（通用 / 大类共享 / 专家独有），对照表见 `docs/civil-buddy/yibiao-mcp-map.md` 与 `workbench/yibiao-map.json`。本轮只对齐施工方案专家，默认新加坡工地 SG。
 
 ## 3. 架构：一大类里多个专家
 

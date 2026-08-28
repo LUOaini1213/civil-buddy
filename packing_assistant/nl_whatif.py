@@ -382,7 +382,6 @@ def packing_options_for_cargo(
         opts["meeting_cap"] = True
         opts["container_budget"] = int(lock_n)
         # 重量是否撑得住
-        net = float(profile.get("net_kg") or 0)
         need = profile.get("n0_weight_hint") or 1
         if int(lock_n) < int(need):
             opts["lock_weight_warning"] = (

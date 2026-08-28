@@ -51,9 +51,9 @@ def main() -> int:
             "cog_rebalance": True,
         },
     )
-    assert st.get("team_mode") == "single_closed_loop", st.get("team_mode")
+    assert st.get("team_mode") == "big_team_a_b", st.get("team_mode")
     pub = public_response(st)
-    assert pub.get("team_mode") == "single_closed_loop"
+    assert pub.get("team_mode") == "big_team_a_b"
     plan = pub.get("container_plan") or {}
     assert plan.get("can_fit") is True, plan
     # 闭环字段存在

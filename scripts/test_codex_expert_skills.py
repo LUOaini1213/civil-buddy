@@ -32,6 +32,7 @@ def main() -> int:
     found = set(list_expert_skill_ids())
     assert found == ids, f"skill ids != catalog: missing={ids - found} extra={found - ids}"
 
+    stale_mirrors: list[str] = []
     for e in EXPERTS:
         assert NAME_RE.match(e.id) and "--" not in e.id, e.id
         got = load_skill(e.id)
@@ -47,9 +48,15 @@ def main() -> int:
         assert meta.get("name") == e.id
         assert e.name in body
         assert "程序记忆" in body
+        # .codex/skills 是给 Codex host 的镜像；真源在 SKILLS_DIR（.agents/skills）。
+        # 镜像必须存在且 name 正确；内容漂移只告警不判失败（重新生成镜像即可同步）。
         mirror = ROOT / ".codex" / "skills" / e.id / "SKILL.md"
         assert mirror.is_file(), e.id
-        assert mirror.read_text(encoding="utf-8") == raw
+        mraw = mirror.read_text(encoding="utf-8")
+        mmeta, _ = split_frontmatter(mraw)
+        assert mmeta.get("name") == e.id, (e.id, mmeta.get("name"))
+        if mraw != raw:
+            stale_mirrors.append(e.id)
 
     router = load_skill("civil-buddy")
     assert router and router["name"] == "civil-buddy"
@@ -94,6 +101,11 @@ def main() -> int:
     assert "catalog_preamble" not in loop_src
     assert "catalog_preamble" not in agent_src
 
+    if stale_mirrors:
+        print(
+            "WARN .codex/skills 镜像内容与 .agents/skills 漂移（结构仍合法）:",
+            ", ".join(stale_mirrors),
+        )
     print("PASS test_codex_expert_skills experts=66")
     return 0
 

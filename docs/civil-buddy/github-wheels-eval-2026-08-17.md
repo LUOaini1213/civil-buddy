@@ -54,8 +54,8 @@ Civil Buddy 已有、别人没有成套的：65 岗独有写盘、chat/run/both�
 | 仓库 | API 现场 | 协议 | 怎么用 |
 |------|----------|------|--------|
 | [docling-project/docling](https://github.com/docling-project/docling) | ★64,839 · 2026-08-15 仍推 | **MIT** | CPU 友好的 PDF/DOCX/PPTX。本仓已接可选 CLI。 |
-| [datalab-to/marker](https://github.com/datalab-to/marker) | ★38,782 · Apache-2.0 | 快、多栏好。可选第三引擎。 |
-| [IfcOpenShell/IfcOpenShell](https://github.com/IfcOpenShell/IfcOpenShell) | ★2,707 · LGPL-3.0 | BIM 真抽量。未接（bim-qto 仍是口径表）。 |
+| [datalab-to/marker](https://github.com/datalab-to/marker) | ★38,782 | Apache-2.0 | 快、多栏好。可选第三引擎。 |
+| [IfcOpenShell/IfcOpenShell](https://github.com/IfcOpenShell/IfcOpenShell) | ★2,707 | LGPL-3.0 | BIM 真抽量。未接（bim-qto 仍是口径表）。 |
 
 ## 已接到本仓（2026-08-17）
 

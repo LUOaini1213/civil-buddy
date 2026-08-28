@@ -63,11 +63,7 @@ def interpret_nl(
 
     复用 material-aware nl_whatif 解析；输出为大 Team 唯一契约。
     """
-    from packing_assistant.nl_whatif import (
-        analyze_materials,
-        apply_material_selection,
-        parse_nl_whatif,
-    )
+    from packing_assistant.nl_whatif import analyze_materials, parse_nl_whatif
 
     raw = (text or "").strip()
     parsed = parse_nl_whatif(raw, materials=materials)

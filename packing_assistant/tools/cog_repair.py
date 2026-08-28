@@ -201,6 +201,12 @@ def _rigid_shift_to_max_mid50(
     span = max_r - min_x
     if span <= 1 or span > L + 1e-3:
         return work0, 0.0
+    # 分布式满舱货（跨度 ≥80% 柜长）且已贴端墙：刚性平移最多挪动 (L-span)/2，
+    # mid50 的“提升”只是箱心跨带边界的离散伪影，代价却是端墙留出无支撑滑移间隙。
+    # CTU 实务：贴端墙优先，禁止为刷 mid50 拉开端墙。
+    wall_flush = min_x <= 1.0 or max_r >= L - 1.0
+    if wall_flush and span >= 0.80 * L:
+        return work0, 0.0
 
     best = work0
     best_mid = mid0

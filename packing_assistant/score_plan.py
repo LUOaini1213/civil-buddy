@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from typing import Any, Dict, Optional, Tuple
+from typing import Any, Dict
 
 
 def score_plan(snap: Dict[str, Any]) -> Dict[str, Any]:

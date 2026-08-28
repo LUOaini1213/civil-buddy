@@ -34,7 +34,6 @@ npm run check
 | **Civil Buddy 工作台** | http://127.0.0.1:8765 | 召唤专家、投标/施工草稿、装箱作业单 |
 | **主线 C · 投标应答 + 交付** | http://127.0.0.1:8000 | 招标要点 → 响应矩阵 → 装柜证据（草稿） |
 | **工程装柜台** | http://127.0.0.1:8000/workbench | 成箱 → HITL → 拼柜 3D / CoG |
-| **用户路径 / PRD（面试一页）** | [docs/civil-buddy/user-flow.html](docs/civil-buddy/user-flow.html) · [prd-pack-ship.md](docs/civil-buddy/prd-pack-ship.md) | 流程图 + 验收；不是座舱 / RoboOS |
 
 ### 1) Civil Buddy 工作台
 
@@ -46,7 +45,7 @@ cargo run --release --bin civil-workbench
 
 Python 参考实现：`demo/`（`uvicorn app:app --host 127.0.0.1 --port 8765`）。
 
-产品 CLI（土木版 Codex）：`python -m packing_assistant.civil`（TUI）· `civil app` · `civil mcp --pack construction`。技能一岗一份：`.agents/skills/<id>/SKILL.md`。IDE：`ide/README.md`。Grok 总控：`skills/civil-buddy`。  
+产品 CLI（土木版 Codex）：`python -m packing_assistant.civil`（TUI）· 子命令 `app` · `mcp --pack construction`（`python scripts/civil.py` 为同义简写）。技能一岗一份：`.agents/skills/<id>/SKILL.md`。IDE：`ide/README.md`。Grok 总控：`skills/civil-buddy`。  
 **全量产品规划书**：[docs/civil-buddy/product-plan.md](docs/civil-buddy/product-plan.md)。切片执行：[product-completion-plan.md](docs/civil-buddy/product-completion-plan.md)。
 
 ### 2) 装箱引擎（pack-ship 的计算器）

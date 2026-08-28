@@ -6,7 +6,6 @@ OptiGuide 风格：求解器重算，LLM 不写坐标。
 from __future__ import annotations
 
 import re
-from copy import deepcopy
 from typing import Any, Dict, List, Optional, Sequence
 
 
