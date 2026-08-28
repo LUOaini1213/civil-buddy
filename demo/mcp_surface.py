@@ -93,6 +93,7 @@ _DEFAULT_EXPERT = {
     "finance": "finance-tax",
 }
 _COMMON = (
+    ("civil.turn", "一轮土木 agent：走同一套 understand → tools → HITL。text 必填。"),
     ("search_kb", "检索当前岗可见知识库。"),
     ("read_kb", "读取 kb:// 或相对路径。越权拒绝。"),
     ("list_kb", "列出当前岗可见知识文件。"),
@@ -299,6 +300,17 @@ def call_tool(
         return {"ok": False, "error": f"未知工具 {name}", "content": []}
     if tool not in visible:
         return {"ok": False, "error": "拒绝：当前专家看不见该工具", "content": []}
+
+    if tool in {"civil.turn", "agent.turn"}:
+        from packing_assistant.runtime.agent_loop import run_agent
+
+        sid = str(args.get("session_id") or "mcp-turn")
+        return run_agent(
+            str(args.get("text") or args.get("task") or ""),
+            session_id=sid,
+            expert_id=str(args.get("skill") or args.get("expert_id") or eid or ""),
+            p0_confirmed=bool(args.get("confirm_ok") or args.get("p0_confirmed")),
+        )
 
     if tool in TOOL_NAMES:
         if rec and rec.id not in {"pack-ship", ""} and cat != "plant":

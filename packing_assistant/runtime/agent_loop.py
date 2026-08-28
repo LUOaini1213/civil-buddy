@@ -53,11 +53,14 @@ def _explain(text: str, expert_id: str, prefix: str = "") -> str:
     if eid:
         from packing_assistant.expert_roster import get_expert
         from packing_assistant.expert_turn import explain_expert
+        from packing_assistant.runtime.expert_skills import prompt_suffix
 
         exp = get_expert(eid)
         if exp:
             body = explain_expert(exp, text)
-            return f"{prefix}\n{body}".strip() if prefix else body
+            sop = prompt_suffix(eid)
+            blob = f"{prefix}\n{body}\n{sop}".strip() if prefix else f"{body}\n{sop}".strip()
+            return blob
     from packing_assistant.product_turn import explain
 
     body = explain(text)
@@ -292,6 +295,8 @@ def run_agent(
         "skill_source": skill_source,
         "sandbox_mode": cfg.sandbox,
         "approval": cfg.approval,
+        "cloud": False,
+        "generic_shell": False,
         "messages": messages,
         "tools_used": [],
         "tools_run": [],
@@ -325,6 +330,14 @@ def run_agent(
         out["events"] = [e.to_dict() for e in bus.for_run(run.run_id)]
         out["reply"] = _scrub(str(out.get("reply") or ""))
         out["submit_blocked"] = True
+        out["cloud"] = False
+        out["generic_shell"] = False
+        if eid:
+            from packing_assistant.runtime.expert_skills import skill_body
+
+            out["skill_sop_loaded"] = bool(skill_body(eid))
+        else:
+            out["skill_sop_loaded"] = False
         out["duration_ms"] = run.duration_ms
         out["history"] = list(run.history)
         from packing_assistant.runtime.memory import assemble_context

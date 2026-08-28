@@ -9,6 +9,7 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
+sys.path.insert(0, str(ROOT / "demo"))
 
 
 def main() -> int:
@@ -34,7 +35,17 @@ def main() -> int:
     assert match_skill("写临边防护方案讨论提纲") == "construction"
     assert match_skill("出一份税务日历") == "finance-tax"
     assert len(list_skills()) == 66
-    assert len(catalog_preamble()) <= CATALOG_BUDGET
+    pre = catalog_preamble()
+    assert len(pre) <= CATALOG_BUDGET
+    assert "scheme-11.md" not in pre
+    assert "程序记忆（Skill / SOP）" not in pre
+    from packing_assistant.runtime.expert_skills import skill_body
+
+    sop = skill_body("construction")
+    assert "scheme-11.md" in sop
+    assert "程序记忆（Skill / SOP）" in sop
+    for row in list_skills():
+        assert "body" not in row
 
     cfg = load_config()
     assert cfg.sandbox == "workspace-write"
@@ -59,6 +70,26 @@ def main() -> int:
     tax = run_task("出一份税务日历", session_id="cx-tax2")
     assert tax.get("skill") == "finance-tax"
     assert tax["wrote"] is True
+    assert tax.get("generic_shell") is False
+    assert tax.get("cloud") is False
+    assert tax.get("submit_blocked") is True
+
+    gst = run_agent("什么是 GST", session_id="cx-gst-overlay")
+    assert gst.get("intent") == "chat"
+    assert gst.get("wrote") is False
+    assert "9%" in (gst.get("reply") or "")
+    assert "scheme-11.md" not in (gst.get("reply") or "")
+    assert gst.get("skill_sop_loaded") is False
+    assert gst.get("generic_shell") is False
+    con = run_agent(
+        "施工方案是什么意思，先别写",
+        expert_id="construction",
+        session_id="cx-sop-con",
+        force_intent="chat",
+    )
+    assert con.get("wrote") is False
+    assert con.get("skill_sop_loaded") is True
+    assert "scheme-11.md" in (con.get("reply") or "")
 
     scheme = run_agent("写临边防护方案讨论提纲", session_id="cx-scheme")
     assert scheme.get("skill") == "construction"
@@ -134,7 +165,7 @@ def main() -> int:
     assert boot["skills_n"] == 66
     init = handle_rpc({"jsonrpc": "2.0", "id": 1, "method": "initialize", "params": {}})
     assert init["result"]["host"] == "civil-buddy"
-    th = handle_rpc({"jsonrpc": "2.0", "id": 2, "method": "thread/start", "params": {"title": "cx-serve"}})
+    th = handle_rpc({"jsonrpc": "2.0", "id": 2, "method": "thread/start", "params": {"title": "cx-serve-gst"}})
     tid = th["result"]["thread_id"]
     turn = handle_rpc(
         {
@@ -146,8 +177,22 @@ def main() -> int:
     )
     assert turn["result"].get("wrote") is False
     assert "9%" in (turn["result"].get("reply") or "")
+    assert turn["result"].get("generic_shell") is False
     bad = handle_rpc({"jsonrpc": "2.0", "id": 4, "method": "nope", "params": {}})
     assert bad.get("error")
+
+    from mcp_surface import call_tool, list_tools
+
+    names = {t["name"] for t in list_tools(pack="construction")}
+    assert "civil.turn" in names
+    mcp_turn = call_tool(
+        "civil.turn",
+        {"text": "什么是 GST", "session_id": "mcp-turn-gst-eda3"},
+        pack="construction",
+    )
+    assert mcp_turn.get("wrote") is False
+    assert "9%" in (mcp_turn.get("reply") or "")
+    assert mcp_turn.get("submit_blocked") is True
 
     from fastapi.testclient import TestClient
     from gateway.app import app
