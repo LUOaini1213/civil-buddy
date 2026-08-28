@@ -799,7 +799,7 @@
 - qa：已有 · hr__scan_forbidden
 - kb：已有 · 分层 KB + search_kb/read_kb（demo/kb）
 - write：已有 · 独有 hr-recruit__brief；chat 不写盘
-- 下一刀：hr-recruit__brief 出职责|任职|面试问法；薪资仅当用户给数才抄。
+- 下一刀：已做 T040 hr-recruit。hr-recruit__brief 出职责|任职|面试问法；薪资仅当用户给数才抄。
 
 ### hr-labor
 

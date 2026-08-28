@@ -76,7 +76,7 @@
     {"id": "finance-fund", "yibiao": ["outline", "kb", "write"], "exclusive": ["finance-fund__plan"], "aligned": true, "note": "资金计划独有"},
     {"id": "finance-tax", "yibiao": ["outline", "kb", "write"], "exclusive": ["finance-tax__calendar"], "aligned": true, "note": "税务日历独有；默认 SG"},
     {"id": "supervision", "yibiao": ["qa", "kb", "write"], "exclusive": ["supervision__reply"], "aligned": true, "note": "监理回复独有"},
-    {"id": "hr-recruit", "yibiao": ["outline", "kb", "write"], "exclusive": ["hr-recruit__brief"], "aligned": true, "note": "招聘简报独有"},
+    {"id": "hr-recruit", "yibiao": ["outline", "kb", "write"], "exclusive": ["hr-recruit__brief"], "aligned": true, "note": "招聘简报独有：职责|任职|面试问法"},
     {"id": "hr-labor", "yibiao": ["qa", "kb", "write"], "exclusive": ["hr-labor__check"], "aligned": true, "note": "合同检查独有"},
     {"id": "hr-train", "yibiao": ["outline", "kb", "write"], "exclusive": ["hr-train__plan"], "aligned": true, "note": "培训计划独有"},
     {"id": "admin-doc", "yibiao": ["outline", "kb", "write"], "exclusive": ["admin-doc__draft"], "aligned": true, "note": "公文草稿独有"},

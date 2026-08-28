@@ -120,7 +120,7 @@ _NEXT = {
     "finance-fund": "已做 T038 finance-fund。finance-fund__plan 出收入/支出窗口，金额 TBD，不当付款指令。",
     "finance-tax": "finance-tax__calendar 加税种|节点|资料是否齐全；税率空白，只可抄 IRAS 页述 9%。",
     "supervision": "已做 T034 supervision。supervision__reply：来文复述|拟办|证据目录；暂停/复工只出目录，不写复工许可。",
-    "hr-recruit": "hr-recruit__brief 出职责|任职|面试问法；薪资仅当用户给数才抄。",
+    "hr-recruit": "已做 T040 hr-recruit。hr-recruit__brief 出职责|任职|面试问法；薪资仅当用户给数才抄。",
     "hr-labor": "hr-labor__check 按合同类型分表+必备条款对照；补偿 [A001]。",
     "hr-train": "hr-train__plan 出公司/项目/班组三层课题表+签到空栏。",
     "admin-doc": "admin-doc__draft 按文种套请示/纪要/用印三套栏，禁止代用印。",

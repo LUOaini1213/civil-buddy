@@ -181,6 +181,9 @@
 59. **civil serve App Server** ✅  
     JSON-RPC `initialize` / `thread/start` / `turn/start` 跑本仓 harness，不是 openai/codex 二进制。无 Cloud、无通用 shell。验收：`python scripts/test_civil_codex.py`。主链头指针仍 **T040 hr-recruit**。
 
+60. **T040 hr-recruit 一岗** ✅ 2026-08-28  
+    hr-recruit__brief 出职责｜任职｜面试问法；薪资仅当用户给数才抄，否则待填不编市场带宽。chat 不写盘。兄弟岗调 hr-recruit__brief 拒绝。主链头指针仍 **T040**（下一岗 hr-labor）。T040 其余岗不得一行勾完。行业总判仍 **部分合格**。
+
 平台内核见 [product-improvement-handbook.md](product-improvement-handbook.md)。岗独有写盘下一刀仍按 [post-horizon-2026-08-17.md](post-horizon-2026-08-17.md)。
 
 ## 有宿主再做

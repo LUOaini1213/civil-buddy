@@ -657,6 +657,23 @@ _PD_WEATHER_RE = re.compile(
 
 _PD_LABOR_RE = re.compile(r"(\d+\s*人|出勤|木工|钢筋工|砼工|架子工|电焊|普工)")
 
+_HR_CHAPTERS = ("职责", "任职", "面试问法")
+
+_HR_SKIP = {
+    "草稿提纲",
+    "招聘简报",
+    "招聘",
+    "岗位说明书",
+    "面试提纲",
+    "待填",
+}
+
+_HR_PAY_RE = re.compile(
+    r"(?:薪资|月薪|工资|salary|SGD|sgd)\s*[:：]?\s*(\d{3,6})"
+    r"|(\d{3,6})\s*(?:元|SGD|sgd)",
+    re.I,
+)
+
 _MM_RE = re.compile(r"(\d+(?:\.\d+)?)\s*(mm|毫米)", re.I)
 
 _MILESTONE_KEYS = ("桩基", "±0", "封顶", "砌筑", "机电", "装饰", "竣工")
@@ -3399,6 +3416,151 @@ def _pm_daily_md(text: str) -> str:
     return "\n".join(lines)
 
 
+def _hr_zone(blob: str) -> str:
+    t = blob or ""
+    if "DUAL" in t:
+        return "DUAL"
+    if any(
+        k in t
+        for k in (
+            "劳动合同法",
+            "就业促进法",
+            "住建部",
+            "人力资源市场",
+            "JGJ",
+        )
+    ):
+        return "CN"
+    return _mix_zone(blob)
+
+
+def _hr_role(blob: str) -> str:
+    t = (blob or "").strip()
+    t = re.sub(r"^写一份\S*\s*", "", t).strip()
+    t = re.sub(r"^(招聘简报|招聘|岗位说明书|面试提纲)\s*", "", t).strip()
+    t = _HR_PAY_RE.sub("", t)
+    for piece in t.replace("；", "\n").replace(";", "\n").splitlines():
+        p = piece.strip()
+        p = _HR_PAY_RE.sub("", p)
+        p = re.sub(r"\s+", " ", p).strip()
+        if not p or p in _HR_SKIP or p.lower() in _HR_SKIP:
+            continue
+        if p.startswith("#") or p.startswith("内部"):
+            continue
+        if p in {
+            "JGJ",
+            "SAC",
+            "CN",
+            "SG",
+            "DUAL",
+            "住建部",
+            "劳动合同法",
+            "就业促进法",
+        }:
+            continue
+        return p[:80]
+    return "待填"
+
+
+def _hr_pay(blob: str) -> str:
+    m = _HR_PAY_RE.search(blob or "")
+    if not m:
+        return "薪资：待填。不编市场带宽。"
+    fig = next((g for g in m.groups() if g), "")
+    if not fig:
+        return "薪资：待填。不编市场带宽。"
+    return f"薪资：用户给出 {fig}。只抄这一处，不编市场带宽。"
+
+
+def _hr_duties(role: str, zone: str) -> str:
+    eight = (
+        "施工现场专业人员可对照 JGJ/T 250-2011 八类名称，用户没点名不要硬套。"
+        if zone in ("CN", "DUAL")
+        else "施工现场专业人员可对照八类现场岗位名称，用户没点名不要硬套。"
+    )
+    return (
+        f"本岗（{role}）职责按用户描述扩写。"
+        f"{eight}"
+        "劳资专管员才写实名制、考勤、工资表审核配合。"
+        "安全员写监督巡查，不写可替代项目负责人。"
+    )
+
+
+def _hr_qual() -> str:
+    return (
+        "任职条件只列门槛栏，不替用人部门圈已符合。"
+        "学历专业、类似工程经验年限用户未给则待填。"
+        "证书与社保以原件核验为准。"
+        "身体条件只写适应现场，不写性别、婚育、年龄、地域、民族、户籍限制。"
+    )
+
+
+def _hr_interview() -> str:
+    return (
+        "行为面：类似项目如何协调进度与安全。"
+        "专业面：读图、危大旁站、资料闭合、实名制。"
+        "每题只列追问点，不写标准答案分数。"
+        "不问婚育、籍贯、房产或证书挂靠。"
+    )
+
+
+def _hr_recruit_md(text: str) -> str:
+    blob = text or ""
+    zone = _hr_zone(blob)
+    role = _hr_role(blob)
+    pay = _hr_pay(blob)
+    duties = _hr_duties(role, zone)
+    qual = _hr_qual()
+    interview = _hr_interview()
+    four = (
+        "| 栏 | 本稿 |\n"
+        "| --- | --- |\n"
+        f"| 职责 | {role} |\n"
+        "| 任职 | 门槛栏待核，不圈已符合 |\n"
+        "| 面试问法 | 行为面+专业面，无标准答案 |\n"
+        f"| 薪资 | {pay} |\n"
+    )
+    lines = [
+        "# 招聘简报（AI 草稿 · 内部讨论）",
+        "",
+        DISCLAIMER,
+        "",
+        "岗位说明书 + 面试提纲。不是录用通知，不是薪酬批复。",
+        "",
+        f"- 辖区：{zone}",
+        "",
+        "## 用户原文",
+        "",
+        blob.strip() or "（未提供）",
+        "",
+        four,
+        "",
+        "## 岗位",
+        "",
+        role,
+        "",
+    ]
+    for title, body in zip(_HR_CHAPTERS, (duties, qual, interview)):
+        lines.append(f"## {title}")
+        lines.append("")
+        lines.append(body)
+        lines.append("")
+    lines.append("## 薪资")
+    lines.append("")
+    lines.append(pay)
+    lines.append("")
+    lines.append("[A001] 用户没给报酬则整栏待填。本稿不是录用通知。")
+    if zone in ("SG", "DUAL"):
+        lines.append(
+            "SG：Fair Consideration Framework / Key Employment Terms 只写标题。"
+            "MyCareersFuture 广告连续 14 日只写标题，不编录用。"
+        )
+    if zone in ("CN", "DUAL"):
+        lines.append("CN：劳动合同法招用告知口径只写标题，不编薪资。")
+    lines.append("")
+    return "\n".join(lines)
+
+
 def _dispatch_daily_md(text: str) -> str:
     jobs = _copy_sensitive_jobs(text)
     sensitive = (
@@ -4638,6 +4800,33 @@ def _run_exclusive_body(
             "submit_blocked": True,
         }
 
+    if expert.id == "hr-recruit":
+        md = _hr_recruit_md(text)
+        from packing_assistant.tools.tender_review import forbidden_hits
+
+        hits = forbidden_hits(md)
+        if hits:
+            return {
+                "wrote": False,
+                "hitl_pending": False,
+                "files": [],
+                "tools_run": [],
+                "reply": "禁语扫描命中，未报成功：" + "、".join(hits),
+                "submit_blocked": True,
+            }
+        path = out_dir / "hr-recruit__brief.md"
+        guarded_write_text(path, md)
+        files.append({"name": path.name, "path": str(path), "tool": "hr-recruit__brief"})
+        ran.append("hr-recruit__brief")
+        return {
+            "wrote": True,
+            "hitl_pending": False,
+            "files": files,
+            "tools_run": ran,
+            "reply": "已出招聘简报。职责｜任职｜面试问法。薪资未给则待填。不是录用通知。submit_blocked=true。",
+            "submit_blocked": True,
+        }
+
     if expert.id == "cost":
         md = (
             f"# 工程量拆分表（AI 草稿）\n\n{DISCLAIMER}\n\n"
@@ -4778,6 +4967,12 @@ def run_named_exclusive(name: str, args: Optional[Dict[str, Any]] = None) -> Dic
         "attendance",
         "resources",
         "hse",
+        "role",
+        "duties",
+        "salary",
+        "pay",
+        "qualifications",
+        "interview",
     ):
         v = args.get(k)
         if v:

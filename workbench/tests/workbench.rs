@@ -767,6 +767,63 @@ fn test_hr_labor_sg_titles() {
 }
 
 #[test]
+fn test_hr_recruit_brief_three_sections() {
+    let p = paths();
+    assert!(packs::visible_tool_names("hr-recruit").iter().any(|n| n == "hr-recruit__brief"));
+    assert!(!packs::visible_tool_names("hr-labor").iter().any(|n| n == "hr-recruit__brief"));
+    let mut ctx = ToolCtx::new(p.clone(), "hr-recruit", "hr", "low", true, "iter-hr-t040");
+    let out = packs::execute(
+        &mut ctx,
+        "hr-recruit__brief",
+        &json!({"role":"施工员","jurisdiction":"SG"}),
+    );
+    assert!(out.contains("已写入"), "{out}");
+    let text = std::fs::read_to_string(ctx.out_dir.join("招聘简报.md")).unwrap();
+    assert!(text.contains("施工员"), "{text}");
+    let duty = text.split("## 职责").nth(1).unwrap().split("## 任职").next().unwrap();
+    let qual = text.split("## 任职").nth(1).unwrap().split("## 面试问法").next().unwrap();
+    let iv = text.split("## 面试问法").nth(1).unwrap().split("## 薪资").next().unwrap();
+    assert_ne!(duty.trim(), qual.trim(), "{text}");
+    assert_ne!(qual.trim(), iv.trim(), "{text}");
+    assert!(duty.contains("八类") || duty.contains("职责"), "{duty}");
+    assert!(qual.contains("门槛") || qual.contains("适应现场"), "{qual}");
+    assert!(iv.contains("行为面") || iv.contains("追问"), "{iv}");
+    let pay = text.split("## 薪资").nth(1).unwrap().split("[A001]").next().unwrap();
+    assert!(pay.contains("待填"), "{pay}");
+    assert!(pay.contains("不编市场带宽"), "{pay}");
+    assert!(text.contains("Fair Consideration") || text.contains("Key Employment Terms"), "{text}");
+    assert!(!text.contains("可以开工"), "{text}");
+    let mut paid = ToolCtx::new(p.clone(), "hr-recruit", "hr", "low", true, "iter-hr-t040-pay");
+    let po = packs::execute(
+        &mut paid,
+        "hr-recruit__brief",
+        &json!({"role":"施工员","salary":"月薪8000","jurisdiction":"SG"}),
+    );
+    assert!(po.contains("已写入"), "{po}");
+    let pt = std::fs::read_to_string(paid.out_dir.join("招聘简报.md")).unwrap();
+    let pay2 = pt.split("## 薪资").nth(1).unwrap().split("[A001]").next().unwrap();
+    assert!(pay2.contains("8000"), "{pay2}");
+    assert!(!pay2.contains("待填"), "{pay2}");
+    let mut cn = ToolCtx::new(p.clone(), "hr-recruit", "hr", "low", true, "iter-hr-t040-cn");
+    let co = packs::execute(
+        &mut cn,
+        "hr-recruit__brief",
+        &json!({"role":"施工员","jurisdiction":"CN"}),
+    );
+    assert!(co.contains("已写入"), "{co}");
+    let ct = std::fs::read_to_string(cn.out_dir.join("招聘简报.md")).unwrap();
+    assert!(ct.contains("辖区：CN"), "{ct}");
+    assert!(ct.contains("劳动合同法"), "{ct}");
+    assert!(!ct.contains("Fair Consideration"), "{ct}");
+    assert!(!ct.contains("MyCareersFuture"), "{ct}");
+    assert!(!ct.contains("FCF"), "{ct}");
+    let mut sib = ToolCtx::new(p, "hr-labor", "hr", "low", true, "iter-hr-t040-sib");
+    let refused = packs::execute(&mut sib, "hr-recruit__brief", &json!({"role":"x"}));
+    assert!(refused.contains("拒绝"), "{refused}");
+    assert!(refused.contains("hr-recruit"), "{refused}");
+}
+
+#[test]
 fn test_finance_tax_and_env_sg_titles() {
     let p = paths();
     assert!(packs::visible_tool_names("finance-tax").iter().any(|n| n == "finance-tax__calendar"));

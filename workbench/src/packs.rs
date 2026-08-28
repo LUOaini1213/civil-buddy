@@ -976,8 +976,17 @@ fn pack_tools(pack: &str) -> Vec<ToolDef> {
             },
             ToolDef {
                 name: "hr-recruit__brief",
-                description: "岗位说明书/面试提纲。不编薪资带宽除非用户给。",
-                parameters: obj(json!({"role": {"type": "string"}, "duties": {"type": "string"}}), &["role"]),
+                description: "招聘简报：职责|任职|面试问法。不编薪资带宽除非用户给。",
+                parameters: obj(
+                    json!({
+                        "role": {"type": "string"},
+                        "duties": {"type": "string"},
+                        "qualifications": {"type": "string"},
+                        "interview": {"type": "string"},
+                        "salary": {"type": "string"}
+                    }),
+                    &["role"],
+                ),
             },
             ToolDef {
                 name: "hr-labor__check",
@@ -3579,18 +3588,136 @@ fn supervision_reply(ctx: &mut ToolCtx, args: &Value) -> String {
     }
 }
 
+fn hr_skip(t: &str) -> bool {
+    matches!(
+        t,
+        "草稿提纲"
+            | "招聘简报"
+            | "招聘"
+            | "岗位说明书"
+            | "面试提纲"
+            | "待填"
+            | "SG"
+            | "CN"
+            | "DUAL"
+            | "住建部"
+            | "劳动合同法"
+            | "就业促进法"
+    )
+}
+
+fn hr_pay(blob: &str) -> String {
+    let re = regex::Regex::new(
+        r"(?i)(?:薪资|月薪|工资|salary|SGD)\s*[:：]?\s*(\d{3,6})|(\d{3,6})\s*(?:元|SGD)",
+    )
+    .expect("hr-pay");
+    if let Some(c) = re.captures(blob) {
+        let fig = c
+            .get(1)
+            .or_else(|| c.get(2))
+            .map(|m| m.as_str())
+            .unwrap_or("");
+        if !fig.is_empty() {
+            return format!("薪资：用户给出 {fig}。只抄这一处，不编市场带宽。");
+        }
+    }
+    "薪资：待填。不编市场带宽。".into()
+}
+
+fn hr_role(blob: &str) -> String {
+    let pay_re = regex::Regex::new(
+        r"(?i)(?:薪资|月薪|工资|salary|SGD)\s*[:：]?\s*\d{3,6}|\d{3,6}\s*(?:元|SGD)",
+    )
+    .expect("hr-pay-strip");
+    for raw in blob.replace('；', "\n").replace(';', "\n").lines() {
+        let mut t = raw.trim().to_string();
+        if let Some(rest) = t.strip_prefix("写一份") {
+            t = rest.trim().to_string();
+        }
+        for p in ["招聘简报", "招聘", "岗位说明书", "面试提纲"] {
+            if let Some(rest) = t.strip_prefix(p) {
+                t = rest.trim().to_string();
+                break;
+            }
+        }
+        t = pay_re.replace_all(&t, "").to_string();
+        let t = t.split_whitespace().collect::<Vec<_>>().join(" ");
+        if t.is_empty() || hr_skip(&t) {
+            continue;
+        }
+        if t.starts_with('#') || t.starts_with("内部") {
+            continue;
+        }
+        return t.chars().take(80).collect();
+    }
+    "待填".into()
+}
+
 fn job_brief(ctx: &mut ToolCtx, args: &Value) -> String {
     let (jur, banner) = zone_banner(args);
+    let blob = format!(
+        "{}\n{}\n{}\n{}\n{}\n{}",
+        s(args, "role"),
+        s(args, "duties"),
+        s(args, "qualifications"),
+        s(args, "interview"),
+        s(args, "salary"),
+        s(args, "pay")
+    );
+    let role = {
+        let from_arg = s(args, "role");
+        if from_arg.is_empty() {
+            hr_role(&blob)
+        } else {
+            from_arg
+        }
+    };
+    let eight = if jur == "CN" || jur == "DUAL" {
+        "施工现场专业人员可对照 JGJ/T 250-2011 八类名称，用户没点名不要硬套。"
+    } else {
+        "施工现场专业人员可对照八类现场岗位名称，用户没点名不要硬套。"
+    };
+    let duties = {
+        let from_arg = s(args, "duties");
+        if from_arg.is_empty() {
+            format!(
+                "本岗（{role}）职责按用户描述扩写。{eight}劳资专管员才写实名制、考勤、工资表审核配合。安全员写监督巡查，不写可替代项目负责人。"
+            )
+        } else {
+            format!(
+                "用户给出的职责：{from_arg}。{eight}不写可替代项目负责人。"
+            )
+        }
+    };
+    let qual = {
+        let from_arg = s(args, "qualifications");
+        if from_arg.is_empty() {
+            "任职条件只列门槛栏，不替用人部门圈已符合。学历专业、类似工程经验年限用户未给则待填。证书与社保以原件核验为准。身体条件只写适应现场，不写性别、婚育、年龄、地域、民族、户籍限制。".to_string()
+        } else {
+            format!(
+                "用户给出的任职：{from_arg}。只列门槛栏，不圈已符合。身体条件只写适应现场。"
+            )
+        }
+    };
+    let interview = {
+        let from_arg = s(args, "interview");
+        if from_arg.is_empty() {
+            "行为面：类似项目如何协调进度与安全。专业面：读图、危大旁站、资料闭合、实名制。每题只列追问点，不写标准答案分数。不问婚育、籍贯、房产或证书挂靠。".to_string()
+        } else {
+            format!(
+                "用户给出的面试问法：{from_arg}。只列追问点，不写标准答案。不问婚育或证书挂靠。"
+            )
+        }
+    };
+    let pay = hr_pay(&blob);
+    let four = format!(
+        "| 栏 | 本稿 |\n| --- | --- |\n| 职责 | {role} |\n| 任职 | 门槛栏待核，不圈已符合 |\n| 面试问法 | 行为面+专业面，无标准答案 |\n| 薪资 | {pay} |"
+    );
     let md = format!(
-        "{}{banner}\n## 岗位\n{}\n\n## 职责\n{}\n\n薪资带宽：用户未给则不编。{}\n",
+        "{}{banner}岗位说明书 + 面试提纲。不是录用通知，不是薪酬批复。\n\n{four}\n\n## 岗位\n{role}\n\n## 职责\n{duties}\n\n## 任职\n{qual}\n\n## 面试问法\n{interview}\n\n## 薪资\n{pay}\n\n[A001] 用户没给报酬则整栏待填。本稿不是录用通知。\n{}{}\n",
         header("招聘简报"),
-        nonempty(&s(args, "role"), "待填"),
-        nonempty(&s(args, "duties"), "待填"),
-        format!(
-            "{}{}",
-            sg_only(&jur, "SG：Fair Consideration Framework / Key Employment Terms 只写标题。"),
-            cn_only(&jur, "CN：劳动合同法招用告知口径只写标题，不编薪资。"),
-        ),
+        sg_only(&jur, "SG：Fair Consideration Framework / Key Employment Terms 只写标题。MyCareersFuture 广告连续 14 日只写标题，不编录用。"),
+        cn_only(&jur, "CN：劳动合同法招用告知口径只写标题，不编薪资。"),
     );
     match ctx.write_md("招聘简报.md", &md) {
         Ok(m) => m,

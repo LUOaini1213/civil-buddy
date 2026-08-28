@@ -895,6 +895,68 @@ def main() -> int:
     assert "BCA" not in pdc
     assert "site record" not in pdc
 
+    hr_chat = run_expert_turn("招聘简报怎么理解？", "hr-recruit", session_id="t040-hr-chat")
+    assert hr_chat["intent"] == "chat" and hr_chat["wrote"] is False
+    hr_ok = run_expert_turn(
+        "写一份招聘简报 施工员",
+        "hr-recruit",
+        force_intent="run",
+        session_id="t040-hr",
+    )
+    assert hr_ok["wrote"] is True
+    assert hr_ok["submit_blocked"] is True
+    assert "hr-recruit__brief" in hr_ok["tools_run"]
+    hrt = Path(hr_ok["files"][0]["path"]).read_text(encoding="utf-8")
+    assert "施工员" in hrt
+    duty = hrt.split("## 职责")[1].split("## 任职")[0]
+    qual = hrt.split("## 任职")[1].split("## 面试问法")[0]
+    ivw = hrt.split("## 面试问法")[1].split("## 薪资")[0]
+    assert duty.strip() != qual.strip()
+    assert qual.strip() != ivw.strip()
+    assert "八类" in duty or "职责" in duty
+    assert "门槛" in qual or "适应现场" in qual
+    assert "行为面" in ivw or "追问" in ivw
+    pay = hrt.split("## 薪资")[1].split("[A001]")[0]
+    assert "待填" in pay
+    assert "不编市场带宽" in pay
+    assert "Fair Consideration" in hrt or "Key Employment Terms" in hrt
+    assert "可以开工" not in hrt
+    assert "男士优先" not in hrt
+    assert "35岁以下" not in hrt and "35 岁以下" not in hrt
+    assert "office__xlsx" in hr_ok["tools_run"]
+    hr_pay = run_expert_turn(
+        "写一份招聘简报 施工员 月薪8000",
+        "hr-recruit",
+        force_intent="run",
+        session_id="t040-hr-pay",
+    )
+    hrp = Path(hr_pay["files"][0]["path"]).read_text(encoding="utf-8")
+    pay2 = hrp.split("## 薪资")[1].split("[A001]")[0]
+    assert "8000" in pay2
+    assert "待填" not in pay2
+    hr_cn = run_expert_turn(
+        "写一份招聘简报 施工员 住建部",
+        "hr-recruit",
+        force_intent="run",
+        session_id="t040-hr-cn",
+    )
+    hrc = Path(hr_cn["files"][0]["path"]).read_text(encoding="utf-8")
+    assert "辖区：CN" in hrc
+    assert "劳动合同法" in hrc
+    assert "Fair Consideration" not in hrc
+    assert "MyCareersFuture" not in hrc
+    assert "FCF" not in hrc
+    from packing_assistant.runtime.tool_engine import ERR_DENIED, get_engine
+
+    sib = get_engine().execute(
+        "hr-recruit__brief",
+        {"text": "写一份招聘简报 施工员", "session_id": "t040-hr-sib"},
+        expert_id="hr-labor",
+        intent="run",
+    )
+    assert sib.get("error_code") == ERR_DENIED, sib
+    assert "hr-recruit" in str(sib.get("reason") or "")
+
     high = [e for e in roster if e.risk == "high"][0]
     blocked = run_expert_turn("写一份专项方案讨论提纲", high.id, confirm_ok=False)
     assert blocked["intent"] == "run"
