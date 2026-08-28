@@ -1,4 +1,11 @@
-"""黄金集回归（最终架构：自动确认跑全流程）。"""
+"""黄金集回归（最终架构：自动确认跑全流程）。
+
+.. deprecated:: 2026-08
+   ``eval/cases.json`` 为旧口径（boxes 上限/结论关键词与现行引擎不一致，4/7 会误报 FAIL）。
+   现行评测请用 phase0 基线：``python main.py --eval`` 或
+   ``python scripts/run_phase0_baseline.py --quick``。
+   本模块保留给 ``--cases`` 显式指定的历史回归，cases 文件未删除。
+"""
 
 from __future__ import annotations
 

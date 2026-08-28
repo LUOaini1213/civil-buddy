@@ -7,6 +7,14 @@
 > 内部讨论草稿，不是法定专项方案、不是签认件。  
 > 高风险写盘前确认句：`我明白，将由持证人员签认`。
 
+## 参赛提交入口（海之子杯 · AI 智能体挑战）
+
+| 评审维度 | 项目证据 | 可复跑命令 |
+|----------|----------|------------|
+| **场景创意价值** | 土木版 Codex：66 岗工作台，NL 一句话 pack 入口出真数字（tools 算柜数/坐标，模型只路由） | `python scripts/demo_one_shot.py` 后在 :8765 工作台输入 `pack test/sim_materials/small_one_container/materials.xlsx` |
+| **AI 协同能力** | Agent Middleware 策略引擎+失败恢复：四拍纠偏剧本（正常下单 → 越权被拒 → 工具挂掉自动恢复 → 成本超限熔断）；HITL 人确认后才拼柜 | `python scripts/demo_agent_middleware.py` |
+| **技术创新** | 装箱引擎 NL→IntentSpec→白名单 tools→HITL→影子评测；446t 单票对照 29→25 柜（mid50 0.594，risk=WARN 口径）；本地校准综合分对外口径 **8.85** | `python main.py --demo` · `python main.py --eval` |
+
 ### Agent Middleware（赛道 1 · 完全合格）
 
 对照表：[docs/civil-buddy/track1-qualified.md](docs/civil-buddy/track1-qualified.md)。  

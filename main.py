@@ -3,10 +3,12 @@
 最终架构 CLI：团队A → 用户确认 → 团队B
 
 用法:
-  python main.py --demo              # 自动确认 40HQ 跑完全程
+  python main.py --demo              # 默认 high_util 预设：过合规门，done/WARN 收尾
+  python main.py --demo --preset structure_fail   # 负例：演示合规阻断生效（REJECT 为预期）
   python main.py --team-a            # 只跑团队A，打印确认单
   python main.py --interactive       # 交互：先A后确认再B
-  python main.py --eval
+  python main.py --eval              # 现行评测 = phase0 基线 quick（全过退出码 0）
+  python main.py --eval --cases eval/cases.json   # 旧黄金集（deprecated，仅历史回归）
 """
 
 from __future__ import annotations
@@ -30,8 +32,32 @@ from packing_assistant.harness import (
 
 
 def cmd_demo(args) -> int:
+    materials = None
+    packing_options = None
+    user_input = args.input or ""
+
+    if not user_input:
+        from packing_assistant.demo_presets import PRESETS
+
+        key = (args.preset or "high_util").strip().lower()
+        if key == "structure_fail":
+            # 负例路径：默认成箱选项下 BOX-01 结构校核阻断——演示「合规门是活的」。
+            # REJECT / need_revision 是这条路径的预期结果，不是缺陷。
+            print("== 合规门负例演示：预期 BOX-01 成箱结构校核阻断（REJECT=门生效）==")
+            user_input = "演示材料清单"
+        else:
+            if key not in PRESETS:
+                key = "high_util"
+            preset = PRESETS[key]
+            materials = preset["materials"]()
+            packing_options = preset["packing_options"]()
+            user_input = preset["user_input"]
+            print(f"== 演示预设: {key} · {preset['label']} ==")
+
     result = run_pipeline(
-        args.input or "演示材料清单",
+        user_input,
+        materials=materials,
+        packing_options=packing_options,
         container_type=args.container,
         enable_auto_confirm=True,
         persist_trace=args.save_trace,
@@ -127,22 +153,62 @@ def main(argv: list[str] | None = None) -> int:
     p = argparse.ArgumentParser(description="装箱拼柜最终架构 CLI")
     p.add_argument("--input", "-i", default="", help="材料清单文本")
     p.add_argument("--container", "-c", default="40HQ", help="自动确认时的柜型")
-    p.add_argument("--demo", action="store_true", help="自动确认跑完全程")
+    p.add_argument("--demo", action="store_true", help="自动确认跑完全程（默认 high_util 预设）")
+    p.add_argument(
+        "--preset",
+        default="high_util",
+        help=(
+            "演示预设：high_util(默认,过合规门) / steel_light / five_containers / "
+            "high_util_uniform / structure_fail(负例,演示合规阻断)"
+        ),
+    )
     p.add_argument("--team-a", action="store_true", help="只跑团队A")
     p.add_argument("--interactive", action="store_true", help="交互确认")
     p.add_argument("--json", action="store_true")
     p.add_argument("--trace", action="store_true")
     p.add_argument("--save-trace", action="store_true")
-    p.add_argument("--eval", action="store_true")
-    p.add_argument("--cases", default="")
+    p.add_argument("--eval", action="store_true", help="现行评测：phase0 基线 quick")
+    p.add_argument(
+        "--cases",
+        default="",
+        help="显式指定旧黄金集 cases 文件（deprecated，仅历史回归）；默认忽略",
+    )
     args = p.parse_args(argv)
 
     if args.eval:
-        from packing_assistant.eval_runner import DEFAULT_CASES_PATH, run_eval
+        if args.cases:
+            # 旧黄金集口径（boxes 上限等）已过时，仅作历史回归用。
+            print(f"[eval] 旧黄金集（deprecated）：{args.cases}")
+            from packing_assistant.eval_runner import run_eval
 
-        path = args.cases or DEFAULT_CASES_PATH
-        passed, total, _ = run_eval(path, verbose=True)
-        return 0 if passed == total else 1
+            passed, total, _ = run_eval(args.cases, verbose=True)
+            return 0 if passed == total else 1
+
+        # 现行评测（2026-08 起）：phase0 基线 quick，与
+        # `python scripts/run_phase0_baseline.py --quick` 同一口径。
+        # 旧 eval/cases.json 口径已 deprecated，未删除，可用 --cases 显式回归。
+        from packing_assistant.phase0_benchmark import build_phase0_cases, run_baseline
+
+        report = run_baseline(
+            build_phase0_cases(include_heavy=False),
+            agent_mode="steps",
+            quick=True,
+        )
+        print("-" * 48)
+        print(
+            "EVAL phase0-quick:",
+            "n=",
+            report.get("n"),
+            "passed=",
+            report.get("passed"),
+            "pass_rate=",
+            report.get("pass_rate"),
+            "avg_score=",
+            report.get("avg_score"),
+        )
+        print("report:", (report.get("paths") or {}).get("md"))
+        print("-" * 48)
+        return 0 if float(report.get("pass_rate") or 0) >= 1.0 else 1
 
     if args.interactive:
         return cmd_interactive(args)
