@@ -3274,29 +3274,33 @@ fn pack_ship_plan(ctx: &mut ToolCtx, args: &Value) -> String {
     let notes = s(args, "notes");
     let (jur, banner) = zone_banner(args);
     let force_off = args.get("connected").and_then(|v| v.as_bool()) == Some(false);
-    let solver = args.get("solver").cloned().unwrap_or(json!({}));
-    let solver_empty = solver.as_object().map(|o| o.is_empty()).unwrap_or(true);
-    let disconnected = force_off || solver_empty;
-    let four = if disconnected {
-        pack_ship_export(&json!({"connected": false}))
-    } else {
-        pack_ship_export(&json!({"connected": true, "solver": solver}))
-    };
-    let tool_block = if force_off {
-        format!(
-            "## packing-agent 回传（工具计算，非本岗编造）\n\n未接通 solver 快照。\n\n```\n{four}```\n"
-        )
+    // 数字一律以桥接回传为准：桥接成功 → 回填 export 数字块；失败/断开 → 维持 UNSPECIFIED 口径。
+    let (four, agent_md, connected_ok) = if force_off {
+        (pack_ship_export(&json!({"connected": false})), None, false)
     } else {
         let agent = crate::websearch::run_blocking(|| crate::packing_bridge::run(&materials, &notes));
-        format!(
-            "## packing-agent 回传（工具计算，非本岗编造）\n\n{}\n\n```\n{four}```\n",
-            agent.markdown()
-        )
+        let md = agent.markdown();
+        if agent.error.is_some() {
+            (pack_ship_export(&json!({"connected": false})), Some(md), false)
+        } else {
+            let nz = |s: &str| if s.trim().is_empty() { "UNSPECIFIED".to_string() } else { s.to_string() };
+            let four = format!(
+                "pack-ship__export\nutilization={}\ncan_fit={}\nmid50=UNSPECIFIED\n系固待办=UNSPECIFIED\nxyz=UNSPECIFIED\n",
+                nz(&agent.utilization),
+                nz(&agent.can_fit),
+            );
+            (four, Some(md), true)
+        }
     };
-    let n0_line = if disconnected {
-        "柜数 N0* = UNSPECIFIED；摆位 xyz = UNSPECIFIED。"
+    let tool_block = if let Some(md) = &agent_md {
+        format!("## packing-agent 回传（工具计算，非本岗编造）\n\n{md}\n\n```\n{four}```\n")
     } else {
+        format!("## packing-agent 回传（工具计算，非本岗编造）\n\n未接通 solver 快照。\n\n```\n{four}```\n")
+    };
+    let n0_line = if connected_ok {
         "柜数/N0* 以上文工具回传为准；未出现的数字标 UNSPECIFIED。"
+    } else {
+        "柜数 N0* = UNSPECIFIED；摆位 xyz = UNSPECIFIED。"
     };
     let md = format!(
         "{}{banner}\n## 工程/批次\n{project}\n\n## 用户物料（只抄原文）\n{materials}\n\n{tool_block}\n## 口径\n- 官方作业守则标题：IMO/ILO/UNECE Code of Practice for Packing of Cargo Transport Units (**CTU Code**, 2014)。非强制性全球作业守则；条款 UNSPECIFIED。https://www.imo.org/en/ourwork/safety/pages/ctu-code.aspx\n- CSC（International Convention for Safe Containers）Safety Approval Plate 有效性由持证人员核，本表不判柜况。\n- 数值边界：与 packing-agent 相同——**工具算数，模型只编排**。禁止在本表手写坐标。\n- {n0_line}\n- [A001] 单件尺寸/重量未给则待填。\n{}\n本作业单不是订舱承诺，不是危险品申报。\n",

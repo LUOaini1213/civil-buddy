@@ -5,11 +5,15 @@ Pure function: no I/O, no writes. Default is chat.
 
 from __future__ import annotations
 
+import re
 from typing import Literal
 
 Intent = Literal["chat", "run", "both"]
 
 _PACKISH = ("成套", "易标", "一人公司", "完整方案", "整套标")
+# pack 一句话动作：装箱/装柜/拼柜是引擎本体动作；英文 pack 按词边界匹配（避免误伤 package）。
+_PACK_ACTION_ZH = ("装柜", "装箱", "拼柜")
+_PACK_ACTION_EN = re.compile(r"\bpack\b", re.IGNORECASE)
 _PHRASE_WRITE = (
     "写一份",
     "出一份",
@@ -59,6 +63,18 @@ def is_packish(blob: str) -> bool:
     return any(k in blob for k in _PACKISH)
 
 
+def is_pack_action(blob: str) -> bool:
+    """pack 一句话动作（装柜/装箱/拼柜/pack）：与 workbench/src/agent.rs 保持一致。"""
+    t = (blob or "").strip()
+    if not t:
+        return False
+    if is_packish(t):
+        return True
+    if _has_any(t, _PACK_ACTION_ZH):
+        return True
+    return _PACK_ACTION_EN.search(t) is not None
+
+
 def _has_any(s: str, keys: tuple[str, ...]) -> bool:
     return any(k in s for k in keys)
 
@@ -67,6 +83,7 @@ def understand(blob: str) -> Intent:
     t = (blob or "").strip()
     if not t:
         return "chat"
+    pack_action = is_pack_action(t)
     if is_packish(t):
         return "run"
     phrase_write = _has_any(t, _PHRASE_WRITE)
@@ -74,9 +91,11 @@ def understand(blob: str) -> Intent:
     ask = _has_any(t, _ASK)
     qmark = "？" in t or "?" in t or t.endswith("吗")
     tender = len(t) > 80 and _has_any(t, _TENDER)
-    if write and (ask or qmark):
+    if (write or pack_action) and (ask or qmark):
         return "both"
-    if write or tender:
+    if (ask or qmark) and not write and not pack_action:
+        return "chat"
+    if pack_action or write or tender:
         return "run"
     return "chat"
 

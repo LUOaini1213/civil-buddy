@@ -10,7 +10,8 @@ use std::path::{Path, PathBuf};
 use std::process::{Command, Stdio};
 use std::time::Duration;
 
-#[derive(Debug, Clone, Default)]
+#[derive(Debug, Clone, Default, serde::Deserialize)]
+#[serde(default)]
 pub struct PackingSummary {
     pub ok: bool,
     pub n0: String,
@@ -20,6 +21,7 @@ pub struct PackingSummary {
     pub ship_ok: String,
     pub phase: String,
     pub source: String,
+    pub utilization: String,
     pub error: Option<String>,
 }
 
@@ -46,8 +48,9 @@ impl PackingSummary {
 }
 
 pub fn url_configured() -> Option<String> {
+    // 默认指向本仓 gateway 的默认端口；未起服务时 run() 的报错会给出启动指引。
     let base = env::var("PACKING_AGENT_URL")
-        .unwrap_or_default()
+        .unwrap_or_else(|_| "http://127.0.0.1:8000".to_string())
         .trim()
         .trim_end_matches('/')
         .to_string();
@@ -162,30 +165,28 @@ pub fn tender_extract(tender_text: &str, project_name: &str) -> Result<Value, St
 }
 
 pub fn run(materials: &str, notes: &str) -> PackingSummary {
+    let mut http_err: Option<String> = None;
     if let Some(base) = url_configured() {
         match http_pipeline(&base, materials, notes) {
             Ok(s) => return s,
-            Err(e) => {
-                if root_configured().is_none() {
-                    return PackingSummary {
-                        error: Some(format!("HTTP {base}: {e}")),
-                        ..Default::default()
-                    };
-                }
-            }
+            Err(e) => http_err = Some(format!("HTTP {base}: {e}")),
         }
     }
     if let Some(root) = root_configured() {
-        return match python_sidecar(&root, materials, notes) {
-            Ok(s) => s,
-            Err(e) => PackingSummary {
-                error: Some(format!("sidecar: {e}")),
-                ..Default::default()
-            },
-        };
+        if sidecar_script().is_some() {
+            return match python_sidecar(&root, materials, notes) {
+                Ok(s) => s,
+                Err(e) => PackingSummary {
+                    error: Some(format!("sidecar: {e}")),
+                    ..Default::default()
+                },
+            };
+        }
     }
     PackingSummary {
-        error: Some("未设置 PACKING_AGENT_URL 或 PACKING_AGENT_ROOT".into()),
+        error: Some(http_err.unwrap_or_else(|| {
+            "未接通 packing 引擎：先启动 gateway（python -m uvicorn gateway.app:app --host 127.0.0.1 --port 8000），或设 PACKING_AGENT_URL / PACKING_AGENT_ROOT".into()
+        })),
         ..Default::default()
     }
 }
@@ -215,6 +216,7 @@ pub fn summarize_pipeline_json(v: &Value, source: &str) -> PackingSummary {
         can_fit: pick(&["can_fit"]),
         ship_ok: pick(&["ship_ok"]),
         phase: pick(&["phase"]),
+        utilization: pick(&["booking_volume_utilization", "outer_space_utilization", "space_utilization"]),
         source: source.to_string(),
         error: None,
     }
@@ -264,6 +266,15 @@ fn http_pipeline(base: &str, materials: &str, notes: &str) -> Result<PackingSumm
 }
 
 fn sidecar_script() -> Option<PathBuf> {
+    if let Some(root) = root_configured() {
+        let p = root
+            .join("workbench")
+            .join("scripts")
+            .join("run_packing_sidecar.py");
+        if p.is_file() {
+            return Some(p);
+        }
+    }
     if let Ok(m) = env::var("CARGO_MANIFEST_DIR") {
         let p = Path::new(&m).join("scripts").join("run_packing_sidecar.py");
         if p.is_file() {

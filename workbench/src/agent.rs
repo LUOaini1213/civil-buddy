@@ -258,13 +258,41 @@ pub fn understand(blob: &str) -> Intent {
     if write && (ask || qmark) {
         return Intent::Both;
     }
-    if (ask || qmark) && !write {
+    // pack 一句话动作（装柜/装箱/拼柜/pack）——与 packing_assistant/understand.py 保持一致。
+    let pack_action = has_any(t, &["装柜", "装箱", "拼柜"])
+        || t.split(|c: char| !c.is_ascii_alphanumeric())
+            .any(|w| w.eq_ignore_ascii_case("pack"));
+    if (write || pack_action) && (ask || qmark) {
+        return Intent::Both;
+    }
+    if (ask || qmark) && !write && !pack_action {
         return Intent::Chat;
     }
-    if write || tender {
+    if pack_action || write || tender {
         return Intent::Run;
     }
     Intent::Chat
+}
+
+/// Implicit skill routing — pack-ship subset of runtime/expert_skills.py `_STRONG`.
+pub fn match_skill_implicit(text: &str) -> Option<String> {
+    let t = text.to_lowercase();
+    const PACK_SHIP: &[&str] = &[
+        "装箱作业",
+        "packing-agent",
+        "装柜",
+        "拼柜",
+        "成箱",
+        "装箱",
+        "pack-ship",
+    ];
+    if PACK_SHIP.iter().any(|k| t.contains(k))
+        || t.split(|c: char| !c.is_ascii_alphanumeric())
+            .any(|w| w == "pack")
+    {
+        return Some("pack-ship".to_string());
+    }
+    None
 }
 
 pub fn is_explain_only(blob: &str) -> bool {

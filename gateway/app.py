@@ -13,6 +13,7 @@ from __future__ import annotations
 
 import json
 import os
+import re
 import sys
 from pathlib import Path
 from typing import Any, Dict, List, Optional
@@ -994,6 +995,37 @@ def _lg_status_safe() -> Dict[str, Any]:
         return {"error": str(e)}
 
 
+_TABLE_PATH_RE = re.compile(
+    r"[A-Za-z0-9_\-.\\/\u4e00-\u9fff\u3000-\u303f，、（）()]+\.(?:xlsx|xlsm|csv)", re.IGNORECASE
+)
+
+
+def _load_materials_from_text(user_input: str) -> Optional[List[Dict[str, Any]]]:
+    """
+    NL 里带仓库相对路径的表格（如 "pack test/sim_materials/small_one_container/materials.xlsx"）
+    → 自动读取为物料。只接受 repo 内存在的相对路径，防目录穿越；任何异常都回退 None。
+    """
+    if not user_input:
+        return None
+    from packing_assistant.tools.table_mapper import load_table
+
+    root = ROOT.resolve()
+    for m in _TABLE_PATH_RE.finditer(user_input):
+        raw = m.group(0).replace("\\", "/").strip("，。,.、（）() ")
+        if not raw or raw.startswith("/"):
+            continue
+        cand = (ROOT / raw).resolve()
+        if root not in cand.parents or not cand.is_file():
+            continue
+        try:
+            mats = load_table(cand)
+        except Exception:
+            continue
+        if mats:
+            return mats
+    return None
+
+
 def _apply_preset(
     *,
     preset: str = "",
@@ -1001,12 +1033,18 @@ def _apply_preset(
     materials: Optional[List[Dict[str, Any]]] = None,
     packing_options: Optional[Dict[str, Any]] = None,
 ) -> tuple:
-    """合并演示预设物料 / packing_options。"""
+    """合并演示预设物料 / packing_options；NL 显式给出的表格路径优先于演示预设。"""
     from packing_assistant.demo_presets import resolve_preset
 
     pm, po, key = resolve_preset(preset, user_input=user_input)
-    mats = materials if materials else pm
-    opts = packing_options if packing_options else po
+    loaded = None if materials else _load_materials_from_text(user_input)
+    if loaded:
+        mats = loaded
+        opts = packing_options if packing_options else {}
+        key = ""
+    else:
+        mats = materials if materials else pm
+        opts = packing_options if packing_options else po
     text = user_input
     if key and (not text or text in ("演示材料清单", "Agent pipeline", "demo")):
         from packing_assistant.demo_presets import PRESETS

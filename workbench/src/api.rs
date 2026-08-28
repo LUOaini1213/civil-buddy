@@ -607,6 +607,13 @@ async fn chat(State(st): State<Arc<AppState>>, Json(body): Json<ChatIn>) -> Resu
     if ids.is_empty() {
         ids = store::resolve_mentions(&st.paths, &body.message);
     }
+    if ids.is_empty() {
+        if let Some(eid) = crate::agent::match_skill_implicit(&body.message) {
+            if store::get_expert(&st.paths, &eid).is_some() {
+                ids.push(eid);
+            }
+        }
+    }
     let mut history = Vec::new();
     for item in body.history.iter().rev().take(80).collect::<Vec<_>>().into_iter().rev() {
         let role = item.get("role").and_then(|v| v.as_str()).unwrap_or("");
