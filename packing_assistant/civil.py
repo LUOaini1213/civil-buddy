@@ -6,6 +6,7 @@
   civil exec "任务"
   civil app                  打开工作台应用
   civil mcp --pack bid       IDE stdio MCP
+  civil serve                JSON-RPC app-server（土木 harness，不是官方 Codex 二进制）
   civil skills
   civil resume <thread> 任务
   civil help
@@ -23,7 +24,7 @@ import webbrowser
 from typing import List, Optional
 
 CONFIRM = "我明白，将由持证人员签认"
-VERBS = ("tui", "exec", "app", "mcp", "skills", "resume", "help")
+VERBS = ("tui", "exec", "app", "mcp", "serve", "skills", "resume", "help")
 
 
 def run_task(
@@ -178,6 +179,11 @@ def main(argv: Optional[List[str]] = None) -> int:
         return cmd_app(args.port)
     if verb == "mcp":
         return cmd_mcp(args.pack or "construction", args.expert)
+    if verb == "serve":
+        from packing_assistant.runtime.app_server import serve_stdio
+
+        print("civil-app-server/v1 stdio · 不是 openai/codex", file=sys.stderr)
+        return serve_stdio()
     if verb == "tui":
         from packing_assistant.civil_tui import run_tui
 

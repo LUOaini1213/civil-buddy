@@ -8,6 +8,7 @@ python -m packing_assistant.civil "什么是 GST"
 python -m packing_assistant.civil exec --confirm "写临边专项方案讨论提纲"
 python -m packing_assistant.civil app
 python -m packing_assistant.civil mcp --pack construction
+python -m packing_assistant.civil serve
 python -m packing_assistant.civil skills
 python -m packing_assistant.civil --sandbox read-only "出一份税务日历"
 ```

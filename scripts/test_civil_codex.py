@@ -124,6 +124,31 @@ def main() -> int:
     assert civil_main(["help"]) == 0
     assert civil_main(["exec", "什么是 GST", "--json"]) == 0
 
+    from packing_assistant.runtime.app_server import PROTOCOL, handle_rpc, initialize
+
+    boot = initialize()
+    assert boot["protocol"] == PROTOCOL
+    assert boot["submit_blocked"] is True
+    assert boot["cloud"] is False
+    assert boot["generic_shell"] is False
+    assert boot["skills_n"] == 66
+    init = handle_rpc({"jsonrpc": "2.0", "id": 1, "method": "initialize", "params": {}})
+    assert init["result"]["host"] == "civil-buddy"
+    th = handle_rpc({"jsonrpc": "2.0", "id": 2, "method": "thread/start", "params": {"title": "cx-serve"}})
+    tid = th["result"]["thread_id"]
+    turn = handle_rpc(
+        {
+            "jsonrpc": "2.0",
+            "id": 3,
+            "method": "turn/start",
+            "params": {"thread_id": tid, "text": "什么是 GST"},
+        }
+    )
+    assert turn["result"].get("wrote") is False
+    assert "9%" in (turn["result"].get("reply") or "")
+    bad = handle_rpc({"jsonrpc": "2.0", "id": 4, "method": "nope", "params": {}})
+    assert bad.get("error")
+
     from fastapi.testclient import TestClient
     from gateway.app import app
 

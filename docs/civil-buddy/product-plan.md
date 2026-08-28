@@ -47,6 +47,7 @@
 | 一次性 exec | `python -m packing_assistant.civil "任务"` |
 | 应用 | `python -m packing_assistant.civil app` → :8765 工作台（threads / 审批 / 技能） |
 | IDE | `ide/cursor/mcp.json` · `ide/vscode/mcp.json` · `civil mcp --pack construction` |
+| App Server | `civil serve`：JSON-RPC `thread/start` · `turn/start`（土木 harness，不是官方 Codex 二进制） |
 | 并行 | `/bg` 或 `POST /api/threads` `background: true`（同 session 仍串行） |
 | 沙箱 / 审批 | `read-only` \| `workspace-write` · `untrusted` \| `on-request` \| `never` |
 

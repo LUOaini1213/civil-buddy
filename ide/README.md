@@ -17,6 +17,7 @@ OpenAI Codex 的 IDE 是编辑器里的 agent。Civil Buddy 的 IDE 面是 **MCP
 ```powershell
 python -m packing_assistant.civil mcp --pack construction
 python -m packing_assistant.civil mcp --expert pack-ship
+python -m packing_assistant.civil serve
 ```
 
 `--pack bid` 看得见招标工具，看不见 `pack-ship__plan`。

@@ -6,6 +6,8 @@ sandbox = "workspace-write"   # read-only | workspace-write
 approval = "on-request"       # untrusted | on-request | never
 max_steps = 8
 max_parallel = 4
+# App Server: python -m packing_assistant.civil serve
+# JSON-RPC on this harness. Not the openai/codex binary. No Cloud.
 
 [workspace]
 # job_root = "C:/Users/LW/Documents/某工地"
