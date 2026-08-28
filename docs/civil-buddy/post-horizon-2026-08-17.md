@@ -810,7 +810,7 @@
 - parse：缺口 · 本岗不解析招标；用户原文进草稿，扫描 PDF 仍拒绝
 - outline：部分 · run 出内部提纲骨架，未对照易标目录扩写器
 - qa：已有 · hr__scan_forbidden
-- kb：已有 · 分层 KB + search_kb/read_kb（demo/kb）
+- kb：已做 K4（2026-08-28）· README 字段表 + faq≥5 必问（含 SG KETs/TADM）+ outline 补 SG 分表；search_kb 命中本岗 web-knowledge，看不见 hr-recruit
 - write：已有 · 独有 hr-labor__check；chat 不写盘
 - 下一刀：hr-labor__check 按合同类型分表+必备条款对照；补偿 [A001]。
 

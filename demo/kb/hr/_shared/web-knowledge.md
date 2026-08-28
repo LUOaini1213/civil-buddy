@@ -4,7 +4,7 @@
 
 ## SG 门户
 
-- MOM 页题 *About the Employment Act*：https://www.mom.gov.sg/employment-practices/employment-act ；法条 SSO *Employment Act 1968*（现行截至 2026-08-14）：https://sso.agc.gov.sg/Act/EmA1968
+- MOM 页题 *About the Employment Act*（2026-08-28 打开，页脚 Last Updated: 14 July 2026）：https://www.mom.gov.sg/employment-practices/employment-act ；法条 SSO *Employment Act 1968*：https://sso.agc.gov.sg/Act/EmA1968
 - 页题 *Employment Act: who it covers*（含 workman / Part 4）：https://www.mom.gov.sg/employment-practices/employment-act/who-is-covered
 - 页题 *What is a contract of service* / *Key employment terms (KETs)*：https://www.mom.gov.sg/employment-practices/contract-of-service/what-is-a-contract-of-service ；https://www.mom.gov.sg/employment-practices/contract-of-service/key-employment-terms
 - 发薪：https://www.mom.gov.sg/employment-practices/salary/paying-salary

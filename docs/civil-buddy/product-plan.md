@@ -277,7 +277,7 @@ xyz 只抄 solver。分页/订阅 = 有真 Host list/call 稳定之后（horizon
 | K1 | 66 岗目录四件套闸 | ✅ | 66/66；`scripts/test_kb_schema.py` |
 | K2 | 门户标题只从 company 页 | ✅ | 五针 company（T003）+ 岗 GST/CORENET 扫描（T007/T008） |
 | K3 | kb 隔离 + 文件名检索当闸 | 部分 | 跨大类拒绝 T023 ✅；文件名检索仍 `test_kb_search_filename.py` |
-| K4 | 按车道每次 1 岗富 faq/outline | 进行中 | 岗 README 字段表 |
+| K4 | 按车道每次 1 岗富 faq/outline | 进行中（hr-labor ✅） | 岗 README 字段表；其余岗不得一行勾完 |
 | M1–M4 | stdio、工具表、Host、prompts | ✅ | `test_mcp_stdio.py` |
 | M5 | 其余大类 Host 样例 | ✅ | 现挂 3 pack；样例 16 行可复制（T020） |
 | M6 | kb:// 分页订阅 | 延期 | 真 Host 先 list/call |
@@ -469,6 +469,10 @@ T 号是开工 ID：K1=T001，P1-5=T002，K2=T003，P1-3=T010。handbook 不得�
 | [URA DC26-08 / APPBCA-2026-12](https://www.ura.gov.sg/guidelines/circulars/dc26-08/) | **2026-07-23** 仍在线：2026-10-01 起新项目 **GFA≥5,000 m²** 强制 Gateway；**<5,000 m² 可继续 CORENET 2.0** | 未改 | 博客仍转 DC25-07「不论 GFA」——当反例，不以博客改口 |
 | [BCA Construction site records](https://www1.bca.gov.sg/safety-and-standards/applications-and-licenses/permit-for-structural-works/construction-site-records/) | 更 2026-01-29；QP *site record book* + 试验须 SAC-SINGLAS | 标题仍对 | pm-daily 只写标题，不是这份法定现场簿 |
 | [MOM Fair Consideration Framework](https://www.mom.gov.sg/employment-practices/fair-consideration-framework) | EP/S Pass 前须在 MyCareersFuture 广告 **至少连续 14 日**；须公平考虑候选人 | 新增旁证（T040 招聘岗） | 只写门户标题；不编薪资、不编录用 |
+| [MOM About the Employment Act](https://www.mom.gov.sg/employment-practices/employment-act) | 2026-08-28 打开：页题仍 *About the Employment Act*；Last Updated **14 July 2026** | 新增旁证（K4 hr-labor） | 只写门户标题；普法不诉讼 |
+| [MOM Employment Act: who it covers](https://www.mom.gov.sg/employment-practices/employment-act/who-is-covered) | 2026-08-28：Last Updated 24 July 2025；Part 4 不覆盖 managers/executives；门槛以当页为准 | 同上 | 不把页述薪资门槛抄成最低工资 |
+| [MOM Paying salary](https://www.mom.gov.sg/employment-practices/salary/paying-salary) | 2026-08-28：Last Updated 30 January 2026；页述 *Singapore does not have a minimum wage*；薪期结束后 7 日 / 加班 14 日 | 同上 | 不编薪资带 |
+| [保障农民工工资支付条例](https://www.gov.cn/zhengce/content/2020-01/07/content_5467278.htm) | 2026-08-28 中国政府网仍在线；国令第 724 号，2020-05-01 施行 | 同上 | 只写标题与检查栏；不代算应付 |
 
 竞品旁证（不是合格线）：腾讯云 WorkBuddy 仍卖「自然语言 → 规划 → **授权文件夹读写** → 可验收成品」，另加 100+ 通岗、云端 7×24、移动端。本仓对齐本地成稿回路，不做桌面壳 / IM / 100 通岗 / 「可直接验收」。
 

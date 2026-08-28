@@ -57,7 +57,7 @@ metadata:
 
 ## 知识分层（需要时再读，不要全量灌进 prompt）
 
-1. 本岗 `demo/kb/hr/hr-labor/`：faq.md、outline.md、web-knowledge.md
+1. 本岗 `demo/kb/hr/hr-labor/`：faq.md、outline.md、web-knowledge.md（SG：Employment Act / KETs / TADM；CN：劳动合同法 / 农民工工资条例。普法不诉讼）
 2. 大类共享 `demo/kb/hr/_shared/`
 3. 公司规则 `demo/kb/company/hard-rules.md` 与 `web-portals.md`
 4. 现行网页：先官方标题，打开原文再引用；搜索摘要不是条文。
