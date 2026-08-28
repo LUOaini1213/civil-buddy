@@ -23,7 +23,7 @@ status: active
 | [03_trajectories/](./03_trajectories/) | medium | 成功 / 失败恢复轨迹（few-shot，T1–T8） |
 | [04_strategies/](./04_strategies/) | medium | 启发式与风险策略 |
 | [05_multi_agent/](./05_multi_agent/) | high | 大 Team ⊃ A/B 协议 |
-| [06_competition/](./06_competition/) | high（赛期） | 评分、约束、示例任务 |
+| [06_competition/](./06_competition/) | high（赛期） | 两赛约束分文件（constraints-nus-iss / constraints-hzzb）、内部评分口径、示例任务 |
 | [07_domain_knowledge/](./07_domain_knowledge/) | low | 常识补充 |
 
 ## 元数据（每篇 YAML frontmatter）

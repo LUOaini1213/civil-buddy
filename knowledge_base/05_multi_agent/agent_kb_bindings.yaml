@@ -226,6 +226,6 @@ agents:
     path_prefixes:
       - 02_tools/intent_interpret.md
       - 01_rules/booking_constraints/container_budget.md
-      - 06_competition/constraints.md
+      - 06_competition/constraints-nus-iss.md
     tags: [IntentSpec, container_budget, NL]
     trajectories: [T5]

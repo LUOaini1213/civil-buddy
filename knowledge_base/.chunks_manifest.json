@@ -1624,7 +1624,7 @@
     {
       "path": "02_tools/tender_parse.md",
       "heading": "## 功能",
-      "chars": 219
+      "chars": 325
     },
     {
       "path": "02_tools/tender_parse.md",
@@ -2377,9 +2377,29 @@
       "chars": 317
     },
     {
-      "path": "06_competition/constraints.md",
+      "path": "06_competition/constraints-hzzb.md",
+      "heading": "(preamble)",
+      "chars": 326
+    },
+    {
+      "path": "06_competition/constraints-hzzb.md",
+      "heading": "## 官方关键条款（2026-08-28 核对）",
+      "chars": 384
+    },
+    {
+      "path": "06_competition/constraints-hzzb.md",
+      "heading": "## 评审三维度（官方原文）",
+      "chars": 366
+    },
+    {
+      "path": "06_competition/constraints-hzzb.md",
+      "heading": "## 提交物（四件，缺一不可）",
+      "chars": 397
+    },
+    {
+      "path": "06_competition/constraints-nus-iss.md",
       "heading": "",
-      "chars": 561
+      "chars": 822
     },
     {
       "path": "06_competition/example_tasks.md",
@@ -2399,7 +2419,7 @@
     {
       "path": "06_competition/scoring_criteria.md",
       "heading": "(preamble)",
-      "chars": 394
+      "chars": 684
     },
     {
       "path": "06_competition/scoring_criteria.md",
@@ -2479,7 +2499,7 @@
     {
       "path": "08_tender_delivery/README.md",
       "heading": "",
-      "chars": 269
+      "chars": 396
     },
     {
       "path": "08_tender_delivery/rules/transport_packaging_redlines.md",
@@ -2489,7 +2509,7 @@
     {
       "path": "08_tender_delivery/rules/transport_packaging_redlines.md",
       "heading": "## 抽取后必进响应矩阵",
-      "chars": 234
+      "chars": 402
     },
     {
       "path": "08_tender_delivery/rules/transport_packaging_redlines.md",
@@ -2500,6 +2520,21 @@
       "path": "08_tender_delivery/strategies/facade_bid_response.md",
       "heading": "",
       "chars": 158
+    },
+    {
+      "path": "08_tender_delivery/strategies/sg_facade_bid_book.md",
+      "heading": "(preamble)",
+      "chars": 128
+    },
+    {
+      "path": "08_tender_delivery/strategies/sg_facade_bid_book.md",
+      "heading": "## Volumes",
+      "chars": 419
+    },
+    {
+      "path": "08_tender_delivery/strategies/sg_facade_bid_book.md",
+      "heading": "## Red lines",
+      "chars": 165
     },
     {
       "path": "08_tender_delivery/trajectories/TD1_tender_to_pack.md",
@@ -2524,7 +2559,7 @@
     {
       "path": "README.md",
       "heading": "## 目录",
-      "chars": 499
+      "chars": 548
     },
     {
       "path": "README.md",

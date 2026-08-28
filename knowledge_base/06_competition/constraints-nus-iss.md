@@ -3,13 +3,17 @@ category: competition
 subcategory: constraints
 priority: high
 type: scoring
-tags: [constraints, steps, llm_toolcall, HITL, SME, eligibility]
+tags: [constraints, steps, llm_toolcall, HITL, SME, eligibility, nus_iss]
 source: internal
-updated: "2026-08-06"
+updated: "2026-08-28"
 harness: ">=0.6.3"
 status: active
 ---
-# 比赛约束（Agent 叙事 + NUS-ISS 资格）
+# 比赛约束 · NUS-ISS 新加坡赛道（Agent 叙事 + 资格）
+
+> **本文件仅适用于 NUS-ISS（新加坡）赛道**（原 `06_competition/constraints.md` 于 2026-08-28 改名保留，原文未删）。
+> 海之子杯（中建国际 AI 智能体挑战，截止 2026-08-31）口径见 [constraints-hzzb.md](./constraints-hzzb.md)，两赛条款互不通用。
+> 下表前 8 行（坐标 / 锁柜 / HITL 等）为引擎横切约束，**两赛通用**；「参赛资格」以下 4 行为 NUS-ISS 专属。
 
 | 约束 | 说明 |
 |------|------|

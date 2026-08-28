@@ -5,11 +5,14 @@ priority: high
 type: scoring
 tags: [phase0, weights, success_criteria]
 source: internal
-updated: "2026-07-30"
+updated: "2026-08-28"
 harness: ">=0.6.3"
 status: active
 ---
 # 评分标准（内部代理 · 无官方表时）
+
+> **口径声明（2026-08-28）**：本文件 = **内部引擎评测口径**（packing phase0 / 代理评分卡，服务 `scripts/eval_competition_scorecard.py`）。
+> **海之子杯官方三维度**（场景创意价值 / AI 协同能力 / 技术创新能力）见 [constraints-hzzb.md](./constraints-hzzb.md)；NUS-ISS 新加坡资格条款见 [constraints-nus-iss.md](./constraints-nus-iss.md)。两套口径不互替，申报材料以官方三维度对齐。
 
 **同源配置**：`test/phase0/success_criteria.json`（有赛方官方权重时 **只改 JSON**）。
 

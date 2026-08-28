@@ -1,7 +1,7 @@
 # 知识库索引（scripts/gen_kb_index.py 生成）
 version: 2
 root: knowledge_base
-generated: 2026-08-13
+generated: 2026-08-29
 priority_order:
   - 01_rules
   - 02_tools
@@ -552,12 +552,19 @@ documents:
     type: protocol
     tags: [summary, supervisor, failure_class]
     status: active
-  - path: 06_competition/constraints.md
-    title: 比赛约束（Agent 叙事 + NUS-ISS 资格）
+  - path: 06_competition/constraints-hzzb.md
+    title: 比赛约束 · 海之子杯（中国建筑国际集团 AI 智能体挑战）
     category: competition
     priority: high
     type: scoring
-    tags: [constraints, steps, llm_toolcall, HITL, SME, eligibility]
+    tags: [constraints, hzzb, haizizhi, submission, three_dimensions, deliverables]
+    status: active
+  - path: 06_competition/constraints-nus-iss.md
+    title: 比赛约束 · NUS-ISS 新加坡赛道（Agent 叙事 + 资格）
+    category: competition
+    priority: high
+    type: scoring
+    tags: [constraints, steps, llm_toolcall, HITL, SME, eligibility, nus_iss]
     status: active
   - path: 06_competition/example_tasks.md
     title: 示例任务（镜像 phase0 任务族）
@@ -621,6 +628,13 @@ documents:
     priority: medium
     type: strategy
     tags: [facade, bid, response, delivery]
+    status: active
+  - path: 08_tender_delivery/strategies/sg_facade_bid_book.md
+    title: Singapore façade bid-book (draft only)
+    category: tender_delivery
+    priority: high
+    type: strategy
+    tags: [singapore, facade, bidbook, PSSCOC, SS654]
     status: active
   - path: 08_tender_delivery/trajectories/TD1_tender_to_pack.md
     title: TD1 · 招标要点 → 装柜交付（成功）

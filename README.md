@@ -15,6 +15,8 @@
 | **AI 协同能力** | Agent Middleware 策略引擎+失败恢复：四拍纠偏剧本（正常下单 → 越权被拒 → 工具挂掉自动恢复 → 成本超限熔断）；HITL 人确认后才拼柜 | `python scripts/demo_agent_middleware.py` |
 | **技术创新** | 装箱引擎 NL→IntentSpec→白名单 tools→HITL→影子评测；446t 单票对照 29→25 柜（mid50 0.594，risk=WARN 口径）；本地校准综合分对外口径 **8.85** | `python main.py --demo` · `python main.py --eval` |
 
+> **66 岗诚实分级**（L1 知识库 66/66 · L2 工具写盘 36/66 · L3 引擎岗 1，每级挂可复跑验收）：[docs/depth-ladder.md](docs/depth-ladder.md)。申报定位与三维度证据映射：[docs/submission/haizizhi-positioning.md](docs/submission/haizizhi-positioning.md)。
+
 ### Agent Middleware（赛道 1 · 完全合格）
 
 对照表：[docs/civil-buddy/track1-qualified.md](docs/civil-buddy/track1-qualified.md)。  
