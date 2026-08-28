@@ -5,3 +5,17 @@
 风险：low
 
 独立成稿时先读本文件和大类共享库。引擎在本仓 `packing_assistant/`。GitHub：https://github.com/LUOaini1213/packing-agent
+独有工具：`pack-ship__list`
+聊天可只答 faq / web-knowledge，不写盘。
+
+## 字段表
+
+| 栏 | 缺则 |
+| --- | --- |
+| 装箱作业单 | 缺则 [A001] / 待填 |
+| 用户物料原文 | 缺则 [A001] / 待填 |
+| packing-agent 工具摘要 | 缺则 [A001] / 待填 |
+| CTU Code 2014 / CSC 标题 | 缺则 [A001] / 待填 |
+| 待填 [A001] | 缺则 [A001] / 待填 |
+
+内部讨论 AI 草稿。缺数不编条款号、综合单价、xyz。不下开工或投标合格结论。

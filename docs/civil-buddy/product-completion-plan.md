@@ -94,7 +94,7 @@
 | 面 | 完成度 | 具体洞 |
 |----|--------|--------|
 | 技术文档 | 40% | 名册已改 66；`harness.md` 仍是 Rust 评测路由与 Python `/api/agent` 两套；没有 GETTING-STARTED / MCP.md / SKILLS.md / KB.md |
-| 知识库 | 45% | 目录 16 大类齐，但除施工/投标/装箱/税务外，faq/outline 大量是骨架；`company/web-portals.md` 与各岗 `web-knowledge.md` 标题会漂；检索未当产品验收 |
+| 知识库 | 目录齐 + K4 内容闸 | 66/66 四件套；faq≥5、README 字段表、`search_kb` 命中本岗（`test_kb_k4_depth.py`）。独有写盘栏位仍按 product-plan §15 |
 | MCP | 40% | 三原语宣告了；**可调用 tools 在 Python 面几乎只有 pack-ship**；Grok 宿主已挂 `civil-bid` / `civil-buddy` / `civil-commercial` / `civil-construction` 四个 stdio，其余 12 大类未挂；无仓内 `mcp.json` / `config.toml` 样例；无 Python stdio 回退（无 MSVC 时 Host 挂不上 Rust 二进制） |
 | Skill | 40% | Grok skill 专家 id 只有 6 个且 V1 只写满 construction；工作台是 66 岗。两套名册未在 skill 里讲清。装箱 `docs/skills/` 与 Grok skill 同叫 skill，接 Host 的人会混 |
 | 独有写盘 | 25% | bid 三岗 + pack-ship 已有真栏位；其余岗 `write_deliverable` 骨架 md。post-horizon 每岗下一刀已写好，本文不复制 66 遍 |
@@ -225,9 +225,7 @@ GST 9%、Fire Code 2023、CTU Code 2014、GeBIZ≠评分、APPBCA-2026-12 只在
 
 ### K4 内容富化顺序（有 schema 之后）
 
-按 post-horizon 总序，**每次 1 岗**：把 faq/outline 从骨架改成「能回答该岗 5 个必问、成稿有栏位表」。施工 / 危大 / 投标三岗 / pack-ship / finance-tax 优先（已相对富）。造价 takeoff、计划日历、试验台账次之。
-
-每岗完成时：更新该岗 `README.md` 的「字段表」+ `post-horizon` 该 id「下一刀」改为已做。禁止一夜改 16 类。
+2026-08-28：**内容闸已对 66/66 收口**（faq≥5、README 字段表、outline 缺数栏、`search_kb` 命中本岗）。验收 `python scripts/test_kb_k4_depth.py`。post-horizon「下一刀」仍指独有写盘，禁止把本闸当成 T040–T047 一行勾完。禁止 16 类 embedding 季更。
 
 ---
 
@@ -375,7 +373,8 @@ GeBIZ 代交、法定签认、十万字写标、标书查重产品化、模型�
 | D2 全量产品规划书 | ✅ | `docs/civil-buddy/product-plan.md` |
 | K1 66 岗目录契约 | ✅ | `python scripts/test_kb_schema.py` |
 | K2 门户标题单一来源 | ✅ | 五针 company（T003）+ 岗 GST/CORENET 扫描（T007/T008） |
-| K3 kb:// 隔离 + 文件名检索闸 | 部分 | 扩 `test_mcp_surface.py` |
+| K3 kb:// 隔离 + 文件名检索闸 | ✅ | `test_mcp_surface.py` + `test_kb_search_filename.py` + `test_kb_k4_depth.py` |
+| K4 66 岗 faq/字段表 | ✅ | `python scripts/test_kb_k4_depth.py`；独有写盘不在本刀 |
 | M1 Python stdio MCP | ✅ | `python scripts/test_mcp_stdio.py` |
 | M2 工具表（KB+招标+装箱+扫描） | ✅ | pack=bid 含 tender.parse，不含 pack-ship__plan |
 | M3 Host 样例 toml | ✅ | `mcp-host.example.toml` |

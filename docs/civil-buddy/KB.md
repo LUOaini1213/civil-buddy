@@ -21,6 +21,8 @@ company    demo/kb/company/*
 
 目录契约（K1）：每岗 `README.md` `faq.md` `outline.md` `web-knowledge.md`。
 
+内容闸（K4）：每岗 faq 能答 ≥5 个必问、README 有字段表、outline 缺数栏 `[A001]`/待填。验收：`python scripts/test_kb_k4_depth.py`（走 shipped `search_kb` / `list_kb`，看不见兄弟私库）。这不是独有写盘。
+
 ## 门户单一来源（K2）
 
 GST 9%、Fire Code 2023、CTU Code 2014、GeBIZ≠评分、APPBCA-2026-12 权威句在 `demo/kb/company/web-portals.md`。各岗可链或抄同一句，禁止各写一个税率。

@@ -1,6 +1,7 @@
 # 66 岗对照易标 / pack-agent 的长程规划（2026-08-17）
 
-> 已做/未做以全量规划书 [product-plan.md](product-plan.md) §7 / §15 为准。本文保留每岗「下一刀」原文；bid 三岗 handoff 与 construction 十一章 md **已经落地**，勿再当缺口。
+> 已做/未做以全量规划书 [product-plan.md](product-plan.md) §7 / §15 为准。本文保留每岗「下一刀」原文；bid 三岗 handoff 与 construction 十一章 md **已经落地**，勿再当缺口。  
+> 2026-08-28：K4 岗库内容闸（faq≥5 / README 字段表 / `search_kb` 本岗命中）已对 **66/66** 收口，见 `scripts/test_kb_k4_depth.py`。本文「下一刀」仍指**独有写盘栏位**，不是再补四件套。
 
 每岗一条。车道 = `lane-<大类>`（子代理分批，不是 16 份大类摘要冒充）。
 易标完成度 = parse → outline → qa → kb → write。pack-agent = 数字只抄 solver + list/plan/export + 断线 UNSPECIFIED。

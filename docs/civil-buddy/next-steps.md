@@ -187,6 +187,9 @@
 61. **K4 hr-labor 岗库** ✅ 2026-08-28  
     劳动关系 README 字段表；faq 补 SG（Employment Act / KETs / contract of service / TADM / 无 nationwide minimum wage）；outline 补 SG 分表。2026-08-28 打开 MOM *About the Employment Act*（更 2026-07-14）与中国政府网《保障农民工工资支付条例》。检索闸：`search_kb(hr-labor)` 命中本岗、看不见 hr-recruit。**不勾** hr-labor 独有写盘。主链头指针仍 **T040**（hr-labor__check）。K4 其余岗不得一行勾完。行业总判仍 **部分合格**。
 
+62. **K4 66 岗内容闸** ✅ 2026-08-28  
+    每岗 faq≥5、README 字段表、outline 缺数栏；`search_kb`/`list_kb` 命中本岗私库、不见兄弟私库。验收：`python scripts/test_kb_k4_depth.py`。K3 隔离一并收口。**不勾** 独有写盘，主链头指针仍 **T040 hr-labor**。不做 16 类 embedding 季更。行业总判仍 **部分合格**。
+
 平台内核见 [product-improvement-handbook.md](product-improvement-handbook.md)。岗独有写盘下一刀仍按 [post-horizon-2026-08-17.md](post-horizon-2026-08-17.md)。
 
 ## 有宿主再做

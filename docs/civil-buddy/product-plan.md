@@ -135,7 +135,7 @@ docs/                 装箱架构、主线 C、研究/归档
 | 装箱引擎 | 80% | 大 Team A/B、3D、CoG、HITL | 非本规划主战场；禁止第二套 packer |
 | MCP | 75% | Python stdio；bid 可见 KB+招标；pack-ship 投影；Host 样例 16 pack 可复制 | 默认仍挂 3 大类；分页/订阅延期 |
 | Skill | 65% | SOP 与 66 岗关系写清；施工十一章接 turn；fill_scheme 失败则 `docx_pending` | 其余 5 个 Grok 专家仍提纲 |
-| 岗 KB | 目录 100% / 写盘栏位 ~55% | **66/66** 四件套在盘；`test_kb_schema.py` 缺一即红 | outline 指针：construction→`scheme-11.md`，危大→`judge-card.md`。**真写盘 36/66**（+ hr-recruit） |
+| 岗 KB | 目录 100% / K4 内容闸 66/66 | **66/66** 四件套；faq≥5 + README 字段表 + `search_kb` 命中本岗（`test_kb_k4_depth.py`） | outline 指针：construction→`scheme-11.md`，危大→`judge-card.md`。**真写盘仍 36/66**（K4 不是独有写盘） |
 | 工作台 66 岗 | 平台齐、栏位 36/66 | 同一套 chat/run | 其余 ~30 岗 `_draft_markdown` |
 | 技术文档 | 80% | GETTING-STARTED/PROTOCOL/MCP/SKILLS/KB；Grok/Cursor 最小 Host；刀后快闸 | 研究笔记不得冒充必读 |
 | 评测 | 75% | 离线闸 + `GET /api/eval/live` 五针（company 页）+ 岗 GST/CORENET 扫描 | 行业总判仍部分合格 |
@@ -276,8 +276,8 @@ xyz 只抄 solver。分页/订阅 = 有真 Host list/call 稳定之后（horizon
 | RT-P1-2 | `GET /api/eval/live` | ✅ | 五针离线，只读 company/web-portals.md（T003） |
 | K1 | 66 岗目录四件套闸 | ✅ | 66/66；`scripts/test_kb_schema.py` |
 | K2 | 门户标题只从 company 页 | ✅ | 五针 company（T003）+ 岗 GST/CORENET 扫描（T007/T008） |
-| K3 | kb 隔离 + 文件名检索当闸 | 部分 | 跨大类拒绝 T023 ✅；文件名检索仍 `test_kb_search_filename.py` |
-| K4 | 按车道每次 1 岗富 faq/outline | 进行中（hr-labor ✅） | 岗 README 字段表；其余岗不得一行勾完 |
+| K3 | kb 隔离 + 文件名检索当闸 | ✅ | 跨大类拒绝 T023；`test_kb_search_filename.py`；`test_kb_k4_depth.py` 对 66 岗 `list_kb`/`search_kb` 不见兄弟私库 |
+| K4 | 66 岗 faq≥5 + README 字段表 + outline 缺数栏 | ✅ | `python scripts/test_kb_k4_depth.py`。独有写盘仍按 §15 一岗一刀 |
 | M1–M4 | stdio、工具表、Host、prompts | ✅ | `test_mcp_stdio.py` |
 | M5 | 其余大类 Host 样例 | ✅ | 现挂 3 pack；样例 16 行可复制（T020） |
 | M6 | kb:// 分页订阅 | 延期 | 真 Host 先 list/call |
@@ -350,11 +350,12 @@ python scripts/test_mcp_host_client.py
 python scripts/test_civil_codex.py
 python scripts/test_docs_completion.py
 python scripts/test_kb_schema.py
+python scripts/test_kb_k4_depth.py
 python scripts/test_official_title_scan.py
 python scripts/test_industry_agent_eval.py # 08-17 历史「部分合格」保留；现网见 08-25 人改口
 ```
 
-刀相关：`test_construction_skill_path.py`（施工）· `test_expert_turn.py`（改 66 岗协议）· `test_tender_ingest.py`（招标进矩阵）· `test_memory_slot.py`（Memory）· `test_tender_parse_engine.py`（parse 走引擎）· `test_kb_search_filename.py`（检索）。
+刀相关：`test_construction_skill_path.py`（施工）· `test_expert_turn.py`（改 66 岗协议）· `test_tender_ingest.py`（招标进矩阵）· `test_memory_slot.py`（Memory）· `test_tender_parse_engine.py`（parse 走引擎）· `test_kb_search_filename.py` / `test_kb_k4_depth.py`（检索与 K4）。
 
 联网：只在改 GST / Fire Code / CTU / GeBIZ / APPBCA 口径后。失败保留 KB 9%。禁止 `fetch_failed` ⇒「官方没写 9%」。结果追加 §13，**不改** `industry-agent-eval-2026-08-17.md` 总判句。脚本只报 `offline_gate_pass/fail`，不得把行业总判改成合格。
 

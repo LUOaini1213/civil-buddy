@@ -83,6 +83,7 @@ python scripts/test_mcp_stdio.py
 python scripts/test_mcp_host_client.py
 python scripts/test_mcp_surface.py
 python scripts/test_kb_schema.py
+python scripts/test_kb_k4_depth.py
 python scripts/test_official_title_scan.py
 python scripts/test_memory_slot.py
 python scripts/test_codex_expert_skills.py
