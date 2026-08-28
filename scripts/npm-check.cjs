@@ -11,6 +11,7 @@ const py = process.env.PYTHON || process.env.PY || "python";
 
 const steps = [
   [py, "scripts/scan_tracked_secrets.py"],
+  [py, "scripts/test_stack_parity.py"],
   [py, "scripts/test_agent_middleware.py"],
   [py, "scripts/test_sandbox.py"],
   [py, "scripts/test_civil_codex.py"],

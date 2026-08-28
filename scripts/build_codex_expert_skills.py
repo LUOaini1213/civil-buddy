@@ -70,6 +70,17 @@ CAT_BAN = {
     "people": "班前白话不是交底签认件；日报不是验收记录。",
 }
 
+# 知识分层第 1 行（本岗 kb 文件清单）的岗位注。
+# 手改 SKILL.md 会被 scripts/test_stack_parity.py 拦下；岗位注改动请改这里（或 demo/kb/ 原文）再重生成。
+KB_NOTES = {
+    "hr-labor": "（SG：Employment Act / KETs / TADM；CN：劳动合同法 / 农民工工资条例。普法不诉讼）",
+}
+
+# 成稿工具段落的岗位补充要求（同上：改这里再重生成，不要手改 SKILL.md）。
+CLOSING_NOTES = {
+    "hr-recruit": "写出 **职责｜任职｜面试问法** 三栏；薪资仅当用户给数字才抄，否则待填、不编市场带宽。",
+}
+
 SPECIAL = {
     "construction": """## 交付骨架
 
@@ -298,6 +309,7 @@ def render_expert(e, exclusive: list[str]) -> str:
     desc = _description(e)
     kb_names = _kb_files(e.category, e.id)
     kb_list = "、".join(kb_names) if kb_names else "outline.md / faq.md / web-knowledge.md"
+    kb_list += KB_NOTES.get(e.id, "")
     tools = " ".join(f"`{t}`" for t in exclusive) if exclusive else "（无独有写入器时用通用 `write_deliverable`）"
     special = SPECIAL.get(e.id, "")
     if not special:
@@ -335,7 +347,7 @@ def render_expert(e, exclusive: list[str]) -> str:
 
 {tools}
 
-成稿必须调工具，不要只在聊天里贴表。兄弟岗调用本岗 exclusive 应被拒绝。
+成稿必须调工具，不要只在聊天里贴表。{CLOSING_NOTES.get(e.id, "")}兄弟岗调用本岗 exclusive 应被拒绝。
 
 ## 知识分层（需要时再读，不要全量灌进 prompt）
 

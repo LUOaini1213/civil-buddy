@@ -3,7 +3,8 @@
 提交前必跑（比赛第 1 周起）：
   1) test_booking_regression.py
   2) test_p2_volume_gates.py
-  3) run_vmu1_site_only.py（主案例可复现）
+  3) test_stack_parity.py（三栈 parity：understand.py==agent.rs、SKILL.md 镜像、66 岗名册）
+  4) run_vmu1_site_only.py（主案例可复现）
 
 可选：
   --quick   只跑 1+2，不跑工地 Excel
@@ -38,6 +39,7 @@ def main() -> int:
     codes = []
     codes.append(run("scripts/test_booking_regression.py", 180))
     codes.append(run("scripts/test_p2_volume_gates.py", 180))
+    codes.append(run("scripts/test_stack_parity.py", 120))
     codes.append(run("scripts/test_nonstandard_tools.py", 60))
     codes.append(run("scripts/test_cog_shift_mid_ok.py", 60))
     codes.append(run("scripts/test_phase0_task_success.py", 60))
@@ -56,7 +58,7 @@ def main() -> int:
         return 1
     print("PRECOMMIT ALL GREEN")
     print(
-        "  booking_regression + p2_gates"
+        "  booking_regression + p2_gates + stack_parity"
         + (" + more" if args.more else "")
         + (" + vmu1_site(or SKIP)" if not args.quick else " (--quick no vmu)")
     )

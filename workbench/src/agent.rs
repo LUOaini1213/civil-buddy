@@ -211,6 +211,8 @@ pub fn understand(blob: &str) -> Intent {
             "请写",
             "生成一份",
             "写个",
+            "解析招标",
+            "进矩阵",
         ],
     );
     let write = phrase_write
@@ -259,6 +261,8 @@ pub fn understand(blob: &str) -> Intent {
         return Intent::Both;
     }
     // pack 一句话动作（装柜/装箱/拼柜/pack）——与 packing_assistant/understand.py 保持一致。
+    // parity:pack-action-en — 英文 pack 判定按非字母数字切词后 eq_ignore_ascii_case("pack")，
+    // 与 understand.py 的正则 \bpack\b 语义等价；锚点由 scripts/test_stack_parity.py 成对校验。
     let pack_action = has_any(t, &["装柜", "装箱", "拼柜"])
         || t.split(|c: char| !c.is_ascii_alphanumeric())
             .any(|w| w.eq_ignore_ascii_case("pack"));

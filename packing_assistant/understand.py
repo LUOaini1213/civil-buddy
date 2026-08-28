@@ -12,6 +12,8 @@ Intent = Literal["chat", "run", "both"]
 
 _PACKISH = ("成套", "易标", "一人公司", "完整方案", "整套标")
 # pack 一句话动作：装箱/装柜/拼柜是引擎本体动作；英文 pack 按词边界匹配（避免误伤 package）。
+# parity:pack-action-en — 英文 pack 判定与 workbench/src/agent.rs（非字母数字切词后
+# eq_ignore_ascii_case("pack")）语义等价；锚点由 scripts/test_stack_parity.py 成对校验。
 _PACK_ACTION_ZH = ("装柜", "装箱", "拼柜")
 _PACK_ACTION_EN = re.compile(r"\bpack\b", re.IGNORECASE)
 _PHRASE_WRITE = (

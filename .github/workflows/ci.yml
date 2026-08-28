@@ -25,13 +25,17 @@ jobs:
         run: |
           python - <<'PY'
           from pathlib import Path
-          t = Path("frontend/index.html").read_text(encoding="utf-8")
+          # 83a2cb5 起 index.html 是 Civil Codex 宿主页；大 Team 工程台功能在 workbench.html
+          idx = Path("frontend/index.html").read_text(encoding="utf-8")
+          for k in ["Civil Buddy", "/workbench"]:
+              assert k in idx, ("index.html", k)
+          w = Path("frontend/workbench.html").read_text(encoding="utf-8")
           need = [
-              "大 Team", "org-chart", "/api/pipeline/stream", "consumeSse", "hitl_summary",
+              "大 Team", "org-chart", "/api/pipeline", "consumeSse", "hitl_summary",
               "draw3d", "TEAM_ROSTER", "/api/whatif", "What-if", "订柜 N0", "3D 用柜",
               "perCabinCog", "secureWorkOrder", "big_team_a_b",
           ]
-          miss = [k for k in need if k not in t]
+          miss = [k for k in need if k not in w]
           assert not miss, miss
           print("frontend OK")
           PY
@@ -97,7 +101,7 @@ jobs:
         run: |
           python - <<'PY'
           from pathlib import Path
-          t = Path("frontend/index.html").read_text(encoding="utf-8")
+          t = Path("frontend/workbench.html").read_text(encoding="utf-8")
           for k in ["/api/whatif/apply", "/api/profiles", "POR 装柜单", "应用为当前方案"]:
               assert k in t, k
           print("frontend continue OK")
