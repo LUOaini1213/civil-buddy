@@ -62,8 +62,15 @@ demo/.env
 demo/data/
 workbench/target/
 workbench/out/
+workbench/output/
 .civil-buddy/out/
 /dist/
+
+# --- real business data (客户原始件，永不入仓；本地另存) ---
+test/*.pdf
+/data/samples/*.pdf
+test/excel/test_*.xlsx
+data/samples/vmu-*.xlsx
 
 # --- session / tool caches ---
 .grok/
