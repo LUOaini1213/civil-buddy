@@ -7,7 +7,7 @@
   <link rel="manifest" href="/static/manifest.webmanifest" />
   <link rel="icon" href="/static/icons/cb-icon.svg" type="image/svg+xml" />
   <title>Civil Buddy</title>
-  <link rel="stylesheet" href="/static/styles.css?v=ui9" />
+  <link rel="stylesheet" href="/static/styles.css?v=ui10" />
 </head>
 <body>
   <header class="top">
@@ -27,6 +27,8 @@
       <span class="pill quiet" id="sandboxBadge">sandbox</span>
       <span class="pill quiet" id="approvalBadge">approval</span>
       <button type="button" id="openStudio" class="top-btn">知识库</button>
+      <!-- ux(round10) 三步引导重开入口：首访自动弹 checklist，之后点 ? 随时重开（localStorage cb_onboarded_v1） -->
+      <button type="button" id="onboardHelp" class="top-btn" title="新手引导 · 三步上手" aria-label="重新打开三步新手引导">?</button>
     </div>
   </header>
 
@@ -53,7 +55,33 @@
         <p class="ctx-text" id="ctxText"></p>
       </div>
       <div id="log" class="log">
-        <p class="welcome">问一句，或写一份草稿。高风险成稿前勾选确认句。</p>
+        <!-- ux(round10) 三步引导 checklist：首访一次性（localStorage cb_onboarded_v1），逐步打勾，全完成自动收起（附录 I） -->
+        <div id="cbOnboard" class="cb-ob" data-cb-onboard="true" hidden></div>
+        <!-- ux(round10) 空态卡：一句话定位 + 三张示例任务卡（点击预填不自动发送）+ 诚实小字。
+             保留 .welcome 类：发送首条消息时由 app.js 既有逻辑移除（Codex 追加式历史：欢迎页=第 0 号 cell）。 -->
+        <div class="cb-empty welcome" id="cbEmpty" data-cb-empty="true">
+          <div class="cb-empty-media" aria-hidden="true">CB</div>
+          <h3 class="cb-empty-title">土木版 Codex：66 岗工作台</h3>
+          <p class="cb-empty-desc">工具算数、模型只路由。在下面输入任务，或点一张示例卡预填（不会自动发送）。</p>
+          <div class="cb-empty-cards">
+            <button type="button" class="cb-empty-card tone-blue" data-cb-sample="pack">
+              <span class="cb-empty-ico" aria-hidden="true">装</span>
+              <span class="cb-empty-k">/pack 装一张票</span>
+              <span class="cb-empty-v">sim_materials 票 → 装柜单草稿，柜数由 tools 算</span>
+            </button>
+            <button type="button" class="cb-empty-card tone-strong" data-cb-sample="bid">
+              <span class="cb-empty-ico" aria-hidden="true">标</span>
+              <span class="cb-empty-k">/bid 解析一段招标</span>
+              <span class="cb-empty-v">资格条件与废标项清单 · P0 资格须人工确认</span>
+            </button>
+            <button type="button" class="cb-empty-card tone-orange" data-cb-sample="safety">
+              <span class="cb-empty-ico" aria-hidden="true">安</span>
+              <span class="cb-empty-k">/safety 出安全交底</span>
+              <span class="cb-empty-v">工友班前三分钟白话，一条一个动作</span>
+            </button>
+          </div>
+          <p class="cb-empty-note">产出永远是 AI 草稿，高风险岗需人工确认。</p>
+        </div>
       </div>
       <form id="form" class="composer">
         <label class="confirm">
@@ -167,7 +195,7 @@
   <script src="/static/docpreview.js?v=r4"></script>
   <script src="/static/posts.js?v=ui4"></script>
   <script src="/static/tickets.js?v=ui9"></script>
-  <script src="/static/app.js?v=ui9"></script>
+  <script src="/static/app.js?v=ui10"></script>
   <script src="/static/studio.js?v=ui4"></script>
 </body>
 </html>

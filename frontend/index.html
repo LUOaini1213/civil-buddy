@@ -347,6 +347,19 @@
       </div>
     </header>
 
+    <!-- ux(round10) 网关兜底空态：/api 探测失败时显示（附录 I）；命令一键复制 -->
+    <section class="card" style="margin-bottom:18px" v-if="gatewayDown" data-cb-down="true">
+      <div class="card-b" style="background:var(--err-bg)">
+        <strong style="color:var(--err)">网关未启动或不可达</strong>
+        <p style="margin:6px 0 10px;font-size:13px;color:var(--ink)">界面在，但解析/交付跑不起来。在仓库根目录启动网关，然后重试：</p>
+        <code id="cbGatewayCmd" style="display:block;padding:8px 10px;background:#fff;border:1px solid var(--line);border-radius:8px;font-family:var(--cb-mono, monospace);font-size:12px;overflow-x:auto;white-space:nowrap">python -m uvicorn gateway.app:app --port 8000</code>
+        <div class="actions">
+          <button class="ghost" @click="copyGatewayCmd">{{ copiedGatewayCmd ? '已复制' : '复制启动命令' }}</button>
+          <button class="ghost" @click="probeGateway">重试检测</button>
+        </div>
+      </div>
+    </section>
+
     <div class="steps">
       <div class="step">
         <div class="n">Step 1</div>
@@ -745,6 +758,9 @@
         agentRunId: '',
         agentState: '',
         toolsUsed: [],
+        /* ux(round10) 网关兜底空态（附录 I） */
+        gatewayDown: false,
+        copiedGatewayCmd: false,
       },
       computed: {
         mid50Label() {
@@ -910,9 +926,28 @@
         async loadExperts() {
           try {
             const res = await fetch('/api/experts');
+            if (!res.ok) throw new Error('HTTP ' + res.status);
             const dat = await res.json().catch(() => ({}));
             this.experts = dat.experts || [];
-          } catch (e) { /* roster optional */ }
+            this.gatewayDown = false; /* ux(round10)：探测恢复 → 撤兜底卡 */
+          } catch (e) {
+            /* ux(round10)：探测失败 → 网关兜底空态（roster 缺失不再静默） */
+            this.gatewayDown = true;
+          }
+        },
+        async probeGateway() {
+          await this.loadExperts();
+        },
+        async copyGatewayCmd() {
+          const text = 'python -m uvicorn gateway.app:app --port 8000';
+          try {
+            if (navigator.clipboard && navigator.clipboard.writeText) await navigator.clipboard.writeText(text);
+            else throw new Error('no clipboard');
+            this.copiedGatewayCmd = true;
+          } catch (e) {
+            this.error = '复制失败：请手选命令';
+          }
+          setTimeout(() => { this.copiedGatewayCmd = false; }, 1600);
         },
         async loadOtel() {
           try {

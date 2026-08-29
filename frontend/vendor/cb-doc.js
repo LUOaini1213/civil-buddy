@@ -123,6 +123,7 @@
   }
 
   function downloadMd() {
+    if (typeof global.cbObStep === "function") global.cbObStep(3); /* ux(round10)：下载 .md → 引导第 3 步打勾（canonical=demo/static/docpreview.js 同步副本） */
     var blob = new Blob([current.text || ""], { type: "text/markdown;charset=utf-8" });
     var a = document.createElement("a");
     a.href = URL.createObjectURL(blob);

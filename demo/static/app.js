@@ -22,8 +22,13 @@ const state = {
 const $ = (id) => document.getElementById(id);
 
 async function boot() {
-  const health = await fetch("/api/health").then((r) => r.json());
-  const badge = $("keyBadge");
+  /* ux(round10)：后端未起/不可达 → 网关兜底空态（附录 I），不再裸 unhandled rejection */
+  try {
+    const health = await fetch("/api/health").then((r) => {
+      if (!r.ok) throw new Error("HTTP " + r.status);
+      return r.json();
+    });
+    const badge = $("keyBadge");
   if (health.has_key || health.deepseek) {
     badge.textContent = "已配置 API Key";
     badge.className = "pill ok";
@@ -54,6 +59,9 @@ async function boot() {
   await loadJobRoot();
   await loadPolicy();
   await loadThreads();
+  } catch (err) {
+    cbEmptyDownShow(err);
+  }
 }
 
 async function loadPolicy() {
@@ -562,6 +570,7 @@ async function streamChat(message, bodyEl) {
       }
       if (eventName === "done") {
         if (tl) tl.finish(data);
+        cbObStep(2); /* ux(round10)：时间线跑完（收口）→ 引导第 2 步打勾 */
         acc = data.text || acc;
         bodyEl.textContent = acc;
         const whoEl = bodyEl.parentElement && bodyEl.parentElement.querySelector(".who");
@@ -627,6 +636,7 @@ function isDocMd(f) {
 }
 
 async function openDeliverable(f) {
+  cbObStep(3); /* ux(round10)：文书预览打开 → 引导第 3 步打勾 */
   try {
     await window.cbDocOpenUrl({
       url: fileUrl(f.path),
@@ -665,6 +675,7 @@ function appendDocCards(files, bodyEl) {
     a.href = fileUrl(f.path);
     a.setAttribute("download", f.name || "文书.md");
     a.textContent = "下载";
+    a.addEventListener("click", () => cbObStep(3)); /* ux(round10)：下载 .md → 引导第 3 步打勾 */
     card.appendChild(a);
   }
   const k = document.createElement("span");
@@ -919,6 +930,177 @@ function cbRecentPush(text) {
   try {
     localStorage.setItem(CB_RECENT_KEY, JSON.stringify(rows.slice(0, 8)));
   } catch (e) { /* 隐私模式等存储不可用：最近任务静默缺席 */ }
+}
+
+/* === ux(round10) 空态卡 + 三步引导 checklist + 网关兜底（docs/ux/ux-design-spec.md 附录 I） ===
+   借鉴 pattern-only，不抄任何代码：
+   - shadcn/ui Empty / Tailwind UI empty state（MIT / 文档）：图标 + 一句话定位 + 主动作，不堆字。
+   - PostHog / Appcues 首访 checklist（文档 pattern-only）：3 步、逐项打勾、全完成自动收起、右上角 ? 重开。
+   - openai/codex 首启欢迎（Apache-2.0）：单一 composer 聚焦；示例卡=预填草稿不自动发送（承附录 F.3 红线）。 */
+const CB_ONBOARD_KEY = "cb_onboarded_v1";
+const CB_ONBOARD_STEPS = [
+  { t: "输入任务，或点一张示例卡（预填，不自动发送）" },
+  { t: "看时间线跑完：8 阶段收口 ✓" },
+  { t: "在审批卡点确认 · 或文书预览 / 下载 .md" },
+];
+
+function cbOnboardLoad() {
+  try {
+    const v = JSON.parse(localStorage.getItem(CB_ONBOARD_KEY) || "null");
+    if (v && Array.isArray(v.s) && v.s.length === 3) {
+      return { s: v.s.map(Boolean), done: !!v.done, dismissed: !!v.dismissed };
+    }
+  } catch (e) { /* 存储不可用：当作首访 */ }
+  return { s: [false, false, false], done: false, dismissed: false };
+}
+
+function cbOnboardSave(st) {
+  try {
+    localStorage.setItem(CB_ONBOARD_KEY, JSON.stringify(st));
+  } catch (e) { /* 存储不可用：本轮内存态即可 */ }
+}
+
+const cbOb = cbOnboardLoad();
+
+function cbObStepsLeft() {
+  return cbOb.s.filter((x) => !x).length;
+}
+
+function cbObStep(n) {
+  if (n < 1 || n > 3 || cbOb.s[n - 1]) return;
+  cbOb.s[n - 1] = true;
+  if (!cbObStepsLeft()) cbOb.done = true;
+  cbOnboardSave(cbOb);
+  cbOnboardRender();
+  if (cbOb.done) {
+    /* 全部完成 → 自动收起（PostHog checklist 语义）；? 可随时重开 */
+    setTimeout(() => { cbOb.dismissed = true; cbOnboardSave(cbOb); cbOnboardRender(); }, 1200);
+  }
+}
+
+function cbOnboardRender() {
+  const box = $("cbOnboard");
+  if (!box) return;
+  const show = !cbOb.dismissed && !(cbOb.done && cbOb.s.every(Boolean) && cbOb.dismissed);
+  if (!show) { box.hidden = true; box.textContent = ""; return; }
+  box.hidden = false;
+  box.textContent = "";
+  const head = document.createElement("div");
+  head.className = "cb-ob-head";
+  const title = document.createElement("strong");
+  title.textContent = cbOb.done ? "三步引导 · 已完成" : "三步上手";
+  const sub = document.createElement("span");
+  sub.className = "cb-ob-sub";
+  sub.textContent = cbOb.done ? "任何时候点右上角 ? 重看" : "第一次用？跟着走 30 秒";
+  const x = document.createElement("button");
+  x.type = "button";
+  x.className = "cb-ob-x";
+  x.setAttribute("aria-label", "收起新手引导");
+  x.title = "收起（不再自动弹出）";
+  x.textContent = "✕";
+  x.addEventListener("click", () => {
+    cbOb.dismissed = true;
+    cbOnboardSave(cbOb);
+    cbOnboardRender();
+  });
+  head.append(title, sub, x);
+  const ol = document.createElement("ol");
+  ol.className = "cb-ob-steps";
+  CB_ONBOARD_STEPS.forEach((s, i) => {
+    const li = document.createElement("li");
+    if (cbOb.s[i]) li.className = "on";
+    else if (i === cbOb.s.indexOf(false)) li.className = "now";
+    const dot = document.createElement("span");
+    dot.className = "cb-ob-dot";
+    dot.textContent = "✓";
+    const t = document.createElement("span");
+    t.className = "cb-ob-t";
+    t.textContent = "①②③"[i] + " " + s.t;
+    li.append(dot, t);
+    ol.appendChild(li);
+  });
+  const foot = document.createElement("div");
+  foot.className = "cb-ob-foot";
+  foot.textContent = "产出永远是 AI 草稿，高风险岗需人工确认 · 全部完成自动收起";
+  box.append(head, ol, foot);
+}
+
+function cbOnboardReopen() {
+  cbOb.dismissed = false;
+  cbOnboardRender();
+  const box = $("cbOnboard");
+  if (box && box.scrollIntoView) box.scrollIntoView({ block: "nearest" });
+}
+
+/* 示例任务卡：预填草稿，不自动发送（附录 F.3）；/pack 用真实小票 small_one_container */
+function cbEmptyPrefill(id) {
+  const ta = $("input");
+  if (!ta) return;
+  let text = "";
+  if (id === "pack") {
+    const t = (window.CB_TICKETS || []).find((x) => x.id === "small_one_container") || null;
+    text = cbSlashTemplate("pack", "", t ? { xlsx: t.xlsx, story: t.story } : {});
+  } else {
+    text = cbSlashTemplate(id, "");
+  }
+  ta.value = text;
+  cbAutosize(ta);
+  cbSyncSend();
+  ta.focus();
+  ta.setSelectionRange(ta.value.length, ta.value.length);
+  cbObStep(1);
+}
+
+/* 网关兜底空态：/api/health 不可达 → 纠偏卡（发生了什么 + 现在能做什么，命令一键复制） */
+function cbEmptyDownShow(err) {
+  const log = $("log");
+  if (!log || $("cbDownCard")) return;
+  const card = document.createElement("div");
+  card.className = "cb-empty-down";
+  card.id = "cbDownCard";
+  card.setAttribute("role", "alert");
+  const h = document.createElement("p");
+  const kb = document.createElement("strong");
+  kb.className = "cb-empty-k";
+  kb.textContent = "工作台后端未启动或不可达";
+  h.appendChild(kb);
+  h.appendChild(document.createTextNode(" —— 界面在，但任务发不出去（" + String(err && err.message || err || "fetch failed") + "）。"));
+  const p1 = document.createElement("p");
+  p1.textContent = "现在能做什么：在仓库根目录启动工作台（或双击 zip 内 start-workbench.bat），然后点「重试检测」。";
+  const code = document.createElement("code");
+  code.textContent = "cargo run --release --bin civil-workbench";
+  const acts = document.createElement("div");
+  acts.className = "cb-empty-acts";
+  const copyBtn = document.createElement("button");
+  copyBtn.type = "button";
+  copyBtn.textContent = "复制启动命令";
+  copyBtn.addEventListener("click", async () => {
+    try {
+      if (navigator.clipboard && navigator.clipboard.writeText) await navigator.clipboard.writeText(code.textContent);
+      else throw new Error("no clipboard");
+      copyBtn.textContent = "已复制";
+    } catch (e) {
+      copyBtn.textContent = "复制失败，请手选";
+    }
+    setTimeout(() => { copyBtn.textContent = "复制启动命令"; }, 1600);
+  });
+  const retry = document.createElement("button");
+  retry.type = "button";
+  retry.textContent = "重试检测";
+  retry.addEventListener("click", async () => {
+    retry.textContent = "检测中…";
+    try {
+      const r = await fetch("/api/health");
+      if (r.ok) { card.remove(); addStatus("后端已恢复 · 可以发任务了"); return; }
+      throw new Error("HTTP " + r.status);
+    } catch (e) {
+      retry.textContent = "仍未启动";
+      setTimeout(() => { retry.textContent = "重试检测"; }, 1600);
+    }
+  });
+  acts.append(copyBtn, retry);
+  card.append(h, p1, code, acts);
+  log.prepend(card);
 }
 
 function cbSlashQuery(text, cursor) {
@@ -1287,6 +1469,7 @@ function cbCmdApplyDraft(text) {
   cbSyncSend();
   ta.focus();
   ta.setSelectionRange(ta.value.length, ta.value.length);
+  if (text && String(text).trim()) cbObStep(1); /* ux(round10)：指令面板/最近任务预填 → 第 1 步打勾 */
 }
 
 function cbCmdMove(d) {
@@ -1364,6 +1547,20 @@ function cbCmdConfirm() {
 }
 
 boot();
+
+/* === ux(round10) 空态卡/引导初始化：示例卡点击预填、首访 checklist 渲染、? 重开、step1 钩子 === */
+document.querySelectorAll("[data-cb-sample]").forEach((btn) => {
+  btn.addEventListener("click", () => cbEmptyPrefill(btn.dataset.cbSample));
+});
+cbOnboardRender();
+if ($("onboardHelp")) {
+  $("onboardHelp").addEventListener("click", cbOnboardReopen);
+}
+if ($("input")) {
+  $("input").addEventListener("input", () => {
+    if ($("input").value.trim()) cbObStep(1);
+  });
+}
 
 /* === ux(round3) 阶段时间线 · 一条流水线（进度可见）· docs/ux/ux-design-spec.md 附录 B ===
    8 阶段轨道：理解任务→召唤岗位→成箱→人工确认→拼柜→合规校核→落盘→收口。
@@ -1625,6 +1822,7 @@ function cbTlCreate(bodyEl, sourceMessage) {
 
     card.querySelector(".cb-apr-confirm").addEventListener("click", () => {
       /* 显式决策=确认：勾选确认句（流程层 confirm_ok 门禁）并重新提交原文 */
+      cbObStep(3); /* ux(round10)：审批卡显式确认 → 引导第 3 步打勾 */
       const ok = $("confirmOk");
       if (ok) ok.checked = true;
       const input = $("input");
@@ -1771,7 +1969,7 @@ function cbTlCreate(bodyEl, sourceMessage) {
 }
 
 /* ===== ux(round6) 跨运行审计时间线（docs/ux 附录 E）=====
-   数据源 GET /api/harness/audit/<session>（只读聚合 demo/out/<session>/runs/*/trace.json）。
+   数据源 GET /api/harness/audit/<session>（只读聚合 demo/out/<session>/runs/<run_id>/trace.json）。
    节点四色：工具执行=蓝 · 人工决策=合规红 · 错误/重试=橙 · 写盘=绿；决策节点永久置顶不可折叠。 */
 let auditTimer = 0;
 let auditLast = null;

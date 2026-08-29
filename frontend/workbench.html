@@ -867,6 +867,94 @@
       .cb-cmd-desc { display: none; }  /* 手机竖屏：只留图标+名称 */
       .cb-cmd-item { min-height: 44px; }  /* --cb-touch-min 触控目标 */
     }
+    /* === ux(round10) 空态卡 + 三步引导 checklist + 网关兜底（--cb-* token，零 CDN；docs/ux 附录 I） ===
+       pattern-only：shadcn/ui Empty / Tailwind UI empty state（图标+一句话+主动作）、
+       PostHog/Appcues 首访 checklist（3 步逐项打勾+全完成自动收起+? 重开）、codex 首启欢迎（单 composer 聚焦）。
+       与 demo/static/styles.css .cb-empty/.cb-ob 同构；本页为暗色 surface，色值随本页既有暗色变量。 */
+    .cb-empty { max-width: 640px; margin: 0 auto var(--cb-space-4); text-align: center; }
+    .cb-empty-media {
+      width: 44px; height: 44px; margin: 0 auto var(--cb-space-3);
+      display: flex; align-items: center; justify-content: center;
+      background: var(--cb-blue); color: #fff;
+      font-size: var(--cb-fs-md); font-weight: 700;
+      border-radius: var(--cb-radius-md); box-shadow: var(--cb-shadow-md);
+    }
+    .cb-empty .cb-empty-title { margin: 0 0 var(--cb-space-2); font-size: var(--cb-fs-xl); font-weight: 700; color: #eaf1ff; letter-spacing: -0.01em; }
+    .cb-empty .cb-empty-desc { margin: 0 auto var(--cb-space-4); font-size: var(--cb-fs-md); line-height: 1.6; color: #9fb2cd; max-width: 40rem; }
+    .cb-empty-cards { display: grid; grid-template-columns: repeat(3, 1fr); gap: var(--cb-space-3); }
+    .cb-empty-card {
+      display: flex; flex-direction: column; align-items: flex-start; gap: 4px;
+      padding: var(--cb-space-3);
+      background: rgba(255, 255, 255, 0.035); border: 1px solid rgba(148, 163, 184, 0.22);
+      border-radius: var(--cb-radius-md); cursor: pointer; text-align: left;
+      font-family: inherit; font-size: var(--cb-fs-sm); color: #dbe7f7;
+      transition: transform .12s, box-shadow .12s, border-color .12s, background .12s;
+    }
+    .cb-empty-card:hover { transform: translateY(-2px); border-color: var(--cb-blue); background: rgba(37, 99, 235, 0.14); }
+    .cb-empty-card:focus-visible { outline: 2px solid var(--cb-blue); outline-offset: 2px; }
+    .cb-empty-ico {
+      flex: 0 0 auto; width: 20px; height: 20px; display: flex; align-items: center; justify-content: center;
+      border-radius: var(--cb-radius-sm); color: #fff; font-size: var(--cb-fs-xs); font-weight: 600;
+    }
+    .cb-empty-card.tone-blue .cb-empty-ico { background: var(--cb-blue); }
+    .cb-empty-card.tone-strong .cb-empty-ico { background: var(--cb-blue-strong); }
+    .cb-empty-card.tone-orange .cb-empty-ico { background: var(--cb-orange); }
+    .cb-empty .cb-empty-k { font-weight: 600; font-size: var(--cb-fs-sm); color: #eaf1ff; }
+    .cb-empty .cb-empty-k code { font-family: var(--cb-mono); font-size: var(--cb-fs-xs); color: #8fb4ff; font-weight: 400; }
+    .cb-empty .cb-empty-v { font-size: var(--cb-fs-xs); line-height: 1.5; color: #9fb2cd; }
+    .cb-empty .cb-empty-note { margin: var(--cb-space-4) 0 0; font-size: var(--cb-fs-xs); color: #8fa3bf; }
+    /* 网关兜底空态（加载失败/后端未起）：纠偏三段式 + 命令一键复制 */
+    .cb-empty-down {
+      max-width: 640px; margin: 0 auto var(--cb-space-4);
+      text-align: left; padding: var(--cb-space-4);
+      background: rgba(220, 38, 38, 0.10); border: 1px solid var(--cb-red); border-radius: var(--cb-radius-md);
+    }
+    .cb-empty-down .cb-empty-k { color: #fca5a5; }
+    .cb-empty-down p { margin: 0 0 var(--cb-space-2); font-size: var(--cb-fs-sm); line-height: 1.6; color: #dbe7f7; }
+    .cb-empty-down code {
+      display: block; margin: var(--cb-space-2) 0; padding: 8px 10px;
+      font-family: var(--cb-mono); font-size: var(--cb-fs-xs); color: #eaf1ff;
+      background: rgba(0, 0, 0, 0.35); border: 1px solid rgba(148, 163, 184, 0.22); border-radius: var(--cb-radius-sm);
+      overflow-x: auto; white-space: nowrap;
+    }
+    .cb-empty-down .cb-empty-acts { display: flex; gap: var(--cb-space-2); flex-wrap: wrap; }
+    .cb-empty-down button {
+      padding: 6px 12px; min-height: 32px; border: 1px solid rgba(148, 163, 184, 0.3); border-radius: var(--cb-radius-sm);
+      background: rgba(255, 255, 255, 0.06); color: #dbe7f7; font-size: var(--cb-fs-xs); font-weight: 600; cursor: pointer; font-family: inherit;
+    }
+    .cb-empty-down button:hover { border-color: var(--cb-blue); color: #fff; }
+    /* 三步引导 checklist（首访一次性，localStorage cb_onboarded_v1） */
+    .cb-ob {
+      max-width: 640px; margin: 0 auto var(--cb-space-4);
+      background: rgba(255, 255, 255, 0.045); border: 1px solid rgba(148, 163, 184, 0.22);
+      border-radius: var(--cb-radius-md); box-shadow: var(--cb-shadow-md); overflow: hidden;
+    }
+    .cb-ob-head { display: flex; align-items: center; gap: var(--cb-space-2); padding: 10px var(--cb-space-4); border-bottom: 1px solid rgba(148, 163, 184, 0.18); }
+    .cb-ob-head strong { font-size: var(--cb-fs-md); color: #eaf1ff; }
+    .cb-ob-head .cb-ob-sub { font-size: var(--cb-fs-xs); color: #9fb2cd; }
+    .cb-ob-x {
+      margin-left: auto; width: 26px; height: 26px; display: flex; align-items: center; justify-content: center;
+      background: transparent; border: none; border-radius: var(--cb-radius-sm);
+      color: #9fb2cd; font-size: var(--cb-fs-md); cursor: pointer;
+    }
+    .cb-ob-x:hover { background: rgba(255, 255, 255, 0.08); color: #eaf1ff; }
+    .cb-ob-steps { list-style: none; margin: 0; padding: var(--cb-space-2) 0; }
+    .cb-ob-steps li { display: flex; align-items: flex-start; gap: 10px; padding: 7px var(--cb-space-4); font-size: var(--cb-fs-sm); line-height: 1.55; color: #dbe7f7; }
+    .cb-ob-dot {
+      flex: 0 0 auto; width: 18px; height: 18px; margin-top: 1px;
+      display: flex; align-items: center; justify-content: center;
+      border: 1.5px solid #64748b; border-radius: var(--cb-radius-full);
+      font-size: 11px; color: transparent; background: transparent;
+    }
+    .cb-ob-steps li.on .cb-ob-dot { border-color: var(--cb-green); background: var(--cb-green); color: #fff; }
+    .cb-ob-steps li.on { color: #8fa3bf; }
+    .cb-ob-steps li.on .cb-ob-t { text-decoration: line-through; }
+    .cb-ob-steps li.now .cb-ob-dot { border-color: var(--cb-blue); }
+    .cb-ob-foot { padding: 8px var(--cb-space-4) 10px; border-top: 1px solid rgba(148, 163, 184, 0.18); font-size: var(--cb-fs-xs); color: #8fa3bf; }
+    @media screen and (max-width: 768px) { /* --cb-bp-tablet */
+      .cb-empty-cards { grid-template-columns: 1fr; }
+      .cb-empty-card { min-height: 44px; } /* --cb-touch-min */
+    }
     .composer-note { font-size: var(--cb-fs-xs); color: var(--cb-text-muted); margin: 0 0 6px; }
     .composer-row {
       display: flex;
@@ -1889,6 +1977,8 @@
           <button type="button" class="soft cb-nav-toggle" aria-label="展开或收起侧栏"
                   aria-expanded="false"
                   onclick="var sb=document.querySelector('.sidebar');if(sb){var o=sb.classList.toggle('mobile-open');this.setAttribute('aria-expanded',o?'true':'false')}">☰ 菜单</button>
+          <!-- ux(round10) 三步引导重开入口：首访自动弹 checklist，之后点 ? 随时重开（localStorage cb_onboarded_v1） -->
+          <button type="button" class="soft" @click="cbObReopen" title="新手引导 · 三步上手" aria-label="重新打开三步新手引导">?</button>
           <a href="/" class="soft" style="text-decoration:none;display:inline-flex;align-items:center">投标应答</a>
           <span class="pill" v-if="loading || (streamProgress.done > 0 && streamProgress.total)">
             {{ streamProgress.done }}/{{ streamProgress.total || '—' }}
@@ -2355,6 +2445,59 @@
               </div>
             </div>
             <p class="foot-note">预览为落盘 markdown 原文渲染；数字只抄 tools 结果，UNSPECIFIED/[A001] 待人工补全。</p>
+          </div>
+
+          <!-- ===== ux(round10) 三步引导 checklist：首访一次性（localStorage cb_onboarded_v1），逐步打勾，全完成自动收起（附录 I） ===== -->
+          <div class="cb-ob" v-if="cbOb.open" data-cb-onboard="true">
+            <div class="cb-ob-head">
+              <strong>{{ cbOb.done ? '三步引导 · 已完成' : '三步上手' }}</strong>
+              <span class="cb-ob-sub">{{ cbOb.done ? '任何时候点右上角 ? 重看' : '第一次用？跟着走 30 秒' }}</span>
+              <button type="button" class="cb-ob-x" title="收起（不再自动弹出）" aria-label="收起新手引导" @click="cbObDismiss">✕</button>
+            </div>
+            <ol class="cb-ob-steps">
+              <li v-for="(s, i) in cbObSteps" :key="'obo'+i"
+                  :class="cbOb.s[i] ? 'on' : (i === cbObNow ? 'now' : '')">
+                <span class="cb-ob-dot" aria-hidden="true">✓</span>
+                <span class="cb-ob-t">{{ '①②③'[i] }} {{ s }}</span>
+              </li>
+            </ol>
+            <div class="cb-ob-foot">产出永远是 AI 草稿，高风险岗需人工确认 · 全部完成自动收起</div>
+          </div>
+
+          <!-- ===== ux(round10) 网关兜底空态：/api/health 不可达（附录 I，命令一键复制） ===== -->
+          <div class="cb-empty-down" v-if="gatewayDown && !hasAnyResult" data-cb-down="true" role="alert">
+            <p><strong class="cb-empty-k">网关未启动或不可达</strong> —— 界面在，但流水线跑不起来（{{ gatewayDownErr }}）。</p>
+            <p>现在能做什么：在仓库根目录启动网关（LLM Key 按需配置），然后点「重试检测」。</p>
+            <code id="cbGatewayCmd">python -m uvicorn gateway.app:app --port 8000</code>
+            <div class="cb-empty-acts">
+              <button type="button" @click="cbCopyGatewayCmd">{{ copiedGatewayCmd ? '已复制' : '复制启动命令' }}</button>
+              <button type="button" @click="refreshHealth">重试检测</button>
+            </div>
+          </div>
+
+          <!-- ===== ux(round10) 空态卡：一句话定位 + 三张示例任务卡（点击预填左栏输入框，不自动发送）+ 诚实小字（附录 I） ===== -->
+          <div class="cb-empty" v-if="!hasAnyResult" data-cb-empty="true">
+            <div class="cb-empty-media" aria-hidden="true">CB</div>
+            <h3 class="cb-empty-title">土木版 Codex：66 岗工作台</h3>
+            <p class="cb-empty-desc">工具算数、模型只路由。点一张示例卡预填左侧输入框（不会自动发送），或直接发任务跑全流程。</p>
+            <div class="cb-empty-cards">
+              <button type="button" class="cb-empty-card tone-blue" data-cb-sample="pack" @click="cbEmptySample('pack')">
+                <span class="cb-empty-ico" aria-hidden="true">装</span>
+                <span class="cb-empty-k"><code>/pack</code> 装一张票</span>
+                <span class="cb-empty-v">sim_materials 票 → 装柜单草稿，柜数与坐标由 tools 算</span>
+              </button>
+              <button type="button" class="cb-empty-card tone-strong" data-cb-sample="bid" @click="cbEmptySample('bid')">
+                <span class="cb-empty-ico" aria-hidden="true">标</span>
+                <span class="cb-empty-k"><code>/bid</code> 解析一段招标</span>
+                <span class="cb-empty-v">资格条件与废标项清单 · P0 资格须人工确认</span>
+              </button>
+              <button type="button" class="cb-empty-card tone-orange" data-cb-sample="safety" @click="cbEmptySample('safety')">
+                <span class="cb-empty-ico" aria-hidden="true">安</span>
+                <span class="cb-empty-k"><code>/safety</code> 出安全交底</span>
+                <span class="cb-empty-v">工友班前三分钟白话，一条一个动作</span>
+              </button>
+            </div>
+            <p class="cb-empty-note">产出永远是 AI 草稿，高风险岗需人工确认。</p>
           </div>
 
           <!-- Empty: full mode landing（简洁无结果时隐藏，避免中间双空洞） -->
@@ -3797,6 +3940,11 @@ window.CB_POSTS = [{"id":"bid-parse","name":"招标解析","aliases":["招标","
           cmdDismissed: '',
           cmdDismissedAt: -1,
           cmdTickets: (window.CB_TICKETS || []).map((t) => Object.assign({}, t, { name: t.story || '' })),
+          /* ux(round10) 空态卡 + 三步引导 checklist + 网关兜底（附录 I；与 demo/static/app.js cbOb 同构） */
+          cbOb: { s: [false, false, false], done: false, open: false },
+          gatewayDown: false,
+          gatewayDownErr: '',
+          copiedGatewayCmd: false,
           sessionId: 'web-' + Date.now(),
           containerType: '40HQ',
           loading: false,
@@ -4074,6 +4222,17 @@ window.CB_POSTS = [{"id":"bid-parse","name":"招标解析","aliases":["招标","
         hasScene3d() {
           const s = this.result.scene3d || {};
           return !!(s.container && (s.boxes || []).length);
+        },
+        /* ux(round10) 引导三步文案（与 demo/static CB_ONBOARD_STEPS 同构） */
+        cbObSteps() {
+          return [
+            '输入任务，或点一张示例卡（预填，不自动发送）',
+            '看时间线跑完：8 阶段收口 ✓',
+            '在审批卡点确认 · 或文书预览 / 下载 .md',
+          ];
+        },
+        cbObNow() {
+          return this.cbOb.s.indexOf(false);
         },
         hasAnyResult() {
           return !!(
@@ -4461,6 +4620,9 @@ window.CB_POSTS = [{"id":"bid-parse","name":"招标解析","aliases":["招标","
       },
       mounted() {
         this.refreshHealth();
+        this.cbObLoad(); /* ux(round10)：首访 checklist（localStorage cb_onboarded_v1） */
+        // ux(round10)：文书预览「下载 .md」钩子（docpreview 侧 global.cbObStep 回调本组件）
+        window.cbObStep = (n) => this.cbObStep(n);
         this.loadRuns();
         this.loadPendingCheckpoints();
         this.loadWhatIfScenarios();
@@ -4500,6 +4662,10 @@ window.CB_POSTS = [{"id":"bid-parse","name":"招标解析","aliases":["招标","
         if (this._cbAprEscHandler) window.removeEventListener('keydown', this._cbAprEscHandler);
       },
       watch: {
+        /* ux(round10)：输入非空 → 引导第 1 步打勾（打字/示例卡/指令面板预填都走这里） */
+        userInput(v) {
+          if (String(v || '').trim()) this.cbObStep(1);
+        },
         demoSimpleMode(on) {
           // 简洁且无结果：强制总览，避免停在可视化/装箱空页导致「中间一片空」
           if (on && !this.hasAnyResult) {
@@ -4574,6 +4740,7 @@ window.CB_POSTS = [{"id":"bid-parse","name":"招标解析","aliases":["招标","
         async cbAprConfirm() {
           if (this.cbApr.state !== 'waiting') return;
           /* 显式决策=确认：走既有 /api/confirm confirm 链路（非标勾选门禁在 confirmPack 内强制） */
+          this.cbObStep(3); /* ux(round10)：审批卡显式确认 → 引导第 3 步打勾 */
           await this.confirmPack();
         },
         async cbAprReject(reason) {
@@ -5057,6 +5224,7 @@ window.CB_POSTS = [{"id":"bid-parse","name":"招标解析","aliases":["招标","
           if (ev.type === 'done' || ev.type === 'replay_done') {
             this.liveNode = '';
             this.streamProgress.pct = 100;
+            this.cbObStep(2); /* ux(round10)：时间线收口 → 引导第 2 步打勾 */
             if (ev.session_id) this.sessionId = ev.session_id; /* ux(round3)：HITL/收口事件带回 session */
             /* ux(round7)：成功收口 → 清纠偏卡；缺数（UNSPECIFIED/[A001]）→ 去补数提示条 */
             this.cbFix = { visible: false, desc: null };
@@ -5205,6 +5373,7 @@ window.CB_POSTS = [{"id":"bid-parse","name":"招标解析","aliases":["招标","
         },
         async openDocArtifact(d) {
           if (!d || !d.path) return;
+          this.cbObStep(3); /* ux(round10)：文书预览打开 → 引导第 3 步打勾 */
           try {
             const res = await fetch('/api/artifact?path=' + encodeURIComponent(d.path));
             const j = await res.json();
@@ -5527,6 +5696,73 @@ window.CB_POSTS = [{"id":"bid-parse","name":"招标解析","aliases":["招标","
         cmdRecentList() {
           return cbRecentList().slice(0, 3);
         },
+        /* ===== ux(round10) 三步引导 checklist + 空态卡 + 网关兜底（docs/ux 附录 I；与 demo/static/app.js 同构） =====
+           pattern-only：PostHog/Appcues 首访 checklist（3 步逐项打勾、全完成自动收起、? 重开）；
+           示例卡动作=预填左栏 composer，不自动发送（承附录 F.3 红线）。 */
+        cbObLoad() {
+          try {
+            const v = JSON.parse(localStorage.getItem('cb_onboarded_v1') || 'null');
+            if (v && Array.isArray(v.s) && v.s.length === 3) {
+              this.cbOb = {
+                s: v.s.map(Boolean),
+                done: !!v.done,
+                open: !v.dismissed && !(v.s.every(Boolean) && v.done && v.dismissed),
+              };
+              return;
+            }
+          } catch (e) { /* 存储不可用：当作首访 */ }
+          this.cbOb = { s: [false, false, false], done: false, open: true };
+        },
+        cbObPersist() {
+          try {
+            localStorage.setItem('cb_onboarded_v1', JSON.stringify({
+              s: this.cbOb.s, done: this.cbOb.done,
+              dismissed: this.cbOb.done || !this.cbOb.open,
+            }));
+          } catch (e) { /* 存储不可用：本轮内存态即可 */ }
+        },
+        cbObStep(n) {
+          if (n < 1 || n > 3 || this.cbOb.s[n - 1]) return;
+          this.cbOb.s.splice(n - 1, 1, true);
+          if (!this.cbOb.s.filter((x) => !x).length) {
+            this.cbOb.done = true;
+            /* 全部完成 → 自动收起（PostHog checklist 语义）；? 可随时重开 */
+            setTimeout(() => {
+              this.cbOb.open = false;
+              this.cbObPersist();
+            }, 1200);
+          }
+          this.cbObPersist();
+        },
+        cbObReopen() {
+          this.cbOb.open = true;
+          this.cbObPersist();
+          this.$nextTick(() => {
+            const el = document.querySelector('[data-cb-onboard]');
+            if (el && el.scrollIntoView) el.scrollIntoView({ block: 'nearest' });
+          });
+        },
+        cbObDismiss() {
+          this.cbOb.open = false;
+          this.cbObPersist();
+        },
+        cbEmptySample(id) {
+          this.cmdApplyDraft(id === 'pack'
+            ? cbSlashTemplate('pack', '', (window.CB_TICKETS || []).find((t) => t.id === 'small_one_container') || {})
+            : cbSlashTemplate(id, ''));
+          this.cbObStep(1);
+        },
+        async cbCopyGatewayCmd() {
+          const text = 'python -m uvicorn gateway.app:app --port 8000';
+          try {
+            if (navigator.clipboard && navigator.clipboard.writeText) await navigator.clipboard.writeText(text);
+            else throw new Error('no clipboard');
+            this.copiedGatewayCmd = true;
+          } catch (e) {
+            this.statusText = '复制失败：请手选命令 ' + text;
+          }
+          setTimeout(() => { this.copiedGatewayCmd = false; }, 1600);
+        },
         cmdApplyRecent(text) {
           this.userInput = String(text || '');
           this.cmdClose();
@@ -5720,12 +5956,17 @@ window.CB_POSTS = [{"id":"bid-parse","name":"招标解析","aliases":["招标","
             if (this.preflightHints.length) {
               this.statusText += ' | ' + this.preflightHints[0];
             }
+            /* ux(round10)：网关兜底空态只在「确实探测过且不可用」时出现，避免首帧闪红 */
+            this.gatewayDown = !this.gatewayOk;
+            this.gatewayDownErr = this.gatewayOk ? '' : '网关自检 DOWN';
           } catch (e) {
             this.gatewayOk = false;
             this.skjolberOk = false;
             this.skjolberLabel = '网关不可达';
             this.statusText = '预检失败: ' + e + ' · 请确认 uvicorn 已启动';
             this.preflightHints = [String(e)];
+            this.gatewayDown = true; /* ux(round10)：/api/health 不可达 → 兜底空态（附录 I） */
+            this.gatewayDownErr = String(e && e.message || e);
           }
         },
         async onTableFileSelected(ev) {

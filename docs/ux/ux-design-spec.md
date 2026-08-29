@@ -97,7 +97,7 @@
 | R7 | 错误恢复：HITL checkpoint 恢复 UI + 失败重试路径 | 断点续跑不丢状态；恢复入口从时间线可达 |
 | R8 | 窄屏：响应式三栏→单栏（768px 断点） | 768/375 宽度下输入、流水线、审批卡全部可用 |
 | R9 | 指令面板：`/` 命令 + 66 岗检索面板（ux round9 落地，见附录 H） | 66 岗可检索可点名；面板零 CDN、键盘可达 |
-| R10 | 引导：空态三步剧本强化（装柜 demo 路径） | 新用户 3 分钟内完成首跑（demo_one_shot 同路径） |
+| R10 | 引导：空态三步剧本强化（装柜 demo 路径，ux round10 落地，见附录 I） | 新用户 3 分钟内完成首跑（demo_one_shot 同路径） |
 | R11 | 主题：--cb-* token 全量接管 + 明暗双套（prefers-color-scheme） | 三端零硬编码色值引用旧变量；明暗切换无对比度回归 |
 | R12 | 离线：内网离线资源自检（零外链断言入 CI） | 断网全功能；CI 增加"零 CDN/外链"静态断言 |
 | R13 | 终评：scorecard + 禁句自查 + 可用性走查收官 | eval_competition_scorecard 分数不降；禁句全文检索为零 |
@@ -516,3 +516,67 @@ round8 新增规则一律 `@media screen and (max-width: …)`——**打印仍�
 | VS Code Command Palette（code.visualstudio.com、issue #1964） | 文档 pattern-only | 模糊过滤必须带模糊排序（前缀>子串>子序列）；全程键盘可达；最近项前置 |
 | Raycast Manual：Search Bar / Arguments / Snippets | 文档 pattern-only | 别名直达；参数 placeholder 提示；子菜单 Esc=返回上一级 |
 | GitHub Saved replies / Issue templates | 文档 pattern-only | 模板选择器（名称+描述）；选中=插入带占位草稿，先编辑后提交 |
+
+## 附录 I：空态与三步新手引导（ux round10 定稿）
+
+> R10 落地「引导」门面（§4 路线图 R10）：评委/试用者打开页面 30 秒内知道
+> **这是什么、能干什么、第一步点哪**。组件两端同构 vanilla 实现
+> （:8765 `demo/static/index.html`+`app.js`+`styles.css`；:8000 `frontend/workbench.html` Vue 内联），
+> 零 CDN、零外链、全 `--cb-*` token；示例卡动作一律**预填不自动发送**（承附录 F.3 红线）。
+
+### I.1 空态卡（无任何会话/无结果时）
+
+结构（shadcn/ui Empty / Tailwind UI empty state 四段式 pattern-only：图标+定位句+主动作+诚实小字）：
+
+```
+.cb-empty
+  .cb-empty-media    "CB" 图标块（--cb-blue 底白字）
+  .cb-empty-title    土木版 Codex：66 岗工作台
+  .cb-empty-desc     工具算数、模型只路由。输入任务，或点一张示例卡预填（不会自动发送）。
+  .cb-empty-cards    三张示例任务卡（等宽 grid，≤768 单列；点击=预填输入框，不发送）：
+    tone-blue   装  /pack 装一张票      sim_materials 票 → 装柜单草稿，柜数由 tools 算（预填真实小票 small_one_container）
+    tone-strong 标  /bid 解析一段招标    资格条件与废标项清单 · P0 资格须人工确认
+    tone-orange 安  /safety 出安全交底   工友班前三分钟白话，一条一个动作
+  .cb-empty-note     产出永远是 AI 草稿，高风险岗需人工确认。
+```
+
+- :8765 挂在 `#log`（原一行 `.welcome` 欢迎语升级为本卡，**保留 `.welcome` 类**——发送首条消息时沿用既有移除逻辑，空态卡即 Codex 历史流的第 0 号 cell）；示例卡点击走 `cbEmptyPrefill()`，复用附录 H `cbSlashTemplate` 生成草稿。
+- :8000 挂在 `workspace-inner`（`v-if="!hasAnyResult"`，简洁/完整两种模式都显示，位于演示剧本/empty-hero 之后）；点击走 `cbEmptySample()` → 左栏 composer 预填（`cmdApplyDraft`），不发送。
+- 三卡预填文案=附录 H.3 模板原文，`<待填>` 占位数字一概不预编。
+
+### I.2 三步引导 checklist（首访一次性）
+
+- 存储：`localStorage["cb_onboarded_v1"]` = `{s:[b,b,b], done, dismissed}`；键不存在=首访自动弹出；✕ 关闭=不再自动弹出；右上角 **?** 按钮（:8765 顶栏 `#onboardHelp` / :8000 顶栏 `@click="cbObReopen"`）随时重开；全部完成 → 1.2s 后自动收起。
+- 三步与打勾条件（只抄真实交互事件，不靠估算）：
+
+| 步 | 文案 | 打勾触发（:8765） | 打勾触发（:8000） |
+| --- | --- | --- | --- |
+| ① | 输入任务，或点一张示例卡（预填，不自动发送） | `#input` input 非空、`data-fill` chips、指令面板/最近任务 `cbCmdApplyDraft`、示例卡 `cbEmptyPrefill` | `watch: userInput` 非空（打字/示例卡/面板预填同源） |
+| ② | 看时间线跑完：8 阶段收口 ✓ | `streamChat` done 事件 | `onStreamEvent` type=`done`/`replay_done` |
+| ③ | 在审批卡点确认 · 或文书预览 / 下载 .md | 审批卡 `cb-apr-confirm` 点击、`openDeliverable`、交付物卡「下载」、预览层「下载 .md」（`docpreview.js` 调 `global.cbObStep(3)`） | `cbAprConfirm`（显式确认并拼柜）、`openDocArtifact`、预览层「下载 .md」（`vendor/cb-doc.js` 同构钩子） |
+
+- 未完成的下一步高亮蓝边（`li.now`），已完成划线灰化（`li.on`）；卡脚常驻诚实句「产出永远是 AI 草稿，高风险岗需人工确认 · 全部完成自动收起」。
+- R10 路线图验收「新用户 3 分钟内完成首跑（demo_one_shot 同路径）」：示例卡预填的 `/pack small_one_container` 即 demo 同款真实数据路径，发送即走 `runTeamA`/`/api/chat` 正常链路，与演示共用一条管线。
+
+### I.3 网关兜底空态（加载失败 / 后端未起）
+
+触发条件与文案（纠偏卡三段式：发生了什么 + 为什么 + 现在能做什么，承附录 F；命令一键复制）：
+
+| 端 | 触发 | 呈现位置 | 启动命令（复制按钮） |
+| --- | --- | --- | --- |
+| :8000 `workbench.html` | `refreshHealth()` catch（/api/health 不可达）或网关自检 DOWN 且无任何结果 | 工作区顶部 `.cb-empty-down`（合规红边） | `python -m uvicorn gateway.app:app --port 8000` |
+| :8000 `index.html` | `loadExperts()`（/api/experts 探测）失败；探测恢复自动撤卡 | 页头下方纠偏卡（--err-bg） | 同上 |
+| :8765 | `boot()` /api/health 失败（此前为裸 unhandled rejection，本轮修复） | `#log` 顶部 `#cbDownCard`（带「重试检测」自愈按钮） | `cargo run --release --bin civil-workbench`（或 zip 内 start-workbench.bat） |
+
+- 卡上一律带「重试检测」：:8000 重调 `refreshHealth`/探测，:8765 重拉 /api/health，成功即撤卡并提示「后端已恢复」。
+- 复制走 `navigator.clipboard`（127.0.0.1 安全上下文可用），失败回退为提示手选，不静默。
+
+### I.4 借鉴来源（pattern-only）
+
+| 来源 | 许可 | 借什么 |
+| --- | --- | --- |
+| shadcn/ui `Empty` 组件（ui.shadcn.com/docs/components/base/empty） | MIT | 四段结构：Header→Media(icon)→Title→Description→Content(主动作)；图标块居中、一句话定位 |
+| Tailwind UI / Tailwind Plus empty state | 文档 pattern-only | 图标+标题+一句描述+单个主 CTA；列表空态即引导 |
+| PostHog / Appcues 首访 checklist | 文档 pattern-only | 3 步 checklist：逐项打勾、全完成自动收起、✕ 可跳过、随时可重开；步骤=产品真实动作 |
+| openai/codex 首启欢迎（session header + 单 composer 聚焦） | Apache-2.0 | 欢迎区只占一屏不堆字；首条输入前不产生历史噪音；空态即第 0 号历史 cell |
+| NN/g Empty-State / Onboarding 指南 | 文档 pattern-only | 空态=教育时机：说清"为什么空"和"下一步做什么"，不放占位图表 |
