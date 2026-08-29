@@ -71,6 +71,7 @@ pub fn app(state: AppState) -> Router {
         .route("/api/eval/live", get(eval_live))
         .route("/api/harness/expert", post(harness_expert))
         .route("/api/harness/trace/{session}/{run_id}", get(harness_trace))
+        .route("/api/harness/audit/{session}", get(harness_audit))
         .route("/api/file", get(file_get))
         .nest_service("/static", ServeDir::new(static_dir))
         .with_state(Arc::new(state))
@@ -147,6 +148,24 @@ async fn harness_trace(
     crate::harness::load_trace(&st.paths, &session, &run_id)
         .map(Json)
         .ok_or_else(|| err(StatusCode::NOT_FOUND, "trace not found"))
+}
+
+/// ux(round6) 跨 run 审计时间线聚合（只读；越界 403，与 :8000 /api/audit 同语义）
+async fn harness_audit(
+    State(st): State<Arc<AppState>>,
+    AxPath((session,)): AxPath<(String,)>,
+) -> Result<Json<Value>, ApiError> {
+    let s = session.as_str();
+    if s.is_empty()
+        || s == "."
+        || s == ".."
+        || s.contains("..")
+        || s.contains('/')
+        || s.contains('\\')
+    {
+        return Err(err(StatusCode::FORBIDDEN, "越界：非法 session id"));
+    }
+    Ok(Json(crate::harness::audit_session(&st.paths, s)))
 }
 
 #[derive(Deserialize)]

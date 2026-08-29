@@ -511,6 +511,7 @@ async function streamChat(message, bodyEl) {
         renderCites(data.citations || []);
         renderFiles(data.deliverables || []);
         appendDocCards(data.deliverables || [], bodyEl);
+        refreshAuditSoon(); /* ux(round6)：本轮完成 → 审计时间线增量刷新（含决策置顶） */
       }
       eventName = "message";
     }
@@ -1345,4 +1346,159 @@ function cbTlCreate(bodyEl, sourceMessage) {
   if (log) log.scrollTop = log.scrollHeight;
 
   return { status, error, finish, root };
+}
+
+/* ===== ux(round6) 跨运行审计时间线（docs/ux 附录 E）=====
+   数据源 GET /api/harness/audit/<session>（只读聚合 demo/out/<session>/runs/*/trace.json）。
+   节点四色：工具执行=蓝 · 人工决策=合规红 · 错误/重试=橙 · 写盘=绿；决策节点永久置顶不可折叠。 */
+let auditTimer = 0;
+let auditLast = null;
+const AUDIT_KIND_LABEL = { run: "运行", tool: "工具", decision: "决策", error: "错误", write: "写盘" };
+
+function auditNodeEl(n, ts) {
+  const row = document.createElement("div");
+  row.className = "cb-audit-node is-" + (n.kind || "tool");
+  const dot = document.createElement("span");
+  dot.className = "cb-audit-dot";
+  dot.setAttribute("aria-hidden", "true");
+  const k = document.createElement("span");
+  k.className = "cb-audit-k";
+  k.textContent = AUDIT_KIND_LABEL[n.kind] || n.kind || "·";
+  const t = document.createElement("span");
+  t.className = "cb-audit-t";
+  t.textContent = String(n.title || "") + (n.detail ? " · " + n.detail : "");
+  row.append(dot, k, t);
+  if (ts) {
+    const time = document.createElement("span");
+    time.className = "cb-audit-time";
+    time.textContent = String(ts);
+    row.append(time);
+  }
+  if (n.operator) {
+    const op = document.createElement("span");
+    op.className = "cb-audit-op";
+    op.textContent = String(n.operator) + " · 未静默放行";
+    row.append(op);
+  }
+  if (n.raw != null) {
+    const det = document.createElement("details");
+    det.className = "cb-audit-raw";
+    const sum = document.createElement("summary");
+    sum.textContent = "原始";
+    const pre = document.createElement("pre");
+    pre.textContent = JSON.stringify(n.raw, null, 2);
+    det.append(sum, pre);
+    row.append(det);
+  }
+  return row;
+}
+
+async function loadAuditPanel() {
+  const body = $("auditBody");
+  if (!body) return;
+  body.innerHTML = '<p class="cb-audit-none">加载中…</p>';
+  const res = await fetch(`/api/harness/audit/${encodeURIComponent(state.session)}`);
+  let j;
+  try {
+    j = await res.json();
+  } catch (_) {
+    j = {};
+  }
+  if (!res.ok || j.ok === false) {
+    throw new Error(j.detail || j.error || "HTTP " + res.status);
+  }
+  auditLast = j;
+  body.textContent = "";
+  const head = document.createElement("p");
+  head.className = "cb-audit-none";
+  const c = j.counts || {};
+  head.textContent = `session ${j.session_id} · ${c.runs || 0} run · 决策 ${c.decisions || 0} · 工具 ${c.tools || 0} · 写盘 ${c.writes || 0} · 错误 ${c.errors || 0}`;
+  body.append(head);
+  /* 决策节点：永久置顶，不可折叠（confirm/reject/waiting 全留痕） */
+  const pin = document.createElement("div");
+  pin.className = "cb-audit-pinned";
+  const pinH = document.createElement("div");
+  pinH.className = "cb-audit-pinned-h";
+  pinH.textContent = "人工决策（永久置顶 · 不可折叠 · 操作者=本地用户）";
+  pin.append(pinH);
+  const decisions = j.decisions || [];
+  if (!decisions.length) {
+    const none = document.createElement("p");
+    none.className = "cb-audit-none";
+    none.textContent = "本会话无人工决策记录（未触发 HITL 闸门或未走到审批）";
+    pin.append(none);
+  } else {
+    for (const d of decisions) {
+      pin.append(auditNodeEl({ kind: "decision", title: d.title, detail: d.detail, operator: d.operator }, d.ts));
+    }
+  }
+  body.append(pin);
+  for (const run of [...(j.runs || [])].reverse()) {
+    const box = document.createElement("div");
+    box.className = "cb-audit-run";
+    const h = document.createElement("div");
+    h.className = "cb-audit-run-h";
+    const rid = document.createElement("span");
+    rid.className = "cb-audit-runid";
+    rid.textContent = run.run_id || "";
+    const tm = document.createElement("span");
+    tm.className = "cb-audit-time";
+    tm.textContent = run.mtime || "";
+    h.append(rid, tm);
+    box.append(h);
+    for (const n of run.nodes || []) box.append(auditNodeEl(n, ""));
+    body.append(box);
+  }
+  if ($("auditCopy")) $("auditCopy").hidden = false;
+  if ($("auditDownload")) $("auditDownload").hidden = false;
+}
+
+function refreshAuditSoon() {
+  clearTimeout(auditTimer);
+  auditTimer = setTimeout(() => {
+    loadAuditPanel().catch(() => {});
+  }, 800);
+}
+
+function auditExportPayload() {
+  return {
+    schema: (auditLast && auditLast.schema) || "civil.audit.v1",
+    exported_at: new Date().toISOString(),
+    product: "Civil Buddy · 人机协同履历（AI 做了什么、人批了什么）",
+    session_id: (auditLast && auditLast.session_id) || state.session,
+    counts: (auditLast && auditLast.counts) || {},
+    decisions: (auditLast && auditLast.decisions) || [],
+    runs: (auditLast && auditLast.runs) || [],
+  };
+}
+
+if ($("loadAudit")) {
+  $("loadAudit").addEventListener("click", () => loadAuditPanel().catch((e) => addStatus("审计加载失败：" + String(e.message || e))));
+}
+if ($("auditCopy")) {
+  $("auditCopy").addEventListener("click", async () => {
+    try {
+      await navigator.clipboard.writeText(JSON.stringify(auditExportPayload(), null, 2));
+      addStatus("审计 JSON 已复制到剪贴板");
+    } catch (_) {
+      addStatus("复制失败（浏览器限制），请改用下载 JSON");
+    }
+  });
+}
+if ($("auditDownload")) {
+  $("auditDownload").addEventListener("click", () => {
+    const text = JSON.stringify(auditExportPayload(), null, 2);
+    const fname = "audit-" + String((auditLast && auditLast.session_id) || state.session).replace(/[^A-Za-z0-9._-]+/g, "_") + ".json";
+    const blob = new Blob([text], { type: "application/json;charset=utf-8" });
+    const a = document.createElement("a");
+    a.href = URL.createObjectURL(blob);
+    a.download = fname;
+    document.body.appendChild(a);
+    a.click();
+    setTimeout(() => {
+      URL.revokeObjectURL(a.href);
+      a.remove();
+    }, 400);
+    addStatus("审计 JSON 已下载：" + fname);
+  });
 }

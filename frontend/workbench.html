@@ -1498,6 +1498,55 @@
       border-left: 3px solid var(--cb-gray-500); padding: 2px 8px; background: var(--bg-panel);
       border-radius: 0 var(--cb-radius-sm) var(--cb-radius-sm) 0;
     }
+    /* ===== ux(round6) 跨运行审计时间线（docs/ux 附录 E）：垂直时间线 · 四类节点 · 决策置顶 ===== */
+    .cb-audit-pinned {
+      margin: var(--cb-space-2) 0 var(--cb-space-3); padding: var(--cb-space-2) var(--cb-space-3);
+      border: 1px solid var(--cb-red); border-radius: var(--cb-radius-md);
+      background: rgba(220, 38, 38, 0.07);
+    }
+    .cb-audit-pinned-h { font-size: var(--cb-fs-xs); font-weight: 700; color: var(--cb-red); margin-bottom: var(--cb-space-1); }
+    .cb-audit-none { font-size: var(--cb-fs-xs); color: var(--cb-text-muted); }
+    .cb-audit-run { margin-bottom: var(--cb-space-3); border-left: 2px solid var(--cb-line); padding-left: var(--cb-space-3); }
+    .cb-audit-run-h {
+      display: flex; align-items: center; gap: var(--cb-space-2); flex-wrap: wrap;
+      font-size: var(--cb-fs-xs); color: var(--cb-text-muted); margin: var(--cb-space-1) 0 var(--cb-space-2);
+      font-family: var(--cb-mono);
+    }
+    .cb-audit-runid { font-family: var(--cb-mono); color: var(--cb-text); }
+    .cb-audit-badge {
+      font-size: var(--cb-fs-xs); border: 1px solid var(--cb-green); color: var(--cb-green);
+      border-radius: var(--cb-radius-full); padding: 0 8px; font-family: var(--cb-font);
+    }
+    .cb-audit-badge.is-reject { border-color: var(--cb-orange); color: var(--cb-orange); }
+    .cb-audit-node {
+      position: relative; display: flex; align-items: baseline; gap: var(--cb-space-2); flex-wrap: wrap;
+      font-size: var(--cb-fs-xs); padding: 3px 8px 3px 0; margin-left: 7px;
+      border-left: 2px solid transparent; padding-left: var(--cb-space-2);
+    }
+    .cb-audit-node .cb-audit-dot { position: absolute; left: -8px; top: 9px; width: 8px; height: 8px; border-radius: var(--cb-radius-full); background: var(--cb-blue); }
+    .cb-audit-node.is-decision { border-left-color: var(--cb-red); background: rgba(220, 38, 38, 0.08); }
+    .cb-audit-node.is-decision .cb-audit-dot { background: var(--cb-red); }
+    .cb-audit-node.is-error { border-left-color: var(--cb-orange); }
+    .cb-audit-node.is-error .cb-audit-dot { background: var(--cb-orange); }
+    .cb-audit-node.is-write .cb-audit-dot { background: var(--cb-green); }
+    .cb-audit-node.pinned { border-left: 2px solid var(--cb-red); }
+    .cb-audit-k {
+      flex: none; font-size: 10px; font-family: var(--cb-mono); color: var(--cb-text-muted);
+      border: 1px solid var(--cb-line); border-radius: var(--cb-radius-sm); padding: 0 5px; min-width: 34px; text-align: center;
+    }
+    .cb-audit-node.is-decision .cb-audit-k { color: var(--cb-red); border-color: var(--cb-red); }
+    .cb-audit-node.is-error .cb-audit-k { color: var(--cb-orange); border-color: var(--cb-orange); }
+    .cb-audit-node.is-write .cb-audit-k { color: var(--cb-green); border-color: var(--cb-green); }
+    .cb-audit-t { overflow-wrap: anywhere; color: var(--text); min-width: 200px; flex: 1 1 auto; }
+    .cb-audit-dur { flex: none; font-family: var(--cb-mono); color: var(--cb-text-muted); font-size: 10px; }
+    .cb-audit-time { flex: none; font-family: var(--cb-mono); color: var(--cb-text-muted); font-size: 10px; }
+    .cb-audit-op { flex: none; font-size: 10px; color: var(--cb-red); font-family: var(--cb-mono); }
+    .cb-audit-raw {
+      flex-basis: 100%; margin: var(--cb-space-1) 0 0; max-height: 220px; overflow: auto;
+      font-family: var(--cb-mono); font-size: 10px; color: var(--cb-text-muted);
+      background: var(--cb-gray-50, transparent); border: 1px solid var(--cb-line);
+      border-radius: var(--cb-radius-sm); padding: var(--cb-space-2); white-space: pre-wrap;
+    }
     .cb-apr {
       position: relative; border: 1px solid var(--cb-line); border-radius: var(--cb-radius-md);
       background: var(--bg-panel); box-shadow: var(--cb-shadow-md); overflow: hidden;
@@ -3023,6 +3072,63 @@
               </table>
               <p class="status-line" v-if="checkpointBanner">{{ checkpointBanner }}</p>
             </div>
+            <!-- ux(round6) 跨运行审计时间线：session 分组 + run 内按时间排序；决策节点永久置顶不可折叠（docs/ux 附录 E） -->
+            <div class="section" data-cb-audit-panel="true">
+              <div class="section-h">
+                <div>
+                  <h3>审计时间线</h3>
+                  <div class="sub" style="margin-top:4px">
+                    AI 做了什么、人批了什么，全留痕：工具执行=<span style="color:var(--cb-blue)">蓝</span> · 人工决策=<span style="color:var(--cb-red)">合规红边</span> · 错误/重试=<span style="color:var(--cb-orange)">橙</span> · 写盘=<span style="color:var(--cb-green)">绿</span> · 数据源 trace.jsonl + checkpoint
+                  </div>
+                </div>
+                <div class="row">
+                  <input class="input" v-model.trim="auditSession" placeholder="session_id" style="max-width:220px" @keyup.enter="loadAudit()" aria-label="session id" />
+                  <button class="ghost" type="button" @click="loadAudit()">{{ auditLoading ? '加载中…' : '加载' }}</button>
+                  <button class="soft" type="button" @click="auditExport(true)" :disabled="!auditData">复制 JSON</button>
+                  <button class="soft" type="button" @click="auditExport(false)" :disabled="!auditData">下载 JSON</button>
+                </div>
+              </div>
+              <p class="status-line" v-if="auditError" style="color:var(--cb-red)">{{ auditError }}</p>
+              <template v-if="auditData">
+                <p class="foot-note">
+                  session <span style="font-family:var(--cb-mono)">{{ auditData.session_id }}</span>
+                  · 匹配 {{ auditData.n_runs_matched }} 次 run · 展示 {{ auditData.runs.length }} 次
+                  · 节点 {{ auditData.counts.nodes }}（工具 {{ auditData.counts.tools }} · 写盘 {{ auditData.counts.writes }} · 错误/重试 {{ auditData.counts.errors }}）
+                </p>
+                <div class="cb-audit-pinned" data-cb-audit-pinned="true">
+                  <div class="cb-audit-pinned-h">人工决策（永久置顶 · 不可折叠 · 以服务端 checkpoint user_action 为准）</div>
+                  <div class="cb-audit-node is-decision pinned" v-for="(d, di) in auditData.decisions" :key="'ad'+di">
+                    <span class="cb-audit-dot" aria-hidden="true"></span>
+                    <span class="cb-audit-k">决策</span>
+                    <span class="cb-audit-t">{{ d.title }}<template v-if="d.detail"> · {{ d.detail }}</template></span>
+                    <span class="cb-audit-time">{{ auditFmtTs(d.ts) }}</span>
+                    <span class="cb-audit-runid" v-if="d.run_id">{{ d.run_id }}</span>
+                    <span class="cb-audit-op">{{ d.operator }} · 未静默放行</span>
+                  </div>
+                  <div class="cb-audit-none" v-if="!auditData.decisions.length">本会话无人工决策记录（未触发 HITL 闸门或未走到审批）</div>
+                </div>
+                <div class="cb-audit-run" v-for="(r, ri) in auditRunsDesc" :key="'ar'+ri">
+                  <div class="cb-audit-run-h">
+                    <span class="cb-audit-runid">{{ r.run_id }}</span>
+                    <span>{{ auditFmtTs(r.started_at) }}</span>
+                    <span class="cb-audit-badge" v-if="r.user_action === 'confirm' && r.auto_confirm">自动确认（非人工）</span>
+                    <span class="cb-audit-badge" v-else-if="r.user_action === 'confirm'">已确认</span>
+                    <span class="cb-audit-badge is-reject" v-else-if="r.user_action === 'cancel'">已驳回 · 未放行</span>
+                    <span class="cb-audit-badge" v-if="r.checkpoint && r.checkpoint.status">{{ r.checkpoint.status }}</span>
+                    <span class="cb-audit-dur">{{ r.n_nodes }} 节点</span>
+                  </div>
+                  <div class="cb-audit-node" :class="'is-' + n.kind" v-for="(n, ni) in r.nodes" :key="'an'+ni">
+                    <span class="cb-audit-dot" aria-hidden="true"></span>
+                    <span class="cb-audit-k">{{ auditKindLabel(n.kind) }}</span>
+                    <span class="cb-audit-t">{{ n.title }}<template v-if="n.detail"> · {{ n.detail }}</template></span>
+                    <span class="cb-audit-dur" v-if="n.duration_ms != null">{{ n.duration_ms }}ms</span>
+                    <button type="button" class="cb-tl-more" @click="auditToggleRaw(ri, ni)">{{ n._open ? '收起' : '原始' }}</button>
+                    <pre class="cb-audit-raw" v-if="n._open">{{ auditRawJson(n) }}</pre>
+                  </div>
+                </div>
+              </template>
+              <p class="foot-note" v-else-if="!auditError">输入 session_id 后加载跨运行审计时间线；决策记录永久置顶。</p>
+            </div>
             <div class="section">
               <div class="section-h">
                 <h3>运行历史</h3>
@@ -3387,6 +3493,11 @@ window.CB_POSTS = [{"id":"bid-parse","name":"招标解析","aliases":["招标","
           compareIds: [],
           compareResult: '',
           tracePreview: '',
+          /* ux(round6) 跨运行审计时间线（GET /api/audit?session= 只读聚合） */
+          auditSession: '',
+          auditData: null,
+          auditLoading: false,
+          auditError: '',
           autoFollowVisual: true,
           streamProgress: { done: 0, total: 11, pct: 0 },
           liveToolLines: [],
@@ -3488,6 +3599,10 @@ window.CB_POSTS = [{"id":"bid-parse","name":"招标解析","aliases":["招标","
         hitlCards() {
           const h = this.result.hitl_summary || {};
           return h.cards || [];
+        },
+        /* ux(round6) 审计时间线：新 run 在上（倒序便于看最近）；run 内节点保持时间正序（可回放） */
+        auditRunsDesc() {
+          return [...((this.auditData && this.auditData.runs) || [])].reverse();
         },
         /* ux(round5) 审批卡：风险/摘要/阻断只抄 hitl_summary 与事件字段，不编数字 */
         cbAprRisk() {
@@ -5331,6 +5446,89 @@ window.CB_POSTS = [{"id":"bid-parse","name":"招标解析","aliases":["招标","
             this.runsList = j.runs || [];
           } catch (e) {
             this.runsList = [];
+          }
+          /* ux(round6)：历史页刷新时同步刷新跨运行审计时间线（跟随当前 session） */
+          this.loadAudit();
+        },
+        /* ===== ux(round6) 审计时间线：/api/audit 只读聚合（trace.jsonl + checkpoint）=====
+           决策节点（confirm/reject/cancel）永久置顶不可折叠；原始负载 JSON 折叠（复用 U-R3 模式）。 */
+        async loadAudit() {
+          if (!this.auditSession && this.sessionId) this.auditSession = this.sessionId;
+          const sid = String(this.auditSession || '').trim();
+          if (!sid) return;
+          this.auditLoading = true;
+          this.auditError = '';
+          try {
+            const r = await fetch(API + '/api/audit?session=' + encodeURIComponent(sid));
+            const j = await r.json();
+            if (!r.ok) throw new Error((j && (j.detail || j.error)) || ('HTTP ' + r.status));
+            (j.runs || []).forEach((run) => (run.nodes || []).forEach((n) => { n._open = false; }));
+            this.auditData = j;
+          } catch (e) {
+            this.auditData = null;
+            this.auditError = '审计加载失败：' + String(e.message || e);
+          } finally {
+            this.auditLoading = false;
+          }
+        },
+        auditKindLabel(kind) {
+          return ({ run: '运行', tool: '工具', decision: '决策', error: '错误', write: '写盘' })[kind] || kind;
+        },
+        auditFmtTs(ts) {
+          const s = String(ts || '');
+          return s.length >= 19 ? s.slice(0, 19).replace('T', ' ') : (s || '—');
+        },
+        auditToggleRaw(ri, ni) {
+          const run = this.auditRunsDesc[ri];
+          const n = run && run.nodes[ni];
+          if (n) n._open = !n._open;
+        },
+        auditRawJson(n) {
+          try { return JSON.stringify(n.raw, null, 2); } catch (e) { return String(n.raw); }
+        },
+        async auditExport(copy) {
+          if (!this.auditData) return;
+          const payload = {
+            schema: this.auditData.schema,
+            exported_at: new Date().toISOString(),
+            product: 'Civil Buddy · 人机协同履历（AI 做了什么、人批了什么）',
+            session_id: this.auditData.session_id,
+            counts: this.auditData.counts,
+            decisions: this.auditData.decisions,
+            runs: (this.auditData.runs || []).map((r) => ({
+              run_id: r.run_id,
+              started_at: r.started_at,
+              ended_at: r.ended_at,
+              user_action: r.user_action,
+              checkpoint: r.checkpoint,
+              nodes: (r.nodes || []).map((n) => ({
+                ts: n.ts, kind: n.kind, type: n.type, title: n.title, detail: n.detail,
+                duration_ms: n.duration_ms, operator: n.operator, run_id: n.run_id, seq: n.seq,
+              })),
+            })),
+          };
+          const text = JSON.stringify(payload, null, 2);
+          const fname = 'audit-' + String(this.auditData.session_id || 'session').replace(/[^A-Za-z0-9._-]+/g, '_') + '.json';
+          if (copy) {
+            try {
+              await navigator.clipboard.writeText(text);
+              this.statusText = '审计 JSON 已复制到剪贴板（' + fname + '）';
+            } catch (e) {
+              this.auditError = '复制失败（浏览器限制），请改用下载 JSON';
+            }
+            return;
+          }
+          try {
+            const blob = new Blob([text], { type: 'application/json;charset=utf-8' });
+            const a = document.createElement('a');
+            a.href = URL.createObjectURL(blob);
+            a.download = fname;
+            document.body.appendChild(a);
+            a.click();
+            setTimeout(() => { URL.revokeObjectURL(a.href); a.remove(); }, 400);
+            this.statusText = '审计 JSON 已下载：' + fname;
+          } catch (e) {
+            this.auditError = '下载失败：' + String(e);
           }
         },
         async openRunTrace(runId) {

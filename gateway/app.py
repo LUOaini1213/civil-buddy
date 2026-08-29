@@ -2105,6 +2105,334 @@ def api_get_session(session_id: str):
     return resp
 
 
+# ===== ux(round6) 跨运行全量可回放审计时间线（只读聚合；映射表见 docs/ux 附录 E） =====
+AUDIT_SCHEMA = "civil.audit.v1"
+# 落盘类工具前缀（承 spec 附录 B.4 落盘阶段映射，同源不改语义）
+_AUDIT_WRITE_TOOL_RE = re.compile(
+    r"^(manifest|tms|booking|secure|docx|plan\.export|export|vgm|replan_log|pre_ship|"
+    r"packing_plan|packing_list|tender|bidbook|evidence|checklist|run_pdf)"
+)
+
+
+def _audit_guard(session: str) -> str:
+    """session id 越界防护：路径分隔符 / 上级目录 / 控制字符 → 403（只读端点不放行）。"""
+    sid = str(session or "").strip()
+    if not sid or len(sid) > 200:
+        raise HTTPException(400, "session required: /api/audit?session=<id>")
+    if sid in (".", "..") or ".." in sid or any(ch in sid for ch in ("/", "\\", "\x00")):
+        raise HTTPException(403, "越界：非法 session id")
+    if any((ord(ch) < 0x20) or ch.isspace() for ch in sid):
+        raise HTTPException(403, "越界：session id 含非法字符")
+    return sid
+
+
+def _audit_node(
+    ev: Dict[str, Any],
+    *,
+    kind: str,
+    title: str,
+    detail: str = "",
+    duration_ms: Any = None,
+) -> Dict[str, Any]:
+    return {
+        "kind": kind,  # run | tool | decision | error | write
+        "type": ev.get("type"),
+        "title": title,
+        "detail": str(detail or "")[:300],
+        "ts": ev.get("ts"),
+        "t_ms": ev.get("t_ms"),
+        "run_id": ev.get("run_id"),
+        "seq": ev.get("seq"),
+        "node": ev.get("node") or ev.get("tool"),
+        "duration_ms": duration_ms if duration_ms is not None else ev.get("duration_ms"),
+        "status": ev.get("status"),
+        "operator": "本地用户" if kind == "decision" else "",
+        "raw": ev,
+    }
+
+
+def _audit_events_to_nodes(events: List[Dict[str, Any]], *, max_nodes: int = 400) -> List[Dict[str, Any]]:
+    """trace.jsonl 事件 → 审计节点：tool_start/end 成对合并（U-R3 active_cell 思路）。"""
+    nodes: List[Dict[str, Any]] = []
+    open_tools: Dict[Any, Dict[str, Any]] = {}
+    open_agents: Dict[str, Dict[str, Any]] = {}
+    for ev in events:
+        t = str(ev.get("type") or "")
+        node = str(ev.get("node") or "")
+        tool = str(ev.get("tool") or "")
+        if t == "run_start":
+            nodes.append(
+                _audit_node(
+                    ev,
+                    kind="run",
+                    title="开始装柜任务",
+                    detail=f"goal={ev.get('goal') or '-'} · container={ev.get('container_type') or '-'}"
+                    + (f" · intent={((ev.get('intent_spec') or {}).get('scheme_id')) or '-'}" if isinstance(ev.get("intent_spec"), dict) else ""),
+                )
+            )
+        elif t == "tool_start":
+            open_tools[(node, tool)] = ev
+        elif t == "tool_end":
+            start = open_tools.pop((node, tool), None)
+            err = str(ev.get("status") or "") == "error"
+            if err:
+                kind = "error"
+            elif _AUDIT_WRITE_TOOL_RE.match(tool):
+                kind = "write"
+            else:
+                kind = "tool"
+            dur = ev.get("duration_ms")
+            if dur is None and start is not None and start.get("t_ms") and ev.get("t_ms"):
+                dur = max(0, int(ev["t_ms"]) - int(start["t_ms"]))
+            nodes.append(
+                _audit_node(
+                    ev,
+                    kind=kind,
+                    title=f"{tool or node or '工具'} 执行{'失败' if err else '完成'}",
+                    detail=str((ev.get("result") or {}).get("note") or "") if isinstance(ev.get("result"), dict) else "",
+                    duration_ms=dur,
+                )
+            )
+        elif t == "agent_start":
+            open_agents[node or str(len(open_agents))] = ev
+        elif t == "agent_end":
+            start = open_agents.pop(node, None)
+            dur = ev.get("duration_ms")
+            if dur is None and start is not None and start.get("t_ms") and ev.get("t_ms"):
+                dur = max(0, int(ev["t_ms"]) - int(start["t_ms"]))
+            step = ev.get("step") if isinstance(ev.get("step"), dict) else {}
+            err = str(ev.get("status") or "") == "error"
+            title = str(step.get("title") or ev.get("title") or node or "岗位节点")
+            nodes.append(
+                _audit_node(
+                    ev,
+                    kind="error" if err else "tool",
+                    title=title + ("（失败）" if err else ""),
+                    detail=str(step.get("message") or "")[:300],
+                    duration_ms=dur,
+                )
+            )
+        elif t == "hitl":
+            nodes.append(
+                _audit_node(
+                    ev,
+                    kind="decision",
+                    title="等待人工确认（HITL 闸门）",
+                    detail="显式决策前不放行 · checkpoint 已落盘（durable）",
+                )
+            )
+        elif t == "replan":
+            nodes.append(
+                _audit_node(
+                    ev,
+                    kind="error",
+                    title=f"打回重做 · round {ev.get('ship_replan_round') or ev.get('replan_round') or '?'}",
+                    detail=str(ev.get("message") or "")[:300],
+                )
+            )
+        elif t == "debate":
+            nodes.append(_audit_node(ev, kind="tool", title="有界辩论", detail=str(ev.get("message") or "")[:200]))
+        elif t == "done":
+            arts = ev.get("artifact_paths") if isinstance(ev.get("artifact_paths"), dict) else {}
+            art_keys = ", ".join(sorted(arts.keys())) if arts else "无 artifact"
+            phase = str(ev.get("phase") or "")
+            if phase in ("done", "team_b_done"):
+                nodes.append(
+                    _audit_node(
+                        ev,
+                        kind="write",
+                        title="收口 · 产物落盘",
+                        detail="artifact: " + art_keys,
+                    )
+                )
+            else:
+                # 事件流的 done 是"本段流结束"；HITL 挂起不是收口——橙 ⚠ 呈现，不粉饰（spec B.1）
+                nodes.append(
+                    _audit_node(
+                        ev,
+                        kind="error",
+                        title=f"运行挂起 · phase={phase or 'unknown'}（等待人工决策，未收口）",
+                        detail="阶段产物已落盘: " + art_keys,
+                    )
+                )
+        if len(nodes) >= max_nodes:
+            break
+    return nodes
+
+
+def _audit_runs_for_session(sid: str, cap: int = 200) -> List[Dict[str, Any]]:
+    """扫描 output/runs：trace.jsonl 首行（run_start 带 session_id）+ checkpoint.json 关联到 session。"""
+    from packing_assistant.trace_events import RUNS_DIR
+
+    found: List[Dict[str, Any]] = []
+    if not RUNS_DIR.exists():
+        return found
+    for d in RUNS_DIR.iterdir():
+        if not d.is_dir():
+            continue
+        meta: Dict[str, Any] = {"run_id": d.name}
+        cp = d / "checkpoint.json"
+        if cp.exists():
+            try:
+                meta["checkpoint"] = json.loads(cp.read_text(encoding="utf-8"))
+            except Exception:
+                pass
+        trace = d / "trace.jsonl"
+        first: Dict[str, Any] = {}
+        if trace.exists():
+            try:
+                with trace.open(encoding="utf-8") as f:
+                    line = f.readline(8192)
+                if line.strip():
+                    first = json.loads(line)
+            except Exception:
+                first = {}
+            ev_sid = str(first.get("session_id") or "")
+            cp_sid = str((meta.get("checkpoint") or {}).get("session_id") or "")
+            if sid not in (ev_sid, cp_sid) and sid != d.name:
+                continue
+        else:
+            # 无 trace 的 run：仅当 checkpoint 或 run_id 本身命中
+            cp_sid = str((meta.get("checkpoint") or {}).get("session_id") or "")
+            if sid != cp_sid and sid != d.name:
+                continue
+        meta["first_event"] = first
+        try:
+            meta["mtime"] = d.stat().st_mtime
+        except Exception:
+            meta["mtime"] = 0
+        found.append(meta)
+        if len(found) >= cap:
+            break
+    found.sort(key=lambda m: (
+        (m.get("first_event") or {}).get("t_ms") or 0,
+        m.get("mtime") or 0,
+    ))
+    return found
+
+
+@app.get("/api/audit")
+def api_audit(session: str = "", limit_runs: int = 20, limit_events: int = 400):
+    """ux(round6)：跨运行全量可回放审计时间线（只读）。
+
+    聚合三源：trace.jsonl（事件流）+ checkpoint.json（user_action 决策）+ session 索引。
+    不带 session 参数 → 返回最近会话索引列表（供面板切换）。
+    节点四类：工具执行=蓝 / 人工决策=合规红边 / 错误与重试=橙 / 写盘=绿（docs/ux 附录 E）。
+    """
+    from packing_assistant.session_store import SESSIONS_DIR
+    from packing_assistant.trace_events import read_trace_jsonl
+
+    if not str(session or "").strip():
+        rows = []
+        if SESSIONS_DIR.exists():
+            for p in sorted(SESSIONS_DIR.glob("*.json"), key=lambda x: x.stat().st_mtime, reverse=True)[:24]:
+                try:
+                    idx = json.loads(p.read_text(encoding="utf-8"))
+                except Exception:
+                    continue
+                rows.append(
+                    {
+                        "session_id": idx.get("session_id") or p.stem,
+                        "run_id": idx.get("run_id"),
+                        "status": idx.get("status"),
+                        "user_action": (idx.get("user_action") if "user_action" in idx else None),
+                        "saved_at": idx.get("saved_at"),
+                    }
+                )
+        return {"ok": True, "schema": AUDIT_SCHEMA, "mode": "session_list", "sessions": rows}
+
+    sid = _audit_guard(session)
+    runs_meta = _audit_runs_for_session(sid)
+    picked = runs_meta[-max(1, min(int(limit_runs or 20), 60)):]
+    out_runs: List[Dict[str, Any]] = []
+    decisions: List[Dict[str, Any]] = []
+    counts = {"runs": 0, "nodes": 0, "tools": 0, "decisions": 0, "errors": 0, "writes": 0}
+    for m in picked:
+        rid = m["run_id"]
+        events = read_trace_jsonl(rid, limit=2000)
+        nodes = _audit_events_to_nodes(events, max_nodes=max(1, min(int(limit_events or 400), 800)))
+        ck = m.get("checkpoint") or {}
+        # 决策节点：服务端 checkpoint 已持久 user_action（U-R5 交接）——跨运行置顶来源
+        action = str(ck.get("user_action") or "") if isinstance(ck, dict) else ""
+        # 诚实边界：enable_auto_confirm 流程引擎会自填 user_action=confirm，非人工决策 →
+        # 蓝色引擎节点，不入红色"人工决策"置顶区（谁来都得说清楚 AI 做了什么、人批了什么）
+        auto_confirm = bool((m.get("first_event") or {}).get("enable_auto_confirm"))
+        if action in ("confirm", "cancel"):
+            if action == "confirm" and auto_confirm:
+                an = {
+                    "kind": "tool",
+                    "type": "user_action",
+                    "title": "自动确认 · enable_auto_confirm（引擎自填，非人工决策）",
+                    "detail": f"action={action} · status={ck.get('status')} · phase={ck.get('phase')}",
+                    "ts": ck.get("saved_at"),
+                    "t_ms": None,
+                    "run_id": rid,
+                    "seq": None,
+                    "node": "user_confirm",
+                    "duration_ms": None,
+                    "status": ck.get("status"),
+                    "operator": "引擎（自动确认）",
+                    "raw": ck,
+                }
+                nodes.append(an)
+            else:
+                dn = {
+                    "kind": "decision",
+                    "type": "user_action",
+                    "title": ("人工确认 · 放行拼柜" if action == "confirm" else "人工驳回 · 未放行"),
+                    "detail": f"action={action} · status={ck.get('status')} · phase={ck.get('phase')}",
+                    "ts": ck.get("saved_at"),
+                    "t_ms": None,
+                    "run_id": rid,
+                    "seq": None,
+                    "node": "user_confirm",
+                    "duration_ms": None,
+                    "status": ck.get("status"),
+                    "operator": "本地用户",
+                    "raw": ck,
+                }
+                nodes.append(dn)
+                decisions.append({k: dn[k] for k in ("title", "detail", "ts", "run_id", "operator", "status")})
+        kind_count_key = {"tool": "tools", "decision": "decisions", "error": "errors", "write": "writes"}
+        for n in nodes:
+            ck_key = kind_count_key.get(n["kind"])
+            if ck_key:
+                counts[ck_key] = counts.get(ck_key, 0) + 1
+            if n["kind"] == "decision" and n.get("type") != "user_action":
+                decisions.append({k: n[k] for k in ("title", "detail", "ts", "run_id", "operator", "status")})
+        ts_list = [e.get("ts") for e in events if e.get("ts")]
+        out_runs.append(
+            {
+                "run_id": rid,
+                "started_at": ts_list[0] if ts_list else None,
+                "ended_at": ts_list[-1] if ts_list else None,
+                "n_nodes": len(nodes),
+                "user_action": action or None,
+                "auto_confirm": auto_confirm,
+                "checkpoint": {
+                    k: ck.get(k)
+                    for k in ("status", "phase", "interrupt", "container_type", "n_boxes", "packing_plan_id", "saved_at")
+                    if isinstance(ck, dict) and ck.get(k) is not None
+                },
+                "nodes": nodes,
+            }
+        )
+        counts["runs"] += 1
+        counts["nodes"] += len(nodes)
+    decisions.sort(key=lambda d: d.get("ts") or "")
+    counts["decisions"] = len(decisions)
+    return {
+        "ok": True,
+        "schema": AUDIT_SCHEMA,
+        "session_id": sid,
+        "n_runs_matched": len(runs_meta),
+        "runs": out_runs,
+        "decisions": decisions,
+        "counts": counts,
+        "note": "只读聚合 trace.jsonl + checkpoint.json；决策以服务端 checkpoint user_action 为准",
+    }
+
+
 @app.get("/api/runs")
 def api_list_runs(limit: int = 30):
     """会话/运行历史：扫描 output/runs。"""

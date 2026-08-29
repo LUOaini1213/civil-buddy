@@ -88,6 +88,16 @@
       <ul id="files"></ul>
       <h2>本岗库</h2>
       <ul id="kblist"></ul>
+      <h2>审计</h2>
+      <!-- ux(round6) 跨运行审计时间线：决策置顶不可折叠 · 四色节点（docs/ux 附录 E） -->
+      <div id="auditPanel" class="cb-audit" data-cb-audit-panel="true">
+        <div class="cb-audit-actions">
+          <button type="button" class="top-btn" id="loadAudit">加载审计时间线</button>
+          <button type="button" class="top-btn" id="auditCopy" hidden>复制 JSON</button>
+          <button type="button" class="top-btn" id="auditDownload" hidden>下载 JSON</button>
+        </div>
+        <div id="auditBody" class="cb-audit-body"></div>
+      </div>
     </aside>
   </main>
 

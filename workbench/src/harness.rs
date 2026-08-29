@@ -807,3 +807,193 @@ pub fn load_trace(paths: &Paths, session: &str, run_id: &str) -> Option<Value> {
         .ok()
         .and_then(|s| serde_json::from_str(&s).ok())
 }
+
+/// ux(round6) 跨 run 全量可回放审计时间线（只读聚合，docs/ux 附录 E）。
+/// 数据源：demo/out/<session>/runs/*/trace.json（Run 结构）。节点四类：
+/// 工具执行=蓝 · 人工决策=合规红 · 错误/重试=橙 · 写盘=绿。
+pub fn audit_session(paths: &Paths, session: &str) -> Value {
+    // 越界防护：与 :8000 /api/audit 同语义（只读端点不放行路径穿越）
+    if session.is_empty()
+        || session == "."
+        || session == ".."
+        || session.contains("..")
+        || session.contains('/')
+        || session.contains('\\')
+    {
+        return json!({
+            "ok": false, "schema": "civil.audit.v1", "error": "forbidden session id",
+            "session_id": session
+        });
+    }
+    let runs_dir = paths.out_root.join(session).join("runs");
+    let mut rows: Vec<(std::time::SystemTime, Value)> = Vec::new();
+    if let Ok(rd) = fs::read_dir(&runs_dir) {
+        for entry in rd.flatten() {
+            let p = entry.path().join("trace.json");
+            let Ok(text) = fs::read_to_string(&p) else {
+                continue;
+            };
+            let Ok(run) = serde_json::from_str::<Value>(&text) else {
+                continue;
+            };
+            let mtime = entry
+                .metadata()
+                .and_then(|m| m.modified())
+                .unwrap_or(std::time::SystemTime::UNIX_EPOCH);
+            let run_id = run
+                .get("run_id")
+                .and_then(|v| v.as_str())
+                .unwrap_or("")
+                .to_string();
+            let mut nodes: Vec<Value> = Vec::new();
+            // 步骤 → 审计节点：ok=false 或非法工具 → 橙（错误）；note 含写入 → 绿（写盘）
+            if let Some(steps) = run.get("steps").and_then(|v| v.as_array()) {
+                for st in steps {
+                    let ok = st.get("ok").and_then(|v| v.as_bool()).unwrap_or(true);
+                    let legal = st.get("legal").and_then(|v| v.as_bool()).unwrap_or(true);
+                    let tool = st.get("tool").and_then(|v| v.as_str()).unwrap_or("").to_string();
+                    let note = st
+                        .get("note")
+                        .and_then(|v| v.as_str())
+                        .unwrap_or("")
+                        .to_string();
+                    let name = st
+                        .get("name")
+                        .and_then(|v| v.as_str())
+                        .unwrap_or("")
+                        .to_string();
+                    let expert = st
+                        .get("expert")
+                        .and_then(|v| v.as_str())
+                        .unwrap_or("")
+                        .to_string();
+                    let kind = if !ok || !legal {
+                        "error"
+                    } else if note.contains("已写入") {
+                        "write"
+                    } else {
+                        "tool"
+                    };
+                    let title = if !legal {
+                        format!("非法工具调用被拦截 · {tool}")
+                    } else if ok {
+                        format!("{expert} · {name}（{tool}）")
+                    } else {
+                        format!("{expert} · {name} 失败")
+                    };
+                    nodes.push(json!({
+                        "kind": kind, "type": "step", "title": title,
+                        "detail": note, "node": expert, "tool": tool,
+                        "operator": "", "status": if ok { "ok" } else { "error" },
+                        "raw": st,
+                    }));
+                }
+            }
+            // HITL 决策节点（合规红）：required 闸门必留痕；confirmed/pending 来自 Run.hitl
+            let hitl = run.get("hitl").cloned().unwrap_or(Value::Null);
+            let required = hitl.get("required").and_then(|v| v.as_bool()).unwrap_or(false);
+            if required {
+                let confirmed = hitl
+                    .get("confirmed")
+                    .and_then(|v| v.as_bool())
+                    .unwrap_or(false);
+                let pending = hitl
+                    .get("pending")
+                    .and_then(|v| v.as_bool())
+                    .unwrap_or(false);
+                let gate = hitl
+                    .get("gate")
+                    .and_then(|v| v.as_str())
+                    .unwrap_or("")
+                    .to_string();
+                let title = if confirmed {
+                    "人工确认 · 放行出稿".to_string()
+                } else if pending {
+                    "等待人工确认（未决策 · 未放行）".to_string()
+                } else {
+                    "人工驳回 · 未放行".to_string()
+                };
+                nodes.push(json!({
+                    "kind": "decision", "type": "hitl", "title": title,
+                    "detail": format!("gate={gate} · confirmed={confirmed} · pending={pending}"),
+                    "node": "hitl", "operator": "本地用户",
+                    "status": if confirmed { "approved" } else if pending { "waiting" } else { "rejected" },
+                    "raw": hitl,
+                }));
+            }
+            let iso = sys_to_iso(mtime);
+            rows.push((
+                mtime,
+                json!({
+                    "run_id": run_id,
+                    "mtime": iso,
+                    "n_nodes": nodes.len(),
+                    "nodes": nodes,
+                }),
+            ));
+        }
+    }
+    rows.sort_by_key(|(t, _)| *t);
+    let runs: Vec<Value> = rows.into_iter().map(|(_, v)| v).collect();
+    let mut counts = json!({"runs": runs.len(), "tools": 0, "decisions": 0, "errors": 0, "writes": 0});
+    for r in &runs {
+        for n in r.get("nodes").and_then(|v| v.as_array()).unwrap_or(&Vec::new()) {
+            let k = n.get("kind").and_then(|v| v.as_str()).unwrap_or("");
+            let key = match k {
+                "decision" => "decisions",
+                "error" => "errors",
+                "write" => "writes",
+                _ => "tools",
+            };
+            counts[key] = json!(counts[key].as_i64().unwrap_or(0) + 1);
+        }
+    }
+    let mut decisions: Vec<Value> = Vec::new();
+    for r in &runs {
+        for n in r.get("nodes").and_then(|v| v.as_array()).unwrap_or(&Vec::new()) {
+            if n.get("kind").and_then(|v| v.as_str()) != Some("decision") {
+                continue;
+            }
+            decisions.push(json!({
+                "title": n.get("title").cloned().unwrap_or(Value::Null),
+                "detail": n.get("detail").cloned().unwrap_or(Value::Null),
+                "ts": r.get("mtime").cloned().unwrap_or(Value::Null),
+                "run_id": r.get("run_id").cloned().unwrap_or(Value::Null),
+                "operator": "本地用户",
+                "status": n.get("status").cloned().unwrap_or(Value::Null),
+            }));
+        }
+    }
+    json!({
+        "ok": true,
+        "schema": "civil.audit.v1",
+        "session_id": session,
+        "counts": counts,
+        "decisions": decisions,
+        "runs": runs,
+        "note": "只读聚合 demo/out/<session>/runs/*/trace.json；决策以 Run.hitl 为准",
+    })
+}
+
+/// SystemTime → "YYYY-MM-DD HH:MM:SS UTC"（审计展示用；零额外依赖）
+fn sys_to_iso(t: std::time::SystemTime) -> String {
+    let dur = t
+        .duration_since(std::time::SystemTime::UNIX_EPOCH)
+        .unwrap_or_default();
+    let secs = dur.as_secs() as i64;
+    let days = secs.div_euclid(86_400);
+    let rem = secs.rem_euclid(86_400);
+    let (h, mi, s) = (rem / 3600, (rem % 3600) / 60, rem % 60);
+    // civil date from days since epoch（Howard Hinnant algorithm）
+    let z = days + 719_468;
+    let era = z.div_euclid(146_097);
+    let doe = z.rem_euclid(146_097);
+    let yoe = (doe - doe / 1460 + doe / 36_524 - doe / 146_096) / 365;
+    let y = yoe + era * 400;
+    let doy = doe - (365 * yoe + yoe / 4 - yoe / 100);
+    let mp = (5 * doy + 2) / 153;
+    let d = doy - (153 * mp + 2) / 5 + 1;
+    let m = if mp < 10 { mp + 3 } else { mp - 9 };
+    let y = if m <= 2 { y + 1 } else { y };
+    format!("{y:04}-{m:02}-{d:02} {h:02}:{mi:02}:{s:02} UTC")
+}

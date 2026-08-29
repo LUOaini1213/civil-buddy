@@ -296,3 +296,48 @@ DOM 结构（追加到 `document.body`，打印时独占文档流）：
 | openai/codex `approval_overlay.rs`（github.com/openai/codex） | Apache-2.0 | 选择必发显式决策事件；Esc=Cancel 不随键位变；动作特定选项（confirm/reject/later）；决策插入历史 cell（→审计行） |
 | GitHub PR review 三态（approve/request changes/comment） | 交互 pattern | 三态决策区 + 决策可追溯；驳回必须给理由位（此处由引擎状态承载） |
 | Temporal/Argo 人工审批节点 | 交互 pattern | 等待卡常驻 + 超时/升级提示语义（此处为"durable checkpoint 可安全关闭后 resume"提示） |
+
+## 附录 E：跨运行审计时间线组件（ux round6 定稿）
+
+> R6 落地「任一运行可回放全部事件；签认/确认有时间戳与操作者」：把 U-R5 单次运行内的审计行
+> 扩展为**跨运行全量可回放审计时间线**——"谁来都得说清楚 AI 做了什么、人批了什么"。
+> 两端同构 vanilla 实现，零 CDN、零外链、全 token 化；数据端点**只读**，越界 403。
+
+### E.1 数据源与关联键（全部只读）
+
+| 数据源 | 位置 | 关键字段 | 说明 |
+| --- | --- | --- | --- |
+| 事件流 trace.jsonl | `output/runs/<run_id>/trace.jsonl`（:8000） | `type, run_id, session_id, seq, ts, t_ms, duration_ms, status, node, tool` | `packing.stream.v1`；每事件带 session_id → **跨 run 串联键 = session_id** |
+| HITL checkpoint | `output/runs/<run_id>/checkpoint.json`（:8000） | `user_action(confirm/cancel), status, phase, saved_at` | U-R5 交接：服务端已持久 user_action → 决策节点的权威来源 |
+| session 索引 | `output/sessions/<session_id>.json`（:8000） | `run_id, status, saved_at` | 无 session 参数时返回最近会话列表 |
+| demo trace | `demo/out/<session>/runs/<run_id>/trace.json`（:8765） | `steps[]{expert,tool,ok,legal,note}, hitl{required,confirmed,pending,gate}` | Rust Run 结构；run 间排序用目录 mtime |
+
+### E.2 端点（只读聚合）
+
+| 端 | 端点 | 实现 |
+| --- | --- | --- |
+| :8000 | `GET /api/audit?session=<id>`（`gateway/app.py`） | 聚合 trace.jsonl + checkpoint.json + session 索引；tool_start/end 成对合并；无 session → 最近会话列表；`..`、路径分隔符、控制字符 → **403**；schema=`civil.audit.v1` |
+| :8765 | `GET /api/harness/audit/{session}`（`workbench/src/api.rs` + `harness.rs::audit_session`） | 扫描 `demo/out/<session>/runs/*/trace.json`；同语义 403；schema=`civil.audit.v1` |
+
+### E.3 节点类型 → 配色 → 来源映射（四色）
+
+| kind | 色 | 语义 | :8000 来源事件 | :8765 来源 |
+| --- | --- | --- | --- | --- |
+| `tool` 工具执行 | --cb-blue 蓝 | AI 做了什么（岗位节点/工具步/辩论） | `agent_start/end`（合并）、`tool_start/end`（合并）、`debate` | `steps[]`（ok 且 note 非"已写入"） |
+| `decision` 人工决策 | --cb-red 合规红边 | 人批了什么（**永久置顶 · 不可折叠**） | `hitl`（等待）+ checkpoint `user_action`（confirm=放行 / cancel=未放行） | `Run.hitl`（confirmed/pending/rejected） |
+| `error` 错误/重试 | --cb-orange 橙 | 失败与打回，不藏不恐慌 | `status=error` 的事件、`replan` | `steps[]`（ok=false 或 legal=false 非法工具拦截） |
+| `write` 写盘 | --cb-green 绿 | 产物落了哪些盘 | `tool_end` 工具名匹配落盘前缀（承附录 B.4：`manifest* tms* booking* secure* docx* plan.export* export* vgm* …`）、`done`（artifact_paths） | `steps[]`（note 含「已写入」） |
+
+节点行：`类型徽 + 一句话摘要 + 耗时（ms，仅 :8000 有）`；点「原始」展开 JSON 负载（折叠模式同 U-R3/U-R4）。
+**决策节点永久置顶**：面板顶部固定"人工决策"区块，跨 run 汇总（标题/时间/run_id/操作者=本地用户 · 未静默放行），不随折叠消失。
+
+### E.4 组件与导出
+
+| 端 | 组件 | 样式 |
+| --- | --- | --- |
+| :8000 | `frontend/workbench.html` 历史页 `[data-cb-audit-panel]`（Vue2：`loadAudit/auditRunsDesc/auditToggleRaw/auditExport`；session 框默认跟随当前 sessionId） | `.cb-audit-*` 内联块 |
+| :8765 | `demo/static/index.html` 侧栏 `#auditPanel` + `app.js`（`loadAuditPanel/auditNodeEl/refreshAuditSoon`；done 事件后自动刷新） | `demo/static/styles.css` `.cb-audit-*` 块 |
+
+- 分组：按 session 一次加载全部匹配 run（新 run 在上），run 内节点按 `ts/seq` 时间正序（可回放）。
+- 导出（人机协同履历表素材）：「复制 JSON / 下载 JSON」→ `{schema, exported_at, product, session_id, counts, decisions, runs[]}`，文件名 `audit-<session>.json`；只抄数据源字段，不编数字。
+- 借鉴来源（pattern-only）：Langfuse session→trace→observation 分层与单列 trace log view（MIT）、Argo Workflows 节点时间线与重试标记（Apache-2.0）、Git 提交图纵向时间轴+泳道分组（pattern）。
