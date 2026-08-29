@@ -1490,6 +1490,82 @@
       padding: 1px 6px; color: var(--muted); background: var(--bg-panel);
     }
 
+    /* ===== ux(round5) HITL 审批卡（docs/ux/ux-design-spec.md 附录 D）=====
+       显式决策事件 + Esc/关闭=驳回永不放行 + 决策写审计行。与 demo/static/styles.css 同构。 */
+    .cb-tl-audit { margin-top: var(--cb-space-2); display: flex; flex-direction: column; gap: 4px; }
+    .cb-tl-audit-row {
+      font-size: var(--cb-fs-xs); font-family: var(--cb-mono); color: var(--cb-gray-400);
+      border-left: 3px solid var(--cb-gray-500); padding: 2px 8px; background: var(--bg-panel);
+      border-radius: 0 var(--cb-radius-sm) var(--cb-radius-sm) 0;
+    }
+    .cb-apr {
+      position: relative; border: 1px solid var(--cb-line); border-radius: var(--cb-radius-md);
+      background: var(--bg-panel); box-shadow: var(--cb-shadow-md); overflow: hidden;
+    }
+    .cb-apr.is-rejected { border-color: var(--cb-orange); }
+    .cb-apr.is-approved { border-color: var(--cb-green); }
+    .cb-apr-bar { position: absolute; left: 0; top: 0; bottom: 0; width: 4px; background: var(--cb-red); }
+    .cb-apr.is-approved .cb-apr-bar { background: var(--cb-green); }
+    .cb-apr.is-rejected .cb-apr-bar { background: var(--cb-orange); }
+    .cb-apr-head {
+      display: flex; align-items: center; gap: var(--cb-space-2); flex-wrap: wrap;
+      padding: var(--cb-space-2) var(--cb-space-3) var(--cb-space-2) calc(var(--cb-space-3) + 4px);
+      border-bottom: 1px solid var(--cb-line);
+    }
+    .cb-apr-title { font-weight: 700; font-size: var(--cb-fs-sm); color: var(--text); }
+    .cb-apr-risk {
+      font-size: var(--cb-fs-xs); border-radius: var(--cb-radius-full); padding: 1px 8px;
+      border: 1px solid var(--cb-gray-400); color: var(--cb-gray-400);
+    }
+    .cb-apr-risk.is-high { color: var(--cb-orange); border-color: var(--cb-orange); background: var(--cb-orange-soft, transparent); }
+    .cb-apr-state {
+      font-size: var(--cb-fs-xs); font-weight: 700; color: var(--cb-green);
+      border: 1px solid var(--cb-green); border-radius: var(--cb-radius-full); padding: 1px 8px;
+    }
+    .cb-apr-state.is-rejected { color: var(--cb-orange); border-color: var(--cb-orange); }
+    .cb-apr-x {
+      margin-left: auto; background: none; border: 1px solid var(--cb-line); color: var(--muted);
+      border-radius: var(--cb-radius-sm); width: 22px; height: 22px; cursor: pointer; line-height: 1;
+    }
+    .cb-apr-x:hover { color: var(--cb-red); border-color: var(--cb-red); }
+    .cb-apr-body { padding: var(--cb-space-2) var(--cb-space-3) var(--cb-space-3) calc(var(--cb-space-3) + 4px); }
+    .cb-apr-chips { display: flex; gap: var(--cb-space-2); flex-wrap: wrap; }
+    .cb-apr-chip {
+      font-size: var(--cb-fs-xs); border: 1px solid var(--cb-line); border-radius: var(--cb-radius-sm);
+      padding: 3px 8px; color: var(--text); background: var(--bg-panel);
+    }
+    .cb-apr-chip b { font-family: var(--cb-mono); font-weight: 700; }
+    .cb-apr-chip.is-warn { border-color: var(--cb-orange); color: var(--cb-orange); }
+    .cb-apr-block {
+      margin-top: var(--cb-space-2); font-size: var(--cb-fs-xs); color: var(--cb-orange);
+      background: rgba(234, 88, 12, 0.08); border: 1px dashed var(--cb-orange);
+      border-radius: var(--cb-radius-sm); padding: 6px 8px; line-height: 1.5;
+    }
+    .cb-apr-block.is-ok { color: var(--muted); border-color: var(--cb-line); background: transparent; }
+    .cb-apr-reject-note {
+      margin-top: var(--cb-space-2); font-size: var(--cb-fs-sm); color: var(--cb-orange); font-weight: 600;
+      background: rgba(234, 88, 12, 0.10); border: 1px solid var(--cb-orange);
+      border-radius: var(--cb-radius-sm); padding: var(--cb-space-2) var(--cb-space-3); line-height: 1.6;
+    }
+    .cb-apr-actions { display: flex; gap: var(--cb-space-2); margin-top: var(--cb-space-3); flex-wrap: wrap; }
+    .cb-apr-actions button { border-radius: var(--cb-radius-sm); padding: 6px 14px; font-size: var(--cb-fs-sm); cursor: pointer; }
+    .cb-apr-confirm {
+      background: var(--cb-blue); border: 1px solid var(--cb-blue); color: #fff; font-weight: 600;
+    }
+    .cb-apr-confirm:hover { background: var(--cb-blue-strong); }
+    .cb-apr-confirm:disabled { opacity: 0.45; cursor: not-allowed; }
+    .cb-apr-reject { background: transparent; border: 1px solid var(--cb-red); color: var(--cb-red); font-weight: 600; }
+    .cb-apr-reject:hover { background: var(--cb-red-soft, transparent); }
+    .cb-apr-later { background: transparent; border: 1px solid var(--cb-line); color: var(--muted); }
+    .cb-apr-later:hover { color: var(--text); border-color: var(--cb-gray-400); }
+    .cb-apr-foot { margin-top: var(--cb-space-2); font-size: var(--cb-fs-xs); color: var(--muted); line-height: 1.5; }
+    .cb-apr-confirm-phrase { color: var(--cb-orange); }
+    @media (max-width: 768px) {
+      /* R8 打底：窄屏审批卡按钮全宽、决策区纵排 */
+      .cb-apr-actions { flex-direction: column; }
+      .cb-apr-actions button { width: 100%; }
+    }
+
     /* ===== ux(round4) 交付物文书预览（cbDocOpen / frontend/vendor/cb-doc.js）=====
        白底 A4 版心 + 页眉页脚 + 免责横幅常驻；诚实元素徽章；打印隐藏工作台 chrome。
        与 demo/static/styles.css 同构（改动请同步两份）。 */
@@ -1973,9 +2049,58 @@
                   </span>
                 </template>
               </div>
-              <!-- R5 审批卡挂载点：审批卡=动作特定选项+显式决策事件，本轮只做占位提示 -->
-              <div class="cb-tl-hitl" id="cb-hitl-slot" data-r5-approval-slot="true" v-if="cbTl.hitlWait">
-                等待人工确认…（确认 / 驳回须显式点击；Esc、关闭、刷新 ≠ 放行 · 审批卡将于后续版本挂载于此）
+              <!-- R5 审批卡：显式决策事件 + Esc/关闭=驳回永不放行 + 决策写审计（docs/ux 附录 D） -->
+              <div class="cb-tl-hitl" id="cb-hitl-slot" data-r5-approval-slot="true" v-if="cbApr.visible && cbApr.open">
+                <div class="cb-apr" :class="cbApr.state === 'approved' ? 'is-approved' : (cbApr.state === 'rejected' ? 'is-rejected' : '')"
+                     role="dialog" aria-label="HITL 人工确认审批卡" data-cb-approval="true" @keydown.esc.stop.prevent="cbAprEsc">
+                  <div class="cb-apr-bar" aria-hidden="true"></div>
+                  <div class="cb-apr-head">
+                    <span class="cb-apr-title">人工确认 · 成箱方案</span>
+                    <span class="cb-apr-risk" :class="cbAprRisk === 'high' ? 'is-high' : ''">{{ cbAprRisk === 'high' ? '风险 · 高' : '风险 · 低' }}</span>
+                    <span class="cb-apr-state" v-if="cbApr.state === 'approved'">已确认 · 拼柜继续</span>
+                    <span class="cb-apr-state is-rejected" v-else-if="cbApr.state === 'rejected'">已驳回 · 未放行</span>
+                    <button type="button" class="cb-apr-x" v-if="cbApr.state === 'waiting'"
+                            title="关闭 = 驳回，永不放行" aria-label="关闭审批卡（等同驳回，不放行）"
+                            @click="cbAprReject('Esc/关闭')">✕</button>
+                  </div>
+                  <div class="cb-apr-body" v-if="cbApr.state !== 'rejected'">
+                    <div class="cb-apr-chips" data-cb-approval-summary="true">
+                      <span class="cb-apr-chip" v-if="cbAprChips.boxes">成箱 <b>{{ cbAprChips.boxes }}</b> 箱</span>
+                      <span class="cb-apr-chip" v-if="cbAprChips.mats">材料 <b>{{ cbAprChips.mats }}</b> 条</span>
+                      <span class="cb-apr-chip" v-if="cbAprChips.ctype">推荐柜型 <b>{{ cbAprChips.ctype }}</b></span>
+                      <span class="cb-apr-chip" v-if="cbAprChips.n0">建议柜数 N0* <b>{{ cbAprChips.n0 }}</b></span>
+                      <span class="cb-apr-chip" v-if="cbAprChips.gross">毛重合计 <b>{{ cbAprChips.gross }}</b> kg</span>
+                      <span class="cb-apr-chip" v-if="cbAprChips.canFit != null">can_fit <b>{{ cbAprChips.canFit ? 'true' : 'false' }}</b></span>
+                    </div>
+                    <div class="cb-apr-block" v-if="cbAprBlockers.length" data-cb-approval-blockers="true">
+                      <div v-for="(b, bi) in cbAprBlockers" :key="'aprb'+bi">⚠ {{ b }}</div>
+                    </div>
+                    <div class="cb-apr-block is-ok" v-else>
+                      工具未报告阻断项 · 柜数与坐标以确认后拼柜 3D 实装为准（tools 计算，非模型拍脑袋）
+                    </div>
+                    <div class="cb-apr-actions" data-cb-approval-actions="true">
+                      <button type="button" class="cb-apr-confirm" :class="{ busy: loading }"
+                              :disabled="cbApr.state !== 'waiting' || loading" @click="cbAprConfirm">确认并拼柜</button>
+                      <button type="button" class="cb-apr-reject"
+                              :disabled="cbApr.state !== 'waiting'" @click="cbAprReject('驳回按钮')">驳回</button>
+                      <button type="button" class="cb-apr-later"
+                              :disabled="cbApr.state !== 'waiting'" @click="cbAprLater">稍后</button>
+                    </div>
+                    <div class="cb-apr-foot">
+                      确认 / 驳回为显式决策，写入下方审计行 · <b>Esc、关闭 = 驳回，永不放行</b> ·
+                      <span class="cb-apr-confirm-phrase" v-if="cbAprRisk === 'high'">高风险岗须持证人员签认（确认句：「我明白，将由持证人员签认」，流程层已强制勾选门禁）</span>
+                      <span v-else>状态已持久化，可安全关闭后 resume</span>
+                    </div>
+                  </div>
+                  <div class="cb-apr-body" v-else>
+                    <div class="cb-apr-reject-note">
+                      ⚠ 已驳回（{{ cbApr.reason }}）· 未进入拼柜，未放行 · 请修改输入后重跑（例如调整柜型 / 拆并箱 / 补齐数据）
+                    </div>
+                  </div>
+                </div>
+              </div>
+              <div class="cb-tl-hitl cb-apr-open-slot" v-if="cbApr.visible && cbApr.state === 'waiting' && !cbApr.open" style="cursor:pointer" @click="cbApr.open = true" role="button" tabindex="0" @keydown.enter.prevent="cbApr.open = true">
+                等待人工确认 · 点此展开审批卡（确认 / 驳回须显式点击；Esc、关闭 = 驳回，永不放行）
               </div>
               <div class="cb-tl-lines" v-if="cbTl.lines.length">
                 <div class="cb-tl-line" v-for="(ln, li) in cbTl.lines" :key="'tll'+li"
@@ -1990,6 +2115,10 @@
                 </div>
               </div>
             </template>
+            <!-- ux(round5) 审计行：决策留痕（决策+时间+操作者），折叠态也常驻，不可折叠消失（R6 时间线轮承接全量审计） -->
+            <div class="cb-tl-audit" v-if="cbTl.audit.length" data-cb-audit="true" aria-label="审批决策审计">
+              <div class="cb-tl-audit-row" v-for="(a, ai) in cbTl.audit" :key="'apra'+ai">{{ a }}</div>
+            </div>
           </div>
 
           <!-- ===== ux(round4) 交付物文书：落盘 .md 文物 → 点开即正式文书预览（cbDocOpen） ===== -->
@@ -3276,6 +3405,17 @@ window.CB_POSTS = [{"id":"bid-parse","name":"招标解析","aliases":["招标","
             lines: [],
             summary: null,
             fallbackTools: [],
+            audit: [],
+          },
+          /* ux(round5) HITL 审批卡状态：waiting → approved/rejected；later=折叠但未决策 */
+          cbApr: {
+            visible: false,
+            open: true,
+            state: 'waiting',
+            risk: 'low',
+            summary: null,
+            reason: '',
+            decidedAt: '',
           },
           pendingCheckpoints: [],
           checkpointBanner: '',
@@ -3348,6 +3488,45 @@ window.CB_POSTS = [{"id":"bid-parse","name":"招标解析","aliases":["招标","
         hitlCards() {
           const h = this.result.hitl_summary || {};
           return h.cards || [];
+        },
+        /* ux(round5) 审批卡：风险/摘要/阻断只抄 hitl_summary 与事件字段，不编数字 */
+        cbAprRisk() {
+          const s = this.cbApr.summary || {};
+          const cards = Array.isArray(s.cards) ? s.cards : [];
+          const badCard = cards.some((c) => c && (c.level === 'warn' || c.level === 'err'));
+          const ns = (s.nonstandard || {}).overall;
+          const high = badCard
+            || (s.structure_fail || 0) > 0
+            || (s.overlength_boxes || 0) > 0
+            || ns === 'FAIL' || ns === 'WARN' || ns === 'NEED_DESIGN';
+          return high ? 'high' : 'low';
+        },
+        cbAprChips() {
+          const s = this.cbApr.summary || {};
+          return {
+            boxes: s.n_boxes != null ? s.n_boxes : (Array.isArray(s.boxes_preview) ? s.boxes_preview.length : null),
+            mats: s.n_materials != null ? s.n_materials : null,
+            ctype: s.recommended_container || '',
+            n0: (s.n0 != null) ? s.n0 : ((s.booking_preview || {}).n0 != null ? s.booking_preview.n0 : null),
+            gross: s.total_gross_kg != null ? s.total_gross_kg : null,
+            canFit: (s.can_fit != null) ? s.can_fit : (((s.booking_preview || {}).can_fit != null) ? s.booking_preview.can_fit : null),
+          };
+        },
+        cbAprBlockers() {
+          const s = this.cbApr.summary || {};
+          const out = [];
+          const ns = s.nonstandard || {};
+          if (ns.overall) {
+            out.push('非标检验 ' + ns.overall + (ns.ship_gate && ns.ship_gate.note ? ' · ' + ns.ship_gate.note : '（FAIL 阻断确认，WARN 须人工复核）'));
+          }
+          if ((s.structure_fail || 0) > 0) out.push('结构不通过 ' + s.structure_fail + ' 箱，须改箱');
+          if ((s.structure_await_design || 0) > 0) out.push('待详设 ' + s.structure_await_design + ' 箱（结构结论未出）');
+          if ((s.overlength_boxes || 0) > 0) out.push('超长箱 ' + s.overlength_boxes + ' 只，装载方案须复核');
+          const cards = Array.isArray(s.cards) ? s.cards : [];
+          for (const c of cards) {
+            if (c && c.id === 'vgm_signoff' && c.level === 'warn') out.push('VGM 待签：须托运人签署，禁止自动申报');
+          }
+          return out;
         },
         hitlPreview() {
           const h = this.result.hitl_summary || {};
@@ -3823,9 +4002,18 @@ window.CB_POSTS = [{"id":"bid-parse","name":"招标解析","aliases":["招标","
           }
         } catch (e) { /* */ }
         this.connectSessionWs(this.sessionId);
+        // ux(round5)：Esc=驳回永不放行（审批卡等待中，全局兜底；对话框内 @keydown.esc 已先行）
+        this._cbAprEscHandler = (ev) => {
+          if (ev.key === 'Escape' && this.cbApr.visible && this.cbApr.state === 'waiting' && this.cbApr.open) {
+            ev.preventDefault();
+            this.cbAprReject('Esc/关闭');
+          }
+        };
+        window.addEventListener('keydown', this._cbAprEscHandler);
       },
       beforeDestroy() {
         this.disconnectSessionWs();
+        if (this._cbAprEscHandler) window.removeEventListener('keydown', this._cbAprEscHandler);
       },
       watch: {
         demoSimpleMode(on) {
@@ -3884,7 +4072,53 @@ window.CB_POSTS = [{"id":"bid-parse","name":"招标解析","aliases":["招标","
             lines: [],
             summary: null,
             fallbackTools: [],
+            audit: [],
           };
+          /* 新一轮运行重置审批卡（上一轮决策已写入上一轮审计行与服务端 checkpoint） */
+          this.cbApr = { visible: false, open: true, state: 'waiting', risk: 'low', summary: null, reason: '', decidedAt: '' };
+        },
+        /* ===== ux(round5) HITL 审批卡：显式决策事件 + Esc/关闭=驳回永不放行 + 决策写审计 ===== */
+        cbAprNow() {
+          const d = new Date();
+          const p = (n) => String(n).padStart(2, '0');
+          return d.getFullYear() + '-' + p(d.getMonth() + 1) + '-' + p(d.getDate()) + ' ' + p(d.getHours()) + ':' + p(d.getMinutes()) + ':' + p(d.getSeconds());
+        },
+        cbAprAudit(decision, reason) {
+          const row = '审计 · ' + decision + (reason ? '（' + reason + '）' : '') + ' · ' + this.cbAprNow() + ' · 操作者=本地用户 · 未静默放行';
+          this.cbTl.audit = this.cbTl.audit.concat([row]);
+        },
+        async cbAprConfirm() {
+          if (this.cbApr.state !== 'waiting') return;
+          /* 显式决策=确认：走既有 /api/confirm confirm 链路（非标勾选门禁在 confirmPack 内强制） */
+          await this.confirmPack();
+        },
+        async cbAprReject(reason) {
+          if (this.cbApr.state !== 'waiting') return;
+          this.cbApr.state = 'rejected';
+          this.cbApr.reason = reason || '驳回';
+          this.cbApr.decidedAt = this.cbAprNow();
+          try {
+            await fetch(API + '/api/confirm', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ session_id: this.sessionId, action: 'cancel' }),
+            });
+          } catch (e) { /* 网络失败不改变本地驳回判定：永不放行 */ }
+          this.cbAprAudit('驳回 · 未放行', this.cbApr.reason);
+          if (this.cbTl.hitlWait || this.cbTl.stages.hitl.state === 'run') {
+            this.cbTlSetStage('hitl', 'warn', '已驳回（未放行）· 请修改输入后重跑');
+            this.cbTlAddLine('hitl', 'hitl.reject', '用户驳回（' + this.cbApr.reason + '）· 未进入拼柜', 'warn');
+          }
+          this.cbTl.hitlWait = false;
+          this.statusText = '已驳回 · 未放行 · 请修改输入后重跑';
+        },
+        cbAprLater() {
+          /* 稍后=折叠卡片继续等待；不做决策、不放行；可重新展开 */
+          this.cbApr.open = false;
+        },
+        cbAprEsc() {
+          /* Esc/关闭=驳回（Codex approval_overlay 契约：dismissal 永不静默变成继续） */
+          if (this.cbApr.state === 'waiting' && this.cbApr.open) this.cbAprReject('Esc/关闭');
         },
         cbTlSetStage(key, state, note, durMs) {
           const st = this.cbTl.stages[key];
@@ -3996,6 +4230,11 @@ window.CB_POSTS = [{"id":"bid-parse","name":"招标解析","aliases":["招标","
           if (type === 'hitl') {
             this.cbTlSetStage('hitl', 'run', '等待人工确认（HITL 闸门）');
             this.cbTl.hitlWait = true;
+            /* ux(round5)：HITL 事件 → 挂审批卡（显式决策，Esc/关闭=驳回） */
+            this.cbApr = {
+              visible: true, open: true, state: 'waiting', risk: 'low',
+              summary: ev.hitl_summary || null, reason: '', decidedAt: '',
+            };
             return;
           }
           if (type === 'replan') {
@@ -4310,6 +4549,15 @@ window.CB_POSTS = [{"id":"bid-parse","name":"招标解析","aliases":["招标","
                 run_id: ev.run_id || this.result.run_id,
                 session_id: ev.session_id || this.sessionId,
               });
+            }
+            /* ux(round5)：cbApr 审批卡已在 cbTlOnEvent(hitl) 挂载；此处只兜底补 summary */
+            if (!this.cbApr.visible) {
+              this.cbApr = {
+                visible: true, open: true, state: 'waiting', risk: 'low',
+                summary: ev.hitl_summary || this.result.hitl_summary || null, reason: '', decidedAt: '',
+              };
+            } else if (!this.cbApr.summary && ev.hitl_summary) {
+              this.cbApr = Object.assign({}, this.cbApr, { summary: ev.hitl_summary });
             }
             this.mainTab = 'overview';
           }
@@ -5310,6 +5558,10 @@ window.CB_POSTS = [{"id":"bid-parse","name":"招标解析","aliases":["招标","
             this.applyResult(j);
             /* ux(round3)：确认闸门通过后，把时间线从「人工确认」推进到收口（数字只抄返回事件） */
             this.cbTlConfirmDone(j.public || j);
+            /* ux(round5)：显式决策=确认 → 卡片定格已确认 + 决策写审计行 */
+            this.cbApr.state = 'approved';
+            this.cbApr.decidedAt = this.cbAprNow();
+            this.cbAprAudit('确认并拼柜 · 已进入拼柜', '');
             const next = (j.agent_steps || (j.public && j.public.agent_steps) || []);
             if (next.length >= prev.length) {
               this.agentSteps = next;
@@ -5407,6 +5659,11 @@ window.CB_POSTS = [{"id":"bid-parse","name":"招标解析","aliases":["招标","
           }
         },
         async cancel() {
+          /* ux(round5)：取消/驳回统一走审批卡驳回流：显式决策事件 + 审计行 + 橙 ⚠ 不粉饰 */
+          if (this.cbApr.visible && this.cbApr.state === 'waiting') {
+            await this.cbAprReject('取消按钮');
+            return;
+          }
           await fetch(API + '/api/confirm', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
@@ -5418,6 +5675,7 @@ window.CB_POSTS = [{"id":"bid-parse","name":"招标解析","aliases":["招标","
             this.cbTlAddLine('hitl', 'hitl.confirm', '用户驳回 · 未进入拼柜', 'warn');
             this.cbTl.hitlWait = false;
           }
+          this.cbAprAudit('驳回 · 未放行', '取消按钮');
           this.statusText = '已取消';
         },
         drawAllViews() {

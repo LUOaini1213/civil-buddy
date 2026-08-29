@@ -251,3 +251,48 @@ DOM 结构（追加到 `document.body`，打印时独占文档流）：
 | vue | 2.7.16 | 107,679 B | MIT | https://registry.npmjs.org/vue/-/vue-2.7.16.tgz | `frontend/vendor/vue.min.js` + `vue.LICENSE`（**修复**：workbench.html 原直连 jsdelivr CDN，违背零外链红线，本轮改同源引用） |
 
 `frontend/vendor/cb-doc.js` 为 `demo/static/docpreview.js` 同构副本（非第三方依赖，改动须同步两份）。
+
+## 附录 D：HITL 审批卡组件（ux round5 定稿）
+
+> R5 落地「一道审批门」：把"等确认"从文本提示变成正式审批交互。
+> 契约（承 U-R1 / codex `approval_overlay.rs` pattern-only）：**审批必须 = 显式决策事件 + Esc/关闭=驳回永不放行 + 决策进审计链**。
+> 组件为两端同构 vanilla 实现，零 CDN、零外链、全 token 化。
+
+### D.1 组件结构（`.cb-apr`，挂载点 `[data-r5-approval-slot]`）
+
+| 端 | 挂载位置 | 实现 |
+| --- | --- | --- |
+| :8000 | `frontend/workbench.html` 时间线「人工确认」阶段（`#cb-hitl-slot`，`cbTlOnEvent` 的 `type==='hitl'` 分支挂载） | Vue2 内联组件（`cbApr` 状态 + `cbAprConfirm/cbAprReject/cbAprLater/cbAprEsc`） |
+| :8765 | `demo/static/app.js` 聊天流内本条消息的时间线（`cbTlCreate` 的 `mountApproval`，`done` 事件 `hitl.pending=true` 时挂载） | vanilla DOM + `CB_APR_WAITING` 全局 Esc 注册表 |
+
+```
+.cb-apr（合规红左边条 .cb-apr-bar；approved→绿、rejected→橙）
+  .cb-apr-head   标题「人工确认 · 成箱方案」+ 风险徽章（high=橙 / low=灰）+ 状态徽 + ✕
+  .cb-apr-body
+    .cb-apr-chips    方案摘要：只抄事件/状态字段（N0*、柜型、箱数、材料数、毛重、can_fit 若有）——不编数字
+    .cb-apr-block    风险与阻断（非标 overall/ship_gate、结构不通过、待详设、超长、VGM 待签；无则直说"工具未报告阻断项"）
+    .cb-apr-actions  决策区三按钮：确认并拼柜（主，--cb-blue）/ 驳回（红 --cb-red）/ 稍后（灰）
+    .cb-apr-foot     Esc/关闭=驳回永不放行 · 高风险岗提示确认句「我明白，将由持证人员签认」（流程层已强制门禁，UI 只提示不重复实现）
+  审计行 .cb-tl-audit-row（追加式、折叠态常驻、永不可折叠消失；R6 全量审计时间线承接）
+    格式：`审计 · <决策>（<理由>） · YYYY-MM-DD HH:MM:SS · 操作者=本地用户 · 未静默放行`
+```
+
+### D.2 决策事件与三态
+
+| 态 | 触发 | 事件 | 后续 |
+| --- | --- | --- | --- |
+| 等待 waiting | `hitl` 事件 / `hitl.pending` | 无决策，checkpoint 已落盘（durable） | 「稍后」折叠为等待条，可重新展开；刷新回来自恢复 |
+| 已确认 approved | 显式点「确认并拼柜」 | :8000 `POST /api/confirm action=confirm`（既有链路）；:8765 勾选 confirm_ok 句并重提原文 | 拼柜继续；卡片定格「已确认」+ 审计行 |
+| 已驳回 rejected | 显点点「驳回」/ ✕ / **Esc（全局）** | :8000 `POST /api/confirm action=cancel`（引擎 `phase=cancelled`）；:8765 不重提、不出稿 | 橙 ⚠ need_revision 式呈现「已驳回 · 未放行 · 请修改输入后重跑」，不粉饰；审计行 |
+
+- Esc 映射=Cancel（永不静默变成"继续"）；关闭按钮与 Esc 同语义；网络失败不改变本地驳回判定。
+- 高风险 = `hitl_summary.cards[].level∈{warn,err}` 或结构不通过 / 超长 / 非标 FAIL·WARN·NEED_DESIGN；:8765 闸门（scheme/exclusive_write）按 expert.risk=high 恒为高风险。
+- 移动端：`@media (max-width: 768px)` 决策按钮全宽纵排（R8 打底）。
+
+### D.3 借鉴来源（pattern-only）
+
+| 来源 | 许可 | 借什么 |
+| --- | --- | --- |
+| openai/codex `approval_overlay.rs`（github.com/openai/codex） | Apache-2.0 | 选择必发显式决策事件；Esc=Cancel 不随键位变；动作特定选项（confirm/reject/later）；决策插入历史 cell（→审计行） |
+| GitHub PR review 三态（approve/request changes/comment） | 交互 pattern | 三态决策区 + 决策可追溯；驳回必须给理由位（此处由引擎状态承载） |
+| Temporal/Argo 人工审批节点 | 交互 pattern | 等待卡常驻 + 超时/升级提示语义（此处为"durable checkpoint 可安全关闭后 resume"提示） |

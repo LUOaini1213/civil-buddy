@@ -1127,6 +1127,12 @@ def api_confirm(body: ConfirmRequest):
         _store_session(body.session_id, state)
         try:
             mark_checkpoint(body.session_id, status="cancelled")
+            # ux(round5)：驳回决策必须进审计链且对 /api/session 可见——
+            # RAM state 里嵌的 _checkpoint 是 hitl 时旧片，这里换成磁盘上新鲜 meta
+            ck = load_checkpoint_meta(body.session_id) or {}
+            if ck:
+                state = {**state, "_checkpoint": ck}
+                _SESSIONS[str(body.session_id)] = state
         except Exception:
             pass
         return public_response(state)

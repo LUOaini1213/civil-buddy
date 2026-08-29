@@ -317,6 +317,79 @@ html, body {
   padding: 0 6px; color: var(--cb-text-muted); background: #fff;
 }
 
+/* ===== ux(round5) HITL 审批卡（docs/ux/ux-design-spec.md 附录 D）=====
+   显式决策事件 + Esc/关闭=驳回永不放行 + 决策写审计行。与 frontend/workbench.html 同构。 */
+.cb-tl-audit { margin-top: 6px; display: flex; flex-direction: column; gap: 4px; }
+.cb-tl-audit-row {
+  font-size: 11px; font-family: var(--cb-mono); color: var(--cb-text-muted);
+  border-left: 3px solid var(--cb-gray-500); padding: 2px 8px; background: #fff;
+  border-radius: 0 var(--cb-radius-sm) var(--cb-radius-sm) 0;
+}
+.cb-apr {
+  position: relative; border: 1px solid var(--cb-line); border-radius: var(--cb-radius-md);
+  background: #fff; box-shadow: var(--cb-shadow-md); overflow: hidden; color: var(--cb-text);
+}
+.cb-apr.is-rejected { border-color: var(--cb-orange); }
+.cb-apr.is-approved { border-color: var(--cb-green); }
+.cb-apr-bar { position: absolute; left: 0; top: 0; bottom: 0; width: 4px; background: var(--cb-red); }
+.cb-apr.is-approved .cb-apr-bar { background: var(--cb-green); }
+.cb-apr.is-rejected .cb-apr-bar { background: var(--cb-orange); }
+.cb-apr-head {
+  display: flex; align-items: center; gap: 8px; flex-wrap: wrap;
+  padding: 6px 10px 6px 14px; border-bottom: 1px solid var(--cb-line);
+}
+.cb-apr-title { font-weight: 700; font-size: var(--cb-fs-sm); }
+.cb-apr-risk {
+  font-size: 11px; border-radius: var(--cb-radius-full); padding: 1px 8px;
+  border: 1px solid var(--cb-gray-400); color: var(--cb-gray-500);
+}
+.cb-apr-risk.is-high { color: var(--cb-orange); border-color: var(--cb-orange); background: var(--cb-orange-soft); }
+.cb-apr-state {
+  font-size: 11px; font-weight: 700; color: var(--cb-green);
+  border: 1px solid var(--cb-green); border-radius: var(--cb-radius-full); padding: 1px 8px;
+}
+.cb-apr-state.is-rejected { color: var(--cb-orange); border-color: var(--cb-orange); }
+.cb-apr-x {
+  margin-left: auto; background: none; border: 1px solid var(--cb-line); color: var(--cb-text-muted);
+  border-radius: var(--cb-radius-sm); width: 22px; height: 22px; cursor: pointer; line-height: 1;
+}
+.cb-apr-x:hover { color: var(--cb-red); border-color: var(--cb-red); }
+.cb-apr-body { padding: 8px 10px 10px 14px; }
+.cb-apr-chips { display: flex; gap: 8px; flex-wrap: wrap; }
+.cb-apr-chip {
+  font-size: 11px; border: 1px solid var(--cb-line); border-radius: var(--cb-radius-sm);
+  padding: 2px 8px; background: #fff;
+}
+.cb-apr-chip b { font-family: var(--cb-mono); }
+.cb-apr-chip.is-warn { border-color: var(--cb-orange); color: var(--cb-orange); }
+.cb-apr-block {
+  margin-top: 6px; font-size: 11px; color: var(--cb-orange);
+  background: var(--cb-orange-soft); border: 1px dashed var(--cb-orange);
+  border-radius: var(--cb-radius-sm); padding: 6px 8px; line-height: 1.5;
+}
+.cb-apr-block.is-ok { color: var(--cb-text-muted); border-color: var(--cb-line); background: transparent; }
+.cb-apr-reject-note {
+  margin-top: 6px; font-size: var(--cb-fs-xs); color: var(--cb-orange); font-weight: 600;
+  background: var(--cb-orange-soft); border: 1px solid var(--cb-orange);
+  border-radius: var(--cb-radius-sm); padding: 8px 10px; line-height: 1.6;
+}
+.cb-apr-actions { display: flex; gap: 8px; margin-top: 10px; flex-wrap: wrap; }
+.cb-apr-actions button { border-radius: var(--cb-radius-sm); padding: 5px 12px; font-size: var(--cb-fs-xs); cursor: pointer; }
+.cb-apr-confirm { background: var(--cb-blue); border: 1px solid var(--cb-blue); color: #fff; font-weight: 600; }
+.cb-apr-confirm:hover { background: var(--cb-blue-strong); }
+.cb-apr-confirm:disabled { opacity: 0.45; cursor: not-allowed; }
+.cb-apr-reject { background: transparent; border: 1px solid var(--cb-red); color: var(--cb-red); font-weight: 600; }
+.cb-apr-reject:hover { background: var(--cb-red-soft); }
+.cb-apr-later { background: transparent; border: 1px solid var(--cb-line); color: var(--cb-text-muted); }
+.cb-apr-later:hover { color: var(--cb-text); border-color: var(--cb-gray-400); }
+.cb-apr-foot { margin-top: 6px; font-size: 11px; color: var(--cb-text-muted); line-height: 1.5; }
+.cb-apr-confirm-phrase { color: var(--cb-orange); }
+@media (max-width: 768px) {
+  /* R8 打底：窄屏审批卡按钮全宽、决策区纵排 */
+  .cb-apr-actions { flex-direction: column; }
+  .cb-apr-actions button { width: 100%; }
+}
+
 /* ===== ux(round4) 交付物文书预览（cbDocOpen / docpreview.js）=====
    白底 A4 版心 + 页眉页脚 + 免责横幅常驻；诚实元素徽章；打印隐藏聊天 chrome。 */
 .cb-doc-overlay { position: fixed; inset: 0; z-index: 9999; display: flex; }

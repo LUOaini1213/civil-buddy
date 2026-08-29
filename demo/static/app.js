@@ -458,8 +458,8 @@ async function streamChat(message, bodyEl) {
   if (!res.ok) {
     throw new Error(await apiError(res));
   }
-  /* ux(round3)：本条消息挂一条阶段时间线（完成后折叠为一行摘要） */
-  const tl = cbTlCreate(bodyEl);
+  /* ux(round3)：本条消息挂一条阶段时间线（完成后折叠为一行摘要）；ux(round5)：消息原文供审批卡「确认并重提」 */
+  const tl = cbTlCreate(bodyEl, message);
   const reader = res.body.getReader();
   const dec = new TextDecoder();
   let buf = "";
@@ -961,6 +961,17 @@ const CB_TL_STAGES = [
   ["write", "落盘"],
   ["finalize", "收口"],
 ];
+/* ux(round5) 全局 Esc=驳回永不放行：等待中的审批卡登记于此（Codex approval_overlay 契约） */
+const CB_APR_WAITING = new Set();
+document.addEventListener("keydown", (ev) => {
+  if (ev.key !== "Escape" || !CB_APR_WAITING.size) return;
+  const cards = [...CB_APR_WAITING];
+  const card = cards[cards.length - 1];
+  if (card && typeof card.onEsc === "function") {
+    ev.preventDefault();
+    card.onEsc();
+  }
+});
 const CB_PHASE_STAGE = {
   understand: "understand",
   compress: "understand",
@@ -985,7 +996,7 @@ const CB_PHASE_STAGE = {
   done: "finalize",
 };
 
-function cbTlCreate(bodyEl) {
+function cbTlCreate(bodyEl, sourceMessage) {
   const STAGE_ORDER = CB_TL_STAGES.map((s) => s[0]);
   const stages = {};
   for (const [key, label] of CB_TL_STAGES) stages[key] = { state: "idle", label, note: "" };
@@ -1002,15 +1013,16 @@ function cbTlCreate(bodyEl) {
     '<button type="button" class="cb-tl-fold" hidden>展开时间线</button></div>' +
     '<div class="cb-tl-summary tl-summary" hidden></div>' +
     '<div class="cb-tl-track"></div>' +
-    '<div class="cb-tl-hitl tl-hitl" data-r5-approval-slot="true" hidden>' +
-    "等待人工确认…（确认 / 驳回须显式点击；Esc、关闭、刷新 ≠ 放行 · 审批卡将于后续版本挂载于此）</div>" +
-    '<div class="cb-tl-lines tl-lines"></div>';
+    '<div class="cb-tl-hitl tl-hitl" data-r5-approval-slot="true" hidden></div>' +
+    '<div class="cb-tl-lines tl-lines"></div>' +
+    '<div class="cb-tl-audit tl-audit" data-cb-audit="true" hidden></div>';
   const badge = root.querySelector(".tl-badge");
   const foldBtn = root.querySelector(".cb-tl-fold");
   const summaryEl = root.querySelector(".tl-summary");
   const trackEl = root.querySelector(".cb-tl-track");
   const hitlEl = root.querySelector(".tl-hitl");
   const linesEl = root.querySelector(".tl-lines");
+  const auditEl = root.querySelector(".tl-audit");
 
   const chips = [];
   for (const [key, label] of CB_TL_STAGES) {
@@ -1094,8 +1106,170 @@ function cbTlCreate(bodyEl) {
     badge.className = "cb-tl-badge tl-badge" + (cls ? " " + cls : "");
   }
 
+  /* ===== ux(round5) HITL 审批卡（docs/ux/ux-design-spec.md 附录 D）=====
+     显式决策事件 + Esc/关闭=驳回永不放行 + 决策写审计行。卡片只抄事件字段（gate/expert/run_id），不编数字。 */
+  function aprNow() {
+    const d = new Date();
+    const p = (n) => String(n).padStart(2, "0");
+    return d.getFullYear() + "-" + p(d.getMonth() + 1) + "-" + p(d.getDate()) + " " + p(d.getHours()) + ":" + p(d.getMinutes()) + ":" + p(d.getSeconds());
+  }
+
+  function aprAudit(decision, reason) {
+    const rowEl = document.createElement("div");
+    rowEl.className = "cb-tl-audit-row";
+    rowEl.textContent = "审计 · " + decision + (reason ? "（" + reason + "）" : "") + " · " + aprNow() + " · 操作者=本地用户 · 未静默放行";
+    auditEl.appendChild(rowEl);
+    auditEl.hidden = false;
+  }
+
+  function addAuditRow(text) {
+    aprAudit(text, "");
+  }
+
+  function gateLabel(gate) {
+    if (gate === "scheme") return "成箱方案闸门（scheme）";
+    if (gate === "exclusive_write") return "高风险写盘闸门（exclusive_write）";
+    return gate ? "闸门 " + gate : "HITL 闸门";
+  }
+
+  function mountApproval(info) {
+    if (!hitlEl) return;
+    const state = { decided: "", open: true };
+    hitlEl.hidden = false;
+    hitlEl.textContent = "";
+    const card = document.createElement("div");
+    card.className = "cb-apr";
+    card.setAttribute("role", "dialog");
+    card.setAttribute("aria-label", "HITL 人工确认审批卡");
+    card.setAttribute("data-cb-approval", "true");
+    card.innerHTML =
+      '<div class="cb-apr-bar" aria-hidden="true"></div>' +
+      '<div class="cb-apr-head">' +
+      '<span class="cb-apr-title">人工确认 · ' + gateLabel(info.gate) + "</span>" +
+      '<span class="cb-apr-risk is-high">风险 · 高</span>' +
+      '<span class="cb-apr-state apr-state" hidden></span>' +
+      '<button type="button" class="cb-apr-x" title="关闭 = 驳回，永不放行" aria-label="关闭审批卡（等同驳回，不放行）">✕</button>' +
+      "</div>" +
+      '<div class="cb-apr-body apr-waiting">' +
+      '<div class="cb-apr-chips" data-cb-approval-summary="true">' +
+      (info.expert ? '<span class="cb-apr-chip">岗位 <b>' + escapeHtml(String(info.expert)) + "</b></span>" : "") +
+      (info.runId ? '<span class="cb-apr-chip">run <b>' + escapeHtml(String(info.runId)) + "</b></span>" : "") +
+      '<span class="cb-apr-chip is-warn">签认 <b>未确认</b> · 本岗未出稿</span>' +
+      "</div>" +
+      '<div class="cb-apr-block" data-cb-approval-blockers="true">高风险动作须人工确认后才会写盘/出稿；流程层已强制 confirm_ok 门禁（未确认不出施工草稿）。</div>' +
+      '<div class="cb-apr-actions" data-cb-approval-actions="true">' +
+      '<button type="button" class="cb-apr-confirm">确认并重提</button>' +
+      '<button type="button" class="cb-apr-reject">驳回</button>' +
+      '<button type="button" class="cb-apr-later">稍后</button>' +
+      "</div>" +
+      '<div class="cb-apr-foot">确认 = 勾选确认句「我明白，将由持证人员签认」并重新提交本条任务 · ' +
+      "<b>Esc、关闭 = 驳回，永不放行</b> · 决策写入下方审计行</div>" +
+      "</div>" +
+      '<div class="cb-apr-body apr-decided" hidden></div>';
+    const stateChip = card.querySelector(".apr-state");
+    const waitingBody = card.querySelector(".apr-waiting");
+    const decidedBody = card.querySelector(".apr-decided");
+
+    function settle(kind, reason) {
+      if (state.decided) return;
+      state.decided = kind;
+      CB_APR_WAITING.delete(api);
+      waitingBody.hidden = true;
+      decidedBody.hidden = false;
+      decidedBody.innerHTML = "";
+      card.querySelector(".cb-apr-x").hidden = true;
+      if (kind === "approved") {
+        card.classList.add("is-approved");
+        stateChip.hidden = false;
+        stateChip.textContent = "已确认 · 已重新提交";
+        setStage("hitl", "done", "已确认 · 已重新提交（续跑见新时间线）");
+        addLine("hitl", "hitl.confirm", "用户确认 · 勾选签认句并重新提交", "ok");
+        decidedBody.textContent = "已确认 · 已重新提交本条任务（confirm_ok=true）。本时间线定格为历史，续跑进度见新时间线。";
+      } else {
+        card.classList.add("is-rejected");
+        stateChip.hidden = false;
+        stateChip.classList.add("is-rejected");
+        stateChip.textContent = "已驳回 · 未放行";
+        setStage("hitl", "warn", "已驳回（未放行）· 请修改输入后重跑");
+        addLine("hitl", "hitl.reject", "用户驳回（" + (reason || "") + "）· 未放行 · 未出稿", "warn");
+        const note = document.createElement("div");
+        note.className = "cb-apr-reject-note";
+        note.textContent = "⚠ 已驳回（" + (reason || "驳回") + "）· 未放行，未出任何稿 · 请修改输入后重跑（补齐数据 / 更换岗位 / 调整任务描述）";
+        decidedBody.appendChild(note);
+      }
+      aprAudit(kind === "approved" ? "确认 · 已重新提交" : "驳回 · 未放行", reason);
+    }
+
+    card.querySelector(".cb-apr-confirm").addEventListener("click", () => {
+      /* 显式决策=确认：勾选确认句（流程层 confirm_ok 门禁）并重新提交原文 */
+      const ok = $("confirmOk");
+      if (ok) ok.checked = true;
+      const input = $("input");
+      const form = $("form");
+      if (input && form && sourceMessage) {
+        input.value = sourceMessage;
+        if (form.requestSubmit) form.requestSubmit();
+        else form.dispatchEvent(new Event("submit", { cancelable: true }));
+      }
+      settle("approved", "");
+    });
+    card.querySelector(".cb-apr-reject").addEventListener("click", () => settle("rejected", "驳回按钮"));
+    card.querySelector(".cb-apr-x").addEventListener("click", () => settle("rejected", "Esc/关闭"));
+    card.querySelector(".cb-apr-later").addEventListener("click", () => {
+      /* 稍后=折叠卡片继续等待；不做决策、不放行 */
+      state.open = false;
+      card.hidden = true;
+      openSlot.hidden = false;
+    });
+    const api = { settle };
+    api.onEsc = () => {
+      if (state.open && !state.decided) settle("rejected", "Esc/关闭");
+    };
+    CB_APR_WAITING.delete(api);
+    CB_APR_WAITING.add(api);
+
+    /* 稍后折叠条：点击重新展开（仍等待，未放行） */
+    const openSlot = document.createElement("div");
+    openSlot.className = "cb-apr-open-slot";
+    openSlot.setAttribute("role", "button");
+    openSlot.tabIndex = 0;
+    openSlot.hidden = true;
+    openSlot.textContent = "等待人工确认 · 点此展开审批卡（确认 / 驳回须显式点击；Esc、关闭 = 驳回，永不放行）";
+    const reopen = () => {
+      if (state.decided) return;
+      state.open = true;
+      openSlot.hidden = true;
+      card.hidden = false;
+    };
+    openSlot.addEventListener("click", reopen);
+    openSlot.addEventListener("keydown", (ev) => {
+      if (ev.key === "Enter") { ev.preventDefault(); reopen(); }
+    });
+
+    hitlEl.appendChild(card);
+    hitlEl.appendChild(openSlot);
+    const log = $("log");
+    if (log) log.scrollTop = log.scrollHeight;
+    return api;
+  }
+
   function finish(data) {
     settleActive();
+    const hitlPending = !!(data && data.hitl && data.hitl.pending);
+    if (hitlPending) {
+      /* HITL 闸门未过：运行已结束但未出稿——时间线不定格为「完成」，审批卡保持等待 */
+      if (activeKey && stages[activeKey] && stages[activeKey].state === "run") {
+        stages[activeKey].state = "done";
+        paintStage(activeKey);
+      }
+      setStage("hitl", "warn", "等待人工确认（闸门未过，本岗未出稿）");
+      setBadge("HITL 等待中", "hitl");
+      hitlEl.hidden = false;
+      if (!hitlEl.querySelector(".cb-apr")) {
+        mountApproval({ gate: (data.hitl || {}).gate, expert: (data && data.expert) || "", runId: (data && data.run_id) || "" });
+      }
+      return;
+    }
     setStage("finalize", "done", "收口完成");
     if (hitlWait) hitlWait = false;
     hitlEl.hidden = true;
@@ -1136,7 +1310,6 @@ function cbTlCreate(bodyEl) {
       setStage("hitl", "run", text || "等待人工确认（HITL 闸门）");
       activeKey = "hitl";
       hitlWait = true;
-      hitlEl.hidden = false;
       setBadge("HITL 等待中", "hitl");
     } else if (stageKey) {
       settleActive();
