@@ -77,6 +77,9 @@
 | 交底 | 班前白话交底（安全交底材料） | "培训材料" |
 | 审批 | HITL 审批门：确认/驳回，决策留痕 | "自动通过"、"一键放行" |
 | UNSPECIFIED | 数据哨兵：**界面上显示为「未提供」安全橙徽标**，点开可见原文哨兵；导出文书保留 `UNSPECIFIED` 原文与 `[A001]` 锚点供人工补全 | 不译、不藏、不伪填 |
+| 纠偏卡 | 错误/拒绝/缺数的统一可行动卡片（R7）：发生了什么+为什么(code)+现在能做什么，见附录 F | 不用「失败了」「出错了」裸文本收尾 |
+| 熔断 | 连续失败/超预算自动停下止损（`circuit_open`/`deny_budget`），卡上写明数字 | 不说"崩了/挂了/系统故障" |
+| 降级 | 工具失败后标 `UNSPECIFIED` 不编数（recovery 层），卡上写明已尝试次数 | 不说"部分成功"掩盖失败 |
 
 ### 3.3 禁句表（承 docs/competition-demo-script.md「不说的话」）
 
@@ -341,3 +344,63 @@ DOM 结构（追加到 `document.body`，打印时独占文档流）：
 - 分组：按 session 一次加载全部匹配 run（新 run 在上），run 内节点按 `ts/seq` 时间正序（可回放）。
 - 导出（人机协同履历表素材）：「复制 JSON / 下载 JSON」→ `{schema, exported_at, product, session_id, counts, decisions, runs[]}`，文件名 `audit-<session>.json`；只抄数据源字段，不编数字。
 - 借鉴来源（pattern-only）：Langfuse session→trace→observation 分层与单列 trace log view（MIT）、Argo Workflows 节点时间线与重试标记（Apache-2.0）、Git 提交图纵向时间轴+泳道分组（pattern）。
+
+## 附录 F：纠偏卡片 · 错误与恢复话术映射（ux round7 定稿）
+
+> R7 落地「错误恢复」门面：把散在事件流/日志里的拒绝、熔断、降级、缺数变成**用户能行动的卡片**
+> （海之子杯评审维度二：AI 纠偏管理）。统一结构三段式：
+> **发生了什么（一句人话）+ 为什么（策略 code/规则名，等宽）+ 现在能做什么（≤3 条动作/指引）**。
+> 两端同构 vanilla 实现，零 CDN、零外链、全 `--cb-*` token；动作**预填输入框草稿，不自动发送**（重试除外=重放同 payload）。
+
+### F.1 组件结构（`.cb-fix`）
+
+| 端 | 分类/渲染源 | 挂载点 |
+| --- | --- | --- |
+| :8765 | `demo/static/fixcard.js`（canonical：`CB_FIX.classify/classifyMissing/cardEl`）+ `app.js` 端侧动作句柄 | 聊天流内失败消息体后（catch / SSE error）；`done` 正文含哨兵时挂缺数提示条 |
+| :8000 | `frontend/vendor/cb-fix.js`（同构副本，改动须同步两份）+ Vue2 组件 `cb-fix-card` | 时间线错误位（`cbTlOnEvent` error/agent_end）、总览报错条下方、`revise-nl` unsupported、`done` public 缺数提示条 |
+
+```
+.cb-fix（左边条：拦截/熔断=合规红，其余=安全橙；role=alert）
+  .cb-fix-head   徽章（已拦截/已熔断/已降级/可重试/暂不支持/缺数/合规阻断/失败）+ 一句人话标题
+  .cb-fix-why    code 徽片（等宽，如 deny_cross_expert）+ 规则一句话
+  .cb-fix-meta   重试/退避信息——只抄事件字段（attempts、audit 动作序列 call→retry→degrade），不编
+  .cb-fix-what   「现在能做什么」≤3：按钮（prefill/retry）或纯指引（note）
+  .cb-fix-raw    <details>「原始记录」折叠原文（一次点击看原始负载，Sentry 卡模式）
+```
+
+### F.2 话术映射表（code → 人话 → 动作；模式对准后端 reason 原文，不编数字）
+
+| code（来源） | 触发原文（摘要） | 发生了什么（人话） | 现在能做什么（≤3） |
+| --- | --- | --- | --- |
+| `deny_chat_write`（policy.py） | 拒绝：提问回合不能调写盘工具 X | 这是提问回合，AI 不会写盘：X 被策略拦下 | [改成出稿任务]预填「写一份 」；指引：说成「写一份…」即 run 意图 |
+| `deny_cross_expert` | 拒绝：岗 A 不能调 T（exclusive 属于 B） | 岗 A 越权调了 B 的专属工具 T，已拦截 | [召唤 @B]预填「@B 」；指引：或改写成 B 岗的活 |
+| `circuit_open` | 熔断：工具 T 连续失败 n 次 | 工具 T 连着失败 n 次，先熔断止损 | [重试]重放同 payload；指引：稍后再试/换个说法 |
+| `deny_budget` | 熔断：session 成本超限 steps s/ms tokens t/mt | 本轮预算用完（steps s/ms · tokens t/mt），已停下 | [缩短输入重跑]预填；[新开会话]（:8765）；指引 |
+| `deny_production` | 拒绝：目标 P 视为生产数据 | 目标 P 是生产数据区，写入被拒 | 指引：输出只落本次运行输出目录，禁 D:\layout / prod |
+| `deny_secret` | 拒绝：…secret/.env | 目标碰到密钥/敏感文件，写入被拒，文件未落地 | 指引：密钥永不写盘，走环境变量/密钥管理 |
+| `deny_sandbox` | 拒绝：…沙箱/越界 | 操作超出本次运行的沙箱范围，被拦下 | 指引：读写限于本次会话工作区 |
+| `deny_cancelled` / `deny_unknown` | 已取消 / 未知工具 X | 任务已取消未执行 / 调用了未注册工具 X | 指引（检查工具名/已取消） |
+| `invalid_args` | 拒绝：工具 T 缺少参数 K | 工具 T 缺参数 K，没跑成 | [重试]；指引：参数由调用方组装，AI 不编 |
+| `revise_unsupported`（nl_revision） | 无此功能：…（status=unsupported） | 这个改法还不会：方案保持原样，没有假装成功 | hints[] 预填 chips（≤2）+ 能力清单 note（总 ≤3） |
+| `recovery_degrade`（recovery.py） | 下游失败 code，工具 T 降级，不编柜数 | 工具 T 重试后仍失败，已降级：数字标「未提供」，不编造 | [重试本工具]；指引；meta=共尝试 n 次 · call→retry→degrade |
+| `timeout` | 失败：工具 T 下游超时（t s） | 工具 T 等了 t 秒没回应 | [重试]重放同 payload；指引 |
+| `compliance_block`（risk/BOX 类） | 阻断/非标/ship_gate/废标/超载 | 合规校核拦下，不是工具坏了：按下面改即可重跑 | [改箱型重跑]预填；[减载重重跑]预填；指引：阻断项见原文 |
+| `missing_data`（UNSPECIFIED/[A001] 扫描） | done 正文/public 含哨兵 | 还有 n 处数据未提供——补一句话即可重跑 | [去补数]预填「补充：[Axxx] …」；指引：发送即重跑，缺的数 AI 不编 |
+| （兜底）`error` | 其余报错 | 原文截断呈现 | 可重试则[重试]，否则修改输入重跑指引 |
+
+### F.3 交互红线（承公理 3/4）
+
+- 动作按钮一律**预填草稿，不自动发送**；唯一例外=重试（重放同 payload，:8765 重发 `state.lastSend`，:8000 重跑 `runPipelineTrace`）。
+- 「重试次数与退避」只抄 middleware/recovery 事件字段（`attempts`/`audit`），前端不编、不估算。
+- 合规阻断不粉饰成"失败了"：列出阻断原文 + 改箱型/减载重引导；熔断写明止损语义与预算数字。
+- 错误不用 toast（自动消失不可达），一律常驻卡片 + 折叠原文；Esc/刷新不丢失（卡片随历史消息定格）。
+
+### F.4 借鉴来源（pattern-only）
+
+| 来源 | 许可 | 借什么 |
+| --- | --- | --- |
+| Sentry issue 卡（docs.sentry.io/product/issues/issue-details） | 文档 pattern-only | 卡头=类型+上下文；动作直接在卡上；「原始记录」一次点击展开（堆栈→原始 reason） |
+| NN/g Error-Message Guidelines | 文档 pattern-only | 错误三要素：可见、建设性（说清下一步）、尊重用户付出；禁"something went wrong"式空话 |
+| GitHub Primer 禁 toast 共识 / toasts-are-bad-UX 辩论 | 文档 pattern-only | 错误与需行动的决策不用自动消失的 toast，用常驻卡 |
+| Linear 乐观更新+持久重试入口 | 文档 pattern-only | 失败可回滚重试：卡上直接给「重试」，重放同 payload |
+| openai/codex `exec_cell`/`history_cell` | Apache-2.0 | 错误=不可变历史 cell 的一部分，重试不改写历史只追加（承 R3 追加式会话流） |

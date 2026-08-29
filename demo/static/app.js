@@ -7,6 +7,7 @@ const state = {
   modelName: "",
   attachments: [],
   threadId: "",
+  lastSend: "", /* ux(round7)：纠偏卡「重试」重放同 payload */
   policy: { sandbox: "workspace-write", approval: "on-request" },
   context: {
     limit: 1000000,
@@ -386,10 +387,47 @@ function addStatus(text) {
   $("log").scrollTop = $("log").scrollHeight;
 }
 
+/* ===== ux(round7) 纠偏卡片（docs/ux/ux-design-spec.md 附录 F）=====
+   错误/拒绝/缺数 → 「发生了什么 + 为什么(code) + 现在能做什么(≤3 动作)」的可行动卡片。
+   分类/渲染逻辑 canonical 在 /static/fixcard.js；此处只注入端侧动作句柄：
+   prefill=预填输入框草稿（不自动发送）· retry=重放同 payload · newsession=新开会话。 */
+function cbFixHandlers() {
+  return {
+    prefill(v) {
+      const input = $("input");
+      if (!input) return;
+      input.value = v || "";
+      cbAutosize(input);
+      input.focus();
+    },
+    retry() {
+      const msg = state.lastSend;
+      if (!msg) return;
+      $("input").value = msg;
+      cbAutosize($("input"));
+      $("form").dispatchEvent(new Event("submit", { cancelable: true }));
+    },
+    newsession() {
+      const btn = $("btnNewThread");
+      if (btn) btn.click();
+    },
+  };
+}
+
+function cbFixMount(anchor, desc) {
+  if (!anchor || !desc || typeof CB_FIX === "undefined") return null;
+  const el = CB_FIX.cardEl(desc, cbFixHandlers());
+  anchor.appendChild(el);
+  const log = $("log");
+  if (log) log.scrollTop = log.scrollHeight;
+  return el;
+}
+
 $("form").addEventListener("submit", async (ev) => {
   ev.preventDefault();
   const message = $("input").value.trim();
   if (!message) return;
+  state.lastSend = message; /* ux(round7)：重试=重放同 payload */
   $("input").value = "";
   cbAutosize($("input"));
   cbSyncSend();
@@ -419,8 +457,11 @@ $("form").addEventListener("submit", async (ev) => {
   try {
     await streamChat(message, bodyEl);
   } catch (err) {
+    /* ux(round7)：裸文本错误 → 纠偏卡（发生了什么+为什么+现在能做什么） */
+    const raw = String(err.message || err);
     bodyEl.classList.add("err");
-    bodyEl.textContent = String(err.message || err);
+    bodyEl.textContent = raw;
+    cbFixMount(bodyEl.parentElement, typeof CB_FIX !== "undefined" ? CB_FIX.classify(raw, { retryable: true }) : null);
   } finally {
     sendBtn.textContent = "发送";
     delete sendBtn.dataset.running;
@@ -511,6 +552,9 @@ async function streamChat(message, bodyEl) {
         renderCites(data.citations || []);
         renderFiles(data.deliverables || []);
         appendDocCards(data.deliverables || [], bodyEl);
+        /* ux(round7)：缺数引导条——UNSPECIFIED/[A001] 徽章旁的「去补数」，预填草稿不自动发送 */
+        const miss = typeof CB_FIX !== "undefined" ? CB_FIX.classifyMissing(acc) : null;
+        if (miss) cbFixMount(bodyEl.parentElement, miss);
         refreshAuditSoon(); /* ux(round6)：本轮完成 → 审计时间线增量刷新（含决策置顶） */
       }
       eventName = "message";

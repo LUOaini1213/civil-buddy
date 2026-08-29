@@ -1724,6 +1724,55 @@
       .cb-badge { border-color: var(--cb-orange); color: var(--cb-orange); -webkit-print-color-adjust: exact; print-color-adjust: exact; }
       .cb-doc-page * { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
     }
+/* ===== ux(round7) 纠偏卡片（docs/ux/ux-design-spec.md 附录 F）=====
+   发生了什么（一句人话）+ 为什么（策略 code）+ 现在能做什么（≤3 动作）。全 --cb-* token，零外链。 */
+.cb-fix {
+  display: flex; gap: 10px; align-items: stretch;
+  margin: 8px 0 4px; padding: 10px 12px;
+  background: var(--cb-orange-soft);
+  border: 1px solid var(--cb-orange); border-radius: var(--cb-radius-md);
+  box-shadow: var(--cb-shadow-sm);
+  text-align: left;
+}
+.cb-fix.is-red { background: var(--cb-red-soft); border-color: var(--cb-red); }
+.cb-fix-bar { flex: none; width: 4px; border-radius: var(--cb-radius-full); background: var(--cb-orange); }
+.cb-fix.is-red .cb-fix-bar { background: var(--cb-red); }
+.cb-fix-main { min-width: 0; display: grid; gap: 6px; }
+.cb-fix-head { display: flex; gap: 8px; align-items: baseline; flex-wrap: wrap; }
+.cb-fix-badge {
+  flex: none; font-size: var(--cb-fs-xs); font-weight: 600; line-height: 1;
+  color: #fff; background: var(--cb-orange); border-radius: var(--cb-radius-full); padding: 3px 8px;
+}
+.cb-fix.is-red .cb-fix-badge { background: var(--cb-red); }
+.cb-fix-title { font-size: var(--cb-fs-sm); font-weight: 600; color: var(--cb-text); overflow-wrap: anywhere; }
+.cb-fix-why { display: flex; gap: 8px; align-items: baseline; flex-wrap: wrap; }
+.cb-fix-code {
+  font-family: var(--cb-mono); font-size: var(--cb-fs-xs); color: var(--cb-text);
+  background: var(--cb-gray-100); border: 1px solid var(--cb-line);
+  border-radius: var(--cb-radius-sm); padding: 1px 6px;
+}
+.cb-fix-why-txt { font-size: var(--cb-fs-xs); color: var(--cb-text-muted); }
+.cb-fix-meta { font-family: var(--cb-mono); font-size: var(--cb-fs-xs); color: var(--cb-text-muted); }
+.cb-fix-what { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+.cb-fix-what-label { flex: none; font-size: var(--cb-fs-xs); color: var(--cb-text-muted); }
+.cb-fix-btn {
+  font: inherit; font-size: var(--cb-fs-sm); cursor: pointer;
+  color: var(--cb-blue); background: var(--cb-blue-soft);
+  border: 1px solid var(--cb-blue); border-radius: var(--cb-radius-sm);
+  padding: 3px 10px;
+}
+.cb-fix-btn:hover { background: var(--cb-blue); color: #fff; }
+.cb-fix-btn.is-retry { color: #fff; background: var(--cb-blue); border-color: var(--cb-blue-strong); }
+.cb-fix-btn.is-retry:hover { background: var(--cb-blue-strong); }
+.cb-fix-note { font-size: var(--cb-fs-xs); color: var(--cb-text-muted); overflow-wrap: anywhere; }
+.cb-fix-raw { flex-basis: 100%; margin: 2px 0 0; }
+.cb-fix-raw summary { cursor: pointer; font-size: 11px; color: var(--cb-text-muted); }
+.cb-fix-raw code {
+  display: block; margin: 4px 0 0; padding: 6px 8px;
+  font-family: var(--cb-mono); font-size: 10px; color: var(--cb-text-muted);
+  background: var(--cb-gray-50); border: 1px solid var(--cb-line);
+  border-radius: var(--cb-radius-sm); white-space: pre-wrap; overflow-wrap: anywhere;
+}
   </style>
 </head>
 <body>
@@ -2163,6 +2212,8 @@
                   <span class="cb-tl-dur" v-if="ln.durMs != null">{{ ln.durMs }}ms</span>
                 </div>
               </div>
+              <!-- ux(round7) 纠偏卡：发生了什么+为什么(code)+现在能做什么（≤3 动作；重试=重放同 payload） -->
+              <cb-fix-card v-if="cbFix.visible && cbFix.desc" :desc="cbFix.desc" @act="cbFixAct" data-cb-fix-slot="true"></cb-fix-card>
             </template>
             <!-- ux(round5) 审计行：决策留痕（决策+时间+操作者），折叠态也常驻，不可折叠消失（R6 时间线轮承接全量审计） -->
             <div class="cb-tl-audit" v-if="cbTl.audit.length" data-cb-audit="true" aria-label="审批决策审计">
@@ -2223,6 +2274,8 @@
 
           <!-- ===== 总览 ===== -->
           <template v-if="mainTab === 'overview' && hasAnyResult">
+            <!-- ux(round7) 缺数提示条：UNSPECIFIED/[A001] → 「去补数」预填草稿（不自动发送） -->
+            <cb-fix-card v-if="cbMissingFix" :desc="cbMissingFix" @act="cbFixAct" data-cb-missing="true"></cb-fix-card>
             <!-- 报错条：缺尺寸 / errors -->
             <div
               class="verdict-banner"
@@ -2238,6 +2291,8 @@
                 <button type="button" class="ghost" @click="mainTab = 'agents'">Agent 轨迹</button>
               </div>
             </div>
+            <!-- ux(round7) 纠偏卡：总览报错/缺尺寸 → 可行动动作 -->
+            <cb-fix-card v-if="cbOverviewFix" :desc="cbOverviewFix" @act="cbFixAct" data-cb-overview-fix="true"></cb-fix-card>
             <!-- 一眼裁决：不必开 PDF -->
             <div
               class="verdict-banner"
@@ -2895,6 +2950,8 @@
                    :style="(nlStatus.startsWith('无此功能') || nlStatus.startsWith('失败')) ? 'color:var(--warn)' : (nlStatus.startsWith('已改') ? 'color:var(--ok)' : '')">
                 {{ nlStatus }}
               </div>
+              <!-- ux(round7) 纠偏卡：revise status=unsupported → 支持的改法预填草稿（不自动应用） -->
+              <cb-fix-card v-if="cbReviseFix" :desc="cbReviseFix" @act="cbReviseAct" data-cb-revise-fix="true"></cb-fix-card>
               <div class="row" style="margin-top:8px;gap:6px;flex-wrap:wrap" v-if="nlHints && nlHints.length">
                 <button type="button" class="ghost" style="padding:4px 10px;font-size:12px"
                         v-for="h in nlHints" :key="h"
@@ -3290,6 +3347,7 @@
 
   <!-- ux(round4)：文书预览依赖（同源 vendored，零 CDN；许可见 frontend/vendor/*.LICENSE） -->
   <script src="/static/vendor/marked.min.js"></script>
+  <script src="/static/vendor/cb-fix.js"></script>
   <script src="/static/vendor/cb-doc.js"></script>
   <script>
     const API = '';
@@ -3442,6 +3500,50 @@ window.CB_POSTS = [{"id":"bid-parse","name":"招标解析","aliases":["招标","
 /* === CB_POSTS END === */
     new Vue({
       el: '#app',
+      components: {
+        /* ux(round7) 纠偏卡片组件：发生了什么+为什么(code)+现在能做什么(≤3 动作)；话术映射见 spec 附录 F。
+           分类 canonical=demo/static/fixcard.js（frontend/vendor/cb-fix.js 同构副本）。零 CDN、全 --cb-* token。 */
+        'cb-fix-card': {
+          props: { desc: { type: Object, required: true } },
+          computed: {
+            meta() {
+              return (window.CB_FIX && CB_FIX.KIND_META && CB_FIX.KIND_META[this.desc.kind]) || {};
+            },
+            tone() { return this.meta.tone === 'red' ? 'is-red' : ''; },
+            badge() { return this.meta.badge || '失败'; },
+            acts() { return (this.desc.actions || []).filter((a) => a.kind !== 'newsession').slice(0, 3); },
+          },
+          template: `
+            <div class="cb-fix" :class="tone" :data-cb-fix="desc.code" role="alert">
+              <span class="cb-fix-bar" aria-hidden="true"></span>
+              <div class="cb-fix-main">
+                <div class="cb-fix-head">
+                  <span class="cb-fix-badge">{{ badge }}</span>
+                  <span class="cb-fix-title">{{ desc.title }}</span>
+                </div>
+                <div class="cb-fix-why">
+                  <span class="cb-fix-code">{{ desc.code }}</span>
+                  <span class="cb-fix-why-txt">{{ desc.why }}</span>
+                </div>
+                <div class="cb-fix-meta" v-if="desc.meta">{{ desc.meta }}</div>
+                <div class="cb-fix-what" v-if="acts.length">
+                  <span class="cb-fix-what-label">现在能做什么</span>
+                  <template v-for="(a, ai) in acts">
+                    <span class="cb-fix-note" v-if="a.kind === 'note'" :key="'n' + ai">{{ a.label }}</span>
+                    <button type="button" class="cb-fix-btn" v-else
+                            :class="{ 'is-retry': a.kind === 'retry' }" :key="'b' + ai"
+                            @click="$emit('act', a)">{{ a.label }}</button>
+                  </template>
+                </div>
+                <details class="cb-fix-raw" v-if="desc.raw">
+                  <summary>原始记录</summary>
+                  <code>{{ desc.raw }}</code>
+                </details>
+              </div>
+            </div>`,
+
+        },
+      },
       data() {
         return {
           userInput: '',
@@ -3528,6 +3630,10 @@ window.CB_POSTS = [{"id":"bid-parse","name":"招标解析","aliases":["招标","
             reason: '',
             decidedAt: '',
           },
+          /* ux(round7) 纠偏卡状态：事件流错误 → 分类成可行动卡片；cbMissingFix=缺数提示条；cbReviseFix=「无此功能」卡 */
+          cbFix: { visible: false, desc: null },
+          cbMissingFix: null,
+          cbReviseFix: null,
           pendingCheckpoints: [],
           checkpointBanner: '',
           ws: null,
@@ -4017,6 +4123,24 @@ window.CB_POSTS = [{"id":"bid-parse","name":"招标解析","aliases":["招标","
           }
           return { show: false, lines: [] };
         },
+        /* ux(round7) 总览纠偏卡：缺尺寸=缺数引导（去补数预填草稿）；errors 首条 → 统一分类 */
+        cbOverviewFix() {
+          if (!(this.errorBanner && this.errorBanner.show)) return null;
+          if (this.errorBanner.materials_incomplete) {
+            return {
+              kind: 'missing', code: 'missing_data', why: '数据哨兵 UNSPECIFIED · L/W/H=0 阻断成箱',
+              title: '还有物料缺尺寸/重量：在输入框补一句话即可重跑',
+              actions: [
+                { kind: 'prefill', label: '去补数', value: '补充：6000x200x300 400kg xN，长x宽x高 单重kg 数量' },
+                { kind: 'note', label: '按「长x宽x高 单重kg x数量」补全后发送重跑；缺的数 AI 不编' },
+              ],
+              raw: (this.errorBanner.lines || []).join(' | '),
+            };
+          }
+          const line = (this.errorBanner.lines || [])[0];
+          if (!line || !window.CB_FIX) return null;
+          return CB_FIX.classify(String(line), {});
+        },
         boxesTwoRowCount() {
           return (this.result.boxes || []).filter((b) => this.boxTwoRowOk(b)).length;
         },
@@ -4311,6 +4435,10 @@ window.CB_POSTS = [{"id":"bid-parse","name":"招标解析","aliases":["招标","
               this.cbTlAddLine(key || 'understand', step.title || ev.node || 'agent', step.message,
                 ev.status === 'error' ? 'error' : 'ok', ev.duration_ms);
             }
+            /* ux(round7)：节点失败（策略拒绝/熔断等带 reason 的）→ 纠偏卡 */
+            if (ev.status === 'error' && step.message && window.CB_FIX) {
+              this.cbFix = { visible: true, desc: CB_FIX.classify(String(step.message), {}) };
+            }
             return;
           }
           if (type === 'tool_start') {
@@ -4365,6 +4493,11 @@ window.CB_POSTS = [{"id":"bid-parse","name":"招标解析","aliases":["招标","
             const key = this.cbTlActiveKey() || 'finalize';
             this.cbTlSetStage(key, 'warn', ev.message || '事件流报错');
             this.cbTlAddLine(key, 'error', ev.message || '事件流报错', 'error');
+            /* ux(round7)：错误 → 纠偏卡（重试=重放同 payload） */
+            this.cbFix = {
+              visible: true,
+              desc: window.CB_FIX ? CB_FIX.classify(String(ev.message || '事件流报错'), { retryable: true }) : null,
+            };
             return;
           }
           if (type === 'done' || type === 'replay_done') {
@@ -4680,6 +4813,9 @@ window.CB_POSTS = [{"id":"bid-parse","name":"招标解析","aliases":["招标","
             this.liveNode = '';
             this.streamProgress.pct = 100;
             if (ev.session_id) this.sessionId = ev.session_id; /* ux(round3)：HITL/收口事件带回 session */
+            /* ux(round7)：成功收口 → 清纠偏卡；缺数（UNSPECIFIED/[A001]）→ 去补数提示条 */
+            this.cbFix = { visible: false, desc: null };
+            this.cbMissingFix = window.CB_FIX ? CB_FIX.classifyMissing(JSON.stringify(ev.public || {})) : null;
             /* ux(round4)：捕获落盘文书（markdown 文物）供「交付物文书」面板预览 */
             this.docArtifacts = this.cbDocFromArtifacts(ev.artifact_paths);
             if (ev.public) {
@@ -5385,12 +5521,30 @@ window.CB_POSTS = [{"id":"bid-parse","name":"招标解析","aliases":["招标","
             this.liveNode = '';
           }
         },
+        /* ux(round7) 纠偏卡动作：prefill=预填输入框草稿（不自动发送）· retry=重放同 payload */
+        cbFixAct(a) {
+          if (a.kind === 'prefill') {
+            this.userInput = a.value || a.label;
+            this.$nextTick(() => { const el = this.$refs.userInput; if (el) el.focus(); });
+          } else if (a.kind === 'retry') {
+            this.cbFix = { visible: false, desc: null };
+            this.runPipelineTrace();
+          }
+        },
+        cbReviseAct(a) {
+          if (a.kind === 'prefill') {
+            this.nlInstruction = a.value || a.label; /* 只预填改方案草稿，不自动应用 */
+            this.$nextTick(() => { const el = this.$refs.nlBox; if (el) el.focus(); });
+          }
+        },
         async runPipelineTrace() {
           // ux(round3)：全流程改回 SSE 流（/api/pipeline/stream）——阶段时间线逐节点可见
           if (!this.beginWork('全流程')) return;
           this.statusText = '全流程计算中…';
           this.mainTab = 'overview';
           this.liveStatus = {};
+          this.cbFix = { visible: false, desc: null }; /* ux(round7)：新运行清纠偏卡 */
+          this.cbMissingFix = null;
           try {
             const last = await this.consumeSse('/api/pipeline/stream', {
               user_input: this.userInput || 'Agent pipeline',
@@ -5412,6 +5566,11 @@ window.CB_POSTS = [{"id":"bid-parse","name":"招标解析","aliases":["招标","
             this.loadRuns();
           } catch (e) {
             this.statusText = '失败: ' + e;
+            /* ux(round7)：整跑失败 → 纠偏卡（重试=同 payload 重放） */
+            this.cbFix = {
+              visible: true,
+              desc: window.CB_FIX ? CB_FIX.classify(String((e && e.message) || e), { retryable: true }) : null,
+            };
           } finally {
             this.endWork();
             this.liveNode = '';
@@ -5815,6 +5974,7 @@ window.CB_POSTS = [{"id":"bid-parse","name":"招标解析","aliases":["招标","
           this.nlStatus = '判断能否改方案…';
           this.nlHints = [];
           this.nlCaps = [];
+          this.cbReviseFix = null; /* ux(round7)：新请求清「无此功能」卡 */
           this.statusText = '自然语言改方案…';
           try {
             const j = await this.fetchJson('/api/revise-nl', {
@@ -5836,9 +5996,17 @@ window.CB_POSTS = [{"id":"bid-parse","name":"招标解析","aliases":["招标","
                 : ['要一排', '要两排', '柜型改 40GP', '去掉 连接板'];
               this.nlCaps = nr.supported_capabilities || [];
               this.statusText = '无此功能（箱方案未改）';
+              /* ux(round7)：unsupported → 纠偏卡（支持的改法=预填草稿，不自动应用） */
+              this.cbReviseFix = window.CB_FIX
+                ? CB_FIX.classify(msg, {
+                    hints: this.nlHints.slice(0, 3),
+                    supported_capabilities: this.nlCaps,
+                  })
+                : null;
               return;
             }
             this.applyResult(j);
+            this.cbReviseFix = null; /* ux(round7)：已改成功 → 清卡 */
             this.nlStatus = logs.length
               ? ('已改：' + logs.join('；'))
               : (nr.message || '已改方案并重算');

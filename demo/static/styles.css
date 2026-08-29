@@ -555,3 +555,53 @@ body.cb-doc-open { overflow: hidden; }
   border: 1px solid var(--cb-line); border-radius: var(--cb-radius-sm); padding: 8px;
   white-space: pre-wrap;
 }
+
+/* ===== ux(round7) 纠偏卡片（docs/ux/ux-design-spec.md 附录 F）=====
+   发生了什么（一句人话）+ 为什么（策略 code）+ 现在能做什么（≤3 动作）。全 --cb-* token，零外链。 */
+.cb-fix {
+  display: flex; gap: 10px; align-items: stretch;
+  margin: 8px 0 4px; padding: 10px 12px;
+  background: var(--cb-orange-soft);
+  border: 1px solid var(--cb-orange); border-radius: var(--cb-radius-md);
+  box-shadow: var(--cb-shadow-sm);
+  text-align: left;
+}
+.cb-fix.is-red { background: var(--cb-red-soft); border-color: var(--cb-red); }
+.cb-fix-bar { flex: none; width: 4px; border-radius: var(--cb-radius-full); background: var(--cb-orange); }
+.cb-fix.is-red .cb-fix-bar { background: var(--cb-red); }
+.cb-fix-main { min-width: 0; display: grid; gap: 6px; }
+.cb-fix-head { display: flex; gap: 8px; align-items: baseline; flex-wrap: wrap; }
+.cb-fix-badge {
+  flex: none; font-size: var(--cb-fs-xs); font-weight: 600; line-height: 1;
+  color: #fff; background: var(--cb-orange); border-radius: var(--cb-radius-full); padding: 3px 8px;
+}
+.cb-fix.is-red .cb-fix-badge { background: var(--cb-red); }
+.cb-fix-title { font-size: var(--cb-fs-sm); font-weight: 600; color: var(--cb-text); overflow-wrap: anywhere; }
+.cb-fix-why { display: flex; gap: 8px; align-items: baseline; flex-wrap: wrap; }
+.cb-fix-code {
+  font-family: var(--cb-mono); font-size: var(--cb-fs-xs); color: var(--cb-text);
+  background: var(--cb-gray-100); border: 1px solid var(--cb-line);
+  border-radius: var(--cb-radius-sm); padding: 1px 6px;
+}
+.cb-fix-why-txt { font-size: var(--cb-fs-xs); color: var(--cb-text-muted); }
+.cb-fix-meta { font-family: var(--cb-mono); font-size: var(--cb-fs-xs); color: var(--cb-text-muted); }
+.cb-fix-what { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+.cb-fix-what-label { flex: none; font-size: var(--cb-fs-xs); color: var(--cb-text-muted); }
+.cb-fix-btn {
+  font: inherit; font-size: var(--cb-fs-sm); cursor: pointer;
+  color: var(--cb-blue); background: var(--cb-blue-soft);
+  border: 1px solid var(--cb-blue); border-radius: var(--cb-radius-sm);
+  padding: 3px 10px;
+}
+.cb-fix-btn:hover { background: var(--cb-blue); color: #fff; }
+.cb-fix-btn.is-retry { color: #fff; background: var(--cb-blue); border-color: var(--cb-blue-strong); }
+.cb-fix-btn.is-retry:hover { background: var(--cb-blue-strong); }
+.cb-fix-note { font-size: var(--cb-fs-xs); color: var(--cb-text-muted); overflow-wrap: anywhere; }
+.cb-fix-raw { flex-basis: 100%; margin: 2px 0 0; }
+.cb-fix-raw summary { cursor: pointer; font-size: 11px; color: var(--cb-text-muted); }
+.cb-fix-raw code {
+  display: block; margin: 4px 0 0; padding: 6px 8px;
+  font-family: var(--cb-mono); font-size: 10px; color: var(--cb-text-muted);
+  background: var(--cb-gray-50); border: 1px solid var(--cb-line);
+  border-radius: var(--cb-radius-sm); white-space: pre-wrap; overflow-wrap: anywhere;
+}
