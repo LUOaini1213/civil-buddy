@@ -37,6 +37,29 @@
       --mono: ui-monospace, "Cascadia Code", Consolas, monospace;
       --surface-ring: inset 0 1px 0 rgba(255, 255, 255, 0.06);
     }
+    /* === Civil Buddy UX tokens · ux(round1) · docs/ux/ux-design-spec.md ===
+       规范 token（--cb-* 命名空间）：与上方现有变量并存、不覆盖任何现有样式。
+       R11 主题轮起逐步切换引用：工程蓝/安全橙/合规红/中性灰阶。 */
+    :root {
+      --cb-blue: #2563eb; --cb-blue-strong: #1d4ed8; --cb-blue-soft: #eff6ff;
+      --cb-orange: #ea580c; --cb-orange-soft: #fff7ed;
+      --cb-red: #dc2626; --cb-red-soft: #fef2f2;
+      --cb-green: #059669; --cb-green-soft: #ecfdf5;
+      --cb-gray-50: #f8fafc; --cb-gray-100: #f1f5f9; --cb-gray-200: #e2e8f0;
+      --cb-gray-400: #94a3b8; --cb-gray-500: #64748b; --cb-gray-900: #0f172a;
+      --cb-text: var(--cb-gray-900); --cb-text-muted: var(--cb-gray-500);
+      --cb-line: var(--cb-gray-200);
+      --cb-font: "Segoe UI", "PingFang SC", "Microsoft YaHei", system-ui, sans-serif;
+      --cb-mono: ui-monospace, "Cascadia Code", Consolas, monospace;
+      --cb-fs-xs: 12px; --cb-fs-sm: 13px; --cb-fs-md: 14px; --cb-fs-lg: 16px;
+      --cb-fs-xl: 18px; --cb-fs-2xl: 22px; --cb-fs-3xl: 28px;
+      --cb-space-1: 4px; --cb-space-2: 8px; --cb-space-3: 12px; --cb-space-4: 16px;
+      --cb-space-5: 24px; --cb-space-6: 32px; --cb-space-7: 48px;
+      --cb-radius-sm: 6px; --cb-radius-md: 10px; --cb-radius-lg: 14px; --cb-radius-full: 999px;
+      --cb-shadow-sm: 0 1px 2px rgba(15, 23, 42, 0.06);
+      --cb-shadow-md: 0 4px 18px rgba(15, 23, 42, 0.10);
+      --cb-shadow-lg: 0 10px 32px rgba(15, 23, 42, 0.16);
+    }
     * { box-sizing: border-box; }
     html, body { height: 100%; }
     body {
