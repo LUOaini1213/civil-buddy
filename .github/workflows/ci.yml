@@ -43,6 +43,16 @@ jobs:
           ]
           miss = [k for k in need if k not in w]
           assert not miss, miss
+          # UX R13: R5-R12 轮次 UI 标记不丢（审批卡/审计时间线/斜杠面板/空态卡/主题持久化）
+          ux_marks = {
+              "frontend/workbench.html": ["cb-apr", "data-cb-audit-panel", "cbSlashFilter", "cb-empty-card", "cb_theme_v1", "cbThemeBtn"],
+              "demo/static/index.html": ["data-cb-audit-panel", "cb-empty-card", "cb_theme_v1", "cbThemeBtn"],
+              "demo/static/app.js": ["确认并重提", "handleSlash", "cb_theme_v1"],
+          }
+          for path, marks in ux_marks.items():
+              text = Path(path).read_text(encoding="utf-8")
+              miss2 = [k for k in marks if k not in text]
+              assert not miss2, (path, miss2)
           print("frontend OK")
           PY
       - name: Pipeline unit smoke

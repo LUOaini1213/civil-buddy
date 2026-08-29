@@ -16,6 +16,8 @@
 | **技术创新** | 装箱引擎 NL→IntentSpec→白名单 tools→HITL→影子评测；446t 单票对照 29→25 柜（mid50 0.594，risk=WARN 口径）；本地校准综合分对外口径 **8.85** | `python main.py --demo` · `python main.py --eval` |
 
 > **66 岗诚实分级**（L1 知识库 66/66 · L2 工具写盘 36/66 · L3 引擎岗 1，每级挂可复跑验收）：[docs/depth-ladder.md](docs/depth-ladder.md)。申报定位与三维度证据映射：[docs/submission/haizizhi-positioning.md](docs/submission/haizizhi-positioning.md)。
+>
+> **UX 证据链（13 轮迭代，R1 立规矩 → R13 收官）**：设计公理/token/13 轮总结表/K.7 金线终验见 [docs/ux/ux-design-spec.md](docs/ux/ux-design-spec.md)；断网专项 `python scripts/test_offline_ui.py`（外域请求 0、pageerror 0）；端到端金线 `python scripts/r13_golden_path_e2e.py`（8/8 PASS，需 playwright）；体验记分卡 `python scripts/eval_competition_scorecard.py --skip-phase0`（本地校准综合 8.85，赢线 PASS）。
 
 ### Agent Middleware（赛道 1 · 完全合格）
 

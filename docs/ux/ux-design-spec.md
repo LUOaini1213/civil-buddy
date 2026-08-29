@@ -1,4 +1,4 @@
-# Civil Buddy UX 设计规范（ux round1 定稿）
+# Civil Buddy UX 设计规范（ux round13 定稿 · R1 立规矩 · R13 收官）
 
 > 本轮（ux round1）为后续 12 轮 UX 迭代立规矩：定公理、定 token、定语言、定路线。
 > 本轮只加文档与 `:root{}` 变量块，**不改任何布局与现有样式**。
@@ -111,6 +111,35 @@
 | watercss/water.css `out/water.css`（watercss.kkga.de） | MIT | token 思路：语义色命名（text-main/text-muted/focus/border）+ `prefers-color-scheme` 明暗双套同名词。R11 主题轮按此扩展 |
 | web.dev 离线清单（web.dev/learn/pwa，App Shell / offline fallback） | 文档 pattern-only | App Shell=静态壳同源自足、数据走 /api；资源一律 cache 可得。R12 借其"壳不依赖网络"的自检口径（本项目壳在本机，天然成立，故只收口不自建缓存） |
 | Workbox precaching（developer.chrome.com/docs/workbox） | 文档 pattern-only | revision 清单 + install 预缓存 + cache-first 的失效思想。R12 借思想不引库；SW 本体经 K.5 评估为不做 |
+
+## 13 轮总结表（ux round13 定稿 · 每轮一行：主题 / 落地物 / 验收态）
+
+| 轮 | 主题 | 落地物 | 验收态 |
+| --- | --- | --- | --- |
+| R1 | 立规矩 | 本 spec：四公理 + `--cb-*` token + 术语/禁句表 + 12 轮路线图 + 基线体检（附录 A） | 只加文档与变量块，零布局改动；红线（零 CDN）全量盘点通过 |
+| R2 | 三端统一输入框 | 一个 composer：自然语言 + `/` 指令 + `@` 文件 + 追问改方案 | 三端落地；Esc=取消；CI 标记不丢 |
+| R3 | 八阶段时间线 | `CB_TL_STAGES` 八轨（理解→召唤→成箱→确认→拼柜→合规→落盘→收口）+ 附录 B 事件映射表 | 状态色蓝/绿/红 + 耗时；事件可回放 |
+| R4 | 文书预览 | `cbDoc*` 组件 + vendored marked（附录 C，零 CDN） | 预览与导出逐字段一致；UNSPECIFIED「未提供」徽标 |
+| R5 | HITL 审批卡 | `.cb-apr` 卡（附录 D）：确认/驳回/补参数动作特定三按钮 | Esc/关闭=驳回≠放行；决策写审计 |
+| R6 | 跨运行审计时间线 | `[data-cb-audit-panel]`（附录 E）+ JSON 导出 | 任一运行可回放；签字/确认有时间戳与操作者 |
+| R7 | 纠偏卡片 | `.cb-fix` 话术映射（附录 F）：code→人话→动作 | 恢复入口从时间线可达；断点续跑不丢状态 |
+| R8 | 窄屏 + PWA | 768/375 断点 + 44px 触控 + manifest/icons（附录 G） | 768/375 下输入/流水线/审批卡全部可用 |
+| R9 | 斜杠面板 | `/` 命令 + 66 岗检索（附录 H） | 面板零 CDN、键盘可达 |
+| R10 | 空态引导 | 空态卡 + 三示例卡 + 三步 checklist + 网关兜底（附录 I）；顺手修 R6 致命 JS 语法错误 | 新用户 3 分钟首跑（demo_one_shot 同路径） |
+| R11 | 双主题无障碍 | `--cb-*` 明暗两套 + aria-live + aria-label + focus-visible + 大字开关（附录 J） | 三端 token 接管；明暗切换零对比度回归 |
+| R12 | 离线门禁 | 零外链断言 + JS 语法门禁进 CI + 断网专项 playwright（附录 K） | 断网全动线绿：外域请求 0、pageerror 0 |
+| R13 | 终评定稿 | 本节总结表 + K.7 金线终验 + 已知边界清单 + CI 补 R5-R12 标记门禁 + README 证据链 | 金线 8/8 PASS；scorecard 8.85 不降；禁句检索为零 |
+
+## 已知边界清单（ux round13 收官时点合并历史提醒，不阻断验收）
+
+| 项 | 现状与边界 | 出处 |
+| --- | --- | --- |
+| 大字模式细节 | `html.cb-large` 把 `--cb-fs-*` 阶梯整体 +2 档（G.3）；只接了顶栏开关与持久化，**未逐组件走查大字下是否溢出**（表格/3D canvas 等宽内容可能需要横向滚动） | R8/R11 |
+| 对比度残留 | 白字在 #059669/#ea580c 彩底按钮 3.8/3.6:1（浅色端既有值，大字粗体达标线内）；装饰性彩边 8 位 alpha hex、JS canvas 3D 渐变、TEAM_ROSTER 成员色、demo 暗色导轨、投标页 hero 深色洗底、文书工具条 #1e293b = 双主题恒定 chrome（附录 J.2 全表） | R11 |
+| Rust 侧 audit 无耗时 | 审计节点行「耗时（ms）」仅 :8000 网关事件流有（B.5/E.4）；:8765 Rust 侧 run 节点无 duration_ms 字段，时间线该列留空，属数据源口径差异非前端缺陷 | R3/R6 |
+| 下载文件名双 `.md` | LLM 工具链路偶发交付名 `xxx.md.md`（write_md 对已带 `.md` 的名字不重复追加，实际为模型传参携带）；仅影响下载建议文件名，内容与预览不受影响 | R13 金线实测 |
+| SW 不做 | 结论与备复发 K.5：本机 serve 壳自足，cache-first 旧壳掩盖每轮 UI 更新且与网关 no-store 冲突 | R12 |
+| 断网专项局限 | route abort 法覆盖"外链卡死/白屏/JS 挂"事故，不做防火墙级断网；loopback 服务可达是部署侧前提（K.4） | R12 |
 
 ## 附录 A：UX 基线体检（ux round1 只读盘点）
 
@@ -727,3 +756,38 @@ runner 自带 node 必跑，并另加 `find … -print0 | node --check` bash 循
 | 断网动线 | 两端核心动线全绿、外域请求 0 次、pageerror 0 | `python scripts/test_offline_ui.py`（需 playwright） |
 | manifest | start_url/scope/icons 全相对路径 | K.1 脚本附加断言 |
 | SW | 未注册（K.5 结论） | grep `serviceWorker` 应为 0 命中 |
+
+### K.7 终验记录（ux round13 收官时点 · 端到端金线逐项）
+
+**金线**：`python scripts/r13_golden_path_e2e.py`（playwright chromium headless；自动起 `uvicorn gateway.app:app :8000` + `CIVIL_PORT=8765 workbench/target/release/civil-workbench.exe`，真实任务走 LLM 链路，测毕自杀进程）。
+
+| # | 项 | 结果 | 证据摘录 |
+| --- | --- | --- | --- |
+| 1 | 空态引导 | PASS | 空态卡在，三步引导可见，步骤数=3，`?` 入口可重开 |
+| 2 | 示例卡预填 | PASS | 点击 `/pack` 示例卡后输入框=`pack test/sim_materials/…`，1.5s 内无自动发送 |
+| 3 | 时间线八阶段 | PASS | 八轨 chips=understand/summon/box/hitl/pack/risk/write/finalize 齐全 |
+| 4 | HITL 审批卡确认 | PASS | 高风险钢结构岗触发审批卡，点「确认并重提」后状态=`已确认 · 已重新提交` |
+| 5 | 文书预览下载 | PASS | 预览浮层打开，真实下载 `钢结构专业说明草稿.md` 1536B 非空，三步引导第 3 步打勾 |
+| 6 | 审计含决策节点 | PASS | 审计头摘要=`决策 2 · 工具 1 · 写盘 1 · 错误 0`，决策节点置顶渲染 |
+| 7 | 主题切换 | PASS | 暗：`data-theme=dark`+`aria-pressed=true`+`cb_theme_v1=dark`；回切 light 成功 |
+| 8 | 窄屏 375px 审批 | PASS | 375×812 视口审批按钮全宽 48px 高、完全在视口内（box=[53,287,273,48]），可点确认 |
+
+汇总 **8/8 PASS，零未捕获 JS 异常**。
+
+**过程记录（诚实）**：首轮第 6 项 FAIL（决策数=0、节点=0）——定性为**金线脚本竞态**而非产品缺陷：`#auditPanel` 的 unhide 是同步的，脚本在面板显示瞬间即读 body，此刻仍是「加载中…」。经独立探针复现（正确等待 `.cb-audit-pinned` 且摘要不含「加载中」后：决策 2、决策节点 4 个）确认数据与渲染均正常，仅修脚本等待条件（`wait_for_selector('.cb-audit-pinned')` + `wait_for_function` 摘要就绪），**产品代码零改动**，复跑 8/8 全绿。
+
+**配套终验（同一时点）**：
+
+| 项 | 结果 |
+| --- | --- |
+| `test_stack_parity.py` | PASS（contract + golden 41 金句 + mirrors + roster 66 岗） |
+| `run_precommit_tests.py --quick` | ALL GREEN（booking_regression + p2_gates + stack_parity + post_scorecard） |
+| `demo_one_shot.py` | ALL SELECTED CHECKS PASSED（冒烟无需 API Key） |
+| `eval_competition_scorecard.py --skip-phase0` | raw 8.90 → **overall 8.85**，hard gates 8/8 True，赢线 PASS（不降） |
+| `eval_post_scorecard.py --all-pilots` | 5/5 岗 PASS（bid-parse / bid-tech / bid-compliance / cost / safety-brief） |
+| `test_offline_ui.py`（R12 断网专项） | PASS：外域请求 0 次、pageerror 0 |
+| `cargo test --release --lib --test intents_golden` | 2/2 ok（frozen baseline + contract vocab wired） |
+| 禁句全文检索（§3.3 六词，UI 三端资产） | 0 命中 |
+| CI 补门禁 | ci.yml frontend 步骤新增 R5–R12 UI 标记断言（cb-apr / audit-panel / slash / 空态卡 / 主题持久化，三文件全 OK） |
+
+**局限**：金线=单用户单会话真浏览器动线，不含负载/多用户/长程稳定性；LLM 链路依赖 `demo/.env` 的 Key，纯断网口径以 K.4 为准；本地无 node，`test_js_syntax.py` 按 R12 设计 SKIP（语法门禁由 CI ubuntu runner 必跑兜底）。
