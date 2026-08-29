@@ -4,7 +4,8 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>装箱拼柜 · Team Mode</title>
-  <script src="https://cdn.jsdelivr.net/npm/vue@2.7.16/dist/vue.min.js"></script>
+  <!-- ux(round4)：零 CDN——Vue/marked/文书预览组件全部同源 vendored（frontend/vendor/） -->
+  <script src="/static/vendor/vue.min.js"></script>
   <style>
     :root {
       /* Elevated dark palette — not pure black void */
@@ -1488,6 +1489,116 @@
       border: 1px solid var(--border); border-radius: var(--cb-radius-sm);
       padding: 1px 6px; color: var(--muted); background: var(--bg-panel);
     }
+
+    /* ===== ux(round4) 交付物文书预览（cbDocOpen / frontend/vendor/cb-doc.js）=====
+       白底 A4 版心 + 页眉页脚 + 免责横幅常驻；诚实元素徽章；打印隐藏工作台 chrome。
+       与 demo/static/styles.css 同构（改动请同步两份）。 */
+    .cb-doc-overlay { position: fixed; inset: 0; z-index: 9999; display: flex; }
+    .cb-doc-overlay[hidden] { display: none; }
+    .cb-doc-backdrop { position: absolute; inset: 0; background: rgba(15, 23, 42, 0.55); }
+    .cb-doc-modal { position: relative; margin: auto; width: min(880px, calc(100vw - 24px)); max-height: calc(100vh - 24px); display: flex; flex-direction: column; }
+    .cb-doc-toolbar {
+      display: flex; align-items: center; gap: 8px; flex-wrap: wrap; padding: 8px 10px;
+      background: var(--cb-gray-900); color: #fff; border-radius: var(--cb-radius-md) var(--cb-radius-md) 0 0;
+    }
+    .cb-doc-title { font-weight: 600; font-size: var(--cb-fs-sm); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 46%; }
+    .cb-doc-meta { font-size: var(--cb-fs-xs); color: var(--cb-gray-400); font-family: var(--cb-mono); }
+    .cb-doc-actions { margin-left: auto; display: flex; gap: 6px; flex-wrap: wrap; }
+    .cb-doc-btn {
+      background: transparent; color: #e2e8f0; border: 1px solid rgba(226, 232, 240, 0.4);
+      border-radius: var(--cb-radius-sm); padding: 3px 10px; font-size: var(--cb-fs-xs); cursor: pointer;
+    }
+    .cb-doc-btn:hover { border-color: #fff; color: #fff; }
+    .cb-doc-scroll { overflow: auto; background: var(--cb-gray-100); padding: 14px; border-radius: 0 0 var(--cb-radius-md) var(--cb-radius-md); }
+    .cb-doc-page {
+      background: #fff; color: var(--cb-gray-900); margin: 0 auto; width: 794px; max-width: 100%;
+      min-height: 1000px; padding: 56px 60px 72px; box-shadow: var(--cb-shadow-lg);
+      font-family: "FangSong", "FangSong_GB2312", "仿宋", "仿宋_GB2312", "STFangsong", "SimSun", "宋体", "Microsoft YaHei", serif;
+      font-size: 15px; line-height: 1.9;
+    }
+    .cb-doc-head, .cb-doc-foot {
+      display: flex; align-items: baseline; gap: 12px; font-size: 12px; color: var(--cb-gray-500);
+      border-bottom: 1px solid var(--cb-gray-200); padding-bottom: 8px; margin-bottom: 20px;
+    }
+    .cb-doc-head .cb-doc-proj { font-weight: 700; color: var(--cb-gray-900); }
+    .cb-doc-head .cb-doc-role { margin-left: auto; font-family: var(--cb-mono); }
+    .cb-doc-foot { border-bottom: none; border-top: 1px solid var(--cb-gray-200); margin: 28px 0 0; padding: 10px 0 0; }
+    .cb-doc-foot .cb-doc-time { font-family: var(--cb-mono); }
+    .cb-doc-foot .cb-doc-ver { font-family: var(--cb-mono); color: var(--cb-gray-400); }
+    .cb-doc-disclaim {
+      margin-left: auto; background: var(--cb-red-soft); color: var(--cb-red);
+      border: 1px solid var(--cb-red); border-radius: var(--cb-radius-sm);
+      padding: 2px 8px; font-size: 12px; font-weight: 600; white-space: nowrap;
+    }
+    .cb-doc-md h1, .cb-doc-md h2, .cb-doc-md h3, .cb-doc-md h4, .cb-doc-md h5, .cb-doc-md h6 {
+      font-family: "SimHei", "黑体", "Microsoft YaHei", "PingFang SC", sans-serif;
+      font-weight: 700; color: var(--cb-gray-900); line-height: 1.5; margin: 1.2em 0 0.5em;
+    }
+    .cb-doc-md h1 { font-size: 21px; text-align: center; margin-top: 0.2em; }
+    .cb-doc-md h2 { font-size: 17px; border-left: 4px solid var(--cb-blue); padding-left: 8px; }
+    .cb-doc-md h3 { font-size: 15px; }
+    .cb-doc-md p { margin: 0.5em 0; }
+    .cb-doc-md ul, .cb-doc-md ol { margin: 0.5em 0; padding-left: 1.8em; }
+    .cb-doc-md li { margin: 0.15em 0; }
+    .cb-doc-md a { color: var(--cb-blue); overflow-wrap: anywhere; }
+    .cb-doc-md code {
+      font-family: var(--cb-mono); font-size: 0.92em; background: var(--cb-gray-100);
+      border: 1px solid var(--cb-gray-200); border-radius: 3px; padding: 0 4px;
+    }
+    .cb-doc-md pre { background: var(--cb-gray-50); border: 1px solid var(--cb-gray-200); border-radius: var(--cb-radius-sm); padding: 10px 12px; overflow: auto; }
+    .cb-doc-md pre code { border: none; background: none; padding: 0; }
+    .cb-doc-md blockquote { border-left: 3px solid var(--cb-gray-200); margin: 0.6em 0; padding: 0.1em 0.9em; color: var(--cb-gray-500); }
+    .cb-doc-md table { border-collapse: collapse; width: 100%; margin: 0.8em 0; font-size: 13px; }
+    .cb-doc-md th, .cb-doc-md td { border: 1px solid var(--cb-gray-400); padding: 5px 8px; text-align: left; vertical-align: top; overflow-wrap: anywhere; }
+    .cb-doc-md th { background: var(--cb-gray-100); font-family: "SimHei", "黑体", "Microsoft YaHei", sans-serif; font-weight: 700; }
+    .cb-doc-md tr:nth-child(even) td { background: var(--cb-gray-50); }
+    .cb-doc-md hr { border: none; border-top: 1px solid var(--cb-gray-200); margin: 1.2em 0; }
+    .cb-badge {
+      display: inline-block; font-family: var(--cb-mono); font-size: 0.88em; line-height: 1.4;
+      border-radius: var(--cb-radius-sm); padding: 0 6px; margin: 0 1px; white-space: nowrap;
+    }
+    .cb-badge-unspec { background: var(--cb-orange-soft); color: var(--cb-orange); border: 1px solid var(--cb-orange); }
+    .cb-badge-anchor { background: #fff; color: var(--cb-orange); border: 1px dashed var(--cb-orange); }
+    .cb-tool-h { background: var(--cb-blue-soft); border-radius: 3px 3px 0 0; }
+    .cb-tool-h::after {
+      content: "tool-computed"; display: inline-block; margin-left: 8px; vertical-align: middle;
+      font-family: var(--cb-mono); font-size: 10px; font-weight: 400; color: var(--cb-blue);
+      border: 1px solid var(--cb-blue); border-radius: var(--cb-radius-full); padding: 0 7px;
+    }
+    .cb-tool-comp { background: var(--cb-blue-soft); box-shadow: 0 6px 0 -4px var(--cb-blue-soft); }
+    .cb-doc-disclaim-p {
+      background: var(--cb-red-soft); border: 1px solid var(--cb-red); border-left-width: 4px;
+      color: var(--cb-gray-900); border-radius: var(--cb-radius-sm); padding: 8px 12px !important; font-size: 13px;
+    }
+    body.cb-doc-open { overflow: hidden; }
+    /* 交付物文书列表面板（工作台内嵌列表） */
+    .cb-doc-list { display: flex; flex-direction: column; gap: 6px; }
+    .cb-doc-row {
+      display: flex; align-items: center; gap: 8px; flex-wrap: wrap;
+      border: 1px solid var(--border); border-radius: var(--cb-radius-sm); padding: 6px 10px; background: var(--bg-panel);
+    }
+    .cb-doc-row-t { font-weight: 600; font-size: var(--cb-fs-sm); color: var(--text); }
+    .cb-doc-row-k { font-size: 11px; color: var(--muted); font-family: var(--cb-mono); }
+    .cb-doc-row-btn {
+      margin-left: auto; font-size: var(--cb-fs-xs); border: 1px solid var(--border);
+      background: transparent; border-radius: var(--cb-radius-sm); padding: 2px 10px; cursor: pointer; color: var(--text); text-decoration: none;
+    }
+    .cb-doc-row-btn:hover { border-color: var(--cb-blue); color: var(--cb-blue); }
+    /* 打印：只留文书本体，隐藏工作台 chrome；@page A4 + 页眉页脚由文书自绘 */
+    @media print {
+      body > :not(.cb-doc-overlay) { display: none !important; }
+      body.cb-doc-open { overflow: visible; }
+      .cb-doc-overlay { position: static; display: block; }
+      .cb-doc-backdrop, .cb-doc-toolbar { display: none !important; }
+      .cb-doc-modal { margin: 0; width: auto; max-height: none; }
+      .cb-doc-scroll { overflow: visible; background: #fff; padding: 0; border-radius: 0; }
+      .cb-doc-page { width: auto; max-width: none; min-height: 0; box-shadow: none; padding: 0; }
+      .cb-doc-head, .cb-doc-foot { position: fixed; left: 0; right: 0; }
+      .cb-doc-head { top: 0; }
+      .cb-doc-foot { bottom: 0; }
+      .cb-badge { border-color: var(--cb-orange); color: var(--cb-orange); -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+      .cb-doc-page * { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+    }
   </style>
 </head>
 <body>
@@ -1879,6 +1990,22 @@
                 </div>
               </div>
             </template>
+          </div>
+
+          <!-- ===== ux(round4) 交付物文书：落盘 .md 文物 → 点开即正式文书预览（cbDocOpen） ===== -->
+          <div class="section" v-if="docArtifacts.length" data-cb-doc-panel="true">
+            <div class="section-h">
+              <h3>交付物文书</h3>
+              <span class="pill">AI 草稿 · 不签认</span>
+            </div>
+            <div class="cb-doc-list">
+              <div class="cb-doc-row" v-for="(d, i) in docArtifacts" :key="'cbdoc'+i">
+                <span class="cb-doc-row-t">{{ d.name }}</span>
+                <span class="cb-doc-row-k">{{ d.key }} · 落盘</span>
+                <button type="button" class="cb-doc-row-btn" @click="openDocArtifact(d)">文书预览</button>
+              </div>
+            </div>
+            <p class="foot-note">预览为落盘 markdown 原文渲染；数字只抄 tools 结果，UNSPECIFIED/[A001] 待人工补全。</p>
           </div>
 
           <!-- Empty: full mode landing（简洁无结果时隐藏，避免中间双空洞） -->
@@ -2926,6 +3053,9 @@
     </div>
   </div>
 
+  <!-- ux(round4)：文书预览依赖（同源 vendored，零 CDN；许可见 frontend/vendor/*.LICENSE） -->
+  <script src="/static/vendor/marked.min.js"></script>
+  <script src="/static/vendor/cb-doc.js"></script>
   <script>
     const API = '';
 
@@ -3131,6 +3261,8 @@ window.CB_POSTS = [{"id":"bid-parse","name":"招标解析","aliases":["招标","
           autoFollowVisual: true,
           streamProgress: { done: 0, total: 11, pct: 0 },
           liveToolLines: [],
+          /* ux(round4) 交付物文书：done 事件 artifact_paths 中的 markdown 文物 */
+          docArtifacts: [],
           /* ux(round3) 阶段时间线状态（Vue2 响应式：字段全部预声明，stages 键固定） */
           cbTl: {
             active: false,
@@ -4185,6 +4317,8 @@ window.CB_POSTS = [{"id":"bid-parse","name":"招标解析","aliases":["招标","
             this.liveNode = '';
             this.streamProgress.pct = 100;
             if (ev.session_id) this.sessionId = ev.session_id; /* ux(round3)：HITL/收口事件带回 session */
+            /* ux(round4)：捕获落盘文书（markdown 文物）供「交付物文书」面板预览 */
+            this.docArtifacts = this.cbDocFromArtifacts(ev.artifact_paths);
             if (ev.public) {
               this.result = Object.assign({}, this.result, ev.public, {
                 agent_steps: (ev.public.agent_steps && ev.public.agent_steps.length)
@@ -4311,6 +4445,34 @@ window.CB_POSTS = [{"id":"bid-parse","name":"招标解析","aliases":["招标","
             return JSON.stringify(obj);
           } catch (e) {
             return String(obj);
+          }
+        },
+        /* ===== ux(round4) 交付物文书预览（cbDocOpen / frontend/vendor/cb-doc.js）===== */
+        cbDocFromArtifacts(paths) {
+          /* artifact_paths: { 键: 落盘路径 } —— 只取 markdown 文书；数字类 JSON 不进预览面板 */
+          const entries = Object.entries(paths || {});
+          return entries
+            .filter(([k, p]) => /\.(md|markdown)$/i.test(String(p)) && k !== 'error')
+            .map(([k, p]) => ({
+              key: k,
+              path: String(p),
+              name: String(p).split(/[\\/]/).pop(),
+            }));
+        },
+        async openDocArtifact(d) {
+          if (!d || !d.path) return;
+          try {
+            const res = await fetch('/api/artifact?path=' + encodeURIComponent(d.path));
+            const j = await res.json();
+            if (!res.ok || !j.ok) throw new Error(j.detail || ('HTTP ' + res.status));
+            window.cbDocOpen({
+              title: j.name || d.name,
+              text: j.text,
+              role: '岗位 · 大 Team 流水线',
+              project: (this.result && (this.result.goal || this.result.run_id)) || 'Civil Buddy 交付物',
+            });
+          } catch (e) {
+            this.statusText = '文书预览失败: ' + (e.message || e);
           }
         },
         applyAgentSteps(payload) {

@@ -212,3 +212,42 @@ SSE 形状：`event: <name>\ndata: {...}\n\n`（demo/static/app.js `streamChat`�
 ### B.6 CI
 
 frontend 断言沿用 §附录 A 的 18 标记清单；时间线组件不删任何标记。`frontend/workbench.html` 保留 `consumeSse`（R3 起重新用于 `/api/pipeline/stream` 全流程流式）与 `hitl_summary`。
+
+## 附录 C：交付物文书预览组件（ux round4 定稿）
+
+> R4 落地「一份正式交付物」：聊天/工作台里的 markdown 交付物按正式文书呈现，
+> 而非终端输出。两端同构 vanilla 组件；零 CDN、零外链字体。
+
+### C.1 组件结构（`cbDocOpen` / `cbDocClose` / `cbDocDecorate`）
+
+| 端 | 组件源 | 样式 | 接入点 |
+| --- | --- | --- | --- |
+| :8765 | `demo/static/docpreview.js`（canonical） | `demo/static/styles.css` 追加 `.cb-doc-*` 块 | `index.html` 引入；`app.js` done 后聊天流内交付物卡片（预览/下载），侧栏 `#files` .md 点开即预览（`/api/file`，out_root 内） |
+| :8000 | `frontend/vendor/cb-doc.js`（同构副本，头部注明 canonical） | `frontend/workbench.html` 内联同构 CSS 块 | `workbench.html` done 事件捕获 `ev.artifact_paths` → 「交付物文书」面板（`[data-cb-doc-panel]`），`openDocArtifact` 走 `GET /api/artifact`（gateway/app.py，限 ROOT 内 .md/.markdown/.json/.txt/.jsonl 文本） |
+
+DOM 结构（追加到 `document.body`，打印时独占文档流）：
+
+```
+.cb-doc-overlay[hidden] > .cb-doc-backdrop + .cb-doc-modal
+  .cb-doc-toolbar（标题/字符数 · 复制 Markdown / 下载 .md / 打印存 PDF / 关闭）
+  .cb-doc-scroll > article.cb-doc-page（白底 A4 版心 794×1000）
+    header.cb-doc-head   页眉：项目名 + 岗位（等宽）
+    .cb-doc-body.cb-doc-md   marked 渲染正文（经 sanitize：去 script/iframe/on*）
+    footer.cb-doc-foot   页脚：生成时间 + 「ux(round4) 文书预览 v1」
+                         + .cb-doc-disclaim「内部讨论 AI 草稿 · 不签认」（合规红，常驻）
+```
+
+### C.2 版式与诚实元素
+
+- 版式：正文系统仿宋/宋体栈（`FangSong → 仿宋_GB2312 → SimSun → …`），标题黑体栈，表格实线边框（GB/T 9704 工程文书惯例 pattern，自拟）；零外链字体。
+- 诚实元素（spec §3.2 落地）：`UNSPECIFIED`/待填类 → 安全橙徽章「未提供」（title 保留原文哨兵）；`[A001]` → 橙色虚线锚点徽章；标题含「工具计算/回传/只抄/非本岗编造」的小节 → 浅蓝底 + `tool-computed` 徽记；正文首段含「不构成/仅供内部讨论/不是签认」→ 合规红横幅样式。
+- 打印：`@media print` 隐藏聊天/工作台 chrome 只留文书本体；页眉页脚 `position:fixed` 每页复现。
+
+### C.3 vendored 依赖清单（零 CDN，运行时全部同源）
+
+| 名 | 版本 | 体积 | 许可 | 来源 URL | 落位 |
+| --- | --- | --- | --- | --- | --- |
+| marked | 12.0.2 | 35,479 B | MIT | https://registry.npmjs.org/marked/-/marked-12.0.2.tgz | `demo/static/vendor/marked.min.js` + `frontend/vendor/marked.min.js`（LICENSE 同目录） |
+| vue | 2.7.16 | 107,679 B | MIT | https://registry.npmjs.org/vue/-/vue-2.7.16.tgz | `frontend/vendor/vue.min.js` + `vue.LICENSE`（**修复**：workbench.html 原直连 jsdelivr CDN，违背零外链红线，本轮改同源引用） |
+
+`frontend/vendor/cb-doc.js` 为 `demo/static/docpreview.js` 同构副本（非第三方依赖，改动须同步两份）。

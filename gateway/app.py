@@ -2266,6 +2266,37 @@ def api_test_report():
     return FileResponse(p)
 
 
+_ARTIFACT_TEXT_SUFFIXES = {".md", ".markdown", ".json", ".txt", ".jsonl"}
+
+
+@app.get("/api/artifact")
+def api_artifact(path: str = ""):
+    """ux(round4)：读取落盘文书文本供前端文书预览（cbDocOpen）。
+
+    边界：仅仓库 ROOT 内、仅 UTF-8 文本扩展名（.md/.markdown/.json/.txt/.jsonl）。
+    数字与内容原文返回——预览只是渲染，不改写（tools compute numbers; the model only routes）。
+    """
+    if not path:
+        raise HTTPException(400, "path required")
+    target = Path(path)
+    try:
+        target = target.resolve()
+        target.relative_to(ROOT.resolve())
+    except ValueError:
+        raise HTTPException(403, "not an artifact")
+    except Exception:
+        raise HTTPException(400, "bad path")
+    if target.suffix.lower() not in _ARTIFACT_TEXT_SUFFIXES:
+        raise HTTPException(403, "type not allowed")
+    if not target.is_file():
+        raise HTTPException(404, "missing")
+    try:
+        text = target.read_text(encoding="utf-8")
+    except UnicodeDecodeError:
+        raise HTTPException(415, "binary file not previewable")
+    return {"ok": True, "name": target.name, "expert": "", "text": text}
+
+
 class PdfRunRequest(BaseModel):
     filename: str = ""
     container_type: str = "40HQ"

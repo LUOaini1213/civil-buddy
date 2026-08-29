@@ -95,7 +95,17 @@ async fn index(State(st): State<Arc<AppState>>) -> Response {
 }
 
 async fn health(State(st): State<Arc<AppState>>) -> Json<Value> {
+    /* ux(round4)：probe() 走 reqwest::blocking，必须在 spawn_blocking 里跑——
+       直接在 async 上下文 drop blocking runtime 会 panic 并截断 /api/health（同 round3 对 /api/chat 的修复）。 */
     let keyed = st.has_key();
+    let probes = tokio::task::spawn_blocking(|| {
+        json!({
+            "parse": crate::parse::probe(),
+            "packing_agent": crate::packing_bridge::probe(),
+        })
+    })
+    .await
+    .unwrap_or_else(|_| json!({"parse": null, "packing_agent": null}));
     Json(json!({
         "ok": true,
         "has_key": keyed,
@@ -103,8 +113,8 @@ async fn health(State(st): State<Arc<AppState>>) -> Json<Value> {
         "model": llm_model(),
         "context": crate::context::Policy::from_env().to_value(),
         "harness": crate::harness::architecture(),
-        "parse": crate::parse::probe(),
-        "packing_agent": crate::packing_bridge::probe(),
+        "parse": probes["parse"],
+        "packing_agent": probes["packing_agent"],
     }))
 }
 

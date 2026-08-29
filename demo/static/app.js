@@ -510,6 +510,7 @@ async function streamChat(message, bodyEl) {
         else paintContext(estimateLocalContext());
         renderCites(data.citations || []);
         renderFiles(data.deliverables || []);
+        appendDocCards(data.deliverables || [], bodyEl);
       }
       eventName = "message";
     }
@@ -533,11 +534,79 @@ function renderFiles(files) {
   for (const f of files) {
     const li = document.createElement("li");
     const a = document.createElement("a");
-    a.href = `/api/file?path=${encodeURIComponent(f.path)}`;
+    a.href = fileUrl(f.path);
     a.textContent = `${f.expert} · ${f.name}`;
+    /* ux(round4)：markdown 交付物点开即文书预览（其余类型保持下载） */
+    if (isDocMd(f)) {
+      a.addEventListener("click", (ev) => {
+        ev.preventDefault();
+        openDeliverable(f);
+      });
+    }
     li.appendChild(a);
     box.prepend(li);
   }
+}
+
+/* ===== ux(round4) 交付物文书预览（cbDocOpen / docpreview.js）===== */
+
+function fileUrl(p) {
+  /* Rust canonicalize 返回 \\?\ verbatim 前缀；/api/file 对该形态 404——
+     剥掉后端点自会 canonicalize（自测发现：此前侧栏下载链接全部 404）。 */
+  return `/api/file?path=${encodeURIComponent(String(p || "").replace(/^\\\\\?\\/, ""))}`;
+}
+
+function isDocMd(f) {
+  return /\.(md|markdown)$/i.test(String(f && (f.name || f.path) || ""));
+}
+
+async function openDeliverable(f) {
+  try {
+    await window.cbDocOpenUrl({
+      url: fileUrl(f.path),
+      title: f.name || f.title || "交付物文书",
+      role: `岗位 · ${f.expert || "未指定"}`,
+    });
+  } catch (e) {
+    addStatus(`预览失败 ${f.name || ""}：${(e && e.message) || e}`);
+  }
+}
+
+/* 聊天流内交付物卡片：点开即预览，另留 .md 下载 */
+function appendDocCards(files, bodyEl) {
+  if (!files || !files.length) return;
+  const host = bodyEl && bodyEl.parentElement ? bodyEl.parentElement : $("log");
+  const card = document.createElement("div");
+  card.className = "cb-doc-card";
+  const tag = document.createElement("span");
+  tag.className = "cb-doc-card-tag";
+  tag.textContent = "交付物文书";
+  card.appendChild(tag);
+  for (const f of files) {
+    const t = document.createElement("span");
+    t.className = "cb-doc-card-t";
+    t.textContent = `${f.expert || ""} · ${f.name || f.path || "文书"}`.replace(/^ · /, "");
+    card.appendChild(t);
+    if (isDocMd(f)) {
+      const b = document.createElement("button");
+      b.type = "button";
+      b.textContent = "文书预览";
+      b.addEventListener("click", () => openDeliverable(f));
+      card.appendChild(b);
+    }
+    const a = document.createElement("a");
+    a.className = "dl";
+    a.href = fileUrl(f.path);
+    a.setAttribute("download", f.name || "文书.md");
+    a.textContent = "下载";
+    card.appendChild(a);
+  }
+  const k = document.createElement("span");
+  k.className = "cb-doc-card-k";
+  k.textContent = "AI 草稿 · 不签认";
+  card.appendChild(k);
+  host.appendChild(card);
+  $("log").scrollTop = $("log").scrollHeight;
 }
 
 async function apiError(res) {
