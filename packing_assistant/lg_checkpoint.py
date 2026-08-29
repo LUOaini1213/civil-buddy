@@ -2,7 +2,12 @@
 
 环境变量:
   PACKING_LG_CHECKPOINT=1     启用（默认 1）
-  PACKING_LG_CHECKPOINT_PATH  sqlite 路径（默认 output/langgraph_checkpoints.db）
+  PACKING_LG_CHECKPOINT_PATH  sqlite 路径（默认 data/civilbuddy.db，与业务表同库共存——
+                              data-plan §1.1/audit C2：SqliteSaver setup() 只 CREATE TABLE
+                              IF NOT EXISTS 自己的 checkpoints/writes 等表，互不冲突）
+
+data(round2)：修复假 durable——此前未装 langgraph-checkpoint-sqlite 时静默回退
+MemorySaver（进程重启即丢）。现在：装包即 SqliteSaver；回退必打 WARNING。
 
 用法:
   app = create_team_a_app(checkpointer=get_checkpointer())
@@ -12,13 +17,16 @@
 
 from __future__ import annotations
 
+import logging
 import os
 import sqlite3
 import threading
 from pathlib import Path
 from typing import Any, Dict, Optional
 
-from packing_assistant.config import TRACE_DIR
+from packing_assistant.storage import default_db_path
+
+logger = logging.getLogger("civil.lg_checkpoint")
 
 _LOCK = threading.Lock()
 _SAVER = None
@@ -34,11 +42,12 @@ def checkpoint_db_path() -> Path:
     raw = (os.getenv("PACKING_LG_CHECKPOINT_PATH") or "").strip()
     if raw:
         return Path(raw)
-    return Path(TRACE_DIR).resolve().parent / "langgraph_checkpoints.db"
+    # 默认与业务库同文件（data/civilbuddy.db）；旧默认 output/langgraph_checkpoints.db 弃用
+    return default_db_path()
 
 
 def get_checkpointer():
-    """单例 SqliteSaver；不可用或关闭时返回 None。"""
+    """单例 SqliteSaver；不可用或关闭时返回 None（回退 MemorySaver 时打 WARNING）。"""
     global _SAVER, _CONN
     if not checkpoint_enabled():
         return None
@@ -48,6 +57,12 @@ def get_checkpointer():
         try:
             from langgraph.checkpoint.sqlite import SqliteSaver
         except Exception:
+            logger.warning(
+                "langgraph-checkpoint-sqlite 未安装：LangGraph checkpoint 回退 MemorySaver"
+                "（进程重启即丢，durable 语义由 session_store JSON/SQLite 承担）。"
+                "修复：pip install langgraph-checkpoint-sqlite",
+                exc_info=True,
+            )
             try:
                 from langgraph.checkpoint.memory import MemorySaver
 
@@ -57,9 +72,15 @@ def get_checkpointer():
                 return None
         path = checkpoint_db_path()
         path.parent.mkdir(parents=True, exist_ok=True)
-        # SqliteSaver 需要保持连接存活
-        _CONN = sqlite3.connect(str(path), check_same_thread=False)
+        # SqliteSaver 需要保持连接存活；连接纪律与 storage 一致（WAL + busy_timeout）
+        _CONN = sqlite3.connect(str(path), check_same_thread=False, timeout=5.0)
+        _CONN.execute("PRAGMA journal_mode=WAL")
+        _CONN.execute("PRAGMA busy_timeout=5000")
         _SAVER = SqliteSaver(_CONN)
+        try:
+            _SAVER.setup()  # CREATE TABLE IF NOT EXISTS checkpoints/writes/...（幂等）
+        except Exception:
+            logger.warning("SqliteSaver.setup() failed（首次写入时会重试）", exc_info=True)
         return _SAVER
 
 

@@ -80,3 +80,9 @@ data/samples/vmu-*.xlsx
 
 # --- large local samples (optional; prefer data/samples tracked thin copies) ---
 # data/samples/ 内小样例可提交；超大原始件请放本地
+
+# --- data(round2): SQLite 统一持久层（库文件不入仓） ---
+data/civilbuddy.db
+data/civilbuddy.db-wal
+data/civilbuddy.db-shm
+data/backup/

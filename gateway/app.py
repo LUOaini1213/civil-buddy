@@ -12,6 +12,7 @@ FastAPI 网关：对接主控 Harness + 静态 Vue2 前端。
 from __future__ import annotations
 
 import json
+import logging
 import os
 import re
 import sys
@@ -26,6 +27,8 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse, StreamingResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
+
+logger = logging.getLogger("civil.gateway")
 
 # 保证可 import packing_assistant
 ROOT = Path(__file__).resolve().parents[1]
@@ -113,6 +116,32 @@ app.add_middleware(
 FRONTEND_DIR = ROOT / "frontend"
 if FRONTEND_DIR.exists():
     app.mount("/static", StaticFiles(directory=str(FRONTEND_DIR)), name="static")
+
+
+@app.on_event("startup")
+def _storage_startup_maintenance() -> None:
+    """data(round2)：启动时距上次备份 >24h 自动 VACUUM INTO 一份（保留最近 7 份）。
+
+    仅在 CB_STORAGE != json 且库文件存在时执行；失败只告警不阻断启动（对齐 M2 验收④）。
+    """
+    try:
+        import time as _time
+
+        from packing_assistant import storage as _storage_mod
+
+        if _storage_mod.storage_mode() == "json":
+            return
+        db = _storage_mod.default_db_path()
+        if not db.exists():
+            return
+        bdir = db.parent / "backup"
+        last = max((p.stat().st_mtime for p in bdir.glob("civilbuddy-*.db")), default=0.0)
+        if _time.time() - last < 86400:
+            return
+        p = _storage_mod.get_storage().backup()
+        logger.info("storage backup done: %s", p)
+    except Exception:
+        logger.warning("storage startup backup skipped (non-blocking)", exc_info=True)
 
 
 class TeamARequest(BaseModel):
@@ -2318,31 +2347,53 @@ def api_audit(session: str = "", limit_runs: int = 20, limit_events: int = 400):
     聚合三源：trace.jsonl（事件流）+ checkpoint.json（user_action 决策）+ session 索引。
     不带 session 参数 → 返回最近会话索引列表（供面板切换）。
     节点四类：工具执行=蓝 / 人工决策=合规红边 / 错误与重试=橙 / 写盘=绿（docs/ux 附录 E）。
+    data(round2)：CB_STORAGE=sqlite 时改 SQL 直查（O(1)，替代全盘扫 613 目录），
+    响应 schema `civil.audit.v1` 不变；json/dual 模式保留旧扫描路径，DB 无数据时回退扫描。
     """
     from packing_assistant.session_store import SESSIONS_DIR
     from packing_assistant.trace_events import read_trace_jsonl
+    from packing_assistant import storage as _storage_mod
+
+    _sqlite_reads = _storage_mod.storage_mode() == "sqlite"
 
     if not str(session or "").strip():
         rows = []
-        if SESSIONS_DIR.exists():
-            for p in sorted(SESSIONS_DIR.glob("*.json"), key=lambda x: x.stat().st_mtime, reverse=True)[:24]:
-                try:
-                    idx = json.loads(p.read_text(encoding="utf-8"))
-                except Exception:
-                    continue
-                rows.append(
-                    {
-                        "session_id": idx.get("session_id") or p.stem,
-                        "run_id": idx.get("run_id"),
-                        "status": idx.get("status"),
-                        "user_action": (idx.get("user_action") if "user_action" in idx else None),
-                        "saved_at": idx.get("saved_at"),
-                    }
-                )
+        if _sqlite_reads:
+            try:
+                rows = _storage_mod.get_storage().audit_session_list(24)
+            except Exception:
+                logger.warning("audit session list via sqlite failed, fallback to scan", exc_info=True)
+                rows = []
+        if not rows:
+            if SESSIONS_DIR.exists():
+                for p in sorted(SESSIONS_DIR.glob("*.json"), key=lambda x: x.stat().st_mtime, reverse=True)[:24]:
+                    try:
+                        idx = json.loads(p.read_text(encoding="utf-8"))
+                    except Exception:
+                        continue
+                    rows.append(
+                        {
+                            "session_id": idx.get("session_id") or p.stem,
+                            "run_id": idx.get("run_id"),
+                            "status": idx.get("status"),
+                            "user_action": (idx.get("user_action") if "user_action" in idx else None),
+                            "saved_at": idx.get("saved_at"),
+                        }
+                    )
         return {"ok": True, "schema": AUDIT_SCHEMA, "mode": "session_list", "sessions": rows}
 
     sid = _audit_guard(session)
-    runs_meta = _audit_runs_for_session(sid)
+    runs_meta = None
+    if _sqlite_reads:
+        try:
+            runs_meta = _storage_mod.get_storage().audit_runs_for_session(sid)
+        except Exception:
+            logger.warning("audit runs via sqlite failed, fallback to scan", exc_info=True)
+            runs_meta = None
+        if not runs_meta:
+            runs_meta = None  # DB 无此 session → 回退旧扫描（旧数据可读）
+    if runs_meta is None:
+        runs_meta = _audit_runs_for_session(sid)
     picked = runs_meta[-max(1, min(int(limit_runs or 20), 60)):]
     out_runs: List[Dict[str, Any]] = []
     decisions: List[Dict[str, Any]] = []

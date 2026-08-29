@@ -1,14 +1,23 @@
-"""结构化 trace 事件：output/runs/<run_id>/trace.jsonl（可回放）。"""
+"""结构化 trace 事件：output/runs/<run_id>/trace.jsonl（可回放）。
+
+data(round2) 起改为 storage 薄壳：CB_STORAGE 三态分派（packing_assistant/storage.py）。
+  json/dual：JSONL 文件照写（dual 另写 SQLite，失败仅告警）
+  sqlite：只写 events 表；读优先 SQLite、无则回退 JSONL 文件（旧数据可读）
+"""
 
 from __future__ import annotations
 
 import json
+import logging
 import time
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Dict, Optional
 
 from packing_assistant.config import HARNESS_VERSION, TRACE_DIR
+from packing_assistant import storage as _storage
+
+logger = logging.getLogger("civil.trace_events")
 
 RUNS_DIR = Path(TRACE_DIR).resolve().parent / "runs"
 
@@ -64,8 +73,29 @@ def append_trace_event(
     *,
     also_global: bool = True,
 ) -> Dict[str, Any]:
-    """追加一行 JSONL，返回规范化事件。"""
+    """追加一行 JSONL（json/dual）或写 events 表（sqlite），返回规范化事件。"""
     ev = normalize_event(run_id, event)
+    mode = _storage.storage_mode()
+
+    if mode == "sqlite":
+        try:
+            st = _storage.get_storage()
+            if ev.get("type") == "run_start":
+                st.ensure_run(
+                    {
+                        "run_id": str(run_id),
+                        "session_id": ev.get("session_id"),
+                        "started_at": ev.get("ts"),
+                        "phase": ev.get("phase"),
+                        "container_type": ev.get("container_type"),
+                        "run_dir": str(RUNS_DIR / str(run_id)),
+                    }
+                )
+            st.insert_event(ev)
+            return ev
+        except Exception:
+            logger.warning("sqlite insert_event failed, fallback to JSONL", exc_info=True)
+
     line = json.dumps(ev, ensure_ascii=False, default=str) + "\n"
     path = run_trace_path(run_id)
     with path.open("a", encoding="utf-8") as f:
@@ -75,10 +105,35 @@ def append_trace_event(
         g.mkdir(parents=True, exist_ok=True)
         with (g / "stream.jsonl").open("a", encoding="utf-8") as f:
             f.write(line)
+
+    if mode == "dual":
+        try:
+            st = _storage.get_storage()
+            if ev.get("type") == "run_start":
+                st.ensure_run(
+                    {
+                        "run_id": str(run_id),
+                        "session_id": ev.get("session_id"),
+                        "started_at": ev.get("ts"),
+                        "phase": ev.get("phase"),
+                        "container_type": ev.get("container_type"),
+                        "run_dir": str(RUNS_DIR / str(run_id)),
+                    }
+                )
+            st.insert_event(ev)
+        except Exception:
+            logger.warning("dual write of trace event to sqlite failed (non-blocking)", exc_info=True)
     return ev
 
 
 def read_trace_jsonl(run_id: str, *, limit: int = 5000) -> list:
+    if _storage.storage_mode() == "sqlite":
+        try:
+            rows = _storage.get_storage().read_trace_events(run_id, limit=limit)
+            if rows:
+                return rows
+        except Exception:
+            logger.warning("sqlite read_trace_events failed, fallback to JSONL", exc_info=True)
     path = run_trace_path(run_id)
     if not path.exists():
         return []
@@ -98,7 +153,14 @@ def read_trace_jsonl(run_id: str, *, limit: int = 5000) -> list:
 
 
 def list_runs(*, limit: int = 50) -> list:
-    """扫描 output/runs 最近 run。"""
+    """最近 run 列表（sqlite 模式 SQL 直查；json/dual 扫 output/runs）。"""
+    if _storage.storage_mode() == "sqlite":
+        try:
+            items = _storage.get_storage().list_runs(limit=limit)
+            if items:
+                return items
+        except Exception:
+            logger.warning("sqlite list_runs failed, fallback to scan", exc_info=True)
     if not RUNS_DIR.exists():
         return []
     items = []

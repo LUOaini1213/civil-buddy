@@ -1,13 +1,11 @@
 """Durable HITL checkpoint（文件持久化 · 可进程重启 resume）。
 
-对齐 LangGraph interrupt 语义（不强制 MemorySaver）：
+data(round2) 起改为 storage 薄壳：CB_STORAGE 三态分派（packing_assistant/storage.py）：
+  json   = 纯 JSON 路径（本文件原实现，与 6df7e1c 等价）
+  dual   = JSON 先写（权威），SQLite 双写尽力而为（失败仅告警）
+  sqlite = 只写 SQLite；读 SQLite 优先、无则回退 JSON（旧数据可读）
 
-  - **thread_id** ≈ session_id（外部恢复钥匙）
-  - **interrupt** 时 phase=await_user_confirm，状态落盘
-  - **resume** = load + apply_user_confirmation + run_team_b
-  - RAM 缓存加速；权威源在磁盘
-
-路径:
+路径（JSON 格式保留为导出/回滚通道）:
   output/runs/<run_id>/session_state.json   # 完整 state
   output/runs/<run_id>/checkpoint.json      # 轻量 interrupt 元数据
   output/sessions/<session_id>.json         # session → run_id 索引
@@ -16,6 +14,7 @@
 from __future__ import annotations
 
 import json
+import logging
 import os
 import tempfile
 from datetime import datetime, timezone
@@ -23,6 +22,9 @@ from pathlib import Path
 from typing import Any, Dict, List, Optional
 
 from packing_assistant.config import TRACE_DIR
+from packing_assistant import storage as _storage
+
+logger = logging.getLogger("civil.session_store")
 
 RUNS_DIR = Path(TRACE_DIR).resolve().parent / "runs"
 SESSIONS_DIR = Path(TRACE_DIR).resolve().parent / "sessions"
@@ -122,6 +124,27 @@ def build_checkpoint_meta(state: Dict[str, Any]) -> Dict[str, Any]:
     }
 
 
+def _db_write(sid: str, rid: str, s: Dict[str, Any], meta: Dict[str, Any]) -> None:
+    """SQLite 侧写入：sessions 行 + runs 行（双写期 runs 表自维护，不依赖重导入）。"""
+    st = _storage.get_storage()
+    st.save_session(sid, s, meta=meta)
+    st.upsert_run(
+        {
+            "run_id": rid,
+            "session_id": sid,
+            "app": "packing",
+            "source": "gateway",
+            "started_at": meta.get("saved_at"),
+            "phase": s.get("phase"),
+            "status": meta.get("status"),
+            "container_type": s.get("container_type"),
+            "n_boxes": meta.get("n_boxes"),
+            "checkpoint_json": json.dumps(meta, ensure_ascii=False, default=str),
+            "run_dir": str(RUNS_DIR / rid),
+        }
+    )
+
+
 def save_session(session_id: str, state: Dict[str, Any]) -> Dict[str, str]:
     """Persist full pipeline state for later /api/confirm resume."""
     sid = str(session_id or state.get("session_id") or "default")
@@ -132,6 +155,21 @@ def save_session(session_id: str, state: Dict[str, Any]) -> Dict[str, str]:
     s["_session_saved_at"] = _now_iso()
     meta = build_checkpoint_meta(s)
     s["_checkpoint"] = meta
+
+    mode = _storage.storage_mode()
+    if mode == "sqlite":
+        try:
+            _db_write(sid, rid, s, meta)
+            return {
+                "session_id": sid,
+                "thread_id": sid,
+                "run_id": rid,
+                "path": str(session_state_path(rid)),
+                "status": str(meta.get("status")),
+                "interrupt": bool(meta.get("interrupt")),
+            }
+        except Exception:
+            logger.warning("sqlite save_session failed, fallback to JSON", exc_info=True)
 
     _atomic_write_json(session_state_path(rid), s)
     _atomic_write_json(checkpoint_meta_path(rid), meta)
@@ -153,6 +191,13 @@ def save_session(session_id: str, state: Dict[str, Any]) -> Dict[str, str]:
     _atomic_write_json(session_index_path(sid), idx)
     if rid != sid:
         _atomic_write_json(session_index_path(rid), idx)
+
+    if mode == "dual":
+        try:
+            _db_write(sid, rid, s, meta)
+        except Exception:
+            logger.warning("dual write to sqlite failed (non-blocking)", exc_info=True)
+
     return {
         "session_id": sid,
         "thread_id": sid,
@@ -168,6 +213,14 @@ def load_session(session_id: str) -> Optional[Dict[str, Any]]:
     sid = str(session_id or "").strip()
     if not sid:
         return None
+
+    if _storage.storage_mode() == "sqlite":
+        try:
+            st = _storage.get_storage().load_session(sid)
+            if st is not None:
+                return st
+        except Exception:
+            logger.warning("sqlite load_session failed, fallback to JSON", exc_info=True)
 
     idx_path = session_index_path(sid)
     if idx_path.exists():
@@ -190,6 +243,13 @@ def load_session(session_id: str) -> Optional[Dict[str, Any]]:
 
 
 def load_checkpoint_meta(session_id: str) -> Optional[Dict[str, Any]]:
+    if _storage.storage_mode() == "sqlite":
+        try:
+            meta = _storage.get_storage().load_checkpoint_meta(session_id)
+            if meta:
+                return meta
+        except Exception:
+            logger.warning("sqlite load_checkpoint_meta failed, fallback to JSON", exc_info=True)
     state = load_session(session_id)
     if not state:
         # try meta-only via index
@@ -216,7 +276,17 @@ def list_checkpoints(
     limit: int = 50,
     pending_hitl_only: bool = False,
 ) -> List[Dict[str, Any]]:
-    """List checkpoint indexes under output/sessions/."""
+    """List checkpoint indexes（sqlite 模式 SQL 直查，否则扫 output/sessions/）。"""
+    if _storage.storage_mode() == "sqlite":
+        try:
+            items = _storage.get_storage().list_checkpoints(
+                limit=limit, pending_hitl_only=pending_hitl_only
+            )
+            if items:
+                return items
+        except Exception:
+            logger.warning("sqlite list_checkpoints failed, fallback to JSON", exc_info=True)
+
     if not SESSIONS_DIR.exists():
         return []
     items: List[Dict[str, Any]] = []
@@ -302,6 +372,11 @@ def delete_checkpoint(session_id: str) -> bool:
         return False
     removed = False
     state = load_session(sid)
+    if _storage.storage_mode() == "sqlite":
+        try:
+            removed = _storage.get_storage().delete_sessions([sid, str((state or {}).get("run_id") or "")]) > 0
+        except Exception:
+            logger.warning("sqlite delete_sessions failed", exc_info=True)
     for key in {sid, str((state or {}).get("run_id") or "")}:
         if not key:
             continue
