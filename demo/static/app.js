@@ -458,6 +458,8 @@ async function streamChat(message, bodyEl) {
   if (!res.ok) {
     throw new Error(await apiError(res));
   }
+  /* ux(round3)：本条消息挂一条阶段时间线（完成后折叠为一行摘要） */
+  const tl = cbTlCreate(bodyEl);
   const reader = res.body.getReader();
   const dec = new TextDecoder();
   let buf = "";
@@ -481,7 +483,7 @@ async function streamChat(message, bodyEl) {
         paintContext(data);
       }
       if (eventName === "status") {
-        addStatus(data.text || "");
+        if (tl) tl.status(data);
         if (data.phase === "summon" && acc) {
           state.history.push({ role: "assistant", content: acc });
           acc = "";
@@ -493,8 +495,12 @@ async function streamChat(message, bodyEl) {
         bodyEl.textContent = acc;
         $("log").scrollTop = $("log").scrollHeight;
       }
-      if (eventName === "error") throw new Error(data.text || "error");
+      if (eventName === "error") {
+        if (tl) tl.error(data.text || "error");
+        throw new Error(data.text || "error");
+      }
       if (eventName === "done") {
+        if (tl) tl.finish(data);
         acc = data.text || acc;
         bodyEl.textContent = acc;
         const whoEl = bodyEl.parentElement && bodyEl.parentElement.querySelector(".who");
@@ -866,3 +872,235 @@ function cbComposerInit() {
 cbComposerInit();
 
 boot();
+
+/* === ux(round3) 阶段时间线 · 一条流水线（进度可见）· docs/ux/ux-design-spec.md 附录 B ===
+   8 阶段轨道：理解任务→召唤岗位→成箱→人工确认→拼柜→合规校核→落盘→收口。
+   事件→阶段映射（SSE event=status.phase，按 workbench/src/api.rs + agent.rs 实际事件名）：
+   understand/compress/import→理解任务 · summon/queue/plain→召唤岗位 · harness/scheme_gate→成箱
+   hitl_gate/confirm→人工确认 · plan_load_eval/pack→拼柜 · risk→合规校核 · price/deliver→落盘 · done→收口。
+   未列出的工具名 phase（search_kb/read_kb/web_search 等）→ 附在当前阶段子行，不进「未知」桶。
+   借鉴 pattern-only：aider waiting.Spinner（Apache-2.0）单行进行中+降级渲染；
+   openai/codex history_cell（Apache-2.0）追加式会话流、完成后折叠为一行摘要；
+   VS Code Tasks presentation（文档 pattern-only）长输出默认折叠、可展开。 */
+const CB_TL_STAGES = [
+  ["understand", "理解任务"],
+  ["summon", "召唤岗位"],
+  ["box", "成箱"],
+  ["hitl", "人工确认"],
+  ["pack", "拼柜"],
+  ["risk", "合规校核"],
+  ["write", "落盘"],
+  ["finalize", "收口"],
+];
+const CB_PHASE_STAGE = {
+  understand: "understand",
+  compress: "understand",
+  import: "understand",
+  summon: "summon",
+  queue: "summon",
+  plain: "summon",
+  harness: "box",
+  scheme_gate: "box",
+  scheme: "box",
+  hitl_gate: "hitl",
+  hitl: "hitl",
+  confirm: "hitl",
+  plan_load_eval: "pack",
+  pack: "pack",
+  risk: "risk",
+  exclusive: "write",
+  write: "write",
+  price: "write",
+  doc: "write",
+  deliver: "write",
+  done: "finalize",
+};
+
+function cbTlCreate(bodyEl) {
+  const STAGE_ORDER = CB_TL_STAGES.map((s) => s[0]);
+  const stages = {};
+  for (const [key, label] of CB_TL_STAGES) stages[key] = { state: "idle", label, note: "" };
+  let activeKey = "";
+  let hitlWait = false;
+  let doneFolded = false;
+
+  const root = document.createElement("div");
+  root.className = "cb-tl";
+  root.setAttribute("data-cb-timeline", "true");
+  root.innerHTML =
+    '<div class="cb-tl-head"><span class="cb-tl-title">阶段时间线</span>' +
+    '<span class="cb-tl-badge tl-badge"></span>' +
+    '<button type="button" class="cb-tl-fold" hidden>展开时间线</button></div>' +
+    '<div class="cb-tl-summary tl-summary" hidden></div>' +
+    '<div class="cb-tl-track"></div>' +
+    '<div class="cb-tl-hitl tl-hitl" data-r5-approval-slot="true" hidden>' +
+    "等待人工确认…（确认 / 驳回须显式点击；Esc、关闭、刷新 ≠ 放行 · 审批卡将于后续版本挂载于此）</div>" +
+    '<div class="cb-tl-lines tl-lines"></div>';
+  const badge = root.querySelector(".tl-badge");
+  const foldBtn = root.querySelector(".cb-tl-fold");
+  const summaryEl = root.querySelector(".tl-summary");
+  const trackEl = root.querySelector(".cb-tl-track");
+  const hitlEl = root.querySelector(".tl-hitl");
+  const linesEl = root.querySelector(".tl-lines");
+
+  const chips = [];
+  for (const [key, label] of CB_TL_STAGES) {
+    if (chips.length) {
+      const arrow = document.createElement("span");
+      arrow.className = "cb-tl-arrow";
+      arrow.textContent = "→";
+      arrow.setAttribute("aria-hidden", "true");
+      trackEl.appendChild(arrow);
+    }
+    const chip = document.createElement("span");
+    chip.className = "cb-tl-stage idle";
+    chip.setAttribute("data-cb-stage", key);
+    chip.innerHTML = '<span class="cb-tl-st">·</span>' + label;
+    chip.title = label;
+    trackEl.appendChild(chip);
+    stages[key].el = chip;
+  }
+
+  function paintStage(key) {
+    const st = stages[key];
+    if (!st || !st.el) return;
+    st.el.className = "cb-tl-stage " + st.state;
+    if (st.state === "run") {
+      st.el.innerHTML = '<span class="cb-tl-spin" aria-hidden="true"></span>' + st.label;
+    } else {
+      const icon = st.state === "done" ? "✓" : st.state === "warn" ? "⚠" : st.state === "err" ? "⛔" : "·";
+      st.el.innerHTML = '<span class="cb-tl-st">' + icon + "</span>" + st.label;
+    }
+  }
+
+  function setStage(key, stateName, note) {
+    const st = stages[key];
+    if (!st) return;
+    if (st.state === "run" && stateName === "run") return;
+    if (st.state === "done" && stateName === "run") st.note = "打回重做";
+    st.state = stateName;
+    if (note) st.note = String(note).slice(0, 200);
+    paintStage(key);
+  }
+
+  function settleActive() {
+    if (activeKey && stages[activeKey] && stages[activeKey].state === "run") {
+      stages[activeKey].state = "done";
+      paintStage(activeKey);
+    }
+  }
+
+  function addLine(stageKey, tool, text, status) {
+    const row = document.createElement("div");
+    row.className = "cb-tl-line is-" + (status === "running" ? "running" : status === "error" ? "err" : status === "warn" ? "warn" : "ok");
+    row.setAttribute("data-cb-stage", stageKey || activeKey || "understand");
+    const t = String(text || "");
+    const toolEl = document.createElement("span");
+    toolEl.className = "tl-tool";
+    toolEl.textContent = tool || "·";
+    const textEl = document.createElement("span");
+    textEl.className = "tl-text";
+    textEl.textContent = t.length > 96 ? t.slice(0, 96) + "…" : t;
+    row.appendChild(toolEl);
+    row.appendChild(textEl);
+    if (t.length > 96) {
+      const more = document.createElement("button");
+      more.type = "button";
+      more.className = "cb-tl-more";
+      more.textContent = "展开";
+      let open = false;
+      more.addEventListener("click", () => {
+        open = !open;
+        textEl.textContent = open ? t : t.slice(0, 96) + "…";
+        more.textContent = open ? "收起" : "展开";
+      });
+      row.appendChild(more);
+    }
+    linesEl.appendChild(row);
+    linesEl.scrollTop = linesEl.scrollHeight;
+  }
+
+  function setBadge(text, cls) {
+    badge.textContent = text || "";
+    badge.className = "cb-tl-badge tl-badge" + (cls ? " " + cls : "");
+  }
+
+  function finish(data) {
+    settleActive();
+    setStage("finalize", "done", "收口完成");
+    if (hitlWait) hitlWait = false;
+    hitlEl.hidden = true;
+    setBadge("完成", "");
+    doneFolded = true;
+    /* 摘要数字只抄事件（deliverables / mode），不编造 */
+    const files = Array.isArray(data && data.deliverables) ? data.deliverables : [];
+    const head = document.createElement("span");
+    head.textContent = "完成 · " + ((data && data.mode) === "firm" ? "一人公司成套" : (data && data.mode) === "expert" ? "岗位收工" : "回答完毕") + (files.length ? " · 文书 " + files.length + " 份" : "");
+    summaryEl.textContent = "";
+    summaryEl.appendChild(head);
+    for (const f of files) {
+      const chip = document.createElement("span");
+      chip.className = "cb-tl-chip";
+      chip.textContent = (f.name || f.title || String(f.path || "").split("/").pop() || "文书").slice(0, 24);
+      summaryEl.appendChild(chip);
+    }
+    summaryEl.hidden = false;
+    trackEl.hidden = true;
+    linesEl.hidden = true;
+    foldBtn.hidden = false;
+    foldBtn.textContent = "展开时间线";
+    foldBtn.onclick = () => {
+      doneFolded = !doneFolded;
+      trackEl.hidden = doneFolded;
+      linesEl.hidden = doneFolded;
+      summaryEl.hidden = !doneFolded;
+      foldBtn.textContent = doneFolded ? "展开时间线" : "折叠为一行摘要";
+    };
+  }
+
+  function status(data) {
+    const phase = String((data && data.phase) || "");
+    const text = String((data && data.text) || "");
+    const stageKey = CB_PHASE_STAGE[phase] || "";
+    if (stageKey === "hitl") {
+      settleActive();
+      setStage("hitl", "run", text || "等待人工确认（HITL 闸门）");
+      activeKey = "hitl";
+      hitlWait = true;
+      hitlEl.hidden = false;
+      setBadge("HITL 等待中", "hitl");
+    } else if (stageKey) {
+      settleActive();
+      setStage(stageKey, "run", text || phase);
+      activeKey = stageKey;
+      setBadge(stageLabel(stageKey), "");
+    } else {
+      /* 工具名 phase / think 等未映射事件 → 当前阶段子行，不落「未知」
+         （Rust 侧 status 事件=该动作已完成并带结果文本，故标 ok 不挂 running） */
+      addLine(activeKey || "understand", phase, text || phase, "ok");
+      return;
+    }
+    if (text) addLine(stageKey || activeKey, phase, text, "ok");
+  }
+
+  function stageLabel(key) {
+    const found = CB_TL_STAGES.find((s) => s[0] === key);
+    return found ? found[1] : key;
+  }
+
+  function error(text) {
+    const key = activeKey || "finalize";
+    setStage(key, "warn", String(text).slice(0, 200));
+    addLine(key, "error", text, "error");
+    setBadge("受阻 · 见子行", "hitl");
+  }
+
+  /* 挂载：插到本条助手消息上方（追加式会话流中的一格，完成后折叠定格） */
+  const msgBox = bodyEl && bodyEl.parentElement;
+  if (msgBox && msgBox.parentElement) msgBox.parentElement.insertBefore(root, msgBox);
+  else if (msgBox) msgBox.insertBefore(root, bodyEl);
+  const log = $("log");
+  if (log) log.scrollTop = log.scrollHeight;
+
+  return { status, error, finish, root };
+}

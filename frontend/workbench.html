@@ -1390,6 +1390,104 @@
       color: var(--faint);
       margin-top: 12px;
     }
+
+    /* === ux(round3) 阶段时间线 · 一条流水线（进度可见）· docs/ux/ux-design-spec.md 附录 B ===
+       8 阶段轨道：理解任务→召唤岗位→成箱→人工确认→拼柜→合规校核→落盘→收口。
+       状态色（--cb-* token）：工程蓝=进行中 / 通过绿=完成 / 安全橙=打回·待人工·UNSPECIFIED / 合规红=阻断。
+       动画降级（借 aider waiting.Spinner 的 ASCII fallback 思路）：prefers-reduced-motion 时去动画。 */
+    .cb-tl {
+      border: 1px solid var(--border-soft);
+      border-radius: var(--radius-sm);
+      background: var(--bg-soft);
+      padding: var(--cb-space-3) var(--cb-space-4);
+      margin: 0 0 14px;
+      font-size: var(--cb-fs-sm);
+    }
+    .cb-tl-head {
+      display: flex; align-items: center; gap: var(--cb-space-2);
+      margin-bottom: var(--cb-space-2); flex-wrap: wrap;
+    }
+    .cb-tl-title { font-weight: 700; color: var(--text); }
+    .cb-tl-badge {
+      font-size: var(--cb-fs-xs); color: var(--muted);
+      border: 1px solid var(--border); border-radius: var(--cb-radius-full);
+      padding: 1px 8px;
+    }
+    .cb-tl-badge.replay { color: var(--cb-orange); border-color: var(--cb-orange); }
+    .cb-tl-fold {
+      margin-left: auto; background: none; border: none; cursor: pointer;
+      color: var(--accent); font-size: var(--cb-fs-xs); padding: 2px 4px;
+    }
+    .cb-tl-track {
+      display: flex; flex-wrap: wrap; gap: 6px 4px; align-items: center;
+    }
+    .cb-tl-stage {
+      display: inline-flex; align-items: center; gap: 6px;
+      padding: 4px 10px; border-radius: var(--cb-radius-full);
+      border: 1px solid var(--border-soft);
+      color: var(--faint); background: transparent;
+      font-size: var(--cb-fs-xs); white-space: nowrap;
+    }
+    .cb-tl-stage.run { color: var(--text); border-color: var(--cb-blue); background: var(--accent-soft); font-weight: 600; }
+    .cb-tl-stage.done { color: var(--text); border-color: var(--cb-green); }
+    .cb-tl-stage.warn { color: var(--text); border-color: var(--cb-orange); background: rgba(234, 88, 12, 0.12); }
+    .cb-tl-stage.err  { color: var(--text); border-color: var(--cb-red); background: rgba(220, 38, 38, 0.12); }
+    .cb-tl-st {
+      width: 12px; height: 12px; border-radius: 50%;
+      display: inline-flex; align-items: center; justify-content: center;
+      font-size: 10px; line-height: 1; flex: none;
+    }
+    .cb-tl-stage.idle .cb-tl-st { border: 1.5px solid var(--border); color: var(--faint); }
+    .cb-tl-stage.done .cb-tl-st { background: var(--cb-green); color: #ffffff; }
+    .cb-tl-stage.warn .cb-tl-st { background: var(--cb-orange); color: #ffffff; }
+    .cb-tl-stage.err .cb-tl-st  { background: var(--cb-red); color: #ffffff; }
+    .cb-tl-spin {
+      width: 11px; height: 11px; border-radius: 50%;
+      border: 2px solid rgba(37, 99, 235, 0.25); border-top-color: var(--cb-blue);
+      animation: cb-tl-rot 0.9s linear infinite; flex: none;
+    }
+    @keyframes cb-tl-rot { to { transform: rotate(360deg); } }
+    @media (prefers-reduced-motion: reduce) {
+      .cb-tl-spin { animation: none; border-color: var(--cb-blue); }
+    }
+    .cb-tl-arrow { color: var(--border); font-size: 10px; flex: none; }
+    .cb-tl-dur { font-size: 10px; color: var(--faint); font-family: var(--cb-mono); }
+    .cb-tl-lines {
+      margin-top: var(--cb-space-2);
+      max-height: 220px; overflow: auto;
+      display: flex; flex-direction: column; gap: 1px;
+    }
+    .cb-tl-line {
+      display: flex; align-items: baseline; gap: var(--cb-space-2);
+      padding: 2px 6px; margin-left: var(--cb-space-3);
+      border-left: 2px solid var(--border-soft);
+      color: var(--muted); font-size: var(--cb-fs-xs);
+    }
+    .cb-tl-line .tl-tool { font-family: var(--cb-mono); color: var(--text); flex: none; }
+    .cb-tl-line .tl-text { overflow-wrap: anywhere; }
+    .cb-tl-line.is-running { border-left-color: var(--cb-blue); }
+    .cb-tl-line.is-ok { border-left-color: var(--cb-green); }
+    .cb-tl-line.is-warn { border-left-color: var(--cb-orange); }
+    .cb-tl-line.is-err { border-left-color: var(--cb-red); }
+    .cb-tl-more {
+      background: none; border: none; cursor: pointer; padding: 0;
+      color: var(--accent); font-size: var(--cb-fs-xs); flex: none;
+    }
+    .cb-tl-hitl {
+      margin-top: var(--cb-space-2);
+      border: 1px dashed var(--cb-orange); border-radius: var(--cb-radius-sm);
+      background: rgba(234, 88, 12, 0.10); color: var(--cb-orange);
+      padding: var(--cb-space-2) var(--cb-space-3); font-size: var(--cb-fs-sm);
+    }
+    .cb-tl-summary {
+      display: flex; align-items: center; gap: var(--cb-space-2); flex-wrap: wrap;
+      font-size: var(--cb-fs-sm); color: var(--text);
+    }
+    .cb-tl-chip {
+      font-size: var(--cb-fs-xs); font-family: var(--cb-mono);
+      border: 1px solid var(--border); border-radius: var(--cb-radius-sm);
+      padding: 1px 6px; color: var(--muted); background: var(--bg-panel);
+    }
   </style>
 </head>
 <body>
@@ -1735,6 +1833,52 @@
             <div class="status-line" v-if="!hasAnyResult && preflightHints.length" style="margin-top:12px">
               <div v-for="(h,i) in preflightHints" :key="'phs'+i">· {{ h }}</div>
             </div>
+          </div>
+
+          <!-- ===== ux(round3) 阶段时间线：事件流 → 8 阶段轨道（映射表见 docs/ux/ux-design-spec.md 附录 B）===== -->
+          <div class="cb-tl" v-if="cbTl.active" data-cb-timeline="true">
+            <div class="cb-tl-head">
+              <span class="cb-tl-title">阶段时间线</span>
+              <span class="cb-tl-badge" v-if="cbTl.replay">回放</span>
+              <span class="cb-tl-badge" v-if="cbTl.hitlWait" style="color:var(--cb-orange);border-color:var(--cb-orange)">HITL 等待中</span>
+              <span class="cb-tl-badge" v-if="cbTl.elapsedMs">{{ (cbTl.elapsedMs / 1000).toFixed(1) }}s</span>
+              <button type="button" class="cb-tl-fold" v-if="cbTl.done" @click="cbTl.collapsed = !cbTl.collapsed">
+                {{ cbTl.collapsed ? '展开时间线' : '折叠为一行摘要' }}
+              </button>
+            </div>
+            <div class="cb-tl-summary" v-if="cbTl.done && cbTl.summary">
+              <span>{{ cbTl.summary.headline }}</span>
+              <span class="cb-tl-chip" v-for="(c, ci) in cbTl.summary.chips" :key="'tlc'+ci">{{ c.k }} {{ c.v }}</span>
+            </div>
+            <template v-if="!cbTl.done || !cbTl.collapsed">
+              <div class="cb-tl-track" role="list" aria-label="流水线阶段">
+                <template v-for="(s, si) in cbTlStages" :key="s.key">
+                  <span class="cb-tl-arrow" v-if="si > 0" aria-hidden="true">→</span>
+                  <span class="cb-tl-stage" :class="cbTlStageClass(s.key)" role="listitem"
+                        :title="cbTl.stages[s.key].note || s.label">
+                    <span class="cb-tl-st" v-if="cbTl.stages[s.key].state !== 'run'">{{ cbTlStageIcon(s.key) }}</span>
+                    <span class="cb-tl-spin" v-else aria-hidden="true"></span>
+                    {{ s.label }}<span class="cb-tl-dur" v-if="cbTl.stages[s.key].durMs != null">{{ (cbTl.stages[s.key].durMs / 1000).toFixed(1) }}s</span>
+                  </span>
+                </template>
+              </div>
+              <!-- R5 审批卡挂载点：审批卡=动作特定选项+显式决策事件，本轮只做占位提示 -->
+              <div class="cb-tl-hitl" id="cb-hitl-slot" data-r5-approval-slot="true" v-if="cbTl.hitlWait">
+                等待人工确认…（确认 / 驳回须显式点击；Esc、关闭、刷新 ≠ 放行 · 审批卡将于后续版本挂载于此）
+              </div>
+              <div class="cb-tl-lines" v-if="cbTl.lines.length">
+                <div class="cb-tl-line" v-for="(ln, li) in cbTl.lines" :key="'tll'+li"
+                     :class="'is-' + (ln.status === 'running' ? 'running' : (ln.status === 'error' ? 'err' : (ln.status === 'warn' ? 'warn' : 'ok')))"
+                     :data-cb-stage="ln.stage">
+                  <span class="tl-tool">{{ ln.tool }}</span>
+                  <span class="tl-text">{{ ln.open ? ln.text : cbTlShort(ln.text) }}</span>
+                  <button type="button" class="cb-tl-more" v-if="ln.text.length > 96" @click="cbTlToggleLine(li)">
+                    {{ ln.open ? '收起' : '展开' }}
+                  </button>
+                  <span class="cb-tl-dur" v-if="ln.durMs != null">{{ ln.durMs }}ms</span>
+                </div>
+              </div>
+            </template>
           </div>
 
           <!-- Empty: full mode landing（简洁无结果时隐藏，避免中间双空洞） -->
@@ -2785,6 +2929,72 @@
   <script>
     const API = '';
 
+    /* === ux(round3) 阶段时间线：事件→阶段映射（docs/ux/ux-design-spec.md 附录 B） ====
+       8 阶段轨道（规范中文）：理解任务→召唤岗位→成箱→人工确认→拼柜→合规校核→落盘→收口。
+       借鉴 pattern-only：aider waiting.Spinner 单行进行中反馈+降级渲染（Apache-2.0）；
+       openai/codex history_cell 追加式会话流、进行中合并为单格、完成后定格（Apache-2.0）；
+       VS Code Tasks presentation：长输出默认折叠、出问题才展开（文档 pattern-only）。 */
+    const CB_TL_STAGES = [
+      { key: 'understand', label: '理解任务' },
+      { key: 'summon', label: '召唤岗位' },
+      { key: 'box', label: '成箱' },
+      { key: 'hitl', label: '人工确认' },
+      { key: 'pack', label: '拼柜' },
+      { key: 'risk', label: '合规校核' },
+      { key: 'write', label: '落盘' },
+      { key: 'finalize', label: '收口' },
+    ];
+    // agent 节点 → 阶段（big_team.py 实际节点名；llm_scheduler 按 CB_TL_TOOL_STAGE 再映射）
+    const CB_TL_NODE_STAGE = {
+      intent: 'understand',
+      orchestrator: 'summon',
+      material_parser: 'box',
+      structure: 'box',
+      box_scheme: 'box',
+      present_team_a: 'box',
+      bounded_debate: 'box',
+      hitl_wait: 'hitl',
+      user_confirm: 'hitl',
+      planner: 'pack',
+      loader: 'pack',
+      evaluator: 'pack',
+      risk_compliance: 'risk',
+      replan_critic: 'risk',
+      visualizer: 'write',
+      finalize_run: 'finalize',
+      finalize: 'finalize',
+      llm_scheduler: '',
+    };
+    // 工具名 → 阶段（agent_loop._dispatch 白名单 + 常见收口工具前缀）
+    const CB_TL_TOOL_STAGE = {
+      'intent.interpret': 'understand',
+      'knowledge.search': 'understand',
+      'container.select': 'summon',
+      'team_a.run': 'box',
+      'team_a.rebox': 'box',
+      'hitl.check': 'hitl',
+      'hitl.confirm': 'hitl',
+      'team_b.plan_load_eval': 'pack',
+      'team_b.risk': 'risk',
+      'team_b.visualize': 'write',
+      'replan.critic': 'risk',
+      'finalize.run': 'finalize',
+    };
+    function cbTlToolStage(tool) {
+      if (!tool) return '';
+      if (CB_TL_TOOL_STAGE[tool]) return CB_TL_TOOL_STAGE[tool];
+      // 前缀规则：落盘类工具（导出/订舱/绑扎/作业单/文书）
+      if (/^(manifest|plan\.export|export|docx|tms|booking|secure|work_order|vgm)/.test(tool)) return 'write';
+      return '';
+    }
+    function cbTlBlankStages() {
+      const o = {};
+      for (const s of CB_TL_STAGES) {
+        o[s.key] = { state: 'idle', note: '', durMs: null, reruns: 0 };
+      }
+      return o;
+    }
+
     const TEAM_ROSTER = [
       { id: 'intent', name: '意图解析', short: '意', role: 'NL → IntentSpec', team: 'big', color: '#5b8def' },
       { id: 'orchestrator', name: '主控编排', short: '主', role: '选柜 · 调度 · 目标', team: 'big', color: '#5b8def' },
@@ -2921,6 +3131,20 @@ window.CB_POSTS = [{"id":"bid-parse","name":"招标解析","aliases":["招标","
           autoFollowVisual: true,
           streamProgress: { done: 0, total: 11, pct: 0 },
           liveToolLines: [],
+          /* ux(round3) 阶段时间线状态（Vue2 响应式：字段全部预声明，stages 键固定） */
+          cbTl: {
+            active: false,
+            replay: false,
+            done: false,
+            collapsed: false,
+            hitlWait: false,
+            elapsedMs: 0,
+            startedAt: 0,
+            stages: cbTlBlankStages(),
+            lines: [],
+            summary: null,
+            fallbackTools: [],
+          },
           pendingCheckpoints: [],
           checkpointBanner: '',
           ws: null,
@@ -3016,6 +3240,9 @@ window.CB_POSTS = [{"id":"bid-parse","name":"招标解析","aliases":["招标","
           const id = this.selectedAgent !== 'ALL' ? this.selectedAgent : this.liveNode;
           if (!id) return [];
           return this.liveToolLines.filter((t) => t.node === id).slice(-8);
+        },
+        cbTlStages() {
+          return CB_TL_STAGES;
         },
         rosterGroups() {
           const order = [
@@ -3511,6 +3738,198 @@ window.CB_POSTS = [{"id":"bid-parse","name":"招标解析","aliases":["招标","
         },
       },
       methods: {
+        /* ===== ux(round3) 阶段时间线方法（事件→阶段→人话；映射表见 spec 附录 B）===== */
+        cbTlReset(replay) {
+          this.cbTl = {
+            active: true,
+            replay: !!replay,
+            done: false,
+            collapsed: false,
+            hitlWait: false,
+            elapsedMs: 0,
+            startedAt: Date.now(),
+            stages: cbTlBlankStages(),
+            lines: [],
+            summary: null,
+            fallbackTools: [],
+          };
+        },
+        cbTlSetStage(key, state, note, durMs) {
+          const st = this.cbTl.stages[key];
+          if (!st) return;
+          if (st.state === 'done' && state === 'run') {
+            st.reruns += 1; /* 打回重做：阶段重新激活 */
+          }
+          st.state = state;
+          if (note) st.note = String(note).slice(0, 200);
+          if (durMs != null) st.durMs = (st.durMs == null ? 0 : st.durMs) + Number(durMs);
+        },
+        cbTlAddLine(stage, tool, text, status, durMs) {
+          if (!stage) stage = this.cbTlActiveKey() || 'understand';
+          this.cbTl.lines = this.cbTl.lines.concat([{
+            stage,
+            tool: tool || '·',
+            text: String(text || ''),
+            status: status || 'ok',
+            durMs: durMs != null ? durMs : null,
+            open: false,
+          }]).slice(-120);
+        },
+        cbTlActiveKey() {
+          const order = CB_TL_STAGES.map((s) => s.key);
+          for (let i = order.length - 1; i >= 0; i--) {
+            const st = this.cbTl.stages[order[i]];
+            if (st && st.state === 'run') return order[i];
+          }
+          return '';
+        },
+        cbTlShort(t) {
+          const s = String(t || '');
+          return s.length > 96 ? s.slice(0, 96) + '…' : s;
+        },
+        cbTlToggleLine(i) {
+          const ln = this.cbTl.lines[i];
+          if (ln) ln.open = !ln.open;
+        },
+        cbTlStageClass(key) {
+          const st = this.cbTl.stages[key];
+          return st ? st.state : 'idle';
+        },
+        cbTlStageIcon(key) {
+          const st = this.cbTl.stages[key];
+          if (!st) return '·';
+          if (st.state === 'done') return '✓';
+          if (st.state === 'warn') return '⚠';
+          if (st.state === 'err') return '⛔';
+          return '·';
+        },
+        /* 事件 → 阶段：唯一入口，onStreamEvent 每条事件先走这里 */
+        cbTlOnEvent(ev) {
+          if (!ev || !ev.type) return;
+          const type = ev.type;
+          if (type === 'run_start') {
+            this.cbTlReset(false);
+            this.cbTlSetStage('understand', 'run', '解析输入…');
+            return;
+          }
+          if (type === 'replay_start') {
+            this.cbTlReset(true);
+            return;
+          }
+          if (type === 'agent_start') {
+            const key = CB_TL_NODE_STAGE[ev.node] || cbTlToolStage(ev.tool) || this.cbTlActiveKey();
+            if (key) this.cbTlSetStage(key, 'run', ev.title || '');
+            return;
+          }
+          if (type === 'agent_end') {
+            const key = CB_TL_NODE_STAGE[ev.node] || this.cbTlActiveKey();
+            const step = ev.step || {};
+            const st = ev.status === 'error' ? 'err' : 'done';
+            if (key) this.cbTlSetStage(key, st, step.message || ev.title || '', ev.duration_ms);
+            if (step.message) {
+              this.cbTlAddLine(key || 'understand', step.title || ev.node || 'agent', step.message,
+                ev.status === 'error' ? 'error' : 'ok', ev.duration_ms);
+            }
+            return;
+          }
+          if (type === 'tool_start') {
+            const key = CB_TL_NODE_STAGE[ev.node] || cbTlToolStage(ev.tool) || this.cbTlActiveKey();
+            if (!CB_TL_TOOL_STAGE[ev.tool] && !cbTlToolStage(ev.tool)) {
+              this.cbTl.fallbackTools = this.cbTl.fallbackTools.concat([ev.tool]);
+            }
+            this.cbTlAddLine(key || 'understand', ev.tool, '执行中…', 'running');
+            if (key) this.cbTlSetStage(key, 'run', ev.tool);
+            return;
+          }
+          if (type === 'tool_end') {
+            const key = CB_TL_NODE_STAGE[ev.node] || cbTlToolStage(ev.tool) || this.cbTlActiveKey();
+            // 更新同 node+tool 最近一条 running（codex active_cell 合并思路），否则追加
+            let found = false;
+            for (let i = this.cbTl.lines.length - 1; i >= 0; i--) {
+              const ln = this.cbTl.lines[i];
+              if (ln.tool === ev.tool && ln.stage === key && ln.status === 'running') {
+                ln.status = ev.status || 'ok';
+                ln.text = ev.status === 'error' ? '执行失败' : '完成';
+                ln.durMs = ev.duration_ms != null ? ev.duration_ms : ln.durMs;
+                found = true;
+                break;
+              }
+            }
+            if (!found) {
+              this.cbTlAddLine(key || 'understand', ev.tool,
+                ev.status === 'error' ? '执行失败' : '完成', ev.status === 'error' ? 'error' : 'ok', ev.duration_ms);
+            }
+            return;
+          }
+          if (type === 'hitl') {
+            this.cbTlSetStage('hitl', 'run', '等待人工确认（HITL 闸门）');
+            this.cbTl.hitlWait = true;
+            return;
+          }
+          if (type === 'replan') {
+            this.cbTlSetStage('risk', 'warn', ev.message || 'critic 打回重做 · round ' + (ev.replan_round || '?'));
+            this.cbTlAddLine('risk', 'replan.critic', ev.message || '打回重做', 'warn');
+            return;
+          }
+          if (type === 'debate') {
+            this.cbTlAddLine('box', 'bounded_debate', ev.message || '有界辩论', 'ok');
+            return;
+          }
+          if (type === 'error') {
+            const key = this.cbTlActiveKey() || 'finalize';
+            this.cbTlSetStage(key, 'warn', ev.message || '事件流报错');
+            this.cbTlAddLine(key, 'error', ev.message || '事件流报错', 'error');
+            return;
+          }
+          if (type === 'done' || type === 'replay_done') {
+            this.cbTlFinish(ev);
+          }
+        },
+        /* HITL 确认成功（非流式 /api/confirm）后推进时间线：hitl 完成→拼柜/校核按结果标记→收口折叠 */
+        cbTlConfirmDone(pub) {
+          if (this.cbTl.hitlWait || this.cbTl.stages.hitl.state === 'run') {
+            this.cbTlSetStage('hitl', 'done', '已确认');
+            this.cbTlAddLine('hitl', 'hitl.confirm', '人工确认通过 · 进入拼柜', 'ok');
+          }
+          this.cbTl.hitlWait = false;
+          if (this.cbTl.stages.pack.state === 'idle' || this.cbTl.stages.pack.state === 'run') {
+            this.cbTlSetStage('pack', 'done', '拼柜完成（确认后执行）');
+          }
+          const risk = (pub && pub.risk_report && pub.risk_report.decision) || '';
+          if (this.cbTl.stages.risk.state === 'idle' || this.cbTl.stages.risk.state === 'run') {
+            this.cbTlSetStage('risk', risk === 'REJECT' ? 'warn' : 'done',
+              risk ? ('风险裁决 ' + risk) : '合规校核完成');
+          }
+          this.cbTlFinish({ public: pub || {} });
+        },
+        cbTlFinish(ev) {
+          /* 收口：hitl 等待解除、落盘/收口标完成、从事件抄数字做一行摘要（不编造） */
+          if (this.cbTl.hitlWait) this.cbTlSetStage('hitl', 'done', '已确认');          if (this.cbTl.stages.write.state === 'idle' || this.cbTl.stages.write.state === 'run') {
+            this.cbTlSetStage('write', 'done', '产物落盘');
+          }
+          this.cbTlSetStage('finalize', 'done', '收口完成');
+          this.cbTl.hitlWait = false;
+          this.cbTl.done = true;
+          this.cbTl.collapsed = true;
+          this.cbTl.elapsedMs = this.cbTl.startedAt ? Date.now() - this.cbTl.startedAt : 0;
+          const pub = (ev && ev.public) || {};
+          const plan = pub.container_plan || {};
+          const vs = pub.volume_summary || {};
+          const n0 = vs.n0 != null ? vs.n0 : plan.n0;
+          const used = plan.containers_used != null ? plan.containers_used : vs.containers_used;
+          const risk = (pub.risk_report || {}).decision;
+          const chips = [];
+          if (n0 != null) chips.push({ k: '订柜 N0', v: String(n0) });
+          if (used != null) chips.push({ k: '实装', v: String(used) + ' 柜' });
+          if (Array.isArray(pub.boxes) && pub.boxes.length) chips.push({ k: '成箱', v: pub.boxes.length + ' 箱' });
+          if (risk) chips.push({ k: '风险', v: String(risk) });
+          if (pub.ship_ok != null) chips.push({ k: 'ship_ok', v: pub.ship_ok ? 'true' : 'false' });
+          const secs = (this.cbTl.elapsedMs / 1000).toFixed(1);
+          this.cbTl.summary = {
+            headline: '流水线完成 · ' + secs + 's',
+            chips,
+          };
+        },
         phaseOn(key) {
           const p = this.result.phase || '';
           if (key === 'big' || key === '总' || key === '终') {
@@ -3689,6 +4108,8 @@ window.CB_POSTS = [{"id":"bid-parse","name":"招标解析","aliases":["招标","
           if (ev.seq != null) {
             this.$set(this.seenEventKeys, key, 1);
           }
+          // ux(round3)：去重后喂阶段时间线（映射表见 docs/ux/ux-design-spec.md 附录 B）
+          this.cbTlOnEvent(ev);
           if (ev.type === 'run_start' || ev.type === 'replay_start') {
             this.seenEventKeys = {};
             this.liveStatus = {};
@@ -3763,6 +4184,7 @@ window.CB_POSTS = [{"id":"bid-parse","name":"招标解析","aliases":["招标","
           if (ev.type === 'done' || ev.type === 'replay_done') {
             this.liveNode = '';
             this.streamProgress.pct = 100;
+            if (ev.session_id) this.sessionId = ev.session_id; /* ux(round3)：HITL/收口事件带回 session */
             if (ev.public) {
               this.result = Object.assign({}, this.result, ev.public, {
                 agent_steps: (ev.public.agent_steps && ev.public.agent_steps.length)
@@ -4346,6 +4768,8 @@ window.CB_POSTS = [{"id":"bid-parse","name":"招标解析","aliases":["招标","
         async runDemo() {
           // 主路径：非 SSE 一次请求（避免流式期间页面假死 / loading 挂起）
           if (!this.beginWork('满载演示')) return;
+          // ux(round3)：接 WS 订阅 agent 事件，阶段时间线在演示路径同样可见
+          if (this.wsStatus !== 'live' && this.sessionId) this.connectSessionWs(this.sessionId);
           this.statusText = '满载演示计算中（约 5–15 秒，请勿连点）…';
           this.mainTab = 'overview';
           this.liveStatus = {};
@@ -4437,20 +4861,13 @@ window.CB_POSTS = [{"id":"bid-parse","name":"招标解析","aliases":["招标","
           }
         },
         async runPipelineTrace() {
-          // 全流程也改非 SSE，保证可完成；需要流式时再开
+          // ux(round3)：全流程改回 SSE 流（/api/pipeline/stream）——阶段时间线逐节点可见
           if (!this.beginWork('全流程')) return;
           this.statusText = '全流程计算中…';
-          this.mainTab = 'agents';
+          this.mainTab = 'overview';
           this.liveStatus = {};
-          const tick = setInterval(() => {
-            if (!this.loading) return;
-            const sec = this.loadingStartedAt
-              ? Math.round((Date.now() - this.loadingStartedAt) / 1000)
-              : 0;
-            this.statusText = '全流程计算中… 已 ' + sec + 's';
-          }, 500);
           try {
-            const j = await this.fetchJson('/api/pipeline', {
+            const last = await this.consumeSse('/api/pipeline/stream', {
               user_input: this.userInput || 'Agent pipeline',
               container_type: this.containerType,
               session_id: this.sessionId,
@@ -4458,8 +4875,10 @@ window.CB_POSTS = [{"id":"bid-parse","name":"招标解析","aliases":["招标","
               max_containers: 0,
               mode: 'steps',
               save_artifacts: true,
-            }, 90000);
-            this.applyResult(j);
+            });
+            if (last) {
+              this.applyResult({ public: last, steps: last.agent_steps || this.agentSteps });
+            }
             this.statusText =
               '轨迹完成 steps=' + this.agentSteps.length +
               ' phase=' + (this.result.phase || '') +
@@ -4469,7 +4888,6 @@ window.CB_POSTS = [{"id":"bid-parse","name":"招标解析","aliases":["招标","
           } catch (e) {
             this.statusText = '失败: ' + e;
           } finally {
-            clearInterval(tick);
             this.endWork();
             this.liveNode = '';
           }
@@ -4728,6 +5146,8 @@ window.CB_POSTS = [{"id":"bid-parse","name":"招标解析","aliases":["招标","
               enforce_ns_checklist: true,
             }, 90000);
             this.applyResult(j);
+            /* ux(round3)：确认闸门通过后，把时间线从「人工确认」推进到收口（数字只抄返回事件） */
+            this.cbTlConfirmDone(j.public || j);
             const next = (j.agent_steps || (j.public && j.public.agent_steps) || []);
             if (next.length >= prev.length) {
               this.agentSteps = next;
@@ -4830,6 +5250,12 @@ window.CB_POSTS = [{"id":"bid-parse","name":"招标解析","aliases":["招标","
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ session_id: this.sessionId, action: 'cancel' }),
           });
+          /* ux(round3)：Esc/取消=驳回 ≠ 放行——时间线标安全橙 ⚠，不静默完成 */
+          if (this.cbTl.hitlWait) {
+            this.cbTlSetStage('hitl', 'warn', '已驳回（未放行）');
+            this.cbTlAddLine('hitl', 'hitl.confirm', '用户驳回 · 未进入拼柜', 'warn');
+            this.cbTl.hitlWait = false;
+          }
           this.statusText = '已取消';
         },
         drawAllViews() {

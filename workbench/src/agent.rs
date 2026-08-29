@@ -681,7 +681,25 @@ pub async fn run_expert(
         }
         Intent::Run | Intent::Both => {
             let ticket = ticket_from_chat(session_id, expert, &history, confirm_ok);
-            let run = harness::run_expert_steps(paths, expert, ticket);
+            // ux(round3) 自测修复：harness steps 内含 reqwest::blocking（pack_ship_health
+            // → packing_bridge）与文件 IO，必须在阻塞线程池执行；否则 blocking client
+            // 在 tokio worker 上 drop 时 panic，SSE 流被无声截断（只收到 context 事件）。
+            let paths_owned = paths.clone();
+            let expert_owned = expert.clone();
+            let run = match tokio::task::spawn_blocking(move || {
+                harness::run_expert_steps(&paths_owned, &expert_owned, ticket)
+            })
+            .await
+            {
+                Ok(run) => run,
+                Err(e) => {
+                    events.push((
+                        "error".into(),
+                        json!({"text": format!("harness join error: {e}")}),
+                    ));
+                    return Ok(events);
+                }
+            };
             events.extend(events_from_run(&expert.name, &expert.id, &run));
             match talk_after_run(paths, expert, &history, confirm_ok, session_id, &run).await {
                 Ok(talk) => events.extend(talk),

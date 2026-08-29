@@ -247,3 +247,72 @@ html, body {
   .layout { grid-template-columns: 1fr; }
   .rail { display: none; }
 }
+
+/* === ux(round3) 阶段时间线 · 一条流水线（进度可见）· docs/ux/ux-design-spec.md 附录 B ===
+   8 阶段轨道：理解任务→召唤岗位→成箱→人工确认→拼柜→合规校核→落盘→收口。
+   状态色（--cb-* token）：工程蓝=进行中 / 通过绿=完成 / 安全橙=打回·待人工·UNSPECIFIED / 合规红=阻断。
+   借鉴 pattern-only：aider waiting.Spinner 单行进行中反馈+降级渲染（Apache-2.0）；
+   openai/codex history_cell 追加式会话流、完成后定格为一行（Apache-2.0）；
+   VS Code Tasks presentation：长输出默认折叠、展开才看全文（文档 pattern-only）。 */
+.cb-tl {
+  border: 1px solid var(--cb-gray-200); border-radius: var(--cb-radius-md);
+  background: var(--cb-gray-50); padding: var(--cb-space-2) var(--cb-space-3);
+  margin: 0 0 10px; font-size: var(--cb-fs-xs);
+}
+.cb-tl-head { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; margin-bottom: 6px; }
+.cb-tl-title { font-weight: 700; color: var(--cb-text); font-size: var(--cb-fs-xs); }
+.cb-tl-badge {
+  font-size: 11px; color: var(--cb-text-muted); border: 1px solid var(--cb-line);
+  border-radius: var(--cb-radius-full); padding: 0 8px;
+}
+.cb-tl-badge.hitl { color: var(--cb-orange); border-color: var(--cb-orange); }
+.cb-tl-fold { background: none; border: none; cursor: pointer; color: var(--cb-blue); font-size: 11px; padding: 0 2px; }
+.cb-tl-track { display: flex; flex-wrap: wrap; gap: 4px 3px; align-items: center; }
+.cb-tl-stage {
+  display: inline-flex; align-items: center; gap: 4px; padding: 2px 8px;
+  border-radius: var(--cb-radius-full); border: 1px solid var(--cb-line);
+  color: var(--cb-gray-400); background: #fff; white-space: nowrap;
+}
+.cb-tl-stage.run { color: var(--cb-text); border-color: var(--cb-blue); background: var(--cb-blue-soft); font-weight: 600; }
+.cb-tl-stage.done { color: var(--cb-text); border-color: var(--cb-green); }
+.cb-tl-stage.warn { color: var(--cb-text); border-color: var(--cb-orange); background: var(--cb-orange-soft); }
+.cb-tl-stage.err { color: var(--cb-text); border-color: var(--cb-red); background: var(--cb-red-soft); }
+.cb-tl-st {
+  width: 12px; height: 12px; border-radius: 50%; display: inline-flex;
+  align-items: center; justify-content: center; font-size: 9px; line-height: 1; flex: none;
+}
+.cb-tl-stage.idle .cb-tl-st { border: 1.5px solid var(--cb-line); color: var(--cb-gray-400); }
+.cb-tl-stage.done .cb-tl-st { background: var(--cb-green); color: #fff; }
+.cb-tl-stage.warn .cb-tl-st { background: var(--cb-orange); color: #fff; }
+.cb-tl-stage.err .cb-tl-st { background: var(--cb-red); color: #fff; }
+.cb-tl-spin {
+  width: 10px; height: 10px; border-radius: 50%; flex: none;
+  border: 2px solid rgba(37, 99, 235, 0.25); border-top-color: var(--cb-blue);
+  animation: cb-tl-rot 0.9s linear infinite;
+}
+@keyframes cb-tl-rot { to { transform: rotate(360deg); } }
+@media (prefers-reduced-motion: reduce) { .cb-tl-spin { animation: none; border-color: var(--cb-blue); } }
+.cb-tl-arrow { color: var(--cb-gray-200); font-size: 10px; flex: none; }
+.cb-tl-dur { font-size: 10px; color: var(--cb-text-muted); font-family: var(--cb-mono); }
+.cb-tl-lines { margin-top: 6px; display: flex; flex-direction: column; gap: 1px; max-height: 200px; overflow: auto; }
+.cb-tl-line {
+  display: flex; align-items: baseline; gap: 6px; padding: 1px 6px;
+  margin-left: 10px; border-left: 2px solid var(--cb-line);
+  color: var(--cb-text-muted); font-size: 11px;
+}
+.cb-tl-line .tl-tool { font-family: var(--cb-mono); color: var(--cb-text); flex: none; }
+.cb-tl-line .tl-text { overflow-wrap: anywhere; }
+.cb-tl-line.is-running { border-left-color: var(--cb-blue); }
+.cb-tl-line.is-ok { border-left-color: var(--cb-green); }
+.cb-tl-line.is-warn { border-left-color: var(--cb-orange); }
+.cb-tl-line.is-err { border-left-color: var(--cb-red); }
+.cb-tl-more { background: none; border: none; cursor: pointer; padding: 0; color: var(--cb-blue); font-size: 11px; flex: none; }
+.cb-tl-hitl {
+  margin-top: 6px; border: 1px dashed var(--cb-orange); border-radius: var(--cb-radius-sm);
+  background: var(--cb-orange-soft); color: var(--cb-orange); padding: 6px 10px; font-size: var(--cb-fs-xs);
+}
+.cb-tl-summary { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; color: var(--cb-text); font-size: var(--cb-fs-xs); }
+.cb-tl-chip {
+  font-family: var(--cb-mono); border: 1px solid var(--cb-line); border-radius: var(--cb-radius-sm);
+  padding: 0 6px; color: var(--cb-text-muted); background: #fff;
+}

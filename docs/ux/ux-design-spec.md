@@ -126,3 +126,89 @@
 - UNSPECIFIED：哨兵遍布 `packing_assistant/runtime/*` 与 `expert_turn.py` 等；**前端无显示规则**（本轮 spec §3.2 定规则，R4 落地）。
 - 术语：装柜（workbench.html 5 处）、作业单/交底少量出现；三端无统一术语表（本轮 §3.2 定稿）。
 - CI frontend 断言（`.github/workflows/ci.yml:24-40,100-107`）要求 workbench.html 保留：`大 Team / org-chart / /api/pipeline / consumeSse / hitl_summary / draw3d / TEAM_ROSTER / /api/whatif / What-if / 订柜 N0 / 3D 用柜 / perCabinCog / secureWorkOrder / big_team_a_b / /api/whatif/apply / /api/profiles / POR 装柜单 / 应用为当前方案`；index.html 保留 `Civil Buddy / /workbench`。每轮改 UI 前先对照此清单。
+
+## 附录 B：阶段时间线 · 事件→阶段映射表（ux round3 定稿，后续轮共用）
+
+> R3 落地「一条流水线（进度可见）」：把 SSE 事件流映射为固定 8 阶段轨道。
+> 组件为纯 vanilla JS/CSS，两端同构：`frontend/workbench.html`（Vue2 内联，`CB_TL_*` 常量）与
+> `demo/static/app.js`（`cbTlCreate()` + `CB_TL_STAGES`/`CB_PHASE_STAGE`）。零 CDN、零外链。
+
+### B.1 阶段轨道与状态色
+
+固定轨道（顺序即流水线顺序，阶段可被打回重做，重做计入 `reruns` 徽记）：
+
+```
+理解任务 → 召唤岗位 → 成箱 → 人工确认 → 拼柜 → 合规校核 → 落盘 → 收口
+```
+
+| 状态 | 图标 | token 色 | 语义 |
+| --- | --- | --- | --- |
+| 待执行 | `·` 空心 | --cb-gray-400 | 未到达 |
+| 进行中 | spinner（prefers-reduced-motion 时静态圆） | --cb-blue 工程蓝 | 事件流正在此阶段 |
+| 完成 | `✓` | --cb-green 通过绿 | 阶段事件闭合 |
+| 打回/待人工 | `⚠` | --cb-orange 安全橙 | replan 打回、HITL 等待、UNSPECIFIED——不藏、不红字恐慌 |
+| 阻断 | `⛔` | --cb-red 合规红 | 仅 agent status=error 等硬失败 |
+
+### B.2 借鉴来源（pattern-only）
+
+| 来源 | 许可 | 借什么 |
+| --- | --- | --- |
+| Aider-AI/aider `aider/waiting.py` `Spinner`（github.com/Aider-AI/aider） | Apache-2.0 | 进行中=单行 spinner+文字标签，不打扰历史流；渲染降级（unicode→ASCII → web 场景 prefers-reduced-motion 去动画） |
+| openai/codex `codex-rs/tui/src/chatwidget.rs` + `history_cell.rs`（github.com/openai/codex） | Apache-2.0 | 追加式会话流；进行中事件合并为单格（active_cell），完成后定格为不可变历史（时间线折叠为一行摘要）；幂等去重 |
+| VS Code Tasks presentation（code.visualstudio.com/docs/debugtest/tasks） | 文档 pattern-only | 长输出默认折叠成一行、出问题才展开；reveal 语义映射为"展开/收起"按钮 |
+
+### B.3 :8000 `/api/pipeline/stream` 事件映射（gateway/app.py → packing_assistant/teams/big_team.py、agent_loop.py）
+
+SSE 形状：`data: {...}\n\n`（fetch+ReadableStream 解析，workbench `consumeSse`/`onStreamEvent`，WS 同源 HUB 复用同一处理）。
+
+| 事件 type | 关键字段 | → 阶段 | 人话 |
+| --- | --- | --- | --- |
+| `run_start` | run_id, team_mode | 重置时间线；理解任务=进行中 | 开始装柜任务 |
+| `agent_start` | node | 见节点映射表 B.4 | 阶段进入进行中 |
+| `agent_end` | node, status, duration_ms, step.message | 同上；status=error→阻断红 | 阶段完成（子行记一句话结果+耗时） |
+| `tool_start` / `tool_end` | node, tool, duration_ms | node 映射优先，tool 映射兜底 | 当前阶段下缩进子行：工具名+结果 |
+| `hitl` | hitl_summary, session_id | 人工确认=进行中+高亮 | "等待人工确认…"（R5 审批卡挂载点 `[data-r5-approval-slot]`） |
+| `replan` | message, replan_round | 合规校核=⚠ 安全橙 | critic 打回重做 |
+| `debate` | message | 成箱子行 | 有界辩论 |
+| `done` | public, summary, artifact_paths | 收口=完成；未完成的落盘补完成 | 折叠为一行摘要：`流水线完成 · Ns` + 数字 chips（订柜 N0/实装柜数/成箱箱数/风险裁决/ship_ok，**只抄事件数值**） |
+| `replay_start` / `replay_done` | run_id | 重置（带「回放」徽标）/ 收口 | 历史回放 |
+| `error` | message | 当前阶段 ⚠ + 子行 | 事件流报错 |
+
+### B.4 :8000 节点/工具 → 阶段（big_team 团队节点 + agent_loop 白名单工具）
+
+| node（agent_start/end） | 阶段 | | tool（llm_scheduler 模式） | 阶段 |
+| --- | --- | --- | --- | --- |
+| `intent` | 理解任务 | | `intent.interpret` / `knowledge.search` | 理解任务 |
+| `orchestrator` | 召唤岗位 | | `container.select` | 召唤岗位 |
+| `material_parser` `structure` `box_scheme` `present_team_a` `bounded_debate` | 成箱 | | `team_a.run` / `team_a.rebox` | 成箱 |
+| `hitl_wait` / `user_confirm` | 人工确认 | | `hitl.check` / `hitl.confirm` | 人工确认 |
+| `planner` `loader` `evaluator` | 拼柜 | | `team_b.plan_load_eval` | 拼柜 |
+| `risk_compliance` `replan_critic` | 合规校核 | | `team_b.risk` / `replan.critic` | 合规校核 |
+| `visualizer` | 落盘 | | `team_b.visualize`、`manifest*` `tms*` `booking*` `secure*` `docx*` `plan.export*` 等前缀 | 落盘 |
+| `finalize_run` / `finalize` | 收口 | | `finalize.run` | 收口 |
+
+兜底规则：未列出工具 → 附在**当前进行中阶段**的子行（计数于 `cbTl.fallbackTools`，不产生「未知」桶）。
+
+### B.5 :8765 `/api/chat` 事件映射（workbench/src/api.rs、agent.rs）
+
+SSE 形状：`event: <name>\ndata: {...}\n\n`（demo/static/app.js `streamChat`→`cbTlCreate()`）。
+
+| event | payload.phase | → 阶段 | 人话 |
+| --- | --- | --- | --- |
+| `context` | — | （不进时间线：已有 ctx 仪表） | 上下文用量 |
+| `status` | `understand` / `compress` / `import` | 理解任务 | 听懂为 run/chat；上下文压缩 |
+| `status` | `summon` / `queue` / `plain` | 召唤岗位 | 已召唤某岗；独立专家 i/N；未点名岗位 |
+| `status` | `harness` / `scheme_gate` | 成箱 | 一人公司成套 harness steps |
+| `status` | `hitl_gate` / `hitl` / `confirm` | 人工确认（高亮+R5 占位） | HITL：专项未确认不出施工草稿 |
+| `status` | `plan_load_eval` / `pack` | 拼柜 | 规划→装载→评估 |
+| `status` | `risk` | 合规校核 | 出运门禁 |
+| `status` | `exclusive` / `write` / `price` / `doc` / `deliver` | 落盘 | 专属出稿工具步（pack-ship__plan/export/health 等）、价表/草稿写盘 |
+| `status` | `done` | 收口 | 收口 |
+| `status` | `think` / `talk` / `chat` / 工具名（`search_kb` `read_kb` `list_kb` `web_search` `web_open` `list_attachments` `read_attachment` 等） | 当前阶段子行（不落「未知」） | 解释轮次/出稿后白话说明/工具一句话结果 |
+| `token` | — | （正文流式渲染，不进时间线） | 正文输出 |
+| `error` | — | 当前阶段 ⚠ 安全橙 | 报错不恐慌 |
+| `done` | mode, deliverables | 收口=完成 | 整条折叠为一行摘要：`完成 · 一人公司成套/岗位收工/回答完毕 · 文书 N 份`（N 只抄 `deliverables.length`） |
+
+### B.6 CI
+
+frontend 断言沿用 §附录 A 的 18 标记清单；时间线组件不删任何标记。`frontend/workbench.html` 保留 `consumeSse`（R3 起重新用于 `/api/pipeline/stream` 全流程流式）与 `hitl_summary`。

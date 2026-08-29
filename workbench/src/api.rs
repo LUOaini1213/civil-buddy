@@ -681,7 +681,21 @@ async fn chat(State(st): State<Arc<AppState>>, Json(body): Json<ChatIn>) -> Resu
                     "project_name": last_user.chars().take(40).collect::<String>(),
                     "confirm_ok": confirm_ok,
                 });
-                let run_v = crate::firm::run_bid_job(&st2.paths, &session, &args);
+                // ux(round3) 自测修复：run_bid_job 内含 reqwest::blocking/文件 IO，
+                // 必须放到阻塞线程池；否则 blocking client 在 tokio worker 上
+                // drop 时 panic（"Cannot drop a runtime..."），SSE 流被无声截断。
+                let run_v = {
+                    let st3 = st2.clone();
+                    let session3 = session.clone();
+                    match tokio::task::spawn_blocking(move || {
+                        crate::firm::run_bid_job(&st3.paths, &session3, &args)
+                    })
+                    .await
+                    {
+                        Ok(v) => v,
+                        Err(e) => json!({"error": e.to_string()}),
+                    }
+                };
                 let evs = vec![
                     (
                         "status".into(),
