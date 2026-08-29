@@ -182,6 +182,34 @@ html, body {
 }
 .cb-at-item.on { background: var(--cb-blue-soft); color: var(--cb-blue-strong); }
 .cb-at-item .cb-at-cat { color: var(--cb-text-muted); font-size: var(--cb-fs-xs); white-space: nowrap; }
+
+/* === ux(round9) 快捷指令面板：/ 命令 + 模板填空 + 最近任务（--cb-* token，零 CDN） ===
+   与 @岗位补全同一浮层体系（.cb-at-menu 基座）；图标=--cb-* 色块+单字，不引图标库。 */
+.cb-cmd-head { padding: 6px 10px 2px; font-size: var(--cb-fs-xs); color: var(--cb-text-muted); }
+.cb-cmd-item {
+  display: flex; align-items: center; gap: var(--cb-space-3);
+  padding: 6px 10px; border-radius: var(--cb-radius-sm); cursor: pointer;
+}
+.cb-cmd-item.on { background: var(--cb-blue-soft); }
+.cb-cmd-item.on .cb-cmd-name, .cb-cmd-item.on .cb-cmd-desc { color: var(--cb-blue-strong); }
+.cb-cmd-ico {
+  flex: 0 0 auto; width: 20px; height: 20px; display: flex; align-items: center; justify-content: center;
+  border-radius: var(--cb-radius-sm); color: #fff; font-size: var(--cb-fs-xs); font-weight: 600;
+}
+.cb-cmd-ico.tone-blue { background: var(--cb-blue); }
+.cb-cmd-ico.tone-strong { background: var(--cb-blue-strong); }
+.cb-cmd-ico.tone-orange { background: var(--cb-orange); }
+.cb-cmd-ico.tone-red { background: var(--cb-red); }
+.cb-cmd-ico.tone-green { background: var(--cb-green); }
+.cb-cmd-ico.tone-gray { background: var(--cb-gray-500); }
+.cb-cmd-name { font-weight: 600; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.cb-cmd-name code { font-family: var(--cb-mono); font-size: var(--cb-fs-xs); color: var(--cb-text-muted); margin-left: 4px; font-weight: 400; }
+.cb-cmd-desc { flex: 1 1 auto; min-width: 0; color: var(--cb-text-muted); font-size: var(--cb-fs-xs); text-align: right; }
+.cb-cmd-recent .cb-cmd-name { font-weight: 400; }
+@media screen and (max-width: 430px) { /* --cb-bp-mobile */
+  .cb-cmd-desc { display: none; }  /* 手机竖屏：只留图标+名称，说明换 title 提示 */
+  .cb-cmd-item { min-height: 44px; }  /* --cb-touch-min 触控目标 */
+}
 .composer-note { font-size: var(--cb-fs-xs); color: var(--cb-text-muted); margin: 0 0 6px; }
 #send:disabled { background: var(--cb-gray-200); border-color: var(--cb-gray-200); color: var(--cb-gray-500); cursor: not-allowed; }
 .composer textarea:focus { outline: none; border-color: #5eead4; box-shadow: 0 0 0 3px rgba(15, 118, 110, 0.12); }

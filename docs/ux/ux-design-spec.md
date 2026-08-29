@@ -96,7 +96,7 @@
 | R6 | 审计时间线：追加式会话 cell 流（签字/确认/阻断全留痕） | 任一运行可回放全部事件；签认/确认有时间戳与操作者 |
 | R7 | 错误恢复：HITL checkpoint 恢复 UI + 失败重试路径 | 断点续跑不丢状态；恢复入口从时间线可达 |
 | R8 | 窄屏：响应式三栏→单栏（768px 断点） | 768/375 宽度下输入、流水线、审批卡全部可用 |
-| R9 | 指令面板：`/` 命令 + 66 岗检索面板 | 66 岗可检索可点名；面板零 CDN、键盘可达 |
+| R9 | 指令面板：`/` 命令 + 66 岗检索面板（ux round9 落地，见附录 H） | 66 岗可检索可点名；面板零 CDN、键盘可达 |
 | R10 | 引导：空态三步剧本强化（装柜 demo 路径） | 新用户 3 分钟内完成首跑（demo_one_shot 同路径） |
 | R11 | 主题：--cb-* token 全量接管 + 明暗双套（prefers-color-scheme） | 三端零硬编码色值引用旧变量；明暗切换无对比度回归 |
 | R12 | 离线：内网离线资源自检（零外链断言入 CI） | 断网全功能；CI 增加"零 CDN/外链"静态断言 |
@@ -462,3 +462,57 @@ round8 新增规则一律 `@media screen and (max-width: …)`——**打印仍�
 | antd mobile（mobile.ant.design）+ 设计稿 750=2×375 惯例 | MIT | 卡片式/列表式布局；移动端主操作全宽按钮；整卡纵排 |
 | Tencent TDesign Mobile（tdesign.tencent.com） | 文档 pattern-only | 样式属性全部收敛进主题 token（对齐 --cb-* 命名空间做法） |
 | web.dev / MDN Web App Manifest | 文档 pattern-only | manifest 最小字段：name/short_name + start_url + display + theme_color + icons |
+
+## 附录 H：快捷指令面板 · / 命令 + 常用任务模板（ux round9 定稿）
+
+> R9 落地「指令面板」：输入 `/` 弹命令面板（与 R2 @岗补全同一浮层体系）——老手直达、新手有路。
+> 两端同构（:8000 `frontend/workbench.html` Vue 内联 / :8765 `demo/static/app.js` vanilla），
+> 零 CDN、零外链、全 `--cb-*` token、全键盘可达。**面板任何动作都不自动发送**（承附录 F.3 红线）。
+
+### H.1 交互模式
+
+| 行为 | 落法 | 来源（pattern-only） |
+| --- | --- | --- |
+| 唤起 | 输入 `/`（行首/空白后）即弹面板；继续输入按名过滤 | codex slash popup |
+| 模糊过滤+排序 | 前缀命中(0) > 中文子串命中(1) > 子序列命中(3)；空查询=原序全量；别名命中不重复展示 | VS Code Command Palette「模糊必须带排序」 |
+| 键盘 | ↑↓ 移动、Enter/Tab 确认、Esc 关闭（关闭记住 token，编辑后才重开——同 @岗）；票子菜单内 Esc=返回命令层 | codex / Raycast「子菜单 Esc=返回上一级」 |
+| 模板填空 | 选中模板命令 → 整框替换为带 `<待填>` 占位的结构化草稿，先改后发 | GitHub Saved replies / Issue templates、Raycast argument placeholder |
+| 最近任务 | 面板顶部「最近 3 条任务」（localStorage `cb_recent_tasks_v1`，去重存 8 条），点击重填不发送 | VS Code palette recency |
+| 老手直达 | 直接发送 `/pack <票名>`、`/bid <要点>`、`/safety <要点>` → 发送前展开成任务文本再走正常链路；`/audit /doc /eval` 就地执行不发送；未带参给用法提示 | codex Tab-queue 语义（就地化） |
+
+### H.2 命令清单（两端同构；图标 = `--cb-*` 色块 + 单字，不引图标库）
+
+| 命令 | 图标/色 | 名称 | 一句说明 | 动作 |
+| --- | --- | --- | --- | --- |
+| `/pack` | 装·蓝 | 装箱拼柜 | 选 sim_materials 票，预填装柜任务 | 票选择子菜单 → 模板 |
+| `/bid` | 标·深蓝 | 招标解析 | 预填招标解析模板（@招标解析） | 模板 |
+| `/safety` | 安·安全橙 | 安全交底 | 预填班前白话交底模板 | 模板 |
+| `/audit` | 审·合规红 | 审计面板 | 打开跨运行审计时间线 | 跳转（附录 E 面板） |
+| `/doc` | 文·通过绿 | 最近交付物 | 预览最近一份交付物文书 | 跳转（附录 C 预览） |
+| `/eval` | 评·中性灰 | 记分卡摘要 | 竞赛记分卡 / 离线自检 | 跳转（见 H.4） |
+| （:8765 附加）`/skills /new /threads /bg /help` | 灰 | 既有客户端命令 | 面板给发现性；确认后预填命令文本 | 预填命令 |
+
+### H.3 模板文案（`<待填>` 占位；数字一概不预编）
+
+- `/pack`（选中票 `<票名>` 后）：`pack test/sim_materials/<票名>/materials.xlsx（<story>）` + `要求：40HQ 高利用率装柜；柜数与坐标由 tools 计算，模型不摆箱子；出装柜单草稿，须人工确认后才拼柜。`（:8000 网关 `_load_materials_from_text` 原生解析 NL 中的仓库相对 xlsx 路径——模板路径即真实可用数据路径）
+- `/bid`：`@招标解析 解析这份招标文件：项目名称：<待填> 关键条款：<待填：工期 / 资质 / 报价上限> 请列出资格条件与废标项清单；P0 资格须人工确认，是否投、怎么投由人决定。`
+- `/safety`：`@安全交底 写一份班前白话交底：作业内容：<待填> 主要风险与防护：<待填> 给工友的白话版，一条一个动作；先讨论，说「写一份」才出草稿。`
+
+### H.4 数据源
+
+| 数据 | 来源 | 说明 |
+| --- | --- | --- |
+| 票选择子菜单（/pack 第二级） | `test/sim_materials/*/materials.xlsx` 磁盘枚举 + `INDEX.json` 元数据 | 由 `scripts/gen_cb_tickets.py` 生成静态清单（gen_cb_posts.py 同款双产物）：`demo/static/tickets.js`（window.CB_TICKETS）+ workbench 内嵌 BEGIN/END 块；**无目录枚举端点**（:8000 `/api/artifact` 只读文件、:8765 `/api/file` 仅 out_root），故走静态清单，与磁盘一致由生成脚本保证 |
+| 最近任务 | `localStorage["cb_recent_tasks_v1"]` | 记录时机：:8765 form submit、:8000 runTeamA/runPipelineTrace；仅本地，不上传 |
+| /audit | :8000 `POST 无`（Vue 跳历史页 + `loadAudit()`）；:8765 `#auditPanel.scrollIntoView` + `loadAuditPanel()` | 附录 E 既有只读端点 |
+| /doc | :8000 `docArtifacts[0]` → `GET /api/artifact`；:8765 `done` 事件 deliverables 最近一份 → `/api/file` | 附录 C 既有预览组件 |
+| /eval | :8000 `GET /api/artifact?path=output/competition/scorecard_latest.json` → cbDocOpen 渲染摘要；:8765 `GET /api/eval/live` → 状态行闸门通过数（只抄返回值） | 无新端点 |
+
+### H.5 借鉴来源（pattern-only）
+
+| 来源 | 许可 | 借什么 |
+| --- | --- | --- |
+| openai/codex `slash_command.rs` / `command_popup.rs`（github.com/openai/codex） | Apache-2.0 | 输入 / 弹浮层、按名过滤、命令行=名称+一句描述、别名不重复展示、Esc 关闭记忆 token |
+| VS Code Command Palette（code.visualstudio.com、issue #1964） | 文档 pattern-only | 模糊过滤必须带模糊排序（前缀>子串>子序列）；全程键盘可达；最近项前置 |
+| Raycast Manual：Search Bar / Arguments / Snippets | 文档 pattern-only | 别名直达；参数 placeholder 提示；子菜单 Esc=返回上一级 |
+| GitHub Saved replies / Issue templates | 文档 pattern-only | 模板选择器（名称+描述）；选中=插入带占位草稿，先编辑后提交 |

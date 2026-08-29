@@ -840,6 +840,33 @@
     }
     .cb-at-item.on { background: var(--cb-blue-soft); color: var(--cb-blue-strong); }
     .cb-at-item .cb-at-cat { color: var(--cb-text-muted); font-size: var(--cb-fs-xs); white-space: nowrap; }
+    /* === ux(round9) 快捷指令面板：/ 命令 + 模板填空 + 最近任务（--cb-* token，零 CDN） ===
+       与 @岗位补全同一浮层体系（.cb-at-menu 基座，暗色）；图标=--cb-* 色块+单字，不引图标库。 */
+    .cb-cmd-head { padding: 6px 10px 2px; font-size: var(--cb-fs-xs); color: #9fb2cd; }
+    .cb-cmd-item {
+      display: flex; align-items: center; gap: var(--cb-space-3);
+      padding: 6px 10px; border-radius: var(--cb-radius-sm); cursor: pointer;
+    }
+    .cb-cmd-item.on { background: var(--cb-blue-soft); }
+    .cb-cmd-item.on .cb-cmd-name, .cb-cmd-item.on .cb-cmd-desc { color: var(--cb-blue-strong); }
+    .cb-cmd-ico {
+      flex: 0 0 auto; width: 20px; height: 20px; display: flex; align-items: center; justify-content: center;
+      border-radius: var(--cb-radius-sm); color: #fff; font-size: var(--cb-fs-xs); font-weight: 600;
+    }
+    .cb-cmd-ico.tone-blue { background: var(--cb-blue); }
+    .cb-cmd-ico.tone-strong { background: var(--cb-blue-strong); }
+    .cb-cmd-ico.tone-orange { background: var(--cb-orange); }
+    .cb-cmd-ico.tone-red { background: var(--cb-red); }
+    .cb-cmd-ico.tone-green { background: var(--cb-green); }
+    .cb-cmd-ico.tone-gray { background: var(--cb-gray-500); }
+    .cb-cmd-name { font-weight: 600; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .cb-cmd-name code { font-family: var(--cb-mono); font-size: var(--cb-fs-xs); color: #8fa3bf; margin-left: 4px; font-weight: 400; }
+    .cb-cmd-desc { flex: 1 1 auto; min-width: 0; color: #8fa3bf; font-size: var(--cb-fs-xs); text-align: right; }
+    .cb-cmd-recent .cb-cmd-name { font-weight: 400; color: #cfe0f5; }
+    @media screen and (max-width: 430px) { /* --cb-bp-mobile */
+      .cb-cmd-desc { display: none; }  /* 手机竖屏：只留图标+名称 */
+      .cb-cmd-item { min-height: 44px; }  /* --cb-touch-min 触控目标 */
+    }
     .composer-note { font-size: var(--cb-fs-xs); color: var(--cb-text-muted); margin: 0 0 6px; }
     .composer-row {
       display: flex;
@@ -2068,7 +2095,7 @@
             <textarea
               ref="userInput"
               v-model="userInput"
-              placeholder="描述任务，或 @选择岗位；Enter 发送 / Shift+Enter 换行"
+              placeholder="描述任务，或 /快捷指令 · @选择岗位；Enter 发送 / Shift+Enter 换行"
               @input="composerInput"
               @keydown="composerKeydown"
             ></textarea>
@@ -2080,6 +2107,28 @@
                 <span class="cb-at-name">@{{ it.name }}</span>
                 <span class="cb-at-cat">{{ it.category_name }} · {{ it.id }}</span>
               </div>
+            </div>
+            <!-- ===== ux(round9) 快捷指令面板：/ 命令 + 模板填空 + 最近任务（附录 H） ===== -->
+            <div class="cb-at-menu cb-cmd-menu" v-if="cmdOpen" role="listbox" aria-label="快捷指令">
+              <template v-if="cmdMode === 'cmds' && !cmdQueryText && cmdRecent.length">
+                <div class="cb-cmd-head">最近任务 · 点击重填（不自动发送）</div>
+                <div class="cb-cmd-item cb-cmd-recent" v-for="(r, i) in cmdRecent" :key="'cbrc'+i"
+                     :title="r.t" @mousedown.prevent="cmdApplyRecent(r.t)">
+                  <span class="cb-cmd-ico tone-gray">↺</span>
+                  <span class="cb-cmd-name">{{ r.t.slice(0, 46) }}</span>
+                  <span class="cb-cmd-desc">重填</span>
+                </div>
+                <div class="cb-cmd-head">命令 · ↑↓ 选择 / Enter 确认 / Esc 关闭</div>
+              </template>
+              <div class="cb-cmd-item" :class="{ on: i === cmdIdx }" role="option"
+                   :aria-selected="i === cmdIdx ? 'true' : 'false'"
+                   v-for="(it, i) in cmdItems" :key="cmdMode + it.id + i"
+                   :title="it.desc" @mousedown.prevent="cmdIdx = i; cmdConfirmComposer()" @mouseenter="cmdIdx = i">
+                <span class="cb-cmd-ico" :class="'tone-' + (it.tone || 'gray')">{{ it.ch }}</span>
+                <span class="cb-cmd-name">{{ cmdMode === 'tickets' ? it.id : it.name }}<code v-if="cmdMode === 'cmds'">/{{ it.id }}</code></span>
+                <span class="cb-cmd-desc">{{ cmdMode === 'tickets' ? cmdTicketDesc(it) : it.desc }}</span>
+              </div>
+              <div class="cb-cmd-head" v-if="!cmdItems.length">{{ cmdMode === 'tickets' ? '没有匹配的票 · Esc 返回' : '没有匹配的命令' }}</div>
             </div>
           </div>
           <div class="composer-row">
@@ -3566,6 +3615,117 @@
       return st;
     }
 
+    /* === ux(round9) 快捷指令面板：/ 命令 + 常用任务模板（docs/ux/ux-design-spec.md 附录 H）
+       实现与 demo/static/app.js 同源镜像。借鉴 pattern-only：
+       - openai/codex slash_command.rs / command_popup.rs（Apache-2.0）：/ 弹命令浮层、
+         按名过滤、每条=命令名+一句描述；Esc 关闭并记住被关的 token。
+       - VS Code Command Palette（文档 pattern-only）：模糊过滤带排序——前缀 > 中文子串 > 子序列。
+       - Raycast Arguments/Snippets（文档 pattern-only）：<待填> 占位提示；子菜单 Esc=返回上一级。
+       - GitHub Saved replies / Issue templates（文档 pattern-only）：选中=插入模板草稿，
+         先改后发，绝不自动发送（承附录 F.3「预填不自动发送」红线）。 */
+    const CB_RECENT_KEY = 'cb_recent_tasks_v1';
+    function cbRecentList() {
+      try {
+        const rows = JSON.parse(localStorage.getItem(CB_RECENT_KEY) || '[]');
+        return Array.isArray(rows) ? rows.filter((r) => r && r.t) : [];
+      } catch (e) {
+        return [];
+      }
+    }
+    function cbRecentPush(text) {
+      const t = String(text || '').trim();
+      if (!t || t.length > 200) return;
+      const rows = cbRecentList().filter((r) => r.t !== t);
+      rows.unshift({ t, ts: Date.now() });
+      try {
+        localStorage.setItem(CB_RECENT_KEY, JSON.stringify(rows.slice(0, 8)));
+      } catch (e) { /* 存储不可用：最近任务静默缺席 */ }
+    }
+    function cbSlashQuery(text, cursor) {
+      // 光标左侧 /token：行首/空白起头，/ 后可跟字母/数字/中文/连字符/下划线（与 @token 同构）
+      const before = String(text || '').slice(0, cursor);
+      const m = before.match(/(^|\s)\/([A-Za-z0-9\u4e00-\u9fa5_-]*)$/);
+      if (!m) return null;
+      return { start: before.length - m[2].length - 1, query: m[2] };
+    }
+    function cbSubsequence(q, names) {
+      return names.some((n) => {
+        let i = 0;
+        for (const ch of String(n)) {
+          if (ch === q[i]) i += 1;
+          if (i >= q.length) return true;
+        }
+        return false;
+      });
+    }
+    function cbSlashFilter(items, query, limit) {
+      // 模糊过滤+排序：前缀命中(0) > 中文子串命中(1) > 子序列命中(3)，空查询=原序全量
+      const q = String(query || '').trim().toLowerCase();
+      const scored = [];
+      for (const it of items || []) {
+        const names = [it.id].concat(it.aliases || [], [it.name]).filter(Boolean).map((n) => String(n).toLowerCase());
+        let score = -1;
+        if (!q) score = 2;
+        else if (names.some((n) => n.indexOf(q) === 0)) score = 0;
+        else if (names.some((n) => n.includes(q))) score = 1;
+        else if (cbSubsequence(q, names)) score = 3;
+        if (score >= 0) scored.push([score, it]);
+      }
+      scored.sort((a, b) => a[0] - b[0]);
+      return scored.slice(0, limit || 9).map((x) => x[1]);
+    }
+    /* 命令注册表（两端同构镜像；图标=--cb-* 色块+单字，不引图标库） */
+    const CB_SLASH = [
+      { id: 'pack', ch: '装', tone: 'blue', name: '装箱拼柜', aliases: ['装柜', '拼柜', '装箱作业单'],
+        desc: '选 sim_materials 票，预填装柜任务', sub: 'tickets' },
+      { id: 'bid', ch: '标', tone: 'strong', name: '招标解析', aliases: ['招标', '解析招标'],
+        desc: '预填招标解析模板（@招标解析）', kind: 'tpl' },
+      { id: 'safety', ch: '安', tone: 'orange', name: '安全交底', aliases: ['交底', '班前', '白话交底'],
+        desc: '预填班前白话交底模板', kind: 'tpl' },
+      { id: 'audit', ch: '审', tone: 'red', name: '审计面板', aliases: ['审计', '时间线'],
+        desc: '打开跨运行审计时间线', kind: 'nav' },
+      { id: 'doc', ch: '文', tone: 'green', name: '最近交付物', aliases: ['文书', '预览'],
+        desc: '预览最近一份交付物文书', kind: 'nav' },
+      { id: 'eval', ch: '评', tone: 'gray', name: '记分卡摘要', aliases: ['评测', '自检'],
+        desc: '竞赛记分卡 / 离线自检', kind: 'nav' },
+    ];
+    /* 模板填空：<待填> 占位提示（Raycast arguments placeholder 模式），数字一概不预编 */
+    function cbSlashTemplate(id, arg, ticket) {
+      const a = String(arg || '').trim();
+      if (id === 'pack') {
+        const t = ticket || {};
+        const path = t.xlsx || 'test/sim_materials/<票名>/materials.xlsx';
+        return 'pack ' + path + (t.story ? '（' + t.story + '）' : '') +
+          '\n要求：40HQ 高利用率装柜；柜数与坐标由 tools 计算，模型不摆箱子；出装柜单草稿，须人工确认后才拼柜。';
+      }
+      if (id === 'bid') {
+        return '@招标解析 解析这份招标文件：\n项目名称：<待填>\n关键条款：<待填：工期 / 资质 / 报价上限>' +
+          (a ? '\n原文要点：' + a : '') +
+          '\n请列出资格条件与废标项清单；P0 资格须人工确认，是否投、怎么投由人决定。';
+      }
+      if (id === 'safety') {
+        return '@安全交底 写一份班前白话交底：\n作业内容：<待填>\n主要风险与防护：<待填>' +
+          (a ? '\n补充：' + a : '') +
+          '\n给工友的白话版，一条一个动作；先讨论，说「写一份」才出草稿。';
+      }
+      return a;
+    }
+    /* 老手直达："/pack <票名>"、"/bid <要点>"、"/safety <要点>" 直接展开成任务文本 */
+    function cbSlashExpandMessage(message) {
+      const m = String(message || '').match(/^\/(pack|bid|safety)(?:\s+([\s\S]+))?$/);
+      if (!m) return null;
+      const arg = (m[2] || '').trim();
+      if (m[1] === 'pack') {
+        if (!arg) return null;
+        const t = (window.CB_TICKETS || []).find((x) => x.id === arg);
+        return cbSlashTemplate('pack', '', t ? { xlsx: t.xlsx, story: t.story } : { xlsx: arg });
+      }
+      return cbSlashTemplate(m[1], arg);
+    }
+
+/* === CB_TICKETS BEGIN · 由 scripts/gen_cb_tickets.py 生成自 test/sim_materials，勿手改 === */
+window.CB_TICKETS = [{"id":"glass_category","xlsx":"test/sim_materials/glass_category/materials.xlsx","story":"玻璃货种，pack_factor 应高于钢","n_lines":12,"net_kg":1152.0},{"id":"hollow_crate_lines","xlsx":"test/sim_materials/hollow_crate_lines/materials.xlsx","story":"当量 1.1m 架行；配合 crate_passthrough 做 Agent 测","n_lines":20,"net_kg":25600.0},{"id":"long_frames","xlsx":"test/sim_materials/long_frames/materials.xlsx","story":"超长件，柜型应倾向 40 尺","n_lines":15,"net_kg":1900.0},{"id":"mixed_realistic","xlsx":"test/sim_materials/mixed_realistic/materials.xlsx","story":"混装真实感小票","n_lines":35,"net_kg":3200.0},{"id":"near_payload","xlsx":"test/sim_materials/near_payload/materials.xlsx","story":"接近单柜载荷（含箱皮后可能 2 柜）","n_lines":27,"net_kg":27000.0},{"id":"overweight_risk","xlsx":"test/sim_materials/overweight_risk/materials.xlsx","story":"重货应力，重量柜应≥3","n_lines":4,"net_kg":64000.0},{"id":"small_one_container","xlsx":"test/sim_materials/small_one_container/materials.xlsx","story":"小票一柜可订","n_lines":8,"net_kg":400.0},{"id":"t30_heavy_modules_s2","xlsx":"test/sim_materials/t30_heavy_modules_s2/materials.xlsx","story":"密实模块 ~30t（dense 友好）","n_lines":36,"net_kg":30600.0},{"id":"t30_mixed_short_s4","xlsx":"test/sim_materials/t30_mixed_short_s4/materials.xlsx","story":"短件堆量 ~30t","n_lines":250,"net_kg":30000.0},{"id":"t30_oversized_mix_s6","xlsx":"test/sim_materials/t30_oversized_mix_s6/materials.xlsx","story":"超长+重块混装 ~30t","n_lines":45,"net_kg":30282.0},{"id":"t30_pallet_like_s5","xlsx":"test/sim_materials/t30_pallet_like_s5/materials.xlsx","story":"托盘整包 ~30t","n_lines":28,"net_kg":30800.0},{"id":"t30_plates_beams_s3","xlsx":"test/sim_materials/t30_plates_beams_s3/materials.xlsx","story":"长梁+板垛混装 ~30t","n_lines":72,"net_kg":30424.0},{"id":"t30_steel_tubes_s1","xlsx":"test/sim_materials/t30_steel_tubes_s1/materials.xlsx","story":"钢通重量主导 ~30t","n_lines":231,"net_kg":30030.0},{"id":"t80_long_mix_s20260780","xlsx":"test/sim_materials/t80_long_mix_s20260780/materials.xlsx","story":"超长+短件+重块 ~80t seed=20260780","n_lines":358,"net_kg":79357.1},{"id":"t80_long_mix_s297883","xlsx":"test/sim_materials/t80_long_mix_s297883/materials.xlsx","story":"超长+短件+重块 ~80t seed=297883","n_lines":349,"net_kg":79300.1},{"id":"t80_modules_plates_s20260763","xlsx":"test/sim_materials/t80_modules_plates_s20260763/materials.xlsx","story":"模块+板垛 ~80t seed=20260763","n_lines":107,"net_kg":80000.0},{"id":"t80_modules_plates_s297866","xlsx":"test/sim_materials/t80_modules_plates_s297866/materials.xlsx","story":"模块+板垛 ~80t seed=297866","n_lines":112,"net_kg":80000.0},{"id":"t80_random_mixed_s20260729","xlsx":"test/sim_materials/t80_random_mixed_s20260729/materials.xlsx","story":"随机混装 ~80t seed=20260729","n_lines":333,"net_kg":80000.0},{"id":"t80_random_mixed_s20260760","xlsx":"test/sim_materials/t80_random_mixed_s20260760/materials.xlsx","story":"随机混装 ~80t seed=20260760","n_lines":278,"net_kg":59655.8},{"id":"t80_random_mixed_s297832","xlsx":"test/sim_materials/t80_random_mixed_s297832/materials.xlsx","story":"随机混装 ~80t seed=297832","n_lines":353,"net_kg":80000.0},{"id":"t80_steel_heavy_s20260746","xlsx":"test/sim_materials/t80_steel_heavy_s20260746/materials.xlsx","story":"钢通主导 ~80t seed=20260746","n_lines":572,"net_kg":79955.3},{"id":"t80_steel_heavy_s297849","xlsx":"test/sim_materials/t80_steel_heavy_s297849/materials.xlsx","story":"钢通主导 ~80t seed=297849","n_lines":500,"net_kg":79800.2},{"id":"tiny","xlsx":"test/sim_materials/tiny/materials.xlsx","story":"极小票，证明未写死 2 柜","n_lines":1,"net_kg":10.0},{"id":"volume_bound_light","xlsx":"test/sim_materials/volume_bound_light/materials.xlsx","story":"轻泡货，体积可能主导","n_lines":40,"net_kg":600.0},{"id":"weight_bound_32t","xlsx":"test/sim_materials/weight_bound_32t/materials.xlsx","story":"重量主导，体积不应抬高柜数","n_lines":230,"net_kg":32200.0}];
+/* === CB_TICKETS END === */
 /* === CB_POSTS BEGIN · 由 scripts/gen_cb_posts.py 生成自 workbench/seed.json，勿手改 === */
 window.CB_POSTS = [{"id":"bid-parse","name":"招标解析","aliases":["招标","解析招标"],"category":"bid","category_name":"经营投标"},{"id":"bid-compliance","name":"废标检查","aliases":["废标","响应检查"],"category":"bid","category_name":"经营投标"},{"id":"bid-tech","name":"技术标","aliases":["技术标","标书"],"category":"bid","category_name":"经营投标"},{"id":"architecture","name":"建筑","aliases":["建筑专业","方案设计"],"category":"design","category_name":"勘察设计"},{"id":"structure","name":"结构","aliases":["结构专业","计算书"],"category":"design","category_name":"勘察设计"},{"id":"geotech","name":"岩土勘察","aliases":["岩土","勘察","地基"],"category":"design","category_name":"勘察设计"},{"id":"plumbing","name":"给排水","aliases":["给水","排水","水专业"],"category":"design","category_name":"勘察设计"},{"id":"hvac","name":"暖通","aliases":["暖通空调","通风"],"category":"design","category_name":"勘察设计"},{"id":"electrical","name":"电气","aliases":["电气专业","强电"],"category":"design","category_name":"勘察设计"},{"id":"fire-protect","name":"消防","aliases":["消防设计","消电"],"category":"design","category_name":"勘察设计"},{"id":"steel","name":"钢结构","aliases":["钢构"],"category":"design","category_name":"勘察设计"},{"id":"landscape","name":"园林景观","aliases":["景观","园林"],"category":"design","category_name":"勘察设计"},{"id":"interior","name":"室内装修","aliases":["精装","室内","装修"],"category":"design","category_name":"勘察设计"},{"id":"facade","name":"幕墙","aliases":["外墙","幕墙工程","玻璃幕墙"],"category":"design","category_name":"勘察设计"},{"id":"intel-weak","name":"智能化弱电","aliases":["弱电","智能化","综合布线"],"category":"design","category_name":"勘察设计"},{"id":"civil-defense","name":"人防","aliases":["人防工程","人防设计"],"category":"design","category_name":"勘察设计"},{"id":"hydraulic","name":"水利","aliases":["水利工程","堤防","水闸"],"category":"design","category_name":"勘察设计"},{"id":"port","name":"港航","aliases":["码头","港口","航道","港航"],"category":"design","category_name":"勘察设计"},{"id":"municipal","name":"市政道路","aliases":["道路","市政"],"category":"design","category_name":"勘察设计"},{"id":"bridge","name":"桥梁","aliases":["桥涵"],"category":"design","category_name":"勘察设计"},{"id":"tunnel","name":"隧道","aliases":["暗挖","隧道工程"],"category":"design","category_name":"勘察设计"},{"id":"traffic","name":"交通工程","aliases":["交通","导改","仿真"],"category":"design","category_name":"勘察设计"},{"id":"design-coord","name":"设计统筹","aliases":["图纸会审","设计变更","提资"],"category":"design","category_name":"勘察设计"},{"id":"bim-coord","name":"模型协调","aliases":["碰撞","BIM协调"],"category":"bim","category_name":"BIM"},{"id":"bim-qto","name":"模型算量","aliases":["算量","QTO"],"category":"bim","category_name":"BIM"},{"id":"bim-deliver","name":"模型交付","aliases":["LOD","BIM交付"],"category":"bim","category_name":"BIM"},{"id":"plan-master","name":"总控计划","aliases":["总计划","网络图"],"category":"planning","category_name":"计划"},{"id":"plan-lookahead","name":"周月计划","aliases":["周计划","月计划"],"category":"planning","category_name":"计划"},{"id":"plan-resource","name":"资源负荷","aliases":["资源计划"],"category":"planning","category_name":"计划"},{"id":"construction","name":"施工方案","aliases":["施工","专项方案","方案"],"category":"construction","category_name":"施工生产"},{"id":"method-hazard","name":"危大识别","aliases":["危大","超危","论证"],"category":"construction","category_name":"施工生产"},{"id":"survey","name":"测量","aliases":["放样","复测","控制点"],"category":"construction","category_name":"施工生产"},{"id":"dispatch","name":"生产调度","aliases":["调度","生产调度"],"category":"construction","category_name":"施工生产"},{"id":"safety-brief","name":"安全交底","aliases":["交底","安全交底"],"category":"hse","category_name":"安质环"},{"id":"quality","name":"质量","aliases":["质检","质量员","隐蔽"],"category":"hse","category_name":"安质环"},{"id":"env","name":"环保文明","aliases":["环保","文明施工"],"category":"hse","category_name":"安质环"},{"id":"emergency","name":"应急","aliases":["应急预案","演练"],"category":"hse","category_name":"安质环"},{"id":"cost","name":"造价","aliases":["造价","组价","清单"],"category":"commercial","category_name":"商务造价"},{"id":"variation","name":"变更签证","aliases":["签证","设计变更"],"category":"commercial","category_name":"商务造价"},{"id":"claim","name":"索赔调概","aliases":["索赔","调概"],"category":"commercial","category_name":"商务造价"},{"id":"subcontract","name":"分包结算","aliases":["分包","劳务结算"],"category":"commercial","category_name":"商务造价"},{"id":"interim","name":"验工计价","aliases":["验工","计量"],"category":"commercial","category_name":"商务造价"},{"id":"proc-plan","name":"采购计划","aliases":["采购计划"],"category":"procurement","category_name":"采购"},{"id":"proc-compare","name":"比价询价","aliases":["询价","比价"],"category":"procurement","category_name":"采购"},{"id":"proc-vendor","name":"供应商","aliases":["供方","供应商"],"category":"procurement","category_name":"采购"},{"id":"equip","name":"设备管理","aliases":["机械","设备","特种设备"],"category":"plant","category_name":"物机"},{"id":"warehouse","name":"仓管","aliases":["仓库","领料"],"category":"plant","category_name":"物机"},{"id":"pack-ship","name":"装箱拼柜","aliases":["装箱","拼柜","packing-agent","集装箱"],"category":"plant","category_name":"物机"},{"id":"material-site","name":"现场材料","aliases":["材料员","料具"],"category":"plant","category_name":"物机"},{"id":"lab-mix","name":"配合比","aliases":["施工配合比","配比"],"category":"lab","category_name":"试验室"},{"id":"lab-sample","name":"见证取样","aliases":["取样","送检","见证"],"category":"lab","category_name":"试验室"},{"id":"lab-record","name":"试验台账","aliases":["试验资料"],"category":"lab","category_name":"试验室"},{"id":"finance-book","name":"核算","aliases":["会计","报销"],"category":"finance","category_name":"财务"},{"id":"finance-fund","name":"资金","aliases":["资金计划","现金流"],"category":"finance","category_name":"财务"},{"id":"finance-tax","name":"税务","aliases":["税务","发票"],"category":"finance","category_name":"财务"},{"id":"supervision","name":"资料监理","aliases":["资料","监理","验收"],"category":"docs","category_name":"资料监理"},{"id":"hr-recruit","name":"招聘","aliases":["招聘","面试"],"category":"hr","category_name":"人力"},{"id":"hr-labor","name":"劳动关系","aliases":["劳动合同","劳务"],"category":"hr","category_name":"人力"},{"id":"hr-train","name":"培训","aliases":["培训","三级教育"],"category":"hr","category_name":"人力"},{"id":"admin-doc","name":"公文印章","aliases":["公文","印章","用印"],"category":"admin","category_name":"行政"},{"id":"admin-office","name":"会务后勤","aliases":["行政","后勤","会议"],"category":"admin","category_name":"行政"},{"id":"it-ops","name":"运维权限","aliases":["运维","权限","账号"],"category":"it","category_name":"IT"},{"id":"it-data","name":"数据备份","aliases":["备份","数据安全"],"category":"it","category_name":"IT"},{"id":"it-app","name":"系统需求","aliases":["信息化","需求"],"category":"it","category_name":"IT"},{"id":"worker-brief","name":"工友白话","aliases":["工人","白话","班前"],"category":"people","category_name":"项目与工人"},{"id":"pm-daily","name":"项目日报","aliases":["日报","工程日志"],"category":"people","category_name":"项目与工人"}];
 /* === CB_POSTS END === */
@@ -3627,6 +3787,16 @@ window.CB_POSTS = [{"id":"bid-parse","name":"招标解析","aliases":["招标","
           atQueryText: '',
           atDismissed: '',
           atDismissedAt: -1,
+          /* ux(round9) 快捷指令面板：/ 命令 + 模板填空 + 最近任务（附录 H） */
+          cmdOpen: false,
+          cmdMode: 'cmds',
+          cmdItems: [],
+          cmdIdx: 0,
+          cmdStart: -1,
+          cmdQueryText: '',
+          cmdDismissed: '',
+          cmdDismissedAt: -1,
+          cmdTickets: (window.CB_TICKETS || []).map((t) => Object.assign({}, t, { name: t.story || '' })),
           sessionId: 'web-' + Date.now(),
           containerType: '40HQ',
           loading: false,
@@ -3739,6 +3909,10 @@ window.CB_POSTS = [{"id":"bid-parse","name":"招标解析","aliases":["招标","
         };
       },
       computed: {
+        /* ux(round9)：面板顶部「最近 3 条任务」（读 localStorage，点击重填不自动发送） */
+        cmdRecent() {
+          return cbRecentList().slice(0, 3);
+        },
         porManifest() {
           return (
             (this.result && this.result.por_manifest)
@@ -5236,8 +5410,15 @@ window.CB_POSTS = [{"id":"bid-parse","name":"招标解析","aliases":["招标","
         composerInput() {
           cbAutosize(this.$refs.userInput);
           this.composerAtUpdate();
+          this.composerCmdUpdate();
         },
         composerKeydown(ev) {
+          if (this.cmdOpen) {
+            if (ev.key === 'ArrowDown') { ev.preventDefault(); this.cmdMove(1); return; }
+            if (ev.key === 'ArrowUp') { ev.preventDefault(); this.cmdMove(-1); return; }
+            if (ev.key === 'Enter' || ev.key === 'Tab') { ev.preventDefault(); this.cmdConfirmComposer(); return; }
+            if (ev.key === 'Escape') { ev.preventDefault(); this.cmdEsc(); return; }
+          }
           if (this.atOpen) {
             if (ev.key === 'ArrowDown') { ev.preventDefault(); this.atMove(1); return; }
             if (ev.key === 'ArrowUp') { ev.preventDefault(); this.atMove(-1); return; }
@@ -5254,6 +5435,20 @@ window.CB_POSTS = [{"id":"bid-parse","name":"招标解析","aliases":["招标","
             && !this.imeBlock(this._cbGuard, ev);
           if (send) {
             ev.preventDefault();
+            const text = (this.userInput || '').trim();
+            /* ux(round9)：/nav 命令就地执行（不发送）；模板命令展开后发送；未知 / 命令拦下指路 */
+            const navCmd = text.match(/^\/(audit|doc|eval)\s*$/);
+            if (navCmd) { this.userInput = ''; this.cmdNav(navCmd[1]); return; }
+            if (text.startsWith('/')) {
+              const expanded = cbSlashExpandMessage(text);
+              if (expanded) {
+                this.userInput = expanded;
+                cbAutosize(this.$refs.userInput);
+              } else {
+                this.statusText = '未知或未完成的 / 命令 · 输入 / 打开面板选择，或用 "/pack <票名>" 直达';
+                return;
+              }
+            }
             if (!this.loading && this.userInput.trim()) this.runTeamA();
           }
         },
@@ -5286,6 +5481,135 @@ window.CB_POSTS = [{"id":"bid-parse","name":"招标解析","aliases":["招标","
           this.atOpen = false;
           this.atItems = [];
           this.atIdx = 0;
+        },
+        /* ===== ux(round9) 快捷指令面板（与 demo/static/app.js 同源镜像） ===== */
+        composerCmdUpdate() {
+          const ta = this.$refs.userInput;
+          if (!ta) { this.cmdClose(); return; }
+          const tok = cbSlashQuery(ta.value, ta.selectionStart);
+          if (!tok || (this.cmdDismissed === tok.query && this.cmdDismissedAt === tok.start)) { this.cmdClose(); return; }
+          this.cmdOpen = true;
+          this.cmdStart = tok.start;
+          this.cmdQueryText = tok.query;
+          if (this.cmdMode === 'tickets') {
+            this.cmdItems = cbSlashFilter(this.cmdTickets, tok.query, 9);
+          } else {
+            this.cmdItems = cbSlashFilter(CB_SLASH, tok.query, 9);
+          }
+          this.cmdIdx = 0;
+        },
+        cmdMove(d) {
+          if (!this.cmdItems.length) return;
+          this.cmdIdx = (this.cmdIdx + d + this.cmdItems.length) % this.cmdItems.length;
+        },
+        cmdClose() {
+          this.cmdOpen = false;
+          this.cmdMode = 'cmds';
+          this.cmdItems = [];
+          this.cmdIdx = 0;
+        },
+        cmdEsc() {
+          /* Raycast 子菜单语义：Esc=返回上一级 */
+          if (this.cmdMode === 'tickets') {
+            this.cmdMode = 'cmds';
+            this.cmdItems = cbSlashFilter(CB_SLASH, this.cmdQueryText, 9);
+            this.cmdIdx = 0;
+            return;
+          }
+          this.cmdDismissed = this.cmdQueryText;
+          this.cmdDismissedAt = this.cmdStart;
+          this.cmdClose();
+        },
+        cmdTicketDesc(it) {
+          return [it.n_lines != null ? it.n_lines + ' 行' : '', it.net_kg != null ? Math.round(it.net_kg) + 'kg' : '']
+            .filter(Boolean).join(' · ') + (it.name ? ' · ' + it.name : '');
+        },
+        cmdRecentList() {
+          return cbRecentList().slice(0, 3);
+        },
+        cmdApplyRecent(text) {
+          this.userInput = String(text || '');
+          this.cmdClose();
+          this.$nextTick(() => {
+            const ta = this.$refs.userInput;
+            if (!ta) return;
+            cbAutosize(ta);
+            ta.focus();
+            ta.setSelectionRange(ta.value.length, ta.value.length);
+          });
+        },
+        cmdApplyDraft(text) {
+          this.userInput = String(text || '');
+          this.cmdClose();
+          this.$nextTick(() => {
+            const ta = this.$refs.userInput;
+            if (!ta) return;
+            cbAutosize(ta);
+            ta.focus();
+            ta.setSelectionRange(ta.value.length, ta.value.length);
+          });
+        },
+        cmdConfirmComposer() {
+          const it = this.cmdItems[this.cmdIdx];
+          if (!it) return;
+          if (this.cmdMode === 'cmds') {
+            if (it.sub === 'tickets') {
+              /* 票选择子菜单：sim_materials 静态清单（scripts/gen_cb_tickets.py 生成，与磁盘一致） */
+              this.cmdMode = 'tickets';
+              this.cmdQueryText = '';
+              this.cmdItems = cbSlashFilter(this.cmdTickets, '', 9);
+              this.cmdIdx = 0;
+              return;
+            }
+            if (it.kind === 'nav') {
+              this.cmdClose();
+              this.cmdNav(it.id);
+              return;
+            }
+            /* tpl：预填模板草稿，不自动发送（附录 F.3 红线） */
+            this.cmdApplyDraft(cbSlashTemplate(it.id, ''));
+            return;
+          }
+          this.cmdApplyDraft(cbSlashTemplate('pack', '', it));
+        },
+        async cmdNav(id) {
+          if (id === 'audit') {
+            this.mainTab = 'history';
+            await this.loadAudit();
+            return;
+          }
+          if (id === 'doc') {
+            if (this.docArtifacts.length) {
+              this.openDocArtifact(this.docArtifacts[0]);
+            } else {
+              this.statusText = '本轮暂无交付物；跑一次全流程后这里可预览最近文书。';
+            }
+            return;
+          }
+          if (id === 'eval') {
+            try {
+              const res = await fetch(API + '/api/artifact?path=' + encodeURIComponent('output/competition/scorecard_latest.json'));
+              const j = await res.json();
+              if (res.ok && j.ok) {
+                let d = {};
+                try { d = JSON.parse(j.text); } catch (e) { d = {}; }
+                const dims = Object.entries(d.dims || {}).map(([k, v]) => '- ' + k + ': ' + v).join('\n');
+                const hard = Object.entries(d.hard || {}).map(([k, v]) => '- ' + k + ': ' + (v ? '✓' : '✗')).join('\n');
+                window.cbDocOpen({
+                  title: '竞赛记分卡摘要（只抄 scorecard_latest.json）',
+                  text: '## 竞赛记分卡摘要\n\n- overall: ' + (d.overall != null ? d.overall : '未提供') +
+                    '\n- harness: ' + (d.harness || '未提供') + '\n- hard_ok: ' + (d.hard_ok ? '✓' : '✗') +
+                    '\n\n### 维度分\n\n' + (dims || '（无数据）') + '\n\n### 硬门\n\n' + (hard || '（无数据）'),
+                  role: 'eval · ux(round9)',
+                  project: 'Civil Buddy 记分卡',
+                });
+              } else {
+                throw new Error(j.detail || 'HTTP ' + res.status);
+              }
+            } catch (e) {
+              this.statusText = '记分卡摘要失败: ' + ((e && e.message) || e) + '（可先跑 scripts/eval_competition_scorecard.py）';
+            }
+          }
         },
         nlBoxInput(ev) {
           cbAutosize(ev.target);
@@ -5475,6 +5799,7 @@ window.CB_POSTS = [{"id":"bid-parse","name":"招标解析","aliases":["招标","
         },
         async runTeamA() {
           if (!this.beginWork('生成方案')) return;
+          cbRecentPush(this.userInput); /* ux(round9)：最近任务（点击重填的来源） */
           this.statusText = '团队 A 运行中…';
           this.mainTab = 'overview';
           try {
@@ -5610,6 +5935,7 @@ window.CB_POSTS = [{"id":"bid-parse","name":"招标解析","aliases":["招标","
         },
         async runPipelineTrace() {
           // ux(round3)：全流程改回 SSE 流（/api/pipeline/stream）——阶段时间线逐节点可见
+          cbRecentPush(this.userInput); /* ux(round9)：最近任务（点击重填的来源） */
           if (!this.beginWork('全流程')) return;
           this.statusText = '全流程计算中…';
           this.mainTab = 'overview';

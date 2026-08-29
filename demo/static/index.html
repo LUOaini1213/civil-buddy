@@ -7,7 +7,7 @@
   <link rel="manifest" href="/static/manifest.webmanifest" />
   <link rel="icon" href="/static/icons/cb-icon.svg" type="image/svg+xml" />
   <title>Civil Buddy</title>
-  <link rel="stylesheet" href="/static/styles.css?v=ui3" />
+  <link rel="stylesheet" href="/static/styles.css?v=ui9" />
 </head>
 <body>
   <header class="top">
@@ -62,7 +62,8 @@
         </label>
         <div class="composer-note">AI 草稿 · 不签认</div>
         <div class="input-wrap">
-          <textarea id="input" rows="1" placeholder="描述任务，或 @选择岗位；Enter 发送 / Shift+Enter 换行"></textarea>
+          <textarea id="input" rows="1" placeholder="描述任务，或 /快捷指令 · @选择岗位；Enter 发送 / Shift+Enter 换行"></textarea>
+          <div id="cmdMenu" class="cb-at-menu cb-cmd-menu" hidden role="listbox" aria-label="快捷指令"></div>
           <div id="atMenu" class="cb-at-menu" hidden role="listbox" aria-label="岗位补全"></div>
         </div>
         <div class="local-row">
@@ -165,7 +166,8 @@
   <script src="/static/fixcard.js?v=r7"></script>
   <script src="/static/docpreview.js?v=r4"></script>
   <script src="/static/posts.js?v=ui4"></script>
-  <script src="/static/app.js?v=ui4"></script>
+  <script src="/static/tickets.js?v=ui9"></script>
+  <script src="/static/app.js?v=ui9"></script>
   <script src="/static/studio.js?v=ui4"></script>
 </body>
 </html>

@@ -158,7 +158,7 @@ async function handleSlash(message) {
     return true;
   }
   if (cmd === "help") {
-    addMsg("assistant", "help", "/skills /new /bg /threads /sandbox /approvals\n全企业可问任意专家。确认句：我明白，将由持证人员签认");
+    addMsg("assistant", "help", "输入 / 打开快捷指令面板：/pack /bid /safety /audit /doc /eval\n客户端命令：/skills /new /bg /threads /sandbox /approvals\n全企业可问任意专家。确认句：我明白，将由持证人员签认");
     return true;
   }
   return false;
@@ -425,13 +425,33 @@ function cbFixMount(anchor, desc) {
 
 $("form").addEventListener("submit", async (ev) => {
   ev.preventDefault();
-  const message = $("input").value.trim();
+  let message = $("input").value.trim();
   if (!message) return;
+  /* ux(round9)：最近任务（点击重填的来源）+ /命令直达展开 */
+  cbRecentPush(message);
+  const navCmd = message.match(/^\/(audit|doc|eval)\s*$/);
+  if (navCmd) {
+    $("input").value = "";
+    cbAutosize($("input"));
+    cbSyncSend();
+    cbCmdNav(navCmd[1]);
+    return;
+  }
+  const expanded = cbSlashExpandMessage(message);
+  if (expanded) {
+    message = expanded;
+    $("input").value = message;
+  } else if (/^\/(pack|bid|safety)\s*$/.test(message)) {
+    /* ux(round9)：模板命令未带参 → 用法提示（不发送） */
+    addStatus("用法：/pack <票名>（如 /pack small_one_container）、/bid <要点>、/safety <要点>；或输入 / 从面板选。");
+    return;
+  }
   state.lastSend = message; /* ux(round7)：重试=重放同 payload */
   $("input").value = "";
   cbAutosize($("input"));
   cbSyncSend();
   cbAtClose();
+  cbCmdClose();
   if (message.startsWith("/")) {
     const welcome = document.querySelector(".welcome");
     if (welcome) welcome.remove();
@@ -550,6 +570,7 @@ async function streamChat(message, bodyEl) {
         if (data.context) paintContext(data.context);
         else paintContext(estimateLocalContext());
         renderCites(data.citations || []);
+        cbLastDeliverables = Array.isArray(data.deliverables) ? data.deliverables : []; /* ux(round9)：/doc 最近交付物 */
         renderFiles(data.deliverables || []);
         appendDocCards(data.deliverables || [], bodyEl);
         /* ux(round7)：缺数引导条——UNSPECIFIED/[A001] 徽章旁的「去补数」，预填草稿不自动发送 */
@@ -870,6 +891,125 @@ function cbComposeGuard(el) {
   return st;
 }
 
+/* === ux(round9) 快捷指令面板：/ 命令 + 常用任务模板（docs/ux/ux-design-spec.md 附录 H） ===
+   借鉴 pattern-only，不抄任何代码：
+   - openai/codex slash_command.rs / command_popup.rs（Apache-2.0）：输入 / 弹命令浮层、
+     按名过滤、每条=命令名+一句描述、别名不在面板重复出现；Esc 关闭并记住被关的 token。
+   - VS Code Command Palette（文档 pattern-only）：模糊过滤必须带排序——前缀命中 > 中文子串
+     命中 > 子序列命中，相关度高的在上；全程键盘可达（↑↓/Enter/Tab/Esc）。
+   - Raycast Arguments/Snippets（文档 pattern-only）：参数用 <待填> 占位提示；Esc 在子菜单=返回上一级。
+   - GitHub Saved replies / Issue templates（文档 pattern-only）：选中=插入带占位的模板草稿，
+     先改后发，绝不自动发送（承附录 F.3「预填不自动发送」红线）。 */
+const CB_RECENT_KEY = "cb_recent_tasks_v1";
+
+function cbRecentList() {
+  try {
+    const rows = JSON.parse(localStorage.getItem(CB_RECENT_KEY) || "[]");
+    return Array.isArray(rows) ? rows.filter((r) => r && r.t) : [];
+  } catch (e) {
+    return [];
+  }
+}
+
+function cbRecentPush(text) {
+  const t = String(text || "").trim();
+  if (!t || t.length > 200) return;
+  const rows = cbRecentList().filter((r) => r.t !== t);
+  rows.unshift({ t, ts: Date.now() });
+  try {
+    localStorage.setItem(CB_RECENT_KEY, JSON.stringify(rows.slice(0, 8)));
+  } catch (e) { /* 隐私模式等存储不可用：最近任务静默缺席 */ }
+}
+
+function cbSlashQuery(text, cursor) {
+  // 光标左侧 /token：行首/空白起头，/ 后可跟字母/数字/中文/连字符/下划线（与 @token 同构）
+  const before = String(text || "").slice(0, cursor);
+  const m = before.match(/(^|\s)\/([A-Za-z0-9\u4e00-\u9fa5_-]*)$/);
+  if (!m) return null;
+  return { start: before.length - m[2].length - 1, query: m[2] };
+}
+
+function cbSlashFilter(items, query, limit) {
+  // 模糊过滤+排序：前缀命中(0) > 中文子串命中(1) > 子序列命中(3)，空查询=原序全量
+  const q = String(query || "").trim().toLowerCase();
+  const scored = [];
+  for (const it of items || []) {
+    const names = [it.id].concat(it.aliases || [], [it.name]).filter(Boolean).map((n) => String(n).toLowerCase());
+    let score = -1;
+    if (!q) score = 2;
+    else if (names.some((n) => n.indexOf(q) === 0)) score = 0;
+    else if (names.some((n) => n.includes(q))) score = 1;
+    else if (cbSubsequence(q, names)) score = 3;
+    if (score >= 0) scored.push([score, it]);
+  }
+  scored.sort((a, b) => a[0] - b[0]);
+  return scored.slice(0, limit || 9).map((x) => x[1]);
+}
+
+function cbSubsequence(q, names) {
+  // 任意 name 包含 q 的全部字符且按 q 的顺序出现（宽容模糊层，排在子串命中之后）
+  return names.some((n) => {
+    let i = 0;
+    for (const ch of String(n)) {
+      if (ch === q[i]) i += 1;
+      if (i >= q.length) return true;
+    }
+    return false;
+  });
+}
+
+/* 命令注册表（两端同构镜像；图标=--cb-* 色块+单字，不引图标库） */
+const CB_SLASH = [
+  { id: "pack", ch: "装", tone: "blue", name: "装箱拼柜", aliases: ["装柜", "拼柜", "装箱作业单"],
+    desc: "选 sim_materials 票，预填装柜任务", sub: "tickets" },
+  { id: "bid", ch: "标", tone: "strong", name: "招标解析", aliases: ["招标", "解析招标"],
+    desc: "预填招标解析模板（@招标解析）", kind: "tpl" },
+  { id: "safety", ch: "安", tone: "orange", name: "安全交底", aliases: ["交底", "班前", "白话交底"],
+    desc: "预填班前白话交底模板", kind: "tpl" },
+  { id: "audit", ch: "审", tone: "red", name: "审计面板", aliases: ["审计", "时间线"],
+    desc: "打开跨运行审计时间线", kind: "nav" },
+  { id: "doc", ch: "文", tone: "green", name: "最近交付物", aliases: ["文书", "预览"],
+    desc: "预览最近一份交付物文书", kind: "nav" },
+  { id: "eval", ch: "评", tone: "gray", name: "记分卡摘要", aliases: ["评测", "自检"],
+    desc: "竞赛记分卡 / 离线自检", kind: "nav" },
+];
+
+/* 模板填空：<待填> 占位提示（Raycast arguments placeholder 模式），数字一概不预编 */
+function cbSlashTemplate(id, arg, ticket) {
+  const a = String(arg || "").trim();
+  if (id === "pack") {
+    const t = ticket || {};
+    const path = t.xlsx || "test/sim_materials/<票名>/materials.xlsx";
+    return "pack " + path + (t.story ? "（" + t.story + "）" : "") +
+      "\n要求：40HQ 高利用率装柜；柜数与坐标由 tools 计算，模型不摆箱子；出装柜单草稿，须人工确认后才拼柜。";
+  }
+  if (id === "bid") {
+    return "@招标解析 解析这份招标文件：\n项目名称：<待填>\n关键条款：<待填：工期 / 资质 / 报价上限>" +
+      (a ? "\n原文要点：" + a : "") +
+      "\n请列出资格条件与废标项清单；P0 资格须人工确认，是否投、怎么投由人决定。";
+  }
+  if (id === "safety") {
+    return "@安全交底 写一份班前白话交底：\n作业内容：<待填>\n主要风险与防护：<待填>" +
+      (a ? "\n补充：" + a : "") +
+      "\n给工友的白话版，一条一个动作；先讨论，说「写一份」才出草稿。";
+  }
+  return a;
+}
+
+/* 老手直达："/pack <票名>"、"/bid <要点>"、"/safety <要点>" 直接展开成任务文本；
+   nav 类命令（/audit /doc /eval）与未带参的 /pack 返回 null，由调用方拦截处理 */
+function cbSlashExpandMessage(message) {
+  const m = String(message || "").match(/^\/(pack|bid|safety)(?:\s+([\s\S]+))?$/);
+  if (!m) return null;
+  const arg = (m[2] || "").trim();
+  if (m[1] === "pack") {
+    if (!arg) return null;
+    const t = (typeof window !== "undefined" && window.CB_TICKETS || []).find((x) => x.id === arg);
+    return cbSlashTemplate("pack", "", t ? { xlsx: t.xlsx, story: t.story } : { xlsx: arg });
+  }
+  return cbSlashTemplate(m[1], arg);
+}
+
 /* ---- :8765 实例接线：@岗位补全 + Enter 语义 + 空态禁用 ---- */
 const cbAt = { open: false, items: [], idx: 0, start: -1, query: "", dismissed: "", dismissedAt: -1 };
 let cbSyncSend = () => {};
@@ -959,8 +1099,15 @@ function cbComposerInit() {
     cbAutosize(ta);
     cbSyncSend();
     cbAtUpdate();
+    cbCmdUpdate();
   });
   ta.addEventListener("keydown", (ev) => {
+    if (cbCmd.open) {
+      if (ev.key === "ArrowDown") { ev.preventDefault(); cbCmdMove(1); return; }
+      if (ev.key === "ArrowUp") { ev.preventDefault(); cbCmdMove(-1); return; }
+      if (ev.key === "Enter" || ev.key === "Tab") { ev.preventDefault(); cbCmdConfirm(); return; }
+      if (ev.key === "Escape") { ev.preventDefault(); cbCmdEsc(); return; }
+    }
     if (cbAt.open) {
       if (ev.key === "ArrowDown") { ev.preventDefault(); cbAtMove(1); return; }
       if (ev.key === "ArrowUp") { ev.preventDefault(); cbAtMove(-1); return; }
@@ -984,6 +1131,237 @@ function cbComposerInit() {
   cbSyncSend();
 }
 cbComposerInit();
+
+/* ---- :8765 实例接线：ux(round9) 快捷指令面板（与 cbAt 同一浮层体系） ---- */
+const cbCmd = { open: false, mode: "cmds", items: [], idx: 0, start: -1, query: "", dismissed: "", dismissedAt: -1 };
+let cbLastDeliverables = []; /* ux(round9)：/doc 取最近一份交付物（done 事件落） */
+
+function cbSlashCmds() {
+  /* 既有客户端命令一并进面板（发现性），确认后预填命令文本，Enter 由既有 handleSlash 执行 */
+  return CB_SLASH.concat([
+    { id: "skills", ch: "技", tone: "gray", name: "技能列表", aliases: [], desc: "既有命令 · 列出 skills", kind: "client" },
+    { id: "new", ch: "新", tone: "gray", name: "新会话", aliases: [], desc: "既有命令 · 开新线程", kind: "client" },
+    { id: "threads", ch: "线", tone: "gray", name: "会话列表", aliases: [], desc: "既有命令 · 刷新 threads", kind: "client" },
+    { id: "bg", ch: "后", tone: "gray", name: "后台任务", aliases: [], desc: "既有命令 · /bg <任务>", kind: "client" },
+    { id: "help", ch: "帮", tone: "gray", name: "帮助", aliases: [], desc: "既有命令 · 命令清单", kind: "client" },
+  ]);
+}
+
+function cbCmdTicketItems() {
+  return (window.CB_TICKETS || []).map((t) => ({
+    id: t.id,
+    name: t.story || "",
+    aliases: [],
+    xlsx: t.xlsx,
+    n_lines: t.n_lines,
+    net_kg: t.net_kg,
+  }));
+}
+
+function cbCmdClose() {
+  cbCmd.open = false;
+  cbCmd.mode = "cmds";
+  const menu = $("cmdMenu");
+  if (menu) menu.hidden = true;
+}
+
+function cbCmdRow(row, i) {
+  const el = document.createElement("div");
+  el.className = "cb-cmd-item" + (i === cbCmd.idx ? " on" : "");
+  el.setAttribute("role", "option");
+  el.setAttribute("aria-selected", i === cbCmd.idx ? "true" : "false");
+  const ico = document.createElement("span");
+  ico.className = "cb-cmd-ico tone-" + (row.tone || "gray");
+  ico.textContent = row.ch || "·";
+  const name = document.createElement("span");
+  name.className = "cb-cmd-name";
+  name.textContent = row.title || "";
+  const desc = document.createElement("span");
+  desc.className = "cb-cmd-desc";
+  desc.textContent = row.desc || "";
+  el.append(ico, name, desc);
+  el.addEventListener("mousedown", (ev) => {
+    ev.preventDefault();
+    cbCmd.idx = i;
+    cbCmdConfirm();
+  });
+  el.addEventListener("mouseenter", () => {
+    cbCmd.idx = i;
+    cbCmdRender();
+  });
+  return el;
+}
+
+function cbCmdRender() {
+  const menu = $("cmdMenu");
+  if (!menu) return;
+  menu.innerHTML = "";
+  if (cbCmd.mode === "cmds" && !cbCmd.query) {
+    /* 面板顶部：最近 3 条任务（读 localStorage 会话历史），点击重填、不自动发送 */
+    const rec = cbRecentList().slice(0, 3);
+    if (rec.length) {
+      const head = document.createElement("div");
+      head.className = "cb-cmd-head";
+      head.textContent = "最近任务 · 点击重填（不自动发送）";
+      menu.appendChild(head);
+      rec.forEach((r) => {
+        const el = document.createElement("div");
+        el.className = "cb-cmd-item cb-cmd-recent";
+        const ico = document.createElement("span");
+        ico.className = "cb-cmd-ico tone-gray";
+        ico.textContent = "↺";
+        const name = document.createElement("span");
+        name.className = "cb-cmd-name";
+        name.textContent = String(r.t).slice(0, 46);
+        const desc = document.createElement("span");
+        desc.className = "cb-cmd-desc";
+        desc.textContent = "重填";
+        el.append(ico, name, desc);
+        el.addEventListener("mousedown", (ev) => {
+          ev.preventDefault();
+          cbCmdClose();
+          cbCmdApplyDraft(r.t);
+        });
+        menu.appendChild(el);
+      });
+      const sep = document.createElement("div");
+      sep.className = "cb-cmd-head";
+      sep.textContent = "命令 · ↑↓ 选择 / Enter 确认 / Esc 关闭";
+      menu.appendChild(sep);
+    }
+  }
+  cbCmd.items.forEach((it, i) => {
+    if (cbCmd.mode === "tickets") {
+      menu.appendChild(cbCmdRow({
+        ch: "票", tone: "blue",
+        title: it.id + (it.name ? " · " + it.name : ""),
+        desc: [it.n_lines != null ? it.n_lines + " 行" : "", it.net_kg != null ? Math.round(it.net_kg) + "kg" : ""]
+          .filter(Boolean).join(" · "),
+      }, i));
+    } else {
+      menu.appendChild(cbCmdRow({
+        ch: it.ch, tone: it.tone,
+        title: it.name + " ",
+        desc: it.desc,
+      }, i));
+      /* 名称里补 mono /id（同 codex 弹层：命令名+描述） */
+      const rows = menu.querySelectorAll(".cb-cmd-item");
+      const last = rows[rows.length - 1];
+      const nameEl = last.querySelector(".cb-cmd-name");
+      const code = document.createElement("code");
+      code.textContent = "/" + it.id;
+      nameEl.appendChild(code);
+    }
+  });
+  if (!cbCmd.items.length) {
+    const none = document.createElement("div");
+    none.className = "cb-cmd-head";
+    none.textContent = cbCmd.mode === "tickets" ? "没有匹配的票 · Esc 返回" : "没有匹配的命令";
+    menu.appendChild(none);
+  }
+  menu.hidden = false;
+}
+
+function cbCmdUpdate() {
+  const ta = $("input");
+  if (!ta) return cbCmdClose();
+  const tok = cbSlashQuery(ta.value, ta.selectionStart);
+  if (!tok || (cbCmd.dismissed === tok.query && cbCmd.dismissedAt === tok.start)) return cbCmdClose();
+  cbCmd.open = true;
+  cbCmd.start = tok.start;
+  cbCmd.query = tok.query;
+  if (cbCmd.mode === "tickets") {
+    cbCmd.items = cbSlashFilter(cbCmdTicketItems(), tok.query, 9);
+  } else {
+    cbCmd.items = cbSlashFilter(cbSlashCmds(), tok.query, 9);
+  }
+  cbCmd.idx = 0;
+  cbCmdRender();
+}
+
+function cbCmdApplyDraft(text) {
+  const ta = $("input");
+  if (!ta) return;
+  ta.value = text;
+  cbAutosize(ta);
+  cbSyncSend();
+  ta.focus();
+  ta.setSelectionRange(ta.value.length, ta.value.length);
+}
+
+function cbCmdMove(d) {
+  if (!cbCmd.items.length) return;
+  cbCmd.idx = (cbCmd.idx + d + cbCmd.items.length) % cbCmd.items.length;
+  cbCmdRender();
+}
+
+function cbCmdEsc() {
+  if (cbCmd.mode === "tickets") {
+    /* Raycast 子菜单语义：Esc=返回上一级 */
+    cbCmd.mode = "cmds";
+    cbCmd.items = cbSlashFilter(cbSlashCmds(), cbCmd.query, 9);
+    cbCmd.idx = 0;
+    cbCmdRender();
+    return;
+  }
+  cbCmd.dismissed = cbCmd.query;
+  cbCmd.dismissedAt = cbCmd.start;
+  cbCmdClose();
+}
+
+function cbCmdNav(id) {
+  if (id === "audit") {
+    const panel = $("auditPanel");
+    if (panel && panel.scrollIntoView) panel.scrollIntoView({ block: "start" });
+    loadAuditPanel().catch((e) => addStatus("审计加载失败：" + ((e && e.message) || e)));
+    return true;
+  }
+  if (id === "doc") {
+    const f = cbLastDeliverables.find(isDocMd) || cbLastDeliverables[0];
+    if (f) {
+      openDeliverable(f);
+    } else {
+      addStatus("本轮暂无交付物；说「写一份…」出稿后这里可直接预览。");
+    }
+    return true;
+  }
+  if (id === "eval") {
+    fetch("/api/eval/live").then((r) => r.json()).then((j) => {
+      const g = j.gates || {};
+      const ks = Object.keys(g);
+      const pass = ks.filter((k) => g[k]).length;
+      addStatus("离线自检 " + (j.verdict || "—") + " · 闸门 " + pass + "/" + ks.length + "（只抄返回值）");
+    }).catch((e) => addStatus("eval/live 失败：" + ((e && e.message) || e)));
+    return true;
+  }
+  return false;
+}
+
+function cbCmdConfirm() {
+  const it = cbCmd.items[cbCmd.idx];
+  if (!it) return;
+  if (cbCmd.mode === "cmds") {
+    if (it.sub === "tickets") {
+      /* 票选择子菜单：sim_materials 静态清单（scripts/gen_cb_tickets.py 生成，与磁盘一致） */
+      cbCmd.mode = "tickets";
+      cbCmd.query = "";
+      cbCmd.items = cbSlashFilter(cbCmdTicketItems(), "", 9);
+      cbCmd.idx = 0;
+      cbCmdRender();
+      return;
+    }
+    cbCmdClose();
+    if (it.kind === "nav") {
+      cbCmdNav(it.id);
+      return;
+    }
+    /* tpl / client：预填草稿，不自动发送（附录 F.3 红线） */
+    cbCmdApplyDraft(it.kind === "client" ? "/" + it.id + " " : cbSlashTemplate(it.id, ""));
+    return;
+  }
+  cbCmdClose();
+  cbCmdApplyDraft(cbSlashTemplate("pack", "", it));
+}
 
 boot();
 
