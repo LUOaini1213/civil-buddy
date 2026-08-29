@@ -7,12 +7,12 @@ Natural Language → Agent Routing → Deterministic Tools → HITL → Evaluati
 66-role AI workflow system for civil / construction / tendering.  
 The packing engine is **one deterministic tool** inside this product (formerly the standalone `packing-agent` repo).
 
-![Packing HITL graph](docs/diagrams/langgraph-create-app.jpg)
+![Civil Buddy workbench](docs/assets/workbench.png)
 
 - Deterministic tools for verifiable numbers (coordinates & container counts are not LLM-written)
 - Human approval for high-risk decisions (eligibility, bid, write-to-disk)
 - Policy engine & failure recovery (reject with reason → retry → circuit-break)
-- Shadow evaluation + E2E golden-path tests (**128** in-repo packing pipelines; golden path **8/8**)
+- **128 automated packing-eval runs (16×8 fan-out) + 8/8 golden-path E2E tests**
 - Tendering → compliance → delivery **drafts** (not legal sign-off; not auto-bid)
 
 **Try:** [Releases](https://github.com/LUOaini1213/civil-buddy/releases) · `python scripts/demo_one_shot.py` (no API key) · `python scripts/demo_agent_middleware.py`
@@ -119,6 +119,8 @@ docs/                # 装箱架构与产品主线
 
 架构：**大 Team ⊃ Team A（成箱）+ Team B（拼柜）** · Harness 0.6.4  
 NL → IntentSpec → 白名单 tools → HITL → 影子评测。
+
+![Packing HITL graph](docs/diagrams/langgraph-create-app.jpg)
 
 ```powershell
 python scripts/demo_one_shot.py --all
