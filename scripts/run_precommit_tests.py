@@ -5,6 +5,7 @@
   2) test_p2_volume_gates.py
   3) test_stack_parity.py（三栈 parity：understand.py==agent.rs、SKILL.md 镜像、66 岗名册）
   4) run_vmu1_site_only.py（主案例可复现）
+  5) eval_post_scorecard.py（R5 每岗记分卡：quick 2 岗 / 全量 5 岗）
 
 可选：
   --quick   只跑 1+2，不跑工地 Excel
@@ -20,13 +21,14 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 
 
-def run(script: str, timeout: int = 600) -> int:
-    cmd = [sys.executable, script]
+def run(script: str, timeout: int = 600, extra: list[str] | None = None) -> int:
+    cmd = [sys.executable, script] + (extra or [])
+    label = script + (" " + " ".join(extra) if extra else "")
     print("\n" + "=" * 60)
-    print("RUN", script)
+    print("RUN", label)
     print("=" * 60)
     r = subprocess.run(cmd, cwd=str(ROOT), timeout=timeout)
-    print("EXIT", r.returncode, script)
+    print("EXIT", r.returncode, label)
     return int(r.returncode)
 
 
@@ -45,6 +47,8 @@ def main() -> int:
     codes.append(run("scripts/test_phase0_task_success.py", 60))
     codes.append(run("scripts/test_facade_sme_mini.py", 180))
     codes.append(run("scripts/test_hollow_volume_n0.py", 60))
+    # R5 每岗记分卡试点：quick 预算只跑 2 岗，全量 5 岗（G1 意图/G2 KB/G3 交付物/G4 诚实度）
+    codes.append(run("scripts/eval_post_scorecard.py", 300, extra=["--all-pilots"] + (["--quick"] if args.quick else [])))
     if args.more:
         codes.append(run("scripts/test_more_examples.py", 300))
     if not args.quick:
@@ -58,7 +62,7 @@ def main() -> int:
         return 1
     print("PRECOMMIT ALL GREEN")
     print(
-        "  booking_regression + p2_gates + stack_parity"
+        "  booking_regression + p2_gates + stack_parity + post_scorecard"
         + (" + more" if args.more else "")
         + (" + vmu1_site(or SKIP)" if not args.quick else " (--quick no vmu)")
     )

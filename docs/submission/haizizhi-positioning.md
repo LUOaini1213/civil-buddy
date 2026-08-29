@@ -1,6 +1,6 @@
 # 海之子杯申报 · 定位陈述与证据包（Civil Buddy）
 
-> 更新：2026-08-28 · 服务 [knowledge_base/06_competition/constraints-hzzb.md](../../knowledge_base/06_competition/constraints-hzzb.md) 的提交物四件。
+> 更新：2026-08-29（R5 补每岗记分卡证据、履历表正式稿）· 服务 [knowledge_base/06_competition/constraints-hzzb.md](../../knowledge_base/06_competition/constraints-hzzb.md) 的提交物四件。
 > 官方章程：<https://aicampus.3311csci.com/rules.html>（以官方页为准）。评审三维度官方原文见 constraints-hzzb.md。
 > 所有"可复跑命令"均在本仓根目录实际执行验证过；冻结数字口径见 [docs/competition-demo-script.md](../competition-demo-script.md)。
 
@@ -28,7 +28,7 @@
 | 官方考察点 | 证据 | 可复跑命令 / 入口 |
 |------------|------|--------------------|
 | 人机协同规划：HITL 高风险写盘前人确认 | 高风险岗未确认 0 稿；确认句"我明白，将由持证人员签认"；成箱→HITL→拼柜 | `python scripts/demo_agent_middleware.py`（第三拍含 HITL）；`http://127.0.0.1:8000/workbench` |
-| AI 交互迭代：一句话自然语言入口 + 意图路由（chat/run/both） | NL→IntentSpec→白名单 tools；无 Key 时 policy fallback 功能不哑 | :8765 输入 `pack test/sim_materials/small_one_container/materials.xlsx`；`python main.py --eval`（phase0 quick 12/12） |
+| AI 交互迭代：一句话自然语言入口 + 意图路由（chat/run/both） | NL→IntentSpec→白名单 tools；无 Key 时 policy fallback 功能不哑；每岗金句冻结（41 条）Python/Rust 双侧实跑守护 | :8765 输入 `pack test/sim_materials/small_one_container/materials.xlsx`；`python main.py --eval`（phase0 quick 12/12）；`python scripts/test_stack_parity.py` |
 | AI 纠偏管理：策略引擎（越权拒绝弹原因）+ 失败恢复（retry→`UNSPECIFIED` 审计链）+ 成本熔断 | Agent Middleware 四拍剧本：正常下单 → 越权被拒 → 工具挂掉自动恢复 → 成本超限熔断 | `python scripts/demo_agent_middleware.py` |
 | 纠偏落到成稿：缺数不编造 | safety-brief 成稿 11 栏中毫米/电话为 `[A001]` 待填；各岗 TBD/UNSPECIFIED | `grep -n "A001" demo/kb/hse/safety-brief/outline.md`；或在 :8765 召唤安全交底专家看成稿待填栏 |
 
@@ -40,6 +40,7 @@
 | 技术应用：NL→IntentSpec→确定性流水线（`agent_mode=steps`）→影子评测 | 引擎正例过 30 项结构校核；负例 `--preset structure_fail` 证明合规门是活的（REJECT=门生效） | `python main.py --demo` · `python main.py --demo --preset structure_fail` |
 | 工具整合：Rust 工作台 + Python 引擎 + MCP + KB 检索 + 前端 3D/CoG | 一个仓库三入口（:8765 工作台 / :8000 主线 C / TUI）；MCP stdio 工具表 | `npm run check`；`python scripts/test_mcp_stdio.py` |
 | 完成度：诚实分级 + 评测口径不注水 | L1 66/66、L2 36/66、L3 1；446t 单票对照 29→25 柜（mid50 0.594）；对外校准综合分 8.85（不报 10.0） | `python scripts/eval_competition_scorecard.py --skip-phase0`；大票对照 `python scripts/compare_446t_agent_vs_tool.py --full-agent`（依赖本地业务数据 `output/cases_446t/materials.json`，不进仓；冻结数字以 [docs/competition-evidence-one-pager.md](../competition-evidence-one-pager.md) 为准，不现场重跑） |
+| 完成度：每岗质量门禁可抽样复跑（R5） | 每岗记分卡四门禁（意图命中/KB 检索/交付物 schema/诚实度），试点 5 岗全 PASS、全离线零 Key | `python scripts/eval_post_scorecard.py --all-pilots`（产物 `output/posts/<岗>.json`） |
 
 ## c) 视频脚本表（3 分钟，单屏录制成片）
 
@@ -53,17 +54,15 @@
 
 录制注意：先跑通 `python scripts/demo_one_shot.py` 与 :8000 网关再开录；NL pack 与纠偏各留一条备选镜头；口播禁句见 [docs/competition-demo-script.md](../competition-demo-script.md)「不说的话」。
 
-## d) 人机协同履历表（骨架）
+## d) 人机协同履历表
 
-> 官方提交物第四件。三要素齐全：**阶段 / 人做什么 / AI 做什么 / 纠偏点**。已有素材行填实，其余为待填骨架。
+> 官方提交物第四件。**正式稿见 [haizizhi-resume.md](haizizhi-resume.md)**（10 行真实素材，2026-07-24 ~ 08-29，每行挂 git 证据与具体纠偏点）。下表保留最早的三行素材：
 
 | 阶段（日期） | 人做什么 | AI 做什么 | 纠偏点 |
 |--------------|----------|-----------|--------|
 | 2026-08-28 泄漏审计 | 人发起历史提交泄漏审计，决定清洗范围并复核结果 | 脚本执行 filter-repo 历史清洗，随后全量回归测试跑绿 | 泄漏在合入前被审计拦截；清洗后以回归全绿证明功能未受损 |
 | 2026-08-29 NL pack 断链 | 人在彩排中发现一句话 pack 入口断链，拍板修复优先级 | 定位断链五处并逐一修复，端到端复跑出真数字 | 彩排即纠偏：入口断了说明集成测试没覆盖到，补进冒烟口径 |
 | 规划书每章复查 | 人定各章口径与"明确不做"边界 | 子代理逐章复查 product-plan，列出内部错误清单 | 人复核后改口（product-plan §14"规划书审阅发现必须改口"），机器不改总判 |
-| （待填）66 岗知识库富化批次 |  |  |  |
-| （待填）行业评测复核 |  |  |  |
 
 ## e) 提交前待办勾选清单
 
@@ -72,7 +71,7 @@
 - [ ] **学籍/身份材料**：按官网要求准备在校证明或学生证材料
 - [ ] **视频录制**：按上表 3 分钟脚本录制，≤2 分钟候选备选剪辑各一条，核对官方时长/格式限制
 - [ ] **技术说明文档**：以本文定位陈述 + 三维度映射表为底稿成文，补团队信息
-- [ ] **人机协同履历表**：按上表骨架填实待填行，导出官方模板格式
+- [ ] **人机协同履历表**：正式稿已成（[haizizhi-resume.md](haizizhi-resume.md)，10 行带 git 证据），按官方模板格式导出
 - [ ] **格式核对**：四件套（智能体链接或代码包 / 技术说明 / 视频 / 履历表）命名、大小、附件格式逐项对照官方页
-- [ ] **提交前全绿复跑**：`python scripts/test_kb_k4_depth.py` · `python scripts/demo_one_shot.py` · `python scripts/eval_competition_scorecard.py --skip-phase0` 三连，退出码全 0
+- [ ] **提交前全绿复跑**：`python scripts/test_kb_k4_depth.py` · `python scripts/demo_one_shot.py` · `python scripts/eval_competition_scorecard.py --skip-phase0` · `python scripts/eval_post_scorecard.py --all-pilots` 四连，退出码全 0
 - [ ] **红线自查**：全文检索禁句（中标率 / 可以投标 / 可以开工 / 代交官方系统），P0 字样必须连着"须人确认"

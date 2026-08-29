@@ -78,6 +78,9 @@ python scripts/eval_competition_scorecard.py --skip-phase0   # 综合分卡（�
 
 # 大票对照证据（上场前一天跑够即可）
 python scripts/compare_446t_agent_vs_tool.py --full-agent
+
+# 每岗记分卡（R5，评委追问岗位质量时）
+python scripts/eval_post_scorecard.py --all-pilots
 ```
 
 ## 证据与文档

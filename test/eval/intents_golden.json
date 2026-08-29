@@ -1,7 +1,7 @@
 {
   "version": "1",
   "contract": "contract/intents.v1.json",
-  "note": "意图行为金句（behavior golden）。期望值冻结自 2026-08 契约单源化重构前的实现（understand.py + expert_skills.match_skill），重构本身零行为变化。Python 侧由 scripts/test_stack_parity.py 实跑 understand()+match_skill() 断言；Rust 侧由 workbench/tests/intents_golden.rs 实跑 understand()+match_skill_implicit() 断言（同读 contract/intents.v1.json）。skill=null 表示不路由任何岗。改词表若导致金句变化，必须先确认新行为是想要的，再同步更新本文件并说明原因。",
+  "note": "意图行为金句（behavior golden）。期望值冻结自 2026-08 契约单源化重构前的实现（understand.py + expert_skills.match_skill），重构本身零行为变化。Python 侧由 scripts/test_stack_parity.py 实跑 understand()+match_skill() 断言；Rust 侧由 workbench/tests/intents_golden.rs 实跑 understand()+match_skill_implicit() 断言（同读 contract/intents.v1.json）。skill=null 表示不路由任何岗。改词表若导致金句变化，必须先确认新行为是想要的，再同步更新本文件并说明原因。R5 起追加每岗记分卡试点金句（bid-parse/bid-compliance/bid-tech/cost/safety-brief 各 3 条，含显式 @岗 与隐式说法），由 scripts/eval_post_scorecard.py 按岗复用。",
   "cases": [
     { "text": "pack test/sim_materials/small_one_container/materials.xlsx", "intent": "run", "skill": "pack-ship" },
     { "text": "帮我装柜", "intent": "run", "skill": "pack-ship" },
@@ -28,6 +28,21 @@
     { "text": "Two Envelope 双信封流程解释一下", "intent": "chat", "skill": null },
     { "text": "抽出评分 进矩阵", "intent": "run", "skill": "bid-parse" },
     { "text": "pack", "intent": "run", "skill": "pack-ship" },
-    { "text": "打包一份清单", "intent": "chat", "skill": null }
+    { "text": "打包一份清单", "intent": "chat", "skill": null },
+    { "text": "@bid-parse 出一份教学楼项目的招标解析", "intent": "run", "skill": "bid-parse" },
+    { "text": "解析招标公告，抽出评分点和工期", "intent": "run", "skill": "bid-parse" },
+    { "text": "招标解析岗是干什么的？", "intent": "chat", "skill": "bid-parse" },
+    { "text": "@bid-compliance 出一份这个项目的废标检查", "intent": "run", "skill": "bid-compliance" },
+    { "text": "编制响应缺口对照表", "intent": "run", "skill": "bid-compliance" },
+    { "text": "废标检查和响应检查有什么区别？", "intent": "chat", "skill": "bid-compliance" },
+    { "text": "@bid-tech 编制教学楼施工组织设计，技术标完整版", "intent": "run", "skill": "bid-tech" },
+    { "text": "扩写技术标的施工部署章节", "intent": "run", "skill": "bid-tech" },
+    { "text": "技术标和商务标先写哪个？", "intent": "chat", "skill": "bid-tech" },
+    { "text": "@cost 出一份教学楼的工程量拆分表", "intent": "run", "skill": "cost" },
+    { "text": "编制工程量拆分表并标注来源", "intent": "run", "skill": "cost" },
+    { "text": "工程量拆分和组价有什么区别？", "intent": "chat", "skill": "cost" },
+    { "text": "@safety-brief 出一份基坑作业的安全交底", "intent": "run", "skill": "safety-brief" },
+    { "text": "帮工友起草今天班前的安全交底", "intent": "run", "skill": "safety-brief" },
+    { "text": "安全交底和技术交底有什么区别？", "intent": "chat", "skill": "safety-brief" }
   ]
 }

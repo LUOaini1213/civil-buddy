@@ -1,6 +1,6 @@
 # 66 岗深度分级（Depth Ladder · 对人诚实）
 
-> 更新：2026-08-28 · 依据 [product-plan.md](civil-buddy/product-plan.md) §3.2 / §6 / §7.2。
+> 更新：2026-08-29（R5 补记分卡抽样验收）· 依据 [product-plan.md](civil-buddy/product-plan.md) §3.2 / §6 / §7.2。
 > **铁律：广度以"路线图"形态出现，深度以"可复跑证据"形态出现。** 本页每一条深度声明都挂验收文件或可复跑命令；不确定的岗宁可标低不标高。
 
 ## 三级阶梯
@@ -18,6 +18,8 @@
 - 综合分 **8.85**：本地校准评分卡，phase0 quick（n=12，pass_rate 1.0）封顶口径，**不报 10.0**
 
 **UNSPECIFIED 是特性，不是未完成。** 每岗成稿缺数处一律写 `[A001]` / `UNSPECIFIED` / `TBD`，不编造数字、不冒充签认件——这是产品纪律（tools compute numbers; the model only routes）的直接体现，也是 L1 验收闸（gaps=66）的一部分。
+
+**R5 每岗记分卡抽样（L2 附加验收）**：`python scripts/eval_post_scorecard.py --all-pilots` 对 5 个试点岗（bid-parse / bid-compliance / bid-tech / cost / safety-brief，覆盖 bid/commercial/hse 三大类）跑四门禁——G1 意图命中（金句 intent+skill）、G2 KB 检索命中私有库、G3 exclusive 工具离线产出覆盖 README 字段表必需栏、G4 缺数空态保留 `[A001]`/UNSPECIFIED 且 `forbidden_hits==0`。当前 5/5 全 PASS；该脚本已登记 precommit（quick 预算跑 2 岗）。
 
 ## 16 车道 × L1/L2/L3 分级表
 

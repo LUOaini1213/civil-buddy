@@ -58,7 +58,8 @@ def main() -> int:
             "cog_rebalance": True,
         },
     )
-    assert base.get("team_mode") == "single_closed_loop"
+    # 66 岗重塑后统一为大 Team A/B 闭环（曾为 single_closed_loop）
+    assert base.get("team_mode") in ("big_team_a_b", "single_closed_loop"), base.get("team_mode")
     plan = base.get("container_plan") or {}
     assert plan.get("can_fit") is True
     used = int(plan.get("containers_used") or 1)
