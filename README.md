@@ -1,5 +1,24 @@
 # Civil Buddy
 
+**Agentic AI Workspace for Engineering**
+
+Natural Language → Agent Routing → Deterministic Tools → HITL → Evaluation
+
+66-role AI workflow system for civil / construction / tendering.  
+The packing engine is **one deterministic tool** inside this product (formerly the standalone `packing-agent` repo).
+
+![Packing HITL graph](docs/diagrams/langgraph-create-app.jpg)
+
+- Deterministic tools for verifiable numbers (coordinates & container counts are not LLM-written)
+- Human approval for high-risk decisions (eligibility, bid, write-to-disk)
+- Policy engine & failure recovery (reject with reason → retry → circuit-break)
+- Shadow evaluation + E2E golden-path tests (**128** in-repo packing pipelines; golden path **8/8**)
+- Tendering → compliance → delivery **drafts** (not legal sign-off; not auto-bid)
+
+**Try:** [Releases](https://github.com/LUOaini1213/civil-buddy/releases) · `python scripts/demo_one_shot.py` (no API key) · `python scripts/demo_agent_middleware.py`
+
+---
+
 土木企业工作台 = **土木版 Codex**：**16 大类 / 66 岗 skill** · 任务选用 SOP · 工具算数 · 沙箱写盘。  
 装箱 / 拼柜是其中一岗（**pack-ship**）：硬数字只走本仓的 packing 引擎，模型不写 xyz、不拍柜数。  
 投标主线 C：招标文本 → 条款级响应矩阵 → 装柜 tools 作交付证据 → 经营岗交接（bid-tech / bid-compliance）。P0 资格/★/废标须人确认，**不**自动判定可投标。
