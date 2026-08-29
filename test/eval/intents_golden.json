@@ -1,0 +1,33 @@
+{
+  "version": "1",
+  "contract": "contract/intents.v1.json",
+  "note": "意图行为金句（behavior golden）。期望值冻结自 2026-08 契约单源化重构前的实现（understand.py + expert_skills.match_skill），重构本身零行为变化。Python 侧由 scripts/test_stack_parity.py 实跑 understand()+match_skill() 断言；Rust 侧由 workbench/tests/intents_golden.rs 实跑 understand()+match_skill_implicit() 断言（同读 contract/intents.v1.json）。skill=null 表示不路由任何岗。改词表若导致金句变化，必须先确认新行为是想要的，再同步更新本文件并说明原因。",
+  "cases": [
+    { "text": "pack test/sim_materials/small_one_container/materials.xlsx", "intent": "run", "skill": "pack-ship" },
+    { "text": "帮我装柜", "intent": "run", "skill": "pack-ship" },
+    { "text": "帮我装箱", "intent": "run", "skill": "pack-ship" },
+    { "text": "什么是装箱？", "intent": "both", "skill": "pack-ship" },
+    { "text": "写一份施工方案", "intent": "run", "skill": "construction" },
+    { "text": "解析招标 xxx", "intent": "run", "skill": "bid-parse" },
+    { "text": "帮我装柜到小柜", "intent": "run", "skill": "pack-ship" },
+    { "text": "pack 小票", "intent": "run", "skill": "pack-ship" },
+    { "text": "能不能装柜", "intent": "both", "skill": "pack-ship" },
+    { "text": "今天天气怎么样？适合户外施工吗", "intent": "chat", "skill": null },
+    { "text": "危大工程怎么判定", "intent": "chat", "skill": "method-hazard" },
+    { "text": "评标是什么", "intent": "chat", "skill": null },
+    { "text": "ITT 是什么意思", "intent": "chat", "skill": null },
+    { "text": "workhead 算不算资质？", "intent": "chat", "skill": null },
+    { "text": "写废标检查清单", "intent": "run", "skill": "bid-compliance" },
+    { "text": "安全交底帮我写一份", "intent": "run", "skill": "safety-brief" },
+    { "text": "packing-agent 路径怎么配", "intent": "chat", "skill": "pack-ship" },
+    { "text": "can you pack these cartons", "intent": "run", "skill": "pack-ship" },
+    { "text": "一人公司成套投标", "intent": "run", "skill": null },
+    { "text": "先解释 GST 再出一份税务日历", "intent": "both", "skill": "finance-tax" },
+    { "text": "专项施工方案和施工方案有什么区别", "intent": "chat", "skill": "construction" },
+    { "text": "写临边防护方案讨论提纲", "intent": "run", "skill": "construction" },
+    { "text": "Two Envelope 双信封流程解释一下", "intent": "chat", "skill": null },
+    { "text": "抽出评分 进矩阵", "intent": "run", "skill": "bid-parse" },
+    { "text": "pack", "intent": "run", "skill": "pack-ship" },
+    { "text": "打包一份清单", "intent": "chat", "skill": null }
+  ]
+}

@@ -1,6 +1,9 @@
 """Understand first. Same chat / run / both rules as workbench/src/agent.rs.
 
 Pure function: no I/O, no writes. Default is chat.
+
+词表单源：全部从 contract/intents.v1.json 加载（见 packing_assistant/intent_contract.py），
+本文件不再内联任何词表字面量。
 """
 
 from __future__ import annotations
@@ -8,57 +11,24 @@ from __future__ import annotations
 import re
 from typing import Literal
 
+from packing_assistant.intent_contract import (
+    contract_list,
+    contract_pack_action_en_pattern,
+)
+
 Intent = Literal["chat", "run", "both"]
 
-_PACKISH = ("成套", "易标", "一人公司", "完整方案", "整套标")
-# pack 一句话动作：装箱/装柜/拼柜是引擎本体动作；英文 pack 按词边界匹配（避免误伤 package）。
+_PACKISH = contract_list("packish")
+# pack 一句话动作：装箱/装柜/拼柜是引擎本体动作；英文 pack 判定模式来自契约 pack_action_en.python。
 # parity:pack-action-en — 英文 pack 判定与 workbench/src/agent.rs（非字母数字切词后
-# eq_ignore_ascii_case("pack")）语义等价；锚点由 scripts/test_stack_parity.py 成对校验。
-_PACK_ACTION_ZH = ("装柜", "装箱", "拼柜")
-_PACK_ACTION_EN = re.compile(r"\bpack\b", re.IGNORECASE)
-_PHRASE_WRITE = (
-    "写一份",
-    "出一份",
-    "做一份",
-    "出稿",
-    "成稿",
-    "编制",
-    "起草",
-    "抽出",
-    "扩写",
-    "落盘",
-    "出判定",
-    "出清单",
-    "出作业单",
-    "帮我写",
-    "请写",
-    "生成一份",
-    "写个",
-    "解析招标",
-    "进矩阵",
-)
-_WRITE_NOUNS = ("方案", "提纲", "草稿", "清单", "纪要", "台账", "日历", "交底", "作业单")
-_ASK = (
-    "什么是",
-    "是什么",
-    "怎么理解",
-    "如何理解",
-    "解释",
-    "科普",
-    "区别",
-    "为什么",
-    "怎么看",
-    "先聊聊",
-    "先别写",
-    "只是问问",
-    "算不算",
-    "要不要",
-    "能不能",
-    "可不可以",
-    "行不行",
-    "对不对",
-)
-_TENDER = ("招标", "ITT", "评标", "Two Envelope", "双信封", "workhead", "必须编制")
+# eq_ignore_ascii_case("pack")）语义等价；两侧机制不同，契约只记录不互译，
+# 锚点由 scripts/test_stack_parity.py 成对校验。
+_PACK_ACTION_ZH = contract_list("pack_action_zh")
+_PACK_ACTION_EN = re.compile(contract_pack_action_en_pattern(), re.IGNORECASE)
+_PHRASE_WRITE = contract_list("phrase_write")
+_WRITE_NOUNS = contract_list("write_nouns")
+_ASK = contract_list("ask")
+_TENDER = contract_list("tender")
 
 
 def is_packish(blob: str) -> bool:

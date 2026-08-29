@@ -13,6 +13,8 @@ import re
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 
+from packing_assistant.intent_contract import contract_strong
+
 _ROOT = Path(__file__).resolve().parents[2]
 SKILLS_DIR = _ROOT / ".agents" / "skills"
 NAME_RE = re.compile(r"^[a-z0-9](?:[a-z0-9-]{0,62}[a-z0-9])?$")
@@ -106,38 +108,9 @@ def prompt_suffix(expert_id: str) -> str:
 
 
 # Longest first. Bare 施工/方案/发票/配比 must not steal a turn.
-_STRONG = (
-    ("专项施工方案", "construction"),
-    ("方案讨论提纲", "construction"),
-    ("施工方案", "construction"),
-    ("专项方案", "construction"),
-    ("危大识别", "method-hazard"),
-    ("危大工程", "method-hazard"),
-    ("判定书", "method-hazard"),
-    ("超危", "method-hazard"),
-    ("危大", "method-hazard"),
-    ("招标解析", "bid-parse"),
-    ("解析招标", "bid-parse"),
-    ("抽出评分", "bid-parse"),
-    ("废标检查", "bid-compliance"),
-    ("响应缺口", "bid-compliance"),
-    ("技术标", "bid-tech"),
-    ("装箱作业", "pack-ship"),
-    ("packing-agent", "pack-ship"),
-    ("装柜", "pack-ship"),
-    ("拼柜", "pack-ship"),
-    ("成箱", "pack-ship"),
-    ("装箱", "pack-ship"),
-    ("pack", "pack-ship"),
-    ("税务日历", "finance-tax"),
-    ("工友白话", "worker-brief"),
-    ("班前口播", "worker-brief"),
-    ("班前白话", "worker-brief"),
-    ("安全交底", "safety-brief"),
-    ("施工配合比", "lab-mix"),
-    ("见证取样", "lab-sample"),
-    ("工程量拆分", "cost"),
-)
+# 单源：全表从 contract/intents.v1.json 的 strong_match 加载（数组保序 = 最长优先），
+# 与 workbench/src/agent.rs match_skill_implicit 同读一份契约。
+_STRONG = contract_strong()
 
 
 CATALOG_BUDGET = 8000

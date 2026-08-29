@@ -7,6 +7,79 @@ use crate::packs::{self, ToolCtx};
 use serde_json::{json, Value};
 use std::fs;
 use std::path::{Path, PathBuf};
+use std::sync::OnceLock;
+
+// 意图契约唯一真源：contract/intents.v1.json（与 packing_assistant/understand.py、
+// packing_assistant/runtime/expert_skills.py 同读一份；改词表先改契约，见 contract/README.md）。
+// include_str 编译期内联：JSON 缺失/损坏在编译期或首次加载即失败（fail-fast，不静默回退）。
+const INTENT_CONTRACT_JSON: &str = include_str!("../../contract/intents.v1.json");
+
+struct IntentContract {
+    pack_action_zh: Vec<String>,
+    packish: Vec<String>,
+    phrase_write: Vec<String>,
+    write_nouns: Vec<String>,
+    ask: Vec<String>,
+    tender: Vec<String>,
+    // (phrase 小写, expert_id)，保序 = 契约数组顺序（最长优先，首个命中语义）
+    strong_match: Vec<(String, String)>,
+}
+
+fn contract() -> &'static IntentContract {
+    static CELL: OnceLock<IntentContract> = OnceLock::new();
+    CELL.get_or_init(|| {
+        let v: Value = serde_json::from_str(INTENT_CONTRACT_JSON)
+            .expect("contract/intents.v1.json 非法 JSON（fail-fast，禁止静默回退内联词表）");
+        let str_list = |key: &str| -> Vec<String> {
+            v.get(key)
+                .and_then(|x| x.as_array())
+                .filter(|a| !a.is_empty())
+                .map(|a| {
+                    a.iter()
+                        .map(|x| {
+                            x.as_str()
+                                .filter(|s| !s.is_empty())
+                                .expect("contract 词表元素必须是非空字符串")
+                                .to_string()
+                        })
+                        .collect()
+                })
+                .unwrap_or_else(|| panic!("contract 缺字段或非字符串数组: {key}"))
+        };
+        let strong = v
+            .get("strong_match")
+            .and_then(|x| x.as_array())
+            .filter(|a| !a.is_empty())
+            .unwrap_or_else(|| panic!("contract 缺字段 strong_match 或为空"));
+        let strong_match = strong
+            .iter()
+            .map(|item| {
+                let pair = item
+                    .as_array()
+                    .filter(|p| p.len() == 2)
+                    .expect("contract strong_match 元素必须是 [phrase, expert_id]");
+                let phrase = pair[0]
+                    .as_str()
+                    .filter(|s| !s.is_empty())
+                    .expect("contract strong_match phrase 必须是非空字符串");
+                let eid = pair[1]
+                    .as_str()
+                    .filter(|s| !s.is_empty())
+                    .expect("contract strong_match expert_id 必须是非空字符串");
+                (phrase.to_lowercase(), eid.to_string())
+            })
+            .collect();
+        IntentContract {
+            pack_action_zh: str_list("pack_action_zh"),
+            packish: str_list("packish"),
+            phrase_write: str_list("phrase_write"),
+            write_nouns: str_list("write_nouns"),
+            ask: str_list("ask"),
+            tender: str_list("tender"),
+            strong_match,
+        }
+    })
+}
 
 const READ_ONLY_TOOLS: &[&str] = &[
     "search_kb",
@@ -156,9 +229,10 @@ fn user_blob(history: &[Value]) -> String {
 }
 
 pub fn is_packish(blob: &str) -> bool {
-    ["成套", "易标", "一人公司", "完整方案", "整套标"]
+    contract()
+        .packish
         .iter()
-        .any(|k| blob.contains(k))
+        .any(|k| blob.contains(k.as_str()))
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -178,94 +252,46 @@ impl Intent {
     }
 }
 
-fn has_any(s: &str, keys: &[&str]) -> bool {
-    keys.iter().any(|k| s.contains(k))
+fn has_any(s: &str, keys: &[String]) -> bool {
+    keys.iter().any(|k| s.contains(k.as_str()))
+}
+
+/// pack 一句话动作（契约 pack_action_zh / pack_action_en）——与 packing_assistant/understand.py 保持一致。
+pub fn is_pack_action(blob: &str) -> bool {
+    let t = blob.trim();
+    if t.is_empty() {
+        return false;
+    }
+    if is_packish(t) {
+        return true;
+    }
+    if has_any(t, &contract().pack_action_zh) {
+        return true;
+    }
+    // parity:pack-action-en — 英文 pack 判定按非字母数字切词后 eq_ignore_ascii_case("pack")，
+    // 与 understand.py 的 \bpack\b 正则语义等价；两侧机制不同，契约 pack_action_en 只记录不互译，
+    // 锚点由 scripts/test_stack_parity.py 成对校验。
+    t.split(|c: char| !c.is_ascii_alphanumeric())
+        .any(|w| w.eq_ignore_ascii_case("pack"))
 }
 
 /// Understand the user first. Default is chat. Write only when they ask for a draft.
+/// 词表全部来自 contract/intents.v1.json（单源）。
 pub fn understand(blob: &str) -> Intent {
     let t = blob.trim();
     if t.is_empty() {
         return Intent::Chat;
     }
+    let c = contract();
+    let pack_action = is_pack_action(t);
     if is_packish(t) {
         return Intent::Run;
     }
-    let phrase_write = has_any(
-        t,
-        &[
-            "写一份",
-            "出一份",
-            "做一份",
-            "出稿",
-            "成稿",
-            "编制",
-            "起草",
-            "抽出",
-            "扩写",
-            "落盘",
-            "出判定",
-            "出清单",
-            "出作业单",
-            "帮我写",
-            "请写",
-            "生成一份",
-            "写个",
-            "解析招标",
-            "进矩阵",
-        ],
-    );
-    let write = phrase_write
-        || (t.contains('写')
-            && has_any(
-                t,
-                &["方案", "提纲", "草稿", "清单", "纪要", "台账", "日历", "交底", "作业单"],
-            ));
-    let ask = has_any(
-        t,
-        &[
-            "什么是",
-            "是什么",
-            "怎么理解",
-            "如何理解",
-            "解释",
-            "科普",
-            "区别",
-            "为什么",
-            "怎么看",
-            "先聊聊",
-            "先别写",
-            "只是问问",
-            "算不算",
-            "要不要",
-            "能不能",
-            "可不可以",
-            "行不行",
-            "对不对",
-        ],
-    );
+    let phrase_write = has_any(t, &c.phrase_write);
+    let write = phrase_write || (t.contains('写') && has_any(t, &c.write_nouns));
+    let ask = has_any(t, &c.ask);
     let qmark = t.contains('？') || t.contains('?') || t.ends_with('吗');
-    let tender = has_any(
-        t,
-        &[
-            "招标",
-            "ITT",
-            "评标",
-            "Two Envelope",
-            "双信封",
-            "workhead",
-            "必须编制",
-        ],
-    );
-    if write && (ask || qmark) {
-        return Intent::Both;
-    }
-    // pack 一句话动作（装柜/装箱/拼柜/pack）——与 packing_assistant/understand.py 保持一致。
-    // parity:pack-action-en — 英文 pack 判定按非字母数字切词后 eq_ignore_ascii_case("pack")，
-    // 与 understand.py 的正则 \bpack\b 语义等价；锚点由 scripts/test_stack_parity.py 成对校验。
-    let pack_action = has_any(t, &["装柜", "装箱", "拼柜"])
-        || t.split(|c: char| !c.is_ascii_alphanumeric())
-            .any(|w| w.eq_ignore_ascii_case("pack"));
+    let tender = has_any(t, &c.tender);
     if (write || pack_action) && (ask || qmark) {
         return Intent::Both;
     }
@@ -278,25 +304,16 @@ pub fn understand(blob: &str) -> Intent {
     Intent::Chat
 }
 
-/// Implicit skill routing — pack-ship subset of runtime/expert_skills.py `_STRONG`.
+/// Implicit skill routing — full `strong_match` table from contract/intents.v1.json
+/// (single source, same table as packing_assistant/runtime/expert_skills.py `_STRONG`).
+/// 保序遍历取首个命中，与 Python match_skill 的 first-hit 语义对齐。
 pub fn match_skill_implicit(text: &str) -> Option<String> {
     let t = text.to_lowercase();
-    const PACK_SHIP: &[&str] = &[
-        "装箱作业",
-        "packing-agent",
-        "装柜",
-        "拼柜",
-        "成箱",
-        "装箱",
-        "pack-ship",
-    ];
-    if PACK_SHIP.iter().any(|k| t.contains(k))
-        || t.split(|c: char| !c.is_ascii_alphanumeric())
-            .any(|w| w == "pack")
-    {
-        return Some("pack-ship".to_string());
-    }
-    None
+    contract()
+        .strong_match
+        .iter()
+        .find(|(phrase, _)| t.contains(phrase.as_str()))
+        .map(|(_, eid)| eid.clone())
 }
 
 pub fn is_explain_only(blob: &str) -> bool {
@@ -504,11 +521,7 @@ pub fn finish_if_no_deliverable(
     if blob.chars().count() < 8 {
         return None;
     }
-    let packish = blob.contains("成套")
-        || blob.contains("易标")
-        || blob.contains("一人公司")
-        || blob.contains("完整方案")
-        || blob.contains("整套标");
+    let packish = is_packish(&blob);
     if packish {
         let v = crate::firm::run_bid_job(
             &ctx.paths,
