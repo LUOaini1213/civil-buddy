@@ -50,6 +50,8 @@ def main() -> int:
     codes.append(run("scripts/test_phase0_task_success.py", 60))
     codes.append(run("scripts/test_facade_sme_mini.py", 180))
     codes.append(run("scripts/test_hollow_volume_n0.py", 60))
+    # D-R3：RAG 三栈对拍（金句 48 条 parity/recall + P50<50ms + 写钩子 + rag.rs 硬编码 grep 门禁）
+    codes.append(run("scripts/test_rag_parity.py", 600))
     # R5 每岗记分卡试点：quick 预算只跑 2 岗，全量 5 岗（G1 意图/G2 KB/G3 交付物/G4 诚实度）
     codes.append(run("scripts/eval_post_scorecard.py", 300, extra=["--all-pilots"] + (["--quick"] if args.quick else [])))
     if args.more:

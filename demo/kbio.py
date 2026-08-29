@@ -171,6 +171,24 @@ def read_text(rel: str) -> tuple[str, dict] | None:
     return text, st
 
 
+def _kb_index_hook(rel_posix: str) -> None:
+    """写钩子（data-plan M3）：KB 落盘成功后即时更新 SQLite FTS 索引。
+    失败只降级不阻断编辑——查询侧 30s 新鲜度检查会兜底重建。"""
+    try:
+        import sys
+
+        if str(REPO_ROOT) not in sys.path:
+            sys.path.insert(0, str(REPO_ROOT))
+        from packing_assistant.kb_search import reindex_kb_file
+
+        reindex_kb_file(
+            rel_posix, kb="demo_kb",
+            title_resolver=lambda p, text: display_title(p.name, text),
+        )
+    except Exception:
+        pass
+
+
 def write_text(rel: str, content: str) -> dict:
     if len(content.encode("utf-8")) > MAX_FILE_BYTES:
         raise ValueError(f"单文件不能超过 {MAX_FILE_BYTES} 字节")
@@ -196,7 +214,9 @@ def write_text(rel: str, content: str) -> dict:
     except Exception:
         path.parent.mkdir(parents=True, exist_ok=True)
         path.write_text(content, encoding="utf-8")
-    return file_stat(path, str(path.relative_to(KB_ROOT)).replace("\\", "/"), "")
+    rel_posix = str(path.relative_to(KB_ROOT)).replace("\\", "/")
+    _kb_index_hook(rel_posix)
+    return file_stat(path, rel_posix, "")
 
 
 def create_file(rel: str) -> dict:

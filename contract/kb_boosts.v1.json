@@ -1,0 +1,46 @@
+{
+  "version": "kb_boosts.v1",
+  "generated_by": "packing_assistant.kb_search（build_kb_index 同源）",
+  "rules": [
+    {
+      "id": "web_knowledge",
+      "kind": "filename_eq",
+      "value": "web-knowledge.md",
+      "boost": 6.0,
+      "scope": "demo_kb",
+      "note": "联网核对要点文件加权"
+    },
+    {
+      "id": "web_portals",
+      "kind": "filename_eq",
+      "value": "web-portals.md",
+      "boost": 5.0,
+      "scope": "demo_kb",
+      "note": "官方门户文件加权"
+    },
+    {
+      "id": "content_2026_08_14",
+      "kind": "body_contains",
+      "value": "2026-08-14",
+      "boost": 1.5,
+      "scope": "demo_kb",
+      "note": "口径更新日期加权（rag.rs 只扫 demo/kb，随源迁移）"
+    },
+    {
+      "id": "content_appbca_2026_12",
+      "kind": "body_contains",
+      "value": "APPBCA-2026-12",
+      "boost": 2.0,
+      "scope": "demo_kb",
+      "note": "APPBCA 规范加权（同上）"
+    },
+    {
+      "id": "sg_order37_penalty",
+      "kind": "sg_query_penalty",
+      "match_filename": "order-37",
+      "match_body": "37 号令永远标 CN",
+      "boost": -10.0,
+      "note": "新加坡类 query 对中国 37 号令惩罚（查询侧条件）"
+    }
+  ]
+}

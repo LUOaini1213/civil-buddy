@@ -37,6 +37,11 @@ tokio-stream = { version = "0.1", features = ["sync"] }
 tower = { version = "0.5", features = ["util"] }
 tower-http = { version = "0.6", features = ["fs"] }
 uuid = { version = "1", features = ["v4"] }
+rusqlite = { version = "0.40.2", features = ["bundled"] }
+
+[[bin]]
+name = "civil-rag-probe"
+path = "src/bin/civil-rag-probe.rs"
 
 [dev-dependencies]
 tower = { version = "0.5", features = ["util"] }

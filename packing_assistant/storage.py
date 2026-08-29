@@ -618,6 +618,77 @@ class Storage:
             )
             self.write_conn.commit()
 
+    # ---------- KB 索引（D-R3/M3：写入口收敛于此，检索层 kb_search 调用） ----------
+
+    def read_conn(self) -> sqlite3.Connection:
+        """公开只读连接（thread-local，WAL 下与写连接互不阻塞）。"""
+        return self._read_conn()
+
+    def count(self, table: str) -> int:
+        if table not in ("sessions", "runs", "events", "audit_decisions", "scores",
+                         "kb_index", "kb_chunks", "kb_fts", "checkpoints"):
+            raise ValueError(f"unexpected table {table}")
+        return int(self._read_conn().execute(f"SELECT COUNT(*) FROM {table}").fetchone()[0])
+
+    def kb_indexed(self, kb: str) -> Dict[str, tuple]:
+        """{path: (mtime_iso, size)}——增量构建判据。"""
+        rows = self._read_conn().execute(
+            "SELECT path, mtime, size FROM kb_index WHERE kb=?", (str(kb),)
+        ).fetchall()
+        return {r[0]: (r[1] or "", int(r[2] or 0)) for r in rows}
+
+    def kb_upsert_doc(self, doc: dict, chunks: List[dict]) -> None:
+        """单文档原子换血：kb_index 行 + kb_chunks/kb_fts 全量重写（写钩子/构建共用）。"""
+        with self._lock:
+            conn = self.write_conn
+            kb, path = str(doc["kb"]), str(doc["path"])
+            conn.execute("DELETE FROM kb_fts WHERE kb=? AND path=?", (kb, path))
+            conn.execute("DELETE FROM kb_chunks WHERE kb=? AND path=?", (kb, path))
+            conn.execute(
+                "INSERT OR REPLACE INTO kb_index"
+                "(path, kb, title, display, layer, category, expert_id,"
+                " priority, tags_json, status, mtime, size, hash, boost)"
+                " VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
+                (
+                    path, kb, doc.get("title"), doc.get("display"), doc.get("layer"),
+                    doc.get("category"), doc.get("expert_id"), doc.get("priority") or "medium",
+                    doc.get("tags_json") or "[]", doc.get("status") or "active",
+                    doc.get("mtime"), doc.get("size"), doc.get("hash"), float(doc.get("boost") or 0.0),
+                ),
+            )
+            for ch in chunks:
+                conn.execute(
+                    "INSERT INTO kb_chunks(kb, path, heading, seq, body, body_bigrams)"
+                    " VALUES(?,?,?,?,?,?)",
+                    (kb, path, ch.get("heading"), int(ch.get("seq") or 0),
+                     ch.get("body"), ch.get("body_bigrams")),
+                )
+                if ch.get("body_bigrams"):
+                    conn.execute(
+                        "INSERT INTO kb_fts(body_bigrams, kb, path, heading) VALUES(?,?,?,?)",
+                        (ch["body_bigrams"], kb, path, ch.get("heading")),
+                    )
+            conn.commit()
+
+    def kb_delete_doc(self, kb: str, path: str) -> bool:
+        with self._lock:
+            conn = self.write_conn
+            conn.execute("DELETE FROM kb_fts WHERE kb=? AND path=?", (kb, path))
+            cur = conn.execute("DELETE FROM kb_index WHERE kb=? AND path=?", (kb, path))
+            conn.execute("DELETE FROM kb_chunks WHERE kb=? AND path=?", (kb, path))
+            conn.commit()
+            return bool(cur.rowcount)
+
+    def kb_clear(self, kb: str) -> int:
+        """全量重建前置：清空一个 kb 的全部索引行。"""
+        with self._lock:
+            conn = self.write_conn
+            conn.execute("DELETE FROM kb_fts WHERE kb=?", (kb,))
+            conn.execute("DELETE FROM kb_chunks WHERE kb=?", (kb,))
+            cur = conn.execute("DELETE FROM kb_index WHERE kb=?", (kb,))
+            conn.commit()
+            return int(cur.rowcount or 0)
+
     # ---------- 维护 ----------
 
     def backup(self, dst: Path | None = None) -> Path:

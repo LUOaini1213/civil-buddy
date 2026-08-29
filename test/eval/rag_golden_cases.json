@@ -1,0 +1,533 @@
+{
+  "version": "rag-golden-cases-v1",
+  "description": "D-R3 三栈对拍金句集（data-plan M3/M4）：parity 旧实现(CB_RAG=json) vs 新实现(fts) top-3 重合率≥95% + 新实现 recall 守卫（expect_paths 任一命中 top3）。demo_kb 侧首个金句资产（audit A3-4 缺口收口）。覆盖中英/2字短查/长问/跨层(expert|_shared|company)/sg 条件惩罚 query。",
+  "items": [
+    {
+      "id": "c01",
+      "stack": "demo_kb",
+      "expert_id": "structure",
+      "category": "design",
+      "q": "结构",
+      "expect_paths": [
+        "design/structure/README.md",
+        "design/structure/web-knowledge.md",
+        "company/hard-rules.md"
+      ]
+    },
+    {
+      "id": "c02",
+      "stack": "demo_kb",
+      "expert_id": "structure",
+      "category": "design",
+      "q": "配筋",
+      "expect_paths": [
+        "design/structure/faq.md",
+        "design/structure/outline.md",
+        "design/structure/web-knowledge.md"
+      ]
+    },
+    {
+      "id": "c03",
+      "stack": "demo_kb",
+      "expert_id": "structure",
+      "category": "design",
+      "q": "concrete curing",
+      "expect_paths": [
+        "design/structure/web-knowledge.md",
+        "company/web-portals.md"
+      ]
+    },
+    {
+      "id": "c04",
+      "stack": "demo_kb",
+      "expert_id": "hvac",
+      "category": "design",
+      "q": "暖通",
+      "expect_paths": [
+        "design/hvac/README.md",
+        "design/hvac/web-knowledge.md",
+        "design/_shared/ask-from-others.md"
+      ]
+    },
+    {
+      "id": "c05",
+      "stack": "demo_kb",
+      "expert_id": "fire-protect",
+      "category": "design",
+      "q": "消防",
+      "expect_paths": [
+        "design/fire-protect/README.md",
+        "design/fire-protect/web-knowledge.md",
+        "design/_shared/ask-from-others.md"
+      ]
+    },
+    {
+      "id": "c06",
+      "stack": "demo_kb",
+      "expert_id": "facade",
+      "category": "design",
+      "q": "幕墙",
+      "expect_paths": [
+        "design/facade/README.md",
+        "design/facade/web-knowledge.md",
+        "design/_shared/ask-from-others.md"
+      ]
+    },
+    {
+      "id": "c07",
+      "stack": "demo_kb",
+      "expert_id": "safety-brief",
+      "category": "hse",
+      "q": "安全交底",
+      "expect_paths": [
+        "hse/safety-brief/README.md",
+        "hse/safety-brief/web-knowledge.md",
+        "hse/_shared/ask-from-others.md"
+      ]
+    },
+    {
+      "id": "c08",
+      "stack": "demo_kb",
+      "expert_id": "safety-brief",
+      "category": "hse",
+      "q": "三级教育",
+      "expect_paths": [
+        "hse/safety-brief/faq.md",
+        "hse/safety-brief/web-knowledge.md",
+        "hse/_shared/ask-from-others.md"
+      ]
+    },
+    {
+      "id": "c09",
+      "stack": "demo_kb",
+      "expert_id": "quality",
+      "category": "hse",
+      "q": "质量",
+      "expect_paths": [
+        "hse/quality/README.md",
+        "hse/quality/web-knowledge.md",
+        "hse/_shared/ask-from-others.md"
+      ]
+    },
+    {
+      "id": "c10",
+      "stack": "demo_kb",
+      "expert_id": "emergency",
+      "category": "hse",
+      "q": "应急",
+      "expect_paths": [
+        "hse/emergency/README.md",
+        "hse/emergency/web-knowledge.md",
+        "hse/_shared/ask-from-others.md"
+      ]
+    },
+    {
+      "id": "c11",
+      "stack": "demo_kb",
+      "expert_id": "cost",
+      "category": "commercial",
+      "q": "造价",
+      "expect_paths": [
+        "commercial/cost/README.md",
+        "commercial/cost/faq.md",
+        "commercial/cost/web-knowledge.md"
+      ]
+    },
+    {
+      "id": "c12",
+      "stack": "demo_kb",
+      "expert_id": "claim",
+      "category": "commercial",
+      "q": "索赔",
+      "expect_paths": [
+        "commercial/claim/README.md",
+        "commercial/claim/faq.md",
+        "commercial/claim/outline.md"
+      ]
+    },
+    {
+      "id": "c13",
+      "stack": "demo_kb",
+      "expert_id": "interim",
+      "category": "commercial",
+      "q": "验工计价",
+      "expect_paths": [
+        "commercial/interim/README.md",
+        "commercial/interim/faq.md",
+        "commercial/interim/web-knowledge.md"
+      ]
+    },
+    {
+      "id": "c14",
+      "stack": "demo_kb",
+      "expert_id": "pack-ship",
+      "category": "plant",
+      "q": "装箱拼柜",
+      "expect_paths": [
+        "plant/pack-ship/README.md",
+        "plant/pack-ship/web-knowledge.md",
+        "plant/_shared/ask-from-others.md"
+      ]
+    },
+    {
+      "id": "c15",
+      "stack": "demo_kb",
+      "expert_id": "pack-ship",
+      "category": "plant",
+      "q": "CTU Code 是不是强制法",
+      "expect_paths": [
+        "plant/pack-ship/faq.md",
+        "plant/pack-ship/README.md",
+        "plant/pack-ship/outline.md"
+      ]
+    },
+    {
+      "id": "c16",
+      "stack": "demo_kb",
+      "expert_id": "pack-ship",
+      "category": "plant",
+      "q": "CTU Code",
+      "expect_paths": [
+        "plant/pack-ship/README.md",
+        "plant/pack-ship/faq.md",
+        "plant/pack-ship/outline.md"
+      ]
+    },
+    {
+      "id": "c17",
+      "stack": "demo_kb",
+      "expert_id": "warehouse",
+      "category": "plant",
+      "q": "仓管",
+      "expect_paths": [
+        "plant/warehouse/README.md",
+        "plant/warehouse/faq.md",
+        "plant/warehouse/outline.md"
+      ]
+    },
+    {
+      "id": "c18",
+      "stack": "demo_kb",
+      "expert_id": "lab-mix",
+      "category": "lab",
+      "q": "配合比",
+      "expect_paths": [
+        "lab/lab-mix/README.md",
+        "lab/lab-mix/faq.md",
+        "lab/lab-mix/outline.md"
+      ]
+    },
+    {
+      "id": "c19",
+      "stack": "demo_kb",
+      "expert_id": "lab-sample",
+      "category": "lab",
+      "q": "见证取样",
+      "expect_paths": [
+        "lab/lab-sample/README.md",
+        "lab/lab-sample/faq.md",
+        "lab/lab-sample/web-knowledge.md"
+      ]
+    },
+    {
+      "id": "c20",
+      "stack": "demo_kb",
+      "expert_id": "survey",
+      "category": "construction",
+      "q": "测量",
+      "expect_paths": [
+        "construction/survey/README.md",
+        "construction/survey/web-knowledge.md",
+        "construction/_shared/ask-from-others.md"
+      ]
+    },
+    {
+      "id": "c21",
+      "stack": "demo_kb",
+      "expert_id": "method-hazard",
+      "category": "construction",
+      "q": "触发词",
+      "expect_paths": [
+        "construction/method-hazard/faq.md",
+        "construction/method-hazard/judge-card.md",
+        "construction/_shared/hazard-triggers.md"
+      ]
+    },
+    {
+      "id": "c22",
+      "stack": "demo_kb",
+      "expert_id": "method-hazard",
+      "category": "construction",
+      "q": "危大",
+      "expect_paths": [
+        "construction/method-hazard/faq.md",
+        "construction/method-hazard/web-knowledge.md",
+        "construction/_shared/web-knowledge.md"
+      ]
+    },
+    {
+      "id": "c23",
+      "stack": "demo_kb",
+      "expert_id": "construction",
+      "category": "construction",
+      "q": "新加坡 动火许可 PTW",
+      "expect_paths": [
+        "construction/construction/web-knowledge.md",
+        "construction/_shared/web-knowledge.md"
+      ]
+    },
+    {
+      "id": "c24",
+      "stack": "demo_kb",
+      "expert_id": "construction",
+      "category": "construction",
+      "q": "新加坡",
+      "expect_paths": [
+        "construction/construction/web-knowledge.md",
+        "company/web-portals.md",
+        "construction/_shared/web-knowledge.md"
+      ]
+    },
+    {
+      "id": "c25",
+      "stack": "demo_kb",
+      "expert_id": "construction",
+      "category": "construction",
+      "q": "order-37 新加坡",
+      "expect_paths": [
+        "construction/_shared/order-37-points.md"
+      ]
+    },
+    {
+      "id": "c26",
+      "stack": "demo_kb",
+      "expert_id": "supervision",
+      "category": "docs",
+      "q": "资料监理",
+      "expect_paths": [
+        "docs/supervision/README.md",
+        "docs/supervision/faq.md",
+        "docs/supervision/web-knowledge.md"
+      ]
+    },
+    {
+      "id": "c27",
+      "stack": "demo_kb",
+      "expert_id": "admin-doc",
+      "category": "admin",
+      "q": "公文印章",
+      "expect_paths": [
+        "admin/admin-doc/README.md",
+        "admin/admin-doc/faq.md",
+        "admin/admin-doc/web-knowledge.md"
+      ]
+    },
+    {
+      "id": "c28",
+      "stack": "demo_kb",
+      "expert_id": "bim-coord",
+      "category": "bim",
+      "q": "模型协调",
+      "expect_paths": [
+        "bim/bim-coord/README.md",
+        "bim/bim-coord/web-knowledge.md",
+        "bim/_shared/ask-from-others.md"
+      ]
+    },
+    {
+      "id": "c29",
+      "stack": "demo_kb",
+      "expert_id": "pm-daily",
+      "category": "people",
+      "q": "项目日报",
+      "expect_paths": [
+        "people/pm-daily/README.md",
+        "people/pm-daily/faq.md",
+        "people/pm-daily/outline.md"
+      ]
+    },
+    {
+      "id": "c30",
+      "stack": "demo_kb",
+      "expert_id": "worker-brief",
+      "category": "people",
+      "q": "工友白话",
+      "expect_paths": [
+        "people/worker-brief/README.md",
+        "people/worker-brief/faq.md",
+        "people/worker-brief/outline.md"
+      ]
+    },
+    {
+      "id": "c31",
+      "stack": "demo_kb",
+      "expert_id": "it-ops",
+      "category": "it",
+      "q": "运维权限",
+      "expect_paths": [
+        "it/it-ops/README.md",
+        "it/it-ops/faq.md",
+        "it/it-ops/web-knowledge.md"
+      ]
+    },
+    {
+      "id": "c32",
+      "stack": "demo_kb",
+      "expert_id": "bridge",
+      "category": "design",
+      "q": "桥梁",
+      "expect_paths": [
+        "design/bridge/README.md",
+        "design/bridge/web-knowledge.md",
+        "design/_shared/README.md"
+      ]
+    },
+    {
+      "id": "c33",
+      "stack": "demo_kb",
+      "expert_id": "tunnel",
+      "category": "design",
+      "q": "隧道",
+      "expect_paths": [
+        "design/tunnel/README.md",
+        "design/tunnel/web-knowledge.md",
+        "design/_shared/README.md"
+      ]
+    },
+    {
+      "id": "c34",
+      "stack": "knowledge_base",
+      "q": "重心 mid50 红线",
+      "expect_paths": [
+        "01_rules/ctu_loading/safety_redlines.md"
+      ]
+    },
+    {
+      "id": "c35",
+      "stack": "knowledge_base",
+      "q": "空隙 15cm 塞实",
+      "expect_paths": [
+        "01_rules/ctu_loading/void_space.md"
+      ]
+    },
+    {
+      "id": "c36",
+      "stack": "knowledge_base",
+      "q": "柜数预算 锁柜",
+      "expect_paths": [
+        "01_rules/booking_constraints/container_budget.md"
+      ]
+    },
+    {
+      "id": "c37",
+      "stack": "knowledge_base",
+      "q": "VGM 出运",
+      "expect_paths": [
+        "01_rules/compliance/vgm_and_ship.md"
+      ]
+    },
+    {
+      "id": "c38",
+      "stack": "knowledge_base",
+      "q": "HITL 续跑 team A team B",
+      "expect_paths": [
+        "03_trajectories/success/multi_agent_collab_03.md",
+        "05_multi_agent/escalation_rules.md",
+        "03_trajectories/success/T4_hitl_resume_ab.md",
+        "03_trajectories/success/T9_facade_sme_hitl.md",
+        "02_tools/hitl_confirm.md"
+      ]
+    },
+    {
+      "id": "c39",
+      "stack": "knowledge_base",
+      "q": "大 Team 小 Team 角色",
+      "expect_paths": [
+        "05_multi_agent/roles_definition.md"
+      ]
+    },
+    {
+      "id": "c40",
+      "stack": "knowledge_base",
+      "q": "replan 升级 stop 人工",
+      "expect_paths": [
+        "05_multi_agent/escalation_rules.md"
+      ]
+    },
+    {
+      "id": "c41",
+      "stack": "knowledge_base",
+      "q": "体积重量计算规则",
+      "expect_paths": [
+        "01_rules/volume_weight/calculation_rules.md"
+      ]
+    },
+    {
+      "id": "c42",
+      "stack": "knowledge_base",
+      "q": "集装箱柜型常识",
+      "expect_paths": [
+        "07_domain_knowledge/container_types.md"
+      ]
+    },
+    {
+      "id": "c43",
+      "stack": "knowledge_base",
+      "q": "how does search_knowledge work",
+      "expect_paths": [
+        "02_tools/search_knowledge.md",
+        "02_tools/secure_work_order.md",
+        "02_tools/knowledge_search.md"
+      ]
+    },
+    {
+      "id": "c44",
+      "stack": "knowledge_base",
+      "q": "stacking limits for CTU loading",
+      "expect_paths": [
+        "01_rules/ctu_loading/stacking_limits.md",
+        "01_rules/ctu_loading/safety_redlines.md",
+        "01_rules/ctu_loading/load_bearing.md"
+      ]
+    },
+    {
+      "id": "c45",
+      "stack": "knowledge_base",
+      "q": "standard steel frame heuristic dense plates",
+      "expect_paths": [
+        "04_strategies/packing_heuristics.md",
+        "02_tools/nonstandard_enrich.md",
+        "02_tools/nonstandard_inspect.md"
+      ]
+    },
+    {
+      "id": "c46",
+      "stack": "knowledge_base",
+      "q": "锁柜",
+      "expect_paths": [
+        "01_rules/booking_constraints/container_budget.md",
+        "03_trajectories/failure_recovery/constraint_violation_fix.md",
+        "03_trajectories/success/T5_container_budget_lock.md"
+      ]
+    },
+    {
+      "id": "c47",
+      "stack": "knowledge_base",
+      "q": "塞实",
+      "expect_paths": [
+        "01_rules/ctu_loading/void_space.md",
+        "07_domain_knowledge/cn_sg_corridor.md"
+      ]
+    },
+    {
+      "id": "c48",
+      "stack": "knowledge_base",
+      "q": "VGM",
+      "expect_paths": [
+        "01_rules/compliance/vgm_and_ship.md",
+        "02_tools/vgm_draft.md",
+        "02_tools/search_knowledge.md"
+      ]
+    }
+  ]
+}

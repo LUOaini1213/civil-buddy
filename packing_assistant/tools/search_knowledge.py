@@ -2,14 +2,20 @@
 
 供 llm_toolcall / critic 文案引用规则与范例；**不返回 3D 坐标**。
 数值箱型仍走 packing_knowledge_base.json。
+
+M3 起（data-plan）默认走 kb_search 的"FTS5 粗召回 + 本文件现行公式精排"；
+CB_RAG=json 或 FTS 异常时回退本文件全盘扫描路径（公式逐字保留，响应 schema 不变）。
 """
 
 from __future__ import annotations
 
+import logging
 import re
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Any, Dict, List, Optional, Tuple
+from typing import Any, Dict, List, Optional, Set, Tuple
+
+logger = logging.getLogger("civil.kb_search")
 
 _ROOT = Path(__file__).resolve().parents[2]
 _DEFAULT_KB = _ROOT / "knowledge_base"
@@ -209,11 +215,54 @@ def search_knowledge(
 
         return search_for_agent(agent_id, q, limit=limit)
 
+    mode = "json"
+    if root is None:  # 自定义 root（测试 tmp 库）不进 FTS 索引，直接走扫描
+        try:
+            from packing_assistant.kb_search import rag_mode
+
+            mode = rag_mode()
+        except Exception:
+            mode = "json"
+    if mode == "fts":
+        try:
+            from packing_assistant.kb_search import knowledge_search_fts
+
+            return knowledge_search_fts(
+                q, category=category, priority=priority, tags=tags,
+                limit=limit, path_prefixes=path_prefixes,
+            )
+        except Exception:
+            logger.warning("knowledge.search FTS 路径异常，回退 JSON 扫描", exc_info=True)
+    return _search_knowledge_scan(
+        q, category=category, priority=priority, tags=tags,
+        limit=limit, root=root, path_prefixes=path_prefixes,
+    )
+
+
+def _search_knowledge_scan(
+    q: str,
+    *,
+    category: Optional[str] = None,
+    priority: Optional[str] = None,
+    tags: Optional[List[str]] = None,
+    limit: int = 5,
+    root: Optional[Path] = None,
+    path_prefixes: Optional[List[str]] = None,
+    _candidate_paths: Optional[Set[str]] = None,
+) -> Dict[str, Any]:
+    """现行实现（评分公式逐字保留）。_candidate_paths 非 None 时只对候选打分
+    （kb_search FTS 粗召回结果），None=全盘扫描（旧路径，FTS 零召回时兜底）。"""
     docs = load_kb(root)
     q_tokens = _tokenize(q or "")
     tags_f = tags or None
+    iter_docs = docs
+    if _candidate_paths is not None:
+        iter_docs = [d for d in docs if d.path in _candidate_paths]
+        if not iter_docs and q_tokens:
+            # FTS 零召回（如 1 字查询）：全量打分，保证召回不低于旧实现
+            iter_docs = docs
     scored: List[Tuple[float, KbDoc]] = []
-    for d in docs:
+    for d in iter_docs:
         fm = d.frontmatter
         if category and str(fm.get("category") or "") != category:
             continue
