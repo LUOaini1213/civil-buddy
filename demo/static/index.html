@@ -55,7 +55,11 @@
           <input type="checkbox" id="confirmOk" />
           我明白，将由持证人员签认
         </label>
-        <textarea id="input" rows="3" placeholder="输入任务，例如：写临边专项方案讨论提纲"></textarea>
+        <div class="composer-note">AI 草稿 · 不签认</div>
+        <div class="input-wrap">
+          <textarea id="input" rows="1" placeholder="描述任务，或 @选择岗位；Enter 发送 / Shift+Enter 换行"></textarea>
+          <div id="atMenu" class="cb-at-menu" hidden role="listbox" aria-label="岗位补全"></div>
+        </div>
         <div class="local-row">
           <input id="localPath" type="text" placeholder="本机文件路径（不要填 D:\layout）" />
           <button type="button" id="btnLocal">导入</button>
@@ -142,7 +146,8 @@
       </div>
     </div>
   </div>
-  <script src="/static/app.js?v=ui3"></script>
-  <script src="/static/studio.js?v=ui3"></script>
+  <script src="/static/posts.js?v=ui4"></script>
+  <script src="/static/app.js?v=ui4"></script>
+  <script src="/static/studio.js?v=ui4"></script>
 </body>
 </html>

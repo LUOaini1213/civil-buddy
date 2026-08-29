@@ -391,6 +391,9 @@ $("form").addEventListener("submit", async (ev) => {
   const message = $("input").value.trim();
   if (!message) return;
   $("input").value = "";
+  cbAutosize($("input"));
+  cbSyncSend();
+  cbAtClose();
   if (message.startsWith("/")) {
     const welcome = document.querySelector(".welcome");
     if (welcome) welcome.remove();
@@ -409,14 +412,19 @@ $("form").addEventListener("submit", async (ev) => {
   state.history.push({ role: "user", content: message });
   paintContext(estimateLocalContext());
   const bodyEl = addMsg("assistant", namesOrPlain(), "");
-  $("send").disabled = true;
+  const sendBtn = $("send");
+  sendBtn.disabled = true;
+  sendBtn.dataset.running = "1";
+  sendBtn.textContent = "运行中…";
   try {
     await streamChat(message, bodyEl);
   } catch (err) {
     bodyEl.classList.add("err");
     bodyEl.textContent = String(err.message || err);
   } finally {
-    $("send").disabled = false;
+    sendBtn.textContent = "发送";
+    delete sendBtn.dataset.running;
+    cbSyncSend();
   }
 });
 
@@ -673,5 +681,188 @@ if (composer) {
     }
   });
 }
+
+/* === ux(round2) 输入体验（docs/ux/ux-design-spec.md R2：一个输入框） ============
+   模式借鉴 pattern-only，不抄任何代码：
+   - openai/codex codex-rs/tui/src/bottom_pane/chat_composer.rs（Apache-2.0）：
+     单输入框按键先路由给活动浮层；补全=替换光标处 @token、尾部留一个空格；
+     Esc 关闭浮层并记住被关闭的 token，编辑后才允许重开。
+   - open-webui src/lib/components/chat/MessageInput.svelte（MIT）：
+     compositionstart/end IME 守卫（中文输入法回车选词不误发，Safari 时序 200ms）；
+     发送按钮随内容空态禁用；textarea autosize=height:auto→scrollHeight 钳制。
+   - Discord/Slack @提及（pattern-only）：↑↓ 选择、Enter/Tab 确认、Esc 关闭、悬停即选中。 */
+const CB_MAX_LINES = 8;
+
+function cbAutosize(ta) {
+  // 1→8 行伸缩，超长内部滚动
+  if (!ta) return;
+  ta.style.height = "auto";
+  const cs = getComputedStyle(ta);
+  const line = parseFloat(cs.lineHeight) || parseFloat(cs.fontSize) * 1.4 || 20;
+  const pad = (parseFloat(cs.paddingTop) || 0) + (parseFloat(cs.paddingBottom) || 0);
+  const max = line * CB_MAX_LINES + pad;
+  ta.style.height = Math.min(ta.scrollHeight, max) + "px";
+  ta.style.overflowY = ta.scrollHeight > max ? "auto" : "hidden";
+}
+
+function cbAtQuery(text, cursor) {
+  // 光标左侧 @token：行首/空白起头，@ 后可跟中文/字母/数字/连字符/下划线
+  const before = String(text || "").slice(0, cursor);
+  const m = before.match(/(^|\s)@([\u4e00-\u9fa5A-Za-z0-9_-]*)$/);
+  if (!m) return null;
+  return { start: before.length - m[2].length - 1, query: m[2] };
+}
+
+function cbAtFilter(posts, query, limit) {
+  // 66 岗按 name/aliases/id 过滤：前缀命中优先于包含命中，默认最多 8 条
+  const q = String(query || "").trim().toLowerCase();
+  const scored = [];
+  for (const p of posts || []) {
+    const names = [p.name].concat(p.aliases || [], [p.id]).filter(Boolean).map((n) => String(n).toLowerCase());
+    let score = -1;
+    if (!q) score = 2;
+    else if (names.some((n) => n.indexOf(q) === 0)) score = 0;
+    else if (names.some((n) => n.includes(q))) score = 1;
+    if (score >= 0) scored.push([score, p]);
+  }
+  scored.sort((a, b) => a[0] - b[0]);
+  return scored.slice(0, limit || 8).map((x) => x[1]);
+}
+
+function cbAtApply(ta, start, post) {
+  // codex token 替换模式：@token → 「@岗位名 」，光标落在尾部空格之后
+  const insert = "@" + post.name + " ";
+  const tail = ta.value.slice(ta.selectionEnd);
+  ta.value = ta.value.slice(0, start) + insert + tail;
+  const pos = start + insert.length;
+  ta.focus();
+  ta.setSelectionRange(pos, pos);
+}
+
+function cbComposeGuard(el) {
+  // IME 守卫：组合输入中的 Enter=选词不发送；结束后 200ms 内的 Enter 也忽略
+  const st = { on: false, endedAt: 0 };
+  el.addEventListener("compositionstart", () => { st.on = true; });
+  el.addEventListener("compositionend", () => { st.on = false; st.endedAt = Date.now(); });
+  st.block = function (ev) {
+    return st.on || (ev && (ev.isComposing || ev.keyCode === 229)) || Date.now() - st.endedAt < 200;
+  };
+  return st;
+}
+
+/* ---- :8765 实例接线：@岗位补全 + Enter 语义 + 空态禁用 ---- */
+const cbAt = { open: false, items: [], idx: 0, start: -1, query: "", dismissed: "", dismissedAt: -1 };
+let cbSyncSend = () => {};
+
+function cbPostsSource() {
+  return state.experts && state.experts.length ? state.experts : window.CB_POSTS || [];
+}
+
+function cbAtClose() {
+  cbAt.open = false;
+  const menu = $("atMenu");
+  if (menu) menu.hidden = true;
+}
+
+function cbAtRender() {
+  const menu = $("atMenu");
+  if (!menu) return;
+  menu.innerHTML = "";
+  cbAt.items.forEach((p, i) => {
+    const row = document.createElement("div");
+    row.className = "cb-at-item" + (i === cbAt.idx ? " on" : "");
+    row.setAttribute("role", "option");
+    row.setAttribute("aria-selected", i === cbAt.idx ? "true" : "false");
+    const name = document.createElement("span");
+    name.className = "cb-at-name";
+    name.textContent = "@" + p.name;
+    const cat = document.createElement("span");
+    cat.className = "cb-at-cat";
+    cat.textContent = (p.category_name || "") + (p.id ? " · " + p.id : "");
+    row.appendChild(name);
+    row.appendChild(cat);
+    row.addEventListener("mousedown", (ev) => {
+      ev.preventDefault();
+      cbAt.idx = i;
+      cbAtConfirm();
+    });
+    row.addEventListener("mouseenter", () => {
+      cbAt.idx = i;
+      cbAtRender();
+    });
+    menu.appendChild(row);
+  });
+  menu.hidden = false;
+}
+
+function cbAtUpdate() {
+  const ta = $("input");
+  if (!ta) return cbAtClose();
+  const tok = cbAtQuery(ta.value, ta.selectionStart);
+  if (!tok || (cbAt.dismissed === tok.query && cbAt.dismissedAt === tok.start)) return cbAtClose();
+  const items = cbAtFilter(cbPostsSource(), tok.query);
+  if (!items.length) return cbAtClose();
+  cbAt.open = true;
+  cbAt.items = items;
+  cbAt.idx = 0;
+  cbAt.start = tok.start;
+  cbAt.query = tok.query;
+  cbAtRender();
+}
+
+function cbAtConfirm() {
+  const ta = $("input");
+  const post = cbAt.items[cbAt.idx];
+  cbAtClose();
+  if (!ta || !post) return;
+  cbAtApply(ta, cbAt.start, post);
+  cbAutosize(ta);
+  cbSyncSend();
+}
+
+function cbAtMove(d) {
+  if (!cbAt.items.length) return;
+  cbAt.idx = (cbAt.idx + d + cbAt.items.length) % cbAt.items.length;
+  cbAtRender();
+}
+
+function cbComposerInit() {
+  const ta = $("input");
+  const form = $("form");
+  if (!ta || !form) return;
+  const guard = cbComposeGuard(ta);
+  cbSyncSend = () => {
+    const btn = $("send");
+    if (btn && !btn.dataset.running) btn.disabled = !ta.value.trim();
+  };
+  ta.addEventListener("input", () => {
+    cbAutosize(ta);
+    cbSyncSend();
+    cbAtUpdate();
+  });
+  ta.addEventListener("keydown", (ev) => {
+    if (cbAt.open) {
+      if (ev.key === "ArrowDown") { ev.preventDefault(); cbAtMove(1); return; }
+      if (ev.key === "ArrowUp") { ev.preventDefault(); cbAtMove(-1); return; }
+      if (ev.key === "Enter" || ev.key === "Tab") { ev.preventDefault(); cbAtConfirm(); return; }
+      if (ev.key === "Escape") {
+        ev.preventDefault();
+        cbAt.dismissed = cbAt.query;
+        cbAt.dismissedAt = cbAt.start;
+        cbAtClose();
+        return;
+      }
+    }
+    const send = ev.key === "Enter" && !ev.shiftKey && !ev.ctrlKey && !ev.metaKey && !ev.altKey && !guard.block(ev);
+    if (send) {
+      ev.preventDefault();
+      if (form.requestSubmit) form.requestSubmit();
+      else form.dispatchEvent(new Event("submit", { cancelable: true }));
+    }
+  });
+  cbAutosize(ta);
+  cbSyncSend();
+}
+cbComposerInit();
 
 boot();

@@ -809,12 +809,28 @@
       background: rgba(12, 16, 22, 0.95);
     }
     .side-composer textarea {
-      min-height: 68px;
-      max-height: 140px;
+      min-height: 40px;
+      max-height: 200px;
       margin-bottom: 8px;
       background: var(--bg);
       border-radius: 10px;
     }
+    /* === ux(round2) 输入体验：autosize + @岗位补全浮层（--cb-* token，零 CDN） === */
+    .side-composer .input-wrap { position: relative; }
+    .cb-at-menu {
+      position: absolute; bottom: calc(100% + 6px); left: 0; right: 0; z-index: 60;
+      max-height: 264px; overflow-y: auto; padding: 4px;
+      background: var(--cb-gray-900); color: var(--cb-gray-50);
+      border: 1px solid var(--cb-gray-500); border-radius: var(--cb-radius-md);
+      box-shadow: var(--cb-shadow-lg); font-size: var(--cb-fs-sm);
+    }
+    .cb-at-item {
+      display: flex; justify-content: space-between; align-items: baseline; gap: var(--cb-space-3);
+      padding: 6px 10px; border-radius: var(--cb-radius-sm); cursor: pointer;
+    }
+    .cb-at-item.on { background: var(--cb-blue-soft); color: var(--cb-blue-strong); }
+    .cb-at-item .cb-at-cat { color: var(--cb-text-muted); font-size: var(--cb-fs-xs); white-space: nowrap; }
+    .composer-note { font-size: var(--cb-fs-xs); color: var(--cb-text-muted); margin: 0 0 6px; }
     .composer-row {
       display: flex;
       gap: 6px;
@@ -1593,13 +1609,28 @@
         </div>
 
         <div class="side-composer">
-          <textarea
-            v-model="userInput"
-            placeholder="材料清单；留空点「满载」=30×密实模块高利用率；钢件叙事点顶栏「钢件轻量」"
-          ></textarea>
+          <div class="composer-note">AI 草稿 · 不签认</div>
+          <div class="input-wrap">
+            <textarea
+              ref="userInput"
+              v-model="userInput"
+              placeholder="描述任务，或 @选择岗位；Enter 发送 / Shift+Enter 换行"
+              @input="composerInput"
+              @keydown="composerKeydown"
+            ></textarea>
+            <div class="cb-at-menu" v-if="atOpen" role="listbox" aria-label="岗位补全">
+              <div class="cb-at-item" :class="{ on: i === atIdx }" role="option"
+                   :aria-selected="i === atIdx ? 'true' : 'false'"
+                   v-for="(it, i) in atItems" :key="it.id"
+                   @mousedown.prevent="atIdx = i; atConfirmComposer()" @mouseenter="atIdx = i">
+                <span class="cb-at-name">@{{ it.name }}</span>
+                <span class="cb-at-cat">{{ it.category_name }} · {{ it.id }}</span>
+              </div>
+            </div>
+          </div>
           <div class="composer-row">
-            <button @click="runTeamA" :class="{ busy: loading }">生成方案</button>
-            <button class="soft" @click="runDemo" :class="{ busy: loading }" title="30模块≈24t">满载</button>
+            <button @click="runTeamA" :disabled="loading || !userInput.trim()" :class="{ busy: loading }" title="生成方案（Enter 发送）">{{ loading ? '运行中…' : '生成方案' }}</button>
+            <button class="soft" @click="runDemo" :class="{ busy: loading }" title="留空也可点：30×密实模块≈24t">满载</button>
             <button class="ghost" @click="runPdf" :class="{ busy: loading }">PDF</button>
           </div>
           <div class="status-line">{{ statusText }}</div>
@@ -2406,8 +2437,9 @@
                 <span class="sub">能改就改 · 不能改返回「无此功能」（不假装成功）</span>
               </div>
               <div class="row" style="align-items:stretch">
-                <textarea v-model="nlInstruction" style="flex:1;min-height:56px"
-                  placeholder="例：要一排；要两排；去掉钢梁；柜型改 40GP；框架用槽钢16#，γ=2.0"></textarea>
+                <textarea ref="nlBox" v-model="nlInstruction" @input="nlBoxInput" @keydown="nlBoxKeydown"
+                  style="flex:1;min-height:56px;max-height:200px"
+                  placeholder="描述改方案指令，Enter 应用 / Shift+Enter 换行（例：要一排；柜型改 40GP；框架用槽钢16#，γ=2.0）"></textarea>
                 <button @click="reviseNl" :disabled="!nlInstruction.trim()" :class="{ busy: loading }">应用</button>
               </div>
               <div class="status-line" v-if="nlStatus"
@@ -2772,11 +2804,81 @@
       { id: 'visualizer', name: '可视化', short: '视', role: '三视角 · COG · 3D', team: 'B', color: '#7c5cfc' },
     ];
 
+    /* === ux(round2) 输入体验（docs/ux/ux-design-spec.md R2：一个输入框） ============
+       模式借鉴 pattern-only，不抄任何代码：
+       - openai/codex codex-rs/tui/src/bottom_pane/chat_composer.rs（Apache-2.0）：
+         单输入框按键先路由给活动浮层；补全=替换光标处 @token、尾部留一个空格；
+         Esc 关闭浮层并记住被关闭的 token，编辑后才允许重开。
+       - open-webui src/lib/components/chat/MessageInput.svelte（MIT）：
+         compositionstart/end IME 守卫（中文输入法回车选词不误发，Safari 时序 200ms）；
+         发送按钮随内容空态禁用；textarea autosize=height:auto→scrollHeight 钳制。
+       - Discord/Slack @提及（pattern-only）：↑↓ 选择、Enter/Tab 确认、Esc 关闭、悬停即选中。 */
+    const CB_MAX_LINES = 8;
+    function cbAutosize(ta) {
+      if (!ta) return;
+      ta.style.height = 'auto';
+      const cs = getComputedStyle(ta);
+      const line = parseFloat(cs.lineHeight) || parseFloat(cs.fontSize) * 1.4 || 20;
+      const pad = (parseFloat(cs.paddingTop) || 0) + (parseFloat(cs.paddingBottom) || 0);
+      const max = line * CB_MAX_LINES + pad;
+      ta.style.height = Math.min(ta.scrollHeight, max) + 'px';
+      ta.style.overflowY = ta.scrollHeight > max ? 'auto' : 'hidden';
+    }
+    function cbAtQuery(text, cursor) {
+      const before = String(text || '').slice(0, cursor);
+      const m = before.match(/(^|\s)@([\u4e00-\u9fa5A-Za-z0-9_-]*)$/);
+      if (!m) return null;
+      return { start: before.length - m[2].length - 1, query: m[2] };
+    }
+    function cbAtFilter(posts, query, limit) {
+      const q = String(query || '').trim().toLowerCase();
+      const scored = [];
+      for (const p of posts || []) {
+        const names = [p.name].concat(p.aliases || [], [p.id]).filter(Boolean).map((n) => String(n).toLowerCase());
+        let score = -1;
+        if (!q) score = 2;
+        else if (names.some((n) => n.indexOf(q) === 0)) score = 0;
+        else if (names.some((n) => n.includes(q))) score = 1;
+        if (score >= 0) scored.push([score, p]);
+      }
+      scored.sort((a, b) => a[0] - b[0]);
+      return scored.slice(0, limit || 8).map((x) => x[1]);
+    }
+    function cbAtApply(ta, start, post) {
+      const insert = '@' + post.name + ' ';
+      const tail = ta.value.slice(ta.selectionEnd);
+      ta.value = ta.value.slice(0, start) + insert + tail;
+      const pos = start + insert.length;
+      ta.focus();
+      ta.setSelectionRange(pos, pos);
+    }
+    function cbComposeGuard(el) {
+      const st = { on: false, endedAt: 0 };
+      el.addEventListener('compositionstart', () => { st.on = true; });
+      el.addEventListener('compositionend', () => { st.on = false; st.endedAt = Date.now(); });
+      st.block = function (ev) {
+        return st.on || (ev && (ev.isComposing || ev.keyCode === 229)) || Date.now() - st.endedAt < 200;
+      };
+      return st;
+    }
+
+/* === CB_POSTS BEGIN · 由 scripts/gen_cb_posts.py 生成自 workbench/seed.json，勿手改 === */
+window.CB_POSTS = [{"id":"bid-parse","name":"招标解析","aliases":["招标","解析招标"],"category":"bid","category_name":"经营投标"},{"id":"bid-compliance","name":"废标检查","aliases":["废标","响应检查"],"category":"bid","category_name":"经营投标"},{"id":"bid-tech","name":"技术标","aliases":["技术标","标书"],"category":"bid","category_name":"经营投标"},{"id":"architecture","name":"建筑","aliases":["建筑专业","方案设计"],"category":"design","category_name":"勘察设计"},{"id":"structure","name":"结构","aliases":["结构专业","计算书"],"category":"design","category_name":"勘察设计"},{"id":"geotech","name":"岩土勘察","aliases":["岩土","勘察","地基"],"category":"design","category_name":"勘察设计"},{"id":"plumbing","name":"给排水","aliases":["给水","排水","水专业"],"category":"design","category_name":"勘察设计"},{"id":"hvac","name":"暖通","aliases":["暖通空调","通风"],"category":"design","category_name":"勘察设计"},{"id":"electrical","name":"电气","aliases":["电气专业","强电"],"category":"design","category_name":"勘察设计"},{"id":"fire-protect","name":"消防","aliases":["消防设计","消电"],"category":"design","category_name":"勘察设计"},{"id":"steel","name":"钢结构","aliases":["钢构"],"category":"design","category_name":"勘察设计"},{"id":"landscape","name":"园林景观","aliases":["景观","园林"],"category":"design","category_name":"勘察设计"},{"id":"interior","name":"室内装修","aliases":["精装","室内","装修"],"category":"design","category_name":"勘察设计"},{"id":"facade","name":"幕墙","aliases":["外墙","幕墙工程","玻璃幕墙"],"category":"design","category_name":"勘察设计"},{"id":"intel-weak","name":"智能化弱电","aliases":["弱电","智能化","综合布线"],"category":"design","category_name":"勘察设计"},{"id":"civil-defense","name":"人防","aliases":["人防工程","人防设计"],"category":"design","category_name":"勘察设计"},{"id":"hydraulic","name":"水利","aliases":["水利工程","堤防","水闸"],"category":"design","category_name":"勘察设计"},{"id":"port","name":"港航","aliases":["码头","港口","航道","港航"],"category":"design","category_name":"勘察设计"},{"id":"municipal","name":"市政道路","aliases":["道路","市政"],"category":"design","category_name":"勘察设计"},{"id":"bridge","name":"桥梁","aliases":["桥涵"],"category":"design","category_name":"勘察设计"},{"id":"tunnel","name":"隧道","aliases":["暗挖","隧道工程"],"category":"design","category_name":"勘察设计"},{"id":"traffic","name":"交通工程","aliases":["交通","导改","仿真"],"category":"design","category_name":"勘察设计"},{"id":"design-coord","name":"设计统筹","aliases":["图纸会审","设计变更","提资"],"category":"design","category_name":"勘察设计"},{"id":"bim-coord","name":"模型协调","aliases":["碰撞","BIM协调"],"category":"bim","category_name":"BIM"},{"id":"bim-qto","name":"模型算量","aliases":["算量","QTO"],"category":"bim","category_name":"BIM"},{"id":"bim-deliver","name":"模型交付","aliases":["LOD","BIM交付"],"category":"bim","category_name":"BIM"},{"id":"plan-master","name":"总控计划","aliases":["总计划","网络图"],"category":"planning","category_name":"计划"},{"id":"plan-lookahead","name":"周月计划","aliases":["周计划","月计划"],"category":"planning","category_name":"计划"},{"id":"plan-resource","name":"资源负荷","aliases":["资源计划"],"category":"planning","category_name":"计划"},{"id":"construction","name":"施工方案","aliases":["施工","专项方案","方案"],"category":"construction","category_name":"施工生产"},{"id":"method-hazard","name":"危大识别","aliases":["危大","超危","论证"],"category":"construction","category_name":"施工生产"},{"id":"survey","name":"测量","aliases":["放样","复测","控制点"],"category":"construction","category_name":"施工生产"},{"id":"dispatch","name":"生产调度","aliases":["调度","生产调度"],"category":"construction","category_name":"施工生产"},{"id":"safety-brief","name":"安全交底","aliases":["交底","安全交底"],"category":"hse","category_name":"安质环"},{"id":"quality","name":"质量","aliases":["质检","质量员","隐蔽"],"category":"hse","category_name":"安质环"},{"id":"env","name":"环保文明","aliases":["环保","文明施工"],"category":"hse","category_name":"安质环"},{"id":"emergency","name":"应急","aliases":["应急预案","演练"],"category":"hse","category_name":"安质环"},{"id":"cost","name":"造价","aliases":["造价","组价","清单"],"category":"commercial","category_name":"商务造价"},{"id":"variation","name":"变更签证","aliases":["签证","设计变更"],"category":"commercial","category_name":"商务造价"},{"id":"claim","name":"索赔调概","aliases":["索赔","调概"],"category":"commercial","category_name":"商务造价"},{"id":"subcontract","name":"分包结算","aliases":["分包","劳务结算"],"category":"commercial","category_name":"商务造价"},{"id":"interim","name":"验工计价","aliases":["验工","计量"],"category":"commercial","category_name":"商务造价"},{"id":"proc-plan","name":"采购计划","aliases":["采购计划"],"category":"procurement","category_name":"采购"},{"id":"proc-compare","name":"比价询价","aliases":["询价","比价"],"category":"procurement","category_name":"采购"},{"id":"proc-vendor","name":"供应商","aliases":["供方","供应商"],"category":"procurement","category_name":"采购"},{"id":"equip","name":"设备管理","aliases":["机械","设备","特种设备"],"category":"plant","category_name":"物机"},{"id":"warehouse","name":"仓管","aliases":["仓库","领料"],"category":"plant","category_name":"物机"},{"id":"pack-ship","name":"装箱拼柜","aliases":["装箱","拼柜","packing-agent","集装箱"],"category":"plant","category_name":"物机"},{"id":"material-site","name":"现场材料","aliases":["材料员","料具"],"category":"plant","category_name":"物机"},{"id":"lab-mix","name":"配合比","aliases":["施工配合比","配比"],"category":"lab","category_name":"试验室"},{"id":"lab-sample","name":"见证取样","aliases":["取样","送检","见证"],"category":"lab","category_name":"试验室"},{"id":"lab-record","name":"试验台账","aliases":["试验资料"],"category":"lab","category_name":"试验室"},{"id":"finance-book","name":"核算","aliases":["会计","报销"],"category":"finance","category_name":"财务"},{"id":"finance-fund","name":"资金","aliases":["资金计划","现金流"],"category":"finance","category_name":"财务"},{"id":"finance-tax","name":"税务","aliases":["税务","发票"],"category":"finance","category_name":"财务"},{"id":"supervision","name":"资料监理","aliases":["资料","监理","验收"],"category":"docs","category_name":"资料监理"},{"id":"hr-recruit","name":"招聘","aliases":["招聘","面试"],"category":"hr","category_name":"人力"},{"id":"hr-labor","name":"劳动关系","aliases":["劳动合同","劳务"],"category":"hr","category_name":"人力"},{"id":"hr-train","name":"培训","aliases":["培训","三级教育"],"category":"hr","category_name":"人力"},{"id":"admin-doc","name":"公文印章","aliases":["公文","印章","用印"],"category":"admin","category_name":"行政"},{"id":"admin-office","name":"会务后勤","aliases":["行政","后勤","会议"],"category":"admin","category_name":"行政"},{"id":"it-ops","name":"运维权限","aliases":["运维","权限","账号"],"category":"it","category_name":"IT"},{"id":"it-data","name":"数据备份","aliases":["备份","数据安全"],"category":"it","category_name":"IT"},{"id":"it-app","name":"系统需求","aliases":["信息化","需求"],"category":"it","category_name":"IT"},{"id":"worker-brief","name":"工友白话","aliases":["工人","白话","班前"],"category":"people","category_name":"项目与工人"},{"id":"pm-daily","name":"项目日报","aliases":["日报","工程日志"],"category":"people","category_name":"项目与工人"}];
+/* === CB_POSTS END === */
     new Vue({
       el: '#app',
       data() {
         return {
           userInput: '',
+          /* ux(round2) 输入体验：@岗位补全浮层状态（数据源 /api/experts → 内嵌 CB_POSTS 兜底） */
+          cbPostsList: [],
+          atOpen: false,
+          atItems: [],
+          atIdx: 0,
+          atStart: -1,
+          atQueryText: '',
+          atDismissed: '',
+          atDismissedAt: -1,
           sessionId: 'web-' + Date.now(),
           containerType: '40HQ',
           loading: false,
@@ -3341,6 +3443,17 @@
         this.loadPendingCheckpoints();
         this.loadWhatIfScenarios();
         this.loadProfiles();
+        this.loadCbPosts();
+        // ux(round2)：输入体验初始化（autosize + IME 守卫）
+        this.$nextTick(() => {
+          if (this.$refs.userInput) {
+            this._cbGuard = cbComposeGuard(this.$refs.userInput);
+            cbAutosize(this.$refs.userInput);
+          }
+          if (this.$refs.nlBox) {
+            this._nlGuard = cbComposeGuard(this.$refs.nlBox);
+          }
+        });
         // ?session=xxx 自动加载磁盘/会话结果（演示用）
         try {
           const q = new URLSearchParams(window.location.search || '');
@@ -3950,6 +4063,87 @@
           });
         },
         /** 连点保护：loading 时再点只提示，避免“点了没反应” */
+        /* === ux(round2) 输入体验：@岗位补全 + Enter 语义（实现与 demo/static/app.js 同源镜像） === */
+        async loadCbPosts() {
+          try {
+            const res = await fetch('/api/experts');
+            const dat = await res.json();
+            this.cbPostsList = (dat.experts || []).map((e) => ({
+              id: e.id, name: e.name, aliases: e.aliases || [], category_name: e.category_name || '',
+            }));
+          } catch (e) { /* 离线兜底：使用内嵌 CB_POSTS */ }
+        },
+        cbComposerPosts() {
+          return (this.cbPostsList && this.cbPostsList.length) ? this.cbPostsList : (window.CB_POSTS || []);
+        },
+        imeBlock(guard, ev) {
+          return guard ? guard.block(ev) : (ev.isComposing || ev.keyCode === 229);
+        },
+        composerInput() {
+          cbAutosize(this.$refs.userInput);
+          this.composerAtUpdate();
+        },
+        composerKeydown(ev) {
+          if (this.atOpen) {
+            if (ev.key === 'ArrowDown') { ev.preventDefault(); this.atMove(1); return; }
+            if (ev.key === 'ArrowUp') { ev.preventDefault(); this.atMove(-1); return; }
+            if (ev.key === 'Enter' || ev.key === 'Tab') { ev.preventDefault(); this.atConfirmComposer(); return; }
+            if (ev.key === 'Escape') {
+              ev.preventDefault();
+              this.atDismissed = this.atQueryText;
+              this.atDismissedAt = this.atStart;
+              this.atClose();
+              return;
+            }
+          }
+          const send = ev.key === 'Enter' && !ev.shiftKey && !ev.ctrlKey && !ev.metaKey && !ev.altKey
+            && !this.imeBlock(this._cbGuard, ev);
+          if (send) {
+            ev.preventDefault();
+            if (!this.loading && this.userInput.trim()) this.runTeamA();
+          }
+        },
+        composerAtUpdate() {
+          const ta = this.$refs.userInput;
+          if (!ta) { this.atClose(); return; }
+          const tok = cbAtQuery(ta.value, ta.selectionStart);
+          if (!tok || (this.atDismissed === tok.query && this.atDismissedAt === tok.start)) { this.atClose(); return; }
+          const items = cbAtFilter(this.cbComposerPosts(), tok.query);
+          if (!items.length) { this.atClose(); return; }
+          this.atOpen = true;
+          this.atItems = items;
+          this.atIdx = 0;
+          this.atStart = tok.start;
+          this.atQueryText = tok.query;
+        },
+        atMove(d) {
+          if (!this.atItems.length) return;
+          this.atIdx = (this.atIdx + d + this.atItems.length) % this.atItems.length;
+        },
+        atConfirmComposer() {
+          const ta = this.$refs.userInput;
+          const post = this.atItems[this.atIdx];
+          this.atClose();
+          if (!ta || !post) return;
+          cbAtApply(ta, this.atStart, post);
+          cbAutosize(ta);
+        },
+        atClose() {
+          this.atOpen = false;
+          this.atItems = [];
+          this.atIdx = 0;
+        },
+        nlBoxInput(ev) {
+          cbAutosize(ev.target);
+        },
+        nlBoxKeydown(ev) {
+          const send = ev.key === 'Enter' && !ev.shiftKey && !ev.ctrlKey && !ev.metaKey && !ev.altKey
+            && !this.imeBlock(this._nlGuard, ev);
+          if (send) {
+            ev.preventDefault();
+            if (this.nlInstruction.trim()) this.reviseNl();
+          }
+        },
         beginWork(label) {
           if (this.loading) {
             const sec = this.loadingStartedAt
