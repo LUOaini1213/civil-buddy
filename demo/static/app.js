@@ -566,11 +566,14 @@ async function streamChat(message, bodyEl) {
       }
       if (eventName === "error") {
         if (tl) tl.error(data.text || "error");
+        cbAnnounce("本轮失败：请看纠偏卡的建议动作"); /* ux(round11)：屏读播报一行，不刷屏（附录 J） */
         throw new Error(data.text || "error");
       }
       if (eventName === "done") {
         if (tl) tl.finish(data);
         cbObStep(2); /* ux(round10)：时间线跑完（收口）→ 引导第 2 步打勾 */
+        /* ux(round11)：流式收口才播报一行（只抄事件字段，不刷屏，附录 J） */
+        cbAnnounce("回答完毕" + (Array.isArray(data.deliverables) && data.deliverables.length ? " · 文书 " + data.deliverables.length + " 份" : ""));
         acc = data.text || acc;
         bodyEl.textContent = acc;
         const whoEl = bodyEl.parentElement && bodyEl.parentElement.querySelector(".who");
@@ -1548,6 +1551,66 @@ function cbCmdConfirm() {
 
 boot();
 
+/* === ux(round11) 主题/大字开关接线 + 屏读播报（附录 J）===
+   切换按钮统一放顶栏；持久化 cb_theme_v1 / cb_large_v1；未设置时跟随 prefers-color-scheme。 */
+function cbAnnounce(text) {
+  const el = document.getElementById("cbLive");
+  if (!el) return;
+  el.textContent = "";
+  setTimeout(() => { el.textContent = String(text || ""); }, 30);
+}
+
+function cbThemeWire() {
+  const themeBtn = document.getElementById("cbThemeBtn");
+  const largeBtn = document.getElementById("cbLargeBtn");
+  const isDark = () =>
+    document.documentElement.getAttribute("data-theme") === "dark" ||
+    (!document.documentElement.hasAttribute("data-theme") &&
+      window.matchMedia && matchMedia("(prefers-color-scheme: dark)").matches);
+  const sync = () => {
+    const dark = isDark();
+    if (themeBtn) {
+      themeBtn.textContent = dark ? "暗" : "明"; /* 图标=文字：显示当前主题 */
+      themeBtn.setAttribute("aria-pressed", dark ? "true" : "false");
+      themeBtn.setAttribute("aria-label", dark ? "主题：当前深色，点击切换为浅色" : "主题：当前浅色，点击切换为深色");
+    }
+    if (largeBtn) {
+      const on = document.documentElement.classList.contains("cb-large");
+      largeBtn.setAttribute("aria-pressed", on ? "true" : "false");
+      largeBtn.setAttribute("aria-label", (on ? "关闭" : "开启") + "大字模式（全站字号放大）");
+    }
+  };
+  if (themeBtn) {
+    themeBtn.addEventListener("click", () => {
+      const next = isDark() ? "light" : "dark";
+      try { localStorage.setItem("cb_theme_v1", next); } catch (e) {}
+      if (window.cbApplyTheme) cbApplyTheme(next);
+      sync();
+    });
+  }
+  if (largeBtn) {
+    largeBtn.addEventListener("click", () => {
+      const on = document.documentElement.classList.toggle("cb-large");
+      try { localStorage.setItem("cb_large_v1", on ? "1" : "0"); } catch (e) {}
+      cbAnnounce(on ? "大字模式已开启" : "大字模式已关闭");
+      sync();
+    });
+  }
+  /* 系统明暗变化时：未显式选择主题则跟随（VS Code "system" 语义） */
+  if (window.matchMedia) {
+    const mq = matchMedia("(prefers-color-scheme: dark)");
+    const onSys = () => {
+      if (!window.cbThemeSaved || !cbThemeSaved()) {
+        if (window.cbApplyTheme) cbApplyTheme("");
+        sync();
+      }
+    };
+    mq.addEventListener ? mq.addEventListener("change", onSys) : mq.addListener && mq.addListener(onSys);
+  }
+  sync();
+}
+cbThemeWire();
+
 /* === ux(round10) 空态卡/引导初始化：示例卡点击预填、首访 checklist 渲染、? 重开、step1 钩子 === */
 document.querySelectorAll("[data-cb-sample]").forEach((btn) => {
   btn.addEventListener("click", () => cbEmptyPrefill(btn.dataset.cbSample));
@@ -1632,7 +1695,7 @@ function cbTlCreate(bodyEl, sourceMessage) {
     '<span class="cb-tl-badge tl-badge"></span>' +
     '<button type="button" class="cb-tl-fold" hidden>展开时间线</button></div>' +
     '<div class="cb-tl-summary tl-summary" hidden></div>' +
-    '<div class="cb-tl-track"></div>' +
+    '<div class="cb-tl-track" role="list" aria-label="流水线阶段"></div>' +
     '<div class="cb-tl-hitl tl-hitl" data-r5-approval-slot="true" hidden></div>' +
     '<div class="cb-tl-lines tl-lines"></div>' +
     '<div class="cb-tl-audit tl-audit" data-cb-audit="true" hidden></div>';
@@ -1656,6 +1719,7 @@ function cbTlCreate(bodyEl, sourceMessage) {
     const chip = document.createElement("span");
     chip.className = "cb-tl-stage idle";
     chip.setAttribute("data-cb-stage", key);
+    chip.setAttribute("role", "listitem"); /* ux(round11)：时间线节点=listitem（附录 J） */
     chip.innerHTML = '<span class="cb-tl-st">·</span>' + label;
     chip.title = label;
     trackEl.appendChild(chip);
@@ -1778,9 +1842,9 @@ function cbTlCreate(bodyEl, sourceMessage) {
       "</div>" +
       '<div class="cb-apr-block" data-cb-approval-blockers="true">高风险动作须人工确认后才会写盘/出稿；流程层已强制 confirm_ok 门禁（未确认不出施工草稿）。</div>' +
       '<div class="cb-apr-actions" data-cb-approval-actions="true">' +
-      '<button type="button" class="cb-apr-confirm">确认并重提</button>' +
-      '<button type="button" class="cb-apr-reject">驳回</button>' +
-      '<button type="button" class="cb-apr-later">稍后</button>' +
+      '<button type="button" class="cb-apr-confirm" aria-label="确认并重提（显式决策：勾选签认句并重新提交）">确认并重提</button>' +
+      '<button type="button" class="cb-apr-reject" aria-label="驳回（显式决策：不放行，可修改输入后重跑）">驳回</button>' +
+      '<button type="button" class="cb-apr-later" aria-label="稍后（折叠为等待条，不改变等待状态）">稍后</button>' +
       "</div>" +
       '<div class="cb-apr-foot">确认 = 勾选确认句「我明白，将由持证人员签认」并重新提交本条任务 · ' +
       "<b>Esc、关闭 = 驳回，永不放行</b> · 决策写入下方审计行</div>" +

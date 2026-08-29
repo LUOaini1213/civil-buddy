@@ -7,7 +7,26 @@
   <link rel="manifest" href="/static/manifest.webmanifest" />
   <link rel="icon" href="/static/icons/cb-icon.svg" type="image/svg+xml" />
   <title>Civil Buddy</title>
-  <link rel="stylesheet" href="/static/styles.css?v=ui10" />
+  <!-- ux(round11) 主题/大字早应用：持久化值先于首帧落地，防 FOUC（VS Code settings pattern，附录 J） -->
+  <script>
+  (function () {
+    var d = document.documentElement, KEY_T = "cb_theme_v1", KEY_L = "cb_large_v1";
+    function read(k) { try { return localStorage.getItem(k); } catch (e) { return null; } }
+    window.cbApplyTheme = function (t) {
+      if (t === "dark") d.setAttribute("data-theme", "dark");
+      else if (t === "light") d.setAttribute("data-theme", "light");
+      else d.removeAttribute("data-theme");
+      var m = document.querySelector('meta[name="theme-color"]');
+      var dark = t === "dark" || (!t && window.matchMedia && matchMedia("(prefers-color-scheme: dark)").matches);
+      if (m) m.setAttribute("content", dark ? "#0c121a" : "#2563eb");
+    };
+    window.cbThemeSaved = function () { return read(KEY_T) || ""; };
+    window.cbLargeSaved = function () { return read(KEY_L) === "1"; };
+    cbApplyTheme(read(KEY_T) || "");
+    if (read(KEY_L) === "1") d.classList.add("cb-large");
+  })();
+  </script>
+  <link rel="stylesheet" href="/static/styles.css?v=ui11" />
 </head>
 <body>
   <header class="top">
@@ -21,6 +40,9 @@
     <div class="top-meta">
       <!-- ux(round8) 汉堡键：≤768 显示，展开「会话/岗位」侧栏（.rail.mobile-open，附录 G） -->
       <button type="button" id="railToggle" class="top-btn" aria-label="展开或收起会话与岗位栏" aria-expanded="false">☰ 栏目</button>
+      <!-- ux(round11) 主题/大字开关：cb_theme_v1 / cb_large_v1 持久化；图标=文字（附录 J） -->
+      <button type="button" id="cbThemeBtn" class="top-btn" title="切换深色/浅色主题（默认跟随系统）">明</button>
+      <button type="button" id="cbLargeBtn" class="top-btn" title="大字模式：全站字号放大一档" aria-pressed="false">大</button>
       <span id="keyBadge" class="pill warn">检查 API Key…</span>
       <span class="pill quiet" id="modelBadge">模型未配置</span>
       <span class="pill quiet" id="harnessBadge">Harness steps</span>
@@ -31,6 +53,9 @@
       <button type="button" id="onboardHelp" class="top-btn" title="新手引导 · 三步上手" aria-label="重新打开三步新手引导">?</button>
     </div>
   </header>
+
+  <!-- ux(round11) 屏读播报区：aria-live=polite，页面加载即存在；流式输出只在收口/出错时播报一行（附录 J） -->
+  <div id="cbLive" class="cb-sr-only" aria-live="polite"></div>
 
   <main class="layout">
     <aside class="rail">
@@ -195,7 +220,7 @@
   <script src="/static/docpreview.js?v=r4"></script>
   <script src="/static/posts.js?v=ui4"></script>
   <script src="/static/tickets.js?v=ui9"></script>
-  <script src="/static/app.js?v=ui10"></script>
+  <script src="/static/app.js?v=ui11"></script>
   <script src="/static/studio.js?v=ui4"></script>
 </body>
 </html>

@@ -580,3 +580,70 @@ round8 新增规则一律 `@media screen and (max-width: …)`——**打印仍�
 | PostHog / Appcues 首访 checklist | 文档 pattern-only | 3 步 checklist：逐项打勾、全完成自动收起、✕ 可跳过、随时可重开；步骤=产品真实动作 |
 | openai/codex 首启欢迎（session header + 单 composer 聚焦） | Apache-2.0 | 欢迎区只占一屏不堆字；首条输入前不产生历史噪音；空态即第 0 号历史 cell |
 | NN/g Empty-State / Onboarding 指南 | 文档 pattern-only | 空态=教育时机：说清"为什么空"和"下一步做什么"，不放占位图表 |
+
+## 附录 J：明暗双主题与无障碍核对（ux round11 定稿）
+
+> R11 落地「主题」门面（§4 路线图 R11）：三端 `:root` 浅色为默认 + `:root[data-theme=dark]` 显式暗色 +
+> 未设置时跟随 `prefers-color-scheme`；顶栏统一「明/暗」文字开关 + 「大」大字开关，双 localStorage 持久化。
+> 暗色取值 = workbench 现行暗盘（零回归）；浅色 = round1 定稿色板。零 CDN、零外链。
+
+### J.1 主题机制（三端同构）
+
+| 机制 | 落法 |
+| --- | --- |
+| 变量组织 | water.css pattern：`--cb-*` 同名变量明暗两套；页面级旧变量（--bg/--panel/--ink/--accent…）全部改为 `var(--cb-*)` 别名，随主题自动翻转 |
+| 选择器 | `:root`（浅，默认）→ `:root[data-theme="dark"]`（显式暗）→ `@media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) }`（跟随系统）；暗块两处同构，改动须同步 |
+| 持久化 | `localStorage["cb_theme_v1"]` = `light/dark`（未设置=跟随系统，系统变化实时跟随，VS Code "system" 语义）；`cb_large_v1` = `0/1` |
+| 防闪烁 | `<head>` 内联脚本在首帧前应用持久化值（VS Code settings pattern）；`meta[name=theme-color]` 随主题切换 #2563eb/#0c121a |
+| 开关 | 三端顶栏统一位置：`明/暗` 文字按钮（显示当前主题，aria-pressed=深色激活）+ `大` 按钮（aria-pressed）；无图标库 |
+| 灰阶反转 | 暗色 `--cb-gray-50/100/200` ↔ 浅色 `--cb-gray-200/500/900` 对调（U-R1 交接：面板灰与文字灰互为反转） |
+| 彩色提亮 | 工程蓝 #2563eb→#5b8def、安全橙 #ea580c→#e6b84d、合规红 #dc2626→#f07178、通过绿 #059669→#3ecf8e（暗底各提亮一档保对比度） |
+| 彩底文字 | `--cb-on-accent`：浅色 #ffffff / **暗色 #0c121a**——亮化后的彩底用深字（白字在暗色彩底仅 1.9-3.2:1 不达 AA） |
+
+### J.2 主题变量映射与对比度核对表（WCAG 2.x，正文 ≥4.5:1 / 大字粗体 ≥3:1 / 非文本 ≥3:1）
+
+| token | 浅色 | 暗色 | 用途 | 浅色对比度（底 #fff/#f8fafc） | 暗色对比度（底 #141c28/#0c121a） |
+| --- | --- | --- | --- | --- | --- |
+| --cb-text | #0f172a | #f1f5fb | 正文 | 17.9 / 17.1 | 15.7 / 17.2 |
+| --cb-text-muted | #64748b | #a8b4c8 | 次要文字 | 4.76 / 4.55 | 8.2 / 9.0 |
+| --cb-text-faint | #94a3b8 | #7a8aa3 | 仅装饰弱文本 | 2.56（**AA 豁免**：非正文） | 4.9 |
+| --cb-blue | #2563eb | #5b8def | 主操作/链接/选中 | 5.17 | 5.3 / 5.8 |
+| --cb-blue-ink | #1d4ed8 | #8db4ff | 14px 蓝色正文 | 6.70 | 8.2 |
+| --cb-orange | #ea580c | #e6b84d | 警示徽/边/待补 | 3.56（≥18px 粗体才作文字） | 9.2 |
+| --cb-orange-ink | #c2410c | #f0d48a | 14px 橙色正文 | 5.18 | 11.8 |
+| --cb-red | #dc2626 | #f07178 | 阻断/废标/禁句 | 4.83 | 6.0 |
+| --cb-green | #059669 | #3ecf8e | PASS/已签认 | 3.77（≥18px 粗体才作文字） | 8.6 |
+| --cb-green-ink | #047857 | #7ee7b0 | 14px 绿色正文 | 5.48 | 11.4 |
+| --cb-on-accent | #ffffff | #0c121a | 彩色实底上文字 | 蓝 5.17 / 红 4.83 | 蓝 5.3 / 橙 9.2 / 红 6.0 / 绿 8.6 |
+| --cb-focus | #2563eb | #8db4ff | :focus-visible 焦点环 | 5.17（非文本 ≥3:1） | 8.2 |
+| --cb-bg / --cb-panel / --cb-panel-soft | #f8fafc / #ffffff / #f1f5f9 | #0c121a / #141c28 / #1a2433 | 页底/浮层/次级面 | — | — |
+| --cb-line / --cb-line-soft | #e2e8f0 / #f1f5f9 | #334155 / #253041 | 边框/分隔（非文本 ≥3:1 按需） | — | — |
+| --cb-gray-50…900 | 浅色板（§2） | 反转板（50=#0c121a … 900=#f1f5fb） | 渐变/骨架 | — | — |
+
+**已知残留（不阻断 R11 验收，R13 走查收口）**：
+- 白字在 #059669/#ea580c 彩底按钮 3.8/3.6:1（浅色端既有值，大字粗体达标线内沿用；后续可改 ink-on-soft）。
+- 装饰性彩边 8 位 alpha hex（#3ecf8e55 等 5 处）与 JS canvas 3D 渐变（#1c2a40 等）、TEAM_ROSTER 成员色、demo 暗色导轨（--rail）、投标页 hero 深色洗底、文书工具条 #1e293b —— 均为**双主题恒定 chrome**（固定深底白字或半透明彩边，两主题可读）。
+- index.html 徽章 #475569→--cb-gray-500（4.76:1）已达标；`--cb-faint` 仅用于装饰位。
+
+### J.3 无障碍核对表（本轮落地项）
+
+| 项 | 要求（来源） | :8000 workbench | :8765 demo | 宿主 index |
+| --- | --- | --- | --- | --- |
+| 流式播报 | aria-live=polite 容器页面加载即存在（MDN/TetraLogical：动态注入不播报）；**只在收口/出错播报一行**，不逐 token 刷屏 | ✅ `#cbLive`（done/error 各一行，数字只抄事件字段） | ✅ `#cbLive`（done/error 各一行） | 不适用（无流式输出） |
+| 审批卡按钮 | aria-label 说明显式决策语义（确认=决策写入审计；驳回=不放行；稍后=等待条） | ✅ 三按钮 | ✅ 三按钮（✕ 关闭已有） | 不适用 |
+| 时间线节点 | 容器 role=list + 节点 role=listitem | ✅（round3 已有） | ✅ 本轮补 | 不适用 |
+| 焦点可见 | `:focus-visible { outline: 2px solid var(--cb-focus) }` 全局 | ✅ | ✅ | ✅ |
+| 对比度 | 新 token 4.5:1 核对表 | ✅ 见 J.2 | ✅ 见 J.2 | ✅ 见 J.2 |
+| 大字模式 | html.cb-large 接 UI 开关 + cb_large_v1 持久化（附录 G 钩子启用） | ✅ 顶栏「大」 | ✅ 顶栏「大」 | ✅ 顶栏「大」（并补齐 index 缺失的 cb-large 字号块） |
+| 主题开关 | 明/暗文字按钮 + cb_theme_v1 + 跟随系统 + 防闪烁 | ✅ | ✅ | ✅ |
+
+### J.4 借鉴来源（pattern-only）
+
+| 来源 | 许可 | 借什么 |
+| --- | --- | --- |
+| watercss/water.css `out/water.css`（npm registry 同源取包核对） | MIT | 语义变量同名明暗两套 + `@media (prefers-color-scheme: dark)` 覆写 `:root`；`--focus` 语义 token；`color-scheme` 原生控件跟随 |
+| daisyUI 主题组织（daisyui.com） | MIT | `:root[data-theme=dark]` 属性选择器承载显式主题，未设置时回退系统偏好 |
+| VS Code / Electron nativeTheme（code.visualstudio.com） | 文档 pattern-only | 持久化 light/dark/system 三态、system 跟随 OS 实时变化、启动先于首帧应用防 FOUC |
+| MDN ARIA Live Regions + web.dev/learn/accessibility/javascript | 文档 pattern-only | polite 等空闲再播报；live 区必须页面加载即存在；流式输出聚合为一行再宣布 |
+| TetraLogical「Why are my live regions not working?」 | 文档 pattern-only | 动态注入的 live 区不播报 → 静态占位 + textContent 先清后写 |
+| WCAG 2.x SC 1.4.3 / 2.4.7 / 4.1.3（w3.org） | 标准 | 4.5:1 正文对比、焦点可见、状态消息播报 |
