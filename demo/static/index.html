@@ -2,7 +2,10 @@
 <html lang="zh-CN">
 <head>
   <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+  <meta name="theme-color" content="#2563eb" />
+  <link rel="manifest" href="/static/manifest.webmanifest" />
+  <link rel="icon" href="/static/icons/cb-icon.svg" type="image/svg+xml" />
   <title>Civil Buddy</title>
   <link rel="stylesheet" href="/static/styles.css?v=ui3" />
 </head>
@@ -16,6 +19,8 @@
       </div>
     </div>
     <div class="top-meta">
+      <!-- ux(round8) 汉堡键：≤768 显示，展开「会话/岗位」侧栏（.rail.mobile-open，附录 G） -->
+      <button type="button" id="railToggle" class="top-btn" aria-label="展开或收起会话与岗位栏" aria-expanded="false">☰ 栏目</button>
       <span id="keyBadge" class="pill warn">检查 API Key…</span>
       <span class="pill quiet" id="modelBadge">模型未配置</span>
       <span class="pill quiet" id="harnessBadge">Harness steps</span>

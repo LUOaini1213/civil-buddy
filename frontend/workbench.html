@@ -2,7 +2,10 @@
 <html lang="zh-CN">
 <head>
   <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+  <meta name="theme-color" content="#2563eb" />
+  <link rel="manifest" href="/static/manifest.webmanifest" />
+  <link rel="icon" href="/static/icons/cb-icon.svg" type="image/svg+xml" />
   <title>装箱拼柜 · Team Mode</title>
   <!-- ux(round4)：零 CDN——Vue/marked/文书预览组件全部同源 vendored（frontend/vendor/） -->
   <script src="/static/vendor/vue.min.js"></script>
@@ -60,6 +63,12 @@
       --cb-shadow-sm: 0 1px 2px rgba(15, 23, 42, 0.06);
       --cb-shadow-md: 0 4px 18px rgba(15, 23, 42, 0.10);
       --cb-shadow-lg: 0 10px 32px rgba(15, 23, 42, 0.16);
+      /* === ux(round8) 窄屏断点/触控 token · 见 docs/ux/ux-design-spec.md 附录 G ===
+         三档：≤--cb-bp-mobile 手机竖屏 / ≤--cb-bp-tablet 平板 / ≥--cb-bp-desktop 桌面。
+         媒体查询条件不支持 var()，规则内用字面量并注释 token 名。 */
+      --cb-bp-mobile: 430px; --cb-bp-tablet: 768px; --cb-bp-desktop: 769px;
+      --cb-touch-min: 44px; /* 可点目标最小高度（Primer AAA pattern） */
+      --cb-touch-lg: 48px;  /* 审批卡主决策按钮高度 */
     }
     * { box-sizing: border-box; }
     html, body { height: 100%; }
@@ -1709,6 +1718,64 @@
       background: transparent; border-radius: var(--cb-radius-sm); padding: 2px 10px; cursor: pointer; color: var(--text); text-decoration: none;
     }
     .cb-doc-row-btn:hover { border-color: var(--cb-blue); color: var(--cb-blue); }
+    /* ===== ux(round8) 窄屏/工地手机适配（docs/ux/ux-design-spec.md 附录 G）=====
+       断点三档（--cb-bp-*）：≤430 手机竖屏 / 431-768 平板 / ≥769 桌面不动。
+       借鉴 pattern-only：GitHub Primer（min 320px、触控目标 44px、内容定断点）、
+       antd mobile / TDesign Mobile（卡片纵排、主操作全宽）、PWA 最小件（manifest+theme-color）。
+       规则一律 @media screen：打印仍走下方 @media print 的 A4 版式，不受窄屏影响。 */
+
+    /* 大字模式钩子（R11 主题轮在此之上接明暗切换）：字号阶梯 +2 档 */
+    html.cb-large {
+      --cb-fs-xs: 14px; --cb-fs-sm: 16px; --cb-fs-md: 18px; --cb-fs-lg: 22px;
+      --cb-fs-xl: 28px; --cb-fs-2xl: 32px; --cb-fs-3xl: 36px;
+    }
+
+    /* 汉堡键：仅 ≤820（侧栏隐藏档）出现，复用既有 .sidebar.mobile-open 浮层 */
+    .cb-nav-toggle { display: none; }
+    @media screen and (max-width: 820px) {
+      .cb-nav-toggle { display: inline-flex; align-items: center; min-height: var(--cb-touch-min, 44px); }
+    }
+
+    /* 平板档（--cb-bp-tablet=768）：顶栏可折叠、页签横向滚动、正文 14px/1.6、触控 ≥44px */
+    @media screen and (max-width: 768px) { /* --cb-bp-tablet */
+      .topbar-row { flex-wrap: wrap; gap: 8px; padding: 8px 12px; }
+      .brand { min-width: 0; }
+      .top-actions { flex-wrap: wrap; }
+      .top-actions button, .composer-row button { min-height: var(--cb-touch-min, 44px); }
+      .tabs { flex-wrap: nowrap; overflow-x: auto; -webkit-overflow-scrolling: touch; }
+      .tab { flex: none; min-height: var(--cb-touch-min, 44px); }
+      .md, .verdict-banner { font-size: 14px; line-height: 1.6; }
+      .cb-tl-fold { min-height: var(--cb-touch-min, 44px); padding: 0 10px; font-size: 12px; }
+      .cb-apr-x { min-width: var(--cb-touch-min, 44px); min-height: var(--cb-touch-min, 44px); }
+      /* 审批卡：决策区纵排全宽、主决策 48px（附录 D.2 打底补齐） */
+      .cb-apr-actions { flex-direction: column; }
+      .cb-apr-actions button { width: 100%; min-height: var(--cb-touch-lg, 48px); font-size: var(--cb-fs-md, 14px); }
+      .cb-audit-actions button { min-height: var(--cb-touch-min, 44px); }
+      /* 文书预览：A4 版心退化为流式宽、内边距收窄；表格横向滚动 + 粘性首列 */
+      .cb-doc-modal { width: 100vw; max-height: 100dvh; border-radius: 0; }
+      .cb-doc-scroll { padding: 8px; }
+      .cb-doc-page { width: 100%; padding: 24px 16px 40px; }
+      .cb-doc-btn, .cb-doc-row-btn { min-height: var(--cb-touch-min, 44px); }
+      .cb-doc-md table { display: block; overflow-x: auto; -webkit-overflow-scrolling: touch; }
+      .cb-doc-md th:first-child, .cb-doc-md td:first-child { position: sticky; left: 0; background: #fff; }
+      /* 材料表格：块级横向滚动，首列粘住 */
+      table.data { display: block; overflow-x: auto; -webkit-overflow-scrolling: touch; }
+      table.data th:first-child, table.data td:first-child { position: sticky; left: 0; background: var(--bg-soft, #121a26); }
+    }
+
+    /* 手机竖屏档（--cb-bp-mobile=430）：时间线缩轨、审计节点单列、JSON 全宽 */
+    @media screen and (max-width: 430px) { /* --cb-bp-mobile */
+      .topbar-row.secondary { padding: 0 10px 8px; }
+      .composer-row { flex-wrap: wrap; }
+      .composer-row button { flex: 1 1 100%; }
+      .cb-tl-lines { margin-left: 2px; }
+      .cb-tl-line { margin-left: 4px; }
+      .cb-audit-run { padding-left: 10px; }
+      .cb-audit-node { flex-wrap: wrap; row-gap: 2px; }
+      .cb-audit-t { min-width: 0; flex-basis: 100%; order: 3; }
+      .cb-audit-raw { flex-basis: 100%; max-height: 180px; }
+    }
+
     /* 打印：只留文书本体，隐藏工作台 chrome；@page A4 + 页眉页脚由文书自绘 */
     @media print {
       body > :not(.cb-doc-overlay) { display: none !important; }
@@ -1791,6 +1858,10 @@
           </div>
         </div>
         <div class="top-actions">
+          <!-- ux(round8) 汉堡键：≤820 显示，展开左侧团队/岗位栏（.sidebar.mobile-open，附录 G） -->
+          <button type="button" class="soft cb-nav-toggle" aria-label="展开或收起侧栏"
+                  aria-expanded="false"
+                  onclick="var sb=document.querySelector('.sidebar');if(sb){var o=sb.classList.toggle('mobile-open');this.setAttribute('aria-expanded',o?'true':'false')}">☰ 菜单</button>
           <a href="/" class="soft" style="text-decoration:none;display:inline-flex;align-items:center">投标应答</a>
           <span class="pill" v-if="loading || (streamProgress.done > 0 && streamProgress.total)">
             {{ streamProgress.done }}/{{ streamProgress.total || '—' }}

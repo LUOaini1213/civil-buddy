@@ -2,9 +2,13 @@
 <html lang="zh-CN">
 <head>
   <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+  <meta name="theme-color" content="#2563eb" />
+  <link rel="manifest" href="/static/manifest.webmanifest" />
+  <link rel="icon" href="/static/icons/cb-icon.svg" type="image/svg+xml" />
   <title>Civil Buddy · 投标应答 / 装箱</title>
-  <script src="https://cdn.jsdelivr.net/npm/vue@2.7.16/dist/vue.min.js"></script>
+  <!-- ux(round8) 顺手修红线遗留：jsdelivr CDN → 同源 vendored 副本（frontend/vendor/，附录 C.3） -->
+  <script src="/static/vendor/vue.min.js"></script>
   <style>
     :root {
       --bg: #f4f6f9;

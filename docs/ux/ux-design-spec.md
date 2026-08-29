@@ -404,3 +404,61 @@ DOM 结构（追加到 `document.body`，打印时独占文档流）：
 | GitHub Primer 禁 toast 共识 / toasts-are-bad-UX 辩论 | 文档 pattern-only | 错误与需行动的决策不用自动消失的 toast，用常驻卡 |
 | Linear 乐观更新+持久重试入口 | 文档 pattern-only | 失败可回滚重试：卡上直接给「重试」，重放同 payload |
 | openai/codex `exec_cell`/`history_cell` | Apache-2.0 | 错误=不可变历史 cell 的一部分，重试不改写历史只追加（承 R3 追加式会话流） |
+
+## 附录 G：窄屏 / 工地手机适配（ux round8 定稿）
+
+> R8 落地验收（§4 路线图）：768/375 宽度下输入、流水线、审批卡全部可用。
+> 真实场景：项目主任/工友在工地用手机**看进度、批 HITL、看交底**——落地可行性的直观证据。
+> 借鉴 pattern-only：GitHub Primer（min viewport 320px、移动触控目标 44px 到 AAA、
+> 内容定断点、constrained fluid layout）、antd mobile / TDesign Mobile（列表式/卡片式布局、
+> 卡片纵排、主操作全宽按钮）、PWA 最小件（manifest + theme-color；SW 离线缓存留给 R12）。
+
+### G.1 断点 token（两端 `:root` 已落）
+
+| token | 值 | 档位 | 说明 |
+| --- | --- | --- | --- |
+| `--cb-bp-mobile` | 430px | ≤430 手机竖屏 | 375/414 落此档；时间线缩轨、审计节点单列 |
+| `--cb-bp-tablet` | 768px | 431-768 平板 | 三栏折叠、触控 44px、正文 14px/1.6 |
+| `--cb-bp-desktop` | 769px | ≥769 桌面 | 不收紧（桌面布局原样） |
+
+媒体查询条件不支持 `var()`：规则内使用字面量并注释 token 名。附录 A 基线里散落的旧断点
+（workbench 720/640/1100/820/768、demo 1100/720/768）语义归并入三档，旧规则保留不动；
+round8 新增规则一律 `@media screen and (max-width: …)`——**打印仍走 `@media print` 的 A4 版式**。
+
+### G.2 关键动线窄屏规则（优先级从高到低）
+
+| 动线 | ≤430（手机竖屏） | 431-768（平板） | 桌面不变 |
+| --- | --- | --- | --- |
+| 聊天+时间线+审批卡 | 时间线左轨道缩窄（子行 margin 10→4px）；composer 按钮整行 | 审批卡决策区纵排全宽、主决策 48px（附录 D.2 打底补齐）；正文 14px/1.6 | 原样 |
+| 文书预览 | A4 版心退化为流式宽（794→100%）、页边距 56/60→16/24 | 同左；`.cb-doc-md table` 块级横向滚动 + 粘性首列 | A4 版心 |
+| 审计面板 | 节点 flex-wrap 单列（徽标/摘要/时间竖排）、JSON 展开全宽 | 触控 ≥44px | 原样 |
+| 顶部导航 | 汉堡键 | workbench ≤820 汉堡键开 `.sidebar.mobile-open`（复用既有 CSS，`☰ 菜单`）；页签横向滚动；demo ≤768 汉堡键开 `.rail.mobile-open`（`☰ 栏目`）；顶栏换行 | 原样 |
+| 表格（材料表） | 横向滚动 | `table.data` 块级横向滚动 + 粘性首列 | 原样 |
+
+### G.3 触控与可读性
+
+- 可点目标 `min-height: var(--cb-touch-min)` = 44px（Primer：视觉 32px 按钮在移动端须垫高到 44 才达 AAA）；
+  审批卡主决策 `var(--cb-touch-lg)` = 48px（拇指优先）。
+- 正文 ≥14px、行高 1.6（≤768 生效：聊天正文/交底/纠偏卡话术）；徽标、时间戳等辅助信息可 10-12px。
+- **大字模式钩子**：`html.cb-large` 把 `--cb-fs-*` 字号阶梯整体 +2 档
+  （xs 12→14、sm 13→16、md 14→18、lg 16→22、xl 18→28、2xl 22→32、3xl 28→36），
+  两端 CSS 已落，R11 主题轮在此之上接明暗切换即可。
+
+### G.4 PWA 最小件（不做 Service Worker，离线缓存留 R12）
+
+- `manifest.webmanifest` 两端同构（`frontend/` 与 `demo/static/` 各一份，改动须同步）：
+  `name=土木伙伴 Civil Buddy`（中文）、`display=standalone`、`theme_color=#2563eb`、
+  `background_color=#f8fafc`、`start_url=/`、icons（SVG any + PNG 192/512 maskable）。
+- 图标：`icons/cb-icon.svg` + `icons/cb-icon-{192,512}.png`（`scripts/gen_pwa_icons.py` 纯标准库生成，零第三方）。
+- head 三件：`<meta name="viewport" … viewport-fit=cover>`（刘海屏安全区）+ `<meta name="theme-color" content="#2563eb">` + `<link rel="manifest">`。
+- 服务：:8000 由 gateway `app.mount("/static", frontend/)` 提供清单；:8765 由 `ServeDir(demo/static)` 同理——零新端点、零 CDN。
+- 本轮顺手修红线遗留：`frontend/index.html` 的 jsdelivr CDN `<script>` 换成同源 vendored 副本（承附录 C.3）。
+
+### G.5 借鉴来源（pattern-only）
+
+| 来源 | 许可 | 借什么 |
+| --- | --- | --- |
+| GitHub Primer Responsive/Layout foundations（primer.style） | 文档 pattern-only | min viewport 320px 起步；移动触控目标垫到 44px（AAA）；内容定断点、constrained fluid、按可用性收拢布局 |
+| antd mobile（mobile.ant.design）+ 设计稿 750=2×375 惯例 | MIT | 卡片式/列表式布局；移动端主操作全宽按钮；整卡纵排 |
+| Tencent TDesign Mobile（tdesign.tencent.com） | 文档 pattern-only | 样式属性全部收敛进主题 token（对齐 --cb-* 命名空间做法） |
+| web.dev / MDN Web App Manifest | 文档 pattern-only | manifest 最小字段：name/short_name + start_url + display + theme_color + icons |

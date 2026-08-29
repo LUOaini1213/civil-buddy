@@ -20,6 +20,12 @@
   --cb-shadow-sm: 0 1px 2px rgba(15, 23, 42, 0.06);
   --cb-shadow-md: 0 4px 18px rgba(15, 23, 42, 0.10);
   --cb-shadow-lg: 0 10px 32px rgba(15, 23, 42, 0.16);
+  /* === ux(round8) 窄屏断点/触控 token · 见 docs/ux/ux-design-spec.md 附录 G ===
+     三档：≤--cb-bp-mobile 手机竖屏 / ≤--cb-bp-tablet 平板 / ≥--cb-bp-desktop 桌面。
+     媒体查询条件不支持 var()，规则内用字面量并注释 token 名。 */
+  --cb-bp-mobile: 430px; --cb-bp-tablet: 768px; --cb-bp-desktop: 769px;
+  --cb-touch-min: 44px; /* 可点目标最小高度（Primer AAA pattern） */
+  --cb-touch-lg: 48px;  /* 审批卡主决策按钮高度 */
 }
 :root {
   --ink: #171717;
@@ -604,4 +610,63 @@ body.cb-doc-open { overflow: hidden; }
   font-family: var(--cb-mono); font-size: 10px; color: var(--cb-text-muted);
   background: var(--cb-gray-50); border: 1px solid var(--cb-line);
   border-radius: var(--cb-radius-sm); white-space: pre-wrap; overflow-wrap: anywhere;
+}
+
+/* ===== ux(round8) 窄屏/工地手机适配（docs/ux/ux-design-spec.md 附录 G）=====
+   断点三档（--cb-bp-*）：≤430 手机竖屏 / 431-768 平板 / ≥769 桌面不动。
+   借鉴 pattern-only：GitHub Primer（min 320px、触控目标 44px、内容定断点）、
+   antd mobile / TDesign Mobile（卡片纵排、主操作全宽）、PWA 最小件（manifest+theme-color）。
+   规则一律 @media screen：打印仍走 @media print 的 A4 版式，不受窄屏影响。 */
+
+/* 大字模式钩子（R11 主题轮在此之上接明暗切换）：字号阶梯 +2 档 */
+html.cb-large {
+  --cb-fs-xs: 14px; --cb-fs-sm: 16px; --cb-fs-md: 18px; --cb-fs-lg: 22px;
+  --cb-fs-xl: 28px; --cb-fs-2xl: 32px; --cb-fs-3xl: 36px;
+}
+
+/* 汉堡键：仅 ≤768（.rail 隐藏档）出现，展开「会话/岗位」侧栏 */
+#railToggle { display: none; }
+.rail.mobile-open {
+  display: flex; flex-direction: column;
+  position: fixed; top: 53px; left: 0; bottom: 0; z-index: 35;
+  width: min(100%, 320px); box-shadow: var(--cb-shadow-lg);
+}
+
+/* 平板档（--cb-bp-tablet=768）：顶栏可折叠、聊天正文 14px/1.6、触控 ≥44px */
+@media screen and (max-width: 768px) { /* --cb-bp-tablet */
+  #railToggle { display: inline-block; min-height: var(--cb-touch-min, 44px); }
+  .top { flex-wrap: wrap; gap: 6px; padding: 8px 12px; }
+  .top-meta { flex-wrap: wrap; }
+  .log { padding: 12px 14px 8px; }
+  .msg, .welcome { font-size: 14px; line-height: 1.6; }
+  .welcome { margin-top: 8vh; }
+  #send, .top-btn, .hints button, .local-row button { min-height: var(--cb-touch-min, 44px); }
+  .ghost.tiny { min-height: var(--cb-touch-min, 44px); }
+  .thread-row { display: flex; align-items: center; min-height: var(--cb-touch-min, 44px); }
+  .confirm, .composer-note { font-size: 13px; line-height: 1.6; }
+  .cb-tl-fold { min-height: var(--cb-touch-min, 44px); padding: 0 10px; font-size: 12px; }
+  .cb-apr-x { min-width: var(--cb-touch-min, 44px); min-height: var(--cb-touch-min, 44px); }
+  /* 审批卡：决策区纵排全宽、主决策 48px（附录 D.2 打底补齐） */
+  .cb-apr-actions { flex-direction: column; }
+  .cb-apr-actions button { width: 100%; min-height: var(--cb-touch-lg, 48px); font-size: var(--cb-fs-md, 14px); }
+  .cb-fix-btn { min-height: var(--cb-touch-min, 44px); }
+  .cb-audit-actions button { min-height: var(--cb-touch-min, 44px); }
+  /* 文书预览：A4 版心退化为流式宽、内边距收窄；表格横向滚动 + 粘性首列 */
+  .cb-doc-modal { width: 100vw; max-height: 100dvh; border-radius: 0; }
+  .cb-doc-scroll { padding: 8px; }
+  .cb-doc-page { width: 100%; padding: 24px 16px 40px; }
+  .cb-doc-btn, .cb-doc-row-btn { min-height: var(--cb-touch-min, 44px); }
+  .cb-doc-md table { display: block; overflow-x: auto; -webkit-overflow-scrolling: touch; }
+  .cb-doc-md th:first-child, .cb-doc-md td:first-child { position: sticky; left: 0; background: #fff; }
+}
+
+/* 手机竖屏档（--cb-bp-mobile=430）：时间线缩轨、审计节点单列、JSON 全宽 */
+@media screen and (max-width: 430px) { /* --cb-bp-mobile */
+  .cb-tl-line { margin-left: 4px; }
+  .cb-audit-node { flex-wrap: wrap; row-gap: 2px; }
+  .cb-audit-t { min-width: 0; flex-basis: 100%; order: 3; }
+  .cb-audit-raw { flex-basis: 100%; max-height: 180px; }
+  .local-row { flex-wrap: wrap; }
+  .local-row input, .local-row button { flex: 1 1 auto; }
+  .hints { gap: 8px; }
 }

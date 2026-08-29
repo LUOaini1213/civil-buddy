@@ -1546,3 +1546,13 @@ if ($("auditDownload")) {
     addStatus("审计 JSON 已下载：" + fname);
   });
 }
+
+/* === ux(round8) 窄屏适配：汉堡键展开「会话/岗位」侧栏（docs/ux/ux-design-spec.md 附录 G） === */
+if ($("railToggle")) {
+  $("railToggle").addEventListener("click", () => {
+    const rail = document.querySelector(".rail");
+    if (!rail) return;
+    const open = rail.classList.toggle("mobile-open");
+    $("railToggle").setAttribute("aria-expanded", open ? "true" : "false");
+  });
+}
