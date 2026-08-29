@@ -39,6 +39,9 @@ def main() -> int:
     args = ap.parse_args()
 
     codes = []
+    # UX R12 门禁：零外链红线（内网断网可用）+ JS/CSS 语法体检（无 node 时 JS 段 SKIP，CI 必跑）
+    codes.append(run("scripts/test_no_external_urls.py", 60))
+    codes.append(run("scripts/test_js_syntax.py", 120))
     codes.append(run("scripts/test_booking_regression.py", 180))
     codes.append(run("scripts/test_p2_volume_gates.py", 180))
     codes.append(run("scripts/test_stack_parity.py", 120))

@@ -11,6 +11,9 @@ const py = process.env.PYTHON || process.env.PY || "python";
 
 const steps = [
   [py, "scripts/scan_tracked_secrets.py"],
+  // UX R12：零外链红线 + JS/CSS 语法门禁（npm 环境必有 node，node --check 必跑）
+  [py, "scripts/test_no_external_urls.py"],
+  [py, "scripts/test_js_syntax.py"],
   [py, "scripts/test_stack_parity.py"],
   [py, "scripts/test_agent_middleware.py"],
   [py, "scripts/test_sandbox.py"],

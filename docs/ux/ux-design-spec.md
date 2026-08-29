@@ -2,7 +2,7 @@
 
 > 本轮（ux round1）为后续 12 轮 UX 迭代立规矩：定公理、定 token、定语言、定路线。
 > 本轮只加文档与 `:root{}` 变量块，**不改任何布局与现有样式**。
-> 红线：中建内网运行 → **任何界面零 CDN、零外链资源**（已全量盘点通过，见附录 A）。
+> 红线：中建内网运行 → **任何界面零 CDN、零外链资源**（已全量盘点通过，见附录 A；R12 升级为 CI 门禁与断网专项，见附录 K）。
 
 ## 1. 设计公理
 
@@ -99,7 +99,7 @@
 | R9 | 指令面板：`/` 命令 + 66 岗检索面板（ux round9 落地，见附录 H） | 66 岗可检索可点名；面板零 CDN、键盘可达 |
 | R10 | 引导：空态三步剧本强化（装柜 demo 路径，ux round10 落地，见附录 I） | 新用户 3 分钟内完成首跑（demo_one_shot 同路径） |
 | R11 | 主题：--cb-* token 全量接管 + 明暗双套（prefers-color-scheme） | 三端零硬编码色值引用旧变量；明暗切换无对比度回归 |
-| R12 | 离线：内网离线资源自检（零外链断言入 CI） | 断网全功能；CI 增加"零 CDN/外链"静态断言 |
+| R12 | 离线：内网离线资源自检（零外链断言入 CI，落地见附录 K） | 断网全功能；CI 增加"零 CDN/外链"静态断言 |
 | R13 | 终评：scorecard + 禁句自查 + 可用性走查收官 | eval_competition_scorecard 分数不降；禁句全文检索为零 |
 
 ## 5. 借鉴来源清单
@@ -109,6 +109,8 @@
 | openai/codex `codex-rs/tui/src/bottom_pane/approval_overlay.rs` · `chat_composer.rs` · `history_cell/`（github.com/openai/codex） | Apache-2.0 | 三态交互模式：审批=动作特定选项+显式决策事件+Esc≠继续；单输入框承载所有输入；输出=追加式历史 cell。**pattern-only**（Rust TUI→Web 场景，不抄代码） |
 | picocss/pico `css/pico.min.css`（picocss.com） | MIT | token 思路：单一 `--spacing`/`--border-radius` 变量派生全局、语义化变量命名、系统字体栈。可抄变量取值思路（本轮仅借模式） |
 | watercss/water.css `out/water.css`（watercss.kkga.de） | MIT | token 思路：语义色命名（text-main/text-muted/focus/border）+ `prefers-color-scheme` 明暗双套同名词。R11 主题轮按此扩展 |
+| web.dev 离线清单（web.dev/learn/pwa，App Shell / offline fallback） | 文档 pattern-only | App Shell=静态壳同源自足、数据走 /api；资源一律 cache 可得。R12 借其"壳不依赖网络"的自检口径（本项目壳在本机，天然成立，故只收口不自建缓存） |
+| Workbox precaching（developer.chrome.com/docs/workbox） | 文档 pattern-only | revision 清单 + install 预缓存 + cache-first 的失效思想。R12 借思想不引库；SW 本体经 K.5 评估为不做 |
 
 ## 附录 A：UX 基线体检（ux round1 只读盘点）
 
@@ -411,7 +413,7 @@ DOM 结构（追加到 `document.body`，打印时独占文档流）：
 > 真实场景：项目主任/工友在工地用手机**看进度、批 HITL、看交底**——落地可行性的直观证据。
 > 借鉴 pattern-only：GitHub Primer（min viewport 320px、移动触控目标 44px 到 AAA、
 > 内容定断点、constrained fluid layout）、antd mobile / TDesign Mobile（列表式/卡片式布局、
-> 卡片纵排、主操作全宽按钮）、PWA 最小件（manifest + theme-color；SW 离线缓存留给 R12）。
+> 卡片纵排、主操作全宽按钮）、PWA 最小件（manifest + theme-color；SW 离线缓存评估结论=不做，见附录 K.5）。
 
 ### G.1 断点 token（两端 `:root` 已落）
 
@@ -647,3 +649,81 @@ round8 新增规则一律 `@media screen and (max-width: …)`——**打印仍�
 | MDN ARIA Live Regions + web.dev/learn/accessibility/javascript | 文档 pattern-only | polite 等空闲再播报；live 区必须页面加载即存在；流式输出聚合为一行再宣布 |
 | TetraLogical「Why are my live regions not working?」 | 文档 pattern-only | 动态注入的 live 区不播报 → 静态占位 + textContent 先清后写 |
 | WCAG 2.x SC 1.4.3 / 2.4.7 / 4.1.3（w3.org） | 标准 | 4.5:1 正文对比、焦点可见、状态消息播报 |
+
+## 附录 K：断网可用性收口（ux round12 定稿）
+
+> R12 落地验收（§4 路线图 R12）：断网全功能；CI 增加"零 CDN/外链"静态断言。
+> 中建现场多为内网/弱网：页面引用任何外域资源（CDN 脚本/字体/图片/统计）都会白屏或卡死。
+> 本轮把"零外链"从附录 A 的人工盘点升级为**机器门禁**（进 CI/precommit/npm check）+
+> **浏览器级断网专项**（playwright 拦截全部外域请求跑核心动线）。
+
+### K.1 零外链断言（scripts/test_no_external_urls.py，三处登记）
+
+- **扫描范围**：`frontend/`、`demo/static/`、`workbench/src/` 下 `*.html *.css *.js *.webmanifest *.svg`
+  （本轮实测 19 个文件）。`workbench/src` 目前无前端资产（`include_str!` 只内联 contract/seed/yibiao-map
+  三份 JSON），纳入是为防将来在 rs 旁落 UI 文件漏网；`.rs` 不扫——Rust 侧的 https://（LLM 端点、
+  websearch 检索、法规原文引用）都是服务器行为，浏览器从不加载。
+- **判定**：先做注释遮蔽（HTML `<!-- -->`、CSS `/* */`、JS `/* */` 与 `//`，带字符串感知的
+  状态机；HTML 内联 `<script>/<style>` 分别按 JS/CSS 处理），再在遮蔽后文本中找
+  `http(s)://` 与协议相对引用（`src="//"`、`css url(//)`——跟随页面协议照样出外网）。
+- **白名单（三类，其余 host 一律违规）**：W1 回环 `127.0.0.1`/`localhost`（同机 API 端点与
+  兜底卡里给用户复制的启动命令）；W2 `www.w3.org`（SVG/XML 命名空间标识符，按规范不发起请求）；
+  W3 仅出现在注释里的文档/仓库 URL（第 1 步已遮蔽，vue/marked 的 LICENSE 头即此类）。
+  另有显式豁免清单 2 条：`marked.min.js` 的运行时错误提示字符串
+  `"Please report this to https://github.com/markedjs/marked."`（异常文案，非资源加载）。
+- **登记**：`run_precommit_tests.py`、`npm-check.cjs`、`.github/workflows/ci.yml` frontend 步骤。
+- **自检**：注入 `https://cdn.example.com/probe.js` → 测试精确报出 `file:line` → 移除复绿（R12 已验）。
+- **已知局限**：JS 正则字面量内的 `//` 可能被当行注释遮蔽（只漏报不误报）；漏网风险由 K.4 兜底。
+
+### K.2 资源与运行时路径清单（全部同源相对）
+
+| 资产 | 路径 | 断网表现 |
+| --- | --- | --- |
+| JS 依赖 | `/static/vendor/vue.min.js`、`marked.min.js`、`cb-fix.js`、`cb-doc.js`（R2-R4 vendored，附 LICENSE） | 本机文件，随服务起 |
+| 字体 | 系统栈（Segoe UI/PingFang SC/Microsoft YaHei + Consolas），零 webfont | 终端自带，零下载 |
+| 图标/manifest | `/static/icons/cb-icon*.png|svg`、`/static/manifest.webmanifest`（start_url/scope=`/`、icons 相对路径，脚本附加断言） | 同源相对 |
+| 数据 | 浏览器 `fetch` 仅同源 `/api/*`；无任何第三方统计/字体/图片 | 服务在本机 |
+
+外联检索（`workbench/src/websearch.rs` → duckduckgo）是 **Rust 服务器侧可选功能**：断网时该功能
+降级/报缺，浏览器界面不依赖它（页面照常出文书，引用条目标 UNSPECIFIED/不编造，承 R10 诚实规则）。
+
+### K.3 JS/CSS 语法门禁（scripts/test_js_syntax.py）
+
+U-R10 用 esprima 才发现的致命 bug（块注释内 `runs/*/trace.json` 的 `*/` 提前终止注释，
+:8765 app.js 整体失效）固化为门禁：11 个独立 js + 5 段 HTML 内联 `<script>` 逐段
+`node --check`（parse-only，不执行）；本机无 node → SKIP（exit 0 + 说明），CI ubuntu
+runner 自带 node 必跑，并另加 `find … -print0 | node --check` bash 循环双保险；附带 CSS
+花括号配平体检（纯 python，本地也必跑，防 R11 量级的大段 `<style>` 改动被截断）。
+登记同 K.1 三处。
+
+### K.4 断网专项（scripts/test_offline_ui.py，playwright route abort）
+
+- **方法**：playwright `context.route("**/*")` 把**所有非 localhost 请求 abort**（模拟外网彻底不通），
+  两条硬断言：被 abort 的外域请求 == 0（连"试图出网"都不许）+ 全程无未捕获 JS 异常（pageerror==0）。
+- **本轮实测动线（全绿）**：
+  - :8765 Rust 工作台：示例卡预填 → 发送 → 阶段时间线 → 交付物「文书预览」打开 → 审计面板加载 + 导出按钮；
+  - :8000 宿主页：填入样例 → 先理解再处理 → 「本轮意图」回显；
+  - :8000 /workbench（三步演示）：满载演示 → HITL 确认闸（`.hitl-bar`）→ 非标预检「演示一键勾选」
+    → 确认并拼柜 · resume → 拼柜完成出裁决（can_fit/ship_ok/mid50）。
+- **局限**：本机无法做防火墙/hosts 级断网模拟；此法覆盖红线真正防的事故——"页面因外链资源
+  卡死/白屏/JS 挂掉"。loopback 服务可达是前提，属部署侧事项（两端都在本机起）。
+
+### K.5 Service Worker 结论：**不做**
+
+| 维度 | 评估 |
+| --- | --- |
+| 收益 | 断网场景下两端都由本机服务 serve，静态资产同源秒回；SW 只能拦截已注册 origin 的请求，**帮不了"服务没起/首次打开"**。web.dev App Shell 针对公网站点离线可开——本项目壳就在本机，App Shell 天然成立，缓存无增益 |
+| 风险 | cache-first 旧壳会**掩盖每轮 UI 更新**（R2-R11 每轮都改 UI/JS），"修了没生效"类问题成倍难查；网关已显式对 index 发 `no-store` 防缓存旧 UI，SW 与之直接冲突 |
+| 成本 | Workbox 式 revision 失效需要构建链与 SW 更新协议，违背零依赖 vendored 现状 |
+| 备忘 | 若未来要"现场笔记本拔网线演示"：再做不迟——仅缓存静态资产、`SW_VERSION` 常量 + 更新即 `skipWaiting+clients.claim` 并提示刷新（借 Workbox precache 思想，不引库）；API 一律 network-only |
+
+### K.6 断网核对表（发版前过一遍）
+
+| 项 | 门槛 | 工具/入口 |
+| --- | --- | --- |
+| 零外链静态断言 | PASS（19 文件，白名单外 0 命中） | `python scripts/test_no_external_urls.py`（CI/precommit/npm check 必跑） |
+| JS 语法 | node --check 全绿（或本地 SKIP + CI 绿） | `python scripts/test_js_syntax.py` |
+| CSS 体检 | `<style>`/`.css` 花括号配平 | 同上（无 node 也跑） |
+| 断网动线 | 两端核心动线全绿、外域请求 0 次、pageerror 0 | `python scripts/test_offline_ui.py`（需 playwright） |
+| manifest | start_url/scope/icons 全相对路径 | K.1 脚本附加断言 |
+| SW | 未注册（K.5 结论） | grep `serviceWorker` 应为 0 命中 |
