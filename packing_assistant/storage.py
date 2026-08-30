@@ -7,10 +7,11 @@
   - 迁移导入器 import_json（幂等：按 run_id/session_id UPSERT）
   - 维护：backup(VACUUM INTO) / prune(软删除 archived)
 
-回滚开关（环境变量 CB_STORAGE=json|dual|sqlite，默认 dual）：
+回滚开关（环境变量 CB_STORAGE=json|dual|sqlite，默认 sqlite）：
   json   = 纯旧 JSON 代码路径（与 6df7e1c 等价，零风险回滚）
   dual   = 写路径 JSON+SQLite 双写（SQLite 失败仅告警不阻断），读路径仍 JSON
-  sqlite = 读路径切 SQLite（读不到再回退 JSON，保证旧数据可读），JSON 降级为导出格式
+  sqlite = 读写均 SQLite 优先（读不到再回退 JSON，保证旧数据可读），JSON 降级为导出格式
+           （D-R4 起默认；切换前已重导 + audit 对拍全绿，见 docs/data/d-r3-status.md）
 
 连接纪律（audit C3）：每个连接 PRAGMA journal_mode=WAL + synchronous=NORMAL +
 busy_timeout=5000 + foreign_keys=ON；进程内单写连接（模块级锁）+ 惰性 thread-local 读连接。
@@ -139,9 +140,9 @@ def default_db_path() -> Path:
 
 
 def storage_mode() -> str:
-    """CB_STORAGE=json|dual|sqlite（默认 dual；非法值回落 dual）。"""
-    raw = (os.getenv("CB_STORAGE") or "dual").strip().lower()
-    return raw if raw in ("json", "dual", "sqlite") else "dual"
+    """CB_STORAGE=json|dual|sqlite（默认 sqlite；非法值回落 sqlite）。"""
+    raw = (os.getenv("CB_STORAGE") or "sqlite").strip().lower()
+    return raw if raw in ("json", "dual", "sqlite") else "sqlite"
 
 
 class Storage:
@@ -726,11 +727,15 @@ class Storage:
             ).fetchall()
             to_archive = []
             for rid, sid in rows:
-                if keep_map.get(sid or "", 0) < max(0, int(keep_min_per_session)):
+                if not sid:
+                    # 无 session 归属的历史 run（如 workbench-bridge 导入）：按年龄直接归档，
+                    # "每 session 保留 N 条"保护对空分组无意义，否则永远不可清理。
+                    to_archive.append(rid)
+                    continue
+                if keep_map.get(sid, 0) < max(0, int(keep_min_per_session)):
                     continue
                 to_archive.append(rid)
-                if sid:
-                    keep_map[sid] = keep_map.get(sid, 0) - 1
+                keep_map[sid] = keep_map.get(sid, 0) - 1
             if not to_archive:
                 return 0
             qmarks = ",".join("?" for _ in to_archive)

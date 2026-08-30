@@ -170,11 +170,11 @@ def main() -> int:
     check("sqlite 模式 save/load", sq["loaded"])
     check("sqlite 读旧数据(JSON 回退)", sq["legacy_ok"])
     check("sqlite events 读回", sq["n_ev"] == 1)
-    # 非法值回落 dual
+    # 非法值回落 sqlite（D-R4 起默认）
     mode_out = run_py(
         "from packing_assistant import storage as S\nprint(S.storage_mode())", {"CB_STORAGE": "bogus"}
     )
-    check("非法 CB_STORAGE 回落", mode_out.strip().splitlines()[-1] == "dual")
+    check("非法 CB_STORAGE 回落", mode_out.strip().splitlines()[-1] == "sqlite")
 
     # ---- 5) audit SQL==JSON 对拍（本 fixture 内）----
     print("[5] audit 对拍（fixture）")
