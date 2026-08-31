@@ -182,28 +182,38 @@ body[data-dock="open"] .layout { grid-template-columns: var(--cb-rail-w) minmax(
 .thread-row .t-name { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .thread-row .t-time { flex: none; font-size: 11px; color: #7d838d; }
 .thread-row:hover, .thread-row.on { background: #2a2d31; color: var(--rail-ink); }
-.skill-q {
-  width: 100%; margin-bottom: 8px; padding: 7px 10px; border-radius: 10px;
-  border: 1px solid #33363b; background: #1a1c1f; color: var(--rail-ink); font: inherit; font-size: 12px;
-}
-.cat { margin: 10px 0 4px; font-size: 11px; color: #6f747c; }
-.exp {
-  display: block; width: 100%; text-align: left; margin: 0 0 2px; padding: 6px 8px;
-  background: transparent; border: 0; color: var(--rail-ink); cursor: pointer; border-radius: 8px; font: inherit;
-}
-.exp:hover { background: #1d1f23; }
-.exp.on { background: var(--cb-blue-soft); color: var(--cb-text); }
-.exp b { display: block; font-size: 13px; font-weight: 600; }
-.exp span { display: none; }
+/* ux(round19)：常驻名册（.skill-q / .cat / .exp*）随 renderWall 一并删除，
+   66 岗改由 composer 的「岗位」两级面板按需召唤。 */
 .stage {
   display: flex; flex-direction: column; min-width: 0;
   background: var(--panel);
 }
+/* ux(round19) 点名 chip 行：贴着输入框，空时整条隐藏（renderSummon 控制 hidden） */
 .summon-bar {
-  padding: 8px 20px; border-bottom: 1px solid var(--line);
-  font-size: 13px; color: var(--muted);
+  display: flex; flex-wrap: wrap; gap: 6px; align-items: center;
+  padding: 0 0 6px;
 }
-.summon-bar em { font-style: normal; color: var(--accent); font-weight: 600; }
+.summon-bar[hidden] { display: none; }
+.cb-sum-chip {
+  display: inline-flex; align-items: center; gap: 4px;
+  padding: 2px 4px 2px 8px; border-radius: 999px;
+  font-size: var(--cb-fs-xs); color: var(--cb-blue-strong);
+  background: var(--cb-blue-soft); border: 1px solid var(--cb-line);
+}
+.cb-sum-x {
+  border: 0; background: transparent; cursor: pointer;
+  color: inherit; font: inherit; line-height: 1;
+  padding: 2px 4px; border-radius: 999px;
+}
+.cb-sum-x:hover { background: var(--cb-panel); }
+.cb-sum-x:focus-visible { outline: 2px solid var(--cb-focus); outline-offset: 1px; }
+.cb-sum-clear {
+  border: 1px solid var(--cb-line); background: transparent; cursor: pointer;
+  color: var(--cb-text-muted); font: inherit; font-size: var(--cb-fs-xs);
+  padding: 2px 8px; border-radius: 999px;
+}
+.cb-sum-clear[hidden] { display: none; }
+.cb-sum-clear:hover { color: var(--cb-text); border-color: var(--cb-blue); }
 .ctx-bar { padding: 4px 20px 8px; }
 .ctx-meter {
   height: 3px; background: var(--cb-panel-soft); border-radius: 99px; overflow: hidden;

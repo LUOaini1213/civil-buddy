@@ -73,13 +73,9 @@
         </div>
         <div id="threadList"></div>
       </div>
-      <input id="skillQ" class="skill-q" type="search" placeholder="搜索岗位…" autocomplete="off" />
-      <button type="button" id="clearExperts" class="ghost">不指定岗位</button>
-      <div id="wall"></div>
     </aside>
 
     <section class="stage">
-      <div class="summon-bar" id="summonBar">当前：<em>未点名岗位</em> · 直接下任务即可</div>
       <div id="log" class="log">
         <!-- ux(round10) 三步引导 checklist：首访一次性（localStorage cb_onboarded_v1），逐步打勾，全完成自动收起（附录 I） -->
         <div id="cbOnboard" class="cb-ob" data-cb-onboard="true" hidden></div>
@@ -117,6 +113,10 @@
           我明白，将由持证人员签认
         </label>
         <div class="composer-note">AI 草稿 · 不签认</div>
+        <!-- ux(round19)：点名岗位贴着输入框（公理①一个输入框）。空时整条隐藏；
+             #summonBar / #clearExperts 的 id 不可删——renderSummon 与其回调读它们。 -->
+        <div class="summon-bar" id="summonBar" hidden></div>
+        <button type="button" id="clearExperts" class="cb-sum-clear" hidden>清空</button>
         <!-- ux(round14) 输入条重做（参考图）：大圆角容器 · 左"+"开快捷指令面板 · 中间 textarea · 右侧圆形发送键 -->
         <div class="composer-shell">
           <button type="button" id="composerPlus" class="composer-plus" aria-label="打开快捷指令面板" title="快捷指令">+</button>

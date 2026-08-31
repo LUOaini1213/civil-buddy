@@ -330,47 +330,20 @@ async function loadJobRoot() {
 }
 
 async function reloadCatalog() {
-  const cat = await fetch("/api/catalog").then((r) => r.json());
-  state.catalog = cat;
-  state.experts = cat.experts;
-  renderWall(cat);
-  renderSummon();
-  if (window.studioOnCatalog) window.studioOnCatalog(cat);
-}
-
-window.reloadCatalog = reloadCatalog;
-
-function renderWall(cat) {
-  const wall = $("wall");
-  if (!wall || !cat) return;
-  const q = (($("skillQ") && $("skillQ").value) || "").trim().toLowerCase();
-  wall.innerHTML = "";
-  for (const c of cat.categories) {
-    const experts = cat.experts.filter((x) => {
-      if (x.category !== c.id) return false;
-      if (!q) return true;
-      const blob = `${x.name} ${x.id} ${(x.aliases || []).join(" ")} ${x.delivers || ""}`.toLowerCase();
-      return blob.includes(q);
-    });
-    if (!experts.length) continue;
-    const h = document.createElement("div");
-    h.className = "cat";
-    h.textContent = c.name;
-    wall.appendChild(h);
-    for (const e of experts) {
-      const b = document.createElement("button");
-      b.type = "button";
-      b.className = "exp";
-      b.dataset.id = e.id;
-      const size = e.kb_label ? ` · 本岗 ${e.kb_label}` : "";
-      const mark = e.over_limit ? " over" : "";
-      b.innerHTML = `<b>${e.name}</b><span class="${mark}">${e.delivers}${size}</span>`;
-      b.addEventListener("click", () => toggle(e.id));
-      wall.appendChild(b);
-    }
+  /* ux(round19)：66 岗名册不再常驻渲染（renderWall 已删），只留数据供召唤面板与
+     @ 补全使用。catalog 拿不到时不阻断 —— cbPostsAll() 会回退 window.CB_POSTS。 */
+  try {
+    const cat = await fetch("/api/catalog").then((r) => r.json());
+    state.catalog = cat;
+    state.experts = cat.experts || [];
+    if (window.studioOnCatalog) window.studioOnCatalog(cat);
+  } catch (e) {
+    /* 静默：离线兜底由 posts.js 承担 */
   }
   renderSummon();
 }
+
+window.reloadCatalog = reloadCatalog;
 
 function toggle(id) {
   if (state.summoned.has(id)) state.summoned.delete(id);
@@ -379,9 +352,18 @@ function toggle(id) {
   refreshKb();
 }
 
+/* ux(round19) 按需召唤：只加不减。
+   必须是 add 而不是 toggle —— @招标解析 打两次不能把自己取消掉。 */
+function cbSummonAdd(id) {
+  if (!id || state.summoned.has(id)) return;
+  state.summoned.add(id);
+  renderSummon();
+  refreshKb();
+}
+
 function renderSummon() {
-  document.querySelectorAll(".exp").forEach((el) => {
-    el.classList.toggle("on", state.summoned.has(el.dataset.id));
+  document.querySelectorAll("[data-cb-post]").forEach((el) => {
+    el.classList.toggle("on", state.summoned.has(el.dataset.cbPost));
   });
   const names = [...state.summoned].map((id) => {
     const e = state.experts.find((x) => x.id === id);
@@ -389,15 +371,39 @@ function renderSummon() {
   });
   const bar = $("summonBar");
   if (!bar) return;
-  bar.innerHTML = names.length
-    ? `当前：<em>${names.join(" · ")}</em>`
-    : "当前：<em>未点名岗位</em> · 直接下任务即可";
-}
-
-if ($("skillQ")) {
-  $("skillQ").addEventListener("input", () => {
-    if (state.catalog) renderWall(state.catalog);
-  });
+  /* ux(round19)：改为可 × 移除的岗位 chip；一个都没点名时整条隐藏 ——
+     「当前：未点名岗位 · 直接下任务即可」这句常驻横幅消失，首屏干净一整条，
+     该信息已由空态卡的 .cb-empty-desc「在下面输入任务」承担。
+     × 是 U+00D7，test_ux_no_emoji 的 ALLOWED 显式豁免。 */
+  bar.innerHTML = "";
+  const ids = [...state.summoned];
+  const clearBtn = $("clearExperts");
+  if (!ids.length) {
+    bar.hidden = true;
+    if (clearBtn) clearBtn.hidden = true;
+    return;
+  }
+  bar.hidden = false;
+  if (clearBtn) clearBtn.hidden = false;
+  for (const id of ids) {
+    const e = state.experts.find((x) => x.id === id);
+    const chip = document.createElement("span");
+    chip.className = "cb-sum-chip";
+    chip.textContent = e ? `${e.category_name}/${e.name}` : id;
+    const x = document.createElement("button");
+    x.type = "button";
+    x.className = "cb-sum-x";
+    x.textContent = "×";
+    x.setAttribute("aria-label", "取消点名 " + (e ? e.name : id));
+    x.addEventListener("click", () => {
+      state.summoned.delete(id);
+      renderSummon();
+      refreshKb();
+    });
+    chip.appendChild(x);
+    bar.appendChild(chip);
+  }
+  if (clearBtn) bar.appendChild(clearBtn);
 }
 
 if ($("clearExperts")) {
@@ -1518,6 +1524,10 @@ async function cbOpenPackStudio() {
 
 /* 命令注册表（两端同构镜像；图标=--cb-* 色块+单字，不引图标库） */
 const CB_SLASH = [
+  /* ux(round19)：66 岗从左栏常驻名册改为按需召唤，入口收进这台已有的两级面板。
+     cbDirectTable() 按 name+aliases 建表，于是整条输入「岗位」「召唤」也直达。 */
+  { id: "at", ch: "岗", tone: "gray", name: "点名岗位", aliases: ["岗位", "召唤", "专家"],
+    desc: "按大类挑岗（66 岗）", sub: "cats" },
   { id: "pack", ch: "装", tone: "blue", name: "装箱拼柜", aliases: ["装柜", "拼柜", "装箱作业单"],
     desc: "选 sim_materials 票，预填装柜任务", sub: "tickets" },
   { id: "bid", ch: "标", tone: "strong", name: "招标解析", aliases: ["招标", "解析招标"],
@@ -1628,12 +1638,17 @@ function cbAtUpdate() {
   cbAtRender();
 }
 
+/* ux(round19)：@ 补全确认时**顺带真正点名**。
+   既有语义缺口：cbAtApply 只往 textarea 插文本、不写 state.summoned，于是 @ 完
+   #summonBar 仍显示「未点名岗位」，真实路由靠服务端 match_skill_implicit 兜底。
+   补上后 expert_ids 显式带出，前后端口径一致，行为不变（api.rs:704 给了就用）。 */
 function cbAtConfirm() {
   const ta = $("input");
   const post = cbAt.items[cbAt.idx];
   cbAtClose();
   if (!ta || !post) return;
   cbAtApply(ta, cbAt.start, post);
+  cbSummonAdd(post.id);
   cbAutosize(ta);
   cbSyncSend();
 }
@@ -1708,7 +1723,7 @@ function cbComposerInit() {
 cbComposerInit();
 
 /* ---- :8765 实例接线：ux(round9) 快捷指令面板（与 cbAt 同一浮层体系） ---- */
-const cbCmd = { open: false, mode: "cmds", items: [], idx: 0, start: -1, query: "", dismissed: "", dismissedAt: -1 };
+const cbCmd = { open: false, mode: "cmds", cat: "", items: [], idx: 0, start: -1, query: "", dismissed: "", dismissedAt: -1 };
 let cbLastDeliverables = []; /* ux(round9)：/doc 取最近一份交付物（done 事件落） */
 
 function cbSlashCmds() {
@@ -1731,6 +1746,44 @@ function cbCmdTicketItems() {
     n_lines: t.n_lines,
     net_kg: t.net_kg,
   }));
+}
+
+/* ux(round19)：子模式数据源。cats/posts 优先用 /api/catalog 的 state.experts，
+   离线或该接口不可用时从 window.CB_POSTS 推导（posts.js 由 gen_cb_posts.py 生成，
+   与 workbench/seed.json 66 岗逐字段相等，禁止手改）。 */
+function cbPostsAll() {
+  if (Array.isArray(state.experts) && state.experts.length) return state.experts;
+  return Array.isArray(window.CB_POSTS) ? window.CB_POSTS : [];
+}
+
+function cbCmdCatItems() {
+  const seen = new Map();
+  for (const p of cbPostsAll()) {
+    const id = p.category || p.category_name || "";
+    if (!id) continue;
+    if (!seen.has(id)) seen.set(id, { id, name: p.category_name || id, n: 0 });
+    seen.get(id).n += 1;
+  }
+  return [...seen.values()].map((c) => ({
+    id: c.id, name: c.name, ch: "类", tone: "gray", desc: c.n + " 岗",
+  }));
+}
+
+function cbCmdPostItems(catId) {
+  return cbPostsAll()
+    .filter((p) => (p.category || p.category_name) === catId)
+    .map((p) => ({
+      id: p.id, name: p.name, aliases: p.aliases || [],
+      ch: "岗", tone: "blue",
+      desc: [p.category_name || "", p.delivers || ""].filter(Boolean).join(" · "),
+    }));
+}
+
+function cbCmdSubItems(mode) {
+  if (mode === "tickets") return cbCmdTicketItems();
+  if (mode === "cats") return cbCmdCatItems();
+  if (mode === "posts") return cbCmdPostItems(cbCmd.cat);
+  return cbSlashCmds();
 }
 
 function cbCmdClose() {
@@ -1806,7 +1859,17 @@ function cbCmdRender() {
     }
   }
   cbCmd.items.forEach((it, i) => {
-    if (cbCmd.mode === "tickets") {
+    if (cbCmd.mode === "cats" || cbCmd.mode === "posts") {
+      /* ux(round19)：岗位行第二行终于露出 delivers —— 常驻名册时代它被
+         .exp span{display:none} 藏了 18 轮，renderWall 白拼。 */
+      menu.appendChild(cbCmdRow({ ch: it.ch, tone: it.tone, title: it.name, desc: it.desc }, i));
+      if (cbCmd.mode === "posts") {
+        const rows = menu.querySelectorAll(".cb-cmd-item");
+        const last = rows[rows.length - 1];
+        last.dataset.cbPost = it.id;
+        if (state.summoned.has(it.id)) last.classList.add("on");
+      }
+    } else if (cbCmd.mode === "tickets") {
       menu.appendChild(cbCmdRow({
         ch: "票", tone: "blue",
         title: it.id + (it.name ? " · " + it.name : ""),
@@ -1831,7 +1894,11 @@ function cbCmdRender() {
   if (!cbCmd.items.length) {
     const none = document.createElement("div");
     none.className = "cb-cmd-head";
-    none.textContent = cbCmd.mode === "tickets" ? "没有匹配的票 · Esc 返回" : "没有匹配的命令";
+    none.textContent =
+      cbCmd.mode === "tickets" ? "没有匹配的票 · Esc 返回"
+      : cbCmd.mode === "cats" ? "没有大类 · Esc 返回"
+      : cbCmd.mode === "posts" ? "该大类没有匹配岗位 · Esc 返回"
+      : "没有匹配的命令";
     menu.appendChild(none);
   }
   menu.hidden = false;
@@ -1845,11 +1912,7 @@ function cbCmdUpdate() {
   cbCmd.open = true;
   cbCmd.start = tok.start;
   cbCmd.query = tok.query;
-  if (cbCmd.mode === "tickets") {
-    cbCmd.items = cbSlashFilter(cbCmdTicketItems(), tok.query, 9);
-  } else {
-    cbCmd.items = cbSlashFilter(cbSlashCmds(), tok.query, 9);
-  }
+  cbCmd.items = cbSlashFilter(cbCmdSubItems(cbCmd.mode), tok.query, 9);
   cbCmd.idx = 0;
   cbCmdRender();
 }
@@ -1872,10 +1935,11 @@ function cbCmdMove(d) {
 }
 
 function cbCmdEsc() {
-  if (cbCmd.mode === "tickets") {
-    /* Raycast 子菜单语义：Esc=返回上一级 */
-    cbCmd.mode = "cmds";
-    cbCmd.items = cbSlashFilter(cbSlashCmds(), cbCmd.query, 9);
+  /* Raycast 子菜单语义：Esc=返回上一级。ux(round19) 由单分支改父级映射，支持三级。 */
+  const parent = { tickets: "cmds", cats: "cmds", posts: "cats" };
+  if (parent[cbCmd.mode]) {
+    cbCmd.mode = parent[cbCmd.mode];
+    cbCmd.items = cbSlashFilter(cbCmdSubItems(cbCmd.mode), cbCmd.query, 9);
     cbCmd.idx = 0;
     cbCmdRender();
     return;
@@ -1917,11 +1981,11 @@ function cbCmdConfirm() {
   const it = cbCmd.items[cbCmd.idx];
   if (!it) return;
   if (cbCmd.mode === "cmds") {
-    if (it.sub === "tickets") {
-      /* 票选择子菜单：sim_materials 静态清单（scripts/gen_cb_tickets.py 生成，与磁盘一致） */
-      cbCmd.mode = "tickets";
+    /* ux(round19)：sub 从写死 "tickets" 泛化为任意子模式（tickets / cats） */
+    if (it.sub) {
+      cbCmd.mode = it.sub;
       cbCmd.query = "";
-      cbCmd.items = cbSlashFilter(cbCmdTicketItems(), "", 9);
+      cbCmd.items = cbSlashFilter(cbCmdSubItems(it.sub), "", 9);
       cbCmd.idx = 0;
       cbCmdRender();
       return;
@@ -1933,6 +1997,28 @@ function cbCmdConfirm() {
     }
     /* tpl / client：预填草稿，不自动发送（附录 F.3 红线） */
     cbCmdApplyDraft(it.kind === "client" ? "/" + it.id + " " : cbSlashTemplate(it.id, ""));
+    return;
+  }
+  if (cbCmd.mode === "cats") {
+    /* 大类 → 该类岗位（第三级） */
+    cbCmd.mode = "posts";
+    cbCmd.cat = it.id;
+    cbCmd.query = "";
+    cbCmd.items = cbSlashFilter(cbCmdPostItems(it.id), "", 9);
+    cbCmd.idx = 0;
+    cbCmdRender();
+    return;
+  }
+  if (cbCmd.mode === "posts") {
+    /* 选中岗位：真点名 + 把 /token 换成 @岗位名，文本与状态一致。绝不自动发送。 */
+    const ta = $("input");
+    cbCmdClose();
+    cbSummonAdd(it.id);
+    if (ta && cbCmd.start >= 0) {
+      cbAtApply(ta, cbCmd.start, it);
+      cbAutosize(ta);
+      cbSyncSend();
+    }
     return;
   }
   cbCmdClose();
