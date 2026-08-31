@@ -47,7 +47,7 @@ jobs:
           ux_marks = {
               "frontend/workbench.html": ["cb-apr", "data-cb-audit-panel", "cbSlashFilter", "cb-empty-card", "cb_theme_v1", "cbThemeBtn"],
               "demo/static/index.html": ["data-cb-audit-panel", "cb-empty-card", "cb_theme_v1", "cbThemeBtn"],
-              "demo/static/app.js": ["确认并重提", "handleSlash", "cb_theme_v1"],
+              "demo/static/app.js": ["确认并重提", "handleSlash", "cb_theme_v1", "cbIsPackOpenWord", "cbOpenPackStudio"],
           }
           for path, marks in ux_marks.items():
               text = Path(path).read_text(encoding="utf-8")

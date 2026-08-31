@@ -871,6 +871,24 @@ html.cb-large {
   background: var(--cb-panel); color: var(--cb-text); font-size: var(--cb-fs-xs); font-weight: 600; cursor: pointer; font-family: inherit;
 }
 .cb-empty-down button:hover { border-color: var(--cb-blue); color: var(--cb-blue-strong); }
+/* ux(round15) 装箱直达卡（附录 M）：未启动态直接复用 .cb-empty-down（同为后端不可达语义），
+   已打开态同版式换蓝 token；两态均只用 --cb-* 变量，随 R11 明暗主题翻转。 */
+.cb-pack-ok {
+  max-width: 560px; margin: 0 auto var(--cb-space-4);
+  text-align: left; padding: var(--cb-space-4);
+  background: var(--cb-blue-soft); border: 1px solid var(--cb-blue); border-radius: var(--cb-radius-md);
+}
+.cb-pack-ok .cb-empty-k { color: var(--cb-blue-strong); }
+.cb-pack-ok p { margin: 0 0 var(--cb-space-2); font-size: var(--cb-fs-sm); line-height: 1.6; color: var(--cb-text); }
+.cb-pack-ok .cb-empty-acts { display: flex; gap: var(--cb-space-2); flex-wrap: wrap; }
+.cb-pack-ok a {
+  display: inline-block; padding: 6px 12px; min-height: 20px; line-height: 20px;
+  border: 1px solid var(--cb-line); border-radius: var(--cb-radius-sm);
+  background: var(--cb-panel); color: var(--cb-blue-strong);
+  font-size: var(--cb-fs-xs); font-weight: 600; text-decoration: none; font-family: inherit;
+}
+.cb-pack-ok a:hover { border-color: var(--cb-blue); }
+.cb-pack-ok a:focus-visible { outline: 2px solid var(--cb-focus); outline-offset: 2px; }
 /* 三步引导 checklist（首访一次性；PostHog/Appcues 模式：逐项打勾 + 全完成自动收起 + 可重开） */
 .cb-ob {
   max-width: 560px; margin: var(--cb-space-5) auto 0;

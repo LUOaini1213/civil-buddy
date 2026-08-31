@@ -514,6 +514,10 @@ $("form").addEventListener("submit", async (ev) => {
   const welcome = document.querySelector(".welcome");
   if (welcome) welcome.remove();
   addMsg("user", "你", message);
+  if (cbIsPackOpenWord(message)) {
+    await cbOpenPackStudio();
+    return;
+  }
   state.history.push({ role: "user", content: message });
   paintContext(estimateLocalContext());
   const bodyEl = addMsg("assistant", namesOrPlain(), "");
@@ -1180,6 +1184,120 @@ function cbSubsequence(q, names) {
     }
     return false;
   });
+}
+
+/* ===== ux(round15) 装箱直达（docs/ux/ux-design-spec.md 附录 M）=====
+   整条输入即"装箱"类词 → 打开装柜台 3D 工程台（成箱 → 人确认 → 拼柜/重心）。
+   只在 trim 后整条等于触发词时接管；句中含"装箱"的正常提问（如"帮我装箱一下"）
+   仍走 pack-ship 专家问答，不抢话。装柜台由装箱引擎网关提供（同机回环 :8000，
+   属 R12 零外链白名单）；不可达时出纠偏卡而不是默默开一个报错空白页。 */
+const CB_PACK_STUDIO_ORIGIN = "http://127.0.0.1:8000";
+const CB_PACK_STUDIO_PATH = "/workbench";
+const CB_PACK_STUDIO_CMD = "uvicorn gateway.app:app --host 127.0.0.1 --port 8000";
+const CB_PACK_OPEN_WORDS = ["装箱", "装柜", "拼柜", "装箱拼柜", "装箱作业单", "装柜台"];
+
+/* 精确匹配：trim + 去尾部标点后整条命中才算（"装箱。""装箱 " 算，"帮我装箱" 不算） */
+function cbIsPackOpenWord(text) {
+  const t = String(text || "").trim().replace(/[\s。．.!！?？，,]+$/, "");
+  return CB_PACK_OPEN_WORDS.indexOf(t) !== -1;
+}
+
+/* 健康探针：网关 CORS 为 *，跨端口 fetch 可读；超时当不可达，不阻塞 UI */
+async function cbPackStudioUp(ms) {
+  const ctl = new AbortController();
+  const timer = setTimeout(() => ctl.abort(), ms || 2500);
+  try {
+    const r = await fetch(CB_PACK_STUDIO_ORIGIN + "/api/health", { signal: ctl.signal });
+    return r.ok;
+  } catch (e) {
+    return false;
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
+function cbPackCardRender(up) {
+  const url = CB_PACK_STUDIO_ORIGIN + CB_PACK_STUDIO_PATH;
+  const card = document.createElement("div");
+  card.className = up ? "cb-pack-ok" : "cb-empty-down";
+  card.id = "cbPackCard";
+  if (!up) card.setAttribute("role", "alert");
+
+  const h = document.createElement("p");
+  const k = document.createElement("strong");
+  k.className = "cb-empty-k";
+  k.textContent = up ? "装柜台已打开" : "装柜台未启动";
+  h.appendChild(k);
+  h.appendChild(document.createTextNode(up
+    ? " —— 成箱 → 人确认 → 拼柜 3D / 重心，都在这一页。"
+    : " —— 装箱引擎网关（:8000）不可达，界面在但算不了。"));
+  card.appendChild(h);
+
+  const p1 = document.createElement("p");
+  p1.textContent = up
+    ? "浏览器若拦了新标签，点下面的链接手动打开。"
+    : "现在能做什么：在仓库根目录启动装箱引擎网关，然后点「重试」。";
+  card.appendChild(p1);
+
+  const acts = document.createElement("div");
+  acts.className = "cb-empty-acts";
+
+  if (up) {
+    const a = document.createElement("a");
+    a.href = url;
+    a.target = "_blank";
+    a.rel = "noopener";
+    a.textContent = "打开装柜台";
+    acts.appendChild(a);
+  } else {
+    const code = document.createElement("code");
+    code.textContent = CB_PACK_STUDIO_CMD;
+    card.appendChild(code);
+    const copyBtn = document.createElement("button");
+    copyBtn.type = "button";
+    copyBtn.textContent = "复制启动命令";
+    copyBtn.addEventListener("click", async () => {
+      try {
+        if (navigator.clipboard && navigator.clipboard.writeText) await navigator.clipboard.writeText(CB_PACK_STUDIO_CMD);
+        else throw new Error("no clipboard");
+        copyBtn.textContent = "已复制";
+      } catch (e) {
+        copyBtn.textContent = "复制失败，请手选";
+      }
+      setTimeout(() => { copyBtn.textContent = "复制启动命令"; }, 1600);
+    });
+    acts.appendChild(copyBtn);
+    const retry = document.createElement("button");
+    retry.type = "button";
+    retry.textContent = "重试";
+    retry.addEventListener("click", () => { cbOpenPackStudio(); });
+    acts.appendChild(retry);
+  }
+
+  card.appendChild(acts);
+  return card;
+}
+
+/* 打开装柜台：先探健康，通了才开新标签（避免弹出一个连接拒绝页） */
+async function cbOpenPackStudio() {
+  const prev = document.getElementById("cbPackCard");
+  if (prev && prev.parentElement) prev.parentElement.removeChild(prev);
+  addStatus("正在检测装箱引擎网关 " + CB_PACK_STUDIO_ORIGIN + " …");
+  const up = await cbPackStudioUp(2500);
+  /* 先落卡片再开标签：部分浏览器/内嵌视图把 window.open 当原地跳转，
+     后落卡片会随原页面一起被替换，回到本页什么痕迹都没有。 */
+  const log = $("log");
+  if (log) {
+    log.appendChild(cbPackCardRender(up));
+    log.scrollTop = log.scrollHeight;
+  }
+  if (up) {
+    try {
+      window.open(CB_PACK_STUDIO_ORIGIN + CB_PACK_STUDIO_PATH, "_blank", "noopener");
+    } catch (e) {
+      /* 弹窗被拦：卡片里的链接就是兜底 */
+    }
+  }
 }
 
 /* 命令注册表（两端同构镜像；图标=--cb-* 色块+单字，不引图标库） */
