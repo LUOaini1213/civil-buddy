@@ -38,9 +38,21 @@ async fn test_index_and_static() {
     assert_eq!(st, StatusCode::OK);
     assert!(body.contains("Civil Buddy"));
     assert!(body.contains("全企业") || body.contains("任意专家") || body.contains("本岗知识"));
-    assert!(body.contains("ctxBar"));
+    /* ux(round23)：原来断言的是 `ctxBar` —— round19 P0 已把它删掉（计划里
+       列在「有守卫，可安全删」那一档），断言没跟着改，于是这条从 round19 起
+       一直红，而 CI 不跑 cargo 所以没人看见。换成钉住当前 co-work 外壳：
+       左栏项目树 + 单一输入框，两者都在 ci.yml 的 ux_marks 保护范围内。 */
+    assert!(body.contains("projTree"), "左栏项目树不见了");
+    assert!(body.contains("composer"), "输入区不见了");
     assert!(body.contains(".xlsx"), "{body}");
-    assert!(body.contains("提问不写盘") || body.contains("写一份"), "{body}");
+    /* ux(round23)：原来断的「提问不写盘」/「写一份」两句，在 round19 P0/P2 清场时
+       随旧提示区一起删了，断言没跟着改 —— 又是一条 CI 看不见的陈红。
+       换成钉住这个页面真正不该丢的两条红线（它们是 spec 的设计公理，不是随手文案）：
+         · 预填不自动发送
+         · 产出永远是 AI 草稿、不是签认件
+       静态 grep（ci.yml ux_marks）钉的是 id 与类名；这里钉的是 exe 实际吐出的正文。 */
+    assert!(body.contains("不会自动发送"), "「预填不自动发送」红线的说明没了");
+    assert!(body.contains("不是签认件"), "「产出是 AI 草稿」红线的说明没了");
     let (js_st, js) = send(
         state(),
         Request::builder().uri("/static/app.js").body(Body::empty()).unwrap(),
@@ -48,7 +60,11 @@ async fn test_index_and_static() {
     .await;
     assert_eq!(js_st, StatusCode::OK);
     assert!(js.contains("reloadCatalog"));
-    assert!(js.contains("能聊能跑"));
+    /* ux(round23)：「能聊能跑」这句文案早已不在 app.js 里，断言没跟着改（同一类陈红）。
+       换成钉住 exe 实际吐出的 app.js 里那两个**功能性**入口 —— 它们也在 ci.yml
+       ux_marks 的 must-keep 名单上，两道门禁指向同一件事，不会各说各话。 */
+    assert!(js.contains("cbIsPackOpenWord"), "装箱直达词识别没了");
+    assert!(js.contains("确认并重提"), "HITL 审批门的确认入口没了");
 }
 
 #[tokio::test]
@@ -92,6 +108,20 @@ async fn test_studio_tree_and_read() {
     let got: Value = serde_json::from_str(&body).unwrap();
     let content = got["content"].as_str().unwrap_or("");
     assert!(content.contains("任何人都可以向你提问") || content.contains("全企业"));
+}
+
+
+/// 是否含形如 2026-08-14 的日期（联网知识的「哪天打开过官方页」标记）。
+/// 手扫而非上 regex：只为这一条断言引一个 dev-dependency 不划算。
+fn has_dated_pass(body: &str) -> bool {
+    let b = body.as_bytes();
+    b.windows(10).any(|w| {
+        w[..4].iter().all(u8::is_ascii_digit)
+            && w[4] == b'-'
+            && w[5..7].iter().all(u8::is_ascii_digit)
+            && w[7] == b'-'
+            && w[8..].iter().all(u8::is_ascii_digit)
+    })
 }
 
 #[test]
@@ -442,9 +472,12 @@ fn test_every_expert_private_and_category_shared_nonstub() {
             "no url in web-knowledge {}",
             e.id
         );
+        /* ux(round23)：原来写死 "2026-08-14"，于是每刷新一篇联网知识就红一条
+           （hr-labor 刷到 2026-08-28 就是这么红的）。断言的**本意**是「这篇带
+           一次注明日期的核验」，不是「必须是那一天」——改成认日期形态。 */
         assert!(
-            body.contains("2026-08-14"),
-            "web-knowledge {} missing 2026-08-14 pass",
+            has_dated_pass(&body),
+            "web-knowledge {} 没有注明核验日期（形如 2026-08-14）",
             e.id
         );
         let shared_web = shared.join("web-knowledge.md");

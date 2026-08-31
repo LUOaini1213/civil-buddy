@@ -7,6 +7,25 @@ on:
   workflow_dispatch:
 
 jobs:
+  # ux(round23)：补 exe 侧门禁。此前 ci.yml **完全不跑 cargo**（只有
+  # test_rag_parity.py --skip-rust），workbench/tests/ 下的 Rust 门禁从来没在 CI
+  # 上执行过 —— 后果是发版前一查，三条断言已经烂了好几轮没人看见：
+  #   · 断言 index.html 含 `ctxBar`，而 round19 P0 就把它删了
+  #   · 断言联网知识含写死的 "2026-08-14"，刷新一篇就红
+  #   · 断言 app.js 含「能聊能跑」，这句文案早没了
+  # 评委下载运行的正是这个 exe，它的测试不能只靠本机想起来才跑。
+  rust:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: workbench
+      - name: cargo test
+        working-directory: workbench
+        run: cargo test --locked
+
   smoke:
     runs-on: ubuntu-latest
     steps:

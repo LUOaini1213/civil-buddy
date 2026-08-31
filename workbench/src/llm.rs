@@ -14,7 +14,8 @@ fn headers() -> Result<reqwest::header::HeaderMap, LlmError> {
     let key = llm_api_key();
     if key.is_empty() {
         return Err(LlmError(
-            "未配置 API Key。在 demo/.env 写入 CIVIL_API_KEY / OPENAI_API_KEY / DEEPSEEK_API_KEY 后重启。".into(),
+            /* ux(round23)：同 api.rs —— 先指界面，再说 .env。*/
+            "未配置 API Key。点右上角「设置 → 模型设置」，把自己的 Key 填进去即可（支持 DeepSeek / z.ai 等，改完立即生效、不用重启）。也可以在 demo/.env 写 CIVIL_API_KEY / OPENAI_API_KEY / DEEPSEEK_API_KEY。".into(),
         ));
     }
     let mut h = reqwest::header::HeaderMap::new();

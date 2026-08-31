@@ -805,7 +805,10 @@ async fn chat(State(st): State<Arc<AppState>>, Json(body): Json<ChatIn>) -> Resu
         if intent == crate::agent::Intent::Chat {
             return Err(err(
                 StatusCode::BAD_REQUEST,
-                "未配置 API Key。在 demo/.env 写入 CIVIL_API_KEY / OPENAI_API_KEY / DEEPSEEK_API_KEY。",
+                /* ux(round23)：这是零配置评委看到的**第一条**错误。round17 起
+                   界面里就能填 Key（设置 → 模型设置，运行时覆盖、无需重启），
+                   而这条提示还在把人支去改 demo/.env —— 正是 v0.2.0 想省掉的那一步。 */
+                "未配置 API Key。点右上角「设置 → 模型设置」，把自己的 Key 填进去即可（支持 DeepSeek / z.ai 等，改完立即生效、不用重启）。也可以在 demo/.env 写 CIVIL_API_KEY / OPENAI_API_KEY / DEEPSEEK_API_KEY。",
             ));
         }
         // Run/Both: exclusive steps do not need a live model.
