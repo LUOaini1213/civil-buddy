@@ -1701,6 +1701,74 @@ function cbPackCardRender(up) {
 }
 
 /* 打开装柜台：先探健康，通了才开新标签（避免弹出一个连接拒绝页） */
+/* ux(round19)：把装柜台以面板形式嵌进对话流，不跳走。 */
+function cbPackEmbed() {
+  const log = $("log");
+  if (!log) return;
+  const old = document.getElementById("cbPackEmbed");
+  if (old && old.parentElement) old.parentElement.removeChild(old);
+  const box = document.createElement("div");
+  box.id = "cbPackEmbed";
+  box.className = "cb-pack-embed";
+
+  const head = document.createElement("div");
+  head.className = "cb-pack-embed-h";
+  const t = document.createElement("strong");
+  t.textContent = "装柜台";
+  const sub = document.createElement("span");
+  sub.textContent = "成箱 → 人确认 → 拼柜 3D / 重心";
+  const acts = document.createElement("div");
+  acts.className = "cb-pack-embed-acts";
+  const max = document.createElement("button");
+  max.type = "button";
+  max.className = "top-btn";
+  max.textContent = "放大";
+  max.addEventListener("click", () => {
+    const on = box.classList.toggle("is-max");
+    max.textContent = on ? "还原" : "放大";
+  });
+  const hide = document.createElement("button");
+  hide.type = "button";
+  hide.className = "top-btn";
+  hide.textContent = "收起";
+  hide.addEventListener("click", () => box.remove());
+  acts.append(max, hide);
+  head.append(t, sub, acts);
+  box.appendChild(head);
+
+  const frame = document.createElement("iframe");
+  frame.className = "cb-pack-frame";
+  frame.title = "装柜台 3D 工程台";
+  frame.loading = "lazy";
+  frame.referrerPolicy = "no-referrer";
+  frame.setAttribute(
+    "sandbox",
+    "allow-scripts allow-same-origin allow-downloads allow-forms allow-popups"
+  );
+  frame.src = CB_PACK_STUDIO_ORIGIN + CB_PACK_STUDIO_PATH;
+  let loaded = false;
+  frame.addEventListener("load", () => { loaded = true; });
+  box.appendChild(frame);
+  log.appendChild(box);
+  log.scrollTop = log.scrollHeight;
+  cbAnnounce("装柜台已在对话内打开");
+
+  /* 探针通了但 iframe 仍白（被上级策略拦等）：4 秒兜底换成链接，不留白框 */
+  setTimeout(() => {
+    if (loaded || !box.isConnected) return;
+    frame.remove();
+    const p1 = document.createElement("p");
+    p1.className = "cb-pack-embed-fb";
+    p1.textContent = "内嵌视图未能加载。用下面的链接在新标签打开：";
+    const a = document.createElement("a");
+    a.href = CB_PACK_STUDIO_ORIGIN + CB_PACK_STUDIO_PATH;
+    a.target = "_blank";
+    a.rel = "noopener";
+    a.textContent = "打开装柜台";
+    box.append(p1, a);
+  }, 4000);
+}
+
 async function cbOpenPackStudio() {
   const prev = document.getElementById("cbPackCard");
   if (prev && prev.parentElement) prev.parentElement.removeChild(prev);
@@ -1716,11 +1784,13 @@ async function cbOpenPackStudio() {
     log.scrollTop = log.scrollHeight;
   }
   if (up) {
-    try {
-      window.open(CB_PACK_STUDIO_ORIGIN + CB_PACK_STUDIO_PATH, "_blank", "noopener");
-    } catch (e) {
-      /* 弹窗被拦：卡片里的链接就是兜底 */
-    }
+    /* ux(round19)：装柜台不再跳走，改为对话流内嵌面板（附录 P）。
+       跨端口 iframe 可行的三个前提已核实：:8000 不设 X-Frame-Options 也不设 CSP
+       frame-ancestors（gateway/app.py:202/217 只设 Cache-Control）；sandbox 必须含
+       allow-same-origin，否则 workbench.html 自己的同源 fetch 会被判成 opaque origin
+       全挂；回环地址属 R12 零外链白名单，无需新增豁免。
+       卡片里原有的「打开装柜台」链接保留作兜底（iframe 被策略拦时仍可点）。 */
+    cbPackEmbed();
     return;
   }
   /* 试用判别放在落卡之后异步改写：真 exe 冷启动期 /api/health 要跑引擎探针（spawn_blocking），

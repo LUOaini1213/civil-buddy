@@ -1083,3 +1083,31 @@ html.cb-large {
 .cb-cite-card li { font-size: var(--cb-fs-xs); border-top: 1px solid var(--cb-line); padding: 6px 0; }
 .cb-cite-card li:first-child { border-top: 0; }
 
+
+/* ===== ux(round19) 装柜台内嵌面板（附录 P）：不跳走，嵌在对话流里 ===== */
+.cb-pack-embed {
+  margin: 10px 0; border: 1px solid var(--cb-line);
+  border-radius: var(--cb-radius-md); overflow: hidden; background: var(--cb-panel);
+}
+.cb-pack-embed-h {
+  display: flex; align-items: center; gap: 8px; flex-wrap: wrap;
+  padding: 8px 10px; border-bottom: 1px solid var(--cb-line);
+  font-size: var(--cb-fs-sm);
+}
+.cb-pack-embed-h span { color: var(--cb-text-muted); font-size: var(--cb-fs-xs); }
+.cb-pack-embed-acts { margin-left: auto; display: flex; gap: 6px; }
+.cb-pack-frame {
+  display: block; width: 100%; height: min(72vh, 720px); border: 0; background: var(--cb-bg);
+}
+.cb-pack-embed.is-max {
+  position: fixed; inset: var(--cb-topbar-h) 0 0 0; z-index: 30;
+  margin: 0; border-radius: 0;
+}
+.cb-pack-embed.is-max .cb-pack-frame { height: calc(100dvh - var(--cb-topbar-h) - 42px); }
+.cb-pack-embed-fb { margin: 10px; font-size: var(--cb-fs-sm); color: var(--cb-text); }
+.cb-pack-embed > a {
+  display: inline-block; margin: 0 10px 12px; padding: 6px 12px;
+  border: 1px solid var(--cb-line); border-radius: var(--cb-radius-sm);
+  background: var(--cb-panel); color: var(--cb-blue-strong);
+  font-size: var(--cb-fs-xs); font-weight: 600; text-decoration: none;
+}
