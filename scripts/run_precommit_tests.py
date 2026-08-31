@@ -53,6 +53,9 @@ def main() -> int:
     codes.append(run("scripts/test_projects_parity.py", 900))
     # ux(round22)：物料来源诚实性（路径读不到必须说，不许静默回落演示物料）
     codes.append(run("scripts/test_materials_notice.py", 180))
+    # ux(round23)：exe 侧同一件事 —— 表格路径读不到必须写进作业单正文。
+    # CI 不跑 cargo，这里是它唯一会被执行到的地方。
+    codes.append(run("scripts/test_pack_table_gate.py", 1900))
     codes.append(run("scripts/test_nonstandard_tools.py", 60))
     codes.append(run("scripts/test_cog_shift_mid_ok.py", 60))
     codes.append(run("scripts/test_phase0_task_success.py", 60))

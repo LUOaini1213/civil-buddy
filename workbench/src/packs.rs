@@ -890,13 +890,21 @@ fn pack_tools(pack: &str) -> Vec<ToolDef> {
             },
             ToolDef {
                 name: "pack-ship__plan",
-                description: "装箱拼柜独有：出作业单。柜数/坐标只抄 packing-agent 工具回传，否则 UNSPECIFIED。不编 xyz。",
+                description: "装箱拼柜独有：出作业单。柜数/坐标只抄 packing-agent 工具回传，否则 UNSPECIFIED。不编 xyz。用户若给了表格文件路径，原样放进 materials。",
                 parameters: obj(
                     json!({
-                        "materials": {"type": "string"},
+                        /* ux(round23)：materials 原来是个没描述的裸 string，而 round20 的
+                           「说 pack <本机路径> 就装箱」全靠模型自己猜着把路径塞进这里。
+                           实测（tests/pack_table.rs）：路径没落进 materials 时整条读表分支
+                           根本不触发，文件里连「读不到」的提示都没有，直接给演示柜数。
+                           所以把「原话抄进来、路径别删」写死进契约，不留给模型发挥。 */
+                        "materials": {
+                            "type": "string",
+                            "description": "用户原话里的物料信息，逐字抄。若用户给了表格文件路径（.xlsx/.xlsm/.csv/.tsv，可以是本机绝对路径），务必原样保留在这里，不要改写、不要只留文件名——本岗要靠它去读那张表。"
+                        },
                         "project_name": {"type": "string"},
                         "jurisdiction": {"type": "string"},
-                        "notes": {"type": "string"}
+                        "notes": {"type": "string", "description": "用户的补充要求，例如柜型、重量上限、装载偏好。"}
                     }),
                     &["materials"],
                 ),
@@ -3307,7 +3315,12 @@ fn pack_ship_plan(ctx: &mut ToolCtx, args: &Value) -> String {
        路径，不是从自由文本猜的）；读表与装箱归网关的两个现成端点。
        **失败必须明说**：路径给了却读不到时要写清原因，绝不静默回落到演示物料 ——
        那正是改造前的坏行为（桌面路径被丢弃后照样给一串演示数据的柜数）。 */
-    let table_hit = find_table_path(&materials);
+    /* ux(round23)：路径也可能被模型放进 notes 或 project_name。参数描述已经写清了
+       该放 materials，但「模型放错格子」不该等于「功能整个失效、还不吭声」——
+       这三个字段都是用户原话的容器，扫哪个都不越权。 */
+    let table_hit = find_table_path(&materials)
+        .or_else(|| find_table_path(&notes))
+        .or_else(|| find_table_path(&project));
     let mut table_note = String::new();
     let mut table_sum: Option<crate::packing_bridge::PackingSummary> = None;
 
