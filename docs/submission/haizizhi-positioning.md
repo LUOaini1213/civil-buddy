@@ -1,6 +1,6 @@
 # 海之子杯申报 · 定位陈述与证据包（Civil Buddy）
 
-> 更新：2026-08-29（R5 补每岗记分卡证据、履历表正式稿）· 服务 [knowledge_base/06_competition/constraints-hzzb.md](../../knowledge_base/06_competition/constraints-hzzb.md) 的提交物四件。
+> 更新：2026-08-31（提交定稿：四件套已产出，见 output/submission/；同步修正可复跑命令与 Key 口径）· 服务 [knowledge_base/06_competition/constraints-hzzb.md](../../knowledge_base/06_competition/constraints-hzzb.md) 的提交物四件。
 > 官方章程：<https://aicampus.3311csci.com/rules.html>（以官方页为准）。评审三维度官方原文见 constraints-hzzb.md。
 > 所有"可复跑命令"均在本仓根目录实际执行验证过；冻结数字口径见 [docs/competition-demo-script.md](../competition-demo-script.md)。
 
@@ -19,8 +19,8 @@
 | 官方考察点 | 证据 | 可复跑命令 / 入口 |
 |------------|------|--------------------|
 | 真实痛点：土木企业 66 类岗位日常起草工作靠人肉重复 | 66 岗工作台：每岗"程序记忆（SOP）+ 知识库 + 独有工具"起草内部交付物（方案提纲、交底、台账、报价栏……缺数标 `[A001]`/`UNSPECIFIED`） | `python scripts/test_kb_k4_depth.py`（66/66 岗知识库深度闸） |
-| 真实痛点：装柜出运凭经验拍柜数、拍坐标 | pack-ship 引擎岗：NL 一句话 `pack <表>` → 引擎出真数字作业单（柜数/坐标是 tools 输出） | 启动 `python scripts/demo_one_shot.py` 后在 :8765 工作台输入 `pack test/sim_materials/small_one_container/materials.xlsx` |
-| 落地可行：不依赖云、自带 Key、免编译冒烟 | 冒烟无需 API Key；工作台 exe 可从 GitHub Releases 下载试用 | `python scripts/demo_one_shot.py` → ALL_PASS |
+| 真实痛点：装柜出运凭经验拍柜数、拍坐标 | pack-ship 引擎岗：NL 一句话 `pack <表>` → 引擎出真数字作业单（柜数/坐标是 tools 输出） | Releases exe 双击（或 `cd demo && uvicorn app:app --port 8765`）+ `uvicorn gateway.app:app --port 8000`，在 :8765 聊天框输入 `pack test/sim_materials/small_one_container/materials.xlsx` |
+| 落地可行：不依赖云、评委在界面填自己的 Key（DeepSeek / z.ai 任选，不用改 .env）、免编译冒烟 | 冒烟无需 API Key；工作台 exe 可从 GitHub Releases 下载试用 | `python scripts/demo_one_shot.py` → ALL_PASS |
 | 产业推广价值：16 大类车道覆盖投标→生产→商务→后勤全链条 | 16 车道分级表与富化批次（T030–T039 滚动推进） | [docs/depth-ladder.md](../depth-ladder.md)（每行挂验收） |
 
 ### 维度二：AI 协同能力（人机协同规划 + AI 交互迭代 + AI 纠偏）
@@ -28,7 +28,7 @@
 | 官方考察点 | 证据 | 可复跑命令 / 入口 |
 |------------|------|--------------------|
 | 人机协同规划：HITL 高风险写盘前人确认 | 高风险岗未确认 0 稿；确认句"我明白，将由持证人员签认"；成箱→HITL→拼柜 | `python scripts/demo_agent_middleware.py`（第三拍含 HITL）；`http://127.0.0.1:8000/workbench` |
-| AI 交互迭代：一句话自然语言入口 + 意图路由（chat/run/both） | NL→IntentSpec→白名单 tools；无 Key 时 policy fallback 功能不哑；每岗金句冻结（41 条）Python/Rust 双侧实跑守护 | :8765 输入 `pack test/sim_materials/small_one_container/materials.xlsx`；`python main.py --eval`（phase0 quick 12/12）；`python scripts/test_stack_parity.py` |
+| AI 交互迭代：一句话自然语言入口 + 意图路由（chat/run/both） | NL→IntentSpec→白名单 tools；无 Key 时 policy fallback 功能不哑；每岗金句冻结（41 条）Python/Rust 双侧实跑守护 | 按上行方式起 :8765 后输入 `pack ...`；`python main.py --eval`（phase0 quick 12/12）；`python scripts/test_stack_parity.py` |
 | AI 纠偏管理：策略引擎（越权拒绝弹原因）+ 失败恢复（retry→`UNSPECIFIED` 审计链）+ 成本熔断 | Agent Middleware 四拍剧本：正常下单 → 越权被拒 → 工具挂掉自动恢复 → 成本超限熔断 | `python scripts/demo_agent_middleware.py` |
 | 纠偏落到成稿：缺数不编造 | safety-brief 成稿 11 栏中毫米/电话为 `[A001]` 待填；各岗 TBD/UNSPECIFIED | `grep -n "A001" demo/kb/hse/safety-brief/outline.md`；或在 :8765 召唤安全交底专家看成稿待填栏 |
 
@@ -66,12 +66,12 @@
 
 ## e) 提交前待办勾选清单
 
-- [ ] **报名**：队长在活动官网 <https://aicampus.3311csci.com> 完成报名（截止 2026-08-31）
+- [x] **报名**：队长在活动官网 <https://aicampus.3311csci.com> 完成报名（截止 2026-08-31）
 - [ ] **组队**：确认每队 ≤4 人、队员学籍信息齐全（海内外全日制在校生）
 - [ ] **学籍/身份材料**：按官网要求准备在校证明或学生证材料
-- [ ] **视频录制**：按上表 3 分钟脚本录制，≤2 分钟候选备选剪辑各一条，核对官方时长/格式限制
-- [ ] **技术说明文档**：以本文定位陈述 + 三维度映射表为底稿成文，补团队信息
-- [ ] **人机协同履历表**：正式稿已成（[haizizhi-resume.md](haizizhi-resume.md)，10 行带 git 证据），按官方模板格式导出
-- [ ] **格式核对**：四件套（智能体链接或代码包 / 技术说明 / 视频 / 履历表）命名、大小、附件格式逐项对照官方页
+- [x] **视频**：已产出 116 秒中文口播版（官方限 ≤2 分钟 / MP4 / ≤500MB，FAQ 已核对），源在 output/submission/build_demo_video.py + narration.json
+- [x] **技术说明文档**：已成 PDF（output/submission/01-说明文档-CivilBuddy.html → Edge 打印；官方对格式不设限，仅 ≤30MB）
+- [x] **人机协同履历表**：已成 PDF，13 行带 git 证据（10 行正式稿 + round14-23 三行）
+- [x] **格式核对**：四件套（智能体链接或代码包 / 技术说明 / 视频 / 履历表）命名、大小、附件格式逐项对照官方页
 - [ ] **提交前全绿复跑**：`python scripts/test_kb_k4_depth.py` · `python scripts/demo_one_shot.py` · `python scripts/eval_competition_scorecard.py --skip-phase0` · `python scripts/eval_post_scorecard.py --all-pilots` 四连，退出码全 0
 - [ ] **红线自查**：全文检索禁句（中标率 / 可以投标 / 可以开工 / 代交官方系统），P0 字样必须连着"须人确认"

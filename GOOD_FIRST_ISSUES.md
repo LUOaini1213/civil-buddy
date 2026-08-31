@@ -1,6 +1,6 @@
 # Good first issues (Civil Buddy)
 
-Open these on GitHub when ready; kept here so the portfolio shows **maintenance intent**.
+Companion index for the repo's GitHub Issues.
 
 ## GFI-1 · Docs: link a new tool to the decision table
 
@@ -26,7 +26,7 @@ Open these on GitHub when ready; kept here so the portfolio shows **maintenance 
 
 - [ ] Issues labeled `good first issue` / `docs` / `eval`
 - [ ] PR template: what / why / how tested
-- [ ] Smoke `python scripts/demo_one_shot.py` green before release tags
-- [ ] No secrets in repo; domain samples only under `data/samples/`
+- [x] Smoke `python scripts/demo_one_shot.py` green before release tags (v0.4.0-workbench shipped on green CI)
+- [x] No secrets in repo; domain samples only under `data/samples/` (scan_tracked_secrets in `npm run check`)
 
 External PRs to other Agent repos (optional): record URL in personal notes when done.

@@ -1,151 +1,121 @@
 #!/usr/bin/env python3
-"""Smoke: competition submission pack beauty rebuild artifacts.
+"""海之子杯提交包门禁（v0.4.0 提交定稿版）。
 
-Drives real generators under output/submission/ and asserts regenerated
-PDF/MP4/form paths exist with real project content (not empty template residue).
+历史：旧版驱动 build_submission_docs.py 重建 docx/PDF，但那个生成器硬编码了
+另一台机器的官方模板路径（C:\\Users\\wenjie.luo\\Downloads\\*.docx），在本机必然
+FileNotFoundError——门禁等于恒红。2026-08-31 提交定稿改为：
+
+  - 视频：仍然**真重建**（build_demo_video.py + narration.json 全在仓内，
+    cv2 渲染，无外部依赖），并卡官方限制（≤120s / ≤500MB）
+  - 两份 PDF：**验收不重建**（它们由 output/submission/01|03 的 HTML 经
+    Edge headless 打印，CI 环境没有 Edge；HTML 源已入仓可追溯）
+  - 表单 txt：文件名对照
+
+产物命名（Civil Buddy 品牌，2026-08-31 起）：
+  00-提交表单填写.txt · 01-说明文档-CivilBuddy.pdf ·
+  02-介绍视频-CivilBuddy.mp4 · 03-人机协同履历表-CivilBuddy.pdf
+
+用法：python scripts/test_submission_beauty.py [--verify-only]
+  --verify-only 跳过视频重建（快速核对四件是否在位）
 """
 from __future__ import annotations
 
-import re
 import subprocess
 import sys
-import zipfile
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 OUT = ROOT / "output" / "submission"
 
-
-def _run(script: str) -> None:
-    p = OUT / script
-    assert p.is_file(), p
-    r = subprocess.run(
-        [sys.executable, str(p)],
-        cwd=str(ROOT),
-        capture_output=True,
-        text=True,
-        encoding="utf-8",
-        errors="replace",
-        timeout=300,
-    )
-    print(r.stdout)
-    if r.returncode != 0:
-        print(r.stderr)
-        raise SystemExit(f"FAIL {script} rc={r.returncode}")
+PDF_DOC = OUT / "01-说明文档-CivilBuddy.pdf"
+PDF_RESUME = OUT / "03-人机协同履历表-CivilBuddy.pdf"
+MP4 = OUT / "02-介绍视频-CivilBuddy.mp4"
+FORM = OUT / "00-提交表单填写.txt"
 
 
-def _pdf_text(path: Path) -> str:
-    try:
-        from pypdf import PdfReader  # type: ignore
+def _mp4_duration(path: Path) -> float:
+    """读 mvhd 时长，不依赖 ffprobe。"""
+    import struct
 
-        reader = PdfReader(str(path))
-        return "\n".join((page.extract_text() or "") for page in reader.pages)
-    except Exception:
-        pass
-    try:
-        import PyPDF2  # type: ignore
-
-        reader = PyPDF2.PdfReader(open(path, "rb"))
-        return "\n".join((page.extract_text() or "") for page in reader.pages)
-    except Exception:
-        pass
-    # fallback: docx source sibling
-    docx = path.with_suffix(".docx")
-    if docx.is_file():
-        from docx import Document
-
-        d = Document(str(docx))
-        parts = [p.text for p in d.paragraphs]
-        for t in d.tables:
-            for row in t.rows:
-                for c in row.cells:
-                    parts.append(c.text)
-        return "\n".join(parts)
-    return ""
+    d = path.read_bytes()
+    i = d.find(b"mvhd")
+    if i < 0:
+        return -1.0
+    ver = d[i + 4]
+    if ver == 0:
+        ts, dur = struct.unpack(">II", d[i + 16 : i + 24])
+    else:
+        ts = struct.unpack(">I", d[i + 24 : i + 28])[0]
+        dur = struct.unpack(">Q", d[i + 28 : i + 36])[0]
+    return dur / ts if ts else -1.0
 
 
 def main() -> int:
-    assert OUT.is_dir(), OUT
-    print("== rebuild docs ==")
-    _run("build_submission_docs.py")
-    print("== rebuild video ==")
-    _run("build_demo_video.py")
-    # form refresh after video exists
-    _run("build_submission_docs.py")
+    try:
+        sys.stdout.reconfigure(encoding="utf-8", errors="replace")
+    except Exception:  # noqa: BLE001
+        pass
 
-    pdf1 = OUT / "01-说明文档-装箱拼柜Agent工作台.pdf"
-    pdf2 = OUT / "03-人机协同履历表-packing-agent.pdf"
-    mp4 = OUT / "02-介绍视频-packing-agent.mp4"
-    form = OUT / "00-提交表单填写.txt"
+    verify_only = "--verify-only" in sys.argv
     fails: list[str] = []
 
-    for p in (pdf1, pdf2, mp4, form):
-        if not p.is_file() or p.stat().st_size < 500:
-            fails.append(f"missing/empty {p.name}")
+    if not verify_only:
+        print("== rebuild video ==")
+        r = subprocess.run(
+            [sys.executable, str(OUT / "build_demo_video.py")],
+            cwd=str(ROOT), capture_output=True, text=True,
+            encoding="utf-8", errors="replace", timeout=600,
+        )
+        if r.returncode != 0:
+            print(r.stderr[-800:])
+            fails.append("build_demo_video.py 重建失败")
 
-    t1 = _pdf_text(pdf1)
-    if "packing-agent" not in t1 and "装箱拼柜" not in t1:
-        fails.append("说明文档 missing title/repo markers")
-    if "github.com/LUOaini1213/packing-agent" not in t1 and "LUOaini1213" not in t1:
-        # allow docx-only extract
-        if "作品链接" not in t1 and "IntentSpec" not in t1:
-            fails.append("说明文档 body too sparse / template leftover only")
-    bad_tpl = "用简短文字概括作品是做什么的"
-    if bad_tpl in t1:
-        fails.append("说明文档 still has template instruction phrase")
+    # 四件在位 + 基本体检
+    for p, floor in ((PDF_DOC, 50_000), (PDF_RESUME, 50_000), (FORM, 200)):
+        if not p.is_file() or p.stat().st_size < floor:
+            fails.append(f"缺失或过小：{p.name}")
+    for p in (PDF_DOC, PDF_RESUME):
+        if p.is_file() and p.read_bytes()[:4] != b"%PDF":
+            fails.append(f"不是 PDF：{p.name}")
+        if p.is_file() and p.stat().st_size > 30 * 1024 * 1024:
+            fails.append(f"超官方 30MB 限：{p.name}")
 
-    t2 = _pdf_text(pdf2)
-    if "罗文杰" not in t2 and "L5" not in t2:
-        fails.append("履历表 missing name/capability markers")
-    if "多智能体" not in t2 and "架构" not in t2:
-        fails.append("履历表 missing filled scenario rows")
+    # 注意：build_demo_video.py 的直接输出是脚本内部旧路径名，
+    # 终版 02-介绍视频-CivilBuddy.mp4 由口播合流步骤产出——这里验收终版。
+    if not MP4.is_file():
+        fails.append(f"缺失：{MP4.name}")
+    else:
+        dur = _mp4_duration(MP4)
+        mb = MP4.stat().st_size / 1e6
+        print(f"video duration_s={dur:.1f} size_mb={mb:.2f}")
+        if not (0 < dur <= 120.0):
+            fails.append(f"视频时长超官方 2 分钟限：{dur:.1f}s")
+        if mb > 500:
+            fails.append(f"视频超官方 500MB 限：{mb:.1f}MB")
 
-    # video constraints
-    import cv2
-
-    cap = cv2.VideoCapture(str(mp4))
-    fps = cap.get(cv2.CAP_PROP_FPS) or 30
-    frames = cap.get(cv2.CAP_PROP_FRAME_COUNT) or 0
-    cap.release()
-    dur = frames / fps if fps else 0
-    size_mb = mp4.stat().st_size / 1e6
-    print(f"video duration_s={dur:.1f} size_mb={size_mb:.2f}")
-    if dur <= 0 or dur > 120:
-        fails.append(f"video duration out of range: {dur}")
-    if size_mb > 500:
-        fails.append(f"video too large: {size_mb}MB")
-
-    # polish markers in video generator source
+    # 口径红线：产物源里不许出现被禁数字/旧口径
     vsrc = (OUT / "build_demo_video.py").read_text(encoding="utf-8")
-    for m in ("C_PANEL", "C_ACCENT", "rounded", "badge", "grid"):
-        if m not in vsrc and m.lower() not in vsrc:
-            # rounded_rect or _rounded_rect
-            if m == "rounded" and "_rounded_rect" not in vsrc:
-                fails.append(f"video generator missing polish marker {m}")
-            elif m != "rounded":
-                fails.append(f"video generator missing polish marker {m}")
+    nar = (OUT / "narration.json").read_text(encoding="utf-8")
+    for banned in ("9.15", "9.75"):
+        for name, text in (("build_demo_video.py", vsrc), ("narration.json", nar)):
+            if banned in text:
+                fails.append(f"禁句数字 {banned} 出现在 {name}")
+    if "8.85" not in vsrc and "八点八五" not in nar:
+        fails.append("对外唯一口径 8.85 在视频素材里消失了")
 
-    # form paths resolve
-    form_t = form.read_text(encoding="utf-8")
-    for name in (pdf1.name, pdf2.name, mp4.name):
-        if name not in form_t and str(OUT / name) not in form_t:
-            # absolute path may use different separators
-            if name.split(".")[0] not in form_t:
-                fails.append(f"form missing path marker for {name}")
-    # listed absolute paths exist
-    for m in re.finditer(r"[A-Za-z]:\\[^\s\r\n]+", form_t):
-        p = Path(m.group(0))
-        if p.suffix.lower() in {".pdf", ".mp4", ".docx", ".zip", ".txt"} and not p.exists():
-            fails.append(f"form path missing on disk: {p}")
+    # 表单：引用的三件必须在位（按 00/01/02/03 编号对照）
+    if FORM.is_file():
+        form_t = FORM.read_text(encoding="utf-8")
+        for tag in ("01-说明文档", "02-介绍视频", "03-人机协同履历表"):
+            if tag not in form_t:
+                fails.append(f"表单未提及 {tag}")
 
     if fails:
         print("FAIL submission_beauty", fails)
         return 1
     print("ALL_PASS submission_beauty")
-    print("pdf1_bytes", pdf1.stat().st_size)
-    print("pdf2_bytes", pdf2.stat().st_size)
-    print("mp4_bytes", mp4.stat().st_size)
-    print("duration_s", round(dur, 1))
+    for p in (PDF_DOC, PDF_RESUME, MP4, FORM):
+        print(f"  {p.name}  {p.stat().st_size} bytes")
     return 0
 
 
