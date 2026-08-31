@@ -1,0 +1,56 @@
+{
+  "_readme": "ux(round19) 项目/会话索引的唯一契约真源。Rust 侧 workbench/src/projects.rs 与 Python 侧 demo/projects.py 都是消费者，不许各留一份手工副本 —— 与 contract/intents.v1.json 同一套纪律（见 contract/README.md）。改契约先改这里，再改两侧实现，最后跑 scripts/test_projects_parity.py 对拍。",
+  "version": 1,
+  "schemas": {
+    "projects": "civil.projects.v1",
+    "sessions": "civil.sessions.v1",
+    "session_detail": "civil.session.detail.v1",
+    "session_meta": "civil.session.meta.v1"
+  },
+  "inbox": {
+    "id": "p-inbox",
+    "name": "未归类",
+    "_why": "服务端合成、不落盘、不可改名不可归档不可合并。空 project_id、指向不存在的 id、指向已归档 id 三种情况全归它 —— 注册表被手工改坏也不会有会话消失。"
+  },
+  "limits": {
+    "default_limit": 50,
+    "max_limit": 100,
+    "name_max_chars": 60,
+    "title_max_chars": 40,
+    "transcript_tail": 200,
+    "text_max_bytes": 8000,
+    "session_index_max_env": "CIVIL_SESSION_INDEX_MAX",
+    "session_index_max_default": 500
+  },
+  "project_id_pattern": "^p-[0-9a-f]{8}$",
+  "session_id": {
+    "allowed": "ASCII 字母数字与 - _",
+    "min_len": 4,
+    "max_len": 32,
+    "reject_underscore_prefix": true,
+    "_why": "demo/out/_threads 与 _index 是真实存在的非会话目录，朴素扫描会把它们当会话列出来。"
+  },
+  "fields": {
+    "project": ["id", "name", "aliases", "n_sessions", "updated_at", "archived"],
+    "session_row": ["session_id", "title", "project_id", "updated_at", "turns"],
+    "session_detail": [
+      "ok", "schema", "session_id", "title", "project_id",
+      "updated_at", "turns", "transcript", "truncated"
+    ],
+    "transcript_line": ["ts", "role", "text"]
+  },
+  "routes": {
+    "GET /api/projects": "civil.projects.v1 —— {projects[], inbox{}}",
+    "POST /api/projects": "建档幂等：按 casefold 精确比对已有 name+aliases，命中直接返回并带 merged:true",
+    "PATCH /api/projects/{pid}": "改名只改 name、id 不动、旧名进 aliases；p-inbox 一律 400",
+    "POST /api/projects/{pid}/merge": "写墓碑 {id, merged_into} 保留不删，解析时跟随一跳",
+    "GET /api/sessions": "查询参数 project_id / q / limit / offset",
+    "GET /api/sessions/{sid}": "civil.session.detail.v1，含 transcript 尾部 N 条",
+    "PATCH /api/sessions/{sid}": "手动归类 / 改标题，写 *_source=manual"
+  },
+  "auto_classify": {
+    "rule": "对活跃项目的 name + aliases 做大小写不敏感子串包含，最长优先首命中",
+    "never_creates": true,
+    "_why": "trace.json 的 project 字段实测高频值是「问」(99 条，前端从输入框前 40 字现搓) 与 H-worker-brief(78 条 eval fixture)。自动建档会造出几十个垃圾项目，比全部未归类更糟。归类是自动的，建档是人的动作。"
+  }
+}

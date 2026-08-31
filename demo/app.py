@@ -228,6 +228,98 @@ def set_config(body: PolicyIn) -> dict:
     return {"ok": True, **cfg.to_dict()}
 
 
+# ===== ux(round19) 项目 / 会话索引（Rust workbench/src/projects.rs 的镜像）=====
+# 契约单源 contract/projects.v1.json；行为差异由 scripts/test_projects_parity.py 对拍。
+# 说明：/api/threads 是 /new 与 /bg 的**并行任务通道**（threads.py 里 session_id ==
+# thread_id），**不是会话列表** —— 主 SSE 聊天路径从不创建 thread。左栏数据源是
+# 下面的 /api/sessions。
+
+
+@app.get("/api/projects")
+def projects_list() -> dict:
+    import projects as pj
+
+    return pj.list_projects(OUT_ROOT)
+
+
+class ProjectIn(BaseModel):
+    name: str = ""
+
+
+@app.post("/api/projects")
+def projects_create(body: ProjectIn) -> dict:
+    import projects as pj
+
+    try:
+        item, merged = pj.create_project(OUT_ROOT, body.name)
+    except ValueError as e:
+        raise HTTPException(400, str(e))
+    return {"ok": True, "project": item, "merged": merged}
+
+
+class ProjectPatchIn(BaseModel):
+    name: str | None = None
+    archived: bool | None = None
+
+
+@app.patch("/api/projects/{pid}")
+def projects_patch(pid: str, body: ProjectPatchIn) -> dict:
+    import projects as pj
+
+    try:
+        item = pj.patch_project(OUT_ROOT, pid, body.name, body.archived)
+    except ValueError as e:
+        raise HTTPException(400, str(e))
+    return {"ok": True, "project": item}
+
+
+class MergeIn(BaseModel):
+    into: str = ""
+
+
+@app.post("/api/projects/{pid}/merge")
+def projects_merge(pid: str, body: MergeIn) -> dict:
+    import projects as pj
+
+    try:
+        item = pj.merge_project(OUT_ROOT, pid, body.into)
+    except ValueError as e:
+        raise HTTPException(400, str(e))
+    return {"ok": True, "project": item}
+
+
+@app.get("/api/sessions")
+def sessions_list(project_id: str = "", q: str = "", limit: int = 0, offset: int = 0) -> dict:
+    import projects as pj
+
+    return pj.list_sessions(OUT_ROOT, project_id, q, limit or pj.DEFAULT_LIMIT, offset)
+
+
+@app.get("/api/sessions/{sid}")
+def session_get(sid: str) -> dict:
+    import projects as pj
+
+    try:
+        return pj.session_detail(OUT_ROOT, sid)
+    except ValueError as e:
+        raise HTTPException(400, str(e))
+
+
+class SessionPatchIn(BaseModel):
+    project_id: str | None = None
+    title: str | None = None
+
+
+@app.patch("/api/sessions/{sid}")
+def session_patch(sid: str, body: SessionPatchIn) -> dict:
+    import projects as pj
+
+    try:
+        return {"ok": True, "session": pj.set_session_meta(OUT_ROOT, sid, body.project_id, body.title)}
+    except ValueError as e:
+        raise HTTPException(400, str(e))
+
+
 @app.get("/api/threads")
 def threads_list() -> dict:
     from packing_assistant.runtime.threads import list_threads
