@@ -49,6 +49,83 @@ def _setup_cjk_font() -> None:
             continue
 
 
+def _fit_label(
+    ax,
+    cx: float,
+    cy: float,
+    text: str,
+    box_w: float,
+    box_h: float,
+    *,
+    base_size: float = 8.0,
+    min_size: float = 4.5,
+    color: str = "white",
+):
+    """把箱号塞进箱子里，塞不下宁可不画，也不要糊成一团。
+
+    真实缺陷：原先每个箱子固定 ``fontsize=8`` 居中写箱号，窄箱上文字宽度远超箱宽，
+    直接溢出压到相邻箱号上，多个标签叠成一坨（见 output/side_*.png 右半段
+    BOX-14/15、BOX-06/16、BOX-10/09）。多柜网格图每柜只有 6 inch，更糊。
+
+    策略三级降级：
+      1. 按可用宽度等比缩字号（不低于 ``min_size``）；
+      2. 仍放不下就竖排——箱高方向比箱宽方向富余得多；
+      3. 竖排也放不下才放弃该标签（箱体颜色仍在，箱号可在装箱方案表里查）。
+
+    必须在 ``set_xlim`` / ``set_ylim`` / ``set_aspect`` **之后**调用：
+    坐标变换在那之前还不是最终值，量出来的像素宽度是错的。
+    """
+    if not text:
+        return None
+    t = ax.text(
+        cx, cy, str(text),
+        ha="center", va="center",
+        fontsize=base_size, color=color, fontweight="bold", zorder=5,
+    )
+    try:
+        ax.apply_aspect()  # aspect="equal" 会改轴框，先落定再量
+        renderer = ax.figure.canvas.get_renderer()
+    except Exception:
+        renderer = None
+    if renderer is None:
+        # 拿不到 renderer（非 Agg 等）：退化为按字符数的保守估计，宁可小也不要溢出
+        est = max(1, len(str(text)))
+        if box_w < 0.16 * est:
+            t.set_fontsize(min_size)
+            t.set_rotation(90)
+        return t
+
+    def _span_px(w: float, h: float):
+        x0, y0 = ax.transData.transform((0.0, 0.0))
+        x1, y1 = ax.transData.transform((w, h))
+        return abs(x1 - x0), abs(y1 - y0)
+
+    box_px_w, box_px_h = _span_px(box_w, box_h)
+    avail_w = box_px_w * 0.88
+
+    bb = t.get_window_extent(renderer)
+    if bb.width <= avail_w:
+        return t
+
+    # 1) 等比缩字号
+    scaled = base_size * avail_w / max(bb.width, 1e-6)
+    if scaled >= min_size:
+        t.set_fontsize(scaled)
+        return t
+
+    # 2) 竖排：比的是「文字高度 vs 箱宽」和「文字长度 vs 箱高」
+    t.set_rotation(90)
+    for size in (base_size, base_size * 0.85, min_size):
+        t.set_fontsize(size)
+        bb = t.get_window_extent(renderer)
+        if bb.width <= avail_w and bb.height <= box_px_h * 0.92:
+            return t
+
+    # 3) 放弃：不画比糊成一团强
+    t.remove()
+    return None
+
+
 def _draw_one_ax(
     ax,
     items: List[Dict[str, Any]],
@@ -74,6 +151,7 @@ def _draw_one_ax(
         if a.get("type") == "pad_beam" and a.get("box_id"):
             pad_ids.add(str(a.get("box_id")))
 
+    _pending_labels: List[Tuple[float, float, Any, Optional[float]]] = []
     for i, item in enumerate(items):
         start = float(item.get("起始位置_m") or item.get("x_m") or 0)
         length = float(item.get("长度_m") or item.get("dx_m") or 0.5)
@@ -92,16 +170,12 @@ def _draw_one_ax(
                 alpha=0.9,
             )
         )
-        ax.text(
-            start + length / 2,
-            0.5,
-            box_id,
-            ha="center",
-            va="center",
-            fontsize=8,
-            color="white",
-            fontweight="bold",
-        )
+        # 箱号推迟到轴范围/aspect 落定后再画：那时坐标变换才是最终值，才量得准。
+        # 同时记下 x 区间与宽度方向坐标，供下面的「同段柜长多箱」分层排布使用。
+        _y_hint = item.get("y_m")
+        if _y_hint is None and item.get("y_mm") is not None:
+            _y_hint = float(item.get("y_mm")) / 1000.0
+        _pending_labels.append((start, length, box_id, _y_hint))
         if is_pad:
             ax.text(
                 start + length / 2,
@@ -147,6 +221,39 @@ def _draw_one_ax(
     ax.set_title(title, fontsize=10)
     ax.set_aspect("equal", adjustable="box")
     ax.grid(axis="x", linestyle="--", alpha=0.4)
+
+    # 箱号最后画：此时 xlim/ylim/aspect 已定，_fit_label 量到的像素宽度才是真的。
+    #
+    # 关键缺陷（实测 output/side_20260831_112518.png）：侧视图是沿**柜宽方向**的投影，
+    # 并排两列的箱子 x 完全相同（BOX-04 y=0 与 BOX-03 y=1150 同为 x=3750..5000mm），
+    # 两个箱号会**精确压在同一点**上糊成一团——不是窄箱溢出，缩字号根本救不了。
+    # 解法：按 x 区间分组，同组在箱高方向分层排布；既不重叠，又如实表达
+    # 「这一段柜长上并排放了几箱」。
+    _groups: List[List[Tuple[float, float, Any, Optional[float]]]] = []
+    for _lab in sorted(
+        _pending_labels,
+        key=lambda r: (r[0], r[3] if r[3] is not None else 0.0),
+    ):
+        _hit = None
+        for _g in _groups:
+            _gs = min(x for x, _w, _b, _y in _g)
+            _ge = max(x + _w for x, _w, _b, _y in _g)
+            if _lab[0] < _ge - 1e-6 and _lab[0] + _lab[1] > _gs + 1e-6:
+                _hit = _g
+                break
+        if _hit is not None:
+            _hit.append(_lab)
+        else:
+            _groups.append([_lab])
+    for _g in _groups:
+        _n = len(_g)
+        _base = 8.0 if _n == 1 else max(5.0, 8.0 - 1.5 * (_n - 1))
+        for _i, (_start, _len, _bid, _y) in enumerate(_g):
+            _cy = 0.15 + 0.7 * ((_i + 0.5) / _n)
+            _fit_label(
+                ax, _start + _len / 2.0, _cy, _bid, _len, 0.7 / _n,
+                base_size=_base,
+            )
 
 
 def _annotations_for_container(

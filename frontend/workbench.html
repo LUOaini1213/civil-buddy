@@ -2809,6 +2809,13 @@ button.danger { background: var(--cb-red); box-shadow: none; }
                 <strong>建议：</strong>{{ verdict.actions.join('；') }}
               </div>
               <div class="row-acts">
+                <!-- ux(round18) 出图可发现性：简洁演示模式下拼柜完成故意停在总览先给裁决，
+                     此前只用一行 statusText 提示「再点可视化」，混在一排 pill 里极易漏看
+                     （实测：用户以为出不来图）。这里给一个首位主按钮直达布局图。 -->
+                <button type="button" @click="mainTab = 'visual'" v-if="hasViews || hasScene3d"
+                        title="3D 场景与俯视/侧视/正视布局图">
+                  看布局图
+                </button>
                 <button type="button" class="soft" @click="mainTab = 'risk'" v-if="(verdict.level === 'block' || verdict.level === 'warn')">
                   查看风险详情
                 </button>
@@ -6869,7 +6876,7 @@ window.CB_POSTS = [{"id":"bid-parse","name":"招标解析","aliases":["招标","
               // 剧本第 3 步：先总览裁决，再可选手动进可视化
               this.mainTab = 'overview';
               this.statusText =
-                '【剧本 2→3】拼柜完成 · 看总览 mid50/ship_ok；需要布局图再点「可视化」';
+                '【剧本 2→3】拼柜完成 · 看总览 mid50/ship_ok；布局图点裁决卡上的「看布局图」按钮';
             } else {
               this.mainTab = this.hasViews || this.hasScene3d ? 'visual' : 'overview';
             }
