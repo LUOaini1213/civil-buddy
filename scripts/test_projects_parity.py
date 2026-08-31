@@ -26,6 +26,10 @@ ROOT = Path(__file__).resolve().parents[1]
 VOLATILE = {"created_at", "updated_at", "ts", "n_sessions"}
 
 
+class SkipParity(Exception):
+    """无 Rust 工具链时的跳过信号（退出码 0，不阻断 CI）。"""
+
+
 def make_fixture(tag: str) -> Path:
     """临时 demo 根：out/ 下造 3 个会话目录 + 1 个 _threads 干扰目录。"""
     base = Path(tempfile.mkdtemp(prefix=f"cb-parity-{tag}-"))
@@ -126,15 +130,25 @@ print(json.dumps(res, ensure_ascii=True))
 def run_rust(demo: Path) -> dict:
     """Rust 侧走 cargo test 里的同名断言不够 —— 这里直接跑一个一次性 bin 太重，
     改为复用已编译的库：用 `cargo run --example` 不存在，故走 tests 里的 dump 用例。"""
-    exe = ROOT / "workbench" / "target" / "release" / "parity_dump.exe"
-    if not exe.is_file():
+    # 可执行名跨平台：Windows 带 .exe，Linux/macOS 不带。
+    # （首版写死 .exe，本机绿而 CI 的 ubuntu runner 直接红 —— 已修。）
+    rel = ROOT / "workbench" / "target" / "release"
+    cands = [rel / "parity_dump.exe", rel / "parity_dump"]
+    exe = next((c for c in cands if c.is_file()), None)
+    if exe is None:
+        if shutil.which("cargo") is None:
+            # 没有 Rust 工具链的 runner：SKIP 而不是 FAIL（同 test_js_syntax 无 node 的处理）
+            raise SkipParity("未安装 cargo，跳过 Rust 侧对拍")
         r = subprocess.run(
             ["cargo", "build", "--release", "--bin", "parity_dump"],
             cwd=str(ROOT / "workbench"), capture_output=True, text=True,
-            encoding="utf-8", errors="replace", timeout=900,
+            encoding="utf-8", errors="replace", timeout=1800,
         )
         if r.returncode != 0:
             raise RuntimeError("cargo build parity_dump 失败：" + (r.stderr or "")[-600:])
+        exe = next((c for c in cands if c.is_file()), None)
+    if exe is None:
+        raise RuntimeError(f"parity_dump 未生成，找过：{[str(c) for c in cands]}")
     p = subprocess.run([str(exe), str(demo / "out")], capture_output=True, text=True,
                        encoding="utf-8", errors="replace", timeout=120)
     if p.returncode != 0:
@@ -154,6 +168,9 @@ def main() -> int:
     try:
         py = run_python(py_demo)
         rs = run_rust(rs_demo)
+    except SkipParity as e:
+        print(f"SKIP 项目索引双栈对拍：{e}")
+        return 0
     except Exception as e:  # noqa: BLE001
         print(f"FAIL 对拍无法执行：{e}")
         return 1
