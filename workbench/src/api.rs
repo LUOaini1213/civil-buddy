@@ -49,6 +49,13 @@ pub fn app(state: AppState) -> Router {
         .route("/", get(index))
         .route("/api/health", get(health))
         .route("/api/llm-config", get(llm_config_get).post(llm_config_set))
+        /* ux(round19) 项目 / 会话索引（左栏两级列表）。Rust 自持 JSON，零依赖 ——
+           发布包里没有 Python 也没有数据库，SQLite 路线对评委 exe 贡献为零。 */
+        .route("/api/projects", get(projects_list).post(projects_create))
+        .route("/api/projects/{pid}", axum::routing::patch(projects_patch))
+        .route("/api/projects/{pid}/merge", post(projects_merge))
+        .route("/api/sessions", get(sessions_list))
+        .route("/api/sessions/{sid}", get(session_get).patch(session_patch))
         .route("/api/catalog", get(catalog))
         .route("/api/kb/{expert_id}", get(kb))
         .route("/api/studio/tree", get(studio_tree))
@@ -164,6 +171,115 @@ async fn llm_config_set(Json(req): Json<LlmConfigIn>) -> Json<Value> {
         model,
     }));
     llm_config_get().await
+}
+
+/* ===== ux(round19) 项目 / 会话索引 handlers =====
+   契约见 contract/projects.v1.json；Python 参考实现镜像在 demo/projects.py。
+   越界守卫统一走 projects::safe_session_id（合并了 attach.rs 与 harness.rs 两份
+   重复检查，另加拒 `_` 前缀 —— demo/out/_threads 是真实存在的非会话目录）。 */
+
+async fn projects_list(State(st): State<Arc<AppState>>) -> Json<Value> {
+    Json(crate::projects::list_projects(&st.paths))
+}
+
+#[derive(Deserialize)]
+struct ProjectIn {
+    #[serde(default)]
+    name: String,
+}
+
+async fn projects_create(
+    State(st): State<Arc<AppState>>,
+    Json(body): Json<ProjectIn>,
+) -> Result<Json<Value>, ApiError> {
+    let (item, merged) = crate::projects::create_project(&st.paths, &body.name)
+        .map_err(|e| err(StatusCode::BAD_REQUEST, &e))?;
+    Ok(Json(json!({"ok": true, "project": item, "merged": merged})))
+}
+
+#[derive(Deserialize)]
+struct ProjectPatchIn {
+    #[serde(default)]
+    name: Option<String>,
+    #[serde(default)]
+    archived: Option<bool>,
+}
+
+async fn projects_patch(
+    State(st): State<Arc<AppState>>,
+    AxPath(pid): AxPath<String>,
+    Json(body): Json<ProjectPatchIn>,
+) -> Result<Json<Value>, ApiError> {
+    let item = crate::projects::patch_project(
+        &st.paths,
+        &pid,
+        body.name.as_deref(),
+        body.archived,
+    )
+    .map_err(|e| err(StatusCode::BAD_REQUEST, &e))?;
+    Ok(Json(json!({"ok": true, "project": item})))
+}
+
+#[derive(Deserialize)]
+struct MergeIn {
+    #[serde(default)]
+    into: String,
+}
+
+async fn projects_merge(
+    State(st): State<Arc<AppState>>,
+    AxPath(pid): AxPath<String>,
+    Json(body): Json<MergeIn>,
+) -> Result<Json<Value>, ApiError> {
+    let item = crate::projects::merge_project(&st.paths, &pid, &body.into)
+        .map_err(|e| err(StatusCode::BAD_REQUEST, &e))?;
+    Ok(Json(json!({"ok": true, "project": item})))
+}
+
+async fn sessions_list(
+    State(st): State<Arc<AppState>>,
+    Query(q): Query<HashMap<String, String>>,
+) -> Json<Value> {
+    let pid = q.get("project_id").cloned().unwrap_or_default();
+    let query = q.get("q").cloned().unwrap_or_default();
+    let limit = q
+        .get("limit")
+        .and_then(|s| s.parse::<usize>().ok())
+        .unwrap_or_else(crate::projects::default_limit);
+    let offset = q.get("offset").and_then(|s| s.parse::<usize>().ok()).unwrap_or(0);
+    Json(crate::projects::list_sessions(&st.paths, &pid, &query, limit, offset))
+}
+
+async fn session_get(
+    State(st): State<Arc<AppState>>,
+    AxPath(sid): AxPath<String>,
+) -> Result<Json<Value>, ApiError> {
+    let v = crate::projects::session_detail(&st.paths, &sid)
+        .map_err(|e| err(StatusCode::BAD_REQUEST, &e))?;
+    Ok(Json(v))
+}
+
+#[derive(Deserialize)]
+struct SessionPatchIn {
+    #[serde(default)]
+    project_id: Option<String>,
+    #[serde(default)]
+    title: Option<String>,
+}
+
+async fn session_patch(
+    State(st): State<Arc<AppState>>,
+    AxPath(sid): AxPath<String>,
+    Json(body): Json<SessionPatchIn>,
+) -> Result<Json<Value>, ApiError> {
+    let v = crate::projects::set_session_meta(
+        &st.paths,
+        &sid,
+        body.project_id.as_deref(),
+        body.title.as_deref(),
+    )
+    .map_err(|e| err(StatusCode::BAD_REQUEST, &e))?;
+    Ok(Json(json!({"ok": true, "session": v})))
 }
 
 async fn health(State(st): State<Arc<AppState>>) -> Json<Value> {
@@ -638,6 +754,9 @@ async fn firm_bid(State(st): State<Arc<AppState>>, Json(body): Json<FirmBidIn>) 
 
 #[derive(Deserialize)]
 struct ChatIn {
+    /* ux(round19)：前端「在某项目下新建会话」时带上，touch_session 据此 manual 归类 */
+    #[serde(default)]
+    project_id: String,
     message: String,
     #[serde(default)]
     history: Vec<Value>,
@@ -736,9 +855,25 @@ async fn chat(State(st): State<Arc<AppState>>, Json(body): Json<ChatIn>) -> Resu
     let st2 = st.clone();
     let llm = st.llm.clone();
     let confirm_ok = body.confirm_ok;
+    /* ux(round19) 会话索引与对话落盘：在 send 闭包里截 done 事件取回复，spawn 收尾时
+       统一写一次 —— chat 有三条出口（run_plain / firm / 专家循环），逐个挂钩必漏。
+       全部失败吞掉：绝不因索引写不动而阻断 SSE。 */
+    let idx_paths = st.paths.clone();
+    let idx_session = session.clone();
+    let idx_user = body.message.clone();
+    let idx_project = body.project_id.clone();
+    let reply_acc = std::sync::Arc::new(std::sync::Mutex::new(String::new()));
+    let reply_send = reply_acc.clone();
     tokio::spawn(async move {
-        let send = |ev: agent::EventOut| {
+        let send = move |ev: agent::EventOut| {
             let (name, data) = ev;
+            if name == "done" {
+                if let Some(t) = data.get("text").and_then(|v| v.as_str()) {
+                    if let Ok(mut g) = reply_send.lock() {
+                        *g = t.to_string();
+                    }
+                }
+            }
             let payload = serde_json::to_string(&data).unwrap_or_else(|_| "{}".into());
             Event::default().event(name).data(payload)
         };
@@ -858,6 +993,17 @@ async fn chat(State(st): State<Arc<AppState>>, Json(body): Json<ChatIn>) -> Resu
                 .data(json!({"text": e.to_string()}).to_string());
             let _ = tx.send(Ok(ev)).await;
         }
+        let reply = reply_acc.lock().map(|g| g.clone()).unwrap_or_default();
+        let _ = tokio::task::spawn_blocking(move || {
+            crate::projects::touch_session(&idx_paths, &idx_session, &idx_user, &idx_project);
+            if !idx_user.trim().is_empty() {
+                crate::projects::append_turn(&idx_paths, &idx_session, "user", &idx_user);
+            }
+            if !reply.trim().is_empty() {
+                crate::projects::append_turn(&idx_paths, &idx_session, "assistant", &reply);
+            }
+        })
+        .await;
     });
 
     Ok(Sse::new(ReceiverStream::new(rx))

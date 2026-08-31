@@ -13,6 +13,7 @@ pub mod llm;
 pub mod mcp;
 pub mod packing_bridge;
 pub mod parse;
+pub mod projects;
 pub mod packs;
 pub mod rag;
 pub mod store;
