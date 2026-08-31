@@ -7,22 +7,22 @@
   <link rel="manifest" href="/static/manifest.webmanifest" />
   <link rel="icon" href="/static/icons/cb-icon.svg" type="image/svg+xml" />
   <title>Civil Buddy</title>
-  <!-- ux(round11) 主题/大字早应用：持久化值先于首帧落地，防 FOUC（VS Code settings pattern，附录 J） -->
+  <!-- ux(round11) 主题/大字早应用：持久化值先于首帧落地，防 FOUC（VS Code settings pattern，附录 J）
+       ux(round14)：暗色为默认主题（未选择时不再跟随系统；浅色仍可显式切换，参考图深炭色基线） -->
   <script>
   (function () {
     var d = document.documentElement, KEY_T = "cb_theme_v1", KEY_L = "cb_large_v1";
     function read(k) { try { return localStorage.getItem(k); } catch (e) { return null; } }
     window.cbApplyTheme = function (t) {
-      if (t === "dark") d.setAttribute("data-theme", "dark");
-      else if (t === "light") d.setAttribute("data-theme", "light");
-      else d.removeAttribute("data-theme");
+      if (t === "light") d.setAttribute("data-theme", "light");
+      else d.setAttribute("data-theme", "dark"); /* round14：dark 为默认（含未设置/未知值） */
       var m = document.querySelector('meta[name="theme-color"]');
-      var dark = t === "dark" || (!t && window.matchMedia && matchMedia("(prefers-color-scheme: dark)").matches);
-      if (m) m.setAttribute("content", dark ? "#0c121a" : "#2563eb");
+      var dark = d.getAttribute("data-theme") !== "light";
+      if (m) m.setAttribute("content", dark ? "#17181a" : "#2563eb");
     };
     window.cbThemeSaved = function () { return read(KEY_T) || ""; };
     window.cbLargeSaved = function () { return read(KEY_L) === "1"; };
-    cbApplyTheme(read(KEY_T) || "");
+    cbApplyTheme(read(KEY_T) || "dark");
     if (read(KEY_L) === "1") d.classList.add("cb-large");
   })();
   </script>
@@ -39,9 +39,9 @@
     </div>
     <div class="top-meta">
       <!-- ux(round8) 汉堡键：≤768 显示，展开「会话/岗位」侧栏（.rail.mobile-open，附录 G） -->
-      <button type="button" id="railToggle" class="top-btn" aria-label="展开或收起会话与岗位栏" aria-expanded="false">☰ 栏目</button>
+      <button type="button" id="railToggle" class="top-btn" aria-label="展开或收起会话与岗位栏" aria-expanded="false">栏目</button>
       <!-- ux(round11) 主题/大字开关：cb_theme_v1 / cb_large_v1 持久化；图标=文字（附录 J） -->
-      <button type="button" id="cbThemeBtn" class="top-btn" title="切换深色/浅色主题（默认跟随系统）">明</button>
+      <button type="button" id="cbThemeBtn" class="top-btn" title="切换深色/浅色主题（默认深色）">明</button>
       <button type="button" id="cbLargeBtn" class="top-btn" title="大字模式：全站字号放大一档" aria-pressed="false">大</button>
       <span id="keyBadge" class="pill warn">检查 API Key…</span>
       <span class="pill quiet" id="modelBadge">模型未配置</span>
@@ -59,11 +59,11 @@
 
   <main class="layout">
     <aside class="rail">
-      <p class="rail-lead">全企业任何人可问任意专家。提问不写盘；说「写一份」才出草稿。</p>
+      <!-- ux(round14) 参考图侧栏：顶部「新建任务」主按钮（=清空当前会话回空态卡）+ 会话列表（标题+相对时间） -->
+      <button type="button" id="btnNewThread" class="rail-new" title="清空当前会话，回到空态卡">+ 新建任务</button>
       <div class="thread-box">
         <div class="thread-head">
-          <span>对话</span>
-          <button type="button" id="btnNewThread" class="ghost tiny">新建</button>
+          <span>最近会话</span>
           <button type="button" id="btnBg" class="ghost tiny">并行</button>
         </div>
         <div id="threadList"></div>
@@ -114,10 +114,15 @@
           我明白，将由持证人员签认
         </label>
         <div class="composer-note">AI 草稿 · 不签认</div>
-        <div class="input-wrap">
-          <textarea id="input" rows="1" placeholder="描述任务，或 /快捷指令 · @选择岗位；Enter 发送 / Shift+Enter 换行"></textarea>
-          <div id="cmdMenu" class="cb-at-menu cb-cmd-menu" hidden role="listbox" aria-label="快捷指令"></div>
-          <div id="atMenu" class="cb-at-menu" hidden role="listbox" aria-label="岗位补全"></div>
+        <!-- ux(round14) 输入条重做（参考图）：大圆角容器 · 左"+"开快捷指令面板 · 中间 textarea · 右侧圆形发送键 -->
+        <div class="composer-shell">
+          <button type="button" id="composerPlus" class="composer-plus" aria-label="打开快捷指令面板" title="快捷指令">+</button>
+          <div class="input-wrap">
+            <textarea id="input" rows="1" placeholder="描述任务，或 /快捷指令 · @选择岗位；Enter 发送 / Shift+Enter 换行"></textarea>
+            <div id="cmdMenu" class="cb-at-menu cb-cmd-menu" hidden role="listbox" aria-label="快捷指令"></div>
+            <div id="atMenu" class="cb-at-menu" hidden role="listbox" aria-label="岗位补全"></div>
+          </div>
+          <button type="submit" id="send" aria-label="发送" title="发送（Enter）">↑</button>
         </div>
         <div class="local-row">
           <input id="localPath" type="text" placeholder="本机文件路径（不要填 D:\layout）" />
@@ -135,7 +140,6 @@
             <button type="button" data-fill="把临边防护编成工友班前三分钟白话。">白话</button>
             <button type="button" data-fill="从下面这段招标里抽出评分点和必须编制的专项：某市政人行道维修，要求编制高处作业/临边专项方案，技术标 40 分。">招标</button>
           </div>
-          <button type="submit" id="send">发送</button>
         </div>
       </form>
     </section>

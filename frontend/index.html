@@ -625,7 +625,7 @@
         <p class="hint">{{ (handoff.p0_reject_scan && handoff.p0_reject_scan.note) || '' }}</p>
         <ul class="todo-list" v-if="(handoff.star_items || []).length">
           <li v-for="s in handoff.star_items" :key="s.id">
-            <span class="badge bad">★</span>
+            <span class="badge bad">重点</span>
             <strong>{{ s.text }}</strong>
             <span class="muted">· {{ s.requirement_ref }}</span>
           </li>

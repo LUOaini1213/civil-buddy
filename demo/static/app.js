@@ -75,6 +75,34 @@ async function loadPolicy() {
   }
 }
 
+/* ux(round14)：相对时间（参考图会话列表「名称 + 相对时间」；只抄线程 updated_at 字段） */
+function cbRelTime(ts) {
+  const t = Number(ts);
+  if (!t || !isFinite(t)) return "";
+  const diff = Math.max(0, Date.now() / 1000 - t);
+  if (diff < 60) return "刚刚";
+  if (diff < 3600) return Math.floor(diff / 60) + " 分钟";
+  if (diff < 86400) return Math.floor(diff / 3600) + " 小时";
+  if (diff < 86400 * 30) return Math.floor(diff / 86400) + " 天";
+  return new Date(t * 1000).toISOString().slice(0, 10);
+}
+
+/* ux(round14)：「新建任务」=清空当前会话回空态卡（Codex 历史流第 0 号 cell 复位） */
+function cbResetToEmpty() {
+  const log = $("log");
+  if (log) {
+    for (const el of Array.from(log.children)) {
+      if (el.id !== "cbOnboard" && el.id !== "cbEmpty") el.remove();
+    }
+    const empty = $("cbEmpty");
+    if (empty) {
+      empty.hidden = false;
+      empty.classList.add("welcome"); /* 发送首条消息时沿用既有移除逻辑 */
+    }
+  }
+  cbLastDeliverables = [];
+}
+
 async function loadThreads() {
   const box = $("threadList");
   if (!box) return;
@@ -85,7 +113,14 @@ async function loadThreads() {
       const b = document.createElement("button");
       b.type = "button";
       b.className = "thread-row" + (t.thread_id === state.threadId ? " on" : "");
-      b.textContent = `${t.thread_id} · ${t.state} · ${t.title || ""}`;
+      b.title = `${t.title || t.thread_id} · ${t.state || ""}`;
+      const name = document.createElement("span");
+      name.className = "t-name";
+      name.textContent = t.title || t.thread_id;
+      const time = document.createElement("span");
+      time.className = "t-time";
+      time.textContent = cbRelTime(t.updated_at || t.created_at);
+      b.append(name, time);
       b.addEventListener("click", () => {
         state.threadId = t.thread_id;
         state.session = t.session_id || t.thread_id;
@@ -93,6 +128,9 @@ async function loadThreads() {
         addStatus(`thread ${t.thread_id}`);
       });
       box.appendChild(b);
+    }
+    if (!box.children.length) {
+      box.innerHTML = '<div class="thread-none">暂无会话</div>';
     }
   } catch (e) {
     box.textContent = "";
@@ -109,6 +147,7 @@ if ($("btnNewThread")) {
     state.threadId = data.thread_id;
     state.session = data.session_id || data.thread_id;
     await loadThreads();
+    cbResetToEmpty();
     addStatus(`/new ${data.thread_id}`);
   });
 }
@@ -943,7 +982,7 @@ function cbRecentPush(text) {
 const CB_ONBOARD_KEY = "cb_onboarded_v1";
 const CB_ONBOARD_STEPS = [
   { t: "输入任务，或点一张示例卡（预填，不自动发送）" },
-  { t: "看时间线跑完：8 阶段收口 ✓" },
+  { t: "看时间线跑完：8 阶段收口" },
   { t: "在审批卡点确认 · 或文书预览 / 下载 .md" },
 ];
 
@@ -1000,7 +1039,7 @@ function cbOnboardRender() {
   x.className = "cb-ob-x";
   x.setAttribute("aria-label", "收起新手引导");
   x.title = "收起（不再自动弹出）";
-  x.textContent = "✕";
+  x.textContent = "关闭";
   x.addEventListener("click", () => {
     cbOb.dismissed = true;
     cbOnboardSave(cbOb);
@@ -1014,8 +1053,8 @@ function cbOnboardRender() {
     if (cbOb.s[i]) li.className = "on";
     else if (i === cbOb.s.indexOf(false)) li.className = "now";
     const dot = document.createElement("span");
-    dot.className = "cb-ob-dot";
-    dot.textContent = "✓";
+    dot.className = "cb-ob-dot"; /* round14：完成态=CSS 实心绿点，不写字符 */
+    dot.setAttribute("aria-hidden", "true");
     const t = document.createElement("span");
     t.className = "cb-ob-t";
     t.textContent = "①②③"[i] + " " + s.t;
@@ -1286,6 +1325,23 @@ function cbComposerInit() {
     cbAtUpdate();
     cbCmdUpdate();
   });
+  /* ux(round14) 输入条左「+」按钮：展开 /快捷指令面板（复用 U-R9 浮层，不自动发送） */
+  const plus = $("composerPlus");
+  if (plus) {
+    plus.addEventListener("click", () => {
+      const tok = cbSlashQuery(ta.value, ta.selectionStart);
+      if (!tok) {
+        if (ta.value && !/\s$/.test(ta.value)) ta.value += " ";
+        ta.value += "/";
+        ta.selectionStart = ta.selectionEnd = ta.value.length;
+        cbAutosize(ta);
+      }
+      cbCmd.dismissed = null;
+      cbCmd.dismissedAt = null;
+      cbCmdUpdate();
+      ta.focus();
+    });
+  }
   ta.addEventListener("keydown", (ev) => {
     if (cbCmd.open) {
       if (ev.key === "ArrowDown") { ev.preventDefault(); cbCmdMove(1); return; }
@@ -1394,7 +1450,7 @@ function cbCmdRender() {
         el.className = "cb-cmd-item cb-cmd-recent";
         const ico = document.createElement("span");
         ico.className = "cb-cmd-ico tone-gray";
-        ico.textContent = "↺";
+        ico.textContent = "近"; /* round14：单字色块图标（与 装/标/安 同式），不用符号 */
         const name = document.createElement("span");
         name.className = "cb-cmd-name";
         name.textContent = String(r.t).slice(0, 46);
@@ -1596,15 +1652,10 @@ function cbThemeWire() {
       sync();
     });
   }
-  /* 系统明暗变化时：未显式选择主题则跟随（VS Code "system" 语义） */
+  /* ux(round14)：暗色为默认主题——未显式选择时不再随系统翻转（浅色=显式切换，参考图深炭色基线） */
   if (window.matchMedia) {
     const mq = matchMedia("(prefers-color-scheme: dark)");
-    const onSys = () => {
-      if (!window.cbThemeSaved || !cbThemeSaved()) {
-        if (window.cbApplyTheme) cbApplyTheme("");
-        sync();
-      }
-    };
+    const onSys = () => sync();
     mq.addEventListener ? mq.addEventListener("change", onSys) : mq.addListener && mq.addListener(onSys);
   }
   sync();
@@ -1720,7 +1771,7 @@ function cbTlCreate(bodyEl, sourceMessage) {
     chip.className = "cb-tl-stage idle";
     chip.setAttribute("data-cb-stage", key);
     chip.setAttribute("role", "listitem"); /* ux(round11)：时间线节点=listitem（附录 J） */
-    chip.innerHTML = '<span class="cb-tl-st">·</span>' + label;
+    chip.innerHTML = '<span class="cb-tl-st" aria-hidden="true"></span>' + label; /* round14：状态=纯 CSS 圆点，无字符 */
     chip.title = label;
     trackEl.appendChild(chip);
     stages[key].el = chip;
@@ -1733,8 +1784,8 @@ function cbTlCreate(bodyEl, sourceMessage) {
     if (st.state === "run") {
       st.el.innerHTML = '<span class="cb-tl-spin" aria-hidden="true"></span>' + st.label;
     } else {
-      const icon = st.state === "done" ? "✓" : st.state === "warn" ? "⚠" : st.state === "err" ? "⛔" : "·";
-      st.el.innerHTML = '<span class="cb-tl-st">' + icon + "</span>" + st.label;
+      /* ux(round14)：done/warn/err 状态 = 单色 CSS 圆点（.cb-tl-st），不再写字符（规则见 spec 附录 L） */
+      st.el.innerHTML = '<span class="cb-tl-st" aria-hidden="true"></span>' + st.label;
     }
   }
 
@@ -1832,7 +1883,7 @@ function cbTlCreate(bodyEl, sourceMessage) {
       '<span class="cb-apr-title">人工确认 · ' + gateLabel(info.gate) + "</span>" +
       '<span class="cb-apr-risk is-high">风险 · 高</span>' +
       '<span class="cb-apr-state apr-state" hidden></span>' +
-      '<button type="button" class="cb-apr-x" title="关闭 = 驳回，永不放行" aria-label="关闭审批卡（等同驳回，不放行）">✕</button>' +
+      '<button type="button" class="cb-apr-x" title="关闭 = 驳回，永不放行" aria-label="关闭审批卡（等同驳回，不放行）">关闭</button>' +
       "</div>" +
       '<div class="cb-apr-body apr-waiting">' +
       '<div class="cb-apr-chips" data-cb-approval-summary="true">' +
@@ -1878,7 +1929,7 @@ function cbTlCreate(bodyEl, sourceMessage) {
         addLine("hitl", "hitl.reject", "用户驳回（" + (reason || "") + "）· 未放行 · 未出稿", "warn");
         const note = document.createElement("div");
         note.className = "cb-apr-reject-note";
-        note.textContent = "⚠ 已驳回（" + (reason || "驳回") + "）· 未放行，未出任何稿 · 请修改输入后重跑（补齐数据 / 更换岗位 / 调整任务描述）";
+        note.textContent = "已驳回（" + (reason || "驳回") + "）· 未放行，未出任何稿 · 请修改输入后重跑（补齐数据 / 更换岗位 / 调整任务描述）";
         decidedBody.appendChild(note);
       }
       aprAudit(kind === "approved" ? "确认 · 已重新提交" : "驳回 · 未放行", reason);

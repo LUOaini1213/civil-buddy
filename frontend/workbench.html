@@ -23,9 +23,9 @@
       --muted: var(--cb-text-muted);
       --faint: var(--cb-text-faint);
       --accent: var(--cb-blue);
-      --accent-2: #8b6cff;                    /* 品牌紫：装饰渐变/徽记，双主题恒定 */
+      --accent-2: var(--cb-blue-strong);       /* ux(round14)：品牌紫收敛为工程蓝（两级灰阶+一个品牌蓝） */
       --accent-soft: var(--cb-blue-soft);
-      --accent-glow: rgba(91, 141, 239, 0.35);
+      --accent-glow: transparent;              /* ux(round14)：去彩色光晕（参考图无辉光） */
       --ok: var(--cb-green);
       --ok-bg: var(--cb-green-soft);
       --warn: var(--cb-orange);
@@ -66,44 +66,45 @@
       color-scheme: light;
     }
     /* === ux(round11) 暗色主题：灰阶 50/100/200 反转；工程蓝/安全橙/合规红/通过绿暗底提亮一档（附录 J）===
-       取值=本页原暗盘（零回归）；两处同构（显式选择 + 系统偏好回退），改动须同步。 */
+       ux(round14)：暗盘切参考图深炭色三级灰阶（#17181a/#1e2023/#2a2d31，替代旧蓝灰盘）；
+       两处同构（显式选择 + 系统偏好回退），改动须同步。 */
     :root[data-theme="dark"] {
-      --cb-blue: #5b8def; --cb-blue-strong: #8db4ff; --cb-blue-soft: rgba(91, 141, 239, 0.18);
+      --cb-blue: #5b8def; --cb-blue-strong: #8db4ff; --cb-blue-soft: rgba(91, 141, 239, 0.16);
       --cb-orange: #e6b84d; --cb-orange-soft: rgba(230, 184, 77, 0.14);
       --cb-red: #f07178; --cb-red-soft: rgba(240, 113, 120, 0.14);
       --cb-green: #3ecf8e; --cb-green-soft: rgba(62, 207, 142, 0.14);
-      --cb-gray-50: #0c121a; --cb-gray-100: #141c28; --cb-gray-200: #253041;
-      --cb-gray-400: #7a8aa3; --cb-gray-500: #a8b4c8; --cb-gray-900: #f1f5fb;
+      --cb-gray-50: #17181a; --cb-gray-100: #1e2023; --cb-gray-200: #2a2d31;
+      --cb-gray-400: #858b95; --cb-gray-500: #a4aab4; --cb-gray-900: #e9eaec;
       --cb-text: var(--cb-gray-900); --cb-text-muted: var(--cb-gray-500);
-      --cb-bg: #0c121a; --cb-panel: #141c28; --cb-panel-soft: #1a2433;
-      --cb-line: #334155; --cb-line-soft: #253041;
-      --cb-text-faint: #7a8aa3;
+      --cb-bg: #17181a; --cb-panel: #1e2023; --cb-panel-soft: #24262a;
+      --cb-line: #303338; --cb-line-soft: #26282c;
+      --cb-text-faint: #7d838d;
       --cb-blue-ink: #8db4ff; --cb-orange-ink: #f0d48a; --cb-green-ink: #7ee7b0;
       --cb-on-accent: #0c121a;
       --cb-focus: #8db4ff;
-      --cb-shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.45);
-      --cb-shadow-md: 0 4px 18px rgba(0, 0, 0, 0.45);
-      --cb-shadow-lg: 0 10px 32px rgba(0, 0, 0, 0.5);
+      --cb-shadow-sm: none;
+      --cb-shadow-md: none;
+      --cb-shadow-lg: none;
       color-scheme: dark;
     }
     @media (prefers-color-scheme: dark) {
       :root:not([data-theme="light"]) {
-        --cb-blue: #5b8def; --cb-blue-strong: #8db4ff; --cb-blue-soft: rgba(91, 141, 239, 0.18);
+        --cb-blue: #5b8def; --cb-blue-strong: #8db4ff; --cb-blue-soft: rgba(91, 141, 239, 0.16);
         --cb-orange: #e6b84d; --cb-orange-soft: rgba(230, 184, 77, 0.14);
         --cb-red: #f07178; --cb-red-soft: rgba(240, 113, 120, 0.14);
         --cb-green: #3ecf8e; --cb-green-soft: rgba(62, 207, 142, 0.14);
-        --cb-gray-50: #0c121a; --cb-gray-100: #141c28; --cb-gray-200: #253041;
-        --cb-gray-400: #7a8aa3; --cb-gray-500: #a8b4c8; --cb-gray-900: #f1f5fb;
+        --cb-gray-50: #17181a; --cb-gray-100: #1e2023; --cb-gray-200: #2a2d31;
+        --cb-gray-400: #858b95; --cb-gray-500: #a4aab4; --cb-gray-900: #e9eaec;
         --cb-text: var(--cb-gray-900); --cb-text-muted: var(--cb-gray-500);
-        --cb-bg: #0c121a; --cb-panel: #141c28; --cb-panel-soft: #1a2433;
-        --cb-line: #334155; --cb-line-soft: #253041;
-        --cb-text-faint: #7a8aa3;
+        --cb-bg: #17181a; --cb-panel: #1e2023; --cb-panel-soft: #24262a;
+        --cb-line: #303338; --cb-line-soft: #26282c;
+        --cb-text-faint: #7d838d;
         --cb-blue-ink: #8db4ff; --cb-orange-ink: #f0d48a; --cb-green-ink: #7ee7b0;
         --cb-on-accent: #0c121a;
         --cb-focus: #8db4ff;
-        --cb-shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.45);
-        --cb-shadow-md: 0 4px 18px rgba(0, 0, 0, 0.45);
-        --cb-shadow-lg: 0 10px 32px rgba(0, 0, 0, 0.5);
+        --cb-shadow-sm: none;
+        --cb-shadow-md: none;
+        --cb-shadow-lg: none;
         color-scheme: dark;
       }
     }
@@ -2006,24 +2007,115 @@
   position: absolute; width: 1px; height: 1px; margin: -1px; padding: 0;
   overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; border: 0;
 }
+/* === ux(round14) 视觉基线收敛（参考图对齐）：深炭底 · 两级面板 · 一条淡边 · 一个品牌蓝 ===
+   去渐变/去重阴影/去彩色光晕；圆角统一 8-12px；本块按同名选择器后置覆写，不动前面各轮规则。 */
+:root { --cb-side: var(--cb-panel-soft); --radius: 12px; --radius-sm: 8px; }
+:root[data-theme="dark"] { --cb-side: #121316; }
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) { --cb-side: #121316; }
+}
+body {
+  background: var(--cb-bg);
+}
+.topbar {
+  background: var(--cb-bg);
+  border-bottom: 1px solid var(--cb-line-soft);
+  box-shadow: none;
+  backdrop-filter: none;
+}
+.topbar::after { display: none; }
+.brand-mark {
+  background: var(--cb-blue); border-radius: 8px; box-shadow: none;
+}
+button {
+  background: var(--cb-panel-soft);
+  box-shadow: none;
+}
+button:hover:not(:disabled) { transform: none; box-shadow: none; }
+button.primary, button.primary-lg {
+  background: var(--cb-blue); border-color: transparent;
+}
+button.ghost { background: transparent; border: 1px solid var(--cb-line-soft); }
+button.soft { background: var(--cb-panel-soft); border: 1px solid var(--cb-line-soft); }
+button.danger { background: var(--cb-red); box-shadow: none; }
+.sidebar {
+  background: var(--cb-side);
+  box-shadow: none;
+}
+.side-composer { background: transparent; border-top: 1px solid var(--cb-line-soft); }
+.org-chart {
+  border: 1px solid var(--cb-line-soft);
+  background: transparent;
+  box-shadow: none;
+}
+.org-layer-big { background: transparent; border-color: var(--cb-line-soft); }
+.demo-script {
+  border: 1px solid var(--cb-line-soft);
+  background: var(--cb-panel-soft);
+  box-shadow: none;
+}
+/* ux(round14) 左侧会话栏（参考图）：「新建任务」主按钮 + 最近会话（名称+相对时间，选中浅色圆角高亮） */
+.side-sessions { padding: 10px 14px 4px; border-bottom: 1px solid var(--cb-line-soft); }
+.rail-new {
+  width: 100%; display: flex; align-items: center; justify-content: center; gap: 6px;
+  background: transparent; color: var(--text);
+  border: 1px solid var(--cb-line); padding: 8px 10px; cursor: pointer;
+  border-radius: 10px; font: inherit; font-size: 13px; font-weight: 600;
+}
+.rail-new:hover { background: var(--cb-panel-soft); border-color: var(--cb-gray-400); }
+.sess-label { font-size: 11px; color: var(--muted); margin: 10px 0 4px; }
+.sess-row {
+  display: flex; justify-content: space-between; align-items: baseline; gap: 8px;
+  width: 100%; text-align: left; background: transparent; border: 0;
+  color: var(--muted); padding: 7px 10px; margin: 0 0 2px; cursor: pointer;
+  font: inherit; font-size: 12px; border-radius: 8px;
+}
+.sess-row .t-name { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.sess-row .t-time { flex: none; font-size: 11px; color: var(--faint); }
+.sess-row:hover { background: var(--cb-panel-soft); color: var(--text); }
+.sess-row.on { background: var(--cb-blue-soft); color: var(--text); }
+.sess-none { font-size: 12px; color: var(--faint); padding: 2px 10px 8px; }
+/* ux(round14) 输入条重做（参考图）：大圆角容器 · 左"+"开指令面板 · 右下圆形发送键 */
+.composer-shell {
+  display: flex; align-items: flex-end; gap: 6px;
+  background: var(--cb-panel-soft); border: 1px solid var(--cb-line-soft);
+  border-radius: 16px; padding: 8px 10px;
+}
+.composer-shell:focus-within { border-color: var(--cb-blue); }
+.composer-plus {
+  flex: none; width: 30px; height: 30px; margin: 0 0 4px; display: grid; place-items: center;
+  background: transparent; border: none; border-radius: 50%;
+  color: var(--muted); font-size: 18px; line-height: 1; cursor: pointer;
+}
+.composer-plus:hover { background: var(--cb-gray-200); color: var(--text); }
+.composer-shell textarea { border: none; background: transparent; padding: 6px 4px; box-shadow: none; }
+.composer-shell textarea:focus { box-shadow: none; }
+.composer-send {
+  flex: none; width: 34px; height: 34px; margin: 0 0 2px; padding: 0;
+  display: grid; place-items: center; border-radius: 50%;
+  background: var(--cb-blue); color: var(--cb-on-accent); border: none;
+  font-size: 16px; font-weight: 700; line-height: 1;
+}
+.composer-send:hover:not(:disabled) { background: var(--cb-blue-strong); transform: none; }
+.composer-row button { flex: none; font-size: 12px; padding: 6px 12px; }
+
   </style>
-  <!-- ux(round11) 主题/大字早应用：持久化值先于首帧落地，防 FOUC（VS Code settings pattern，附录 J） -->
+  <!-- ux(round11) 主题/大字早应用：持久化值先于首帧落地，防 FOUC（VS Code settings pattern，附录 J）
+       ux(round14)：暗色为默认主题（未选择时不再跟随系统；浅色仍可显式切换，参考图深炭色基线） -->
   <script>
   (function () {
     var d = document.documentElement, KEY_T = "cb_theme_v1", KEY_L = "cb_large_v1";
     function read(k) { try { return localStorage.getItem(k); } catch (e) { return null; } }
     window.cbApplyTheme = function (t) {
-      if (t === "dark") d.setAttribute("data-theme", "dark");
-      else if (t === "light") d.setAttribute("data-theme", "light");
-      else d.removeAttribute("data-theme");
-      var dark = t === "dark" || (!t && window.matchMedia && matchMedia("(prefers-color-scheme: dark)").matches);
+      if (t === "light") d.setAttribute("data-theme", "light");
+      else d.setAttribute("data-theme", "dark"); /* round14：dark 为默认（含未设置/未知值） */
+      var dark = d.getAttribute("data-theme") !== "light";
       var m = document.querySelector('meta[name="theme-color"]');
-      if (m) m.setAttribute("content", dark ? "#0c121a" : "#2563eb");
+      if (m) m.setAttribute("content", dark ? "#17181a" : "#2563eb");
     };
     window.cbThemeSaved = function () { return read(KEY_T) || ""; };
     window.cbIsDark = function () {
-      return d.getAttribute("data-theme") === "dark" ||
-        (!d.hasAttribute("data-theme") && window.matchMedia && matchMedia("(prefers-color-scheme: dark)").matches);
+      return d.getAttribute("data-theme") !== "light";
     };
     window.cbThemeSync = function () {
       var tb = document.getElementById("cbThemeBtn"), lb = document.getElementById("cbLargeBtn");
@@ -2057,7 +2149,7 @@
       el.textContent = "";
       window.setTimeout(function () { el.textContent = String(text || ""); }, 30);
     };
-    cbApplyTheme(read(KEY_T) || "");
+    cbApplyTheme(read(KEY_T) || "dark");
     if (read(KEY_L) === "1") d.classList.add("cb-large");
   })();
   </script>
@@ -2083,11 +2175,11 @@
           <!-- ux(round8) 汉堡键：≤820 显示，展开左侧团队/岗位栏（.sidebar.mobile-open，附录 G） -->
           <button type="button" class="soft cb-nav-toggle" aria-label="展开或收起侧栏"
                   aria-expanded="false"
-                  onclick="var sb=document.querySelector('.sidebar');if(sb){var o=sb.classList.toggle('mobile-open');this.setAttribute('aria-expanded',o?'true':'false')}">☰ 菜单</button>
+                  onclick="var sb=document.querySelector('.sidebar');if(sb){var o=sb.classList.toggle('mobile-open');this.setAttribute('aria-expanded',o?'true':'false')}">菜单</button>
           <!-- ux(round10) 三步引导重开入口：首访自动弹 checklist，之后点 ? 随时重开（localStorage cb_onboarded_v1） -->
           <button type="button" class="soft" @click="cbObReopen" title="新手引导 · 三步上手" aria-label="重新打开三步新手引导">?</button>
           <!-- ux(round11) 主题/大字开关：cb_theme_v1 / cb_large_v1 持久化；图标=文字，与 demo 端同位（附录 J） -->
-          <button type="button" id="cbThemeBtn" class="soft" title="切换深色/浅色主题（默认跟随系统）" onclick="cbThemeToggle()">明</button>
+          <button type="button" id="cbThemeBtn" class="soft" title="切换深色/浅色主题（默认深色）" onclick="cbThemeToggle()">明</button>
           <button type="button" id="cbLargeBtn" class="soft" title="大字模式：全站字号放大一档" aria-pressed="false" onclick="cbLargeToggle()">大</button>
           <a href="/" class="soft" style="text-decoration:none;display:inline-flex;align-items:center">投标应答</a>
           <span class="pill" v-if="loading || (streamProgress.done > 0 && streamProgress.total)">
@@ -2129,11 +2221,11 @@
           <span class="pill" :class="gatewayOk ? 'ok' : 'err'" :title="preflightTitle">
             <span class="dot"></span> 网关 {{ gatewayOk ? 'UP' : 'DOWN' }}
           </span>
-          <span class="pill warn" v-if="result.phase === 'await_user_confirm'">★ 待 HITL</span>
+          <span class="pill warn" v-if="result.phase === 'await_user_confirm'">待确认</span>
           <span class="pill" v-if="verdict && verdict.level"
                 :class="verdict.level === 'ok' ? 'ok' : (verdict.level === 'block' ? 'err' : 'warn')"
                 :title="verdict.summary || ''">
-            {{ verdict.level === 'block' ? '⛔阻断' : (verdict.level === 'warn' ? '⚠预警' : '✓可用') }}
+            {{ verdict.level === 'block' ? '阻断' : (verdict.level === 'warn' ? '预警' : '可用') }}
           </span>
           <template v-if="!demoSimpleMode">
           <span class="pill" :class="skjolberOk ? 'ok' : 'warn'">
@@ -2182,6 +2274,17 @@
     <div class="body">
       <!-- Left: 三层组织图 + roster -->
       <aside class="sidebar">
+        <!-- ux(round14) 左侧会话栏（参考图）：顶部「新建任务」（=清空当前会话回空态）+ 最近会话列表（/api/audit session 索引，只读） -->
+        <div class="side-sessions">
+          <button type="button" class="rail-new" @click="cbNewTask" title="清空当前会话，回到空态卡">+ 新建任务</button>
+          <div class="sess-label">最近会话</div>
+          <button type="button" v-for="s in cbSessions" :key="s.session_id" class="sess-row"
+                  :class="{ on: s.session_id === sessionId }" @click="cbOpenSession(s)" :title="s.session_id">
+            <span class="t-name">{{ s.session_id }}</span>
+            <span class="t-time">{{ cbRelTime(s.saved_at) }}</span>
+          </button>
+          <div class="sess-none" v-if="!cbSessions.length">暂无会话；跑一次演示后自动落盘</div>
+        </div>
         <div class="side-head">
           <div class="label">大 Team ⊃ A + B</div>
           <h2>智能体组织</h2>
@@ -2237,7 +2340,7 @@
                 class="org-chip"
                 :class="orgChipClass('hitl_wait')"
                 @click="selectAgent('hitl_wait')"
-              >★ HITL 闸门</span>
+              >HITL 确认闸门</span>
             </div>
           </div>
         </div>
@@ -2291,14 +2394,17 @@
 
         <div class="side-composer">
           <div class="composer-note">AI 草稿 · 不签认</div>
-          <div class="input-wrap">
-            <textarea
-              ref="userInput"
-              v-model="userInput"
-              placeholder="描述任务，或 /快捷指令 · @选择岗位；Enter 发送 / Shift+Enter 换行"
-              @input="composerInput"
-              @keydown="composerKeydown"
-            ></textarea>
+          <!-- ux(round14) 输入条重做（参考图）：大圆角容器 · 左"+"开快捷指令面板 · 中间 textarea · 右侧圆形发送键 -->
+          <div class="composer-shell">
+            <button type="button" class="composer-plus" @click.prevent="cbPlusOpen" aria-label="打开快捷指令面板" title="快捷指令">+</button>
+            <div class="input-wrap">
+              <textarea
+                ref="userInput"
+                v-model="userInput"
+                placeholder="描述任务，或 /快捷指令 · @选择岗位；Enter 发送 / Shift+Enter 换行"
+                @input="composerInput"
+                @keydown="composerKeydown"
+              ></textarea>
             <div class="cb-at-menu" v-if="atOpen" role="listbox" aria-label="岗位补全">
               <div class="cb-at-item" :class="{ on: i === atIdx }" role="option"
                    :aria-selected="i === atIdx ? 'true' : 'false'"
@@ -2314,7 +2420,7 @@
                 <div class="cb-cmd-head">最近任务 · 点击重填（不自动发送）</div>
                 <div class="cb-cmd-item cb-cmd-recent" v-for="(r, i) in cmdRecent" :key="'cbrc'+i"
                      :title="r.t" @mousedown.prevent="cmdApplyRecent(r.t)">
-                  <span class="cb-cmd-ico tone-gray">↺</span>
+                  <span class="cb-cmd-ico tone-gray">近</span>
                   <span class="cb-cmd-name">{{ r.t.slice(0, 46) }}</span>
                   <span class="cb-cmd-desc">重填</span>
                 </div>
@@ -2330,9 +2436,11 @@
               </div>
               <div class="cb-cmd-head" v-if="!cmdItems.length">{{ cmdMode === 'tickets' ? '没有匹配的票 · Esc 返回' : '没有匹配的命令' }}</div>
             </div>
+            </div>
+            <button class="composer-send" @click="runTeamA" :disabled="loading || !userInput.trim()" :class="{ busy: loading }"
+                    aria-label="发送（生成方案）" title="生成方案（Enter 发送）">↑</button>
           </div>
           <div class="composer-row">
-            <button @click="runTeamA" :disabled="loading || !userInput.trim()" :class="{ busy: loading }" title="生成方案（Enter 发送）">{{ loading ? '运行中…' : '生成方案' }}</button>
             <button class="soft" @click="runDemo" :class="{ busy: loading }" title="留空也可点：30×密实模块≈24t">满载</button>
             <button class="ghost" @click="runPdf" :class="{ busy: loading }">PDF</button>
           </div>
@@ -2479,7 +2587,7 @@
                     <span class="cb-apr-state is-rejected" v-else-if="cbApr.state === 'rejected'">已驳回 · 未放行</span>
                     <button type="button" class="cb-apr-x" v-if="cbApr.state === 'waiting'"
                             title="关闭 = 驳回，永不放行" aria-label="关闭审批卡（等同驳回，不放行）"
-                            @click="cbAprReject('Esc/关闭')">✕</button>
+                            @click="cbAprReject('Esc/关闭')">×</button>
                   </div>
                   <div class="cb-apr-body" v-if="cbApr.state !== 'rejected'">
                     <div class="cb-apr-chips" data-cb-approval-summary="true">
@@ -2491,7 +2599,7 @@
                       <span class="cb-apr-chip" v-if="cbAprChips.canFit != null">can_fit <b>{{ cbAprChips.canFit ? 'true' : 'false' }}</b></span>
                     </div>
                     <div class="cb-apr-block" v-if="cbAprBlockers.length" data-cb-approval-blockers="true">
-                      <div v-for="(b, bi) in cbAprBlockers" :key="'aprb'+bi">⚠ {{ b }}</div>
+                      <div v-for="(b, bi) in cbAprBlockers" :key="'aprb'+bi">{{ b }}</div>
                     </div>
                     <div class="cb-apr-block is-ok" v-else>
                       工具未报告阻断项 · 柜数与坐标以确认后拼柜 3D 实装为准（tools 计算，非模型拍脑袋）
@@ -2512,7 +2620,7 @@
                   </div>
                   <div class="cb-apr-body" v-else>
                     <div class="cb-apr-reject-note">
-                      ⚠ 已驳回（{{ cbApr.reason }}）· 未进入拼柜，未放行 · 请修改输入后重跑（例如调整柜型 / 拆并箱 / 补齐数据）
+                      已驳回（{{ cbApr.reason }}）· 未进入拼柜，未放行 · 请修改输入后重跑（例如调整柜型 / 拆并箱 / 补齐数据）
                     </div>
                   </div>
                 </div>
@@ -2562,12 +2670,12 @@
             <div class="cb-ob-head">
               <strong>{{ cbOb.done ? '三步引导 · 已完成' : '三步上手' }}</strong>
               <span class="cb-ob-sub">{{ cbOb.done ? '任何时候点右上角 ? 重看' : '第一次用？跟着走 30 秒' }}</span>
-              <button type="button" class="cb-ob-x" title="收起（不再自动弹出）" aria-label="收起新手引导" @click="cbObDismiss">✕</button>
+              <button type="button" class="cb-ob-x" title="收起（不再自动弹出）" aria-label="收起新手引导" @click="cbObDismiss">×</button>
             </div>
             <ol class="cb-ob-steps">
               <li v-for="(s, i) in cbObSteps" :key="'obo'+i"
                   :class="cbOb.s[i] ? 'on' : (i === cbObNow ? 'now' : '')">
-                <span class="cb-ob-dot" aria-hidden="true">✓</span>
+                <span class="cb-ob-dot" aria-hidden="true"></span>
                 <span class="cb-ob-t">{{ '①②③'[i] }} {{ s }}</span>
               </li>
             </ol>
@@ -2612,7 +2720,7 @@
 
           <!-- Empty: full mode landing（简洁无结果时隐藏，避免中间双空洞） -->
           <div class="empty-hero" v-if="!hasAnyResult && mainTab === 'overview' && !demoSimpleMode">
-            <div class="hero-icon" aria-hidden="true">📦</div>
+            <div class="hero-icon" aria-hidden="true">CB</div>
             <h3>组建团队，开始装柜</h3>
             <p>
               结果工作区已就绪。左侧是 <strong>{{ agentCount || 13 }}</strong> 智能体（大 Team⊃A/B）+ HITL · harness v{{ harnessVersion || '0.6.4' }}。
@@ -2740,7 +2848,7 @@
             <div class="hitl-bar" v-if="result.phase === 'await_user_confirm' || (result.hitl_summary && result.hitl_summary.n_boxes)">
               <div class="hitl-top">
                 <div>
-                  <strong>★ HITL 确认闸门</strong>
+                  <strong>HITL 确认闸门</strong>
                   <div style="font-size:12px;color:var(--muted);margin-top:4px;max-width:560px;">
                     {{ (result.hitl_summary && result.hitl_summary.message) || '请确认柜型后进入团队 B 拼柜' }}
                   </div>
@@ -3156,7 +3264,7 @@
                        class="flow-chip" style="cursor:default;opacity:1"
                        :style="{ borderColor: r.applied ? 'var(--ok, #3d8)' : 'var(--muted)' }">
                     <span class="idx">{{ r.step }}</span>
-                    <span v-if="r.applied" style="color:var(--ok,#3d8)">✓</span>
+                    <span v-if="r.applied" style="color:var(--ok,#3d8)">已应用</span>
                     <span v-else style="color:var(--muted)">–</span>
                     <span v-if="r.mid50_before != null || r.mid50_after != null" style="font-size:11px;margin-left:4px">
                       {{ pct(r.mid50_before) }}→{{ pct(r.mid50_after) }}
@@ -3259,7 +3367,7 @@
                 <div class="va" v-if="boxSchemeCabinCard.hint">{{ boxSchemeCabinCard.hint }}</div>
               </div>
               <div class="verdict-banner warn" v-if="result.materials_incomplete || (errorBanner && errorBanner.materials_incomplete)" style="margin-bottom:10px">
-                <div class="vt">⛔ 缺尺寸 · 不可出运</div>
+                <div class="vt">缺尺寸 · 不可出运</div>
                 <div class="vs">有物料 L/W/H=0，成箱已阻断；请补全尺寸后重跑，勿当成可装方案。</div>
               </div>
               <div style="overflow:auto">
@@ -3432,7 +3540,7 @@
             </div>
 
             <div class="empty-hero" v-if="!hasViews && !hasScene3d">
-              <div class="hero-icon" aria-hidden="true">🗺</div>
+              <div class="hero-icon" aria-hidden="true">CB</div>
               <h3>暂无布局图</h3>
               <p>完成拼柜后这里显示三视角与等轴测 3D（本地 canvas，不是纯黑屏）。先跑「满载演示」或上传材料表。</p>
               <div class="actions">
@@ -3701,7 +3809,7 @@
             </div>
             <div v-if="drawerLiveTools.length" style="margin-bottom:8px;font-size:11px;color:var(--muted)">
               <div v-for="(tl, i) in drawerLiveTools" :key="i" style="margin:2px 0">
-                🔧 {{ tl.tool }}
+                {{ tl.tool }}
                 <span v-if="tl.duration_ms != null"> · {{ tl.duration_ms }}ms</span>
                 <span v-if="tl.status === 'running'" class="live-pulse"> · run</span>
               </div>
@@ -4283,7 +4391,7 @@ window.CB_POSTS = [{"id":"bid-parse","name":"招标解析","aliases":["招标","
           const order = [
             { key: 'big', title: '大 Team · 编排/闸门/critic/收口' },
             { key: 'A', title: '小 Team A · 成箱' },
-            { key: 'HITL', title: '★ HITL 闸门' },
+            { key: 'HITL', title: 'HITL 确认闸门' },
             { key: 'B', title: '小 Team B · 拼柜' },
           ];
           return order.map((g) => ({
@@ -4337,7 +4445,7 @@ window.CB_POSTS = [{"id":"bid-parse","name":"招标解析","aliases":["招标","
         cbObSteps() {
           return [
             '输入任务，或点一张示例卡（预填，不自动发送）',
-            '看时间线跑完：8 阶段收口 ✓',
+            '看时间线跑完：8 阶段收口',
             '在审批卡点确认 · 或文书预览 / 下载 .md',
           ];
         },
@@ -4377,7 +4485,7 @@ window.CB_POSTS = [{"id":"bid-parse","name":"招标解析","aliases":["招标","
           const s = this.demoScriptStep;
           if (this.loading) return '运行中，请稍候…';
           if (s === 1) return '点「开始第 1 步」跑满载成箱；柜数由 tools 算，不是聊天编的。';
-          if (s === 2) return '★ 停在确认闸：检查箱表 → 选柜型 →「确认并拼柜」。';
+          if (s === 2) return '停在确认闸：检查箱表 → 选柜型 →「确认并拼柜」。';
           return '拼柜完成：看总览 mid50/ship_ok，可切可视化与 Agent 输出。';
         },
         cogPrimary() {
@@ -4625,7 +4733,7 @@ window.CB_POSTS = [{"id":"bid-parse","name":"招标解析","aliases":["招标","
             return {
               show: true,
               level: 'block',
-              title: r.materials_incomplete ? '⛔ 缺尺寸 / 材料不完整' : '⛔ 运行报错',
+              title: r.materials_incomplete ? '缺尺寸 / 材料不完整' : '运行报错',
               lines: (r.materials_incomplete
                 ? ['存在 L/W/H=0 的物料，已阻断成箱与出运']
                 : []).concat(errs.slice(0, 6)),
@@ -4633,7 +4741,7 @@ window.CB_POSTS = [{"id":"bid-parse","name":"招标解析","aliases":["招标","
             };
           }
           if (warns.length) {
-            return { show: true, level: 'warn', title: '⚠️ 警告', lines: warns.slice(0, 6) };
+            return { show: true, level: 'warn', title: '警告', lines: warns.slice(0, 6) };
           }
           return { show: false, lines: [] };
         },
@@ -4926,9 +5034,9 @@ window.CB_POSTS = [{"id":"bid-parse","name":"招标解析","aliases":["招标","
         cbTlStageIcon(key) {
           const st = this.cbTl.stages[key];
           if (!st) return '·';
-          if (st.state === 'done') return '✓';
-          if (st.state === 'warn') return '⚠';
-          if (st.state === 'err') return '⛔';
+          if (st.state === 'done') return '';
+          if (st.state === 'warn') return '';
+          if (st.state === 'err') return '';
           return '·';
         },
         /* 事件 → 阶段：唯一入口，onStreamEvent 每条事件先走这里 */
@@ -5642,8 +5750,8 @@ window.CB_POSTS = [{"id":"bid-parse","name":"招标解析","aliases":["招标","
           if (!plan || (!plan.can_fit && plan.can_fit !== false && !res.phase)) {
             return { level: 'warn', title: '尚未出结果', summary: '请先运行演示或生成方案', show_banner: false, issues: [] };
           }
-          const title = level === 'block' ? '⛔ 不可出运 / 硬阻断'
-            : (level === 'warn' ? '⚠️ 可装但有预警' : '✅ 方案可用（建议人工复核）');
+          const title = level === 'block' ? '不可出运 / 硬阻断'
+            : (level === 'warn' ? '可装但有预警' : '方案可用（建议人工复核）');
           const summary = issues.length ? issues.join('；') : '可讨论出运：未见硬阻断（正式前仍需 VGM/人工）';
           const headline = [
             canFit != null ? ('can_fit=' + (canFit ? '是' : '否')) : null,
@@ -5948,11 +6056,11 @@ window.CB_POSTS = [{"id":"bid-parse","name":"招标解析","aliases":["招标","
                 let d = {};
                 try { d = JSON.parse(j.text); } catch (e) { d = {}; }
                 const dims = Object.entries(d.dims || {}).map(([k, v]) => '- ' + k + ': ' + v).join('\n');
-                const hard = Object.entries(d.hard || {}).map(([k, v]) => '- ' + k + ': ' + (v ? '✓' : '✗')).join('\n');
+                const hard = Object.entries(d.hard || {}).map(([k, v]) => '- ' + k + ': ' + (v ? '通过' : '未过')).join('\n');
                 window.cbDocOpen({
                   title: '竞赛记分卡摘要（只抄 scorecard_latest.json）',
                   text: '## 竞赛记分卡摘要\n\n- overall: ' + (d.overall != null ? d.overall : '未提供') +
-                    '\n- harness: ' + (d.harness || '未提供') + '\n- hard_ok: ' + (d.hard_ok ? '✓' : '✗') +
+                    '\n- harness: ' + (d.harness || '未提供') + '\n- hard_ok: ' + (d.hard_ok ? '通过' : '未过') +
                     '\n\n### 维度分\n\n' + (dims || '（无数据）') + '\n\n### 硬门\n\n' + (hard || '（无数据）'),
                   role: 'eval · ux(round9)',
                   project: 'Civil Buddy 记分卡',
@@ -6211,7 +6319,7 @@ window.CB_POSTS = [{"id":"bid-parse","name":"招标解析","aliases":["招标","
             if (this.result.phase === 'await_user_confirm') {
               this.statusText =
                 (this.demoSimpleMode ? '【剧本 1→2】' : '') +
-                '★ 已停在 HITL · session=' + (this.result.session_id || this.sessionId) +
+                '已停在 HITL · session=' + (this.result.session_id || this.sessionId) +
                 ' · 请确认柜型后点「确认并拼柜」';
               this.mainTab = 'overview';
               if (this.demoSimpleMode) {
@@ -6781,7 +6889,7 @@ window.CB_POSTS = [{"id":"bid-parse","name":"招标解析","aliases":["招标","
           }
         },
         async cancel() {
-          /* ux(round5)：取消/驳回统一走审批卡驳回流：显式决策事件 + 审计行 + 橙 ⚠ 不粉饰 */
+          /* ux(round5)：取消/驳回统一走审批卡驳回流：显式决策事件 + 审计行 + 橙色警示不粉饰 */
           if (this.cbApr.visible && this.cbApr.state === 'waiting') {
             await this.cbAprReject('取消按钮');
             return;
@@ -6791,7 +6899,7 @@ window.CB_POSTS = [{"id":"bid-parse","name":"招标解析","aliases":["招标","
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ session_id: this.sessionId, action: 'cancel' }),
           });
-          /* ux(round3)：Esc/取消=驳回 ≠ 放行——时间线标安全橙 ⚠，不静默完成 */
+          /* ux(round3)：Esc/取消=驳回 ≠ 放行——时间线标安全橙警示，不静默完成 */
           if (this.cbTl.hitlWait) {
             this.cbTlSetStage('hitl', 'warn', '已驳回（未放行）');
             this.cbTlAddLine('hitl', 'hitl.confirm', '用户驳回 · 未进入拼柜', 'warn');
