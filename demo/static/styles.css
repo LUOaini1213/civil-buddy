@@ -106,6 +106,15 @@ html, body {
   color: var(--ink);
   background: var(--paper);
 }
+/* ux(round19)：body 改 grid 两行（顶栏 auto + 主区 1fr），让浏览器自己算高度。
+   原先 .layout 写死 height: calc(100% - 53px)，与顶栏实际高度硬耦合——顶栏一改就错位。
+   仍需顶栏高度的只剩窄屏 fixed 覆盖层，统一引用 --cb-topbar-h。 */
+body {
+  display: grid;
+  grid-template-rows: auto 1fr;
+  height: 100dvh;
+}
+.top { min-height: var(--cb-topbar-h); }
 .top {
   display: flex;
   justify-content: space-between;
@@ -128,13 +137,14 @@ html, body {
 }
 .pill.ok { color: var(--ok); border-color: var(--cb-green); background: var(--cb-green-soft); }
 .pill.warn { color: var(--warn); border-color: var(--cb-orange); background: var(--cb-orange-soft); }
-.pill.quiet { display: none; }
+:root { --cb-topbar-h: 53px; --cb-rail-w: 260px; --cb-dock-w: 320px; }
 .layout {
   display: grid;
-  /* ux(round14)：参考图侧栏宽 ~280px */
-  grid-template-columns: 280px 1fr 260px;
-  height: calc(100% - 53px);
+  /* ux(round19)：三栏 → 两栏；审计移入右侧抽屉，展开时才占第三列 */
+  grid-template-columns: var(--cb-rail-w) minmax(0, 1fr);
+  min-height: 0;
 }
+body[data-dock="open"] .layout { grid-template-columns: var(--cb-rail-w) minmax(0, 1fr) var(--cb-dock-w); }
 .rail {
   background: var(--rail);
   color: var(--rail-ink);
@@ -315,12 +325,21 @@ html, body {
 .confirm { display: flex; gap: 8px; align-items: flex-start; font-size: 12px; color: var(--muted); margin-bottom: 8px; }
 .row { display: flex; justify-content: space-between; align-items: center; gap: 12px; margin-top: 8px; flex-wrap: wrap; }
 .hints { display: flex; flex-wrap: wrap; gap: 6px; }
-.side { overflow: auto; padding: 16px 14px 24px; background: var(--cb-bg); border-left: 1px solid var(--line); }
-.side h2 { font-size: 12px; margin: 16px 0 6px; color: var(--muted); font-weight: 600; letter-spacing: .04em; }
-.side h2:first-child { margin-top: 0; }
+/* ux(round19) 审计抽屉：宽屏是第三列，窄屏是 fixed 浮层（附录 P） */
+.dock {
+  overflow: auto; padding: 12px 14px 24px;
+  background: var(--cb-bg); border-left: 1px solid var(--line);
+  min-height: 0;
+}
+.dock[hidden] { display: none; }
+.dock-head {
+  display: flex; justify-content: space-between; align-items: center;
+  margin-bottom: 10px;
+}
+.dock-h { font-size: 12px; margin: 16px 0 6px; color: var(--muted); font-weight: 600; letter-spacing: .04em; }
 .muted { font-size: 12px; color: var(--muted); margin: 0 0 8px; }
-.side ul { list-style: none; padding: 0; margin: 0; }
-.side li { font-size: 12px; border-top: 1px solid var(--line); padding: 8px 0; }
+.dock ul { list-style: none; padding: 0; margin: 0; }
+.dock li { font-size: 12px; border-top: 1px solid var(--line); padding: 8px 0; }
 .layer { display: inline-block; font-size: 10px; padding: 0 4px; margin-right: 4px; border: 1px solid var(--line); border-radius: 4px; }
 .layer.expert { border-color: var(--accent); color: var(--accent); }
 .layer.category { border-color: var(--accent-2); color: var(--accent-2); }
@@ -368,12 +387,21 @@ html, body {
   flex: 1; border: 0; padding: 14px 16px; font: 13px/1.55 ui-monospace, Consolas, monospace;
   resize: none; background: var(--panel);
 }
+/* ux(round19) 三档断点（附录 P）：
+   ≥1280 两栏 + 抽屉可作第三列；769–1279 两栏 + 抽屉浮层；≤768 单栏 + 两者皆浮层。 */
+@media (max-width: 1279px) {
+  body[data-dock="open"] .layout { grid-template-columns: var(--cb-rail-w) minmax(0, 1fr); }
+  .dock {
+    position: fixed; right: 0; top: var(--cb-topbar-h); bottom: 0;
+    width: min(92vw, 360px); z-index: 25;
+    box-shadow: var(--cb-shadow-md);
+  }
+}
 @media (max-width: 1100px) {
-  .layout { grid-template-columns: 200px 1fr; }
-  .side { display: none; }
+  .layout { grid-template-columns: 200px minmax(0, 1fr); }
 }
 @media (max-width: 720px) {
-  .layout { grid-template-columns: 1fr; }
+  .layout { grid-template-columns: minmax(0, 1fr); }
   .rail { display: none; }
 }
 
@@ -760,7 +788,7 @@ html.cb-large {
 #railToggle { display: none; }
 .rail.mobile-open {
   display: flex; flex-direction: column;
-  position: fixed; top: 53px; left: 0; bottom: 0; z-index: 35;
+  position: fixed; top: var(--cb-topbar-h); left: 0; bottom: 0; z-index: 35;
   width: min(100%, 320px); box-shadow: var(--cb-shadow-lg);
 }
 
@@ -979,3 +1007,33 @@ html.cb-large {
   .cb-llm-row { grid-template-columns: 1fr; gap: 4px; }
   .cb-llm-acts button { flex: 1 1 100%; min-height: 44px; }
 }
+
+/* ===== ux(round19) 设置菜单 + 流内依据卡（附录 P）===== */
+.top-menu-wrap { position: relative; }
+.top-menu {
+  position: absolute; right: 0; top: calc(100% + 6px); z-index: 40;
+  min-width: 168px; padding: 4px;
+  background: var(--cb-panel); border: 1px solid var(--cb-line);
+  border-radius: var(--cb-radius-md); box-shadow: var(--cb-shadow-md);
+}
+.top-menu[hidden] { display: none; }
+.top-menu-item {
+  display: block; width: 100%; text-align: left;
+  padding: 8px 10px; min-height: var(--cb-touch-min, 44px);
+  background: transparent; border: 0; border-radius: var(--cb-radius-sm);
+  color: var(--cb-text); font: inherit; font-size: var(--cb-fs-sm); cursor: pointer;
+}
+.top-menu-item:hover { background: var(--cb-blue-soft); color: var(--cb-blue-strong); }
+.top-menu-item:focus-visible { outline: 2px solid var(--cb-focus); outline-offset: -2px; }
+
+/* 依据卡：跟着那条回答走，不再堆在右栏 */
+.cb-cite-card {
+  margin: 8px 0 0; padding: 8px 10px;
+  background: var(--cb-bg); border: 1px solid var(--cb-line);
+  border-radius: var(--cb-radius-sm);
+}
+.cb-cite-h { font-size: var(--cb-fs-xs); color: var(--cb-text-muted); margin-bottom: 4px; }
+.cb-cite-card ul { list-style: none; padding: 0; margin: 0; }
+.cb-cite-card li { font-size: var(--cb-fs-xs); border-top: 1px solid var(--cb-line); padding: 6px 0; }
+.cb-cite-card li:first-child { border-top: 0; }
+

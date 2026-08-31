@@ -44,10 +44,19 @@
       <button type="button" id="cbThemeBtn" class="top-btn" title="切换深色/浅色主题（默认深色）">明</button>
       <button type="button" id="cbLargeBtn" class="top-btn" title="大字模式：全站字号放大一档" aria-pressed="false">大</button>
       <span id="keyBadge" class="pill warn">检查 API Key…</span>
-      <button type="button" id="cbLlmOpen" class="top-btn" title="填自己的 API Key，选 DeepSeek / z.ai 等供应商">模型</button>
-      <button type="button" id="openStudio" class="top-btn">知识库</button>
+      <!-- ux(round19) 审计抽屉开关：审计从常驻右栏改为右侧抽屉（≥1280 默认展开，见附录 P） -->
+      <button type="button" id="cbDockBtn" class="top-btn" aria-expanded="true" aria-controls="cbDock" title="打开或收起审计抽屉">审计</button>
       <!-- ux(round10) 三步引导重开入口：首访自动弹 checklist，之后点 ? 随时重开（localStorage cb_onboarded_v1） -->
       <button type="button" id="onboardHelp" class="top-btn" title="新手引导 · 三步上手" aria-label="重新打开三步新手引导">?</button>
+      <!-- ux(round19) 设置菜单：把低频入口（模型 / 知识库）收进来，顶栏只留高频。
+           #cbLlmOpen 与 #openStudio 的 id 不可变——studio.js:18-19 对后者无守卫读取。 -->
+      <div class="top-menu-wrap">
+        <button type="button" id="cbMoreBtn" class="top-btn" aria-expanded="false" aria-haspopup="true" aria-controls="cbMoreMenu" title="设置">设置</button>
+        <div id="cbMoreMenu" class="top-menu" role="menu" aria-label="设置" hidden>
+          <button type="button" id="cbLlmOpen" class="top-menu-item" role="menuitem" title="填自己的 API Key，选 DeepSeek / z.ai 等供应商">模型设置</button>
+          <button type="button" id="openStudio" class="top-menu-item" role="menuitem">知识库工作室</button>
+        </div>
+      </div>
     </div>
   </header>
 
@@ -121,14 +130,16 @@
       </form>
     </section>
 
-    <aside class="side">
-      <h2>依据</h2>
-      <ul id="cites"></ul>
-      <h2>文件</h2>
-      <ul id="files"></ul>
-      <h2>本岗库</h2>
-      <ul id="kblist"></ul>
-      <h2>审计</h2>
+    <!-- ux(round19) 右栏常驻列取消，改为可开合抽屉（附录 P）：
+         「依据」改为跟着那条回答走的流内卡片（renderCites(cites, hostEl)）；
+         「文件」删除——它与 appendDocCards 渲染的是同一份 deliverables，纯重复；
+         「本岗库」暂留抽屉内，P2 随召唤面板迁走；
+         「审计」整块搬进来，DOM 常在，#auditCopy/#auditDownload 仍由 hidden 属性控制。 -->
+    <aside class="dock" id="cbDock" aria-label="审计与本岗库">
+      <div class="dock-head">
+        <strong>审计</strong>
+        <button type="button" id="cbDockClose" class="top-btn" aria-label="收起审计抽屉">收起</button>
+      </div>
       <!-- ux(round6) 跨运行审计时间线：决策置顶不可折叠 · 四色节点（docs/ux 附录 E） -->
       <div id="auditPanel" class="cb-audit" data-cb-audit-panel="true">
         <div class="cb-audit-actions">
@@ -138,6 +149,8 @@
         </div>
         <div id="auditBody" class="cb-audit-body"></div>
       </div>
+      <h2 class="dock-h">本岗库</h2>
+      <ul id="kblist"></ul>
     </aside>
   </main>
 

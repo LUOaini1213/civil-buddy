@@ -70,6 +70,73 @@ async function loadPolicy() {
   }
 }
 
+/* ===== ux(round19) 审计抽屉 + 设置菜单（docs/ux 附录 P）=====
+   审计从常驻右栏改为右侧抽屉。**≥1280 默认展开是硬约束不是审美**：
+   test_offline_ui:150 与金线第 6 项都是 page.click("#loadAudit") 且**无前置展开动作**，
+   Playwright 的 click 会等元素可见 —— 抽屉默认收起 = 两个 e2e 直接挂。
+   用户手动收起后记住（cb_dock_v1），窄屏默认收起。 */
+const CB_DOCK_KEY = "cb_dock_v1";
+const CB_DOCK_WIDE = 1280;
+
+function cbDockRead() {
+  try {
+    const v = localStorage.getItem(CB_DOCK_KEY);
+    if (v === "open") return true;
+    if (v === "closed") return false;
+  } catch (e) { /* 存储不可用：按宽度默认 */ }
+  return null;
+}
+
+function cbDockSet(open, remember) {
+  const dock = $("cbDock");
+  const btn = $("cbDockBtn");
+  if (dock) dock.hidden = !open;
+  document.body.dataset.dock = open ? "open" : "closed";
+  if (btn) btn.setAttribute("aria-expanded", open ? "true" : "false");
+  if (remember) {
+    try { localStorage.setItem(CB_DOCK_KEY, open ? "open" : "closed"); } catch (e) { /* 忽略 */ }
+  }
+}
+
+function cbDockInit() {
+  const saved = cbDockRead();
+  const wide = window.innerWidth >= CB_DOCK_WIDE;
+  cbDockSet(saved === null ? wide : saved, false);
+  const btn = $("cbDockBtn");
+  if (btn) {
+    btn.addEventListener("click", () => {
+      cbDockSet(document.body.dataset.dock !== "open", true);
+    });
+  }
+  const close = $("cbDockClose");
+  if (close) close.addEventListener("click", () => cbDockSet(false, true));
+}
+
+/* 设置菜单：低频入口（模型 / 知识库）收纳。点外部或 Esc 关闭。 */
+function cbMoreInit() {
+  const btn = $("cbMoreBtn");
+  const menu = $("cbMoreMenu");
+  if (!btn || !menu) return;
+  const setOpen = (open) => {
+    menu.hidden = !open;
+    btn.setAttribute("aria-expanded", open ? "true" : "false");
+  };
+  btn.addEventListener("click", (ev) => {
+    ev.stopPropagation();
+    setOpen(menu.hidden);
+  });
+  menu.addEventListener("click", () => setOpen(false));
+  document.addEventListener("click", (ev) => {
+    if (!menu.hidden && !menu.contains(ev.target) && ev.target !== btn) setOpen(false);
+  });
+  document.addEventListener("keydown", (ev) => {
+    if (ev.key === "Escape" && !menu.hidden) setOpen(false);
+  });
+}
+
+cbDockInit();
+cbMoreInit();
+
 /* ux(round19)：本地新会话 —— 不依赖任何后端接口，任何后端上都生效。 */
 function cbNewLocalSession() {
   state.threadId = "";
@@ -653,9 +720,8 @@ async function streamChat(message, bodyEl) {
         if (acc) state.history.push({ role: "assistant", content: acc });
         if (data.context) paintContext(data.context);
         else paintContext(estimateLocalContext());
-        renderCites(data.citations || []);
+        renderCites(data.citations || [], bodyEl);
         cbLastDeliverables = Array.isArray(data.deliverables) ? data.deliverables : []; /* ux(round9)：/doc 最近交付物 */
-        renderFiles(data.deliverables || []);
         appendDocCards(data.deliverables || [], bodyEl);
         /* ux(round7)：缺数引导条——UNSPECIFIED/[A001] 徽章旁的「去补数」，预填草稿不自动发送 */
         const miss = typeof CB_FIX !== "undefined" ? CB_FIX.classifyMissing(acc) : null;
@@ -667,40 +733,32 @@ async function streamChat(message, bodyEl) {
   }
 }
 
-function renderCites(cites) {
-  const box = $("cites");
-  if (!box) return;
-  for (const c of cites) {
+/* ux(round19)：「依据」从常驻右栏改为**跟着那条回答走**的流内卡片（附录 P）。
+   依据本来就是某一条回答的产物，堆在右栏等于把它和上下文剥离。
+   renderFiles 一并删除——它与 appendDocCards 渲染的是同一份 deliverables，纯重复。 */
+function renderCites(cites, hostEl) {
+  const list = Array.isArray(cites) ? cites : [];
+  if (!list.length) return;
+  const host = hostEl && hostEl.parentElement ? hostEl.parentElement : null;
+  if (!host) return;
+  const card = document.createElement("div");
+  card.className = "cb-cite-card";
+  const h = document.createElement("div");
+  h.className = "cb-cite-h";
+  h.textContent = `依据 ${list.length} 条`;
+  card.appendChild(h);
+  const ul = document.createElement("ul");
+  for (const c of list) {
     const li = document.createElement("li");
     const title = c.display || c.title || (c.path || "").split("/").pop();
     const layer = c.layer_label || layerName(c.layer);
     li.title = c.path || "";
     li.innerHTML = `<span class="layer ${c.layer}">${escapeHtml(layer)}</span><b>${escapeHtml(title)}</b><br>${escapeHtml(c.snippet || c.path || "")}`;
-    box.prepend(li);
+    ul.appendChild(li);
   }
+  card.appendChild(ul);
+  host.appendChild(card);
 }
-
-function renderFiles(files) {
-  const box = $("files");
-  if (!box) return;
-  for (const f of files) {
-    const li = document.createElement("li");
-    const a = document.createElement("a");
-    a.href = fileUrl(f.path);
-    a.textContent = `${f.expert} · ${f.name}`;
-    /* ux(round4)：markdown 交付物点开即文书预览（其余类型保持下载） */
-    if (isDocMd(f)) {
-      a.addEventListener("click", (ev) => {
-        ev.preventDefault();
-        openDeliverable(f);
-      });
-    }
-    li.appendChild(a);
-    box.prepend(li);
-  }
-}
-
-/* ===== ux(round4) 交付物文书预览（cbDocOpen / docpreview.js）===== */
 
 function fileUrl(p) {
   /* Rust canonicalize 返回 \\?\ verbatim 前缀；/api/file 对该形态 404——
