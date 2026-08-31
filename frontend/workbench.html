@@ -2182,6 +2182,9 @@ button.danger { background: var(--cb-red); box-shadow: none; }
           <button type="button" id="cbThemeBtn" class="soft" title="切换深色/浅色主题（默认深色）" onclick="cbThemeToggle()">明</button>
           <button type="button" id="cbLargeBtn" class="soft" title="大字模式：全站字号放大一档" aria-pressed="false" onclick="cbLargeToggle()">大</button>
           <a href="/" class="soft" style="text-decoration:none;display:inline-flex;align-items:center">投标应答</a>
+          <!-- ux(round16) 回跳：装柜台此前是单向终点，只能按浏览器后退；回环地址属 R12 零外链白名单 -->
+          <a href="http://127.0.0.1:8765/" class="soft" title="回 Civil Buddy 66 岗工作台"
+             style="text-decoration:none;display:inline-flex;align-items:center">回工作台</a>
           <span class="pill" v-if="loading || (streamProgress.done > 0 && streamProgress.total)">
             {{ streamProgress.done }}/{{ streamProgress.total || '—' }}
           </span>
@@ -4207,6 +4210,8 @@ window.CB_POSTS = [{"id":"bid-parse","name":"招标解析","aliases":["招标","
           auditData: null,
           auditLoading: false,
           auditError: '',
+          /* ux(round16) 左侧会话栏数据；R14 只落 markup 未落 JS，本轮补齐（只读） */
+          cbSessions: [],
           autoFollowVisual: true,
           streamProgress: { done: 0, total: 11, pct: 0 },
           liveToolLines: [],
@@ -4847,6 +4852,7 @@ window.CB_POSTS = [{"id":"bid-parse","name":"招标解析","aliases":["招标","
         this.loadWhatIfScenarios();
         this.loadProfiles();
         this.loadCbPosts();
+        this.cbLoadSessions(); /* ux(round16)：左侧会话栏首帧填充 */
         // ux(round2)：输入体验初始化（autosize + IME 守卫）
         this.$nextTick(() => {
           if (this.$refs.userInput) {
@@ -5877,6 +5883,23 @@ window.CB_POSTS = [{"id":"bid-parse","name":"招标解析","aliases":["招标","
           this.atItems = [];
           this.atIdx = 0;
         },
+        /* ux(round16) 输入条「+」开面板：R14 落了按钮没落函数。
+           `@click.prevent` 带修饰符被包成函数，是点击期求值——故不白屏，但点了没反应。
+           行为对齐键盘路径：插入 "/" 后交给既有 composerCmdUpdate，不另起一套面板逻辑。 */
+        cbPlusOpen() {
+          const ta = this.$refs.userInput;
+          if (!ta) return;
+          const v = String(this.userInput || '');
+          this.userInput = v + (v.length && !/\s$/.test(v) ? ' ' : '') + '/';
+          this.cmdDismissed = '';
+          this.cmdDismissedAt = -1;
+          this.$nextTick(() => {
+            ta.focus();
+            const end = ta.value.length;
+            ta.setSelectionRange(end, end);
+            this.composerCmdUpdate();
+          });
+        },
         /* ===== ux(round9) 快捷指令面板（与 demo/static/app.js 同源镜像） ===== */
         composerCmdUpdate() {
           const ta = this.$refs.userInput;
@@ -6493,6 +6516,55 @@ window.CB_POSTS = [{"id":"bid-parse","name":"招标解析","aliases":["招标","
           } finally {
             this.auditLoading = false;
           }
+        },
+        /* ===== ux(round16) 左侧会话栏：补齐 R14 缺失的 JS 半边 =====
+           R14 加了「+ 新建任务」与最近会话列表的 HTML，但 cbNewTask / cbOpenSession /
+           cbSessions / cbRelTime 四个绑定全部未定义。Vue 2 在**渲染期**就求值
+           on:{click: cbNewTask} → ReferenceError → 装柜台整页白屏（非点击时才报）。
+           四道静态门禁（符号/外链/JS 语法/CI 标记）都不执行页面，故全绿仍漏。
+           本轮只补只读逻辑：列会话、开审计、新建任务清空当前会话回空态卡。 */
+        async cbLoadSessions() {
+          try {
+            const r = await fetch(API + '/api/audit');
+            const j = await r.json();
+            this.cbSessions = ((j && j.sessions) || []).slice(0, 12);
+          } catch (e) {
+            this.cbSessions = [];
+          }
+        },
+        cbNewTask() {
+          /* 清空当前会话回空态：hasAnyResult 由 result/agentSteps 推导，清这两项即回空态卡 */
+          this.result = {};
+          this.agentSteps = [];
+          this.selectedAgent = 'ALL';
+          this.mainTab = 'overview';
+          this.auditSession = '';
+          this.auditData = null;
+          this.auditError = '';
+          this.sessionId = 'web-' + Date.now();
+          this.statusText = '新任务 · 可一键演示或生成方案';
+          this.cbLoadSessions();
+        },
+        cbOpenSession(s) {
+          const sid = s && s.session_id;
+          if (!sid) return;
+          this.auditSession = sid;
+          this.loadAudit();
+          this.$nextTick(() => {
+            const el = document.querySelector('[data-cb-audit-panel]');
+            if (el && el.scrollIntoView) el.scrollIntoView({ block: 'start' });
+          });
+        },
+        cbRelTime(iso) {
+          if (!iso) return '';
+          const t = Date.parse(iso);
+          if (!t) return '';
+          const m = Math.floor(Math.max(0, Date.now() - t) / 60000);
+          if (m < 1) return '刚刚';
+          if (m < 60) return m + ' 分钟前';
+          const h = Math.floor(m / 60);
+          if (h < 24) return h + ' 小时前';
+          return Math.floor(h / 24) + ' 天前';
         },
         auditKindLabel(kind) {
           return ({ run: '运行', tool: '工具', decision: '决策', error: '错误', write: '写盘' })[kind] || kind;

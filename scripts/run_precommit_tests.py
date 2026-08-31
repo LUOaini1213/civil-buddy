@@ -44,6 +44,8 @@ def main() -> int:
     codes.append(run("scripts/test_js_syntax.py", 120))
     # UX R14 门禁：符号纪律（浏览器资产 0 装饰符号，规则见 spec 附录 L）
     codes.append(run("scripts/test_ux_no_emoji.py", 60))
+    # UX R16 门禁：Vue 绑定必须有定义（R14 半拉子 markup 致整页白屏，静态门禁全绿仍漏；附录 N）
+    codes.append(run("scripts/test_vue_bindings.py", 60))
     codes.append(run("scripts/test_booking_regression.py", 180))
     codes.append(run("scripts/test_p2_volume_gates.py", 180))
     codes.append(run("scripts/test_stack_parity.py", 120))

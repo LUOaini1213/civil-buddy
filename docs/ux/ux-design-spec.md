@@ -827,3 +827,24 @@ runner 自带 node 必跑，并另加 `find … -print0 | node --check` bash 循
 
 **实测记录**（:8765 + :8000 双服务真浏览器）：上行 → 卡 `cb-pack-ok`、`window.open` 收到 `/workbench`、`state.history` 增量 0；停 :8000 后 → 卡 `cb-empty-down`、`openedUrls` 为空（未弹空白页）；重启 :8000 点「重试」→ 卡就地翻蓝、页面仅 1 张卡不叠加。
 
+## 附录 N · 直达词泛化 / 空态露出 / 回跳 / 试用边界 + R14 白屏事故（ux(round16)）
+
+### N.1 四项落地
+
+| # | 项 | 口径 |
+|---|---|---|
+| A | 直达词泛化 | 词表由 `CB_SLASH` 的 `name + aliases` 自动生成（与 `/` 面板同一份口径，杜绝两处漂移）+ `CB_DIRECT_EXTRA` 少量口语补充，共 24 词。`pack` → 开装柜台；`kind:"nav"` → `cbCmdNav` 就地打开；`tpl` → `cbCmdApplyDraft` 预填不自动发送（附录 F.3 红线）。整条精确匹配，`帮我装箱一下` / `招标文件怎么读` 不触发 |
+| B | 空态露出 | 空态卡在示例卡与免责小字之间加一行直达提示；`code` 块走蓝 token 随明暗主题翻转。理由：评委第一屏发现不了的功能等于没做 |
+| C | 装柜台回跳 | 装柜台此前是单向终点（只能按浏览器后退），顶栏 `top-actions` 加「回工作台」→ `http://127.0.0.1:8765/`（回环属 R12 零外链白名单） |
+| D | 试用包边界 | `packing_bridge::probe()` 的 `python_root` 为空 = 磁盘无 `packing_assistant/` = 试用 zip，没有引擎可启动。此时卡片改「装柜台不在试用包内」并**撤掉那条它跑不了的 uvicorn 命令**，只留「重试」。Python 参考实现无该字段 → 探针返回 `null`（未知），按完整仓库口径走，安全降级 |
+
+### N.2 R14 白屏事故与守卫（诚实记录）
+
+**事故**：R14 往 `frontend/workbench.html` 加了左侧会话栏与新输入条的 markup，**JS 半边整块没落**——`cbNewTask` / `cbOpenSession` / `cbSessions` / `cbRelTime` / `cbPlusOpen` 五处绑定零定义。Vue 2 把 `@click="cbNewTask"` 编译成 `on:{click: cbNewTask}`，在**渲染期**求值 → ReferenceError → **装柜台整页白屏**。带修饰符的 `@click.prevent="cbPlusOpen"` 被包成函数，是点击期求值，故不白屏但点了没反应。
+
+**为什么四道门禁全绿仍漏**：符号纪律 / 零外链 / JS 语法 / CI 标记断言**都只做静态扫描，不执行页面**。`node --check` 只验语法，不解析 Vue 模板表达式；标记断言只查字符串在不在。
+
+**守卫**：`scripts/test_vue_bindings.py` —— 扫模板里的裸标识符事件绑定（`@click="ident"`）与 `v-for` 数据源，逐个对账 `data/computed/methods` 定义面；表达式型绑定（带括号/点号）不在范围内以避免误报。已登记 precommit 与 CI frontend 步骤。自检：回滚到 R14 状态可精确报出 3 处致命绑定，修复后复绿。
+
+**沉淀的纪律**：markup 与其 JS 半边必须同轮落地；宁可不加按钮，不留半拉子绑定。
+

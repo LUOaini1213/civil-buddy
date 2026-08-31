@@ -851,6 +851,16 @@ html.cb-large {
   margin: var(--cb-space-4) 0 0;
   font-size: var(--cb-fs-xs); color: var(--cb-text-muted);
 }
+/* ux(round16) 直达词提示：空态卡内一行，比 note 稍显眼但不抢示例卡（附录 M.2） */
+.cb-empty-hint {
+  margin: var(--cb-space-3) 0 0;
+  font-size: var(--cb-fs-xs); line-height: 1.7; color: var(--cb-text);
+}
+.cb-empty-hint code {
+  padding: 1px 6px; margin: 0 1px;
+  font-family: var(--cb-mono); font-size: var(--cb-fs-xs); color: var(--cb-blue-strong);
+  background: var(--cb-blue-soft); border: 1px solid var(--cb-line); border-radius: var(--cb-radius-sm);
+}
 /* 网关兜底空态：加载失败/后端未起（纠偏卡三段式：发生了什么 + 现在能做什么） */
 .cb-empty-down {
   max-width: 560px; margin: 0 auto var(--cb-space-4);

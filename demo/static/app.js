@@ -514,8 +514,9 @@ $("form").addEventListener("submit", async (ev) => {
   const welcome = document.querySelector(".welcome");
   if (welcome) welcome.remove();
   addMsg("user", "你", message);
-  if (cbIsPackOpenWord(message)) {
-    await cbOpenPackStudio();
+  const cbDirect = cbDirectMatch(message);
+  if (cbDirect) {
+    await cbDirectRun(cbDirect);
     return;
   }
   state.history.push({ role: "user", content: message });
@@ -1196,10 +1197,53 @@ const CB_PACK_STUDIO_PATH = "/workbench";
 const CB_PACK_STUDIO_CMD = "uvicorn gateway.app:app --host 127.0.0.1 --port 8000";
 const CB_PACK_OPEN_WORDS = ["装箱", "装柜", "拼柜", "装箱拼柜", "装箱作业单", "装柜台"];
 
-/* 精确匹配：trim + 去尾部标点后整条命中才算（"装箱。""装箱 " 算，"帮我装箱" 不算） */
+/* ux(round16) 直达词泛化：不止装箱，CB_SLASH 每一项都能整条直达。
+   词源 = 该项的 name + aliases（与 / 面板同一份口径，杜绝两处漂移）+ 少量口语补充。 */
+const CB_DIRECT_EXTRA = {
+  pack: ["装箱", "装柜台"],
+  doc: ["交付物"],
+  eval: ["记分卡"],
+};
+
+function cbDirectTable() {
+  const map = new Map();
+  for (const it of CB_SLASH) {
+    const words = [it.name].concat(it.aliases || [], CB_DIRECT_EXTRA[it.id] || []);
+    for (const w of words) if (w && !map.has(w)) map.set(w, it);
+  }
+  return map;
+}
+
+/* 精确匹配：trim + 去尾部中英标点后整条命中才算
+   （"装箱。""交底 " 算；"帮我装箱""交底怎么写" 不算——不抢正常提问） */
+function cbDirectNorm(text) {
+  return String(text || "").trim().replace(/[\s。．.!！?？，,]+$/, "");
+}
+
+function cbDirectMatch(text) {
+  return cbDirectTable().get(cbDirectNorm(text)) || null;
+}
+
+/* 保留：pack 专用谓词（round15 起对外语义不变，ci.yml ux_marks 亦断言此名） */
 function cbIsPackOpenWord(text) {
-  const t = String(text || "").trim().replace(/[\s。．.!！?？，,]+$/, "");
-  return CB_PACK_OPEN_WORDS.indexOf(t) !== -1;
+  const it = cbDirectMatch(text);
+  return !!it && it.id === "pack";
+}
+
+/* 直达执行：复用面板既有动作，不另起一套
+   pack → 开装柜台；nav → 就地打开面板；tpl/client → 预填草稿不自动发送（附录 F.3 红线） */
+async function cbDirectRun(it) {
+  if (it.id === "pack") {
+    await cbOpenPackStudio();
+    return;
+  }
+  if (it.kind === "nav") {
+    addStatus("直达：" + it.name);
+    cbCmdNav(it.id);
+    return;
+  }
+  addStatus("直达：" + it.name + " —— 模板已填进输入框，改完再按发送（不自动发送）。");
+  cbCmdApplyDraft(cbSlashTemplate(it.id, ""));
 }
 
 /* 健康探针：网关 CORS 为 *，跨端口 fetch 可读；超时当不可达，不阻塞 UI */
@@ -1216,6 +1260,23 @@ async function cbPackStudioUp(ms) {
   }
 }
 
+/* ux(round16) 试用包判别（附录 M.2）：Rust 工作台 /api/health 挂 packing_agent 探针；
+   python_root 为空 = 磁盘上找不到 packing_assistant/ 目录 = 试用 zip，没有引擎可启动，
+   此时给"完整仓库"指引而不是一条它跑不了的 uvicorn 命令。
+   Python 参考实现无此字段 → 返回 null（未知），按完整仓库口径走，安全降级。 */
+let CB_PACK_TRIAL = null;
+
+async function cbPackTrialProbe() {
+  try {
+    const h = await fetch("/api/health").then((r) => r.json());
+    const pa = h && h.packing_agent;
+    if (!pa) return null;
+    return !(pa.http && pa.http.up) && !pa.python_root;
+  } catch (e) {
+    return null;
+  }
+}
+
 function cbPackCardRender(up) {
   const url = CB_PACK_STUDIO_ORIGIN + CB_PACK_STUDIO_PATH;
   const card = document.createElement("div");
@@ -1226,21 +1287,36 @@ function cbPackCardRender(up) {
   const h = document.createElement("p");
   const k = document.createElement("strong");
   k.className = "cb-empty-k";
-  k.textContent = up ? "装柜台已打开" : "装柜台未启动";
+  const trial = !up && CB_PACK_TRIAL === true;
+  k.textContent = up ? "装柜台已打开" : (trial ? "装柜台不在试用包内" : "装柜台未启动");
   h.appendChild(k);
   h.appendChild(document.createTextNode(up
     ? " —— 成箱 → 人确认 → 拼柜 3D / 重心，都在这一页。"
-    : " —— 装箱引擎网关（:8000）不可达，界面在但算不了。"));
+    : (trial
+      ? " —— 试用包只含工作台本体，不含装箱引擎（3D 拼柜 / 重心 / 出运裁决）。"
+      : " —— 装箱引擎网关（:8000）不可达，界面在但算不了。")));
   card.appendChild(h);
 
   const p1 = document.createElement("p");
   p1.textContent = up
     ? "浏览器若拦了新标签，点下面的链接手动打开。"
-    : "现在能做什么：在仓库根目录启动装箱引擎网关，然后点「重试」。";
+    : (trial
+      ? "现在能做什么：装箱引擎随完整仓库分发，按仓库 README「装箱引擎」一节或「给试用的人.md」取用；工作台其余 66 岗不受影响，照常可用。"
+      : "现在能做什么：在仓库根目录启动装箱引擎网关，然后点「重试」。");
   card.appendChild(p1);
 
   const acts = document.createElement("div");
   acts.className = "cb-empty-acts";
+
+  if (!up && trial) {
+    const retry = document.createElement("button");
+    retry.type = "button";
+    retry.textContent = "重试";
+    retry.addEventListener("click", () => { cbOpenPackStudio(); });
+    acts.appendChild(retry);
+    card.appendChild(acts);
+    return card;
+  }
 
   if (up) {
     const a = document.createElement("a");
@@ -1284,6 +1360,7 @@ async function cbOpenPackStudio() {
   if (prev && prev.parentElement) prev.parentElement.removeChild(prev);
   addStatus("正在检测装箱引擎网关 " + CB_PACK_STUDIO_ORIGIN + " …");
   const up = await cbPackStudioUp(2500);
+  CB_PACK_TRIAL = up ? null : await cbPackTrialProbe();
   /* 先落卡片再开标签：部分浏览器/内嵌视图把 window.open 当原地跳转，
      后落卡片会随原页面一起被替换，回到本页什么痕迹都没有。 */
   const log = $("log");

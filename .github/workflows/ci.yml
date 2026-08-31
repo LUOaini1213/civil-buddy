@@ -26,6 +26,8 @@ jobs:
           # UX R12: 零外链红线（内网断网可用）+ JS 语法门禁（node --check 固化 U-R10 esprima 检查）
           python scripts/test_no_external_urls.py
           python scripts/test_js_syntax.py
+          # UX R16: Vue 模板绑定必须有定义（渲染期 ReferenceError = 整页白屏，语法门禁抓不到）
+          python scripts/test_vue_bindings.py
           # 双保险: 独立 js 逐个 node --check（runner 自带 node，必跑；-e 任一失败即红）
           while IFS= read -r -d '' f; do node --check "$f"; done \
             < <(find frontend demo/static workbench/src -name '*.js' -not -path '*/target/*' -print0 2>/dev/null)
@@ -45,9 +47,9 @@ jobs:
           assert not miss, miss
           # UX R13: R5-R12 轮次 UI 标记不丢（审批卡/审计时间线/斜杠面板/空态卡/主题持久化）
           ux_marks = {
-              "frontend/workbench.html": ["cb-apr", "data-cb-audit-panel", "cbSlashFilter", "cb-empty-card", "cb_theme_v1", "cbThemeBtn"],
-              "demo/static/index.html": ["data-cb-audit-panel", "cb-empty-card", "cb_theme_v1", "cbThemeBtn"],
-              "demo/static/app.js": ["确认并重提", "handleSlash", "cb_theme_v1", "cbIsPackOpenWord", "cbOpenPackStudio"],
+              "frontend/workbench.html": ["cb-apr", "data-cb-audit-panel", "cbSlashFilter", "cb-empty-card", "cb_theme_v1", "cbThemeBtn", "cbNewTask", "cbPlusOpen", "回工作台"],
+              "demo/static/index.html": ["data-cb-audit-panel", "cb-empty-card", "cb_theme_v1", "cbThemeBtn", "cb-empty-hint"],
+              "demo/static/app.js": ["确认并重提", "handleSlash", "cb_theme_v1", "cbIsPackOpenWord", "cbOpenPackStudio", "cbDirectMatch"],
           }
           for path, marks in ux_marks.items():
               text = Path(path).read_text(encoding="utf-8")
