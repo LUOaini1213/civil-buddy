@@ -51,6 +51,8 @@ def main() -> int:
     codes.append(run("scripts/test_stack_parity.py", 120))
     # ux(round19)：项目索引双栈对拍（Rust projects.rs ↔ Python demo/projects.py）
     codes.append(run("scripts/test_projects_parity.py", 900))
+    # ux(round22)：物料来源诚实性（路径读不到必须说，不许静默回落演示物料）
+    codes.append(run("scripts/test_materials_notice.py", 180))
     codes.append(run("scripts/test_nonstandard_tools.py", 60))
     codes.append(run("scripts/test_cog_shift_mid_ok.py", 60))
     codes.append(run("scripts/test_phase0_task_success.py", 60))

@@ -1055,6 +1055,25 @@ def _load_materials_from_text(user_input: str) -> Optional[List[Dict[str, Any]]]
     return None
 
 
+def _attach_materials_notice(resp, notice: str):
+    """ux(round22)：把「看见了表格路径但没用上」如实挂进响应。
+
+    键名固定 `materials_notice`，与既有 `demo_note` 同级，调用方一眼可见。
+    没有 notice 时**不加键**，老响应形状零变化（逐字段对拍类测试不受影响）。
+    """
+    if notice and isinstance(resp, dict):
+        resp["materials_notice"] = notice
+    return resp
+
+
+def _table_path_mentioned(user_input: str) -> str:
+    """user_input 里是否出现过表格路径（不管能不能读）。用于识别「看见了但没用上」。"""
+    if not user_input:
+        return ""
+    m = _TABLE_PATH_RE.search(user_input)
+    return m.group(0) if m else ""
+
+
 def _apply_preset(
     *,
     preset: str = "",
@@ -1062,11 +1081,23 @@ def _apply_preset(
     materials: Optional[List[Dict[str, Any]]] = None,
     packing_options: Optional[Dict[str, Any]] = None,
 ) -> tuple:
-    """合并演示预设物料 / packing_options；NL 显式给出的表格路径优先于演示预设。"""
+    """合并演示预设物料 / packing_options；NL 显式给出的表格路径优先于演示预设。
+
+    返回 (mats, opts, key, text, notice)。
+
+    ux(round22) notice：**给了表格路径却没读成**时如实说明，绝不静默回落。
+    改造前的坏行为：桌面绝对路径被 `_load_materials_from_text` 的仓库沙箱丢弃后，
+    直接改用演示预设物料，不报错、照样返回一串很像样的柜数 —— 实测「给绝对路径」
+    与「什么都不给」返回**完全相同**的 15 箱 / 0.675。演示时说「这是我的表」而
+    屏幕上其实是样例数据，会很难看。
+    沙箱本身是对的（user_input 可能混着 LLM 生成或从文档粘来的内容，不能随便读盘），
+    所以不放宽它，只是把这件事说出来。
+    """
     from packing_assistant.demo_presets import resolve_preset
 
     pm, po, key = resolve_preset(preset, user_input=user_input)
     loaded = None if materials else _load_materials_from_text(user_input)
+    notice = ""
     if loaded:
         mats = loaded
         opts = packing_options if packing_options else {}
@@ -1074,17 +1105,27 @@ def _apply_preset(
     else:
         mats = materials if materials else pm
         opts = packing_options if packing_options else po
+        hit = _table_path_mentioned(user_input)
+        if hit and not materials:
+            used_demo = bool(pm) and mats is pm
+            notice = (
+                f"看到表格路径「{hit}」但没能读成："
+                "只接受仓库内相对路径（防目录穿越）；绝对路径请走 /api/table/parse/json "
+                "解析后把 materials 传进来。"
+            )
+            if used_demo:
+                notice += "**下面的数字来自演示预设物料，不是这张表算出来的。**"
     text = user_input
     if key and (not text or text in ("演示材料清单", "Agent pipeline", "demo")):
         from packing_assistant.demo_presets import PRESETS
 
         text = PRESETS.get(key, {}).get("user_input") or text
-    return mats, opts, key, text
+    return mats, opts, key, text, notice
 
 
 @app.post("/api/team-a")
 def api_team_a(body: TeamARequest):
-    mats, opts, key, text = _apply_preset(
+    mats, opts, key, text, _notice = _apply_preset(
         preset=body.preset or "",
         user_input=body.user_input,
         materials=body.materials,
@@ -1100,6 +1141,7 @@ def api_team_a(body: TeamARequest):
     )
     _store_session(body.session_id, state)
     resp = public_response(state)
+    _attach_materials_notice(resp, _notice)
     resp["run_id"] = state.get("run_id")
     resp["session_id"] = body.session_id
     resp["preset"] = key
@@ -1127,6 +1169,7 @@ def api_revise_nl(body: ReviseNlRequest):
     # applied 时 state 是新方案；unsupported 时 state 与改前一致（仅多了 nl_revision）
     _store_session(body.session_id, state)
     resp = public_response(state)
+    _attach_materials_notice(resp, _notice)
     resp["nl_revision"] = nr
     resp["revise_ok"] = bool(nr.get("applied") and nr.get("status") == "applied")
     resp["feature_available"] = bool(nr.get("feature_available"))
@@ -1614,7 +1657,7 @@ def api_pipeline_profile(body: ProfilePipelineRequest):
     """按偏好档跑单 Team 闭环。"""
     from packing_assistant.packing_profiles import apply_profile
 
-    mats, opts, key, text = _apply_preset(
+    mats, opts, key, text, _notice = _apply_preset(
         preset=body.preset or "",
         user_input=body.user_input,
         materials=body.materials,
@@ -1632,6 +1675,7 @@ def api_pipeline_profile(body: ProfilePipelineRequest):
     )
     _store_session(body.session_id, state)
     pub = public_response(state)
+    _attach_materials_notice(pub, _notice)
     return {
         "ok": True,
         "profile": body.profile,
@@ -1796,7 +1840,7 @@ def api_demo(body: DemoRequest):
 
     enable_auto_confirm=true 时才自动进 B 并 finalize（非比赛主戏）。
     """
-    mats, opts, key, text = _apply_preset(
+    mats, opts, key, text, _notice = _apply_preset(
         preset=body.preset or "high_util",
         user_input=body.user_input,
         materials=body.materials,
@@ -1814,6 +1858,7 @@ def api_demo(body: DemoRequest):
     )
     _store_session(body.session_id, state)
     resp = public_response(state)
+    _attach_materials_notice(resp, _notice)
     resp["agent_loop"] = "感知→规划→工具→行动→finalize"
     resp["preset"] = key or body.preset
     resp["enable_auto_confirm"] = auto
@@ -1849,7 +1894,7 @@ def api_pipeline(body: PipelineRequest):
 
     mode/agent_mode: steps | llm_toolcall | auto | graph
     """
-    mats, opts, key, text = _apply_preset(
+    mats, opts, key, text, _notice = _apply_preset(
         preset=body.preset or "",
         user_input=body.user_input,
         materials=body.materials,
@@ -1890,6 +1935,7 @@ def api_pipeline(body: PipelineRequest):
     book = state.get("booking") or plan.get("booking") or {}
     paths = state.get("artifact_paths") or {}
     pub = public_response(state)
+    _attach_materials_notice(pub, _notice)
     return {
         "ok": True,
         "agent_definition": {
@@ -1940,7 +1986,7 @@ def api_pipeline_stream(body: PipelineRequest):
     SSE 流式 pipeline：逐 Agent 推送 agent_start / agent_end / hitl / done。
     前端可用 fetch + ReadableStream 解析 `data: {...}\\n\\n`。
     """
-    mats, opts, _key, text = _apply_preset(
+    mats, opts, _key, text, _notice = _apply_preset(
         preset=body.preset or "",
         user_input=body.user_input,
         materials=body.materials,
@@ -1948,6 +1994,9 @@ def api_pipeline_stream(body: PipelineRequest):
     )
 
     def gen():
+        if _notice:
+            # 流式也要说 —— 首帧就给，别等收口
+            yield f"data: {json.dumps({'type': 'notice', 'scope': 'materials', 'message': _notice}, ensure_ascii=False)}\n\n"
         final_state = None
         for ev in iter_agent_pipeline(
             text,

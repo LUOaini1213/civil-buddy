@@ -30,6 +30,8 @@ jobs:
           python scripts/test_vue_bindings.py
           # ux(round19): 项目索引双栈对拍（自造 fixture，不依赖存量数据）
           python scripts/test_projects_parity.py
+          # ux(round22): 物料来源诚实性 —— 给了路径读不到必须说，不许静默用演示物料
+          python scripts/test_materials_notice.py
           # 双保险: 独立 js 逐个 node --check（runner 自带 node，必跑；-e 任一失败即红）
           while IFS= read -r -d '' f; do node --check "$f"; done \
             < <(find frontend demo/static workbench/src -name '*.js' -not -path '*/target/*' -print0 2>/dev/null)
