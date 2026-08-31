@@ -44,10 +44,6 @@
       <button type="button" id="cbThemeBtn" class="top-btn" title="切换深色/浅色主题（默认深色）">明</button>
       <button type="button" id="cbLargeBtn" class="top-btn" title="大字模式：全站字号放大一档" aria-pressed="false">大</button>
       <span id="keyBadge" class="pill warn">检查 API Key…</span>
-      <span class="pill quiet" id="modelBadge">模型未配置</span>
-      <span class="pill quiet" id="harnessBadge">Harness steps</span>
-      <span class="pill quiet" id="sandboxBadge">sandbox</span>
-      <span class="pill quiet" id="approvalBadge">approval</span>
       <button type="button" id="cbLlmOpen" class="top-btn" title="填自己的 API Key，选 DeepSeek / z.ai 等供应商">模型</button>
       <button type="button" id="openStudio" class="top-btn">知识库</button>
       <!-- ux(round10) 三步引导重开入口：首访自动弹 checklist，之后点 ? 随时重开（localStorage cb_onboarded_v1） -->
@@ -65,7 +61,6 @@
       <div class="thread-box">
         <div class="thread-head">
           <span>最近会话</span>
-          <button type="button" id="btnBg" class="ghost tiny">并行</button>
         </div>
         <div id="threadList"></div>
       </div>
@@ -76,10 +71,6 @@
 
     <section class="stage">
       <div class="summon-bar" id="summonBar">当前：<em>未点名岗位</em> · 直接下任务即可</div>
-      <div class="ctx-bar" id="ctxBar" data-zone="room">
-        <div class="ctx-meter" aria-hidden="true"><i id="ctxFill"></i></div>
-        <p class="ctx-text" id="ctxText"></p>
-      </div>
       <div id="log" class="log">
         <!-- ux(round10) 三步引导 checklist：首访一次性（localStorage cb_onboarded_v1），逐步打勾，全完成自动收起（附录 I） -->
         <div id="cbOnboard" class="cb-ob" data-cb-onboard="true" hidden></div>
@@ -126,23 +117,6 @@
             <div id="atMenu" class="cb-at-menu" hidden role="listbox" aria-label="岗位补全"></div>
           </div>
           <button type="submit" id="send" aria-label="发送" title="发送（Enter）">↑</button>
-        </div>
-        <div class="local-row">
-          <input id="localPath" type="text" placeholder="本机文件路径（不要填 D:\layout）" />
-          <button type="button" id="btnLocal">导入</button>
-          <button type="button" id="btnFirm">成套投标</button>
-        </div>
-        <div id="attaches" class="attaches"></div>
-        <div class="row">
-          <div class="hints">
-            <input type="file" id="filePick" hidden multiple accept=".pdf,.docx,.xlsx,.txt,.md,.csv,.json" />
-            <button type="button" id="btnUpload">上传</button>
-            <button type="button" data-fill="什么是 GST">GST</button>
-            <button type="button" data-fill="临边防护算不算危大？要不要专家论证？">危大</button>
-            <button type="button" data-fill="按虚构滨河路人行道维修，写临边与洞口防护专项方案讨论提纲。高度未提供。">施工方案</button>
-            <button type="button" data-fill="把临边防护编成工友班前三分钟白话。">白话</button>
-            <button type="button" data-fill="从下面这段招标里抽出评分点和必须编制的专项：某市政人行道维修，要求编制高处作业/临边专项方案，技术标 40 分。">招标</button>
-          </div>
         </div>
       </form>
     </section>

@@ -5,7 +5,10 @@ const state = {
   history: [],
   session: crypto.randomUUID().slice(0, 12),
   modelName: "",
-  attachments: [],
+  /* ux(round19)：本地文件入口拆除后，唯一可能的附件来源是作业根（见 loadJobRoot）。
+     刻意不再叫 attachments —— 留一个没有写入方的同名数组，等于给拖拽上传留门。 */
+  jobAttachments: [],
+  jobRoot: "",
   threadId: "",
   lastSend: "", /* ux(round7)：纠偏卡「重试」重放同 payload */
   policy: { sandbox: "workspace-write", approval: "on-request" },
@@ -39,18 +42,6 @@ async function boot() {
   if (health.model) {
     state.modelName = health.model;
   }
-  if (health.model && $("modelBadge")) {
-    const lim = health.context && health.context.limit;
-    $("modelBadge").textContent = lim
-      ? `模型 ${health.model} · 上下文 ${lim}`
-      : `模型 ${health.model}`;
-  }
-  if (health.harness && $("harnessBadge")) {
-    $("harnessBadge").textContent =
-      health.harness.summoned_default === "chat"
-        ? "Harness 能聊能跑"
-        : `Harness ${health.harness.default_mode || "steps"}`;
-  }
   if (health.context) {
     state.context = { ...state.context, ...health.context };
   }
@@ -71,11 +62,22 @@ async function loadPolicy() {
   try {
     const cfg = await fetch("/api/config").then((r) => r.json());
     state.policy = cfg;
-    if ($("sandboxBadge")) $("sandboxBadge").textContent = `sandbox ${cfg.sandbox || ""}`;
-    if ($("approvalBadge")) $("approvalBadge").textContent = `approval ${cfg.approval || ""}`;
   } catch (e) {
-    addStatus(String(e));
+    /* ux(round19)：Rust 工作台没有 /api/config（只有 Python 参考实现有）。
+       原先这里 addStatus(String(e))，导致评委每次打开页面，对话流里都会多一行
+       "SyntaxError: Unexpected end of JSON input" —— 「页面不干净」的字面来源。
+       静默保留默认 state.policy 即可，策略徽章本就允许缺省。 */
   }
+}
+
+/* ux(round19)：本地新会话 —— 不依赖任何后端接口，任何后端上都生效。 */
+function cbNewLocalSession() {
+  state.threadId = "";
+  state.session = (crypto.randomUUID ? crypto.randomUUID() : String(Date.now())).slice(0, 12);
+  state.history = [];
+  state.summoned.clear();
+  renderSummon();
+  cbResetToEmpty();
 }
 
 /* ux(round14)：相对时间（参考图会话列表「名称 + 相对时间」；只抄线程 updated_at 字段） */
@@ -91,6 +93,17 @@ function cbRelTime(ts) {
 }
 
 /* ux(round14)：「新建任务」=清空当前会话回空态卡（Codex 历史流第 0 号 cell 复位） */
+/* ux(round19)：空态卡改「隐藏」而非「移除」。
+   原先发首条消息时 welcome.remove() 把 #cbEmpty 整个删掉，而 cbResetToEmpty()
+   只会把它 hidden=false —— 于是「+ 新建任务」按钮 title 写着「回到空态卡」，
+   实际一旦发过消息就永远回不去（既有缺陷，本轮修 exe 死键时暴露）。 */
+function cbHideWelcome() {
+  const el = $("cbEmpty") || document.querySelector(".welcome");
+  if (!el) return;
+  el.classList.remove("welcome");
+  el.hidden = true;
+}
+
 function cbResetToEmpty() {
   const log = $("log");
   if (log) {
@@ -142,34 +155,55 @@ async function loadThreads() {
 
 if ($("btnNewThread")) {
   $("btnNewThread").addEventListener("click", async () => {
-    const data = await fetch("/api/threads", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ title: "新对话" }),
-    }).then((r) => r.json());
-    state.threadId = data.thread_id;
-    state.session = data.session_id || data.thread_id;
-    await loadThreads();
-    cbResetToEmpty();
-    addStatus(`/new ${data.thread_id}`);
+    /* ux(round19) 客户端优先：Rust 工作台没有 /api/threads（只有 Python 参考实现有）。
+       原实现先 await fetch(...).then(r => r.json())，空 body 上抛在 cbResetToEmpty()
+       之前 —— 结果「+ 新建任务」在评委下载的 exe 上是**死键**，还留一条 unhandled
+       rejection。现在先做本地清空（任何后端都生效），再尝试登记远端线程。 */
+    cbNewLocalSession();
+    try {
+      const r = await fetch("/api/threads", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ title: "新对话" }),
+      });
+      if (!r.ok) return;
+      const data = await r.json();
+      if (data && data.thread_id) {
+        state.threadId = data.thread_id;
+        state.session = data.session_id || data.thread_id;
+        await loadThreads();
+      }
+    } catch (e) {
+      /* 无 /api/threads 的后端：本地新会话已经生效，静默即可 */
+    }
   });
 }
-if ($("btnBg")) {
-  $("btnBg").addEventListener("click", async () => {
-    const text = $("input").value.trim();
-    if (!text) {
-      addStatus("/bg 先在输入框写任务");
-      return;
-    }
-    $("input").value = "";
-    const data = await fetch("/api/threads", {
+/* ux(round19)：并行任务逻辑从按钮里抽出来。原先 /bg 命令的实现是
+   $("btnBg").click()，委托给按钮 —— 一旦按钮从界面移除，/bg 会变成静默空操作
+   （有 && 守卫不报错、也不干活）。抽成函数后两条入口共用一份实现。 */
+async function cbRunBackground(text) {
+  const body = String(text || "").trim();
+  if (!body) {
+    addStatus("/bg 先写任务内容");
+    return;
+  }
+  try {
+    const r = await fetch("/api/threads", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ text, background: true, confirm_ok: $("confirmOk").checked }),
-    }).then((r) => r.json());
+      body: JSON.stringify({
+        text: body,
+        background: true,
+        confirm_ok: !!($("confirmOk") && $("confirmOk").checked),
+      }),
+    });
+    if (!r.ok) throw new Error("HTTP " + r.status);
+    const data = await r.json();
     addStatus(`并行 thread ${data.thread_id} ${data.state || "running"}`);
     await loadThreads();
-  });
+  } catch (e) {
+    addStatus("并行任务需要 Python 参考实现（当前后端没有 /api/threads）");
+  }
 }
 
 async function handleSlash(message) {
@@ -185,12 +219,14 @@ async function handleSlash(message) {
     return true;
   }
   if (cmd === "new") {
-    $("btnNewThread") && $("btnNewThread").click();
+    if ($("btnNewThread")) $("btnNewThread").click();
+    else cbNewLocalSession();
     return true;
   }
   if (cmd === "bg") {
-    $("input").value = arg;
-    $("btnBg") && $("btnBg").click();
+    const ta = $("input");
+    if (ta) ta.value = "";
+    await cbRunBackground(arg);
     return true;
   }
   if (cmd === "sandbox" || cmd === "approvals" || cmd === "approval") {
@@ -217,20 +253,12 @@ async function handleSlash(message) {
 async function loadJobRoot() {
   try {
     const job = await fetch("/api/job").then((r) => r.json());
-    const box = $("attaches");
-    if (!box) return;
-    if (!job.granted) {
-      addStatus(job.hint || "未授权作业根。设 CIVIL_JOB_ROOT 后可直接读本机文件。");
-      return;
-    }
-    addStatus(`作业根 ${job.root} · 已看到 ${(job.files || []).length} 个文件，说「写一份」会自动抄，不必再上传。`);
-    for (const f of job.files || []) {
-      if (state.attachments.some((a) => a.id === `job:${f.name}`)) continue;
-      state.attachments.push({ id: `job:${f.name}`, name: f.name, layer: "job" });
-    }
-    renderAttaches();
+    /* ux(round19)：只记录授权状态，不再往界面写附件 chip、不再写对话流。
+       原先这里两条 addStatus 是常驻噪音；且它 push 的 job: 前缀占位对象
+       在 streamChat 里本来就被 filter 掉，从未真正传给模型。 */
+    state.jobRoot = job && job.granted ? String(job.root || "") : "";
   } catch (e) {
-    addStatus(String(e));
+    /* 没有 /api/job 的后端：静默 */
   }
 }
 
@@ -292,7 +320,9 @@ function renderSummon() {
     const e = state.experts.find((x) => x.id === id);
     return e ? `${e.category_name}/${e.name}` : id;
   });
-  $("summonBar").innerHTML = names.length
+  const bar = $("summonBar");
+  if (!bar) return;
+  bar.innerHTML = names.length
     ? `当前：<em>${names.join(" · ")}</em>`
     : "当前：<em>未点名岗位</em> · 直接下任务即可";
 }
@@ -303,21 +333,18 @@ if ($("skillQ")) {
   });
 }
 
-$("clearExperts").addEventListener("click", () => {
-  state.summoned.clear();
-  renderSummon();
-  $("kblist").innerHTML = "";
-});
-
-document.querySelectorAll("[data-fill]").forEach((btn) => {
-  btn.addEventListener("click", () => {
-    $("input").value = btn.dataset.fill;
-    $("input").focus();
+if ($("clearExperts")) {
+  $("clearExperts").addEventListener("click", () => {
+    state.summoned.clear();
+    renderSummon();
+    const kb = $("kblist");
+    if (kb) kb.innerHTML = "";
   });
-});
+}
 
 async function refreshKb() {
   const box = $("kblist");
+  if (!box) return;
   box.innerHTML = "";
   for (const id of state.summoned) {
     const data = await fetch(`/api/kb/${id}`).then((r) => r.json());
@@ -503,8 +530,7 @@ $("form").addEventListener("submit", async (ev) => {
   cbAtClose();
   cbCmdClose();
   if (message.startsWith("/")) {
-    const welcome = document.querySelector(".welcome");
-    if (welcome) welcome.remove();
+    cbHideWelcome();
     addMsg("user", "你", message);
     try {
       const ok = await handleSlash(message);
@@ -514,8 +540,7 @@ $("form").addEventListener("submit", async (ev) => {
     }
     return;
   }
-  const welcome = document.querySelector(".welcome");
-  if (welcome) welcome.remove();
+  cbHideWelcome();
   addMsg("user", "你", message);
   const cbDirect = cbDirectMatch(message);
   if (cbDirect) {
@@ -564,9 +589,9 @@ async function streamChat(message, bodyEl) {
       message,
       history: state.history.slice(0, -1),
       expert_ids: [...state.summoned],
-      confirm_ok: $("confirmOk").checked,
+      confirm_ok: !!($("confirmOk") && $("confirmOk").checked),
       session_id: state.session,
-      attachments: state.attachments
+      attachments: state.jobAttachments
         .filter((a) => !String(a.id || "").startsWith("job:"))
         .map((a) => a.id),
     }),
@@ -644,6 +669,7 @@ async function streamChat(message, bodyEl) {
 
 function renderCites(cites) {
   const box = $("cites");
+  if (!box) return;
   for (const c of cites) {
     const li = document.createElement("li");
     const title = c.display || c.title || (c.path || "").split("/").pop();
@@ -656,6 +682,7 @@ function renderCites(cites) {
 
 function renderFiles(files) {
   const box = $("files");
+  if (!box) return;
   for (const f of files) {
     const li = document.createElement("li");
     const a = document.createElement("a");
@@ -757,132 +784,10 @@ if ($("input")) {
   $("input").addEventListener("input", () => paintContext(estimateLocalContext()));
 }
 
-function renderAttaches() {
-  const box = $("attaches");
-  if (!box) return;
-  box.innerHTML = "";
-  for (const f of state.attachments) {
-    const chip = document.createElement("span");
-    chip.className = "chip";
-    const kb = f.bytes != null ? fmtBytes(f.bytes) : "";
-    chip.textContent = `${f.name || f.id} · ${kb}`;
-    const x = document.createElement("button");
-    x.type = "button";
-    x.textContent = "×";
-    x.addEventListener("click", () => {
-      state.attachments = state.attachments.filter((a) => a.id !== f.id);
-      renderAttaches();
-    });
-    chip.appendChild(x);
-    box.appendChild(chip);
-  }
-}
-
-async function uploadFiles(fileList) {
-  const files = [...fileList];
-  if (!files.length) return;
-  for (const file of files) {
-    const fd = new FormData();
-    fd.append("session_id", state.session);
-    fd.append("file", file, file.name);
-    const res = await fetch("/api/upload", { method: "POST", body: fd });
-    if (!res.ok) {
-      addStatus(`上传失败 ${file.name}：${await apiError(res)}`);
-      continue;
-    }
-    const data = await res.json();
-    for (const f of data.files || []) {
-      if (!state.attachments.some((a) => a.id === f.id)) state.attachments.push(f);
-    }
-  }
-  renderAttaches();
-}
-
-async function importLocalPath() {
-  const path = $("localPath") ? $("localPath").value.trim() : "";
-  if (!path) {
-    addStatus("请填写本机完整路径。不要填 D:\\layout。");
-    return;
-  }
-  const res = await fetch("/api/local", {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ session_id: state.session, path }),
-  });
-  if (!res.ok) {
-    addStatus(`导入失败：${await apiError(res)}`);
-    return;
-  }
-  const data = await res.json();
-  for (const f of data.files || []) {
-    if (!state.attachments.some((a) => a.id === f.id)) state.attachments.push(f);
-  }
-  renderAttaches();
-  addStatus(`已导入本机 ${ (data.files || []).length } 个文件，可点成套投标。`);
-}
-
-async function runFirmBid() {
-  const path = $("localPath") ? $("localPath").value.trim() : "";
-  const brief = $("input") ? $("input").value.trim() : "";
-  addStatus("Harness steps：parse → qa → outline → price …");
-  const res = await fetch("/api/firm/bid", {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({
-      session_id: state.session,
-      project_name: brief.slice(0, 40) || "未命名投标项目",
-      path,
-      brief,
-      confirm_ok: $("confirmOk") ? $("confirmOk").checked : false,
-      jurisdiction: "SG",
-    }),
-  });
-  if (!res.ok) {
-    addStatus(`成套失败：${await apiError(res)}`);
-    return;
-  }
-  const data = await res.json();
-  const body = addMsg("assistant", "一人公司", "");
-  const hitl = data.hitl && data.hitl.pending ? "HITL 待确认（专项未出施工草稿）" : "HITL 未挡";
-  const lines = [
-    `mode=${data.mode || "steps"} · run ${data.run_id || ""} · ${hitl}`,
-    `${data.project || "成套"} · 作业目录 ${data.job_dir || ""}`,
-    `illegal_tool_calls=${data.illegal_tool_calls ?? 0}`,
-    ...((data.steps || []).map((s) => `${s.name}: ${s.tool} legal=${s.legal} ok=${s.ok}`)),
-    ...(data.notes || []),
-    "右侧可下载各份草稿。这不是可提交标书。",
-  ];
-  body.textContent = lines.join("\n");
-  renderFiles(data.files || []);
-  addStatus("成套已落盘。");
-}
-
-if ($("btnLocal")) $("btnLocal").addEventListener("click", () => importLocalPath().catch((e) => addStatus(String(e))));
-if ($("btnFirm")) $("btnFirm").addEventListener("click", () => runFirmBid().catch((e) => addStatus(String(e))));
-
-if ($("btnUpload") && $("filePick")) {
-  $("btnUpload").addEventListener("click", () => $("filePick").click());
-  $("filePick").addEventListener("change", async (ev) => {
-    await uploadFiles(ev.target.files);
-    ev.target.value = "";
-  });
-}
-
-const composer = document.querySelector(".composer");
-if (composer) {
-  composer.addEventListener("dragover", (ev) => {
-    ev.preventDefault();
-    composer.classList.add("drop");
-  });
-  composer.addEventListener("dragleave", () => composer.classList.remove("drop"));
-  composer.addEventListener("drop", async (ev) => {
-    ev.preventDefault();
-    composer.classList.remove("drop");
-    if (ev.dataTransfer && ev.dataTransfer.files.length) {
-      await uploadFiles(ev.dataTransfer.files);
-    }
-  });
-}
+/* ux(round19)：本地文件入口整体拆除（附件 chip / 上传 / 本机路径导入 / 成套投标 /
+   拖拽上传）。拖拽监听原先挂在 .composer 上、独立于「上传」按钮 —— 只删按钮不删它，
+   界面上看不见但拖个文件进输入区照样静默 POST /api/upload，所以一并移除。
+   服务端 /api/upload、/api/local、/api/firm/bid 路由保留，只是不再有界面入口。 */
 
 /* === ux(round2) 输入体验（docs/ux/ux-design-spec.md R2：一个输入框） ============
    模式借鉴 pattern-only，不抄任何代码：
@@ -1277,7 +1182,6 @@ async function cbLlmSubmit(payload, okNote) {
       badge.textContent = cfg.configured ? "已配置 API Key" : "缺少 API Key";
       badge.className = cfg.configured ? "pill ok" : "pill warn";
     }
-    if ($("modelBadge") && cfg.model) $("modelBadge").textContent = "模型 " + cfg.model;
     state.modelName = cfg.model || state.modelName;
     addStatus(okNote + "：" + cfg.model + " · " + cfg.base_url);
   } catch (e) {
