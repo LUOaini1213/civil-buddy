@@ -1065,3 +1065,61 @@ round19 拆界面时把上传入口一并拆了，用自己的表只剩「放进
 `\\` 吞成一个 `\`，导致测试断言写错，一度以为是 `pretty_path` 有 bug。
 **结论：含中文或反斜杠的补丁一律写脚本文件执行，不走 heredoc。**
 
+
+## 附录 R · 物料来源诚实性 + 门禁自身的可信度（ux(round22-23)）
+
+发版 0.4.0 前的收口轮。起点是「打包发布」，做下去发现**该修的比该打的多**。
+
+### R.1 网关层的静默回落（round22）
+
+round20 只在 exe 侧（`packs.rs`）给「表格路径读不到」加了标注，但**任何直接调网关的人**仍是老样子。改造前实测：
+
+| 输入 | 结果 |
+|---|---|
+| `pack C:\...\我的表.xlsx`（读不到） | 15 箱 / 利用率 0.675 |
+| 只说「帮我装箱」，什么都不给 | 15 箱 / 利用率 0.675 |
+
+**完全一样** —— 路径被 `_load_materials_from_text` 的仓库沙箱丢弃后静默回落到演示预设物料，不报错，照样返回一串很像样的柜数。演示时说「这是我的表」，屏幕上其实是样例数据。
+
+**沙箱本身是对的，不放宽**：`user_input` 里可能混着 LLM 生成或从文档粘来的内容，不能让它随便读盘。只要求「看见了但没用上」这件事必须写进 `materials_notice`。挂载点是四个 JSON 端点各自已有的 `public_response(...)` 之后加一行；SSE 在**首帧**发 `type=notice`（不等收口）。没有 notice 时**不加键**，老响应形状零变化。
+
+### R.2 exe 侧同一件事，此前完全没有测试（round23）
+
+评委下载运行的是 exe，且**评委机上 :8000 根本不存在**，`run_table` 必然连不上 —— 这条路径反而最常走。补 `workbench/tests/pack_table.rs` 时当场逮到两处真缺陷：
+
+1. **`materials` 是个没有任何 description 的裸 string**，工具描述里也没说「用户给了文件路径就放这儿」。整个 round20 靠模型自己猜着把 Windows 路径塞进一个叫 materials 的参数——猜不中，读表分支根本不触发，作业单里连「读不到」都没有。→ 把要求写死进参数契约。
+2. **路径被放进 `notes` 就当没看见**。→ `materials → notes → project_name` 依次扫。**模型放错格子不该等于功能静默失效。**
+
+### R.3 门禁自身烂了好几轮没人看见 —— 根因是 CI 不跑 cargo
+
+`ci.yml` 此前**完全没有 cargo**（只有 `test_rag_parity.py --skip-rust`），`workbench/tests/` 下所有 Rust 门禁从来没在 CI 上执行过。发版前一查，三条断言已经陈红：
+
+| 断言 | 何时烂的 | 为什么没人发现 |
+|---|---|---|
+| `index.html` 含 `ctxBar` | round19 P0 就把它删了（附录 P 里明写「有守卫，可安全删」） | CI 不跑 |
+| 联网知识含写死的 `2026-08-14` | hr-labor 刷新到 `2026-08-28` 即红（80 篇里就这一篇被刷新过） | 同上 |
+| `app.js` 含「能聊能跑」 | 这句文案早没了 | 同上 |
+
+修法是**改回断言本来的意图**，不是删了了事：`ctxBar` → 钉当前外壳（`projTree` + `composer`）；写死日期 → 钉「有一次注明日期的核验」这件事本身（新增 `has_dated_pass` 手扫 `YYYY-MM-DD`，不为一条断言引 regex 依赖）；文案 → 钉 exe 实际吐出的两条**红线正文**（`不会自动发送` / `不是签认件`）与两个功能入口，与 `ci.yml` 的 `ux_marks` 指向同一批东西，两道门禁不会各说各话。
+
+CI 加 `rust` job（stable + rust-cache + `cargo test --locked`），Linux 上验过全绿。
+
+### R.4 零配置评委看到的第一条错误，指错了地方
+
+真浏览器走评委路径时发现：没配 Key 的第一条提示是「在 `demo/.env` 写入 …」，可 round17 起界面里就能填（设置 → 模型设置，运行时覆盖、无需重启）—— 那正是 v0.2.0 想省掉的那一步。改成先指界面、再说 `.env`。
+
+**Python 参考实现不跟着改**：`demo/app.py` 没有 `/api/llm-config`，面板在那边填不了，它的提示指 `.env` 才是诚实的。这是两栈分叉的又一处，见 R.6。
+
+### R.5 三条自检（门禁不自检就不算门禁）
+
+本轮每加一道门禁都把对应的修复临时回退一次，确认它精确报红、恢复后复绿：
+
+- 把 `hit = _table_path_mentioned(...)` 改成 `hit = ""` → `test_materials_notice.py` 报「静默回落又回来了」
+- 删掉 `notes` 兜底 → `test_path_in_notes_still_seen` 单项红，其余三例仍绿
+- （反面教材）我自己在 round23 的提交信息里写过「cargo 全量 41 项全过」，**那句是错的**：跑的是 `cargo test | grep | head`，读到的是 `head` 的退出码。此后一律核 `PIPESTATUS[0]`。
+
+### R.6 已知欠账（不假装已完成）
+
+- **两栈路由仍分叉**：Rust 有 `/api/upload`、`/api/local`、`/api/llm-config`、`/api/harness/*`；Python 有 `/api/config`、`/api/threads`、`/api/skills`。前端对两边都做了静默降级，但 `/api/config` 在 exe 上每次开页仍 404（只在 devtools 可见，不再写进对话流）。exe 根本没有 sandbox/approval 概念，**没有真值可回**，所以补路由等于编造——留着 404 比编一个值诚实。连带：`/sandbox`、`/approval` 两个斜杠命令在 exe 上回显的是名义默认值。
+- **CI 的 cargo 是 debug build**，与发布用的 `--release` 不是同一套编译产物。
+- 附录 P 记的「点会话不恢复完整 UI 状态」（时间线卡 / 审批卡 / 引用块）仍未做。
