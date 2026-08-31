@@ -29,19 +29,19 @@ C_CARD = (18, 28, 44)
 # (seconds, title, subtitle, bullet lines, badge)
 SLIDES = [
     (
-        9,
-        "装箱拼柜 Agent 工作台",
-        "packing-agent · harness 0.6.4 · 13 Agents",
+        12.8,
+        "Civil Buddy · 土木版 Codex",
+        "66 岗智能体工作台 · harness 0.6.4",
         [
-            "面向工程出运的多智能体装柜产品",
-            "GitHub: github.com/LUOaini1213/packing-agent",
+            "面向土建全链条：投标 · 施工 · 出运装柜",
+            "GitHub: github.com/LUOaini1213/civil-buddy",
             "tools 定柜坐标 · 人确认成箱 · 可回放轨迹",
         ],
         "作品介绍",
     ),
     (
-        12,
-        "架构：大 Team ⊃ A + B",
+        21.4,
+        "架构：大 Team 包含 A + B",
         "固定专岗 · 不是 free multi-agent swarm",
         [
             "大 Team：编排 · HITL 闸门 · 有界 critic · 收口",
@@ -52,7 +52,7 @@ SLIDES = [
         "架构",
     ),
     (
-        13,
+        22.8,
         "主路径演示（HITL）",
         "默认停确认闸 · 成箱后再拼柜",
         [
@@ -64,19 +64,19 @@ SLIDES = [
         "演示",
     ),
     (
-        11,
+        21.7,
         "有界辩论 · 非 free swarm",
         "critic ↔ planner · tools 重裁决",
         [
             "replan 时 1～2 轮协商 packing_options",
             "densify-over-raise：抑制无脑加柜",
-            "联网校准综合约 9.15 / 10（诚实口径）",
-            "本地 scorecard 不与对外分混报",
+            "表读不到会明说，不拿演示数据冒充",
+            "本地校准综合 8.85 / 10（对外唯一口径）",
         ],
         "创新",
     ),
     (
-        12,
+        16.1,
         "自然语言改方案契约",
         "能改就改 · 不能改返回无此功能",
         [
@@ -88,7 +88,7 @@ SLIDES = [
         "契约",
     ),
     (
-        11,
+        13.8,
         "本地启动与证据",
         "一键可复现",
         [
@@ -100,12 +100,12 @@ SLIDES = [
         "证据",
     ),
     (
-        9,
+        7.9,
         "谢谢",
         "tools 定柜坐标 · 人确认成箱 · 有界辩论反无脑加柜",
         [
             "不是 free swarm · 可观察 · 可确认 · 可追责",
-            "开源：LUOaini1213/packing-agent",
+            "开源：LUOaini1213/civil-buddy",
         ],
         "收口",
     ),
@@ -201,7 +201,7 @@ def render_slide(title: str, subtitle: str, lines: list[str], badge: str) -> np.
 
     # footer
     ff = font(16)
-    draw.text((48, H - 40), "packing-agent · submission demo · polished", fill=C_FAINT, font=ff)
+    draw.text((48, H - 40), "Civil Buddy · civil-buddy · 66-post workbench", fill=C_FAINT, font=ff)
     draw.text((W - 280, H - 40), "tools · HITL · bounded debate", fill=C_FAINT, font=ff)
 
     # bottom accent

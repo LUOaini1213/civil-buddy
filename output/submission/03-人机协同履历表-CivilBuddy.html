@@ -1,0 +1,92 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<title>人机协同履历表 · Civil Buddy</title>
+<style>
+  @page { size: A4 landscape; margin: 12mm; }
+  body { font-family: "Microsoft YaHei", "PingFang SC", sans-serif; color: #1a202c;
+         font-size: 9pt; line-height: 1.55; margin: 0; }
+  h1 { font-size: 16pt; margin: 0 0 2pt; }
+  .sub { color: #4a5568; font-size: 9.5pt; margin-bottom: 8pt; }
+  table { border-collapse: collapse; width: 100%; margin: 6pt 0; }
+  th, td { border: 1px solid #cbd5e0; padding: 4pt 6pt; text-align: left; vertical-align: top; }
+  th { background: #f1f5fb; font-size: 9pt; }
+  td { font-size: 8.5pt; }
+  code { font-family: Consolas, monospace; font-size: 8pt; background: #f5f7fa; padding: 0 3px; }
+  .sum { background: #eef3ff; border-left: 4px solid #2b5bd7; padding: 6pt 10pt; margin: 8pt 0; font-size: 9.5pt; }
+  h2 { font-size: 11.5pt; margin: 10pt 0 4pt; }
+</style>
+</head>
+<body>
+
+<h1>人机协同履历表 · Civil Buddy（土木版 Codex：66 岗智能体工作台）</h1>
+<div class="sub">第一届「海之子」杯 AI 智能体挑战计划 · 2026-08-31 ·
+工作区间 2026-07-24 起，git log 全程可查（github.com/LUOaini1213/civil-buddy）·
+口径：只写有仓内证据（git 提交 / 可复跑命令）的事</div>
+
+<div class="sum">
+分工：<b>人管口径与边界</b>（做什么、不做什么、数字从哪来），<b>AI 管实现与回归</b>（子代理实现、审查、评测）。
+每次纠偏必须沉淀成守卫或纪律（评测断言、parity 守卫、金句冻结、precommit 登记），使同类错误不可二次发生
+——下表每一行「纠偏点」都对应仓内一条仍在生效的机制。
+</div>
+
+<table>
+<tr><th style="width:16%">阶段（日期）</th><th style="width:26%">人做什么</th><th style="width:28%">AI 做什么</th><th style="width:30%">纠偏点</th></tr>
+<tr><td>① 07-24~08-13 引擎与评测体系（<code>72c75d3</code>…<code>ebe5625</code>）</td>
+<td>定比赛主口径「表格进、真数字出」；每日复盘评测分数拍板刀口</td>
+<td>搭 pack-ship 装箱引擎（体积/承重/混装/多柜）与评测闭环：fanout 16×8 共 128 次管线评测、netopt 在线调参</td>
+<td>booking 指标曾静默回退默认值被体积审计揪出（<code>11e2eec</code>）：人拍板「指标缺数不许回退默值，宁可标 TBD」——UNSPECIFIED 纪律的雏形，沿用至今</td></tr>
+<tr><td>② 08-17 workbench 合并与 66 岗重塑（<code>f69f085</code>）</td>
+<td>拍板独立仓并入 monorepo，产品从装箱工具重塑为 16 大类 66 岗工作台</td>
+<td>执行合并与重塑：66 岗 chat/run 双模、UI 先判意图再写盘、tender 交接</td>
+<td>合并后出现「投标问题也落盘写文件」越权，人补纪律「chat 零写盘」由 AI 修复（<code>0df9a63</code>）——意图与写盘从此分层</td></tr>
+<tr><td>③ 08-25 策略引擎与失败恢复四拍（<code>96684ea</code>）</td>
+<td>定四拍剧本验收口径：正常下单 → 越权被拒 → 工具挂掉恢复 → 成本熔断</td>
+<td>实现 Agent Middleware（permission/sandbox/HITL/audit/cost），落地 <code>demo_agent_middleware.py</code></td>
+<td>失败恢复最初只重试不留痕：人要求「retry 失败必须落 UNSPECIFIED 审计链」——恢复不能以丢证据为代价</td></tr>
+<tr><td>④ 08-28 敏感数据全历史审计与两轮清洗</td>
+<td>发起全历史泄漏审计，圈定范围，复核清洗后功能完好</td>
+<td>全历史扫描识别发票 PDF 与客户衍生 xlsx，filter-repo 两轮清洗后全量回归跑绿</td>
+<td>第一轮漏了 xlsx 派生文件，第二轮补刀；「清洗后回归全绿」成为验收标准——只删数据不验功能等于没洗</td></tr>
+<tr><td>⑤⑥ 08-29 NL pack 断链修复 + 评委路径体检（<code>8226574</code>、<code>8817310</code>）</td>
+<td>彩排中发现「一句话 pack」断链；以评委视角走 5 分钟路径发现文档与实际不一致</td>
+<td>顺链定位五处断点逐一修复；把「文档每条命令必须实跑」固化为材料门禁</td>
+<td>彩排即纠偏：入口断了说明冒烟没覆盖 NL 入口——修完写进 demo 主路径防二次断链；「可复跑」从口头承诺变成验收动作</td></tr>
+<tr><td>⑦⑧⑨ 08-29 章程核对 · CI 根因 · 契约单源（<code>ec94c19</code>、<code>175b812</code>、<code>cd49632</code>）</td>
+<td>逐条读官方章程核对提交物与三维度；追 CI 三连败三类根因；拍板意图词表唯一真源</td>
+<td>落 66 岗 L1/L2/L3 分级诚实披露；三栈 parity 守卫；<code>contract/intents.v1.json</code> 双栈只读、金句双向断言</td>
+<td>AI 初稿把「路线图宽度」写成「已交付深度」，人按章程砍掉越界声明；「不许把断言改绿了事」——每类漂移必须变成防再发守卫</td></tr>
+<tr><td>⑩ 08-29 每岗记分卡试点</td>
+<td>定四门禁口径（意图/检索/schema/诚实度），挑 5 个试点岗</td>
+<td>实现 <code>eval_post_scorecard.py</code>：5 岗 × 4 门禁全 PASS，41 条行为金句双栈全绿</td>
+<td>CI 红根因是断言随 66 岗重塑过期：按「断言同步引擎现实」修复，不回滚引擎、不放松成永真</td></tr>
+<tr><td>⑪ 08-30~31 UX 14–19 轮：符号纪律到 co-work 壳重构（<code>913beba</code>…<code>6406254</code>）</td>
+<td>提出「页面不干净」的产品判断，定下「左项目树 · 专家按需召唤 · 单一聊天框」的目标形态并逐轮验收</td>
+<td>10 轮重构：三栏改两栏、66 岗常驻名册改按需召唤、项目/会话索引双栈实现 + 对拍测试</td>
+<td><b>R14 白屏事故</b>：AI 提交含 5 个未定义模板绑定的页面并声称「可以安全提交」，整页白屏后人发现该结论错误；AI 回滚修复并新增 <code>test_vue_bindings.py</code> 门禁——AI 的「安全」结论也要有门禁看着</td></tr>
+<tr><td>⑫ 08-31 20-21 轮：用自己的表装箱（<code>19a6e14</code>、<code>56f5be8</code>）</td>
+<td>拍板「exe 要能自己按地址找表」与回形针上传两条用户路径</td>
+<td>实现 <code>pack &lt;本机路径&gt;</code> 直读 + 上传表真实解析入装箱管线</td>
+<td>上传件按无扩展名存储导致按后缀分发的解析<b>静默失败</b>（传了表却仍走演示物料）：按原文件名物化带后缀副本修复——「换个姿势的静默回落」也要堵</td></tr>
+<tr><td>⑬ 08-31 22-23 轮：物料来源诚实性 + 门禁自身可信度（<code>a239327</code>…<code>fb73005</code>）</td>
+<td>指出「真正该修的」是静默回落；复核 AI 的测试结论</td>
+<td>实测证明缺陷（给读不到的路径与什么都不给，返回完全相同的演示柜数），修三层（exe/网关/SSE）并各配门禁；每道门禁做回退自检确认能精确报红</td>
+<td><b>AI 报错结论被人机共同纠正</b>：AI 声称「cargo 全量 41 项全过」实为读错管道退出码，真实套件当时有 2 项在红；根因是 CI 从不跑 Rust 测试——当天把 <code>cargo test</code> 接入 CI，三条烂了多轮的陈红断言按本来意图修正</td></tr>
+</table>
+
+<h2>复跑方式（全部无需 API Key）</h2>
+<table>
+<tr><th style="width:30%">阶段</th><th>复跑命令 / 证据</th></tr>
+<tr><td>① 引擎与评测</td><td><code>python scripts/eval_competition_scorecard.py --skip-phase0</code>（综合分 8.85 门禁）</td></tr>
+<tr><td>② 66 岗重塑</td><td><code>python scripts/test_kb_k4_depth.py</code>（66/66）；<code>cargo test --release</code>（workbench）</td></tr>
+<tr><td>③ 四拍剧本</td><td><code>python scripts/demo_agent_middleware.py</code></td></tr>
+<tr><td>⑤⑥ NL pack 与演示路径</td><td><code>python scripts/demo_one_shot.py</code>；<code>python main.py --demo</code></td></tr>
+<tr><td>⑦⑧⑨ 口径 / parity / 契约</td><td><code>python scripts/test_stack_parity.py</code>（41 金句）；<code>cargo test --release --test intents_golden</code></td></tr>
+<tr><td>⑩ 每岗记分卡</td><td><code>python scripts/eval_post_scorecard.py --all-pilots</code>（5/5 PASS）</td></tr>
+<tr><td>⑪ co-work 壳与项目索引</td><td><code>python scripts/test_projects_parity.py</code>（12 例双栈对拍）；<code>python scripts/test_vue_bindings.py</code></td></tr>
+<tr><td>⑫⑬ 物料来源诚实性</td><td><code>python scripts/test_materials_notice.py</code>（网关侧）；<code>cargo test --release --test pack_table</code>（exe 侧 4 例）；GitHub Actions 双 job 绿</td></tr>
+</table>
+
+</body>
+</html>
