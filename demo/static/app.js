@@ -136,6 +136,44 @@ function cbMoreInit() {
 
 cbDockInit();
 cbMoreInit();
+cbProjOpenLoad();
+if ($("btnNewProject")) {
+  $("btnNewProject").addEventListener("click", () => {
+    const box = $("projTree");
+    if (!box || box.querySelector(".rail-rename")) return;
+    const inp = document.createElement("input");
+    inp.type = "text";
+    inp.className = "rail-rename";
+    inp.placeholder = "项目名，Enter 确认";
+    let settled = false;
+    const done = async (save) => {
+      if (settled) return;
+      settled = true;
+      const v = inp.value.trim();
+      inp.remove();
+      if (!save || !v) return;
+      try {
+        const r = await fetch("/api/projects", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ name: v }),
+        });
+        if (!r.ok) throw new Error("HTTP " + r.status);
+        await loadThreads();
+      } catch (e) {
+        addStatus("新建项目失败：" + ((e && e.message) || e));
+      }
+    };
+    inp.addEventListener("keydown", (ev) => {
+      if (ev.key === "Enter") { ev.preventDefault(); done(true); }
+      if (ev.key === "Escape") { ev.preventDefault(); done(false); }
+    });
+    inp.addEventListener("blur", () => done(true));
+    box.prepend(inp);
+    inp.focus();
+  });
+}
+
 
 /* ux(round19)：本地新会话 —— 不依赖任何后端接口，任何后端上都生效。 */
 function cbNewLocalSession() {
@@ -186,39 +224,213 @@ function cbResetToEmpty() {
   cbLastDeliverables = [];
 }
 
+/* ===== ux(round19) 左栏项目树（两级：工程项目 > 该项目下历次会话）=====
+   数据源是 Rust 的 /api/projects 与 /api/sessions（P3-P5）。没有这两个接口的后端
+   （如 Python 参考实现，P8 才补镜像）静默降级：不报错、不留空白、不写对话流。
+   展开态存 localStorage，与 cb_theme_v1 / cb_dock_v1 同一套 try/catch 容错写法。 */
+const CB_PROJ_OPEN_KEY = "cb_proj_open_v1";
+const cbProj = { projects: [], inbox: null, sessions: [], open: new Set(), cur: "" };
+
+function cbProjOpenLoad() {
+  try {
+    const v = JSON.parse(localStorage.getItem(CB_PROJ_OPEN_KEY) || "[]");
+    if (Array.isArray(v)) cbProj.open = new Set(v.map(String));
+  } catch (e) { /* 存储不可用：全折叠 */ }
+}
+
+function cbProjOpenSave() {
+  try { localStorage.setItem(CB_PROJ_OPEN_KEY, JSON.stringify([...cbProj.open])); } catch (e) { /* 忽略 */ }
+}
+
+function cbProjFallback(msg) {
+  const box = $("projTree");
+  if (!box) return;
+  box.innerHTML = "";
+  const none = document.createElement("div");
+  none.className = "thread-none";
+  none.textContent = msg;
+  box.appendChild(none);
+}
+
 async function loadThreads() {
-  const box = $("threadList");
+  const box = $("projTree");
   if (!box) return;
   try {
-    const data = await fetch("/api/threads").then((r) => r.json());
-    box.innerHTML = "";
-    for (const t of data.threads || []) {
-      const b = document.createElement("button");
-      b.type = "button";
-      b.className = "thread-row" + (t.thread_id === state.threadId ? " on" : "");
-      b.title = `${t.title || t.thread_id} · ${t.state || ""}`;
-      const name = document.createElement("span");
-      name.className = "t-name";
-      name.textContent = t.title || t.thread_id;
-      const time = document.createElement("span");
-      time.className = "t-time";
-      time.textContent = cbRelTime(t.updated_at || t.created_at);
-      b.append(name, time);
-      b.addEventListener("click", () => {
-        state.threadId = t.thread_id;
-        state.session = t.session_id || t.thread_id;
-        loadThreads();
-        addStatus(`thread ${t.thread_id}`);
-      });
-      box.appendChild(b);
-    }
-    if (!box.children.length) {
-      box.innerHTML = '<div class="thread-none">暂无会话</div>';
-    }
+    const [pj, ss] = await Promise.all([
+      fetch("/api/projects").then((r) => (r.ok ? r.json() : null)),
+      fetch("/api/sessions?limit=100").then((r) => (r.ok ? r.json() : null)),
+    ]);
+    if (!pj || !ss) throw new Error("no-projects-api");
+    cbProj.projects = pj.projects || [];
+    cbProj.inbox = pj.inbox || null;
+    cbProj.sessions = ss.sessions || [];
+    cbProjRender();
   } catch (e) {
-    box.textContent = "";
+    /* 降级：该后端没有项目接口。静默留一行弱文本，不写对话流。 */
+    cbProjFallback("本后端不提供项目列表");
   }
 }
+
+function cbProjSessionsOf(pid) {
+  return cbProj.sessions.filter((s) => s.project_id === pid);
+}
+
+function cbProjRender() {
+  const box = $("projTree");
+  if (!box) return;
+  box.innerHTML = "";
+  const groups = cbProj.projects.slice();
+  if (cbProj.inbox) groups.push(cbProj.inbox); /* 未归类恒在最后 */
+  if (!groups.length) {
+    cbProjFallback("还没有项目；跑一次任务后自动归入未归类");
+    return;
+  }
+  for (const p of groups) {
+    const kids = cbProjSessionsOf(p.id);
+    const open = cbProj.open.has(p.id);
+    const wrap = document.createElement("div");
+    wrap.className = "proj" + (open ? " open" : "");
+    wrap.dataset.pid = p.id;
+    wrap.setAttribute("role", "treeitem");
+    wrap.setAttribute("aria-expanded", open ? "true" : "false");
+
+    const row = document.createElement("div");
+    row.className = "proj-row";
+    const tw = document.createElement("button");
+    tw.type = "button";
+    tw.className = "proj-tw"; /* CSS 三角，不用字符（符号纪律） */
+    tw.setAttribute("aria-label", (open ? "折叠 " : "展开 ") + p.name);
+    tw.addEventListener("click", () => {
+      if (cbProj.open.has(p.id)) cbProj.open.delete(p.id);
+      else cbProj.open.add(p.id);
+      cbProjOpenSave();
+      cbProjRender();
+    });
+    const name = document.createElement("button");
+    name.type = "button";
+    name.className = "proj-name";
+    name.textContent = p.name;
+    name.title = p.name;
+    name.addEventListener("click", () => {
+      cbProj.cur = p.id;
+      cbProj.open.add(p.id);
+      cbProjOpenSave();
+      cbProjRender();
+    });
+    const n = document.createElement("span");
+    n.className = "proj-n";
+    n.textContent = String(kids.length);
+    row.append(tw, name, n);
+
+    /* 内置「未归类」不可改名 —— 服务端也会 400，这里不给入口 */
+    if (!p.builtin) {
+      const more = document.createElement("button");
+      more.type = "button";
+      more.className = "proj-more";
+      more.textContent = "改名";
+      more.setAttribute("aria-label", "重命名项目 " + p.name);
+      more.addEventListener("click", () => cbProjRename(p));
+      row.appendChild(more);
+    }
+    wrap.appendChild(row);
+
+    const kidBox = document.createElement("div");
+    kidBox.className = "proj-kids";
+    if (!open) kidBox.hidden = true;
+    for (const s of kids) {
+      const b = document.createElement("button");
+      b.type = "button";
+      b.className = "sess-row" + (s.session_id === state.session ? " on" : "");
+      b.title = s.session_id;
+      const t1 = document.createElement("span");
+      t1.className = "t-name";
+      t1.textContent = s.title || s.session_id;
+      const t2 = document.createElement("span");
+      t2.className = "t-time";
+      t2.textContent = cbRelTime(s.updated_at);
+      b.append(t1, t2);
+      b.addEventListener("click", () => cbProjOpenSession(s));
+      kidBox.appendChild(b);
+    }
+    if (!kids.length) {
+      const none = document.createElement("div");
+      none.className = "sess-none";
+      none.textContent = "这个项目还没有会话";
+      kidBox.appendChild(none);
+    }
+    wrap.appendChild(kidBox);
+    box.appendChild(wrap);
+  }
+}
+
+/* 行内改名：不用 prompt()（嵌入视图会被拦，且与现有 vanilla 风格不搭） */
+function cbProjRename(p) {
+  const wrap = document.querySelector('.proj[data-pid="' + p.id + '"]');
+  const row = wrap && wrap.querySelector(".proj-row");
+  if (!row) return;
+  const old = row.querySelector(".proj-name");
+  if (!old) return;
+  const inp = document.createElement("input");
+  inp.type = "text";
+  inp.className = "rail-rename";
+  inp.value = p.name;
+  let settled = false;
+  const commit = async (save) => {
+    if (settled) return;
+    settled = true;
+    const v = inp.value.trim();
+    inp.replaceWith(old);
+    if (!save || !v || v === p.name) return;
+    try {
+      const r = await fetch("/api/projects/" + encodeURIComponent(p.id), {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ name: v }),
+      });
+      if (!r.ok) throw new Error("HTTP " + r.status);
+      await loadThreads();
+    } catch (e) {
+      addStatus("改名失败：" + ((e && e.message) || e));
+    }
+  };
+  inp.addEventListener("keydown", (ev) => {
+    if (ev.key === "Enter") { ev.preventDefault(); commit(true); }
+    if (ev.key === "Escape") { ev.preventDefault(); commit(false); }
+  });
+  inp.addEventListener("blur", () => commit(true));
+  old.replaceWith(inp);
+  inp.focus();
+  inp.select();
+}
+
+/* 点会话：拉详情并**整体替换** state.history（不 merge，避免与浏览器内存分叉） */
+async function cbProjOpenSession(s) {
+  try {
+    const d = await fetch("/api/sessions/" + encodeURIComponent(s.session_id)).then((r) => r.json());
+    state.session = d.session_id;
+    state.threadId = "";
+    state.history = (d.transcript || [])
+      .filter((t) => t.role === "user" || t.role === "assistant")
+      .map((t) => ({ role: t.role, content: t.text || "" }));
+    cbResetToEmpty();
+    const log = $("log");
+    if (state.history.length) {
+      cbHideWelcome();
+      for (const t of state.history) {
+        addMsg(t.role === "user" ? "user" : "assistant", t.role === "user" ? "你" : "岗位", t.content);
+      }
+    } else {
+      /* 诚实：没有留存正文就明说，不假装接上了 */
+      addStatus("这条会话没有留存对话正文；上文从此刻重新开始。");
+    }
+    if (d.truncated) addStatus("只载入了最近若干轮，更早的历史已截断。");
+    if (log) log.scrollTop = log.scrollHeight;
+    cbProjRender();
+  } catch (e) {
+    addStatus("载入会话失败：" + ((e && e.message) || e));
+  }
+}
+
 
 if ($("btnNewThread")) {
   $("btnNewThread").addEventListener("click", async () => {

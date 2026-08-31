@@ -67,11 +67,12 @@
     <aside class="rail">
       <!-- ux(round14) 参考图侧栏：顶部「新建任务」主按钮（=清空当前会话回空态卡）+ 会话列表（标题+相对时间） -->
       <button type="button" id="btnNewThread" class="rail-new" title="清空当前会话，回到空态卡">+ 新建任务</button>
-      <div class="thread-box">
-        <div class="thread-head">
-          <span>最近会话</span>
-        </div>
-        <div id="threadList"></div>
+      <!-- ux(round19) 项目树（两级：工程项目 > 该项目下历次会话）。
+           数据来自 Rust 的 /api/projects 与 /api/sessions；没有这两个接口的后端
+           会静默降级为「只列会话」，不报错、不留空白。 -->
+      <div id="projTree" class="rail-projects" role="tree" aria-label="工程项目与会话"></div>
+      <div class="rail-foot">
+        <button type="button" id="btnNewProject" class="ghost tiny">+ 新建项目</button>
       </div>
     </aside>
 

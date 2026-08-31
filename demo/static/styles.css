@@ -166,22 +166,58 @@ body[data-dock="open"] .layout { grid-template-columns: var(--cb-rail-w) minmax(
 }
 .ghost:hover { background: #1d1f23; }
 .ghost.tiny { width: auto; margin: 0; padding: 3px 8px; font-size: 11px; }
-.thread-box { margin-bottom: 10px; }
-/* ux(round14)：会话列表空态 = 一行弱文本（无符号） */
+/* ===== ux(round19) 左栏项目树（两级）=====
+   .thread-* 那套单级会话列表退役，改为 .proj / .sess-row 两级。
+   左栏是「双主题恒定暗色 chrome」（styles.css 顶部 --rail 注释、spec 附录 J），
+   故此处沿用 rail 语境的固定色，不随明暗翻转 —— 这是既有设计决定，不是遗漏。 */
 .thread-none { font-size: 12px; color: #6f747c; padding: 4px 10px; }
-.thread-head {
-  display: flex; gap: 6px; align-items: center; font-size: 11px;
-  color: #8b8f96; margin-bottom: 6px;
+.rail-projects { margin-bottom: 8px; }
+.rail-foot { margin-top: 8px; }
+.proj { margin-bottom: 2px; }
+.proj-row { display: flex; align-items: center; gap: 4px; padding: 2px 0; }
+.proj-tw {
+  flex: none; width: 18px; height: 18px; padding: 0; cursor: pointer;
+  background: transparent; border: 0; position: relative;
 }
-.thread-row {
+/* CSS 三角，不用字符（符号纪律，附录 L） */
+.proj-tw::before {
+  content: ""; position: absolute; left: 6px; top: 5px;
+  border-left: 4px solid #8b8f96; border-top: 4px solid transparent;
+  border-bottom: 4px solid transparent; transition: transform .12s ease;
+}
+.proj.open .proj-tw::before { transform: rotate(90deg); transform-origin: 2px 4px; }
+.proj-tw:focus-visible { outline: 2px solid var(--cb-focus); outline-offset: -2px; border-radius: 4px; }
+.proj-name {
+  flex: 1; min-width: 0; text-align: left; overflow: hidden;
+  text-overflow: ellipsis; white-space: nowrap;
+  background: transparent; border: 0; color: var(--rail-ink);
+  font: inherit; font-size: 12px; font-weight: 600; cursor: pointer;
+  padding: 4px 2px; border-radius: 6px;
+}
+.proj-name:hover { background: #1d1f23; }
+.proj-n { flex: none; font-size: 11px; color: #7d838d; padding: 0 2px; }
+.proj-more {
+  flex: none; background: transparent; border: 0; cursor: pointer;
+  color: #7d838d; font: inherit; font-size: 11px; padding: 2px 4px; border-radius: 6px;
+}
+.proj-more:hover { color: var(--rail-ink); background: #1d1f23; }
+.proj-kids { padding-left: 18px; }
+.proj-kids[hidden] { display: none; }
+.rail-rename {
+  width: 100%; margin: 2px 0; padding: 5px 8px; border-radius: 8px;
+  border: 1px solid var(--cb-blue); background: #1a1c1f;
+  color: var(--rail-ink); font: inherit; font-size: 12px;
+}
+.sess-row {
   display: flex; justify-content: space-between; align-items: baseline; gap: 8px;
   width: 100%; text-align: left; background: transparent;
-  color: #c9ccd1; border: 0; padding: 7px 10px; margin: 0 0 2px; cursor: pointer;
+  color: #c9ccd1; border: 0; padding: 6px 10px; margin: 0 0 2px; cursor: pointer;
   font-size: 12px; border-radius: 8px;
 }
-.thread-row .t-name { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.thread-row .t-time { flex: none; font-size: 11px; color: #7d838d; }
-.thread-row:hover, .thread-row.on { background: #2a2d31; color: var(--rail-ink); }
+.sess-row .t-name { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.sess-row .t-time { flex: none; font-size: 11px; color: #7d838d; }
+.sess-row:hover, .sess-row.on { background: #2a2d31; color: var(--rail-ink); }
+.sess-none { font-size: 11px; color: #6f747c; padding: 4px 10px; }
 /* ux(round19)：常驻名册（.skill-q / .cat / .exp*）随 renderWall 一并删除，
    66 岗改由 composer 的「岗位」两级面板按需召唤。 */
 .stage {
