@@ -16,5 +16,19 @@ if not exist "demo\.env" (
   echo See the Chinese trial page for details.
 )
 set CIVIL_DEMO_ROOT=%~dp0demo
-civil-workbench.exe
+
+REM Open the browser a few seconds later, once the KB index is warm.
+REM Detached so it does not block the server below.
+start "" /min cmd /c "timeout /t 6 /nobreak >nul && start "" http://127.0.0.1:8765/"
+
+echo.
+echo Civil Buddy workbench starting on http://127.0.0.1:8765/
+echo The browser opens by itself in a few seconds. Keep this window open.
+echo Close this window to stop the workbench.
+echo.
+
+REM Absolute path on purpose: bare "civil-workbench.exe" relies on cmd searching the
+REM current directory, which is disabled when NoDefaultCurrentDirectoryInExePath=1
+REM (set by Git Bash, and by some hardened corporate Windows images via policy).
+"%~dp0civil-workbench.exe"
 if errorlevel 1 pause
