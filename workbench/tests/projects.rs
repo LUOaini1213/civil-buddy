@@ -215,3 +215,38 @@ fn broken_registry_never_loses_sessions() {
     let v = projects::list_sessions(&p, projects::INBOX_ID, "", 50, 0);
     assert_eq!(v["total"], 1, "指向不存在项目的会话必须归 inbox");
 }
+
+// ===== ux(round20) 按本机路径装箱：路径识别与显示 =====
+
+#[test]
+fn pretty_path_strips_windows_unc_prefix() {
+    // Windows canonicalize 返回 \?\C:\... ，打进作业单很难看；只影响显示不改语义
+    use civil_workbench::packing_bridge::pretty_path;
+    // 前缀显式按字符拼，不依赖源码里反斜杠的写法（首版被 heredoc 吞掉一个 \，
+    // 断言假失败，查了半天发现是测试自己写错而不是 pretty_path 有问题）
+    let verbatim = format!("{}{}?{}C:\\Users\\x\\a.xlsx", '\\', '\\', '\\');
+    let p = PathBuf::from(&verbatim);
+    assert!(verbatim.starts_with("\\\\?\\"), "前缀必须是 4 个字符的 \\\\?\\");
+    assert_eq!(pretty_path(&p), r"C:\Users\x\a.xlsx");
+    let q = PathBuf::from(r"C:\Users\x\a.xlsx");
+    assert_eq!(pretty_path(&q), r"C:\Users\x\a.xlsx", "非 UNC 路径原样返回");
+}
+
+#[test]
+fn local_path_guard_rejects_system_dirs_and_missing() {
+    // 与 attach::allow_local_path 的既有策略对齐：系统目录拒读、不存在的路径明确报错。
+    // 这条钉住的是 round20 的核心行为：**给了路径读不到必须报错，绝不静默回落到演示物料**。
+    let p = fixture("localguard");
+    assert!(
+        civil_workbench::attach::allow_local_path(&p, r"C:\Windows\System32\drivers\etc\hosts").is_err(),
+        "系统目录必须拒读"
+    );
+    assert!(
+        civil_workbench::attach::allow_local_path(&p, r"C:\Users\nobody\不存在的表.xlsx").is_err(),
+        "不存在的路径必须报错而不是回落"
+    );
+    assert!(
+        civil_workbench::attach::allow_local_path(&p, "   ").is_err(),
+        "空路径必须报错"
+    );
+}

@@ -164,6 +164,85 @@ pub fn tender_extract(tender_text: &str, project_name: &str) -> Result<Value, St
     serde_json::from_slice(&out.stdout).map_err(|e| e.to_string())
 }
 
+/// ux(round20)：**按本机路径装箱**。
+///
+/// 为什么不是把路径塞进 `user_input` 让网关去抠：网关的
+/// `_load_materials_from_text`（gateway/app.py:1031）出于防目录穿越，**只认仓库内
+/// 相对路径**，桌面路径会被丢弃并**静默回落到演示预设物料** —— 不报错、照样给一串
+/// 很像样的柜数，演示时极易把样例数据当成用户的表。那个沙箱本身是对的，因为
+/// `user_input` 里可能混着 LLM 生成或从文档粘来的内容，不能让它随便读盘。
+///
+/// 所以改走**显式通道**，职责各归各位：
+///   1. exe 侧用 `attach::allow_local_path` 判断这个路径能不能读（该策略本来就归 exe，
+///      与老「导入」按钮同一信任级别：路径是用户显式给的，不是从自由文本猜的）；
+///   2. 网关 `/api/table/parse/json` 把表读成 materials（Python 的 table_mapper 能处理
+///      脏表头与单位归一，见 test/generic_tables/G6_messy_headers；在 Rust 重写是倒退）；
+///   3. materials **数组**直接喂 `/api/pipeline` —— 不传路径，沙箱问题根本不存在。
+///
+/// 两个端点都是现成的，网关侧零改动。
+/// Windows 的 `canonicalize` 会返回 `\\?\C:\...` 这种扩展长度前缀，
+/// 打进作业单里很难看。只用于显示，不改实际传给网关的路径语义。
+pub fn pretty_path(p: &std::path::Path) -> String {
+    let s = p.to_string_lossy().to_string();
+    s.strip_prefix("\\\\?\\").map(|x| x.to_string()).unwrap_or(s)
+}
+
+pub fn run_table(path: &std::path::Path, notes: &str) -> Result<PackingSummary, String> {
+    let base = url_configured().ok_or_else(|| "未配置装箱网关地址".to_string())?;
+    let client = reqwest::blocking::Client::builder()
+        .timeout(Duration::from_secs(240))
+        .http1_only()
+        .build()
+        .map_err(|e| e.to_string())?;
+
+    // 1) 路径 → materials
+    let parse_url = format!("{base}/api/table/parse/json");
+    let resp = client
+        .post(&parse_url)
+        .json(&json!({"path": path.to_string_lossy()}))
+        .send()
+        .map_err(|e| format!("表解析请求失败：{e}"))?;
+    if !resp.status().is_success() {
+        return Err(format!("表解析 HTTP {}", resp.status()));
+    }
+    let parsed: Value = resp.json().map_err(|e| e.to_string())?;
+    let mats = parsed
+        .get("materials")
+        .and_then(|v| v.as_array())
+        .cloned()
+        .unwrap_or_default();
+    if mats.is_empty() {
+        return Err(format!(
+            "表里没解析出物料：{}（检查表头是否含 名称/数量/长宽高/重量 等列）",
+            pretty_path(path)
+        ));
+    }
+
+    // 2) materials → 装箱
+    let run_url = format!("{base}/api/pipeline");
+    let payload = json!({
+        "materials": mats,
+        "user_input": notes,
+        "mode": "steps",
+        "agent_mode": "steps",
+        "enable_auto_confirm": true,
+        "save_artifacts": false,
+        "session_id": format!("civil-buddy-tbl-{}", chrono::Local::now().format("%H%M%S")),
+    });
+    let resp = client
+        .post(&run_url)
+        .json(&payload)
+        .send()
+        .map_err(|e| format!("装箱请求失败：{e}"))?;
+    if !resp.status().is_success() {
+        return Err(format!("装箱 HTTP {}", resp.status()));
+    }
+    let v: Value = resp.json().map_err(|e| e.to_string())?;
+    let mut sum = summarize_pipeline_json(&v, &format!("http {base} · 表 {}", pretty_path(path)));
+    sum.source = format!("{} · {} 条物料", sum.source, mats.len());
+    Ok(sum)
+}
+
 pub fn run(materials: &str, notes: &str) -> PackingSummary {
     let mut http_err: Option<String> = None;
     if let Some(base) = url_configured() {

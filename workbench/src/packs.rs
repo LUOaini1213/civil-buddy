@@ -3256,6 +3256,33 @@ fn pack_ship_export(args: &Value) -> String {
     )
 }
 
+/// ux(round20)：从用户文本里找表格路径（.xlsx/.xlsm/.csv/.tsv）。
+/// 认 Windows 反斜杠与正斜杠、带引号、中文文件名；只取第一个命中。
+/// 这里**只负责找**；能不能读由 attach::allow_local_path 判。
+fn find_table_path(text: &str) -> Option<String> {
+    for tok in text.split(|c: char| {
+        c == '\n' || c == '\r' || c == '\t' || c == ' ' || c == '\u{ff0c}' || c == '\u{3002}'
+    }) {
+        let t = tok
+            .trim()
+            .trim_matches('"')
+            .trim_matches('\'')
+            .trim_matches('`');
+        if t.len() < 5 {
+            continue;
+        }
+        let lower = t.to_ascii_lowercase();
+        if lower.ends_with(".xlsx")
+            || lower.ends_with(".xlsm")
+            || lower.ends_with(".csv")
+            || lower.ends_with(".tsv")
+        {
+            return Some(t.to_string());
+        }
+    }
+    None
+}
+
 fn pack_ship_plan(ctx: &mut ToolCtx, args: &Value) -> String {
     let mut materials = nonempty(&s(args, "materials"), "");
     if materials.is_empty() {
@@ -3274,11 +3301,57 @@ fn pack_ship_plan(ctx: &mut ToolCtx, args: &Value) -> String {
     let notes = s(args, "notes");
     let (jur, banner) = zone_banner(args);
     let force_off = args.get("connected").and_then(|v| v.as_bool()) == Some(false);
+
+    /* ux(round20) 按本机路径装箱：用户直接说「pack D:\\某项目\\发货清单.xlsx」。
+       路径判定归 exe（allow_local_path，与老「导入」按钮同一信任级别：用户显式给的
+       路径，不是从自由文本猜的）；读表与装箱归网关的两个现成端点。
+       **失败必须明说**：路径给了却读不到时要写清原因，绝不静默回落到演示物料 ——
+       那正是改造前的坏行为（桌面路径被丢弃后照样给一串演示数据的柜数）。 */
+    let table_hit = find_table_path(&materials);
+    let mut table_note = String::new();
+    let mut table_sum: Option<crate::packing_bridge::PackingSummary> = None;
+    if let Some(raw) = &table_hit {
+        match crate::attach::allow_local_path(&ctx.paths, raw) {
+            Ok(abs) => {
+                let notes2 = notes.clone();
+                let abs2 = abs.clone();
+                match crate::websearch::run_blocking(move || {
+                    crate::packing_bridge::run_table(&abs2, &notes2)
+                }) {
+                    Ok(sum) => {
+                        table_note = format!(
+                            "\n> 物料来源：**本机表格** `{}`（exe 读盘 → 网关 table_mapper 解析 → 装箱引擎）。\n",
+                            crate::packing_bridge::pretty_path(&abs)
+                        );
+                        table_sum = Some(sum);
+                    }
+                    Err(e) => {
+                        table_note = format!(
+                            "\n> **注意：给了表格路径但没能用上** —— `{}`：{}。\n> 下面的数字**不是**这张表算出来的，不要当成它的结果。\n",
+                            crate::packing_bridge::pretty_path(&abs),
+                            e
+                        );
+                    }
+                }
+            }
+            Err(e) => {
+                table_note = format!(
+                    "\n> **注意：给了表格路径但读不到** —— `{raw}`：{e}。\n> 下面的数字**不是**这张表算出来的，不要当成它的结果。\n"
+                );
+            }
+        }
+    }
+
     // 数字一律以桥接回传为准：桥接成功 → 回填 export 数字块；失败/断开 → 维持 UNSPECIFIED 口径。
     let (four, agent_md, connected_ok) = if force_off {
         (pack_ship_export(&json!({"connected": false})), None, false)
     } else {
-        let agent = crate::websearch::run_blocking(|| crate::packing_bridge::run(&materials, &notes));
+        let agent = match table_sum {
+            Some(s) => s,
+            None => {
+                crate::websearch::run_blocking(|| crate::packing_bridge::run(&materials, &notes))
+            }
+        };
         let md = agent.markdown();
         if agent.error.is_some() {
             (pack_ship_export(&json!({"connected": false})), Some(md), false)
@@ -3293,9 +3366,9 @@ fn pack_ship_plan(ctx: &mut ToolCtx, args: &Value) -> String {
         }
     };
     let tool_block = if let Some(md) = &agent_md {
-        format!("## packing-agent 回传（工具计算，非本岗编造）\n\n{md}\n\n```\n{four}```\n")
+        format!("## packing-agent 回传（工具计算，非本岗编造）\n{table_note}\n{md}\n\n```\n{four}```\n")
     } else {
-        format!("## packing-agent 回传（工具计算，非本岗编造）\n\n未接通 solver 快照。\n\n```\n{four}```\n")
+        format!("## packing-agent 回传（工具计算，非本岗编造）\n{table_note}\n未接通 solver 快照。\n\n```\n{four}```\n")
     };
     let n0_line = if connected_ok {
         "柜数/N0* 以上文工具回传为准；未出现的数字标 UNSPECIFIED。"
