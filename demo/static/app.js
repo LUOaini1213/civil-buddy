@@ -54,6 +54,9 @@ async function boot() {
   if (health.context) {
     state.context = { ...state.context, ...health.context };
   }
+  /* ux(round16)：试用包判别蹭 boot 这一次 health，别在装箱直达时再发赶时间的请求——
+     真 exe 冷启动期 /api/health 要跑引擎 spawn_blocking 探针，实测可超 2s（附录 N.3）。 */
+  CB_PACK_TRIAL = cbPackTrialFrom(health);
   paintContext(estimateLocalContext());
   await reloadCatalog();
   await loadJobRoot();
@@ -1187,6 +1190,159 @@ function cbSubsequence(q, names) {
   });
 }
 
+/* ===== ux(round17) 模型设置面板 =====
+   目的：评委/试用者用自己的 Key 就能跑，界面里切 DeepSeek / z.ai 等 OpenAI 兼容供应商，
+   不必改 demo/.env 再重启进程。
+   边界：Key 只 POST 给同源工作台，存进程内存（config.rs RUNTIME_LLM）——不写盘、不进
+   localStorage、不进日志；GET 只回首尾各 4 位掩码，永不回明文。浏览器**从不**直连供应商，
+   /chat/completions 由 Rust 侧 reqwest 发出，故不破 R12 断网红线（见该门禁 EXEMPT_URLS 理由）。 */
+const CB_LLM_VENDORS = {
+  deepseek: {
+    base: "https://api.deepseek.com",
+    models: ["deepseek-chat", "deepseek-reasoner", "deepseek-v4-flash"],
+  },
+  zai: {
+    base: "https://api.z.ai/api/paas/v4",
+    models: ["glm-5.3", "glm-5.2", "glm-4.7", "GLM-4.7-Flash"],
+  },
+  openai: {
+    base: "https://api.openai.com/v1",
+    models: ["gpt-4o-mini", "gpt-4o"],
+  },
+  custom: { base: "", models: [] },
+};
+
+function cbLlmVendorOf(base) {
+  const b = String(base || "").toLowerCase();
+  if (b.indexOf("deepseek") !== -1) return "deepseek";
+  if (b.indexOf("z.ai") !== -1) return "zai";
+  if (b.indexOf("openai.com") !== -1) return "openai";
+  return "custom";
+}
+
+function cbLlmFillModels(vendor) {
+  const dl = $("cbLlmModels");
+  if (!dl) return;
+  dl.innerHTML = "";
+  for (const m of (CB_LLM_VENDORS[vendor] || CB_LLM_VENDORS.custom).models) {
+    const o = document.createElement("option");
+    o.value = m;
+    dl.appendChild(o);
+  }
+}
+
+function cbLlmPaint(cfg, note, tone) {
+  const st = $("cbLlmStatus");
+  if (!st) return;
+  st.className = "cb-llm-status" + (tone ? " " + tone : "");
+  if (note) { st.textContent = note; return; }
+  if (!cfg) { st.textContent = "读取失败：工作台未响应。"; return; }
+  const src = cfg.source === "runtime" ? "本次运行（界面设置）" : "demo/.env";
+  st.textContent = cfg.configured
+    ? "当前：" + cfg.model + " · " + cfg.base_url + " · Key " + cfg.key_masked + " · 来源 " + src
+    : "当前未配置 Key（来源 " + src + "）。填 Key 后点「保存并生效」，无需重启。";
+}
+
+async function cbLlmLoad(note, tone) {
+  try {
+    const cfg = await fetch("/api/llm-config").then((r) => r.json());
+    const vendor = cbLlmVendorOf(cfg.base_url);
+    if ($("cbLlmVendor")) $("cbLlmVendor").value = vendor;
+    cbLlmFillModels(vendor);
+    if ($("cbLlmBase")) $("cbLlmBase").value = cfg.base_url || "";
+    if ($("cbLlmModel")) $("cbLlmModel").value = cfg.model || "";
+    if ($("cbLlmKey")) $("cbLlmKey").value = "";
+    cbLlmPaint(cfg, note, tone);
+    return cfg;
+  } catch (e) {
+    cbLlmPaint(null, "读取失败：" + String((e && e.message) || e), "err");
+    return null;
+  }
+}
+
+async function cbLlmSubmit(payload, okNote) {
+  try {
+    const r = await fetch("/api/llm-config", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(payload),
+    });
+    if (!r.ok) throw new Error("HTTP " + r.status);
+    await cbLlmLoad(null, null);
+    const cfg = await fetch("/api/llm-config").then((x) => x.json());
+    cbLlmPaint(cfg, null, "ok");
+    /* 顶栏徽章跟着变，别让用户以为没生效 */
+    const badge = $("keyBadge");
+    if (badge) {
+      badge.textContent = cfg.configured ? "已配置 API Key" : "缺少 API Key";
+      badge.className = cfg.configured ? "pill ok" : "pill warn";
+    }
+    if ($("modelBadge") && cfg.model) $("modelBadge").textContent = "模型 " + cfg.model;
+    state.modelName = cfg.model || state.modelName;
+    addStatus(okNote + "：" + cfg.model + " · " + cfg.base_url);
+  } catch (e) {
+    cbLlmPaint(null, "保存失败：" + String((e && e.message) || e), "err");
+  }
+}
+
+function cbLlmOpen() {
+  const box = $("cbLlm");
+  if (!box) return;
+  box.classList.remove("hidden");
+  box.setAttribute("aria-hidden", "false");
+  cbLlmLoad(null, null);
+  const first = $("cbLlmVendor");
+  if (first) first.focus();
+}
+
+function cbLlmClose() {
+  const box = $("cbLlm");
+  if (!box) return;
+  box.classList.add("hidden");
+  box.setAttribute("aria-hidden", "true");
+  if ($("cbLlmKey")) $("cbLlmKey").value = "";
+}
+
+function cbLlmWire() {
+  const open = $("cbLlmOpen");
+  if (open) open.addEventListener("click", cbLlmOpen);
+  const close = $("cbLlmClose");
+  if (close) close.addEventListener("click", cbLlmClose);
+  const box = $("cbLlm");
+  if (box) {
+    box.addEventListener("click", (e) => { if (e.target === box) cbLlmClose(); });
+  }
+  document.addEventListener("keydown", (e) => {
+    if (e.key === "Escape" && box && !box.classList.contains("hidden")) cbLlmClose();
+  });
+  const vendor = $("cbLlmVendor");
+  if (vendor) {
+    vendor.addEventListener("change", () => {
+      const v = vendor.value;
+      cbLlmFillModels(v);
+      const preset = CB_LLM_VENDORS[v] || CB_LLM_VENDORS.custom;
+      if (preset.base) $("cbLlmBase").value = preset.base;
+      if (preset.models.length) $("cbLlmModel").value = preset.models[0];
+    });
+  }
+  const save = $("cbLlmSave");
+  if (save) {
+    save.addEventListener("click", () => {
+      cbLlmSubmit({
+        api_key: $("cbLlmKey").value,
+        base_url: $("cbLlmBase").value,
+        model: $("cbLlmModel").value,
+      }, "模型已切换");
+    });
+  }
+  const reset = $("cbLlmReset");
+  if (reset) {
+    reset.addEventListener("click", () => cbLlmSubmit({ clear: true }, "已回退到 .env 配置"));
+  }
+}
+
+cbLlmWire();
+
 /* ===== ux(round15) 装箱直达（docs/ux/ux-design-spec.md 附录 M）=====
    整条输入即"装箱"类词 → 打开装柜台 3D 工程台（成箱 → 人确认 → 拼柜/重心）。
    只在 trim 后整条等于触发词时接管；句中含"装箱"的正常提问（如"帮我装箱一下"）
@@ -1266,14 +1422,24 @@ async function cbPackStudioUp(ms) {
    Python 参考实现无此字段 → 返回 null（未知），按完整仓库口径走，安全降级。 */
 let CB_PACK_TRIAL = null;
 
-async function cbPackTrialProbe() {
+/* 判据单点：http.up=false 且 python_root 为空 = 磁盘上根本没有引擎可启动。
+   注意不能用 packing_agent.connected —— url_configured() 有默认值故它恒为 true。 */
+function cbPackTrialFrom(h) {
+  const pa = h && h.packing_agent;
+  if (!pa) return null;
+  return !(pa.http && pa.http.up) && !pa.python_root;
+}
+
+async function cbPackTrialProbe(ms) {
+  const ctl = new AbortController();
+  const timer = setTimeout(() => ctl.abort(), ms || 2000);
   try {
-    const h = await fetch("/api/health").then((r) => r.json());
-    const pa = h && h.packing_agent;
-    if (!pa) return null;
-    return !(pa.http && pa.http.up) && !pa.python_root;
+    const h = await fetch("/api/health", { signal: ctl.signal }).then((r) => r.json());
+    return cbPackTrialFrom(h);
   } catch (e) {
     return null;
+  } finally {
+    clearTimeout(timer);
   }
 }
 
@@ -1360,7 +1526,8 @@ async function cbOpenPackStudio() {
   if (prev && prev.parentElement) prev.parentElement.removeChild(prev);
   addStatus("正在检测装箱引擎网关 " + CB_PACK_STUDIO_ORIGIN + " …");
   const up = await cbPackStudioUp(2500);
-  CB_PACK_TRIAL = up ? null : await cbPackTrialProbe();
+  /* CB_PACK_TRIAL 已由 boot 的 health 填好；仅当那次没拿到（如 Python 参考实现无该字段，
+     或 boot 时 health 失败）才现场补探一次。 */
   /* 先落卡片再开标签：部分浏览器/内嵌视图把 window.open 当原地跳转，
      后落卡片会随原页面一起被替换，回到本页什么痕迹都没有。 */
   const log = $("log");
@@ -1374,7 +1541,17 @@ async function cbOpenPackStudio() {
     } catch (e) {
       /* 弹窗被拦：卡片里的链接就是兜底 */
     }
+    return;
   }
+  /* 试用判别放在落卡之后异步改写：真 exe 冷启动期 /api/health 要跑引擎探针（spawn_blocking），
+     可能好几秒才回；若把它挡在渲染前面，用户按下回车会长时间无任何反馈（实测冷启动即复现）。
+     先给通用「未启动」卡，探针回来再就地换成试用文案。 */
+  if (CB_PACK_TRIAL !== null) return; /* boot 已判定，卡片文案已正确，无需改写 */
+  const trial = await cbPackTrialProbe(2000);
+  if (trial !== true) return;
+  CB_PACK_TRIAL = true;
+  const cur = document.getElementById("cbPackCard");
+  if (cur && cur.parentElement) cur.parentElement.replaceChild(cbPackCardRender(false), cur);
 }
 
 /* 命令注册表（两端同构镜像；图标=--cb-* 色块+单字，不引图标库） */

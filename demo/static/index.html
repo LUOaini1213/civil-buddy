@@ -48,6 +48,7 @@
       <span class="pill quiet" id="harnessBadge">Harness steps</span>
       <span class="pill quiet" id="sandboxBadge">sandbox</span>
       <span class="pill quiet" id="approvalBadge">approval</span>
+      <button type="button" id="cbLlmOpen" class="top-btn" title="填自己的 API Key，选 DeepSeek / z.ai 等供应商">模型</button>
       <button type="button" id="openStudio" class="top-btn">知识库</button>
       <!-- ux(round10) 三步引导重开入口：首访自动弹 checklist，之后点 ? 随时重开（localStorage cb_onboarded_v1） -->
       <button type="button" id="onboardHelp" class="top-btn" title="新手引导 · 三步上手" aria-label="重新打开三步新手引导">?</button>
@@ -165,6 +166,42 @@
       </div>
     </aside>
   </main>
+
+  <!-- ux(round17) 模型设置：评委/试用者在界面里填自己的 Key，选 DeepSeek / z.ai 等 OpenAI 兼容供应商，
+       不必改 demo/.env 再重启。Key 只存工作台进程内存——不写盘、不回显明文、不进日志。 -->
+  <div id="cbLlm" class="cb-llm hidden" role="dialog" aria-modal="true" aria-labelledby="cbLlmTitle" aria-hidden="true">
+    <div class="cb-llm-box">
+      <div class="cb-llm-head">
+        <strong id="cbLlmTitle">模型设置</strong>
+        <button type="button" id="cbLlmClose" class="top-btn">关闭</button>
+      </div>
+      <p class="cb-llm-note">用你自己的 Key，任何 OpenAI 兼容的 <code>/chat/completions</code> 都行。Key 只存本工作台进程内存：不写盘、不回显明文、不进日志，关掉工作台即失效。</p>
+      <label class="cb-llm-row"><span>供应商</span>
+        <select id="cbLlmVendor">
+          <option value="deepseek">DeepSeek</option>
+          <option value="zai">z.ai（GLM）</option>
+          <option value="openai">OpenAI</option>
+          <option value="custom">自填（任意 OpenAI 兼容）</option>
+        </select>
+      </label>
+      <label class="cb-llm-row"><span>接口地址</span>
+        <input type="text" id="cbLlmBase" spellcheck="false" autocomplete="off" />
+      </label>
+      <label class="cb-llm-row"><span>模型</span>
+        <input type="text" id="cbLlmModel" list="cbLlmModels" spellcheck="false" autocomplete="off" />
+      </label>
+      <datalist id="cbLlmModels"></datalist>
+      <label class="cb-llm-row"><span>API Key</span>
+        <input type="password" id="cbLlmKey" autocomplete="off" spellcheck="false" placeholder="留空 = 不改动当前 Key" />
+      </label>
+      <p class="cb-llm-status" id="cbLlmStatus">读取中…</p>
+      <div class="cb-llm-acts">
+        <button type="button" id="cbLlmSave" class="top-btn">保存并生效</button>
+        <button type="button" id="cbLlmReset" class="top-btn">回退到 .env</button>
+      </div>
+      <p class="cb-llm-note">模型名以供应商文档为准，下拉里的只是常见值。z.ai 若用 Coding Plan，接口地址要换成 <code>/api/coding/paas/v4</code> 的编码专用端点，与通用端点不通用。</p>
+    </div>
+  </div>
 
   <div id="studio" class="studio hidden" aria-hidden="true">
     <div class="studio-head">

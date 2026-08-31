@@ -50,9 +50,18 @@ ALLOWED_HOSTS = {"127.0.0.1", "localhost", "::1", "www.w3.org"}
 # 显式豁免（文件 → 精确 URL 集合，逐条写明"非资源加载"理由；新增豁免必须给理由）：
 # - marked 的运行时错误提示字符串 "Please report this to https://github.com/markedjs/marked."
 #   只是异常文案，浏览器从不 fetch 它；其余 host 一律违规。
+# - ux(round17) 模型设置面板的供应商端点（demo/static/app.js 的 CB_LLM_VENDORS 预设、
+#   index.html 里没有硬编码 URL）：这些是**表单默认值**，页面加载时不发任何请求；真正的
+#   /chat/completions 由 Rust 侧 reqwest 发出（workbench/src/llm.rs），浏览器从不直连供应商。
+#   断网红线约束的是"界面资产能否离线加载"，与用户自填的 LLM 端点是两回事——同 .rs 不入扫描的理由。
 EXEMPT_URLS: dict[str, set[str]] = {
     "frontend/vendor/marked.min.js": {"https://github.com/markedjs/marked"},
     "demo/static/vendor/marked.min.js": {"https://github.com/markedjs/marked"},
+    "demo/static/app.js": {
+        "https://api.deepseek.com",
+        "https://api.z.ai/api/paas/v4",
+        "https://api.openai.com/v1",
+    },
 }
 
 

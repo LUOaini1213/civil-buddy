@@ -1,5 +1,6 @@
 use std::env;
 use std::path::{Path, PathBuf};
+use std::sync::RwLock;
 
 #[derive(Clone, Debug)]
 pub struct Paths {
@@ -185,7 +186,26 @@ where
     }
 }
 
+/* ux(round17) 运行时模型配置覆盖：让评委/试用者在界面里填 Key、切 DeepSeek / z.ai 等
+   OpenAI 兼容供应商，不必改 demo/.env 再重启进程。
+   边界：只存进程内存——不写盘、不进日志、不随会话落盘；进程退出即失效。
+   env 仍是缺省来源，清除覆盖即回退到 .env 口径。 */
+static RUNTIME_LLM: RwLock<Option<LlmConfig>> = RwLock::new(None);
+
+pub fn set_runtime_llm(cfg: Option<LlmConfig>) {
+    if let Ok(mut g) = RUNTIME_LLM.write() {
+        *g = cfg;
+    }
+}
+
+pub fn runtime_llm() -> Option<LlmConfig> {
+    RUNTIME_LLM.read().ok().and_then(|g| g.clone())
+}
+
 pub fn llm_config() -> LlmConfig {
+    if let Some(c) = runtime_llm() {
+        return c;
+    }
     llm_from_env_map(|k| env::var(k).ok())
 }
 

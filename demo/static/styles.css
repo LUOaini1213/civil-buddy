@@ -942,3 +942,40 @@ html.cb-large {
   position: absolute; width: 1px; height: 1px; margin: -1px; padding: 0;
   overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; border: 0;
 }
+
+/* ===== ux(round17) 模型设置浮层：居中卡片，全部走 --cb-* token 随明暗主题翻转 ===== */
+.cb-llm {
+  position: fixed; inset: 0; z-index: 40;
+  display: flex; align-items: center; justify-content: center;
+  padding: var(--cb-space-4); background: rgba(0, 0, 0, 0.45);
+}
+.cb-llm.hidden { display: none; }
+.cb-llm-box {
+  width: 100%; max-width: 520px; max-height: 88vh; overflow: auto;
+  padding: var(--cb-space-4);
+  background: var(--cb-panel); border: 1px solid var(--cb-line);
+  border-radius: var(--cb-radius-md); box-shadow: var(--cb-shadow-md);
+}
+.cb-llm-head { display: flex; justify-content: space-between; align-items: center; margin-bottom: var(--cb-space-3); }
+.cb-llm-note { margin: var(--cb-space-2) 0 var(--cb-space-3); font-size: var(--cb-fs-xs); line-height: 1.7; color: var(--cb-text-muted); }
+.cb-llm-note code {
+  padding: 1px 5px; font-family: var(--cb-mono); font-size: var(--cb-fs-xs);
+  color: var(--cb-blue-strong); background: var(--cb-blue-soft);
+  border: 1px solid var(--cb-line); border-radius: var(--cb-radius-sm);
+}
+.cb-llm-row { display: grid; grid-template-columns: 84px 1fr; align-items: center; gap: var(--cb-space-3); margin-bottom: var(--cb-space-3); }
+.cb-llm-row > span { font-size: var(--cb-fs-xs); color: var(--cb-text); }
+.cb-llm-row input, .cb-llm-row select {
+  width: 100%; min-height: 36px; padding: 6px 10px;
+  font-family: inherit; font-size: var(--cb-fs-sm); color: var(--cb-text);
+  background: var(--cb-paper); border: 1px solid var(--cb-line); border-radius: var(--cb-radius-sm);
+}
+.cb-llm-row input:focus-visible, .cb-llm-row select:focus-visible { outline: 2px solid var(--cb-focus); outline-offset: 1px; }
+.cb-llm-status { margin: var(--cb-space-3) 0; font-size: var(--cb-fs-xs); line-height: 1.7; color: var(--cb-text); }
+.cb-llm-status.ok { color: var(--cb-green, var(--cb-blue-strong)); }
+.cb-llm-status.err { color: var(--cb-red); }
+.cb-llm-acts { display: flex; gap: var(--cb-space-2); flex-wrap: wrap; }
+@media (max-width: 430px) {
+  .cb-llm-row { grid-template-columns: 1fr; gap: 4px; }
+  .cb-llm-acts button { flex: 1 1 100%; min-height: 44px; }
+}

@@ -848,3 +848,29 @@ runner 自带 node 必跑，并另加 `find … -print0 | node --check` bash 循
 
 **沉淀的纪律**：markup 与其 JS 半边必须同轮落地；宁可不加按钮，不留半拉子绑定。
 
+## 附录 O · 模型设置面板（ux(round17)）
+
+需求：**评委/试用者用自己的 Key 就能跑**，并可在 DeepSeek 各模型与 z.ai（GLM）等 OpenAI 兼容供应商之间切换，不必改 `demo/.env` 再重启进程。
+
+| 项 | 口径 |
+|---|---|
+| 入口 | :8765 顶栏「模型」按钮 → 居中浮层（Esc / 点遮罩 / 关闭 三种关法） |
+| 供应商预设 | DeepSeek（`https://api.deepseek.com`）· z.ai（`https://api.z.ai/api/paas/v4`）· OpenAI · 自填。选中后自动填接口地址与首选模型，两者均可改 |
+| 模型 | `datalist` 给常见值但**可自由输入**；面板与文档均注明「以供应商文档为准」，不写死 |
+| 后端 | `GET/POST /api/llm-config`（`workbench/src/api.rs`）；覆盖存 `config.rs` 的 `RUNTIME_LLM: RwLock<Option<LlmConfig>>`，`llm_config()` 优先读它，未设置则回退 env |
+| Key 边界 | 只存**进程内存**：不写盘、不进 localStorage、不进日志；`GET` 只回首尾各 4 位掩码，**永不回明文**；进程退出即失效；`{"clear":true}` 回退 `.env` |
+| 空字段语义 | POST 里空字段=保持当前值 —— 只换模型不必重填 Key（实测验证） |
+| 断网红线 | 浏览器**从不**直连供应商，`/chat/completions` 由 Rust 侧 `reqwest` 发出；预设端点只是表单默认值，页面加载不发请求。故在 `test_no_external_urls.py` 的 `EXEMPT_URLS` 里按该门禁要求逐条写明理由后豁免 |
+| 连带修 | `scripts/start-workbench.bat` 此前缺 `demo\.env` 会 `exit /b 1` **硬退出**；有了本面板该门槛就是错的（评委可零配置启动、界面里填 Key），改为提示后继续启动 |
+
+**实测**（真 exe，dist 试用包）：初始 `source=env` 显示 `.env` 口径 → 切 z.ai 自动填端点与候选模型 → 存假 Key 后 `source=runtime`、顶栏徽章翻「已配置 API Key」、模型徽章变 `glm-5.3`、Key 输入框自动清空 → 只 POST `model` 时掩码不变证明 Key 保持 → 响应与页面 DOM 中 `grep` 明文 Key 命中 **0** → `clear` 回退 env。
+
+## 附录 N.3 · 装箱直达的冷启动竞态（round16 复测补记）
+
+真 exe 冷启动期 `/api/health` 要跑 `packing_bridge::probe()`（`spawn_blocking` + 对 :8000 的 HTTP 探测），实测**超过 2s**。最初把试用判别挡在渲染前面，导致页面刚加载就输入「装箱」时长时间无任何反馈（Python 参考实现快，故未暴露）。两处修正：
+
+1. 判别结果改为**蹭 `boot()` 那一次 `/api/health`** 缓存（`cbPackTrialFrom`），装箱直达时直接用，不再发赶时间的请求；
+2. 探针加 `AbortController` 超时，且卡片**先落通用文案再异步改写**，保证回车后立即有反馈。
+
+判据只认 `http.up=false && python_root==null`；**不可用 `packing_agent.connected`** —— `url_configured()` 有默认值故它恒为 `true`。
+

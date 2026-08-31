@@ -48,6 +48,7 @@ pub fn app(state: AppState) -> Router {
     Router::new()
         .route("/", get(index))
         .route("/api/health", get(health))
+        .route("/api/llm-config", get(llm_config_get).post(llm_config_set))
         .route("/api/catalog", get(catalog))
         .route("/api/kb/{expert_id}", get(kb))
         .route("/api/studio/tree", get(studio_tree))
@@ -93,6 +94,76 @@ async fn index(State(st): State<Arc<AppState>>) -> Response {
             .into_response(),
         Err(_) => err(StatusCode::NOT_FOUND, "missing index").into_response(),
     }
+}
+
+/* ===== ux(round17) 模型设置接口 =====
+   GET  只回可公开字段——**永不回 Key 明文**，只回首尾各 4 位的掩码。
+   POST 设运行时覆盖：空字段=保持当前值（改模型不必重填 Key）；{"clear":true} 回退 env。
+   仅监听回环，Key 不落盘、不进日志。 */
+fn mask_key(k: &str) -> String {
+    let n = k.chars().count();
+    if n == 0 {
+        return String::new();
+    }
+    if n <= 8 {
+        return "*".repeat(n);
+    }
+    let head: String = k.chars().take(4).collect();
+    let tail: String = k.chars().skip(n - 4).collect();
+    format!("{head}{}{tail}", "*".repeat(n - 8))
+}
+
+async fn llm_config_get() -> Json<Value> {
+    let cfg = crate::config::llm_config();
+    Json(json!({
+        "ok": true,
+        "source": if crate::config::runtime_llm().is_some() { "runtime" } else { "env" },
+        "configured": !cfg.api_key.is_empty(),
+        "base_url": cfg.base_url,
+        "model": cfg.model,
+        "key_masked": mask_key(&cfg.api_key),
+    }))
+}
+
+#[derive(Deserialize, Default)]
+struct LlmConfigIn {
+    #[serde(default)]
+    api_key: String,
+    #[serde(default)]
+    base_url: String,
+    #[serde(default)]
+    model: String,
+    #[serde(default)]
+    clear: bool,
+}
+
+async fn llm_config_set(Json(req): Json<LlmConfigIn>) -> Json<Value> {
+    if req.clear {
+        crate::config::set_runtime_llm(None);
+        return llm_config_get().await;
+    }
+    let cur = crate::config::llm_config();
+    let api_key = if req.api_key.trim().is_empty() {
+        cur.api_key
+    } else {
+        req.api_key.trim().to_string()
+    };
+    let base_url = if req.base_url.trim().is_empty() {
+        cur.base_url
+    } else {
+        req.base_url.trim().trim_end_matches('/').to_string()
+    };
+    let model = if req.model.trim().is_empty() {
+        cur.model
+    } else {
+        req.model.trim().to_string()
+    };
+    crate::config::set_runtime_llm(Some(crate::config::LlmConfig {
+        api_key,
+        base_url,
+        model,
+    }));
+    llm_config_get().await
 }
 
 async fn health(State(st): State<Arc<AppState>>) -> Json<Value> {

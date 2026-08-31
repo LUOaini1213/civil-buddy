@@ -6,13 +6,14 @@ if not exist "demo\kb" (
   pause
   exit /b 1
 )
+REM Missing demo\.env is no longer fatal: since v0.2.0 you can set the API key
+REM in the UI ("Model" button, top right) and pick DeepSeek / z.ai / any
+REM OpenAI-compatible endpoint without restarting. The .env is just a shortcut.
 if not exist "demo\.env" (
   if exist "demo\.env.example" copy /Y "demo\.env.example" "demo\.env" >nul
-  echo Fill demo\.env with CIVIL_API_KEY or OPENAI_API_KEY or DEEPSEEK_API_KEY, then run again.
-  echo See 给试用的人.md
-  notepad "demo\.env"
-  pause
-  exit /b 1
+  echo No API key found in demo\.env.
+  echo Starting anyway - set the key in the browser via the "Model" button.
+  echo See the Chinese trial page for details.
 )
 set CIVIL_DEMO_ROOT=%~dp0demo
 civil-workbench.exe
