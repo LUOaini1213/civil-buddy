@@ -238,19 +238,40 @@ def main() -> int:
             except Exception as e:  # noqa: BLE001
                 record("6 审计含决策节点", False, f"{type(e).__name__}: {e}")
 
-            # 7. 主题切换（暗→明 + 持久化）
+            # 7. 主题切换（相对翻转 + 持久化 + 回切复位）
+            #
+            # 断言必须是**相对的**：记录点击前的态 → 点一次断言翻到另一态 → 再点一次
+            # 断言回到原态。不可写死「点完必须是 dark」——那依赖「默认是明还是暗」这个
+            # 会随轮次变化的产品决策。
+            # 本轮修复的既有缺陷：R14 把默认主题改成 dark（index.html 的
+            # cbApplyTheme(read(KEY_T) || "dark")），而本项一直断言「点一次后是 dark」；
+            # playwright 全新 context 无 localStorage → 首帧即 dark → 点一次变 light
+            # → 断言必然失败。实测确为 FAIL（data-theme=light, store=light），
+            # 自 R14 起一直红，只因本脚本未进 CI/precommit 而未被发现。
             try:
+                before = page.evaluate("() => document.documentElement.getAttribute('data-theme')")
+                # 未设置过主题时（data-theme 为 None）跟随系统，首次点击后必落到显式态
                 page.click("#cbThemeBtn")
                 page.wait_for_timeout(300)
-                dark = page.evaluate("() => document.documentElement.getAttribute('data-theme')")
+                flipped = page.evaluate("() => document.documentElement.getAttribute('data-theme')")
                 pressed = page.get_attribute("#cbThemeBtn", "aria-pressed")
                 stored = page.evaluate("() => localStorage.getItem('cb_theme_v1')")
-                ok7 = dark == "dark" and pressed == "true" and stored == "dark"
+                ok7 = (
+                    flipped in ("dark", "light")
+                    and flipped != before
+                    and stored == flipped
+                    and pressed == ("true" if flipped == "dark" else "false")
+                )
                 page.click("#cbThemeBtn")
                 page.wait_for_timeout(300)
                 back = page.evaluate("() => document.documentElement.getAttribute('data-theme')")
-                ok7 = ok7 and (back in ("light", None))
-                record("7 主题切换", ok7, f"暗:data-theme={dark},aria={pressed},store={stored}; 回切={back}")
+                stored_back = page.evaluate("() => localStorage.getItem('cb_theme_v1')")
+                ok7 = ok7 and back != flipped and back in ("dark", "light") and stored_back == back
+                record(
+                    "7 主题切换",
+                    ok7,
+                    f"初始={before} 翻转后={flipped}(aria={pressed},store={stored}) 回切={back}(store={stored_back})",
+                )
             except Exception as e:  # noqa: BLE001
                 record("7 主题切换", False, f"{type(e).__name__}: {e}")
             page.close()
