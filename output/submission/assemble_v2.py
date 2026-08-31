@@ -26,8 +26,8 @@ demo_total = sched["total"]
 marks = dict(sched["marks"])
 webm = Path(sched["video"])
 
-TITLE_DUR = round(DUR["t0_title"] + 1.0, 2)          # 8.2
-END_DUR = round(DUR["s10_end"] + 0.8, 2)             # 12.5
+TITLE_DUR = round(DUR["t0_title"] + 0.6, 2)          # 8.2
+END_DUR = round(DUR["s10_end"] + 0.6, 2)             # 12.5
 TOTAL = TITLE_DUR + demo_total + END_DUR
 print(f"片头 {TITLE_DUR}s + 演示 {demo_total:.1f}s + 片尾 {END_DUR}s = {TOTAL:.1f}s")
 assert TOTAL <= 119.5, TOTAL

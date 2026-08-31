@@ -63,7 +63,7 @@ def mark(seg: str) -> None:
     marks.append((seg, now()))
     print(f"  [{now():6.1f}s] {seg}")
 
-def hold(seg: str, pad: float = 0.8) -> None:
+def hold(seg: str, pad: float = 0.5) -> None:
     start = dict(marks)[seg]
     end = start + DUR[seg] + pad
     while now() < end:
@@ -145,7 +145,7 @@ with sync_playwright() as p:
     for _ in range(4):
         page.mouse.wheel(0, 260)
         time.sleep(0.7)
-    hold("s7_visual", 1.2)
+    hold("s7_visual", 0.8)
 
     # s8 总览裁决
     mark("s8_verdict")
@@ -154,7 +154,7 @@ with sync_playwright() as p:
     for _ in range(3):
         page.mouse.wheel(0, 240)
         time.sleep(0.8)
-    hold("s8_verdict", 1.2)
+    hold("s8_verdict", 0.8)
 
     # s9 还原 → @召唤 → /指令 → 示例卡只预填
     mark("s9_more")
@@ -193,7 +193,7 @@ with sync_playwright() as p:
                     sub.first.click()
     except Exception:
         pass
-    hold("s9_more", 1.2)
+    hold("s9_more", 0.8)
 
     total = now()
     video = page.video
