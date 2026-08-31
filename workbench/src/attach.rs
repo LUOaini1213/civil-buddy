@@ -423,6 +423,44 @@ pub fn save_upload(paths: &Paths, session: &str, filename: &str, bytes: &[u8]) -
     Ok(meta)
 }
 
+/// ux(round21)：从本会话的上传件里挑一个**表格**，返回一个 load_table 能吃的路径。
+///
+/// 上传件是按 `<id>.bin` 存的（原始字节，无扩展名），而 Python 侧的 `load_table`
+/// 按后缀分发 —— 直接把 `.bin` 交过去会被判 unsupported。这里按存下来的原文件名
+/// 取扩展名，惰性物化一份 `<id><ext>` 再返回，避免改动既有的 save_upload 布局。
+///
+/// 取最后一个（list_uploads 按 name 排序），只认 xlsx/xlsm/csv/tsv。
+pub fn latest_table_upload(paths: &Paths, session: &str) -> Option<(PathBuf, String)> {
+    let dir = session_dir(paths, session).ok()?;
+    let mut hit: Option<(String, String, String)> = None; // (id, name, ext)
+    for m in list_uploads(paths, session) {
+        let id = m.get("id").and_then(|v| v.as_str()).unwrap_or("").to_string();
+        let name = m.get("name").and_then(|v| v.as_str()).unwrap_or("").to_string();
+        if id.is_empty() || name.is_empty() {
+            continue;
+        }
+        let lower = name.to_ascii_lowercase();
+        let ext = [".xlsx", ".xlsm", ".csv", ".tsv"]
+            .iter()
+            .find(|e| lower.ends_with(*e))
+            .map(|e| e.to_string());
+        if let Some(ext) = ext {
+            hit = Some((id, name, ext));
+        }
+    }
+    let (id, name, ext) = hit?;
+    let bin = dir.join(format!("{id}.bin"));
+    if !bin.is_file() {
+        return None;
+    }
+    let typed = dir.join(format!("{id}{ext}"));
+    if !typed.is_file() {
+        let bytes = fs::read(&bin).ok()?;
+        fs::write(&typed, bytes).ok()?;
+    }
+    Some((typed, name))
+}
+
 pub fn list_uploads(paths: &Paths, session: &str) -> Vec<Value> {
     let Ok(dir) = session_dir(paths, session) else {
         return vec![];

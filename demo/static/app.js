@@ -5,9 +5,9 @@ const state = {
   history: [],
   session: crypto.randomUUID().slice(0, 12),
   modelName: "",
-  /* ux(round19)：本地文件入口拆除后，唯一可能的附件来源是作业根（见 loadJobRoot）。
-     刻意不再叫 attachments —— 留一个没有写入方的同名数组，等于给拖拽上传留门。 */
-  jobAttachments: [],
+  /* ux(round21)：改回 attachments —— round19 拆掉入口后它一度没有写入方，
+     叫这个名字等于给拖拽上传留后门；现在回形针是**唯一且显式**的写入方，名副其实。 */
+  attachments: [],
   jobRoot: "",
   threadId: "",
   lastSend: "", /* ux(round7)：纠偏卡「重试」重放同 payload */
@@ -69,6 +69,112 @@ async function loadPolicy() {
        静默保留默认 state.policy 即可，策略徽章本就允许缺省。 */
   }
 }
+
+/* ===== ux(round21) 附件（回形针）=====
+   round19 把本地文件入口整体拆了，界面是干净了，但用自己的表只剩「放进仓库 /
+   给绝对路径」两条路，最自然的「拖进来」没有了。这里只补回一个入口：
+   composer 里的回形针 + 一行可移除的 chip。**不恢复**原先那排杂项。
+
+   拖拽也一并接回来 —— round19 删它是因为它当时**看不见**（删了按钮它还活着，
+   拖个文件进来就静默 POST）。现在有可见的 chip 反馈，它不再是隐藏通道。
+
+   服务端 /api/upload 一直都在（round19 只拆了界面），Python 参考实现没有该路由，
+   届时静默提示而不是抛错。 */
+function cbAttachRender() {
+  const box = $("attaches");
+  if (!box) return;
+  box.innerHTML = "";
+  if (!state.attachments.length) {
+    box.hidden = true;
+    return;
+  }
+  box.hidden = false;
+  for (const f of state.attachments) {
+    const chip = document.createElement("span");
+    chip.className = "cb-att-chip";
+    const nm = document.createElement("span");
+    nm.className = "cb-att-name";
+    nm.textContent = f.name || f.id;
+    nm.title = f.name || f.id;
+    chip.appendChild(nm);
+    if (f.bytes != null) {
+      const sz = document.createElement("span");
+      sz.className = "cb-att-size";
+      sz.textContent = fmtBytes(f.bytes);
+      chip.appendChild(sz);
+    }
+    const x = document.createElement("button");
+    x.type = "button";
+    x.className = "cb-att-x";
+    x.textContent = "\u00d7"; /* U+00D7，符号纪律显式豁免 */
+    x.setAttribute("aria-label", "移除附件 " + (f.name || f.id));
+    x.addEventListener("click", () => {
+      state.attachments = state.attachments.filter((a) => a.id !== f.id);
+      cbAttachRender();
+    });
+    chip.appendChild(x);
+    box.appendChild(chip);
+  }
+}
+
+async function cbAttachUpload(fileList) {
+  const files = Array.from(fileList || []);
+  if (!files.length) return;
+  for (const file of files) {
+    try {
+      const fd = new FormData();
+      fd.append("session_id", state.session);
+      fd.append("file", file);
+      const r = await fetch("/api/upload", { method: "POST", body: fd });
+      if (!r.ok) throw new Error("HTTP " + r.status);
+      const meta = await r.json();
+      /* /api/upload 回的是 {ok, files:[{id,name,bytes,...}]}，不是裸 meta。
+         首版按 meta.id 取，chip 永远是空的 —— 实测发现（返回体包了一层）。 */
+      const items = Array.isArray(meta && meta.files) ? meta.files : (meta && meta.id ? [meta] : []);
+      for (const item of items) {
+        if (item && item.id && !state.attachments.some((a) => a.id === item.id)) {
+          state.attachments.push(item);
+        }
+      }
+    } catch (e) {
+      addStatus("附件上传失败（" + file.name + "）：" + ((e && e.message) || e));
+    }
+  }
+  cbAttachRender();
+  const tbl = state.attachments.some((a) =>
+    /\.(xlsx|xlsm|csv|tsv)$/i.test(String(a.name || ""))
+  );
+  if (tbl) addStatus("表格已上传：说「装箱」即可按这张表算，柜数与坐标仍由 tools 计算。");
+}
+
+function cbAttachInit() {
+  const btn = $("btnAttach");
+  const pick = $("filePick");
+  if (btn && pick) {
+    btn.addEventListener("click", () => pick.click());
+    pick.addEventListener("change", async (ev) => {
+      await cbAttachUpload(ev.target.files);
+      ev.target.value = "";
+    });
+  }
+  const composer = document.querySelector(".composer");
+  if (composer) {
+    composer.addEventListener("dragover", (ev) => {
+      ev.preventDefault();
+      composer.classList.add("drop");
+    });
+    composer.addEventListener("dragleave", () => composer.classList.remove("drop"));
+    composer.addEventListener("drop", async (ev) => {
+      ev.preventDefault();
+      composer.classList.remove("drop");
+      if (ev.dataTransfer && ev.dataTransfer.files && ev.dataTransfer.files.length) {
+        await cbAttachUpload(ev.dataTransfer.files);
+      }
+    });
+  }
+}
+
+cbAttachInit();
 
 /* ===== ux(round19) 审计抽屉 + 设置菜单（docs/ux 附录 P）=====
    审计从常驻右栏改为右侧抽屉。**≥1280 默认展开是硬约束不是审美**：
@@ -178,6 +284,8 @@ if ($("btnNewProject")) {
 /* ux(round19)：本地新会话 —— 不依赖任何后端接口，任何后端上都生效。 */
 function cbNewLocalSession() {
   state.threadId = "";
+  state.attachments = [];
+  cbAttachRender();
   state.session = (crypto.randomUUID ? crypto.randomUUID() : String(Date.now())).slice(0, 12);
   state.history = [];
   state.summoned.clear();
@@ -876,7 +984,7 @@ async function streamChat(message, bodyEl) {
       expert_ids: [...state.summoned],
       confirm_ok: !!($("confirmOk") && $("confirmOk").checked),
       session_id: state.session,
-      attachments: state.jobAttachments
+      attachments: state.attachments
         .filter((a) => !String(a.id || "").startsWith("job:"))
         .map((a) => a.id),
     }),

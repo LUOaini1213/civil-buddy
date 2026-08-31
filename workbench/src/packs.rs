@@ -3310,6 +3310,33 @@ fn pack_ship_plan(ctx: &mut ToolCtx, args: &Value) -> String {
     let table_hit = find_table_path(&materials);
     let mut table_note = String::new();
     let mut table_sum: Option<crate::packing_bridge::PackingSummary> = None;
+
+    /* ux(round21)：没在文本里给路径时，回落到**本会话上传的表**（回形针）。
+       上传件按 <id>.bin 存、无扩展名，latest_table_upload 会按原文件名物化一份
+       带后缀的副本再交给 run_table —— 否则 load_table 按后缀分发会判 unsupported，
+       回形针传了表却依旧走演示物料，就是换个姿势重演「静默回落」。 */
+    if table_hit.is_none() {
+        if let Some((p, name)) = crate::attach::latest_table_upload(&ctx.paths, &ctx.session_id) {
+            let notes2 = notes.clone();
+            let p2 = p.clone();
+            match crate::websearch::run_blocking(move || {
+                crate::packing_bridge::run_table(&p2, &notes2)
+            }) {
+                Ok(sum) => {
+                    table_note = format!(
+                        "\n> 物料来源：**上传的表** `{name}`（回形针 → 网关 table_mapper 解析 → 装箱引擎）。\n"
+                    );
+                    table_sum = Some(sum);
+                }
+                Err(e) => {
+                    table_note = format!(
+                        "\n> **注意：上传了表但没能用上** —— `{name}`：{e}。\n> 下面的数字**不是**这张表算出来的，不要当成它的结果。\n"
+                    );
+                }
+            }
+        }
+    }
+
     if let Some(raw) = &table_hit {
         match crate::attach::allow_local_path(&ctx.paths, raw) {
             Ok(abs) => {

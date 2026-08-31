@@ -981,3 +981,87 @@ skills，**没有 `packing_assistant/`、没有 `data/civilbuddy.db`** → proje
 `scripts/test_projects_parity.py`（双栈对拍，自造 fixture 零存量依赖）已进 precommit
 与 ci.yml。`workbench/tests/projects.rs` 12 条断言同样自造 fixture。
 
+## 附录 Q · 用自己的表装箱（ux(round20-21)）
+
+用户问「我的测试表在哪 / 能不能给个文件地址就装箱」。实测后发现**能力本来就全在，
+只是中间断了一节**，而断的方式很坏。
+
+### Q.1 改造前：给了路径却静默用演示数据
+
+| 输入 | 箱数 | 利用率 |
+|---|---|---|
+| 仓库内相对路径 `test/sim_materials/small_one_container/materials.xlsx` | 8 | 0.0014（真读了，与表逐项吻合） |
+| 绝对路径 `C:\Users\LW\Desktop\我的表.xlsx` | 15 | 0.675 |
+| **什么都不给**，只说「帮我装箱」 | 15 | 0.675 |
+
+后两行**数字完全一样** —— 绝对路径被丢弃后回落到了演示预设物料，**不报错、照样给
+一串很像样的柜数**。演示时说「这是我的表」而屏幕上其实是样例，会很难看。
+
+根因：exe 把整句话当 `user_input` 文本发给网关，网关的 `_load_materials_from_text`
+（gateway/app.py:1031）出于防目录穿越**只认仓库内相对路径**。
+
+### Q.2 三段能力本来都是现成的
+
+| 环节 | 状态 |
+|---|---|
+| exe 读本机任意路径 | 已有：`attach::allow_local_path` 只挡 `D:\layout` / `\windows\` / `\program files` / 回收站 |
+| 网关按**绝对**路径解析表 | 已有：`/api/table/parse/json` 里 `if not p.is_absolute(): p = ROOT / p` —— 绝对路径直接用，**无仓库沙箱** |
+| 网关直接收物料数组 | 已有：`PipelineRequest.materials` |
+
+### Q.3 解法：不放宽沙箱，换显式通道
+
+那个沙箱**是对的，别动** —— `user_input` 里可能混着 LLM 生成或从文档粘来的内容，
+不能让它随便读盘。改为职责各归各位：
+
+```
+exe 收到 pack <路径> → find_table_path 找出表格路径
+  → attach::allow_local_path 判能不能读
+     （该策略本来就归 exe，与老「导入」按钮同一信任级别：
+       路径是用户**显式**给的，不是从自由文本猜的）
+  → 网关 /api/table/parse/json 读表
+     （Python 的 table_mapper 处理脏表头与单位归一，见 test/generic_tables/
+       G6_messy_headers；在 Rust 重写是明显倒退）
+  → materials **数组**喂 /api/pipeline（不传路径，沙箱问题根本不存在）
+```
+
+**网关侧零改动**，两个端点都是现成的。
+
+### Q.4 失败必须明说（本轮核心）
+
+路径给了却读不到时，作业单里写：
+
+> **注意：给了表格路径但读不到** —— `<路径>`：<原因>。
+> 下面的数字**不是**这张表算出来的，不要当成它的结果。
+
+绝不静默回落。这是「缺数标 UNSPECIFIED、不编造」纪律的同一条底线，改造前这里是破的。
+
+### Q.5 回形针（round21）
+
+round19 拆界面时把上传入口一并拆了，用自己的表只剩「放进仓库 / 给绝对路径」两条，
+最自然的「拖进来」没有了。补回**一个**入口：composer 里的「附件」按钮 + 一行可 ×
+移除的 chip。**不恢复**原先那排杂项（本机路径框 / 成套投标 / 5 个预填 chip）。
+
+- 图标是**文字**「附件」——符号纪律禁 emoji 与 dingbats，回形针图标会撞 `test_ux_no_emoji`
+- 拖拽一并接回：round19 删它是因为它当时**看不见**（删了按钮它还活着，拖文件进来
+  就静默 POST）。现在有可见 chip 与 `.composer.drop` 高亮，它不再是隐藏通道
+- `state.jobAttachments` 改回 `state.attachments` —— round19 那个改名的理由是
+  「没有写入方的同名数组等于留后门」，现在回形针是**唯一且显式**的写入方，名副其实
+
+**关键：光加回形针不够。** 上传件按 `<id>.bin` 存（无扩展名），而 `load_table` 按后缀
+分发，直接喂会判 unsupported —— 回形针传了表却依旧走演示物料，等于换个姿势重演
+「静默回落」。故加 `attach::latest_table_upload`：按存下的原文件名取扩展名，惰性
+物化一份 `<id><ext>` 再交给 `run_table`。
+
+### Q.6 已知边界
+
+- 需要 `:8000` 装箱网关起着，否则「装箱」只给启动指引
+- `pretty_path` 去掉 Windows `canonicalize` 的 `\\?\` 扩展长度前缀（只影响显示）
+- 同一会话附件数有上限（`attach::MAX_FILES`）
+
+### Q.7 过程记录：连踩两次同一个编码坑
+
+补丁脚本走 heredoc 时 `sys.stdin.encoding=gbk`，UTF-8 中文被按 GBK 解码，匹配串
+静默损坏、断言假失败（此前几次能中是运气）。另有 `cat >> <<EOF` 把 Rust 原始串里的
+`\\` 吞成一个 `\`，导致测试断言写错，一度以为是 `pretty_path` 有 bug。
+**结论：含中文或反斜杠的补丁一律写脚本文件执行，不走 heredoc。**
+

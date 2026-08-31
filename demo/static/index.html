@@ -126,8 +126,18 @@
             <div id="cmdMenu" class="cb-at-menu cb-cmd-menu" hidden role="listbox" aria-label="快捷指令"></div>
             <div id="atMenu" class="cb-at-menu" hidden role="listbox" aria-label="岗位补全"></div>
           </div>
+          <!-- ux(round21) 回形针：round19 拆界面时把上传入口一并拆了，导致用自己的表
+               只剩「放进仓库 / 给绝对路径」两条。这里只补回**一个**入口，不恢复原先
+               那一排杂项（本机路径框 / 成套投标 / 5 个预填 chip）。
+               图标用文字「附件」——符号纪律禁 U+2600-27BF 等区段，回形针 emoji 会红。 -->
+          <input type="file" id="filePick" hidden multiple
+                 accept=".xlsx,.xlsm,.csv,.tsv,.pdf,.docx,.txt,.md,.json" />
+          <button type="button" id="btnAttach" class="composer-attach"
+                  aria-label="添加附件" title="添加附件（表格可直接用于装箱）">附件</button>
           <button type="submit" id="send" aria-label="发送" title="发送（Enter）">↑</button>
         </div>
+        <!-- 已选附件：一行 chip，可 × 移除；空时整条隐藏 -->
+        <div id="attaches" class="attaches" hidden></div>
       </form>
     </section>
 

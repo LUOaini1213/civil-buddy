@@ -1111,3 +1111,35 @@ html.cb-large {
   background: var(--cb-panel); color: var(--cb-blue-strong);
   font-size: var(--cb-fs-xs); font-weight: 600; text-decoration: none;
 }
+
+/* ===== ux(round21) 回形针与附件 chip（附录 Q）=====
+   只补一个入口，不恢复 round19 拆掉的那排杂项。图标是文字「附件」——
+   符号纪律禁 emoji 与 dingbats，回形针图标会撞 test_ux_no_emoji。 */
+.composer-attach {
+  flex: none; align-self: flex-end;
+  padding: 6px 10px; min-height: 32px;
+  background: transparent; border: 1px solid var(--cb-line);
+  border-radius: 999px; cursor: pointer;
+  color: var(--cb-text-muted); font: inherit; font-size: var(--cb-fs-xs);
+}
+.composer-attach:hover { color: var(--cb-blue-strong); border-color: var(--cb-blue); }
+.composer-attach:focus-visible { outline: 2px solid var(--cb-focus); outline-offset: 2px; }
+.attaches { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 6px; }
+.attaches[hidden] { display: none; }
+.cb-att-chip {
+  display: inline-flex; align-items: center; gap: 6px;
+  max-width: 260px; padding: 2px 4px 2px 10px; border-radius: 999px;
+  font-size: var(--cb-fs-xs); color: var(--cb-text);
+  background: var(--cb-bg); border: 1px solid var(--cb-line);
+}
+.cb-att-name { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.cb-att-size { flex: none; color: var(--cb-text-muted); }
+.cb-att-x {
+  flex: none; border: 0; background: transparent; cursor: pointer;
+  color: var(--cb-text-muted); font: inherit; line-height: 1;
+  padding: 2px 6px; border-radius: 999px;
+}
+.cb-att-x:hover { background: var(--cb-panel); color: var(--cb-text); }
+.cb-att-x:focus-visible { outline: 2px solid var(--cb-focus); outline-offset: 1px; }
+/* 拖拽反馈：round19 删拖拽是因为它当时看不见；现在有 chip 与这个高亮，不再是隐藏通道 */
+.composer.drop { outline: 2px dashed var(--cb-blue); outline-offset: -4px; }
