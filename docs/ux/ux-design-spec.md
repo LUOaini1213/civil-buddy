@@ -874,3 +874,110 @@ runner 自带 node 必跑，并另加 `find … -print0 | node --check` bash 循
 
 判据只认 `http.up=false && python_root==null`；**不可用 `packing_agent.connected`** —— `url_configured()` 有默认值故它恒为 `true`。
 
+## 附录 P · co-work 壳改造（ux(round19)，P0-P9）
+
+用户反馈「页面不干净」。实测：一屏塞了**三栏 + 5 个独立输入入口 + 7 个功能区块**。
+目标形态：**左栏项目（两级）· 专家按需召唤 · 无本地文件入口 · 中间一个聊天框**。
+
+### P.1 分阶段与净效果
+
+| 阶段 | 内容 |
+|---|---|
+| P0 | 清场与止血：拆本地文件入口、删死 UI、修 exe 上的噪音与死键（净 −122 行） |
+| P1 | 三栏 → 两栏 + 审计抽屉 + 设置菜单 |
+| P2 | 66 岗常驻名册 → 按需召唤（复用 cbCmd 两级机加两个 mode） |
+| P3-P5 | Rust 项目/会话索引 + 自动归类 + 对话落盘（新模块 projects.rs） |
+| P6 | 左栏两级项目树，点会话恢复对话历史 |
+| P7 | 装柜台改对话流内嵌面板，不再跳走 |
+| P8 | Python 镜像 + contract/projects.v1.json 契约单源 + 双栈对拍 |
+| P9 | 收口：spec、重打包、Release |
+
+### P.2 「先补守卫，再删 DOM」——本轮最重要的纪律
+
+删 UI 前先给 **7 处无守卫的 `$()` 读取**补守卫。其中 `app.js:306` 的
+`$("clearExperts").addEventListener` 是**顶层裸调用**：删该元素会在脚本加载期抛
+TypeError，`boot` / `cbComposerInit` / `cbThemeWire` 全不执行，**整页变砖** —— 与
+R14 白屏事故同一类。其余：`renderSummon` 的 `summonBar.innerHTML`、`refreshKb` 与
+clearExperts 回调的 `kblist`、`renderCites`/`renderFiles` 的 `const box`、
+`streamChat` 的 `confirmOk.checked`（删该框会打断全站发送）、`studio.js:18-19`。
+
+**本轮真踩了一次**：P6 第一版用 `s.index("
+函数关键字 ", i)` 猜函数体结束边界，
+而 `reloadCatalog` / `loadJobRoot` / `handleSlash` / `cbRunBackground` 都是
+`async function` 开头，边界跳过它们把四个函数一起删了（`handleSlash` 还是 ci.yml
+断言的必保标识），表现为 boot 抛 ReferenceError、左栏空白、网关兜底卡误弹。
+已回滚重做：改**花括号配平**精确定位（跳过字符串与注释），并在替换后逐个断言
+9 个必保标识前后计数一致。**教训：批量改 JS 不许用「下一个关键字」猜边界。**
+
+### P.3 修掉三处只在评委那侧发作的「脏」
+
+Rust exe 没有 `/api/config`、`/api/threads`、`/api/skills`（只有 Python 参考实现有）：
+
+| 现象 | 根因 | 处置 |
+|---|---|---|
+| 每次开页面对话流多一行 `SyntaxError: Unexpected end of JSON input` | `loadPolicy` catch 里 `addStatus(String(e))` | 静默保留默认 policy。**这是「页面不干净」的字面来源** |
+| 左栏永远空白 | `loadThreads` 404 后 `box.textContent=""` | 改项目树 + 降级文案 |
+| 「+ 新建任务」是死键 | `await fetch().then(r=>r.json())` 抛在 `cbResetToEmpty()` 之前 | 客户端优先：先本地清空，再 try 登记远端 |
+
+顺带修一个既有缺陷：`cbResetToEmpty()` 只把 `#cbEmpty` 设 `hidden=false`，而发首条
+消息用的是 `welcome.remove()` 把元素整个删掉 —— 按钮 title 写着「回到空态卡」，
+一旦发过消息就永远回不去。改 `cbHideWelcome()` 隐藏式。
+
+### P.4 抽屉 ≥1280 默认展开是硬约束
+
+`test_offline_ui:150` 与金线第 6 项都是 `page.click("#loadAudit")` 且**无前置展开
+动作**，Playwright 的 click 会等元素可见 —— 默认收起 = 两个 e2e 直接挂。
+结果：本轮两个 e2e 脚本**一行都没改**。
+
+### P.5 后端为什么是 JSON 三件套而不是 SQLite（三条实测前提）
+
+① 发布包（`package-workbench-release.ps1:45-52`）只拷 exe + demo/kb + demo/static +
+skills，**没有 `packing_assistant/`、没有 `data/civilbuddy.db`** → projects 表对
+「评委 exe 能用」贡献为零。
+② `session.summary.json` 的 project 槽实测 **2554 个里 2551 个是 `UNSPECIFIED`**，
+且 Rust 侧从不写它 → 靠它归类＝全仓一个「未归类」桶。
+③ `trace.json` 的 project 实测高频值是 `"问"`（99 条，前端从输入框前 40 字现搓）与
+`H-worker-brief`（78 条 eval fixture）→ 自动建档会造出几十个垃圾项目。
+
+**所以：归类是自动的，建档是人的动作。** 自动归类对活跃项目 name+aliases 做
+子串包含最长优先，**永不新建项目**。改名只改 name、**id 不动**、旧名进 aliases，
+存量会话零回写自动跟随；合并写墓碑保留不删，解析跟随一跳。
+存量 3250 个目录全部落 `p-inbox`，不做自动归类（依据②③）。
+扫盘分级读取、绝不打开 trace.json、上限 500，**实测 3250 目录 208ms**。
+
+### P.6 恢复对话历史：没有免费方案
+
+实测 Rust `/api/chat` 的 history **完全由浏览器提供**（`api.rs:701-733`），服务端
+从不落盘正文；前端 `state.history` 纯内存，刷新即丢。故新增
+`<out>/<sid>/transcript.jsonl`，在 chat 收尾统一追加。**一个钩子覆盖三条出口**
+（run_plain / firm / 专家循环）—— 在 `send` 闭包里截 `done` 取回复，spawn 收尾写一次；
+逐个分支挂钩必漏。前端点会话后**整体替换** `state.history`（不 merge，避免与浏览器
+内存分叉）。**明确不还原**时间线卡 / 审批卡 / 引用块（渲染装饰，不影响接着聊）；
+没有留存正文时 UI 明说「上文从此刻重新开始」，不假装接上了。
+
+### P.7 已知边界（诚实清单）
+
+- 装柜台内嵌 iframe 的 `sandbox` 必须含 `allow-same-origin`（否则 :8000 自己的同源
+  fetch 全挂），配 `allow-scripts` 后对 :8000 等于不设防 —— 它本就是用户自己在跑的
+  同机应用，且跨 origin 决定了它碰不到 :8765 的 DOM
+- `#kblist` 仍在抽屉内，未随召唤面板迁走：召唤面板是选完即关的浮层，而 `refreshKb`
+  是异步 fetch，渲染进去会立刻被隐藏
+- SQLite `projects` 表 / `SCHEMA_VERSION` 1→2 **本轮明确不做**（见 P.5 ①），
+  且 `storage.py:195-207` 的 `_ensure_schema` 只有 `CREATE TABLE IF NOT EXISTS`，
+  **没有 ALTER 路径**，将来真要上表得先补迁移能力
+- `gateway/app.py` 的 `/api/audit` 不加字段（一加 `test_audit_parity.py:112` 立刻红）
+
+### P.8 双栈对拍连踩三个 Windows 编码陷阱
+
+首跑报「8 处双栈不一致」，逐个查下来**全部是编码问题，没有一处真实行为分叉**：
+① 差异打印撞控制台 GBK → `UnicodeEncodeError`（同 `rag_parity` 踩过的坑）；
+② `python -c <含中文源码>` 在 Windows 上 argv 按控制台代码页编码 → 改写 UTF-8 临时
+脚本文件；③ 子进程 stdout 按 GBK 写而父进程按 UTF-8 解 → 子进程改输出
+`ensure_ascii=True` 的纯 ASCII JSON。**对拍脚本本身不推敲，会把编码问题误报成
+架构问题。**
+
+### P.9 新增守卫
+
+`scripts/test_projects_parity.py`（双栈对拍，自造 fixture 零存量依赖）已进 precommit
+与 ci.yml。`workbench/tests/projects.rs` 12 条断言同样自造 fixture。
+
