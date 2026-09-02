@@ -17,7 +17,7 @@ Natural Language → Agent Routing → Deterministic Tools → HITL → Evaluati
 | 证据 | 数字 | 复跑 |
 |---|---|---|
 | 66 岗诚实分级 | L1 知识库 66/66 · L2 工具写盘 36/66 · L3 引擎岗 1 | [docs/depth-ladder.md](docs/depth-ladder.md)（每级挂验收命令） |
-| 自动化装箱评测 | **128** 次（16 并发 × 8 轮） | `python scripts/fanout16x8_online_cargo.py`（需联网抓公开货样） |
+| 自动化装箱评测 | **128** 次（16 并发 × 8 轮），2026-09-02 复跑 **128/128 PASS** | [留档](docs/eval/fanout16x8-2026-09-02/rollup.md) · `python scripts/fanout16x8_online_cargo.py`（需联网抓公开货样，约 4 分钟） |
 | 同一订单 agent vs 引擎 | LLM 自排 **29** 柜 → 引擎 **25** 柜 | `python scripts/compare_446t_agent_vs_tool.py` |
 | Agent 中间件四拍剧本 | 正常放行 → 越权被拒 → 工具故障重试降级 → 成本超限熔断 | `python scripts/demo_agent_middleware.py`（无需 Key） |
 | 端到端金线 | 8/8（R13 时点实测，需 playwright，未进 CI） | `python scripts/r13_golden_path_e2e.py` |

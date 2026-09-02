@@ -1,0 +1,56 @@
+{
+  "fetched_at": "2026-09-02T02:08:18.700919+00:00",
+  "ok_count": 4,
+  "total_urls": 4,
+  "items": [
+    {
+      "name": "dwave_sample_1.txt",
+      "url": "https://raw.githubusercontent.com/dwave-examples/3d-bin-packing/main/input/sample_data_1.txt",
+      "ok": true,
+      "bytes": 341,
+      "error": null,
+      "path": "C:\\Users\\LW\\civil-buddy\\data\\external\\fanout16x8\\dwave_sample_1.txt"
+    },
+    {
+      "name": "dwave_sample_2.txt",
+      "url": "https://raw.githubusercontent.com/dwave-examples/3d-bin-packing/main/input/sample_data_2.txt",
+      "ok": true,
+      "bytes": 475,
+      "error": null,
+      "path": "C:\\Users\\LW\\civil-buddy\\data\\external\\fanout16x8\\dwave_sample_2.txt"
+    },
+    {
+      "name": "ortools_packing.md",
+      "url": "https://raw.githubusercontent.com/google/or-tools/stable/ortools/packing/README.md",
+      "ok": true,
+      "bytes": 1444,
+      "error": null,
+      "path": "C:\\Users\\LW\\civil-buddy\\data\\external\\fanout16x8\\ortools_packing.md"
+    },
+    {
+      "name": "3dbpp_readme.md",
+      "url": "https://raw.githubusercontent.com/enzoruiz/3dbinpacking/master/README.md",
+      "ok": true,
+      "bytes": 3771,
+      "error": null,
+      "path": "C:\\Users\\LW\\civil-buddy\\data\\external\\fanout16x8\\3dbpp_readme.md"
+    },
+    {
+      "name": "sample_data_1.txt",
+      "path": "C:\\Users\\LW\\civil-buddy\\data\\external\\sample_data_1.txt",
+      "ok": true,
+      "bytes": 349,
+      "url": "data/external cache",
+      "from_cache": true
+    },
+    {
+      "name": "sample_data_2.txt",
+      "path": "C:\\Users\\LW\\civil-buddy\\data\\external\\sample_data_2.txt",
+      "ok": true,
+      "bytes": 486,
+      "url": "data/external cache",
+      "from_cache": true
+    }
+  ],
+  "network_any_ok": true
+}
