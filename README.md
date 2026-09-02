@@ -2,62 +2,35 @@
 
 [![ci-smoke](https://github.com/LUOaini1213/civil-buddy/actions/workflows/ci.yml/badge.svg)](https://github.com/LUOaini1213/civil-buddy/actions/workflows/ci.yml) [![release](https://img.shields.io/github/v/release/LUOaini1213/civil-buddy)](https://github.com/LUOaini1213/civil-buddy/releases) [![license](https://img.shields.io/badge/license-MIT-blue)](LICENSE)
 
-**Agentic AI Workspace for Engineering**
+**Agentic AI Workspace for Engineering** — 土木版 Codex
 
 Natural Language → Agent Routing → Deterministic Tools → HITL → Evaluation
 
-66-role AI workflow system for civil / construction / tendering.  
-The packing engine is **one deterministic tool** inside this product (formerly the standalone `packing-agent` repo).
-
 ![Civil Buddy workbench](docs/assets/workbench.png)
 
-- Deterministic tools for verifiable numbers (coordinates & container counts are not LLM-written)
-- Human approval for high-risk decisions (eligibility, bid, write-to-disk)
-- Policy engine & failure recovery (reject with reason → retry → circuit-break)
-- **128 automated packing-eval runs (16×8 fan-out)** + 8/8 golden-path E2E (R13 时点实测，需 playwright，未进 CI)
-- Tendering → compliance → delivery **drafts** (not legal sign-off; not auto-bid)
+**是什么** — 面向土木 / 施工 / 投标的 **66 岗（16 大类）工作台**。每岗一份 `SKILL.md` 按 SOP 出稿；**硬数字（坐标、柜数、单价）只由确定性工具算**，模型负责路由和起草；资格、投标、写盘这类高风险动作**须人确认**。产出是内部讨论草稿，不是签认件。
 
-**Try（零编译）：** 下载 [Releases](https://github.com/LUOaini1213/civil-buddy/releases) 的 **v0.4.0-workbench** zip → 双击 `start-workbench.bat`（浏览器自动打开 :8765）→ 右上角「设置 → 模型设置」填自己的 Key。
-**Try（命令行）：** `python scripts/demo_one_shot.py`（冒烟，无需 Key）· `python scripts/demo_agent_middleware.py`（四拍剧本，无需 Key）
+**给谁用** — 物机 / 物流 / 投标岗的日常起草与装柜计算。装箱引擎 pack-ship 是其中一岗，也是前身独立仓 `packing-agent`（已并入本仓，旧链接自动跳转）。
 
----
+**凭什么可信** — 每一条都有可复跑的命令：
 
-土木企业工作台 = **土木版 Codex**：**16 大类 / 66 岗 skill** · 任务选用 SOP · 工具算数 · 沙箱写盘。  
-装箱 / 拼柜是其中一岗（**pack-ship**）：硬数字只走本仓的 packing 引擎，模型不写 xyz、不拍柜数。  
-投标主线 C：招标文本 → 条款级响应矩阵 → 装柜 tools 作交付证据 → 经营岗交接（bid-tech / bid-compliance）。P0 资格/★/废标须人确认，**不**自动判定可投标。
+| 证据 | 数字 | 复跑 |
+|---|---|---|
+| 66 岗诚实分级 | L1 知识库 66/66 · L2 工具写盘 36/66 · L3 引擎岗 1 | [docs/depth-ladder.md](docs/depth-ladder.md)（每级挂验收命令） |
+| 自动化装箱评测 | **128** 次（16 并发 × 8 轮） | `python scripts/fanout16x8_online_cargo.py`（需联网抓公开货样） |
+| 同一订单 agent vs 引擎 | LLM 自排 **29** 柜 → 引擎 **25** 柜 | `python scripts/compare_446t_agent_vs_tool.py` |
+| Agent 中间件四拍剧本 | 正常放行 → 越权被拒 → 工具故障重试降级 → 成本超限熔断 | `python scripts/demo_agent_middleware.py`（无需 Key） |
+| 端到端金线 | 8/8（R13 时点实测，需 playwright，未进 CI） | `python scripts/r13_golden_path_e2e.py` |
 
-> 内部讨论草稿，不是法定专项方案、不是签认件。  
+**试用（零编译）** — 下载 [Releases](https://github.com/LUOaini1213/civil-buddy/releases) 的 **v0.4.0-workbench** zip → 双击 `start-workbench.bat`（浏览器自动打开 :8765）→「设置 → 模型设置」填自己的 Key（DeepSeek / z.ai / OpenAI 兼容任选，运行时生效）。
+试用包**不含装箱引擎**；要看真柜数需源码起装柜台：`pip install -r requirements.txt` → `uvicorn gateway.app:app --port 8000`。边界见 [给试用的人.md](给试用的人.md)。
+
+**提交署名说明** — 仓内约 40% 的提交署名为 `Packing Assistant`：agent 起草并落盘的改动独立署名，经人审后合入 `main`。这是 HITL 流程的一部分，不是第二位作者。
+
+> 内部讨论草稿，不是法定专项方案、不是签认件。
 > 高风险写盘前确认句：`我明白，将由持证人员签认`。
 
-## 参赛提交入口（海之子杯 · AI 智能体挑战）
-
-| 评审维度 | 项目证据 | 可复跑命令 |
-|----------|----------|------------|
-| **场景创意价值** | 土木版 Codex：66 岗工作台，NL 一句话 pack 入口出真数字（tools 算柜数/坐标，模型只路由） | 起两个服务后在 :8765 聊天框输入 `pack test/sim_materials/small_one_container/materials.xlsx`（起法：Releases exe 双击，或 `cd demo && uvicorn app:app --port 8765`；引擎 `uvicorn gateway.app:app --port 8000`。只起 :8765 无引擎时会得到如实的说明卡，不出假数字） |
-| **AI 协同能力** | Agent Middleware 策略引擎+失败恢复：四拍纠偏剧本（正常下单 → 越权被拒 → 工具挂掉自动恢复 → 成本超限熔断）；HITL 人确认后才拼柜 | `python scripts/demo_agent_middleware.py` |
-| **技术创新** | 装箱引擎 NL→IntentSpec→白名单 tools→HITL→影子评测；446t 单票对照 29→25 柜（mid50 0.594，risk=WARN 口径）；本地校准综合分对外口径 **8.85** | `python main.py --demo` · `python main.py --eval` |
-
-> **66 岗诚实分级**（L1 知识库 66/66 · L2 工具写盘 36/66 · L3 引擎岗 1，每级挂可复跑验收）：[docs/depth-ladder.md](docs/depth-ladder.md)。申报定位与三维度证据映射：[docs/submission/haizizhi-positioning.md](docs/submission/haizizhi-positioning.md)。
->
-> **UX 证据链（23 轮迭代，R1 立规矩 → R23 门禁自检）**：R17 界面填 Key（评委自带，不必改 .env）· R19 co-work 壳（左项目树 · 单一聊天框）· R20-21 `pack <本机路径>` 与回形针上传 · R22-23 物料来源诚实性（表读不到必须明说，网关/exe/CI 三层门禁）。设计公理/逐轮总结/附录 N-R 见 [docs/ux/ux-design-spec.md](docs/ux/ux-design-spec.md)；断网专项 `python scripts/test_offline_ui.py`（外域请求 0、pageerror 0）；端到端金线 `python scripts/r13_golden_path_e2e.py`（8/8 PASS，需 playwright）；体验记分卡 `python scripts/eval_competition_scorecard.py --skip-phase0`（本地校准综合 8.85，赢线 PASS）。
-
-### Agent Middleware（赛道 1 · 完全合格）
-
-对照表：[docs/civil-buddy/track1-qualified.md](docs/civil-buddy/track1-qualified.md)。  
-Runtime 只深做两层：**策略引擎**（拒绝弹原因）和 **失败恢复**（retry → `UNSPECIFIED` 审计链）。  
-剧本写死：正常下单 → 越权被拒 → 工具挂掉自动恢复 → 成本超限熔断。  
-行业现网总判（人改口）：[industry-agent-eval-2026-08-25.md](docs/civil-buddy/industry-agent-eval-2026-08-25.md) — 内部起草搭子 **合格**；签认/投标 **不合格**。
-
-```powershell
-python scripts/demo_agent_middleware.py
-npm run check
-```
-
-`npm run check` 必须过。不得把 API Key 提交进仓。
-
-原独立仓 packing-agent 与 civil-buddy 已并入本树：https://github.com/LUOaini1213/civil-buddy
-
-试用（别人可下载 exe）：[给试用的人.md](给试用的人.md) · LICENSE：MIT · 工作台包在 [GitHub Releases](https://github.com/LUOaini1213/civil-buddy/releases)。启动后在「设置 → 模型设置」填**自己的** Key（DeepSeek / z.ai / OpenAI 兼容任选，运行时生效不用重启）。
+**竞赛材料（海之子杯 2026 · AI 智能体挑战）** — 评审维度对照、可复跑命令与 23 轮 UX 迭代记录移至 [docs/submission/haizizhi-entry.md](docs/submission/haizizhi-entry.md)；Agent Middleware 赛道对照表（**按赛题 checklist 自评**，非官方评审）见 [docs/civil-buddy/track1-qualified.md](docs/civil-buddy/track1-qualified.md)。
 
 ---
 
@@ -65,11 +38,11 @@ npm run check
 
 | 入口 | 地址 | 用途 |
 |------|------|------|
-| **零编译试用（评委推荐）** | Releases exe → :8765 | 双击即用；不含装箱引擎（边界见[给试用的人.md](给试用的人.md)） |
+| **零编译试用** | Releases exe → :8765 | 双击即用；不含装箱引擎（边界见[给试用的人.md](给试用的人.md)） |
 | **Civil Buddy 工作台** | http://127.0.0.1:8765 | 召唤专家、投标/施工草稿、装箱作业单 |
 | **主线 C · 投标应答 + 交付** | http://127.0.0.1:8000 | 招标要点 → 响应矩阵 → 装柜证据（草稿） |
 | **工程装柜台** | http://127.0.0.1:8000/workbench | 成箱 → HITL → 拼柜 3D / CoG |
-| **用户路径 / PRD（面试一页）** | [docs/civil-buddy/user-flow.html](docs/civil-buddy/user-flow.html) · [prd-pack-ship.md](docs/civil-buddy/prd-pack-ship.md) | 流程图 + 验收；不是座舱 / RoboOS |
+| **用户路径 / PRD** | [prd-pack-ship.md](docs/civil-buddy/prd-pack-ship.md)（含 Mermaid 流程图，GitHub 直接渲染） | 流程图 + 验收表 |
 
 ### 1) Civil Buddy 工作台
 
@@ -88,7 +61,7 @@ Python 参考实现：`demo/`（`uvicorn app:app --host 127.0.0.1 --port 8765`�
 
 ```powershell
 pip install -r requirements.txt
-python scripts/demo_one_shot.py              # 冒烟，无需 API Key
+python scripts/demo_agent_middleware.py      # 冒烟（四拍剧本），无需 API Key；demo_one_shot.py 的 trace 断言回归待修，见 issues
 uvicorn gateway.app:app --host 127.0.0.1 --port 8000
 ```
 
@@ -127,8 +100,8 @@ NL → IntentSpec → 白名单 tools → HITL → 影子评测。
 ![Packing HITL graph](docs/diagrams/langgraph-create-app.jpg)
 
 ```powershell
-python scripts/demo_one_shot.py --all
-python scripts/run_hard_fail_cases.py --smoke
+python scripts/test_p0_p1_p2_full.py              # P0–P2 全链（CI 覆盖）
+python scripts/eval_workteams_cli.py --tiny-only      # steps vs llm 影子评测（CI 覆盖）
 ```
 
 文档：[docs/harness-design.md](docs/harness-design.md) · [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) · [docs/product-mainline-tender-delivery.md](docs/product-mainline-tender-delivery.md)
