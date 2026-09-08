@@ -126,6 +126,9 @@ def interpret_nl(
     # 标注架构
     opts.setdefault("architecture", "big_team_a_b")
     opts.setdefault("intent_driven", True)
+    from packing_assistant.pack_profile import apply_pack_profile
+
+    opts = apply_pack_profile(opts)
     spec.packing_options = opts
     return spec
 
@@ -147,9 +150,13 @@ def apply_intent_to_state(
     mc = spec.max_containers()
     if mc > 0:
         s["max_containers"] = mc
+    from packing_assistant.pack_profile import apply_pack_profile
+
     base = dict(s.get("packing_options") or {})
     base.update(spec.packing_options or {})
+    base = apply_pack_profile(base)
     s["packing_options"] = base
+    s["pack_profile"] = base.get("pack_profile")
     s["material_profile"] = spec.material_profile
 
     mats = list(materials if materials is not None else (s.get("materials") or []))

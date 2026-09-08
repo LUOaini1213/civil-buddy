@@ -21,7 +21,15 @@ def agent_loader(state: PackingState) -> Dict[str, Any]:
     ctype = plan.get("container_type") or state.get("container_type") or "40HQ"
     priority = plan.get("priority_order") or []
     booking = plan.get("booking") or state.get("booking") or {}
-    packing_opts = dict(state.get("packing_options") or {})
+    from packing_assistant.pack_profile import (
+        apply_pack_profile,
+        repairs_for_worst_mid50,
+        resolve_pack_profile,
+        n_search_candidates,
+    )
+
+    packing_opts = apply_pack_profile(state.get("packing_options") or {})
+    profile = resolve_pack_profile(packing_opts.get("pack_profile"))
     # 大票 / 策略要求：统一 40HQ（除非用户硬锁 20/40GP/45）
     if packing_opts.get("prefer_40hq_multi") or packing_opts.get("force_40hq"):
         if str(ctype).upper() in ("40GP", "40HQ", ""):
@@ -46,14 +54,14 @@ def agent_loader(state: PackingState) -> Dict[str, Any]:
     packing_opts.setdefault("prefer_bottom_weight_kg", 2000)
     packing_opts.setdefault("multi_start", True)
     packing_opts.setdefault("cog_aware", True)
-    # CTU 60/50：默认强制中段质量再平衡（消 mid50 block）
-    packing_opts.setdefault("cog_rebalance", True)
-    packing_opts.setdefault("r4_repair", True)
+    # Profile owns CoG repair defaults (demo/quality). Do not re-force True.
+    packing_opts.setdefault("cog_rebalance", packing_opts.get("cog_rebalance", False))
+    packing_opts.setdefault("r4_repair", False)
     packing_opts.setdefault("r4_target_mid50", 0.60)
     packing_opts.setdefault("r0_r1", True)
-    packing_opts.setdefault("r2_slab", True)
-    packing_opts.setdefault("lns_worst", True)
-    packing_opts.setdefault("lateral_repair", True)
+    packing_opts.setdefault("r2_slab", packing_opts.get("r2_slab", False))
+    packing_opts.setdefault("lns_worst", False)
+    packing_opts.setdefault("lateral_repair", False)
     packing_opts.setdefault("corner_support", True)
     packing_opts.setdefault("export_strict", False)  # 出运时 state 可设 True
     # 一箱一柜：5 箱 → 5 集装箱（不拼柜优化）
@@ -119,7 +127,8 @@ def agent_loader(state: PackingState) -> Dict[str, Any]:
         or packing_opts.get("container_budget")
     )
     budget_opt = int(packing_opts.get("container_budget") or 0)
-    n_max = plan_cap if plan_cap > 0 else min(40, n0 + 8)
+    profile_cap = max(n_search_candidates(n0, profile, n_max=40) or [n0])
+    n_max = plan_cap if plan_cap > 0 else min(40, profile_cap)
     if hard_lock and (user_cap > 0 or budget_opt > 0 or plan_cap > 0):
         cap = user_cap or budget_opt or plan_cap
         n_max = max(1, min(int(cap), 40))
@@ -129,10 +138,10 @@ def agent_loader(state: PackingState) -> Dict[str, Any]:
         n_max = max(n0, min(user_cap, 40)) if user_cap >= n0 else max(n0, n_max)
         n_max = max(n0, min(n_max, 40))
     else:
-        n_max = max(n0, min(n_max, 40))
-    # 若 cap 意外等于 n0 且无显式「只要一柜」意图，仍留 headroom（replan 前的安全垫）
-    if n_max == n0 and user_cap <= 0 and not hard_lock:
-        n_max = min(40, n0 + 8)
+        n_max = max(n0, min(n_max, profile_cap))
+    # demo stays at N0/N0+1; quality keeps modest increment. Do not widen for mid50.
+    if n_max == n0 and user_cap <= 0 and not hard_lock and profile != "demo":
+        n_max = min(40, max(n_search_candidates(n0, profile, n_max=40)))
 
     notes: List[str] = []
     # 大票多柜：Planner 的「超长优先」序常伤 mid50 / 抬柜数；默认丢弃，交给 bin3d 重货+CoG
@@ -167,7 +176,7 @@ def agent_loader(state: PackingState) -> Dict[str, Any]:
             skjolber_ok = False
     if skjolber_ok:
         try:
-            for mc in range(n0, n_max + 1):
+            for mc in n_search_candidates(n0, profile, n_max=n_max):
                 trial = pack_via_skjolber(
                     boxes,
                     {
@@ -215,6 +224,32 @@ def agent_loader(state: PackingState) -> Dict[str, Any]:
                 f"booking_vol_util={container_plan.get('booking_volume_utilization')}"
             )
             notes.append(container_plan.get("engine") or "python-laff-3d")
+            # quality: turn on named repairs only when worst mid50 < 0.55; same N, no extra cabinet
+            try:
+                from packing_assistant.tools.booking import _plan_worst_mid50
+
+                worst = _plan_worst_mid50(container_plan)
+                repair = repairs_for_worst_mid50(profile, worst)
+                if profile == "quality" and any(repair.values()) and not packing_opts.get(
+                    "_repairs_applied"
+                ):
+                    packing_opts.update(repair)
+                    packing_opts["_repairs_applied"] = True
+                    used_n = int(container_plan.get("containers_used") or n0)
+                    repaired = pack_boxes_api(
+                        boxes,
+                        container_type=str(ctype),
+                        max_containers=max(1, used_n),
+                        priority_order=priority or None,
+                        packing_options=packing_opts,
+                    )
+                    if repaired.get("can_fit"):
+                        container_plan = repaired
+                        notes.append(
+                            f"quality_repairs worst_mid50={worst} @N={used_n}"
+                        )
+            except Exception as e:
+                notes.append(f"quality_repairs_skip: {e}")
             # Loader 二次 soft 压柜：priority 序下 pack_with_auto 可能漏压；在 light..light+3 再扫
             container_plan = _soft_budget_post_densify(
                 container_plan,
@@ -232,7 +267,7 @@ def agent_loader(state: PackingState) -> Dict[str, Any]:
     if container_plan is None:
         try:
             last_fb: Dict[str, Any] | None = None
-            for mc in range(n0, n_max + 1):
+            for mc in n_search_candidates(n0, profile, n_max=n_max):
                 trial = pack_boxes_api(
                     boxes,
                     container_type=ctype,
@@ -319,6 +354,8 @@ def agent_loader(state: PackingState) -> Dict[str, Any]:
     return {
         "container_plan": container_plan,
         "booking": booking_out,
+        "packing_options": packing_opts,
+        "pack_profile": profile,
         "agent_meta": {
             "node": "loader",
             "capability": ["使用工具", "采取行动", "追求目标"],
@@ -378,6 +415,8 @@ def _soft_budget_post_densify(
     """
     if not plan or not boxes or packing_opts.get("disable_soft_budget_densify"):
         return plan
+    if str((packing_opts or {}).get("pack_profile") or "") == "demo":
+        return plan
     try:
         from packing_assistant.tools.booking import _plan_worst_mid50
     except Exception as ex:
@@ -399,25 +438,33 @@ def _soft_budget_post_densify(
     notes.append(f"soft_densify_scan {lo}..{hi} ref={ref} used={used} mid0={mid0}")
 
     # Tool 对齐 opts（少扰动）优先；再完整 loader opts
+    from packing_assistant.pack_profile import repairs_for_worst_mid50, resolve_pack_profile
+
     base = dict(packing_opts or {})
+    _prof = resolve_pack_profile(base.get("pack_profile"))
+    _gates = repairs_for_worst_mid50(_prof, mid0)
     tool_like = {
         "prefer_stack": True,
         "multi_start": True,
         "cog_aware": True,
-        "cog_rebalance": True,
-        "r4_repair": True,
+        "cog_rebalance": bool(base.get("cog_rebalance")),
+        "r4_repair": bool(_gates.get("r4_repair")),
         "r4_target_mid50": float(base.get("r4_target_mid50") or mid_tgt),
         "r0_r1": True,
-        "r2_slab": True,
-        "lateral_repair": True,
+        "r2_slab": bool(base.get("r2_slab")),
+        "lateral_repair": bool(_gates.get("lateral_repair")),
         "clearance_mm": int(base.get("clearance_mm") or 30),
         "support_ratio_min": float(base.get("support_ratio_min") or 0.55),
         "max_stack_layers": int(base.get("max_stack_layers") or 3),
         "prefer_bottom_weight_kg": float(base.get("prefer_bottom_weight_kg") or 2000),
-        "lns_worst": False,
+        "lns_worst": bool(_gates.get("lns_worst")),
         "r3_repack": False,
+        "pack_profile": _prof,
     }
     densify_opt_list = [tool_like, base]
+    # same-N only: do not add cabinets to chase mid50
+    hi = used
+    lo = used
 
     best = plan
     best_key = (

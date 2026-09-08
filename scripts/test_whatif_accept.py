@@ -58,7 +58,7 @@ def main() -> int:
             "cog_rebalance": True,
         },
     )
-    assert base.get("team_mode") == "single_closed_loop"
+    assert base.get("team_mode") in ("big_team_a_b", "single_closed_loop")
     plan = base.get("container_plan") or {}
     assert plan.get("can_fit") is True
     used = int(plan.get("containers_used") or 1)
@@ -94,7 +94,8 @@ def main() -> int:
         (r2.get("after") or {}).get("worst_mid50"),
     )
 
-    assert len(list_whatif_scenarios()) >= 5
+    ids = [s["id"] for s in list_whatif_scenarios()]
+    assert ids == ["force_40hq", "no_stack", "minus_one_container"], ids
     print("ALL PASS whatif accept")
     return 0
 

@@ -23,7 +23,9 @@ SCENARIOS = {
 
 
 def list_whatif_scenarios() -> List[Dict[str, str]]:
-    return [{"id": k, "label": v} for k, v in SCENARIOS.items()]
+    from packing_assistant.pack_profile import DEMO_WHATIF_ALLOWLIST
+
+    return [{"id": i, "label": lab} for i, lab in DEMO_WHATIF_ALLOWLIST]
 
 
 def _filter_materials(
@@ -76,6 +78,12 @@ def apply_whatif_to_options(
         opts["fixed_container_budget"] = True
         opts["meeting_cap"] = True
         opts["container_budget"] = n
+    elif scenario == "force_40hq":
+        opts["force_40hq"] = True
+        opts["prefer_40hq_multi"] = True
+    elif scenario == "no_stack":
+        opts["prefer_stack"] = False
+        opts["max_stack_layers"] = 1
     elif scenario == "strict_mid50":
         opts["cog_aware"] = True
         opts["cog_rebalance"] = True

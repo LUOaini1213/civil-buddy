@@ -108,10 +108,13 @@ def iter_big_team_run(
     state["agent_roster"] = list(AGENT_ROSTER)
     state["available_tools"] = list_tools()
     state["team_loop_round"] = 0
-    opts0 = dict(state.get("packing_options") or {})
+    from packing_assistant.pack_profile import apply_pack_profile
+
+    opts0 = apply_pack_profile(state.get("packing_options") or {})
     opts0.setdefault("architecture", "big_team_a_b")
     opts0.setdefault("intent_driven", True)
     state["packing_options"] = opts0
+    state["pack_profile"] = opts0.get("pack_profile")
 
     agents: Dict[str, Any] = {
         "orchestrator": agent_orchestrator,

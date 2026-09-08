@@ -214,14 +214,8 @@ def resolve_preset(
             key = "five_containers"
         elif any(k in text for k in ("钢件轻量", "steel_light", "结构叙事")):
             key = "steel_light"
-        elif not text or text in (
-            "演示材料清单",
-            "Agent pipeline",
-            "一键演示",
-            "demo",
-        ):
-            key = "default"
         else:
+            # empty / generic NL: do not inject high_util repair flags
             return None, None, ""
     if key not in PRESETS:
         key = "default"

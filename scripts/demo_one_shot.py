@@ -63,6 +63,19 @@ def main() -> int:
     print(f"root: {ROOT}")
     print("docs: docs/architecture-as-harness.md")
     print("default: no DEEPSEEK_API_KEY required (steps / policy fallback)")
+    sys.path.insert(0, str(ROOT))
+    from packing_assistant.harness import make_initial_state
+    from packing_assistant.pack_profile import apply_pack_profile
+
+    dump = make_initial_state(user_input="demo_one_shot profile lock")
+    dump_opts = apply_pack_profile(dump.get("packing_options") or {})
+    dump["packing_options"] = dump_opts
+    dump["pack_profile"] = dump_opts.get("pack_profile")
+    print(f"pack_profile={dump.get('pack_profile')}")
+    print(f"enable_auto_confirm={dump.get('enable_auto_confirm')}")
+    if dump.get("pack_profile") != "demo":
+        print("[demo_one_shot] FAIL: pack_profile is not demo")
+        return 1
 
     code = _run("smoke (product harness)", [py, "scripts/smoke_agent_product.py"])
     if code != 0:

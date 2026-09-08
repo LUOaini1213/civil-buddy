@@ -30,6 +30,7 @@ class PackingState(TypedDict, total=False):
     plan_diff: Dict[str, Any]
     replan_proposal: Dict[str, Any]
     packing_options: Dict[str, Any]
+    pack_profile: str
     final_response: str
     harness_meta: Dict[str, Any]
     orchestrator: Dict[str, Any]  # 大 Team 主控：名册、双利用率目标
@@ -51,6 +52,8 @@ class PackingState(TypedDict, total=False):
     materials_summary: Dict[str, Any]
     perception: Dict[str, Any]  # 跑前状态摘要（感知）
     structure_constraints: List[Dict[str, Any]]
+    structure_skipped: bool
+    structure_skip_reason: str
     global_advice: Dict[str, Any]
     boxes: List[Dict[str, Any]]
     structure_notes: List[str]

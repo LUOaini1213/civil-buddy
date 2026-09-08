@@ -422,7 +422,24 @@ def pack_with_auto_containers(
     - 柜内：固定 N 时多种放置策略（bin3d multi_start）
     - 柜级：N0* 下界 + 递增试装 + 多轮末柜并回
     """
+    import time
+
+    from packing_assistant.pack_profile import (
+        annotate_wall_clock_stop,
+        apply_pack_profile,
+        decide_next_n,
+        mid50_driven_extra_n_allowed,
+        n_search_candidates,
+        repairs_for_worst_mid50,
+        resolve_pack_profile,
+        wall_clock_budget_s,
+    )
     from packing_assistant.tools.bin3d import pack_boxes_api
+
+    packing_options = apply_pack_profile(packing_options)
+    profile = resolve_pack_profile(packing_options.get("pack_profile"))
+    t_search0 = time.monotonic()
+    budget_s = wall_clock_budget_s(profile)
 
     booking = compute_booking(
         boxes=boxes, container_type=container_type, fill_ratio=fill_ratio
@@ -448,7 +465,23 @@ def pack_with_auto_containers(
 
     last = None
     tried = []
-    for n in range(start, n_max + 1):
+    search_stopped = None
+    candidates = n_search_candidates(start, profile, n_max=n_max)
+    for n in candidates:
+        decision = decide_next_n(
+            profile=profile,
+            n0=start,
+            tried=[t["n"] for t in tried],
+            last_can_fit=bool(last and last.get("can_fit")),
+            elapsed_s=time.monotonic() - t_search0,
+            n_max=n_max,
+            for_mid50=False,
+        )
+        if decision.get("stop") == "wall_clock":
+            search_stopped = "wall_clock"
+            break
+        if decision.get("next_n") is None and decision.get("stop"):
+            break
         plan = pack_boxes_api(
             boxes,
             container_type=container_type,
@@ -467,6 +500,8 @@ def pack_with_auto_containers(
         last = plan
         if plan.get("can_fit"):
             break
+    if search_stopped == "wall_clock" and last is not None:
+        last = annotate_wall_clock_stop(last)
 
     if last is None:
         last = {
@@ -483,6 +518,7 @@ def pack_with_auto_containers(
         and used0 >= 6
         and len(boxes) >= 40
         and packing_options
+        and profile != "demo"
     ):
         light_opts = {
             **dict(packing_options),
@@ -539,23 +575,43 @@ def pack_with_auto_containers(
                 full_mid_ok = None
                 full_any = None
                 scan_hi = min(n_max, max(used0, lu + 3))
+                _gates = repairs_for_worst_mid50(profile, _plan_worst_mid50(last))
                 tight_opts = {
                     "prefer_stack": True,
                     "multi_start": True,
                     "cog_aware": True,
-                    "cog_rebalance": True,
-                    "r4_repair": True,
+                    "cog_rebalance": bool((packing_options or {}).get("cog_rebalance")),
+                    "r4_repair": bool(_gates.get("r4_repair")),
                     "r4_target_mid50": 0.60,
                     "r0_r1": True,
-                    "r2_slab": True,
-                    "lateral_repair": True,  # 必须开：否则左右偏心 block
+                    "r2_slab": bool((packing_options or {}).get("r2_slab")),
+                    "lateral_repair": bool(_gates.get("lateral_repair")),
                     "clearance_mm": int((packing_options or {}).get("clearance_mm") or 30),
-                    "lns_worst": False,
+                    "lns_worst": bool(_gates.get("lns_worst")),
                     "r3_repack": False,
+                    "pack_profile": profile,
                 }
                 drop_p = bool((packing_options or {}).get("drop_load_priority", True))
                 prio_use = None if drop_p else priority_order
                 for n in range(lu, scan_hi + 1):
+                    mid50_dec = decide_next_n(
+                        profile=profile,
+                        n0=start,
+                        tried=[t["n"] for t in tried],
+                        last_can_fit=True,
+                        elapsed_s=time.monotonic() - t_search0,
+                        n_max=n_max,
+                        for_mid50=True,
+                    )
+                    if mid50_dec.get("stop") in (
+                        "mid50_extra_forbidden",
+                        "wall_clock",
+                    ):
+                        if mid50_dec.get("stop") == "wall_clock":
+                            last = annotate_wall_clock_stop(last)
+                        break
+                    if n > lu and not mid50_driven_extra_n_allowed(profile):
+                        break
                     full_n = pack_boxes_api(
                         boxes,
                         container_type=container_type,
@@ -603,12 +659,12 @@ def pack_with_auto_containers(
                                 return 0.0
 
                         polish_opts = dict(packing_options or {})
-                        polish_opts["lateral_repair"] = True
-                        polish_opts["cog_rebalance"] = True
+                        _pg = repairs_for_worst_mid50(profile, _plan_worst_mid50(last))
+                        polish_opts.update(_pg)
                         polish_opts["drop_load_priority"] = True
                         best_p = last
                         best_lat = _lat(last)
-                        for n_pol in range(fu0, min(fu0 + 2, n_max) + 1):
+                        for n_pol in (fu0,):
                             polished = pack_boxes_api(
                                 boxes,
                                 container_type=container_type,
@@ -718,6 +774,11 @@ def pack_with_auto_containers(
     floor_lb = hard_lb  # 并回目标可压到重量/体积下界
     # 大票多并几轮；小票最多 4 轮
     max_merge_rounds = 10 if used >= 10 else 4
+    if profile == "demo":
+        max_merge_rounds = 1
+    if profile == "demo" and (time.monotonic() - t_search0) >= budget_s:
+        last = annotate_wall_clock_stop(last)
+        max_merge_rounds = 0
     if last.get("can_fit") and used >= 2:
         # 即使末柜不极空，若 used 明显高于重量下界也尝试并回（抬重量利用率）
         wt_util_est = 0.0
@@ -793,6 +854,7 @@ def pack_with_auto_containers(
     last["n0_components"] = booking.get("n0_components") or {}
     last["n0_note"] = booking.get("n0_note") or f"N0*={n0_report}"
     last["n_tried"] = tried
+    last["pack_profile"] = profile
     last["auto_containers"] = True
     last["n0_gap"] = int(used) - int(n0_report) if used else 0
     last["last_container_stats"] = last_stats

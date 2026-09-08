@@ -208,7 +208,7 @@ def api_health():
     if not llm_key:
         preflight["hints"].append("无 LLM Key → llm_toolcall 走 policy_fallback（主路径 steps 不受影响）")
     preflight["hints"].append(
-        f"演示默认 enable_auto_confirm=false，露出 HITL · harness {HARNESS_VERSION} · {agent_count} agents"
+        f"演示默认 pack_profile=demo · enable_auto_confirm=false · harness {HARNESS_VERSION}"
     )
     preflight["hints"].append(
         "通用表：POST /api/table/parse（上传）或 /api/table/parse/json · 前端「表上传」"
@@ -536,8 +536,10 @@ def _apply_preset(
     from packing_assistant.demo_presets import resolve_preset
 
     pm, po, key = resolve_preset(preset, user_input=user_input)
+    from packing_assistant.pack_profile import apply_pack_profile
+
     mats = materials if materials else pm
-    opts = packing_options if packing_options else po
+    opts = apply_pack_profile({**(po or {}), **(packing_options or {})})
     text = user_input
     if key and (not text or text in ("演示材料清单", "Agent pipeline", "demo")):
         from packing_assistant.demo_presets import PRESETS
@@ -749,8 +751,8 @@ class PipelineRequest(BaseModel):
     container_type: str = "40HQ"
     session_id: str = "pipeline"
     max_containers: int = 0
-    # True=跳过确认闸门自动跑到 finalize；False=停在 HITL
-    enable_auto_confirm: bool = True
+    # True=跳过确认闸门自动跑到 finalize；默认 False=停在 HITL（demo 面）
+    enable_auto_confirm: bool = False
     goal: str = Field(
         default="deliver_valid_pack_plan",
         description="deliver_valid_pack_plan | minimize_containers | safe_to_ship",
@@ -763,8 +765,12 @@ class PipelineRequest(BaseModel):
         description="覆盖 mode：steps | llm_toolcall | auto（空则用 mode）",
     )
     max_llm_rounds: int = 12
-    preset: str = "high_util"
+    preset: str = ""
     packing_options: Optional[Dict[str, Any]] = None
+    pack_profile: str = Field(
+        default="",
+        description="demo | quality；空则 demo",
+    )
 
 
 class WhatIfRequest(BaseModel):
@@ -1307,11 +1313,14 @@ def api_pipeline(body: PipelineRequest):
 
     mode/agent_mode: steps | llm_toolcall | auto | graph
     """
+    extra_opts = dict(body.packing_options or {})
+    if (body.pack_profile or "").strip():
+        extra_opts["pack_profile"] = body.pack_profile.strip()
     mats, opts, key, text = _apply_preset(
         preset=body.preset or "",
         user_input=body.user_input,
         materials=body.materials,
-        packing_options=body.packing_options,
+        packing_options=extra_opts,
     )
     if (body.mode or "steps").lower() == "graph":
         state = run_pipeline(

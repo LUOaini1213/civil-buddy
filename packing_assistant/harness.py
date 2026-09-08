@@ -50,6 +50,9 @@ def make_initial_state(
         _design_facts = load_design_facts()
     except Exception:
         _design_facts = {}
+    from packing_assistant.pack_profile import DEFAULT_PROFILE, apply_pack_profile
+
+    _opts = apply_pack_profile({})
     return {
         "user_input": user_input or "",
         "session_id": session_id or rid,
@@ -92,6 +95,8 @@ def make_initial_state(
         "validation_warnings": [],
         "replan_round": 0,
         "ship_replan_round": 0,
+        "packing_options": _opts,
+        "pack_profile": _opts.get("pack_profile") or DEFAULT_PROFILE,
         "enable_auto_confirm": enable_auto_confirm,
         "agent_steps": [],
         "team_mode": "big_team_a_b",
@@ -129,10 +134,15 @@ def run_team_a(
             state.get("design_facts") or {}, design_facts
         )
     if packing_options:
-        state["packing_options"] = {
-            **(state.get("packing_options") or {}),
-            **packing_options,
-        }
+        from packing_assistant.pack_profile import apply_pack_profile
+
+        state["packing_options"] = apply_pack_profile(
+            {
+                **(state.get("packing_options") or {}),
+                **packing_options,
+            }
+        )
+        state["pack_profile"] = (state["packing_options"] or {}).get("pack_profile")
     tid = str(session_id or state.get("session_id") or state.get("run_id") or "team_a")
     result = invoke_with_checkpoint(app, state, tid)
     if (result.get("phase") or "") == "await_user_confirm":
@@ -361,7 +371,12 @@ def run_pipeline(
         goal=str(g or "deliver_valid_pack_plan"),
     )
     if packing_options:
-        initial["packing_options"] = dict(packing_options)
+        from packing_assistant.pack_profile import apply_pack_profile
+
+        initial["packing_options"] = apply_pack_profile(
+            {**(initial.get("packing_options") or {}), **dict(packing_options)}
+        )
+        initial["pack_profile"] = (initial["packing_options"] or {}).get("pack_profile")
     if revision:
         initial["revision"] = dict(revision)
     result = app.invoke(initial)
@@ -750,6 +765,16 @@ def public_response(state: Dict[str, Any]) -> Dict[str, Any]:
         "agent_style": state.get("agent_style") or "",
         "path_honesty": _path_honesty(state),
         "intent_spec": state.get("intent_spec") or {},
+        "pack_profile": (state.get("packing_options") or {}).get("pack_profile")
+        or state.get("pack_profile"),
+        "enable_auto_confirm": bool(state.get("enable_auto_confirm")),
+        "repair_flags": {
+            "lns_worst": bool((state.get("packing_options") or {}).get("lns_worst")),
+            "r4_repair": bool((state.get("packing_options") or {}).get("r4_repair")),
+            "lateral_repair": bool(
+                (state.get("packing_options") or {}).get("lateral_repair")
+            ),
+        },
         "team_architecture": state.get("team_architecture") or {},
         "graph_segment": state.get("graph_segment"),
         "tms_booking": state.get("tms_booking") or {},
