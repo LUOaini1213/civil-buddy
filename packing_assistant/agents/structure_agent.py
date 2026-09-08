@@ -22,6 +22,41 @@ from packing_assistant.tools.packing import STANDARD_BOX_TYPES, _normalize_mater
 
 def agent_structure(state: PackingState) -> Dict[str, Any]:
     materials = state.get("materials") or []
+    from packing_assistant.pack_profile import should_skip_structure
+
+    skip, skip_reason = should_skip_structure(
+        materials=materials,
+        boxes=state.get("boxes") or [],
+        packing_options=state.get("packing_options") or {},
+    )
+    if skip:
+        reason = skip_reason or "complete_lwh_generic_cargo"
+        return {
+            "structure_skipped": True,
+            "structure_skip_reason": reason,
+            "structure_constraints": [],
+            "global_advice": {
+                "skipped": True,
+                "reason": reason,
+                "prefer_iron_box": False,
+            },
+            "structure_notes": [f"skipped: {reason}"],
+            "agent_meta": {
+                "node": "structure",
+                "capability": ["使用工具", "推理与规划"],
+                "tools_used": [],
+                "artifacts": {"skipped": True, "reason": reason},
+            },
+            "messages": [
+                {
+                    "role": "assistant",
+                    "content": (
+                        f"结构步骤跳过：{reason}（通用表/已有外尺寸，不挡 HITL 确认）"
+                    ),
+                }
+            ],
+        }
+
     constraints: List[Dict[str, Any]] = []
     notes: List[str] = []
     prefer_iron = False
