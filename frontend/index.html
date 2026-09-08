@@ -1364,7 +1364,7 @@
           <div class="brand-mark">P</div>
           <div>
             <h1>装箱拼柜 · Team Mode</h1>
-            <div class="tag tag-full">大 Team⊃A/B · {{ agentCount || 13 }} Agents · HITL · v{{ harnessVersion || '0.6.4' }}</div>
+            <div class="tag tag-full">装箱工作台 · HITL · v{{ harnessVersion || '0.6.4' }}</div>
             <div class="tag tag-simple">三步演示 · tools 定柜 · 人确认成箱</div>
           </div>
         </div>
@@ -1384,18 +1384,18 @@
           <button class="soft" v-show="!demoSimpleMode" @click="refreshHealth" title="健康预检">预检</button>
           <button class="ghost" v-show="!demoSimpleMode" @click="runPipelineTrace" :class="{ busy: loading }">全流程</button>
           <button class="soft" v-show="!demoSimpleMode" @click="runDemoSteel" :class="{ busy: loading }" title="少量钢件">钢件轻量</button>
-          <label class="soft" v-show="!demoSimpleMode || tableMaterials.length"
+          <label class="soft" data-demo-upload="true"
                  style="cursor:pointer;display:inline-flex;align-items:center;gap:4px;padding:6px 10px;border-radius:8px"
                  title="上传 CSV/XLSX → /api/table/parse → materials">
             表上传
-            <input type="file" accept=".csv,.tsv,.txt,.xlsx,.xlsm,.json" style="display:none"
+            <input id="demo-table-file" type="file" accept=".csv,.tsv,.txt,.xlsx,.xlsm,.json" style="display:none"
                    @change="onTableFileSelected" :disabled="loading" />
           </label>
-          <button class="soft" v-show="!demoSimpleMode && tableMaterials.length" @click="runWithTableMaterials" :class="{ busy: loading }"
+          <button class="soft" v-show="tableMaterials.length" @click="runWithTableMaterials" :class="{ busy: loading }"
                   :disabled="!tableMaterials.length" title="用已解析表材料跑 pipeline">
             表材料跑 ({{ tableMaterials.length || 0 }})
           </button>
-          <button class="primary-lg" @click="runDemo" :class="{ busy: loading }" title="30×钢实模块·默认 HITL">
+          <button class="primary-lg" v-show="!demoSimpleMode" @click="runDemo" :class="{ busy: loading }" title="30×钢实模块·默认 HITL">
             {{ loading ? '运行中…' : '满载演示' }}
           </button>
         </div>
@@ -1618,7 +1618,7 @@
               <div>
                 <div class="ds-title">{{ hasAnyResult ? '简洁演示 · 三步剧本' : '三步演示，开始装柜' }}</div>
                 <div class="ds-sub">
-                  ①满载成箱 → ②人确认 HITL → ③看裁决 · tools 定柜 · 默认停确认闸
+                  ①上传表/成箱数字 → ②必须人确认 → ③拼柜图 + CoG
                 </div>
               </div>
               <span class="pill" :class="demoScriptStep >= 3 ? 'ok' : (demoScriptStep === 2 ? 'warn' : '')">
@@ -1630,8 +1630,8 @@
                       :class="demoStepClass(1)"
                       @click="goDemoStep(1)"
                       :disabled="loading">
-                <div class="ds-k"><span class="ds-num">1</span>满载成箱</div>
-                <div class="ds-v">跑 Team A · 出箱方案与 N0* · 不停在聊天编柜数</div>
+                <div class="ds-k"><span class="ds-num">1</span>上传表成箱</div>
+                <div class="ds-v">上传 CSV/Excel · 出箱方案与 N0* · 不停在聊天编柜数</div>
               </button>
               <button type="button" class="demo-step"
                       :class="demoStepClass(2)"
@@ -1663,8 +1663,8 @@
               </div>
             </div>
             <div class="ds-actions">
-              <button class="primary-lg" v-if="demoScriptStep === 1" @click="runDemo" :class="{ busy: loading }">
-                {{ loading ? '成箱中…' : '开始第 1 步 · 满载演示' }}
+              <button class="primary-lg" v-if="demoScriptStep === 1" @click="triggerTableUpload" :class="{ busy: loading }">
+                {{ loading ? '成箱中…' : '开始第 1 步 · 上传物料表' }}
               </button>
               <button class="primary-lg" v-else-if="demoScriptStep === 2" @click="goDemoStep(2)">
                 去第 2 步 · 确认并拼柜
@@ -1672,8 +1672,8 @@
               <button class="primary-lg" v-else @click="goDemoStep(3)">
                 看第 3 步 · 总览裁决
               </button>
-              <button class="soft" v-if="hasAnyResult" @click="runDemo" :class="{ busy: loading }" title="重跑成箱">
-                重跑成箱
+              <button class="soft" v-if="hasAnyResult" @click="triggerTableUpload" :class="{ busy: loading }" title="再上传物料表">
+                再上传表
               </button>
               <span class="ds-hint">{{ demoScriptHint }}</span>
             </div>
@@ -1687,7 +1687,7 @@
             <div class="hero-icon" aria-hidden="true">📦</div>
             <h3>组建团队，开始装柜</h3>
             <p>
-              结果工作区已就绪。左侧是 <strong>{{ agentCount || 13 }}</strong> 智能体（大 Team⊃A/B）+ HITL · harness v{{ harnessVersion || '0.6.4' }}。
+              上传物料表 → 看成箱数字 → 确认后再拼柜。tools 定柜，默认不停自动确认。
             </p>
             <div class="empty-features" aria-label="产品要点">
               <div class="empty-feature">
@@ -2499,9 +2499,9 @@
             <div class="empty-hero" v-if="!hasViews && !hasScene3d">
               <div class="hero-icon" aria-hidden="true">🗺</div>
               <h3>暂无布局图</h3>
-              <p>完成拼柜后这里显示三视角与等轴测 3D（本地 canvas，不是纯黑屏）。先跑「满载演示」或上传材料表。</p>
+              <p>完成拼柜后这里显示三视角与等轴测 3D（本地 canvas，不是纯黑屏）。先上传材料表，确认后再拼柜。</p>
               <div class="actions">
-                <button class="primary-lg" @click="runDemo" :class="{ busy: loading }">满载演示</button>
+                <button class="primary-lg" @click="triggerTableUpload" :class="{ busy: loading }">上传物料表</button>
                 <button class="soft" @click="mainTab = 'overview'">回总览</button>
               </div>
             </div>
@@ -2762,7 +2762,7 @@
           skjolberLabel: 'unknown',
           gatewayOk: false,
           llmKeyPresent: false,
-          agentCount: 13,
+          agentCount: 0,
           preflightHints: [],
           nsFilter: 'all',
           nsChecked: {},
@@ -2770,7 +2770,7 @@
           tableParseNote: '',
           tableColumnMap: null,
           demoAutoConfirm: false,
-          /** 默认简洁演示：收侧栏、精简 pill/按钮，突出满载演示主 CTA */
+          /** 默认简洁演示：收侧栏、精简 pill/按钮，第一步主 CTA 为上传表 */
           demoSimpleMode: true,
           result: {},
           agentSteps: [],
@@ -2803,14 +2803,9 @@
           seenEventKeys: {},
           viewContainerNo: 1,
           whatifScenarios: [
-            { id: 'lock_containers', label: '锁定预算柜数' },
-            { id: 'plus_one_container', label: '允许多 1 柜' },
-            { id: 'minus_one_container', label: '尝试少 1 柜' },
-            { id: 'strict_mid50', label: '严格 mid50≥55%' },
-            { id: 'iron_only', label: '仅铁件/架' },
-            { id: 'no_long', label: '排除超长≥6m' },
-            { id: 'dense_passthrough', label: '密装直通' },
-            { id: 'prefer_min_cabin', label: '优先少柜' },
+            { id: 'force_40hq', label: '改 40HQ' },
+            { id: 'no_stack', label: '这票不能叠' },
+            { id: 'minus_one_container', label: '少一柜试试' },
           ],
           whatifScenario: 'minus_one_container',
           whatifMaxC: null,
@@ -3813,14 +3808,18 @@
           if (n === cur) return 'active';
           return 'todo';
         },
+        triggerTableUpload() {
+          const el = document.getElementById('demo-table-file');
+          if (el && el.click) el.click();
+        },
         goDemoStep(n) {
           if (n === 1) {
             if (!this.hasAnyResult) {
-              this.runDemo();
+              this.triggerTableUpload();
               return;
             }
             this.mainTab = 'boxes';
-            this.statusText = '第 1 步：查看成箱方案（可重跑满载演示）';
+            this.statusText = '第 1 步：查看成箱方案（可再上传物料表）';
             return;
           }
           if (n === 2) {
@@ -4009,7 +4008,7 @@
               ? 'UP ' + (j.skjolber_url || '')
               : (j.skjolber && j.skjolber.reason) || '未连接（将用本地回退）';
             this.harnessVersion = j.harness_version || this.harnessVersion || '';
-            this.agentCount = j.agent_count || this.agentCount || 13;
+            this.agentCount = j.agent_count || this.agentCount || 0;
             this.llmKeyPresent = !!j.llm_key_present;
             const pf = j.preflight || {};
             this.preflightHints = pf.hints || [];
@@ -4018,7 +4017,7 @@
               'skjolber ' + (this.skjolberOk ? 'UP' : '本地回退'),
               'LLM ' + (this.llmKeyPresent ? '有Key' : '无Key'),
               'v' + (this.harnessVersion || '—'),
-              (this.agentCount || 13) + ' agents',
+              'pack_profile=demo',
             ];
             this.statusText = '预检: ' + parts.join(' · ');
             if (this.preflightHints.length) {
@@ -4065,6 +4064,9 @@
             this.userInput = (this.userInput || '') +
               (this.userInput ? ' | ' : '') +
               'table:' + (file.name || 'upload');
+            if (this.demoSimpleMode && this.tableMaterials.length) {
+              await this.runWithTableMaterials();
+            }
           } catch (e) {
             this.tableMaterials = [];
             this.tableParseNote = '表上传失败: ' + e;
@@ -4087,8 +4089,10 @@
               session_id: this.sessionId,
               materials: this.tableMaterials,
               container_type: this.containerType || '40HQ',
-              enable_auto_confirm: !!this.demoAutoConfirm,
-              packing_options: { profile_id: 'generic_table', crate_passthrough: true, multi_start: true, cog_aware: true },
+              enable_auto_confirm: false,
+              preset: '',
+              pack_profile: 'demo',
+              packing_options: { profile_id: 'generic_table', crate_passthrough: true, multi_start: true, cog_aware: true, pack_profile: 'demo' },
             }, 120000);
             this.applyResult(j.public || j);
             this.statusText =

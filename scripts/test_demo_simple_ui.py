@@ -29,9 +29,13 @@ def main() -> int:
     if not re.search(r"demoSimpleMode\s*:\s*true", text):
         fails.append("demoSimpleMode default is not true")
 
-    # Primary CTA remains
-    if "满载演示" not in text or "runDemo" not in text:
-        fails.append("missing primary 满载演示 CTA")
+    # Primary step-1 CTA is table upload (满载 is advanced-only)
+    if "表上传" not in text or "onTableFileSelected" not in text:
+        fails.append("missing 表上传 step-1 control")
+    if "triggerTableUpload" not in text:
+        fails.append("missing triggerTableUpload for demo step 1")
+    if 'data-demo-upload="true"' not in text:
+        fails.append("upload control not marked data-demo-upload")
 
     # Simple mode must display:none sidebar (width:0 still stacks in 1-col grid)
     if "display: none !important" not in text or ".shell.demo-simple .sidebar" not in text:
@@ -64,8 +68,8 @@ def main() -> int:
         fails.append("missing demoScriptStep / goDemoStep wiring")
     if "三步" not in text and "第 1 步" not in text:
         fails.append("missing 3-step script copy")
-    if "满载成箱" not in text or "人确认" not in text:
-        fails.append("missing step labels 满载成箱 / 人确认")
+    if "上传表成箱" not in text or "人确认" not in text:
+        fails.append("missing step labels 上传表成箱 / 人确认")
     if "is-landing" not in text:
         fails.append("missing is-landing full-middle landing class")
     if "ds-features" not in text:
@@ -96,8 +100,19 @@ def main() -> int:
             fails.append("is-landing still uses justify-content:center (causes upper void)")
     if ".shell.demo-simple.no-result .workspace" not in text:
         fails.append("missing no-result workspace fill selectors")
-    if "开始第 1 步" not in text and "满载演示" not in text:
-        fails.append("missing first-step CTA copy")
+    if "开始第 1 步 · 上传物料表" not in text:
+        fails.append("missing first-step upload CTA copy")
+    # Step-1 primary must be upload, not 满载/runDemo
+    if not re.search(
+        r'demoScriptStep === 1[^>]*>[\s\S]*?@click="triggerTableUpload"',
+        text,
+    ) and 'v-if="demoScriptStep === 1" @click="triggerTableUpload"' not in text:
+        fails.append("simple-mode step-1 primary still not triggerTableUpload")
+    if re.search(
+        r'demoScriptStep === 1"[^>]*@click="runDemo"',
+        text,
+    ):
+        fails.append("simple-mode step-1 primary still calls runDemo")
 
 
     # Simple tag copy for first glance
@@ -138,7 +153,7 @@ def main() -> int:
     print("ALL_PASS demo_simple_ui")
     print("file=", HTML.relative_to(ROOT))
     print("demoSimpleMode_default=true")
-    print("primary_cta=满载演示")
+    print("primary_cta=上传物料表")
     return 0
 
 
