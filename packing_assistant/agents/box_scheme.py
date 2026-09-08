@@ -252,6 +252,62 @@ def agent_box_scheme(state: PackingState) -> Dict[str, Any]:
     if str(ctype).upper() == "20GP" and (max_L >= 4000 or total_w >= 8000):
         ctype = "40HQ"
 
+    packing_opts = dict(packing_opts)
+    from packing_assistant.tools.rack_fold import fold_packing_list_racks, groups_from_options
+
+    if groups_from_options(materials, packing_opts):
+        folded = fold_packing_list_racks(materials, packing_opts)
+        if folded.get("ok"):
+            boxes = list(folded.get("boxes") or [])
+            skip_n = len(folded.get("skipped_incomplete") or [])
+            notes = list(folded.get("notes") or [])
+            if skip_n:
+                notes.append(f"incomplete LWH dropped={skip_n} (did not block ticket)")
+            outer_sum = sum(float(b.get("outer_m3") or 0) for b in boxes)
+            content_sum = sum(float(b.get("content_m3") or 0) for b in boxes)
+            return {
+                "boxes": boxes,
+                "packing_options": {
+                    **packing_opts,
+                    "crate_passthrough": False,
+                    "packing_list_racks_applied": True,
+                },
+                "team_a_summary": {
+                    "pass": len(boxes),
+                    "reinforce": 0,
+                    "fail": 0,
+                    "packing_mode": "packing_list_racks",
+                    "standard_boxes": True,
+                    "crate_passthrough": False,
+                    "boxes_outer_volume_m3": round(outer_sum, 4),
+                    "cargo_item_volume_m3": round(content_sum, 4),
+                    "structure_overall": "通过(装货单收架)",
+                    "total_net_weight_kg": round(
+                        sum(float(b.get("net_weight_kg") or 0) for b in boxes), 1
+                    ),
+                    "total_gross_weight_kg": round(
+                        sum(float(b.get("gross_weight_kg") or 0) for b in boxes), 1
+                    ),
+                },
+                "structure_notes": notes,
+                "agent_meta": {
+                    "node": "box_scheme",
+                    "capability": ["使用工具", "采取行动"],
+                    "tools_used": ["rack_fold.fold_packing_list_racks"],
+                    "artifacts": {"boxes": len(boxes), "mode": "packing_list_racks"},
+                },
+                "messages": [
+                    {
+                        "role": "assistant",
+                        "content": (
+                            f"装箱完成：{len(boxes)} 只铁架（装货单收架，非散件直通）"
+                            f" 外廓{outer_sum:.2f}m³/内容{content_sum:.2f}m³"
+                            f"｜tools=rack_fold"
+                        ),
+                    }
+                ],
+            }
+
     # 缺尺寸：禁止静默成箱出运
     if state.get("materials_incomplete") or _materials_missing_dims(materials):
         return {
@@ -284,7 +340,6 @@ def agent_box_scheme(state: PackingState) -> Dict[str, Any]:
         }
 
     # 模块级大件：覆盖 standard 默认，防空心标准架假多柜
-    packing_opts = dict(packing_opts)
     module_pt = _module_like_majority(materials) and packing_opts.get(
         "force_standard_boxes"
     ) is not True
