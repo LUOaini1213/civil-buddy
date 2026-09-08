@@ -35,6 +35,9 @@ COLUMN_SYNONYMS: Dict[str, Tuple[str, ...]] = {
         "article_name",
         "货品名称",
         "商品名称",
+        "content",
+        "description of goods",
+        "goods description",
     ),
     "quantity": (
         "quantity",
@@ -49,6 +52,10 @@ COLUMN_SYNONYMS: Dict[str, Tuple[str, ...]] = {
         "pc",
         "件",
         "装箱数",
+        "packages",
+        "cartons",
+        "no. of packages",
+        "kind & no of packages",
     ),
     "length_mm": (
         "length_mm",
@@ -71,6 +78,13 @@ COLUMN_SYNONYMS: Dict[str, Tuple[str, ...]] = {
         "长(m)",
         "长mm",
         "长m",
+        "l (cm)",
+        "l(cm)",
+        "l cm",
+        "lcm",
+        "l (mm)",
+        "l(mm)",
+        "l mm",
     ),
     "width_mm": (
         "width_mm",
@@ -88,6 +102,13 @@ COLUMN_SYNONYMS: Dict[str, Tuple[str, ...]] = {
         "宽度_mm",
         "宽(mm)",
         "宽mm",
+        "w (cm)",
+        "w(cm)",
+        "w cm",
+        "wcm",
+        "w (mm)",
+        "w(mm)",
+        "w mm",
     ),
     "height_mm": (
         "height_mm",
@@ -107,6 +128,13 @@ COLUMN_SYNONYMS: Dict[str, Tuple[str, ...]] = {
         "高mm",
         "厚",
         "厚度",
+        "h (cm)",
+        "h(cm)",
+        "h cm",
+        "hcm",
+        "h (mm)",
+        "h(mm)",
+        "h mm",
     ),
     "weight_kg": (
         "weight_kg",
@@ -127,6 +155,14 @@ COLUMN_SYNONYMS: Dict[str, Tuple[str, ...]] = {
         "weight_t",
         "单重t",
         "吨",
+        "gross weight (kg)",
+        "gross weight(kg)",
+        "gross wt (kg)",
+        "gross wt(kg)",
+        "gross kg / carton",
+        "gross kg/carton",
+        "net wt (kg)",
+        "net wt(kg)",
     ),
     "total_weight_kg": (
         "total_weight_kg",
@@ -203,6 +239,20 @@ def build_column_map(headers: Sequence[Any]) -> Dict[str, str]:
 
     mapping: Dict[str, str] = {}
     used_std: set[str] = set()
+    # Prefer exact 长/宽/高 (packing outer) over 宽度W/高度H (section, often empty).
+    exact_lwh = {
+        "长": "length_mm",
+        "宽": "width_mm",
+        "高": "height_mm",
+        "l": "length_mm",
+        "w": "width_mm",
+        "h": "height_mm",
+    }
+    present = {_norm_header(h): str(h or "").strip() for h in headers if str(h or "").strip()}
+    if all(k in present for k in ("长", "宽", "高")):
+        for k, field in (("长", "length_mm"), ("宽", "width_mm"), ("高", "height_mm")):
+            mapping[present[k]] = field
+            used_std.add(field)
     for h in headers:
         raw = str(h or "").strip()
         if not raw:
