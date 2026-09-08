@@ -49,6 +49,10 @@ scripts/_*.py
 scripts/dev/
 scripts/__pycache__/
 
+# --- Rust ---
+/crates/target/
+**/target/
+
 # --- Java build (optional skjolber) ---
 skjolber-service/target/
 *.class

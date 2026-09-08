@@ -1,0 +1,3 @@
+[workspace]
+members = ["pack-core"]
+resolver = "2"
