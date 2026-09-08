@@ -114,7 +114,7 @@ jobs:
       - name: Agent middleware four-beat script (policy deny / recovery chain / cost fuse)
         # The three guarantees the README leads with, asserted rather than demoed.
         run: python scripts/test_agent_middleware.py
-      - name: Contest gate (npm run check: secret scan, sandbox, civil codex, offline eval)
+      - name: "Contest gate (npm run check: secret scan, sandbox, civil codex, offline eval)"
         run: npm run check
       - name: TMS booking stub
         run: |
