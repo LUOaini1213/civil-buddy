@@ -26,7 +26,7 @@ Companion index for the repo's GitHub Issues.
 
 - [ ] Issues labeled `good first issue` / `docs` / `eval`
 - [ ] PR template: what / why / how tested
-- [x] Smoke `python scripts/demo_one_shot.py` green before release tags (v0.4.0-workbench shipped on green CI)
+- [ ] Smoke `python scripts/demo_one_shot.py` green before release tags — its trace assertion regressed after v0.4.0-workbench (issue #22); `python scripts/demo_agent_middleware.py` and `python scripts/test_agent_middleware.py` are the smoke that is green today
 - [x] No secrets in repo; domain samples only under `data/samples/` (scan_tracked_secrets in `npm run check`)
 
 External PRs to other Agent repos (optional): record URL in personal notes when done.

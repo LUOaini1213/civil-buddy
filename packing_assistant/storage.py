@@ -386,8 +386,30 @@ class Storage:
             self.write_conn.commit()
 
     def ensure_run(self, run: dict) -> None:
-        """INSERT OR IGNORE：双写期从 run_start 事件补 runs 行，不覆盖导入器的 checkpoint_json。"""
+        """INSERT OR IGNORE：双写期从 run_start 事件补 runs 行，不覆盖导入器的 checkpoint_json。
+
+        runs.session_id 外键指向 sessions。run_start 事件常常先于该会话的第一次
+        checkpoint 到达（并发 lane、或从不落盘的 run），此前这里直接违反外键，
+        整条 run 的事件都回退到 JSONL（issue #22）。现在先补一行占位 session：
+        status='placeholder'、state_json='{}'，之后 save_session 的 INSERT OR
+        REPLACE 会把它换成真实快照。
+        """
+        sid = run.get("session_id")
         with self._lock:
+            if sid:
+                self.write_conn.execute(
+                    "INSERT OR IGNORE INTO sessions"
+                    "(session_id, run_id, phase, status, saved_at, state_json)"
+                    " VALUES(?,?,?,?,?,?)",
+                    (
+                        str(sid),
+                        str(run.get("run_id") or ""),
+                        run.get("phase"),
+                        "placeholder",
+                        str(run.get("started_at") or _now_iso()),
+                        "{}",
+                    ),
+                )
             self.write_conn.execute(
                 "INSERT OR IGNORE INTO runs"
                 "(run_id, session_id, app, source, started_at, phase, container_type, run_dir)"

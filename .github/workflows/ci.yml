@@ -106,7 +106,16 @@ jobs:
       - name: HITL disk resume (3 cases)
         run: python scripts/test_hitl_resume_competition.py
       - name: Workteams shadow eval (steps vs llm) + KPI
+        # No key in CI, so the llm arm runs as policy_fallback (harness._path_honesty);
+        # this covers the plumbing and the steps-vs-llm agreement check, not a live model.
         run: python scripts/eval_workteams_cli.py --tiny-only
+      - name: Trace store creates the parent session row (issue 22 regression)
+        run: python scripts/test_storage_ensure_run.py
+      - name: Agent middleware four-beat script (policy deny / recovery chain / cost fuse)
+        # The three guarantees the README leads with, asserted rather than demoed.
+        run: python scripts/test_agent_middleware.py
+      - name: Contest gate (npm run check: secret scan, sandbox, civil codex, offline eval)
+        run: npm run check
       - name: TMS booking stub
         run: |
           python - <<'PY'
@@ -149,6 +158,8 @@ jobs:
               assert k in t, k
           print("frontend continue OK")
           PY
+      - name: Fan-out evaluation archive matches the README numbers
+        run: python scripts/render_eval_table.py --check README.md
       - name: P0 cog t80 (if materials present)
         run: |
           if [ -f test/sim_materials/t80_random_mixed_s20260729/materials.json ]; then
@@ -156,3 +167,30 @@ jobs:
           else
             echo "skip t80 materials not in repo"
           fi
+
+  # A slice of the 128-run packing evaluation (16 lanes × 8 rounds locally,
+  # docs/eval/fanout16x8-2026-09-02/): 2 lanes × 1 round on the committed
+  # public cargo samples, no network, no key. Proves the pipeline the archive
+  # was produced with still completes end to end on every push.
+  packing-eval-slice:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Install deps
+        run: |
+          python -m pip install -U pip
+          pip install -r requirements.txt
+      - name: 2 lanes × 1 round, offline cargo cache
+        run: python scripts/fanout16x8_online_cargo.py --lanes 2 --rounds 1 --workers 2 --skip-fetch
+      - name: Slice must be all green
+        run: |
+          python - <<'PY'
+          import json, pathlib
+          r = json.loads(pathlib.Path("output/fanout16x8/rollup.json").read_text(encoding="utf-8"))
+          assert r["all_green"] and r["total_pass"] == r["total_runs_expected"] == 2, r
+          print("slice", r["total_pass"], "/", r["total_runs_expected"], "wall", r["wall_s"], "s")
+          PY

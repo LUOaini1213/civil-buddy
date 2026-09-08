@@ -13,7 +13,7 @@
 
 **L3 pack-ship 证据链（冻结口径，演示日不现场重跑大票对照）：**
 
-- 446t 单票对照 **29→25 柜**：`python scripts/compare_446t_agent_vs_tool.py --full-agent`（旧基线 29 已废弃，现行全 Agent 25×40HQ，`phase=done / risk=WARN / ship_ok=true`）。**注意**：该命令依赖本地业务数据 `output/cases_446t/materials.json`（客户衍生清单，按本仓 local-only 政策不进仓），净仓环境跑不了属预期；冻结数字以 [docs/competition-evidence-one-pager.md](competition-evidence-one-pager.md) 存档记录为准，演示/评审不现场重跑
+- 446t 单票：现行全 Agent **25×40HQ**（`phase=done / risk=WARN / ship_ok=true`），命令 `python scripts/compare_446t_agent_vs_tool.py --full-agent`。**注意**：该命令依赖本地业务数据 `output/cases_446t/materials.json`（客户衍生清单，按本仓 local-only 政策不进仓），净仓环境跑不了属预期；冻结数字以 [docs/competition-evidence-one-pager.md](competition-evidence-one-pager.md) 存档记录为准，演示/评审不现场重跑。早期的「29 柜」基线已废弃，README 与本页均不再引用；可在净仓复跑的公开货样评测是 `docs/eval/fanout16x8-2026-09-02/`
 - **mid50 0.594**：同一对照产物，贴 CTU 严格偏好 60% 线，风险 WARN；少柜 light 路径 mid≈0.17 仅参考、不作出运结论
 - 综合分 **8.85**：本地校准评分卡，phase0 quick（n=12，pass_rate 1.0）封顶口径，**不报 10.0**
 
