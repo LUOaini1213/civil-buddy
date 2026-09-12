@@ -136,7 +136,7 @@ def load_config() -> CivilConfig:
 
 def high_risk_unconfirmed(*, risk: str, confirmed: bool) -> bool:
     """High-risk write needs the confirm sentence. Chat is not a write."""
-    return (risk or "low") == "high" and not bool(confirmed)
+    return (risk or "low") == "high" and confirmed is not True
 
 
 def hitl_reply(who: str = "") -> str:

@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Civil Buddy overnight eval → optional one knife → report until AUTONOMY_END_TS.
 
-Does not rewrite GST 9% on a failed IRAS scrape. Does not change 部分合格.
+A fetched title is source evidence, not a verified current tax rate. Does not change 部分合格.
 Default: evaluate only (OVERNIGHT_APPLY=0). Grok scheduler applies knives.
 """
 
@@ -42,32 +42,32 @@ PAGES = (
     {
         "id": "iras-gst",
         "url": "https://www.iras.gov.sg/taxes/goods-services-tax-(gst)/basics-of-gst/current-gst-rates",
-        "needles": ("9%", "Current GST rates", "GST rate"),
-        "gst9": True,
+        "needles": ("Current GST rates", "GST rate"),
+        "gst_source": True,
     },
     {
         "id": "scdf-fire",
         "url": "https://www.scdf.gov.sg/fire-safety-services-listing/fire-code-2023",
         "needles": ("Fire Code 2023",),
-        "gst9": False,
+        "gst_source": False,
     },
     {
         "id": "imo-ctu",
         "url": "https://www.imo.org/en/ourwork/safety/pages/ctu-code.aspx",
         "needles": ("CTU Code", "2014"),
-        "gst9": False,
+        "gst_source": False,
     },
     {
         "id": "gebiz",
         "url": "https://www.gebiz.gov.sg/",
         "needles": ("GeBIZ",),
-        "gst9": False,
+        "gst_source": False,
     },
     {
         "id": "mof-proc",
         "url": "https://www.mof.gov.sg/policies/government-procurement/procurement-processes/",
         "needles": ("Procurement", "GeBIZ"),
-        "gst9": False,
+        "gst_source": False,
     },
 )
 
@@ -201,7 +201,7 @@ def live_web() -> Dict[str, Any]:
     if (os.environ.get("OVERNIGHT_LIVE_WEB") or "1").strip() not in {"1", "true", "yes"}:
         return {"skipped": True, "ok": True, "pages": []}
     pages = []
-    gst9_page: Optional[bool] = None
+    gst_source_found: Optional[bool] = None
     for spec in PAGES:
         got = fetch_page(spec["url"])
         blob = got.get("text") or ""
@@ -215,25 +215,25 @@ def live_web() -> Dict[str, Any]:
             "hits": hits,
             "error": got.get("error"),
         }
-        if spec.get("gst9"):
+        if spec.get("gst_source"):
             if not got.get("ok"):
-                rec["gst_page_has_9"] = None
-                rec["note"] = "fetch_failed; do not claim 官方没写 9%"
-                gst9_page = None if gst9_page is None else gst9_page
+                rec["gst_source_found"] = None
+                rec["note"] = "fetch_failed; current rate remains unverified"
+                gst_source_found = None if gst_source_found is None else gst_source_found
             else:
-                has9 = "9%" in blob
-                rec["gst_page_has_9"] = has9
-                rec["note"] = "page has 9%" if has9 else "js_shell_or_truncated; keep KB 9%"
-                gst9_page = has9 if has9 else False
+                has_title = any(needle in blob for needle in spec["needles"])
+                rec["gst_source_found"] = has_title
+                rec["note"] = "source title found; rate not validated" if has_title else "source title not found; do not infer tax rate"
+                gst_source_found = has_title if has_title else False
         pages.append(rec)
     kb = ROOT / "demo" / "kb" / "finance" / "finance-tax" / "web-knowledge.md"
     kb_text = kb.read_text(encoding="utf-8") if kb.is_file() else ""
     out = {
         "ok": True,
         "ts": now_s(),
-        "gst_page_has_9": gst9_page,
-        "kb_has_9": "9%" in kb_text,
-        "never_claim_official_omitted_9_on_fetch_fail": True,
+        "gst_source_found": gst_source_found,
+        "kb_has_gst_source": "Current GST rates" in kb_text and "IRAS" in kb_text,
+        "failed_fetch_does_not_validate_rate": True,
         "pages": pages,
     }
     LIVE.write_text(json.dumps(out, ensure_ascii=False, indent=2), encoding="utf-8")
@@ -282,13 +282,13 @@ def write_status(cycle: int, payload: Dict[str, Any], end: datetime) -> None:
             f"- HEAD: `{payload.get('head')}`",
             f"- gates_ok: {payload.get('gates_ok')}",
             f"- eval_live_ok: {payload.get('eval_live_ok')}",
-            f"- live_web gst_page_has_9: {payload.get('gst_page_has_9')}",
-            f"- kb_has_9: {payload.get('kb_has_9')}",
+            f"- live_web gst_source_found: {payload.get('gst_source_found')}",
+            f"- kb_has_gst_source: {payload.get('kb_has_gst_source')}",
             f"- next_knife: {(nxt or {}).get('id') or 'none'}",
             f"- rolled_back: {payload.get('rolled_back')}",
             f"- verdict_locked: 部分合格",
             "",
-            "抓 IRAS 失败时不得改口「官方没写 9%」。",
+            "抓取失败不能推断官方内容；标题命中不代表税率已核验，缺依据保留 UNSPECIFIED。",
             "",
         ]
     )
@@ -296,7 +296,7 @@ def write_status(cycle: int, payload: Dict[str, Any], end: datetime) -> None:
     with HEART.open("a", encoding="utf-8") as f:
         f.write(
             f"CYCLE n={cycle} ok={payload.get('gates_ok')} remaining_h={rem_h:.2f} "
-            f"next={(nxt or {}).get('id') or '-'} gst9={payload.get('gst_page_has_9')}\n"
+            f"next={(nxt or {}).get('id') or '-'} gst_source={payload.get('gst_source_found')}\n"
         )
 
 
@@ -321,7 +321,7 @@ def write_final(cycles: List[Dict[str, Any]], end: datetime) -> None:
     for c in cycles:
         body += (
             f"- cycle {c.get('n')}: gates={c.get('gates_ok')} eval={c.get('eval_live_ok')} "
-            f"gst_page_has_9={c.get('gst_page_has_9')} rolled_back={c.get('rolled_back')}\n"
+            f"gst_source_found={c.get('gst_source_found')} rolled_back={c.get('rolled_back')}\n"
         )
     body += "\n## 闸口径\n\n- submit_blocked 仍 true\n- 不判定可以投标 / 可以开工\n- 装箱断线 UNSPECIFIED\n"
     FINAL.write_text(body, encoding="utf-8")
@@ -371,8 +371,8 @@ def main() -> int:
             "head": start_head,
             "gates_ok": bool(gates["ok"]),
             "eval_live_ok": bool(elive.get("ok")),
-            "gst_page_has_9": web.get("gst_page_has_9"),
-            "kb_has_9": web.get("kb_has_9"),
+            "gst_source_found": web.get("gst_source_found"),
+            "kb_has_gst_source": web.get("kb_has_gst_source"),
             "rolled_back": False,
             "slow": slow,
             "fail_streak": fail_streak,

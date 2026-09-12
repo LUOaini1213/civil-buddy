@@ -1,34 +1,30 @@
 @echo off
-REM Civil Buddy trial launcher. Put next to civil-workbench.exe in the Release zip.
+setlocal
+REM The current release is the Python product, not the legacy civil-workbench.exe.
 cd /d "%~dp0"
-if not exist "demo\kb" (
-  echo Missing demo\kb. Unzip the full Release pack, do not run the exe alone.
-  pause
+if not exist "packing_assistant\civil.py" (
+  echo Missing product files. Extract the full Python workbench zip first.
   exit /b 1
 )
-REM Missing demo\.env is no longer fatal: since v0.2.0 you can set the API key
-REM in the UI (top-right "Settings" menu, "Model settings") and pick DeepSeek / z.ai / any
-REM OpenAI-compatible endpoint without restarting. The .env is just a shortcut.
-if not exist "demo\.env" (
-  if exist "demo\.env.example" copy /Y "demo\.env.example" "demo\.env" >nul
-  echo No API key found in demo\.env.
-  echo Starting anyway - set the key in the browser: Settings menu, "Model settings".
-  echo See the Chinese trial page for details.
-)
-set CIVIL_DEMO_ROOT=%~dp0demo
-
-REM Open the browser a few seconds later, once the KB index is warm.
-REM Detached so it does not block the server below.
-start "" /min cmd /c "timeout /t 6 /nobreak >nul && start "" http://127.0.0.1:8765/"
-
-echo.
-echo Civil Buddy workbench starting on http://127.0.0.1:8765/
-echo The browser opens by itself in a few seconds. Keep this window open.
-echo Close this window to stop the workbench.
-echo.
-
-REM Absolute path on purpose: bare "civil-workbench.exe" relies on cmd searching the
-REM current directory, which is disabled when NoDefaultCurrentDirectoryInExePath=1
-REM (set by Git Bash, and by some hardened corporate Windows images via policy).
-"%~dp0civil-workbench.exe"
-if errorlevel 1 pause
+set PYTHONUTF8=1
+if defined CIVIL_PYTHON goto selected
+if exist ".venv\Scripts\python.exe" goto local
+where py >nul 2>nul
+if not errorlevel 1 goto pylauncher
+where python >nul 2>nul
+if not errorlevel 1 goto systempython
+echo Python 3.10 or newer is required. Install Python, then run this launcher again.
+echo Alternatively set CIVIL_PYTHON to an existing prepared python.exe.
+exit /b 1
+:selected
+"%CIVIL_PYTHON%" "scripts\start_workbench.py" %*
+exit /b %errorlevel%
+:local
+".venv\Scripts\python.exe" "scripts\start_workbench.py" %*
+exit /b %errorlevel%
+:pylauncher
+py -3 "scripts\start_workbench.py" %*
+exit /b %errorlevel%
+:systempython
+python "scripts\start_workbench.py" %*
+exit /b %errorlevel%

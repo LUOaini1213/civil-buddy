@@ -15,7 +15,7 @@ const PAGES: &[PageCheck] = &[
     PageCheck {
         id: "iras-gst",
         url: "https://www.iras.gov.sg/taxes/goods-services-tax-(gst)/basics-of-gst/current-gst-rates",
-        needles: &["9%", "Current GST rates"],
+        needles: &["Current GST rates"],
     },
     PageCheck {
         id: "scdf-fire-code",
@@ -89,10 +89,7 @@ fn intent_rounds() -> Vec<Value> {
 }
 
 fn needle_hit(raw: &str, n: &str) -> bool {
-    if raw.contains(n) {
-        return true;
-    }
-    n == "9%" && (raw.contains("9 %") || raw.contains("9 per cent") || raw.contains("9 percent"))
+    raw.contains(n)
 }
 
 fn fetch_page(p: &PageCheck) -> Value {
@@ -115,11 +112,12 @@ fn fetch_page(p: &PageCheck) -> Value {
 }
 
 fn search_round() -> Value {
-    let out = websearch::search("IRAS current GST rates Singapore 9%");
+    let out = websearch::search("IRAS current GST rates Singapore");
     let ok = out.contains("iras.gov.sg") || out.contains("GST");
     json!({
         "ok": ok,
-        "query": "IRAS current GST rates Singapore 9%",
+        "query": "IRAS current GST rates Singapore",
+        "rate_verified": false,
         "excerpt": out.chars().take(280).collect::<String>(),
     })
 }

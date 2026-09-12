@@ -110,9 +110,82 @@
         "招标",
         "解析招标"
       ],
-      "pipeline": "理解任务 → 检索本库与大类库 → 提纲 → 独立成稿 → 自检",
+      "pipeline": "区分公告、须知、评标办法和补遗的来源与版本 → 逐项摘录时间轴、资格、评分、实质性条款及专项要求 → 输出可追溯摘录表并交接评分与响应缺项",
       "builtin": true,
-      "enabled": true
+      "enabled": true,
+      "exclusive": [
+        "bid-parse__extract"
+      ],
+      "yibiao": [
+        "parse",
+        "kb",
+        "write"
+      ],
+      "aligned": true,
+      "tool_note": "未提供可读正文时不生成项目事实；submit_blocked=true，不作投标资格结论",
+      "capability": {
+        "inputs": [
+          "辖区（未提供则UNSPECIFIED；多个对象单独归属）",
+          "招标正文与补遗版本",
+          "项目及标段名称",
+          "投标人须知和评标办法",
+          "用户已有摘录或附件来源"
+        ],
+        "steps": [
+          {
+            "action": "区分公告、须知、评标办法和补遗的来源与版本",
+            "tools": []
+          },
+          {
+            "action": "逐项摘录时间轴、资格、评分、实质性条款及专项要求",
+            "tools": []
+          },
+          {
+            "action": "输出可追溯摘录表并交接评分与响应缺项",
+            "tools": [
+              "bid-parse__extract"
+            ]
+          }
+        ],
+        "output_sections": [
+          "项目与公告",
+          "时间轴",
+          "资格与业绩",
+          "实质性响应",
+          "评分点",
+          "清单限价",
+          "专项触发",
+          "保证金",
+          "书面澄清与交接"
+        ],
+        "output_tables": [
+          {
+            "name": "招标摘录",
+            "columns": [
+              "事项",
+              "要求原文",
+              "来源页段",
+              "是否检出",
+              "澄清建议"
+            ]
+          }
+        ],
+        "acceptance": [
+          "每个分值、金额、期限均能回溯招标原句",
+          "未检出的字段写招标未写，评分与缺口分别交接"
+        ],
+        "limitations": [
+          "未提供可读正文时不生成项目事实；submit_blocked=true，不作投标资格结论"
+        ],
+        "implementation": "tender_extraction",
+        "reference_paths": [
+          "demo/kb/bid/bid-parse/outline.md"
+        ],
+        "runtime_tools": [
+          "tender.parse"
+        ],
+        "runtime_note": "工作台主链使用共享入口 tender.parse；本岗 bid-parse__extract 是同一解析链的专属入口。"
+      }
     },
     {
       "id": "bid-compliance",
@@ -126,9 +199,79 @@
         "废标",
         "响应检查"
       ],
-      "pipeline": "理解任务 → 检索本库与大类库 → 提纲 → 独立成稿 → 自检",
+      "pipeline": "按招标来源建立要求与响应逐条对照 → 分别检查形式、资格、保证金、实质性和技术目录缺项 → 输出响应三态与补证责任栏",
       "builtin": true,
-      "enabled": true
+      "enabled": true,
+      "exclusive": [
+        "bid-compliance__gaps"
+      ],
+      "yibiao": [
+        "qa",
+        "kb",
+        "write"
+      ],
+      "aligned": true,
+      "tool_note": "仅提供响应缺口检查，不宣布废标成立或可以投标",
+      "capability": {
+        "inputs": [
+          "辖区（未提供则UNSPECIFIED；多个对象单独归属）",
+          "招标要求或同任务解析交接",
+          "投标响应草稿",
+          "企业提供的资格及签章证据",
+          "待检查标段和文件版本"
+        ],
+        "steps": [
+          {
+            "action": "按招标来源建立要求与响应逐条对照",
+            "tools": []
+          },
+          {
+            "action": "分别检查形式、资格、保证金、实质性和技术目录缺项",
+            "tools": []
+          },
+          {
+            "action": "输出响应三态与补证责任栏",
+            "tools": [
+              "bid-compliance__gaps"
+            ]
+          }
+        ],
+        "output_sections": [
+          "来源与范围",
+          "形式签章",
+          "资格证据",
+          "保证金",
+          "实质性与价格响应",
+          "技术目录缺口",
+          "澄清与补证"
+        ],
+        "output_tables": [
+          {
+            "name": "响应对照",
+            "columns": [
+              "招标要求",
+              "响应原文或证据",
+              "已响应/未响应/招标未提供正文",
+              "缺口",
+              "责任人"
+            ]
+          }
+        ],
+        "acceptance": [
+          "已响应必须对应用户证据，资料缺失不得标通过",
+          "输出中保留 submit_blocked=true 和未解决P0项"
+        ],
+        "limitations": [
+          "仅提供响应缺口检查，不宣布废标成立或可以投标"
+        ],
+        "implementation": "dedicated_document_draft",
+        "reference_paths": [
+          "demo/kb/bid/bid-compliance/outline.md"
+        ],
+        "runtime_tools": [
+          "bid-compliance__gaps"
+        ]
+      }
     },
     {
       "id": "bid-tech",
@@ -142,9 +285,81 @@
         "技术标",
         "标书"
       ],
-      "pipeline": "理解任务 → 检索本库与大类库 → 提纲 → 独立成稿 → 自检",
+      "pipeline": "把评分点映射到章节并核对项目范围 → 按原文扩写技术措施与专项接口 → 检查承诺一致性并列出待补材料",
       "builtin": true,
-      "enabled": true
+      "enabled": true,
+      "exclusive": [
+        "bid-tech__expand"
+      ],
+      "yibiao": [
+        "outline",
+        "kb",
+        "write"
+      ],
+      "aligned": true,
+      "tool_note": "不承诺分数或中标结果，不把技术标草稿视为已论证专项",
+      "capability": {
+        "inputs": [
+          "辖区（未提供则UNSPECIFIED；多个对象单独归属）",
+          "评分点原文或同任务解析交接",
+          "招标范围及点名专项",
+          "用户工期质量承诺",
+          "已有技术目录和企业证据"
+        ],
+        "steps": [
+          {
+            "action": "把评分点映射到章节并核对项目范围",
+            "tools": []
+          },
+          {
+            "action": "按原文扩写技术措施与专项接口",
+            "tools": []
+          },
+          {
+            "action": "检查承诺一致性并列出待补材料",
+            "tools": [
+              "bid-tech__expand"
+            ]
+          }
+        ],
+        "output_sections": [
+          "评分目录映射",
+          "依据概况",
+          "部署工艺",
+          "工期资源",
+          "质量",
+          "安全环保",
+          "点名专项",
+          "组织机构",
+          "缺项与自检"
+        ],
+        "output_tables": [
+          {
+            "name": "评分目录对应",
+            "columns": [
+              "评分点原文",
+              "拟写章节",
+              "已有证据",
+              "缺项",
+              "专项接口"
+            ]
+          }
+        ],
+        "acceptance": [
+          "每个评分点都有章节或明确缺口，未给评分点不伪造权重",
+          "工期人员承诺与所给响应一致，专项正文交施工方案岗"
+        ],
+        "limitations": [
+          "不承诺分数或中标结果，不把技术标草稿视为已论证专项"
+        ],
+        "implementation": "dedicated_document_draft",
+        "reference_paths": [
+          "demo/kb/bid/bid-tech/outline.md"
+        ],
+        "runtime_tools": [
+          "bid-tech__expand"
+        ]
+      }
     },
     {
       "id": "architecture",
@@ -158,9 +373,85 @@
         "建筑专业",
         "方案设计"
       ],
-      "pipeline": "理解任务 → 检索本库与大类库 → 提纲 → 独立成稿 → 自检",
+      "pipeline": "按单体登记面积、功能和图号，缺项独立编号 → 梳理总平面、功能、防火、无障碍、竖向和节能接口 → 成文十章并核对图则与各专业提资",
       "builtin": true,
-      "enabled": true
+      "enabled": true,
+      "exclusive": [
+        "architecture__memo"
+      ],
+      "yibiao": [
+        "outline",
+        "kb",
+        "write"
+      ],
+      "aligned": true,
+      "tool_note": "未连接建筑设计或疏散计算；不编面积、宽度、图号或审图结论",
+      "capability": {
+        "inputs": [
+          "辖区（未提供则UNSPECIFIED；多个对象单独归属）",
+          "单体名称与设计任务书",
+          "面积、功能、层数和高度的用户值",
+          "图号及版本清单",
+          "消防分区与疏散输入",
+          "无障碍、节能和专业提资要求"
+        ],
+        "steps": [
+          {
+            "action": "按单体登记面积、功能和图号，缺项独立编号",
+            "tools": []
+          },
+          {
+            "action": "梳理总平面、功能、防火、无障碍、竖向和节能接口",
+            "tools": []
+          },
+          {
+            "action": "成文十章并核对图则与各专业提资",
+            "tools": [
+              "architecture__memo"
+            ]
+          }
+        ],
+        "output_sections": [
+          "工程概况与范围",
+          "草稿声明",
+          "总平面",
+          "平面功能",
+          "防火",
+          "无障碍",
+          "竖向",
+          "节能与绿色",
+          "图则口径",
+          "专业界面"
+        ],
+        "output_tables": [
+          {
+            "name": "单体与功能",
+            "columns": [
+              "单体",
+              "面积",
+              "功能",
+              "层数",
+              "高度",
+              "来源",
+              "待核项"
+            ]
+          }
+        ],
+        "acceptance": [
+          "十章完整，未给面积出现[A001]待填而非估算",
+          "每个单体与图号各自对应，消防与结构机电提资不能遗漏"
+        ],
+        "limitations": [
+          "未连接建筑设计或疏散计算；不编面积、宽度、图号或审图结论"
+        ],
+        "implementation": "dedicated_document_draft",
+        "reference_paths": [
+          "demo/kb/design/architecture/outline.md"
+        ],
+        "runtime_tools": [
+          "architecture__memo"
+        ]
+      }
     },
     {
       "id": "structure",
@@ -174,9 +465,86 @@
         "结构专业",
         "计算书"
       ],
-      "pipeline": "理解任务 → 检索本库与大类库 → 提纲 → 独立成稿 → 自检",
+      "pipeline": "按单体构件分开登记恒活风雪地震及组合输入 → 编制材料、基础、抗震和构件计算复核提纲 → 形成提资清单与未执行计算的缺项表",
       "builtin": true,
-      "enabled": true
+      "enabled": true,
+      "exclusive": [
+        "structure__calc_outline"
+      ],
+      "yibiao": [
+        "outline",
+        "qa",
+        "kb",
+        "write"
+      ],
+      "aligned": true,
+      "tool_note": "仅计算书提纲，未连接结构求解器，不出经验算满足结论",
+      "capability": {
+        "inputs": [
+          "辖区（未提供则UNSPECIFIED；多个对象单独归属）",
+          "单体与结构体系",
+          "构件编号和荷载表",
+          "材料等级及来源",
+          "建筑图和勘察报告",
+          "计算书或待复核项目"
+        ],
+        "steps": [
+          {
+            "action": "按单体构件分开登记恒活风雪地震及组合输入",
+            "tools": []
+          },
+          {
+            "action": "编制材料、基础、抗震和构件计算复核提纲",
+            "tools": []
+          },
+          {
+            "action": "形成提资清单与未执行计算的缺项表",
+            "tools": [
+              "structure__calc_outline"
+            ]
+          }
+        ],
+        "output_sections": [
+          "工程概况",
+          "草稿声明",
+          "设计资料",
+          "荷载组合",
+          "材料",
+          "地基基础",
+          "计算复核",
+          "抗震概念",
+          "构件清单",
+          "专业接口"
+        ],
+        "output_tables": [
+          {
+            "name": "构件复核",
+            "columns": [
+              "单体",
+              "构件",
+              "荷载及组合",
+              "材料",
+              "计算资料",
+              "缺项",
+              "复核状态"
+            ]
+          }
+        ],
+        "acceptance": [
+          "荷载与材料逐构件引用，不从兄弟单体借值",
+          "未执行的承载力、配筋与截面计算结果为UNSPECIFIED"
+        ],
+        "limitations": [
+          "仅计算书提纲，未连接结构求解器，不出经验算满足结论"
+        ],
+        "implementation": "dedicated_document_draft",
+        "reference_paths": [
+          "demo/kb/design/structure/outline.md"
+        ],
+        "runtime_tools": [
+          "structure__calc_outline"
+        ]
+      }
     },
     {
       "id": "geotech",
@@ -191,9 +559,86 @@
         "勘察",
         "地基"
       ],
-      "pipeline": "理解任务 → 检索本库与大类库 → 提纲 → 独立成稿 → 自检",
+      "pipeline": "按孔号层号登记地层、水位、c与φ及出处 → 列勘探试验、地基方案条件和不良地质缺项 → 交接结构所需参数与监测复核清单",
       "builtin": true,
-      "enabled": true
+      "enabled": true,
+      "exclusive": [
+        "geotech__brief"
+      ],
+      "yibiao": [
+        "parse",
+        "outline",
+        "kb",
+        "write"
+      ],
+      "aligned": true,
+      "tool_note": "不替代勘察报告，不计算承载力、液化或边坡稳定",
+      "capability": {
+        "inputs": [
+          "辖区（未提供则UNSPECIFIED；多个对象单独归属）",
+          "勘察阶段与拟建物资料",
+          "勘察报告文件及版本",
+          "孔号、层号与试验记录",
+          "水位和岩土参数原文",
+          "基础比选及监测需求"
+        ],
+        "steps": [
+          {
+            "action": "按孔号层号登记地层、水位、c与φ及出处",
+            "tools": []
+          },
+          {
+            "action": "列勘探试验、地基方案条件和不良地质缺项",
+            "tools": []
+          },
+          {
+            "action": "交接结构所需参数与监测复核清单",
+            "tools": [
+              "geotech__brief"
+            ]
+          }
+        ],
+        "output_sections": [
+          "任务阶段",
+          "草稿声明",
+          "场地条件",
+          "勘探试验",
+          "分层参数",
+          "地下水",
+          "地基比选",
+          "不良地质",
+          "结构提资",
+          "监测验收资料"
+        ],
+        "output_tables": [
+          {
+            "name": "钻孔分层",
+            "columns": [
+              "孔号",
+              "层号",
+              "岩土名称",
+              "深度",
+              "参数原文",
+              "来源",
+              "待核项"
+            ]
+          }
+        ],
+        "acceptance": [
+          "孔层记录不互借参数，未给地下水与承载力不填数",
+          "方案仅列适用条件与待补证据，不擅定最优基础"
+        ],
+        "limitations": [
+          "不替代勘察报告，不计算承载力、液化或边坡稳定"
+        ],
+        "implementation": "dedicated_document_draft",
+        "reference_paths": [
+          "demo/kb/design/geotech/outline.md"
+        ],
+        "runtime_tools": [
+          "geotech__brief"
+        ]
+      }
     },
     {
       "id": "plumbing",
@@ -208,9 +653,85 @@
         "排水",
         "水专业"
       ],
-      "pipeline": "理解任务 → 检索本库与大类库 → 提纲 → 独立成稿 → 自检",
+      "pipeline": "逐系统登记水源、接驳与标高来源 → 梳理给水分区、排水雨水及消防水界面 → 列选泵管径计算输入和待核图纸",
       "builtin": true,
-      "enabled": true
+      "enabled": true,
+      "exclusive": [
+        "plumbing__memo"
+      ],
+      "yibiao": [
+        "outline",
+        "kb",
+        "write"
+      ],
+      "aligned": true,
+      "tool_note": "未执行水力计算，不以原则稿替代消防水或给排水设计",
+      "capability": {
+        "inputs": [
+          "辖区（未提供则UNSPECIFIED；多个对象单独归属）",
+          "系统范围与单体",
+          "水源、水压及市政接驳资料",
+          "室内出户和市政井标高",
+          "器具或用水负荷资料",
+          "消防水和机电提资"
+        ],
+        "steps": [
+          {
+            "action": "逐系统登记水源、接驳与标高来源",
+            "tools": []
+          },
+          {
+            "action": "梳理给水分区、排水雨水及消防水界面",
+            "tools": []
+          },
+          {
+            "action": "列选泵管径计算输入和待核图纸",
+            "tools": [
+              "plumbing__memo"
+            ]
+          }
+        ],
+        "output_sections": [
+          "系统范围",
+          "草稿声明",
+          "水源接驳",
+          "生活给水",
+          "污废水",
+          "雨水回用",
+          "消防水",
+          "特殊部位",
+          "节水",
+          "专业接口"
+        ],
+        "output_tables": [
+          {
+            "name": "接驳与标高",
+            "columns": [
+              "系统",
+              "接管点",
+              "市政水压",
+              "出户标高",
+              "市政井标高",
+              "来源",
+              "缺项"
+            ]
+          }
+        ],
+        "acceptance": [
+          "不同系统的水压标高不串值",
+          "无器具当量、流量和计算书时选泵管径保留UNSPECIFIED"
+        ],
+        "limitations": [
+          "未执行水力计算，不以原则稿替代消防水或给排水设计"
+        ],
+        "implementation": "dedicated_document_draft",
+        "reference_paths": [
+          "demo/kb/design/plumbing/outline.md"
+        ],
+        "runtime_tools": [
+          "plumbing__memo"
+        ]
+      }
     },
     {
       "id": "hvac",
@@ -224,9 +745,84 @@
         "暖通空调",
         "通风"
       ],
-      "pipeline": "理解任务 → 检索本库与大类库 → 提纲 → 独立成稿 → 自检",
+      "pipeline": "按系统区分温湿度参数、负荷和服务范围 → 编排冷热源、风水系统和防排烟联锁接口 → 列机房竖井、消声保温与选型缺项",
       "builtin": true,
-      "enabled": true
+      "enabled": true,
+      "exclusive": [
+        "hvac__memo"
+      ],
+      "yibiao": [
+        "outline",
+        "kb",
+        "write"
+      ],
+      "aligned": true,
+      "tool_note": "未执行冷热负荷、水力或排烟计算，不选主机与风管断面",
+      "capability": {
+        "inputs": [
+          "辖区（未提供则UNSPECIFIED；多个对象单独归属）",
+          "系统名称与服务空间",
+          "室内外计算参数",
+          "逐项逐时冷热负荷或计算书",
+          "机房竖井条件",
+          "防排烟与联锁要求"
+        ],
+        "steps": [
+          {
+            "action": "按系统区分温湿度参数、负荷和服务范围",
+            "tools": []
+          },
+          {
+            "action": "编排冷热源、风水系统和防排烟联锁接口",
+            "tools": []
+          },
+          {
+            "action": "列机房竖井、消声保温与选型缺项",
+            "tools": [
+              "hvac__memo"
+            ]
+          }
+        ],
+        "output_sections": [
+          "范围声明",
+          "空气计算参数",
+          "冷热源比选",
+          "负荷资料",
+          "风水系统",
+          "防排烟",
+          "机房竖井",
+          "消声隔振",
+          "节能",
+          "专业接口"
+        ],
+        "output_tables": [
+          {
+            "name": "负荷与选型输入",
+            "columns": [
+              "系统",
+              "服务空间",
+              "参数",
+              "负荷来源",
+              "设备条件",
+              "待算项"
+            ]
+          }
+        ],
+        "acceptance": [
+          "用户负荷原值进入对应系统，不能用单一总数伪称完成选型",
+          "未给风量与尺寸留待填，联锁责任有接收专业"
+        ],
+        "limitations": [
+          "未执行冷热负荷、水力或排烟计算，不选主机与风管断面"
+        ],
+        "implementation": "dedicated_document_draft",
+        "reference_paths": [
+          "demo/kb/design/hvac/outline.md"
+        ],
+        "runtime_tools": [
+          "hvac__memo"
+        ]
+      }
     },
     {
       "id": "electrical",
@@ -240,9 +836,85 @@
         "电气专业",
         "强电"
       ],
-      "pipeline": "理解任务 → 检索本库与大类库 → 提纲 → 独立成稿 → 自检",
+      "pipeline": "逐回路登记电源和用户负荷参数 → 形成变配电、照明、防雷接地与线路原则 → 核对消防弱电接口和选型计算缺项",
       "builtin": true,
-      "enabled": true
+      "enabled": true,
+      "exclusive": [
+        "electrical__memo"
+      ],
+      "yibiao": [
+        "outline",
+        "kb",
+        "write"
+      ],
+      "aligned": true,
+      "tool_note": "未执行负荷、短路或电缆计算，不凭经验选容量",
+      "capability": {
+        "inputs": [
+          "辖区（未提供则UNSPECIFIED；多个对象单独归属）",
+          "市政电源与回路条件",
+          "设备容量及负荷表",
+          "需要系数或用户计算书",
+          "变配电和备用电源资料",
+          "照明、防雷与消防接口"
+        ],
+        "steps": [
+          {
+            "action": "逐回路登记电源和用户负荷参数",
+            "tools": []
+          },
+          {
+            "action": "形成变配电、照明、防雷接地与线路原则",
+            "tools": []
+          },
+          {
+            "action": "核对消防弱电接口和选型计算缺项",
+            "tools": [
+              "electrical__memo"
+            ]
+          }
+        ],
+        "output_sections": [
+          "范围声明",
+          "电源条件",
+          "负荷提纲",
+          "变配电",
+          "照明",
+          "防雷接地",
+          "线路敷设",
+          "消防电气",
+          "节能",
+          "专业接口"
+        ],
+        "output_tables": [
+          {
+            "name": "负荷与回路",
+            "columns": [
+              "回路",
+              "设备",
+              "容量",
+              "系数来源",
+              "供电要求",
+              "计算书",
+              "缺项"
+            ]
+          }
+        ],
+        "acceptance": [
+          "回路容量与系数各自对应，用户未给不填接地电阻",
+          "变压器、电缆和备用电源选型均有待算状态"
+        ],
+        "limitations": [
+          "未执行负荷、短路或电缆计算，不凭经验选容量"
+        ],
+        "implementation": "dedicated_document_draft",
+        "reference_paths": [
+          "demo/kb/design/electrical/outline.md"
+        ],
+        "runtime_tools": [
+          "electrical__memo"
+        ]
+      }
     },
     {
       "id": "fire-protect",
@@ -256,9 +928,85 @@
         "消防设计",
         "消电"
       ],
-      "pipeline": "理解任务 → 检索本库与大类库 → 提纲 → 独立成稿 → 自检",
+      "pipeline": "按建筑登记防火分区、疏散和救援输入 → 分专业列消防水、防排烟、电气和报警联动接口 → 形成报审资料缺项与复核清单",
       "builtin": true,
-      "enabled": true
+      "enabled": true,
+      "exclusive": [
+        "fire-protect__brief"
+      ],
+      "yibiao": [
+        "outline",
+        "qa",
+        "kb",
+        "write"
+      ],
+      "aligned": true,
+      "tool_note": "不替代消防审图与验收，未计算疏散、水量或排烟量",
+      "capability": {
+        "inputs": [
+          "辖区（未提供则UNSPECIFIED；多个对象单独归属）",
+          "建筑分类、高度和使用功能",
+          "消防救援与总图资料",
+          "防火分区和疏散用户参数",
+          "消防水、防排烟及报警资料",
+          "审查接口和依据原文"
+        ],
+        "steps": [
+          {
+            "action": "按建筑登记防火分区、疏散和救援输入",
+            "tools": []
+          },
+          {
+            "action": "分专业列消防水、防排烟、电气和报警联动接口",
+            "tools": []
+          },
+          {
+            "action": "形成报审资料缺项与复核清单",
+            "tools": [
+              "fire-protect__brief"
+            ]
+          }
+        ],
+        "output_sections": [
+          "概况声明",
+          "救援总图",
+          "建筑防火",
+          "疏散避难",
+          "消防给水灭火",
+          "防烟排烟",
+          "报警联动",
+          "消防电气",
+          "装修使用",
+          "报审资料"
+        ],
+        "output_tables": [
+          {
+            "name": "消防接口",
+            "columns": [
+              "对象",
+              "系统或分区",
+              "用户参数",
+              "来源",
+              "负责专业",
+              "待复核项"
+            ]
+          }
+        ],
+        "acceptance": [
+          "各专业消防参数不互相代填，未给数值不套标准门槛",
+          "审查与验收状态明确待核，不写通过或放行"
+        ],
+        "limitations": [
+          "不替代消防审图与验收，未计算疏散、水量或排烟量"
+        ],
+        "implementation": "dedicated_document_draft",
+        "reference_paths": [
+          "demo/kb/design/fire-protect/outline.md"
+        ],
+        "runtime_tools": [
+          "fire-protect__brief"
+        ]
+      }
     },
     {
       "id": "steel",
@@ -271,9 +1019,84 @@
       "aliases": [
         "钢构"
       ],
-      "pipeline": "理解任务 → 检索本库与大类库 → 提纲 → 独立成稿 → 自检",
+      "pipeline": "逐构件登记体系跨度、材料与荷载 → 组织连接、稳定支撑、防腐防火及检测提纲 → 列主体预埋与加工安装提资缺项",
       "builtin": true,
-      "enabled": true
+      "enabled": true,
+      "exclusive": [
+        "steel__memo"
+      ],
+      "yibiao": [
+        "outline",
+        "kb",
+        "write"
+      ],
+      "aligned": true,
+      "tool_note": "不替代钢结构计算书或焊缝检测，未连接截面求解器",
+      "capability": {
+        "inputs": [
+          "辖区（未提供则UNSPECIFIED；多个对象单独归属）",
+          "体系、构件编号和跨度",
+          "荷载及吊车条件",
+          "材料规格来源",
+          "连接详图或节点要求",
+          "防腐防火与加工安装资料"
+        ],
+        "steps": [
+          {
+            "action": "逐构件登记体系跨度、材料与荷载",
+            "tools": []
+          },
+          {
+            "action": "组织连接、稳定支撑、防腐防火及检测提纲",
+            "tools": []
+          },
+          {
+            "action": "列主体预埋与加工安装提资缺项",
+            "tools": [
+              "steel__memo"
+            ]
+          }
+        ],
+        "output_sections": [
+          "体系声明",
+          "荷载",
+          "材料截面",
+          "焊接螺栓连接",
+          "稳定支撑",
+          "防腐",
+          "防火",
+          "加工运输安装",
+          "检测资料",
+          "专业接口"
+        ],
+        "output_tables": [
+          {
+            "name": "构件与连接",
+            "columns": [
+              "构件",
+              "跨度",
+              "荷载",
+              "材料",
+              "连接资料",
+              "复核项"
+            ]
+          }
+        ],
+        "acceptance": [
+          "构件规格与节点来源逐行对应，不凭惯例填螺栓数量",
+          "承载、稳定和焊缝计算未执行必须保持未知"
+        ],
+        "limitations": [
+          "不替代钢结构计算书或焊缝检测，未连接截面求解器"
+        ],
+        "implementation": "dedicated_document_draft",
+        "reference_paths": [
+          "demo/kb/design/steel/outline.md"
+        ],
+        "runtime_tools": [
+          "steel__memo"
+        ]
+      }
     },
     {
       "id": "landscape",
@@ -287,9 +1110,84 @@
         "景观",
         "园林"
       ],
-      "pipeline": "理解任务 → 检索本库与大类库 → 提纲 → 独立成稿 → 自检",
+      "pipeline": "按分区登记软硬景、苗木和标高资料 → 组织种植、竖向灌排和铺装原则 → 核对顶板荷载及消防交通衔接",
       "builtin": true,
-      "enabled": true
+      "enabled": true,
+      "exclusive": [
+        "landscape__memo"
+      ],
+      "yibiao": [
+        "outline",
+        "kb",
+        "write"
+      ],
+      "aligned": true,
+      "tool_note": "不编苗木单价、坡度或荷载，不替代种植施工图签章",
+      "capability": {
+        "inputs": [
+          "辖区（未提供则UNSPECIFIED；多个对象单独归属）",
+          "景观红线和功能分区",
+          "场地标高及排水条件",
+          "用户苗木种类规格数量",
+          "铺装和室外设施要求",
+          "顶板覆土及消防接口"
+        ],
+        "steps": [
+          {
+            "action": "按分区登记软硬景、苗木和标高资料",
+            "tools": []
+          },
+          {
+            "action": "组织种植、竖向灌排和铺装原则",
+            "tools": []
+          },
+          {
+            "action": "核对顶板荷载及消防交通衔接",
+            "tools": [
+              "landscape__memo"
+            ]
+          }
+        ],
+        "output_sections": [
+          "范围声明",
+          "功能分区",
+          "竖向排水",
+          "硬景铺装",
+          "软景苗木",
+          "土壤灌排",
+          "水景照明",
+          "消防交通",
+          "专业接口",
+          "缺项"
+        ],
+        "output_tables": [
+          {
+            "name": "苗木与分区",
+            "columns": [
+              "分区",
+              "苗木种类",
+              "规格",
+              "数量",
+              "来源",
+              "待核项"
+            ]
+          }
+        ],
+        "acceptance": [
+          "不同分区苗木规格数量不串行，未给不推荐为定值",
+          "标高坡度与顶板覆土荷载标清来源和复核接口"
+        ],
+        "limitations": [
+          "不编苗木单价、坡度或荷载，不替代种植施工图签章"
+        ],
+        "implementation": "dedicated_document_draft",
+        "reference_paths": [
+          "demo/kb/design/landscape/outline.md"
+        ],
+        "runtime_tools": [
+          "landscape__memo"
+        ]
+      }
     },
     {
       "id": "interior",
@@ -304,9 +1202,85 @@
         "室内",
         "装修"
       ],
-      "pipeline": "理解任务 → 检索本库与大类库 → 提纲 → 独立成稿 → 自检",
+      "pipeline": "按房间分开登记地墙顶和防水做法 → 组织建筑结构机电及幕墙收口接口 → 列材料节点、观感检查与资料缺项",
       "builtin": true,
-      "enabled": true
+      "enabled": true,
+      "exclusive": [
+        "interior__schedule"
+      ],
+      "yibiao": [
+        "outline",
+        "kb",
+        "write"
+      ],
+      "aligned": true,
+      "tool_note": "不编材料厚度和防火性能，不替代精装深化或消防审查",
+      "capability": {
+        "inputs": [
+          "辖区（未提供则UNSPECIFIED；多个对象单独归属）",
+          "房间编号和使用功能",
+          "地墙顶材料及分层做法",
+          "防水、隔声和门窗要求",
+          "综合天花与机电条件",
+          "节点图号和收口责任"
+        ],
+        "steps": [
+          {
+            "action": "按房间分开登记地墙顶和防水做法",
+            "tools": []
+          },
+          {
+            "action": "组织建筑结构机电及幕墙收口接口",
+            "tools": []
+          },
+          {
+            "action": "列材料节点、观感检查与资料缺项",
+            "tools": [
+              "interior__schedule"
+            ]
+          }
+        ],
+        "output_sections": [
+          "范围声明",
+          "功能材料",
+          "地墙顶分层",
+          "防水隔声",
+          "门窗成品",
+          "消防疏散",
+          "观感资料",
+          "建筑界面",
+          "结构界面",
+          "综合天花与图纸"
+        ],
+        "output_tables": [
+          {
+            "name": "房间做法",
+            "columns": [
+              "房间",
+              "地面",
+              "墙面",
+              "天花",
+              "防水",
+              "节点来源",
+              "收口责任"
+            ]
+          }
+        ],
+        "acceptance": [
+          "每个房间材料、厚度和节点保持独立",
+          "未核验疏散或结构改动不得写满足要求"
+        ],
+        "limitations": [
+          "不编材料厚度和防火性能，不替代精装深化或消防审查"
+        ],
+        "implementation": "dedicated_document_draft",
+        "reference_paths": [
+          "demo/kb/design/interior/outline.md"
+        ],
+        "runtime_tools": [
+          "interior__schedule"
+        ]
+      }
     },
     {
       "id": "facade",
@@ -321,9 +1295,85 @@
         "幕墙工程",
         "玻璃幕墙"
       ],
-      "pipeline": "理解任务 → 检索本库与大类库 → 提纲 → 独立成稿 → 自检",
+      "pipeline": "按幕墙系统登记性能、分格和主体接口 → 编制抗风、防水、防火防雷和维护提纲 → 列预埋、检测与结构复核缺项",
       "builtin": true,
-      "enabled": true
+      "enabled": true,
+      "exclusive": [
+        "facade__brief"
+      ],
+      "yibiao": [
+        "outline",
+        "qa",
+        "kb",
+        "write"
+      ],
+      "aligned": true,
+      "tool_note": "未执行抗风或锚固计算，不编风压与挠度限值",
+      "capability": {
+        "inputs": [
+          "辖区（未提供则UNSPECIFIED；多个对象单独归属）",
+          "幕墙系统编号和体系",
+          "设计风压、层高及分格",
+          "主体预埋与锚栓资料",
+          "气密水密变位性能要求",
+          "加工图及检测报告"
+        ],
+        "steps": [
+          {
+            "action": "按幕墙系统登记性能、分格和主体接口",
+            "tools": []
+          },
+          {
+            "action": "编制抗风、防水、防火防雷和维护提纲",
+            "tools": []
+          },
+          {
+            "action": "列预埋、检测与结构复核缺项",
+            "tools": [
+              "facade__brief"
+            ]
+          }
+        ],
+        "output_sections": [
+          "体系声明",
+          "主体预埋接口",
+          "抗风气密水密变位",
+          "防火防雷冷凝",
+          "开启维护",
+          "加工材料",
+          "性能检测",
+          "验收资料",
+          "专项提资"
+        ],
+        "output_tables": [
+          {
+            "name": "幕墙性能",
+            "columns": [
+              "系统",
+              "风压",
+              "气密",
+              "水密",
+              "层间变位",
+              "来源",
+              "待算项"
+            ]
+          }
+        ],
+        "acceptance": [
+          "性能值只抄指定系统原文，未给风压不填规格",
+          "预埋承载和锚栓拉拔状态为待复核，不能标已验收"
+        ],
+        "limitations": [
+          "未执行抗风或锚固计算，不编风压与挠度限值"
+        ],
+        "implementation": "dedicated_document_draft",
+        "reference_paths": [
+          "demo/kb/design/facade/outline.md"
+        ],
+        "runtime_tools": [
+          "facade__brief"
+        ]
+      }
     },
     {
       "id": "intel-weak",
@@ -338,9 +1388,83 @@
         "智能化",
         "综合布线"
       ],
-      "pipeline": "理解任务 → 检索本库与大类库 → 提纲 → 独立成稿 → 自检",
+      "pipeline": "按系统与区域登记终端、网络和供电需求 → 编排安防、通信、控制及桥架接口 → 列点表、联调和验收资料缺口",
       "builtin": true,
-      "enabled": true
+      "enabled": true,
+      "exclusive": [
+        "intel-weak__memo"
+      ],
+      "yibiao": [
+        "outline",
+        "kb",
+        "write"
+      ],
+      "aligned": true,
+      "tool_note": "不编品牌、IP地址、账号或链路性能，不宣称系统已接通",
+      "capability": {
+        "inputs": [
+          "辖区（未提供则UNSPECIFIED；多个对象单独归属）",
+          "系统名称与覆盖区域",
+          "用户功能和终端点位",
+          "机房网络及供电条件",
+          "桥架管线和接地接口",
+          "品牌协议或点表来源"
+        ],
+        "steps": [
+          {
+            "action": "按系统与区域登记终端、网络和供电需求",
+            "tools": []
+          },
+          {
+            "action": "编排安防、通信、控制及桥架接口",
+            "tools": []
+          },
+          {
+            "action": "列点表、联调和验收资料缺口",
+            "tools": [
+              "intel-weak__memo"
+            ]
+          }
+        ],
+        "output_sections": [
+          "范围声明",
+          "系统清单",
+          "点位覆盖",
+          "网络机房",
+          "桥架路径",
+          "供电接地",
+          "联动接口",
+          "图纸与联调资料"
+        ],
+        "output_tables": [
+          {
+            "name": "系统点表",
+            "columns": [
+              "系统",
+              "区域",
+              "终端或功能",
+              "数量来源",
+              "网络供电",
+              "接口",
+              "缺项"
+            ]
+          }
+        ],
+        "acceptance": [
+          "终端数量只取用户点表，多区域不共用数量",
+          "未做联调的协议和报警联动保留待测状态"
+        ],
+        "limitations": [
+          "不编品牌、IP地址、账号或链路性能，不宣称系统已接通"
+        ],
+        "implementation": "dedicated_document_draft",
+        "reference_paths": [
+          "demo/kb/design/intel-weak/outline.md"
+        ],
+        "runtime_tools": [
+          "intel-weak__memo"
+        ]
+      }
     },
     {
       "id": "civil-defense",
@@ -354,9 +1478,85 @@
         "人防工程",
         "人防设计"
       ],
-      "pipeline": "理解任务 → 检索本库与大类库 → 提纲 → 独立成稿 → 自检",
+      "pipeline": "区分防护单元及辖区适用要求 → 编排口部、防化通风、密闭给排水和平战转换接口 → 输出人防资料与专项审查缺项",
       "builtin": true,
-      "enabled": true
+      "enabled": true,
+      "exclusive": [
+        "civil-defense__brief"
+      ],
+      "yibiao": [
+        "outline",
+        "qa",
+        "kb",
+        "write"
+      ],
+      "aligned": true,
+      "tool_note": "不裁定防护等级或设备能力，不替代人防审图",
+      "capability": {
+        "inputs": [
+          "辖区（未提供则UNSPECIFIED；多个对象单独归属）",
+          "防护单元与工程用途",
+          "用户批准的人防或掩蔽要求",
+          "口部与平战转换资料",
+          "防化通风及给排水条件",
+          "结构机电接口文件"
+        ],
+        "steps": [
+          {
+            "action": "区分防护单元及辖区适用要求",
+            "tools": []
+          },
+          {
+            "action": "编排口部、防化通风、密闭给排水和平战转换接口",
+            "tools": []
+          },
+          {
+            "action": "输出人防资料与专项审查缺项",
+            "tools": [
+              "civil-defense__brief"
+            ]
+          }
+        ],
+        "output_sections": [
+          "概况声明",
+          "防护单元",
+          "口部",
+          "防化通风",
+          "给排水",
+          "供电通信",
+          "平战转换",
+          "密闭接口",
+          "审查资料"
+        ],
+        "output_tables": [
+          {
+            "name": "防护单元接口",
+            "columns": [
+              "单元",
+              "用途",
+              "用户等级要求",
+              "口部",
+              "通风给排水",
+              "来源",
+              "待核项"
+            ]
+          }
+        ],
+        "acceptance": [
+          "防护等级只抄批准资料，CN与SG等依据分别列示",
+          "密闭套管和防护设备未核验不得标可用"
+        ],
+        "limitations": [
+          "不裁定防护等级或设备能力，不替代人防审图"
+        ],
+        "implementation": "dedicated_document_draft",
+        "reference_paths": [
+          "demo/kb/design/civil-defense/outline.md"
+        ],
+        "runtime_tools": [
+          "civil-defense__brief"
+        ]
+      }
     },
     {
       "id": "hydraulic",
@@ -371,9 +1571,83 @@
         "堤防",
         "水闸"
       ],
-      "pipeline": "理解任务 → 检索本库与大类库 → 提纲 → 独立成稿 → 自检",
+      "pipeline": "按建筑物登记水文地质与边界条件 → 编排防洪排涝、结构防渗和机电原则 → 列水力稳定计算与运行管理提资缺项",
       "builtin": true,
-      "enabled": true
+      "enabled": true,
+      "exclusive": [
+        "hydraulic__outline"
+      ],
+      "yibiao": [
+        "outline",
+        "kb",
+        "write"
+      ],
+      "aligned": true,
+      "tool_note": "不凭缺失水文选泵或定断面，不替代水利设计文件",
+      "capability": {
+        "inputs": [
+          "辖区（未提供则UNSPECIFIED；多个对象单独归属）",
+          "水工建筑物或区段编号",
+          "水文水位和流量资料",
+          "地质及基础条件",
+          "堤防护岸水闸泵站范围",
+          "设计任务及上下游接口"
+        ],
+        "steps": [
+          {
+            "action": "按建筑物登记水文地质与边界条件",
+            "tools": []
+          },
+          {
+            "action": "编排防洪排涝、结构防渗和机电原则",
+            "tools": []
+          },
+          {
+            "action": "列水力稳定计算与运行管理提资缺项",
+            "tools": [
+              "hydraulic__outline"
+            ]
+          }
+        ],
+        "output_sections": [
+          "范围声明",
+          "水文",
+          "地质",
+          "堤防护岸",
+          "水闸泵站",
+          "防渗消能",
+          "施工导流",
+          "运行监测",
+          "专业接口"
+        ],
+        "output_tables": [
+          {
+            "name": "水工参数",
+            "columns": [
+              "建筑物",
+              "水位",
+              "流量",
+              "地质资料",
+              "来源",
+              "待计算项"
+            ]
+          }
+        ],
+        "acceptance": [
+          "水位流量逐建筑物引用，不按经验补设计频率",
+          "水力、抗滑及防渗计算结果未连接保持UNSPECIFIED"
+        ],
+        "limitations": [
+          "不凭缺失水文选泵或定断面，不替代水利设计文件"
+        ],
+        "implementation": "dedicated_document_draft",
+        "reference_paths": [
+          "demo/kb/design/hydraulic/outline.md"
+        ],
+        "runtime_tools": [
+          "hydraulic__outline"
+        ]
+      }
     },
     {
       "id": "port",
@@ -389,9 +1663,83 @@
         "航道",
         "港航"
       ],
-      "pipeline": "理解任务 → 检索本库与大类库 → 提纲 → 独立成稿 → 自检",
+      "pipeline": "按港工对象登记船型、水文与地质来源 → 编排码头航道防波堤和疏浚原则 → 列靠泊结构、施工水域及陆域提资",
       "builtin": true,
-      "enabled": true
+      "enabled": true,
+      "exclusive": [
+        "port__outline"
+      ],
+      "yibiao": [
+        "outline",
+        "kb",
+        "write"
+      ],
+      "aligned": true,
+      "tool_note": "未执行港工荷载、波浪或疏浚算量，不编靠泊能力",
+      "capability": {
+        "inputs": [
+          "辖区（未提供则UNSPECIFIED；多个对象单独归属）",
+          "码头航道或防波堤编号",
+          "船型与靠泊需求",
+          "设计水位、波浪和潮流原文",
+          "地质及地形测量资料",
+          "岸线疏浚与陆域接口"
+        ],
+        "steps": [
+          {
+            "action": "按港工对象登记船型、水文与地质来源",
+            "tools": []
+          },
+          {
+            "action": "编排码头航道防波堤和疏浚原则",
+            "tools": []
+          },
+          {
+            "action": "列靠泊结构、施工水域及陆域提资",
+            "tools": [
+              "port__outline"
+            ]
+          }
+        ],
+        "output_sections": [
+          "概况声明",
+          "自然条件",
+          "码头",
+          "航道疏浚",
+          "防波堤",
+          "地基结构",
+          "施工水域",
+          "陆域衔接",
+          "监测与复核"
+        ],
+        "output_tables": [
+          {
+            "name": "港工对象",
+            "columns": [
+              "对象",
+              "船型",
+              "水位",
+              "波浪",
+              "地质来源",
+              "待核接口"
+            ]
+          }
+        ],
+        "acceptance": [
+          "同一行对象参数完整归属，后置或重复ID不串记录",
+          "未给水位地质不确定结构尺寸或疏浚数量"
+        ],
+        "limitations": [
+          "未执行港工荷载、波浪或疏浚算量，不编靠泊能力"
+        ],
+        "implementation": "dedicated_document_draft",
+        "reference_paths": [
+          "demo/kb/design/port/outline.md"
+        ],
+        "runtime_tools": [
+          "port__outline"
+        ]
+      }
     },
     {
       "id": "municipal",
@@ -405,9 +1753,83 @@
         "道路",
         "市政"
       ],
-      "pipeline": "理解任务 → 检索本库与大类库 → 提纲 → 独立成稿 → 自检",
+      "pipeline": "按区段登记横断、标高与管线条件 → 梳理道路路面排水及交叉口组织原则 → 输出管线冲突与专业提资清单",
       "builtin": true,
-      "enabled": true
+      "enabled": true,
+      "exclusive": [
+        "municipal__memo"
+      ],
+      "yibiao": [
+        "outline",
+        "kb",
+        "write"
+      ],
+      "aligned": true,
+      "tool_note": "未计算路面厚度、管径或土方量，不编设计速度",
+      "capability": {
+        "inputs": [
+          "辖区（未提供则UNSPECIFIED；多个对象单独归属）",
+          "道路区段和桩号",
+          "道路功能与红线宽度",
+          "纵横断面及标高资料",
+          "地下管线与交叉口条件",
+          "路面材料和排水输入"
+        ],
+        "steps": [
+          {
+            "action": "按区段登记横断、标高与管线条件",
+            "tools": []
+          },
+          {
+            "action": "梳理道路路面排水及交叉口组织原则",
+            "tools": []
+          },
+          {
+            "action": "输出管线冲突与专业提资清单",
+            "tools": [
+              "municipal__memo"
+            ]
+          }
+        ],
+        "output_sections": [
+          "范围声明",
+          "道路功能",
+          "纵横断面",
+          "路基路面",
+          "管线综合",
+          "排水",
+          "交叉口慢行",
+          "附属设施",
+          "资料复核"
+        ],
+        "output_tables": [
+          {
+            "name": "道路区段",
+            "columns": [
+              "区段桩号",
+              "红线宽度",
+              "标高",
+              "路面资料",
+              "管线接口",
+              "待核项"
+            ]
+          }
+        ],
+        "acceptance": [
+          "紧凑表格空列保留，宽度标高不移动到邻字段",
+          "地下管线未确认处标冲突待核，不能假称完成探测"
+        ],
+        "limitations": [
+          "未计算路面厚度、管径或土方量，不编设计速度"
+        ],
+        "implementation": "dedicated_document_draft",
+        "reference_paths": [
+          "demo/kb/design/municipal/outline.md"
+        ],
+        "runtime_tools": [
+          "municipal__memo"
+        ]
+      }
     },
     {
       "id": "bridge",
@@ -420,9 +1842,84 @@
       "aliases": [
         "桥涵"
       ],
-      "pipeline": "理解任务 → 检索本库与大类库 → 提纲 → 独立成稿 → 自检",
+      "pipeline": "逐桥登记跨径荷载和控制条件 → 列桥型比选、上下部结构与基础提纲 → 形成支座伸缩、施工监测和计算复核清单",
       "builtin": true,
-      "enabled": true
+      "enabled": true,
+      "exclusive": [
+        "bridge__outline"
+      ],
+      "yibiao": [
+        "outline",
+        "qa",
+        "kb",
+        "write"
+      ],
+      "aligned": true,
+      "tool_note": "不定量选桥型、截面或基础，不替代桥梁计算书",
+      "capability": {
+        "inputs": [
+          "辖区（未提供则UNSPECIFIED；多个对象单独归属）",
+          "桥梁或构件编号",
+          "跨径布置与桥宽",
+          "荷载、地质和水文资料",
+          "既定桥型与施工约束",
+          "上下部结构及桥头接口"
+        ],
+        "steps": [
+          {
+            "action": "逐桥登记跨径荷载和控制条件",
+            "tools": []
+          },
+          {
+            "action": "列桥型比选、上下部结构与基础提纲",
+            "tools": []
+          },
+          {
+            "action": "形成支座伸缩、施工监测和计算复核清单",
+            "tools": [
+              "bridge__outline"
+            ]
+          }
+        ],
+        "output_sections": [
+          "工程声明",
+          "控制条件",
+          "桥型比选",
+          "上部结构",
+          "下部基础",
+          "桥面附属",
+          "施工接口",
+          "耐久监测",
+          "复核资料"
+        ],
+        "output_tables": [
+          {
+            "name": "桥梁比选",
+            "columns": [
+              "桥梁",
+              "跨径布置",
+              "用户桥型",
+              "荷载来源",
+              "基础条件",
+              "待核项"
+            ]
+          }
+        ],
+        "acceptance": [
+          "无跨径不填结构尺寸，多桥不继承兄弟辖区",
+          "承载力及支座计算明确未执行"
+        ],
+        "limitations": [
+          "不定量选桥型、截面或基础，不替代桥梁计算书"
+        ],
+        "implementation": "dedicated_document_draft",
+        "reference_paths": [
+          "demo/kb/design/bridge/outline.md"
+        ],
+        "runtime_tools": [
+          "bridge__outline"
+        ]
+      }
     },
     {
       "id": "tunnel",
@@ -436,9 +1933,84 @@
         "暗挖",
         "隧道工程"
       ],
-      "pipeline": "理解任务 → 检索本库与大类库 → 提纲 → 独立成稿 → 自检",
+      "pipeline": "逐区间登记围岩、水文和周边控制条件 → 编排开挖支护、防排水及施工组织原则 → 列监测项目、触发条件来源与复核接口",
       "builtin": true,
-      "enabled": true
+      "enabled": true,
+      "exclusive": [
+        "tunnel__outline"
+      ],
+      "yibiao": [
+        "outline",
+        "qa",
+        "kb",
+        "write"
+      ],
+      "aligned": true,
+      "tool_note": "未执行围岩、衬砌或支护计算，不生成施工放行结论",
+      "capability": {
+        "inputs": [
+          "辖区（未提供则UNSPECIFIED；多个对象单独归属）",
+          "隧道或区间编号",
+          "断面及埋深用户资料",
+          "围岩等级与勘察原文",
+          "地下水和周边建构筑物",
+          "开挖支护及监测要求"
+        ],
+        "steps": [
+          {
+            "action": "逐区间登记围岩、水文和周边控制条件",
+            "tools": []
+          },
+          {
+            "action": "编排开挖支护、防排水及施工组织原则",
+            "tools": []
+          },
+          {
+            "action": "列监测项目、触发条件来源与复核接口",
+            "tools": [
+              "tunnel__outline"
+            ]
+          }
+        ],
+        "output_sections": [
+          "概况声明",
+          "工程地质",
+          "断面与线形",
+          "开挖支护",
+          "防排水",
+          "通风消防接口",
+          "监控量测",
+          "周边保护",
+          "计算资料"
+        ],
+        "output_tables": [
+          {
+            "name": "区间支护",
+            "columns": [
+              "区间",
+              "围岩来源",
+              "埋深",
+              "用户支护方案",
+              "监测要求",
+              "待核项"
+            ]
+          }
+        ],
+        "acceptance": [
+          "围岩等级和支护参数逐区间登记，不凭洞名类推",
+          "未给监测阈值标待填，不宣布支护安全"
+        ],
+        "limitations": [
+          "未执行围岩、衬砌或支护计算，不生成施工放行结论"
+        ],
+        "implementation": "dedicated_document_draft",
+        "reference_paths": [
+          "demo/kb/design/tunnel/outline.md"
+        ],
+        "runtime_tools": [
+          "tunnel__outline"
+        ]
+      }
     },
     {
       "id": "traffic",
@@ -453,9 +2025,83 @@
         "导改",
         "仿真"
       ],
-      "pipeline": "理解任务 → 检索本库与大类库 → 提纲 → 独立成稿 → 自检",
+      "pipeline": "按节点时段登记交通需求与现状设施 → 组织交通导改、标志标线和慢行接口 → 列仿真输入、方案对比及验证条件",
       "builtin": true,
-      "enabled": true
+      "enabled": true,
+      "exclusive": [
+        "traffic__skeleton"
+      ],
+      "yibiao": [
+        "outline",
+        "kb",
+        "write"
+      ],
+      "aligned": true,
+      "tool_note": "未运行交通仿真或信号优化，不承诺通行能力改善",
+      "capability": {
+        "inputs": [
+          "辖区（未提供则UNSPECIFIED；多个对象单独归属）",
+          "道路节点和评价范围",
+          "调查时段及交通流量来源",
+          "转向、车型与行人资料",
+          "信号配时或导改约束",
+          "仿真模型与实验目的"
+        ],
+        "steps": [
+          {
+            "action": "按节点时段登记交通需求与现状设施",
+            "tools": []
+          },
+          {
+            "action": "组织交通导改、标志标线和慢行接口",
+            "tools": []
+          },
+          {
+            "action": "列仿真输入、方案对比及验证条件",
+            "tools": [
+              "traffic__skeleton"
+            ]
+          }
+        ],
+        "output_sections": [
+          "范围声明",
+          "调查来源",
+          "交通需求",
+          "节点组织",
+          "标志标线",
+          "信号与慢行",
+          "导改阶段",
+          "仿真实验",
+          "验证缺项"
+        ],
+        "output_tables": [
+          {
+            "name": "交通调查",
+            "columns": [
+              "节点",
+              "时段",
+              "方向车型",
+              "用户流量",
+              "来源",
+              "实验待核项"
+            ]
+          }
+        ],
+        "acceptance": [
+          "流量与配时逐节点时段对应，未给不估算",
+          "没有模型运行结果不填写延误、排队或改善率"
+        ],
+        "limitations": [
+          "未运行交通仿真或信号优化，不承诺通行能力改善"
+        ],
+        "implementation": "dedicated_document_draft",
+        "reference_paths": [
+          "demo/kb/design/traffic/outline.md"
+        ],
+        "runtime_tools": [
+          "traffic__skeleton"
+        ]
+      }
     },
     {
       "id": "design-coord",
@@ -470,9 +2116,82 @@
         "设计变更",
         "提资"
       ],
-      "pipeline": "理解任务 → 检索本库与大类库 → 提纲 → 独立成稿 → 自检",
+      "pipeline": "按问题登记图纸版本和专业冲突 → 拆分已决、待决与提资行动 → 输出责任期限和复核闭合清单",
       "builtin": true,
-      "enabled": true
+      "enabled": true,
+      "exclusive": [
+        "design-coord__minutes"
+      ],
+      "yibiao": [
+        "qa",
+        "kb",
+        "write"
+      ],
+      "aligned": true,
+      "tool_note": "不代签设计变更或审图意见，不假装读取缺失图纸",
+      "capability": {
+        "inputs": [
+          "辖区（未提供则UNSPECIFIED；多个对象单独归属）",
+          "会议或问题编号",
+          "图号、版本和专业范围",
+          "用户问题原文及关联对象",
+          "提资方接收方与期限",
+          "已决及待决事项证据"
+        ],
+        "steps": [
+          {
+            "action": "按问题登记图纸版本和专业冲突",
+            "tools": []
+          },
+          {
+            "action": "拆分已决、待决与提资行动",
+            "tools": []
+          },
+          {
+            "action": "输出责任期限和复核闭合清单",
+            "tools": [
+              "design-coord__minutes"
+            ]
+          }
+        ],
+        "output_sections": [
+          "范围声明",
+          "图纸版本",
+          "会审问题",
+          "专业冲突",
+          "提资接口",
+          "设计变更",
+          "决议与待定",
+          "闭合复核"
+        ],
+        "output_tables": [
+          {
+            "name": "会审行动",
+            "columns": [
+              "问题编号",
+              "对象图号",
+              "问题原文",
+              "责任专业",
+              "期限",
+              "状态证据"
+            ]
+          }
+        ],
+        "acceptance": [
+          "一个问题一行，重复ID邻接记录保持独立",
+          "讨论意见不自动升格为决议，未给复核证据不闭合"
+        ],
+        "limitations": [
+          "不代签设计变更或审图意见，不假装读取缺失图纸"
+        ],
+        "implementation": "dedicated_document_draft",
+        "reference_paths": [
+          "demo/kb/design/design-coord/outline.md"
+        ],
+        "runtime_tools": [
+          "design-coord__minutes"
+        ]
+      }
     },
     {
       "id": "bim-coord",
@@ -486,9 +2205,82 @@
         "碰撞",
         "BIM协调"
       ],
-      "pipeline": "理解任务 → 检索本库与大类库 → 提纲 → 独立成稿 → 自检",
+      "pipeline": "登记各模型专业版本与交换接口 → 把用户碰撞问题逐条编成责任行动 → 核对解决证据与待复查状态",
       "builtin": true,
-      "enabled": true
+      "enabled": true,
+      "exclusive": [
+        "bim-coord__clash"
+      ],
+      "yibiao": [
+        "qa",
+        "kb",
+        "write"
+      ],
+      "aligned": true,
+      "tool_note": "不扫描IFC、不运行碰撞检测，不将清单当成检测结果",
+      "capability": {
+        "inputs": [
+          "辖区（未提供则UNSPECIFIED；多个对象单独归属）",
+          "模型名称、专业及版本",
+          "专业提资需求",
+          "用户碰撞或协调问题记录",
+          "关联构件和空间位置",
+          "责任方、处理期限及复核资料"
+        ],
+        "steps": [
+          {
+            "action": "登记各模型专业版本与交换接口",
+            "tools": []
+          },
+          {
+            "action": "把用户碰撞问题逐条编成责任行动",
+            "tools": []
+          },
+          {
+            "action": "核对解决证据与待复查状态",
+            "tools": [
+              "bim-coord__clash"
+            ]
+          }
+        ],
+        "output_sections": [
+          "范围声明",
+          "模型资料",
+          "专业提资",
+          "碰撞问题",
+          "处理行动",
+          "复查证据",
+          "缺项"
+        ],
+        "output_tables": [
+          {
+            "name": "协调问题",
+            "columns": [
+              "问题ID",
+              "模型专业",
+              "构件位置",
+              "问题原文",
+              "责任方",
+              "期限",
+              "复核状态"
+            ]
+          }
+        ],
+        "acceptance": [
+          "多个模型和问题独立成行，问题数据真正进入清单",
+          "无碰撞报告时明确尚未检查，不标全部闭合"
+        ],
+        "limitations": [
+          "不扫描IFC、不运行碰撞检测，不将清单当成检测结果"
+        ],
+        "implementation": "dedicated_document_draft",
+        "reference_paths": [
+          "demo/kb/bim/bim-coord/outline.md"
+        ],
+        "runtime_tools": [
+          "bim-coord__clash"
+        ]
+      }
     },
     {
       "id": "bim-qto",
@@ -502,9 +2294,83 @@
         "算量",
         "QTO"
       ],
-      "pipeline": "理解任务 → 检索本库与大类库 → 提纲 → 独立成稿 → 自检",
+      "pipeline": "按模型专业登记构件过滤与计量规则 → 分开整理重复、扣减和来源对照 → 输出用户数量与待校核清单",
       "builtin": true,
-      "enabled": true
+      "enabled": true,
+      "exclusive": [
+        "bim-qto__rules"
+      ],
+      "yibiao": [
+        "parse",
+        "kb",
+        "write"
+      ],
+      "aligned": true,
+      "tool_note": "不读取未知模型算量，不编单价或计算未给构件数量",
+      "capability": {
+        "inputs": [
+          "辖区（未提供则UNSPECIFIED；多个对象单独归属）",
+          "模型名称、版本与工程分类",
+          "构件类别及过滤条件",
+          "计量单位和计量口径",
+          "用户明确数量或导出明细",
+          "重复、扣减及来源校核资料"
+        ],
+        "steps": [
+          {
+            "action": "按模型专业登记构件过滤与计量规则",
+            "tools": []
+          },
+          {
+            "action": "分开整理重复、扣减和来源对照",
+            "tools": []
+          },
+          {
+            "action": "输出用户数量与待校核清单",
+            "tools": [
+              "bim-qto__rules"
+            ]
+          }
+        ],
+        "output_sections": [
+          "范围声明",
+          "模型来源",
+          "工程分类",
+          "构件过滤",
+          "计量口径",
+          "重复扣减",
+          "用户数量",
+          "来源校核"
+        ],
+        "output_tables": [
+          {
+            "name": "算量口径",
+            "columns": [
+              "模型",
+              "构件类别",
+              "过滤条件",
+              "计量单位",
+              "用户数量",
+              "来源",
+              "扣减待核"
+            ]
+          }
+        ],
+        "acceptance": [
+          "数量只抄明确输入，未给保持UNSPECIFIED",
+          "不同模型的单位过滤和扣减规则不得串用"
+        ],
+        "limitations": [
+          "不读取未知模型算量，不编单价或计算未给构件数量"
+        ],
+        "implementation": "dedicated_document_draft",
+        "reference_paths": [
+          "demo/kb/bim/bim-qto/outline.md"
+        ],
+        "runtime_tools": [
+          "bim-qto__rules"
+        ]
+      }
     },
     {
       "id": "bim-deliver",
@@ -518,9 +2384,83 @@
         "LOD",
         "BIM交付"
       ],
-      "pipeline": "理解任务 → 检索本库与大类库 → 提纲 → 独立成稿 → 自检",
+      "pipeline": "按交付目的核对模型与LOD需求 → 整理命名拆分、版本和交付物列表 → 形成交付检查与未验收缺项",
       "builtin": true,
-      "enabled": true
+      "enabled": true,
+      "exclusive": [
+        "bim-deliver__lod"
+      ],
+      "yibiao": [
+        "outline",
+        "kb",
+        "write"
+      ],
+      "aligned": true,
+      "tool_note": "不承诺模型达到LOD等级，不把交付清单称为已验收模型",
+      "capability": {
+        "inputs": [
+          "辖区（未提供则UNSPECIFIED；多个对象单独归属）",
+          "模型清单与交付目的",
+          "用户LOD要求",
+          "命名、拆分和文件格式规则",
+          "模型版本与交付对象",
+          "碰撞复查及验收记录"
+        ],
+        "steps": [
+          {
+            "action": "按交付目的核对模型与LOD需求",
+            "tools": []
+          },
+          {
+            "action": "整理命名拆分、版本和交付物列表",
+            "tools": []
+          },
+          {
+            "action": "形成交付检查与未验收缺项",
+            "tools": [
+              "bim-deliver__lod"
+            ]
+          }
+        ],
+        "output_sections": [
+          "范围声明",
+          "交付目的LOD",
+          "模型拆分",
+          "命名规则",
+          "交付物",
+          "版本记录",
+          "交付检查",
+          "验收资料"
+        ],
+        "output_tables": [
+          {
+            "name": "交付检查",
+            "columns": [
+              "模型",
+              "目的LOD",
+              "文件命名",
+              "版本",
+              "交付对象",
+              "检查证据",
+              "状态"
+            ]
+          }
+        ],
+        "acceptance": [
+          "LOD与目的同列对应，版本缺失不填最新",
+          "未提供验收和碰撞复查证据必须保持未知"
+        ],
+        "limitations": [
+          "不承诺模型达到LOD等级，不把交付清单称为已验收模型"
+        ],
+        "implementation": "dedicated_document_draft",
+        "reference_paths": [
+          "demo/kb/bim/bim-deliver/outline.md"
+        ],
+        "runtime_tools": [
+          "bim-deliver__lod"
+        ]
+      }
     },
     {
       "id": "plan-master",
@@ -534,9 +2474,83 @@
         "总计划",
         "网络图"
       ],
-      "pipeline": "理解任务 → 检索本库与大类库 → 提纲 → 独立成稿 → 自检",
+      "pipeline": "梳理活动、里程碑与依赖原文 → 编排总控层级及逻辑关系 → 输出关键线路待算和节点复核表",
       "builtin": true,
-      "enabled": true
+      "enabled": true,
+      "exclusive": [
+        "plan-master__network"
+      ],
+      "yibiao": [
+        "outline",
+        "kb",
+        "write"
+      ],
+      "aligned": true,
+      "tool_note": "不运行CPM或排程优化，不编活动工期",
+      "capability": {
+        "inputs": [
+          "辖区（未提供则UNSPECIFIED；多个对象单独归属）",
+          "计划范围和分级",
+          "用户节点与约定日期",
+          "活动清单及前后依赖",
+          "合同工期和工作日历",
+          "资源及外部约束"
+        ],
+        "steps": [
+          {
+            "action": "梳理活动、里程碑与依赖原文",
+            "tools": []
+          },
+          {
+            "action": "编排总控层级及逻辑关系",
+            "tools": []
+          },
+          {
+            "action": "输出关键线路待算和节点复核表",
+            "tools": [
+              "plan-master__network"
+            ]
+          }
+        ],
+        "output_sections": [
+          "范围声明",
+          "总控目标",
+          "活动分解",
+          "里程碑",
+          "逻辑关系",
+          "关键线路待核",
+          "资源接口",
+          "风险与更新"
+        ],
+        "output_tables": [
+          {
+            "name": "活动逻辑",
+            "columns": [
+              "活动ID",
+              "活动名称",
+              "前置依赖",
+              "用户工期",
+              "里程碑",
+              "来源",
+              "待核项"
+            ]
+          }
+        ],
+        "acceptance": [
+          "节点日期和依赖有来源，不把假设标为批准计划",
+          "没有网络计算结果不宣布关键线路或总时差"
+        ],
+        "limitations": [
+          "不运行CPM或排程优化，不编活动工期"
+        ],
+        "implementation": "dedicated_document_draft",
+        "reference_paths": [
+          "demo/kb/planning/plan-master/outline.md"
+        ],
+        "runtime_tools": [
+          "plan-master__network"
+        ]
+      }
     },
     {
       "id": "plan-lookahead",
@@ -550,9 +2564,83 @@
         "周计划",
         "月计划"
       ],
-      "pipeline": "理解任务 → 检索本库与大类库 → 提纲 → 独立成稿 → 自检",
+      "pipeline": "按周区分区段工序和准备条件 → 列交叉作业、材料图纸与停工点 → 形成滚动计划和下周补齐行动",
       "builtin": true,
-      "enabled": true
+      "enabled": true,
+      "exclusive": [
+        "plan-lookahead__week"
+      ],
+      "yibiao": [
+        "outline",
+        "kb",
+        "write"
+      ],
+      "aligned": true,
+      "tool_note": "不自动优化工期，不以计划草稿授权开工",
+      "capability": {
+        "inputs": [
+          "辖区（未提供则UNSPECIFIED；多个对象单独归属）",
+          "计划周期和基准计划",
+          "区段工序及前置条件",
+          "已知节点与完成事实",
+          "交叉作业和停工约束",
+          "责任班组及资源需求"
+        ],
+        "steps": [
+          {
+            "action": "按周区分区段工序和准备条件",
+            "tools": []
+          },
+          {
+            "action": "列交叉作业、材料图纸与停工点",
+            "tools": []
+          },
+          {
+            "action": "形成滚动计划和下周补齐行动",
+            "tools": [
+              "plan-lookahead__week"
+            ]
+          }
+        ],
+        "output_sections": [
+          "范围声明",
+          "基准衔接",
+          "四周工序",
+          "前置条件",
+          "交叉作业",
+          "停工条件",
+          "资源接口",
+          "更新责任"
+        ],
+        "output_tables": [
+          {
+            "name": "滚动计划",
+            "columns": [
+              "周次",
+              "区段工序",
+              "前置条件",
+              "用户节点",
+              "责任方",
+              "约束",
+              "待办"
+            ]
+          }
+        ],
+        "acceptance": [
+          "未满足前置条件的活动保留阻塞项",
+          "实际完成与未来拟安排分开，不编完成百分比"
+        ],
+        "limitations": [
+          "不自动优化工期，不以计划草稿授权开工"
+        ],
+        "implementation": "dedicated_document_draft",
+        "reference_paths": [
+          "demo/kb/planning/plan-lookahead/outline.md"
+        ],
+        "runtime_tools": [
+          "plan-lookahead__week"
+        ]
+      }
     },
     {
       "id": "plan-resource",
@@ -565,9 +2653,83 @@
       "aliases": [
         "资源计划"
       ],
-      "pipeline": "理解任务 → 检索本库与大类库 → 提纲 → 独立成稿 → 自检",
+      "pipeline": "按活动时段登记人机料来源 → 对齐资源需求、可用量与冲突条件 → 输出峰值待算和错峰核对表",
       "builtin": true,
-      "enabled": true
+      "enabled": true,
+      "exclusive": [
+        "plan-resource__peak"
+      ],
+      "yibiao": [
+        "outline",
+        "kb",
+        "write"
+      ],
+      "aligned": true,
+      "tool_note": "不做资源优化求解，不估算台班和材料耗用",
+      "capability": {
+        "inputs": [
+          "辖区（未提供则UNSPECIFIED；多个对象单独归属）",
+          "活动或作业面清单",
+          "工期和时间段",
+          "已给人工机械材料需求",
+          "定额或测算来源",
+          "供应能力和错峰约束"
+        ],
+        "steps": [
+          {
+            "action": "按活动时段登记人机料来源",
+            "tools": []
+          },
+          {
+            "action": "对齐资源需求、可用量与冲突条件",
+            "tools": []
+          },
+          {
+            "action": "输出峰值待算和错峰核对表",
+            "tools": [
+              "plan-resource__peak"
+            ]
+          }
+        ],
+        "output_sections": [
+          "范围声明",
+          "活动时段",
+          "人工",
+          "机械",
+          "材料",
+          "供应约束",
+          "峰值错峰",
+          "待核来源"
+        ],
+        "output_tables": [
+          {
+            "name": "资源负荷",
+            "columns": [
+              "时段",
+              "活动",
+              "资源类别",
+              "用户需求量",
+              "可用量",
+              "来源",
+              "冲突待核"
+            ]
+          }
+        ],
+        "acceptance": [
+          "无定额不编人机料用量，需求与供应分别标注",
+          "未计算峰值不将最大值或平衡状态写成已核实"
+        ],
+        "limitations": [
+          "不做资源优化求解，不估算台班和材料耗用"
+        ],
+        "implementation": "dedicated_document_draft",
+        "reference_paths": [
+          "demo/kb/planning/plan-resource/outline.md"
+        ],
+        "runtime_tools": [
+          "plan-resource__peak"
+        ]
+      }
     },
     {
       "id": "construction",
@@ -582,9 +2744,89 @@
         "专项方案",
         "方案"
       ],
-      "pipeline": "理解任务 → 检索本库与大类库 → 提纲 → 独立成稿 → 自检",
+      "pipeline": "登记现场输入与专项范围，区分缺项和用户值 → 按十一章组织施工工艺与质量安全资源接口 → 扫描无来源数字并导出待签认讨论草稿",
       "builtin": true,
-      "enabled": true
+      "enabled": true,
+      "exclusive": [
+        "construction__scheme_draft",
+        "construction__fill_scheme_docx"
+      ],
+      "yibiao": [
+        "outline",
+        "qa",
+        "kb",
+        "write"
+      ],
+      "aligned": true,
+      "tool_note": "不构成法定专项、专家论证或开工依据；不计算支架荷载",
+      "capability": {
+        "inputs": [
+          "辖区（未提供则UNSPECIFIED；多个对象单独归属）",
+          "单位工程与具体工序",
+          "作业部位和现场条件",
+          "用户尺寸、材料与荷载来源",
+          "图纸及专项要求",
+          "质量安全应急和资源资料"
+        ],
+        "steps": [
+          {
+            "action": "登记现场输入与专项范围，区分缺项和用户值",
+            "tools": []
+          },
+          {
+            "action": "按十一章组织施工工艺与质量安全资源接口",
+            "tools": []
+          },
+          {
+            "action": "扫描无来源数字并导出待签认讨论草稿",
+            "tools": [
+              "construction__scheme_draft",
+              "construction__fill_scheme_docx"
+            ]
+          }
+        ],
+        "output_sections": [
+          "封面与文件控制",
+          "草稿与责任声明",
+          "工程概况",
+          "编制依据",
+          "施工部署与工艺",
+          "质量",
+          "安全与应急",
+          "环保与文明施工",
+          "资源计划",
+          "验收与资料",
+          "附录"
+        ],
+        "output_tables": [
+          {
+            "name": "施工输入与缺项",
+            "columns": [
+              "工序部位",
+              "用户参数",
+              "来源文件",
+              "缺项编号",
+              "责任接口",
+              "待核状态"
+            ]
+          }
+        ],
+        "acceptance": [
+          "十一章完整且来源不明的荷载尺寸均待填",
+          "高风险写盘只有本轮强类型确认生效，签认栏不代填"
+        ],
+        "limitations": [
+          "不构成法定专项、专家论证或开工依据；不计算支架荷载"
+        ],
+        "implementation": "dedicated_document_draft",
+        "reference_paths": [
+          "demo/kb/construction/construction/outline.md",
+          "demo/kb/construction/construction/scheme-11.md"
+        ],
+        "runtime_tools": [
+          "construction__scheme_draft"
+        ]
+      }
     },
     {
       "id": "method-hazard",
@@ -599,9 +2841,81 @@
         "超危",
         "论证"
       ],
-      "pipeline": "理解任务 → 检索本库与大类库 → 提纲 → 独立成稿 → 自检",
+      "pipeline": "按辖区隔离危大触发事实和规则来源 → 将用户尺寸与可核验依据列成对照 → 输出信息不足项和施工方案交接",
       "builtin": true,
-      "enabled": true
+      "enabled": true,
+      "exclusive": [
+        "method-hazard__judge_hazard"
+      ],
+      "yibiao": [
+        "qa",
+        "kb",
+        "write"
+      ],
+      "aligned": true,
+      "tool_note": "不签发PTW、不作法定危大认定或开工放行",
+      "capability": {
+        "inputs": [
+          "辖区（未提供则UNSPECIFIED；多个对象单独归属）",
+          "作业名称与触发事实",
+          "辖区和拟用规则原文",
+          "用户高度、跨度或开挖深度",
+          "施工环境与专项资料",
+          "已有人工判定依据"
+        ],
+        "steps": [
+          {
+            "action": "按辖区隔离危大触发事实和规则来源",
+            "tools": []
+          },
+          {
+            "action": "将用户尺寸与可核验依据列成对照",
+            "tools": []
+          },
+          {
+            "action": "输出信息不足项和施工方案交接",
+            "tools": [
+              "method-hazard__judge_hazard"
+            ]
+          }
+        ],
+        "output_sections": [
+          "作业登记",
+          "辖区依据",
+          "触发事实",
+          "危大待判",
+          "超规模待判",
+          "缺项补证",
+          "方案交接"
+        ],
+        "output_tables": [
+          {
+            "name": "判定对照",
+            "columns": [
+              "作业",
+              "触发原文",
+              "尺寸来源",
+              "适用依据",
+              "信息缺口",
+              "待核结论"
+            ]
+          }
+        ],
+        "acceptance": [
+          "未知辖区不默认SG或CN，DUAL分别列依据",
+          "缺尺寸或规则时结论保留信息不足，不猜门槛"
+        ],
+        "limitations": [
+          "不签发PTW、不作法定危大认定或开工放行"
+        ],
+        "implementation": "dedicated_document_draft",
+        "reference_paths": [
+          "demo/kb/construction/method-hazard/outline.md"
+        ],
+        "runtime_tools": [
+          "method-hazard__judge_hazard"
+        ]
+      }
     },
     {
       "id": "survey",
@@ -616,9 +2930,82 @@
         "复测",
         "控制点"
       ],
-      "pipeline": "理解任务 → 检索本库与大类库 → 提纲 → 独立成稿 → 自检",
+      "pipeline": "核对坐标高程基准及控制点来源 → 按放样或复测任务登记观测与仪器 → 输出记录、复核及监测资料空栏",
       "builtin": true,
-      "enabled": true
+      "enabled": true,
+      "exclusive": [
+        "survey__record"
+      ],
+      "yibiao": [
+        "parse",
+        "kb",
+        "write"
+      ],
+      "aligned": true,
+      "tool_note": "未执行测量平差或精度判定，不编坐标或合格结论",
+      "capability": {
+        "inputs": [
+          "辖区（未提供则UNSPECIFIED；多个对象单独归属）",
+          "测量任务与部位",
+          "坐标系和高程基准",
+          "用户控制点及原始观测",
+          "仪器检定资料",
+          "图号、精度要求和复测记录"
+        ],
+        "steps": [
+          {
+            "action": "核对坐标高程基准及控制点来源",
+            "tools": []
+          },
+          {
+            "action": "按放样或复测任务登记观测与仪器",
+            "tools": []
+          },
+          {
+            "action": "输出记录、复核及监测资料空栏",
+            "tools": [
+              "survey__record"
+            ]
+          }
+        ],
+        "output_sections": [
+          "范围声明",
+          "基准资料",
+          "控制网",
+          "放样",
+          "复测",
+          "仪器检定",
+          "监测",
+          "资料交接"
+        ],
+        "output_tables": [
+          {
+            "name": "测量记录",
+            "columns": [
+              "点号",
+              "坐标高程原文",
+              "基准",
+              "观测来源",
+              "复测人",
+              "待核项"
+            ]
+          }
+        ],
+        "acceptance": [
+          "用户未给点号坐标时不生成模拟点",
+          "基准与单位不同不得混表，复测签字留空"
+        ],
+        "limitations": [
+          "未执行测量平差或精度判定，不编坐标或合格结论"
+        ],
+        "implementation": "dedicated_document_draft",
+        "reference_paths": [
+          "demo/kb/construction/survey/outline.md"
+        ],
+        "runtime_tools": [
+          "survey__record"
+        ]
+      }
     },
     {
       "id": "dispatch",
@@ -632,9 +3019,82 @@
         "调度",
         "生产调度"
       ],
-      "pipeline": "理解任务 → 检索本库与大类库 → 提纲 → 独立成稿 → 自检",
+      "pipeline": "分开登记现场实绩和计划要求 → 汇总人机料冲突、外部制约与指令待办 → 形成调度日报和节点追踪",
       "builtin": true,
-      "enabled": true
+      "enabled": true,
+      "exclusive": [
+        "dispatch__daily"
+      ],
+      "yibiao": [
+        "outline",
+        "kb",
+        "write"
+      ],
+      "aligned": true,
+      "tool_note": "不代领导下达指令，不编产值或完成率",
+      "capability": {
+        "inputs": [
+          "辖区（未提供则UNSPECIFIED；多个对象单独归属）",
+          "调度日期和班次",
+          "作业面及工序状态",
+          "用户实绩与计划节点",
+          "人机料冲突和停工事项",
+          "指令来源、责任方及期限"
+        ],
+        "steps": [
+          {
+            "action": "分开登记现场实绩和计划要求",
+            "tools": []
+          },
+          {
+            "action": "汇总人机料冲突、外部制约与指令待办",
+            "tools": []
+          },
+          {
+            "action": "形成调度日报和节点追踪",
+            "tools": [
+              "dispatch__daily"
+            ]
+          }
+        ],
+        "output_sections": [
+          "范围声明",
+          "当日生产",
+          "节点偏差",
+          "人机料协调",
+          "指令待办",
+          "停工与外部",
+          "下步安排"
+        ],
+        "output_tables": [
+          {
+            "name": "调度行动",
+            "columns": [
+              "作业面",
+              "事实或指令来源",
+              "节点",
+              "问题",
+              "责任人",
+              "期限",
+              "待核状态"
+            ]
+          }
+        ],
+        "acceptance": [
+          "已完成状态有用户事实支撑，不能把计划当实绩",
+          "调度指令明确草稿与待批准状态"
+        ],
+        "limitations": [
+          "不代领导下达指令，不编产值或完成率"
+        ],
+        "implementation": "dedicated_document_draft",
+        "reference_paths": [
+          "demo/kb/construction/dispatch/outline.md"
+        ],
+        "runtime_tools": [
+          "dispatch__daily"
+        ]
+      }
     },
     {
       "id": "safety-brief",
@@ -648,9 +3108,81 @@
         "交底",
         "安全交底"
       ],
-      "pipeline": "理解任务 → 检索本库与大类库 → 提纲 → 独立成稿 → 自检",
+      "pipeline": "把工序步骤与危险点逐项对应 → 整理准备条件、防护和异常停工动作 → 输出书面交底草稿及签认空栏",
       "builtin": true,
-      "enabled": true
+      "enabled": true,
+      "exclusive": [
+        "safety-brief__talk"
+      ],
+      "yibiao": [
+        "outline",
+        "kb",
+        "write"
+      ],
+      "aligned": true,
+      "tool_note": "不替代专项方案或现场交底签认，不宣称可以施工",
+      "capability": {
+        "inputs": [
+          "辖区（未提供则UNSPECIFIED；多个对象单独归属）",
+          "交底工序与作业部位",
+          "班组及岗位对象",
+          "专项方案和作业条件",
+          "用户已识别危险点与措施",
+          "停工、报告和应急联系人"
+        ],
+        "steps": [
+          {
+            "action": "把工序步骤与危险点逐项对应",
+            "tools": []
+          },
+          {
+            "action": "整理准备条件、防护和异常停工动作",
+            "tools": []
+          },
+          {
+            "action": "输出书面交底草稿及签认空栏",
+            "tools": [
+              "safety-brief__talk"
+            ]
+          }
+        ],
+        "output_sections": [
+          "范围声明",
+          "交底对象",
+          "作业准备",
+          "工序危险点",
+          "防护措施",
+          "停工应急",
+          "签认与资料"
+        ],
+        "output_tables": [
+          {
+            "name": "交底措施",
+            "columns": [
+              "作业步骤",
+              "危险点",
+              "措施依据",
+              "停工条件",
+              "责任接口",
+              "待填项"
+            ]
+          }
+        ],
+        "acceptance": [
+          "危险点与步骤一一对应，未给高度间距荷载不报数",
+          "交底人接受人和日期均不伪填为已签认"
+        ],
+        "limitations": [
+          "不替代专项方案或现场交底签认，不宣称可以施工"
+        ],
+        "implementation": "dedicated_document_draft",
+        "reference_paths": [
+          "demo/kb/hse/safety-brief/outline.md"
+        ],
+        "runtime_tools": [
+          "safety-brief__talk"
+        ]
+      }
     },
     {
       "id": "quality",
@@ -665,9 +3197,81 @@
         "质量员",
         "隐蔽"
       ],
-      "pipeline": "理解任务 → 检索本库与大类库 → 提纲 → 独立成稿 → 自检",
+      "pipeline": "按检验批或隐蔽部位整理检查依据 → 登记问题、证据和整改要求 → 输出待复查清单及验收资料缺项",
       "builtin": true,
-      "enabled": true
+      "enabled": true,
+      "exclusive": [
+        "quality__lot"
+      ],
+      "yibiao": [
+        "qa",
+        "kb",
+        "write"
+      ],
+      "aligned": true,
+      "tool_note": "不作质量合格或验收结论，不代签检验批",
+      "capability": {
+        "inputs": [
+          "辖区（未提供则UNSPECIFIED；多个对象单独归属）",
+          "单位工程、部位和检验批",
+          "用户质量问题或检查记录",
+          "设计、材料和验收依据",
+          "隐蔽工序与检测资料",
+          "整改责任及复查证据"
+        ],
+        "steps": [
+          {
+            "action": "按检验批或隐蔽部位整理检查依据",
+            "tools": []
+          },
+          {
+            "action": "登记问题、证据和整改要求",
+            "tools": []
+          },
+          {
+            "action": "输出待复查清单及验收资料缺项",
+            "tools": [
+              "quality__lot"
+            ]
+          }
+        ],
+        "output_sections": [
+          "范围声明",
+          "检验批",
+          "隐蔽检查",
+          "材料检测",
+          "通病问题",
+          "整改",
+          "复查与归档"
+        ],
+        "output_tables": [
+          {
+            "name": "质量检查",
+            "columns": [
+              "检验批部位",
+              "检查项",
+              "用户记录",
+              "证据",
+              "整改责任",
+              "复查状态"
+            ]
+          }
+        ],
+        "acceptance": [
+          "没有检测和验收证据时状态为待核，不能填合格",
+          "整改完成和复查确认分栏"
+        ],
+        "limitations": [
+          "不作质量合格或验收结论，不代签检验批"
+        ],
+        "implementation": "dedicated_document_draft",
+        "reference_paths": [
+          "demo/kb/hse/quality/outline.md"
+        ],
+        "runtime_tools": [
+          "quality__lot"
+        ]
+      }
     },
     {
       "id": "env",
@@ -681,9 +3285,81 @@
         "环保",
         "文明施工"
       ],
-      "pipeline": "理解任务 → 检索本库与大类库 → 提纲 → 独立成稿 → 自检",
+      "pipeline": "按施工活动区分污染源与管控接口 → 登记扬尘、污水、弃土和夜间施工待办 → 输出文明施工检查与证据清单",
       "builtin": true,
-      "enabled": true
+      "enabled": true,
+      "exclusive": [
+        "env__list"
+      ],
+      "yibiao": [
+        "outline",
+        "kb",
+        "write"
+      ],
+      "aligned": true,
+      "tool_note": "不作排放合规认定，不编监测数据或处罚金额",
+      "capability": {
+        "inputs": [
+          "辖区（未提供则UNSPECIFIED；多个对象单独归属）",
+          "工地部位与施工活动",
+          "扬尘污水噪声弃土事实",
+          "当地许可或企业要求",
+          "处置单位和台账资料",
+          "检查日期及责任方"
+        ],
+        "steps": [
+          {
+            "action": "按施工活动区分污染源与管控接口",
+            "tools": []
+          },
+          {
+            "action": "登记扬尘、污水、弃土和夜间施工待办",
+            "tools": []
+          },
+          {
+            "action": "输出文明施工检查与证据清单",
+            "tools": [
+              "env__list"
+            ]
+          }
+        ],
+        "output_sections": [
+          "范围声明",
+          "扬尘",
+          "污水",
+          "噪声夜间",
+          "弃土废物",
+          "场容交通",
+          "检查与整改"
+        ],
+        "output_tables": [
+          {
+            "name": "环保检查",
+            "columns": [
+              "部位活动",
+              "污染源",
+              "用户现状",
+              "要求来源",
+              "责任方",
+              "证据待核"
+            ]
+          }
+        ],
+        "acceptance": [
+          "许可阈值与处置量不从常识补，已有监测值注明出处",
+          "无许可或复查记录时不能标已达标"
+        ],
+        "limitations": [
+          "不作排放合规认定，不编监测数据或处罚金额"
+        ],
+        "implementation": "dedicated_document_draft",
+        "reference_paths": [
+          "demo/kb/hse/env/outline.md"
+        ],
+        "runtime_tools": [
+          "env__list"
+        ]
+      }
     },
     {
       "id": "emergency",
@@ -697,9 +3373,82 @@
         "应急预案",
         "演练"
       ],
-      "pipeline": "理解任务 → 检索本库与大类库 → 提纲 → 独立成稿 → 自检",
+      "pipeline": "按场景整理预警、响应和撤离接口 → 列组织联络、资源保障与处置原则 → 形成演练记录和评估整改空栏",
       "builtin": true,
-      "enabled": true
+      "enabled": true,
+      "exclusive": [
+        "emergency__plan"
+      ],
+      "yibiao": [
+        "outline",
+        "kb",
+        "write"
+      ],
+      "aligned": true,
+      "tool_note": "不签发应急指令，不编救援能力或演练完成记录",
+      "capability": {
+        "inputs": [
+          "辖区（未提供则UNSPECIFIED；多个对象单独归属）",
+          "风险场景和工程部位",
+          "现有预案与响应层级",
+          "用户组织架构及联系人",
+          "应急资源和联络方式",
+          "演练目标与真实记录"
+        ],
+        "steps": [
+          {
+            "action": "按场景整理预警、响应和撤离接口",
+            "tools": []
+          },
+          {
+            "action": "列组织联络、资源保障与处置原则",
+            "tools": []
+          },
+          {
+            "action": "形成演练记录和评估整改空栏",
+            "tools": [
+              "emergency__plan"
+            ]
+          }
+        ],
+        "output_sections": [
+          "范围声明",
+          "风险场景",
+          "预警响应",
+          "组织联络",
+          "处置撤离",
+          "资源",
+          "演练评估",
+          "整改归档"
+        ],
+        "output_tables": [
+          {
+            "name": "应急资源联络",
+            "columns": [
+              "场景",
+              "职责",
+              "联系人",
+              "联系方式来源",
+              "资源",
+              "缺项"
+            ]
+          }
+        ],
+        "acceptance": [
+          "联系人电话来自用户，无资料留空不填示例号码",
+          "拟演练计划与已经演练的事实分开"
+        ],
+        "limitations": [
+          "不签发应急指令，不编救援能力或演练完成记录"
+        ],
+        "implementation": "dedicated_document_draft",
+        "reference_paths": [
+          "demo/kb/hse/emergency/outline.md"
+        ],
+        "runtime_tools": [
+          "emergency__plan"
+        ]
+      }
     },
     {
       "id": "cost",
@@ -714,9 +3463,83 @@
         "组价",
         "清单"
       ],
-      "pipeline": "理解任务 → 检索本库与大类库 → 提纲 → 独立成稿 → 自检",
+      "pipeline": "按清单项目核对特征、单位和数量来源 → 列工程量拆分与组价所需资料 → 输出单价待填和询价核对表",
       "builtin": true,
-      "enabled": true
+      "enabled": true,
+      "exclusive": [
+        "cost__takeoff"
+      ],
+      "yibiao": [
+        "parse",
+        "kb",
+        "write"
+      ],
+      "aligned": true,
+      "tool_note": "未接造价算量或计价引擎，不编综合单价",
+      "capability": {
+        "inputs": [
+          "辖区（未提供则UNSPECIFIED；多个对象单独归属）",
+          "工程量清单或用户项目分解",
+          "图纸和计量口径",
+          "明确数量及单位",
+          "定额、询价或单价来源",
+          "取费和税费资料"
+        ],
+        "steps": [
+          {
+            "action": "按清单项目核对特征、单位和数量来源",
+            "tools": []
+          },
+          {
+            "action": "列工程量拆分与组价所需资料",
+            "tools": []
+          },
+          {
+            "action": "输出单价待填和询价核对表",
+            "tools": [
+              "cost__takeoff"
+            ]
+          }
+        ],
+        "output_sections": [
+          "范围声明",
+          "清单来源",
+          "项目拆分",
+          "计量口径",
+          "数量",
+          "组价资料",
+          "单价缺项",
+          "复核"
+        ],
+        "output_tables": [
+          {
+            "name": "工程量拆分",
+            "columns": [
+              "项目编码",
+              "名称特征",
+              "单位",
+              "用户数量",
+              "来源",
+              "单价TBD",
+              "待核项"
+            ]
+          }
+        ],
+        "acceptance": [
+          "未给清单或询价时单价TBD，不填写综合合价",
+          "数量只抄用户值且单位与项目不串行"
+        ],
+        "limitations": [
+          "未接造价算量或计价引擎，不编综合单价"
+        ],
+        "implementation": "dedicated_document_draft",
+        "reference_paths": [
+          "demo/kb/commercial/cost/outline.md"
+        ],
+        "runtime_tools": [
+          "cost__takeoff"
+        ]
+      }
     },
     {
       "id": "variation",
@@ -730,9 +3553,82 @@
         "签证",
         "设计变更"
       ],
-      "pipeline": "理解任务 → 检索本库与大类库 → 提纲 → 独立成稿 → 自检",
+      "pipeline": "按事项分开登记事实和指令出处 → 逐项对应工程量口径及证据目录 → 形成签证草稿与审批空栏",
       "builtin": true,
-      "enabled": true
+      "enabled": true,
+      "exclusive": [
+        "variation__form"
+      ],
+      "yibiao": [
+        "parse",
+        "outline",
+        "kb",
+        "write"
+      ],
+      "aligned": true,
+      "tool_note": "不代业主确认变更，不计算签证金额或认定索赔成立",
+      "capability": {
+        "inputs": [
+          "辖区（未提供则UNSPECIFIED；多个对象单独归属）",
+          "变更或签证事项编号",
+          "发生时间、部位及原因",
+          "用户指令和合同依据",
+          "工程量原始记录",
+          "附件证据与责任单位"
+        ],
+        "steps": [
+          {
+            "action": "按事项分开登记事实和指令出处",
+            "tools": []
+          },
+          {
+            "action": "逐项对应工程量口径及证据目录",
+            "tools": []
+          },
+          {
+            "action": "形成签证草稿与审批空栏",
+            "tools": [
+              "variation__form"
+            ]
+          }
+        ],
+        "output_sections": [
+          "事项声明",
+          "事实经过",
+          "依据指令",
+          "工程量",
+          "影响待核",
+          "证据目录",
+          "审批空栏"
+        ],
+        "output_tables": [
+          {
+            "name": "签证事项",
+            "columns": [
+              "编号部位",
+              "事实原文",
+              "指令来源",
+              "用户工程量",
+              "金额待填",
+              "证据"
+            ]
+          }
+        ],
+        "acceptance": [
+          "未给工程量不推算，金额不从描述生成",
+          "签证事实、申请和批准状态必须区分"
+        ],
+        "limitations": [
+          "不代业主确认变更，不计算签证金额或认定索赔成立"
+        ],
+        "implementation": "dedicated_document_draft",
+        "reference_paths": [
+          "demo/kb/commercial/variation/outline.md"
+        ],
+        "runtime_tools": [
+          "variation__form"
+        ]
+      }
     },
     {
       "id": "claim",
@@ -746,9 +3642,82 @@
         "索赔",
         "调概"
       ],
-      "pipeline": "理解任务 → 检索本库与大类库 → 提纲 → 独立成稿 → 自检",
+      "pipeline": "整理事件时间线与通知来源 → 列因果关系、损失和工期证据缺口 → 形成索赔意向及后续资料行动",
       "builtin": true,
-      "enabled": true
+      "enabled": true,
+      "exclusive": [
+        "claim__notice"
+      ],
+      "yibiao": [
+        "parse",
+        "outline",
+        "kb",
+        "write"
+      ],
+      "aligned": true,
+      "tool_note": "不判断索赔胜率或法定权利，不代算工期损失",
+      "capability": {
+        "inputs": [
+          "辖区（未提供则UNSPECIFIED；多个对象单独归属）",
+          "索赔事件与时间线",
+          "合同和通知要求原文",
+          "业主指令或往来证据",
+          "用户损失与工期资料",
+          "已发通知及接收记录"
+        ],
+        "steps": [
+          {
+            "action": "整理事件时间线与通知来源",
+            "tools": []
+          },
+          {
+            "action": "列因果关系、损失和工期证据缺口",
+            "tools": []
+          },
+          {
+            "action": "形成索赔意向及后续资料行动",
+            "tools": [
+              "claim__notice"
+            ]
+          }
+        ],
+        "output_sections": [
+          "范围声明",
+          "事件事实",
+          "合同依据",
+          "通知时限待核",
+          "影响证据",
+          "意向请求",
+          "补证计划"
+        ],
+        "output_tables": [
+          {
+            "name": "索赔证据",
+            "columns": [
+              "事件",
+              "日期来源",
+              "合同要求",
+              "影响资料",
+              "证据位置",
+              "补证责任"
+            ]
+          }
+        ],
+        "acceptance": [
+          "时限只能抄合同原文，不按记忆倒推通知日",
+          "缺损失资料不编金额，意向与正式索赔分开"
+        ],
+        "limitations": [
+          "不判断索赔胜率或法定权利，不代算工期损失"
+        ],
+        "implementation": "dedicated_document_draft",
+        "reference_paths": [
+          "demo/kb/commercial/claim/outline.md"
+        ],
+        "runtime_tools": [
+          "claim__notice"
+        ]
+      }
     },
     {
       "id": "subcontract",
@@ -762,9 +3731,82 @@
         "分包",
         "劳务结算"
       ],
-      "pipeline": "理解任务 → 检索本库与大类库 → 提纲 → 独立成稿 → 自检",
+      "pipeline": "按分包合同核对计量范围和记录 → 分开登记已验工、扣款与付款依据 → 形成结算表头和差异待核清单",
       "builtin": true,
-      "enabled": true
+      "enabled": true,
+      "exclusive": [
+        "subcontract__sheet"
+      ],
+      "yibiao": [
+        "parse",
+        "kb",
+        "write"
+      ],
+      "aligned": true,
+      "tool_note": "不出最终结算或支付批准结论，不计算未知合同金额",
+      "capability": {
+        "inputs": [
+          "辖区（未提供则UNSPECIFIED；多个对象单独归属）",
+          "分包合同和计量范围",
+          "分包单位及期间",
+          "用户确认工程量",
+          "扣款、代供料和支付记录",
+          "变更签证及对账资料"
+        ],
+        "steps": [
+          {
+            "action": "按分包合同核对计量范围和记录",
+            "tools": []
+          },
+          {
+            "action": "分开登记已验工、扣款与付款依据",
+            "tools": []
+          },
+          {
+            "action": "形成结算表头和差异待核清单",
+            "tools": [
+              "subcontract__sheet"
+            ]
+          }
+        ],
+        "output_sections": [
+          "范围声明",
+          "合同资料",
+          "验工记录",
+          "变更",
+          "扣款代供",
+          "付款",
+          "差异核对",
+          "签认空栏"
+        ],
+        "output_tables": [
+          {
+            "name": "分包结算",
+            "columns": [
+              "合同分包",
+              "期间",
+              "用户验工量",
+              "扣款依据",
+              "支付记录",
+              "差异待核"
+            ]
+          }
+        ],
+        "acceptance": [
+          "验工、应付与已付分栏，不把申请量当确认量",
+          "无扣款依据不造扣款，无单价不填结算额"
+        ],
+        "limitations": [
+          "不出最终结算或支付批准结论，不计算未知合同金额"
+        ],
+        "implementation": "dedicated_document_draft",
+        "reference_paths": [
+          "demo/kb/commercial/subcontract/outline.md"
+        ],
+        "runtime_tools": [
+          "subcontract__sheet"
+        ]
+      }
     },
     {
       "id": "interim",
@@ -778,9 +3820,81 @@
         "验工",
         "计量"
       ],
-      "pipeline": "理解任务 → 检索本库与大类库 → 提纲 → 独立成稿 → 自检",
+      "pipeline": "登记本期完成量与业主确认的差别 → 核对清单编码、计量附件和变更接口 → 形成对上验工表及未确认事项",
       "builtin": true,
-      "enabled": true
+      "enabled": true,
+      "exclusive": [
+        "interim__measure"
+      ],
+      "yibiao": [
+        "parse",
+        "kb",
+        "write"
+      ],
+      "aligned": true,
+      "tool_note": "不代签付款证书，不把申报金额写成业主应付",
+      "capability": {
+        "inputs": [
+          "辖区（未提供则UNSPECIFIED；多个对象单独归属）",
+          "合同、标段与验工期间",
+          "工程量明细和计量口径",
+          "业主确认记录",
+          "变更及调价依据",
+          "付款证书与附件目录"
+        ],
+        "steps": [
+          {
+            "action": "登记本期完成量与业主确认的差别",
+            "tools": []
+          },
+          {
+            "action": "核对清单编码、计量附件和变更接口",
+            "tools": []
+          },
+          {
+            "action": "形成对上验工表及未确认事项",
+            "tools": [
+              "interim__measure"
+            ]
+          }
+        ],
+        "output_sections": [
+          "范围声明",
+          "本期计量",
+          "业主确认",
+          "变更调价",
+          "支付资料",
+          "附件",
+          "签认与缺项"
+        ],
+        "output_tables": [
+          {
+            "name": "验工计价",
+            "columns": [
+              "清单项",
+              "本期用户量",
+              "业主确认量",
+              "确认来源",
+              "单价待核",
+              "金额待填"
+            ]
+          }
+        ],
+        "acceptance": [
+          "未获业主确认的量不改写为已确认",
+          "金额缺依据不计算，期间与累计记录分开"
+        ],
+        "limitations": [
+          "不代签付款证书，不把申报金额写成业主应付"
+        ],
+        "implementation": "dedicated_document_draft",
+        "reference_paths": [
+          "demo/kb/commercial/interim/outline.md"
+        ],
+        "runtime_tools": [
+          "interim__measure"
+        ]
+      }
     },
     {
       "id": "proc-plan",
@@ -793,9 +3907,82 @@
       "aliases": [
         "采购计划"
       ],
-      "pipeline": "理解任务 → 检索本库与大类库 → 提纲 → 独立成稿 → 自检",
+      "pipeline": "按物资区分甲指、自采和设计待定项 → 对齐需求节点与采购准备条件 → 输出采购计划及责任审批空栏",
       "builtin": true,
-      "enabled": true
+      "enabled": true,
+      "exclusive": [
+        "proc-plan__schedule"
+      ],
+      "yibiao": [
+        "outline",
+        "kb",
+        "write"
+      ],
+      "aligned": true,
+      "tool_note": "不代下采购单，不编供应周期或预算单价",
+      "capability": {
+        "inputs": [
+          "辖区（未提供则UNSPECIFIED；多个对象单独归属）",
+          "采购物资与规格清单",
+          "甲指或自采划分",
+          "需求部门和到货节点",
+          "用户采购提前期",
+          "库存、设计确认及审批条件"
+        ],
+        "steps": [
+          {
+            "action": "按物资区分甲指、自采和设计待定项",
+            "tools": []
+          },
+          {
+            "action": "对齐需求节点与采购准备条件",
+            "tools": []
+          },
+          {
+            "action": "输出采购计划及责任审批空栏",
+            "tools": [
+              "proc-plan__schedule"
+            ]
+          }
+        ],
+        "output_sections": [
+          "范围声明",
+          "物资需求",
+          "采购划分",
+          "提前期节点",
+          "库存接口",
+          "设计审批",
+          "到货与验收"
+        ],
+        "output_tables": [
+          {
+            "name": "采购计划",
+            "columns": [
+              "物资规格",
+              "甲指/自采",
+              "用户数量",
+              "需要日期",
+              "提前期来源",
+              "责任方",
+              "待办"
+            ]
+          }
+        ],
+        "acceptance": [
+          "未给提前期不倒推采购日期，甲指与自采不混",
+          "数量规格及到货要求逐物资对应"
+        ],
+        "limitations": [
+          "不代下采购单，不编供应周期或预算单价"
+        ],
+        "implementation": "dedicated_document_draft",
+        "reference_paths": [
+          "demo/kb/procurement/proc-plan/outline.md"
+        ],
+        "runtime_tools": [
+          "proc-plan__schedule"
+        ]
+      }
     },
     {
       "id": "proc-compare",
@@ -809,9 +3996,82 @@
         "询价",
         "比价"
       ],
-      "pipeline": "理解任务 → 检索本库与大类库 → 提纲 → 独立成稿 → 自检",
+      "pipeline": "把报价规格、含税和运费口径分别登记 → 按供应商对照商务技术差异 → 输出可比性缺口和复询清单",
       "builtin": true,
-      "enabled": true
+      "enabled": true,
+      "exclusive": [
+        "proc-compare__table"
+      ],
+      "yibiao": [
+        "qa",
+        "kb",
+        "write"
+      ],
+      "aligned": true,
+      "tool_note": "不编市场价、不自动选定中标供应商",
+      "capability": {
+        "inputs": [
+          "辖区（未提供则UNSPECIFIED；多个对象单独归属）",
+          "可比物资规格和数量",
+          "各供应商报价原文",
+          "币种税费和计价单位",
+          "交货、付款及运费条件",
+          "偏差和报价有效期"
+        ],
+        "steps": [
+          {
+            "action": "把报价规格、含税和运费口径分别登记",
+            "tools": []
+          },
+          {
+            "action": "按供应商对照商务技术差异",
+            "tools": []
+          },
+          {
+            "action": "输出可比性缺口和复询清单",
+            "tools": [
+              "proc-compare__table"
+            ]
+          }
+        ],
+        "output_sections": [
+          "范围声明",
+          "询价要求",
+          "报价来源",
+          "技术可比性",
+          "商务条件",
+          "价格原文",
+          "偏差复询"
+        ],
+        "output_tables": [
+          {
+            "name": "报价对照",
+            "columns": [
+              "供应商",
+              "规格",
+              "原报价",
+              "币种单位",
+              "税运口径",
+              "付款交期",
+              "偏差"
+            ]
+          }
+        ],
+        "acceptance": [
+          "无报价不得造比价数字或排名",
+          "不同币种税口径未统一前不宣布最低总价"
+        ],
+        "limitations": [
+          "不编市场价、不自动选定中标供应商"
+        ],
+        "implementation": "dedicated_document_draft",
+        "reference_paths": [
+          "demo/kb/procurement/proc-compare/outline.md"
+        ],
+        "runtime_tools": [
+          "proc-compare__table"
+        ]
+      }
     },
     {
       "id": "proc-vendor",
@@ -825,9 +4085,81 @@
         "供方",
         "供应商"
       ],
-      "pipeline": "理解任务 → 检索本库与大类库 → 提纲 → 独立成稿 → 自检",
+      "pipeline": "按供应商整理准入材料和缺项 → 对应考察、质量、供货与服务证据 → 形成评价表和短名单待决栏",
       "builtin": true,
-      "enabled": true
+      "enabled": true,
+      "exclusive": [
+        "proc-vendor__eval"
+      ],
+      "yibiao": [
+        "qa",
+        "kb",
+        "write"
+      ],
+      "aligned": true,
+      "tool_note": "不编证书业绩、不代准入审批或信用评级",
+      "capability": {
+        "inputs": [
+          "辖区（未提供则UNSPECIFIED；多个对象单独归属）",
+          "供应商名称与供货范围",
+          "用户资质证件和业绩",
+          "考察记录与质量资料",
+          "交付服务能力证据",
+          "企业准入评价标准"
+        ],
+        "steps": [
+          {
+            "action": "按供应商整理准入材料和缺项",
+            "tools": []
+          },
+          {
+            "action": "对应考察、质量、供货与服务证据",
+            "tools": []
+          },
+          {
+            "action": "形成评价表和短名单待决栏",
+            "tools": [
+              "proc-vendor__eval"
+            ]
+          }
+        ],
+        "output_sections": [
+          "范围声明",
+          "准入资料",
+          "资质业绩",
+          "考察记录",
+          "质量能力",
+          "交付服务",
+          "短名单待核"
+        ],
+        "output_tables": [
+          {
+            "name": "供应商评价",
+            "columns": [
+              "供应商",
+              "准入项",
+              "用户证据",
+              "缺口",
+              "考察待办",
+              "评价待核"
+            ]
+          }
+        ],
+        "acceptance": [
+          "评价必须有证据位置，不凭供应商名称打分",
+          "待核名单与已批准供应商分开"
+        ],
+        "limitations": [
+          "不编证书业绩、不代准入审批或信用评级"
+        ],
+        "implementation": "dedicated_document_draft",
+        "reference_paths": [
+          "demo/kb/procurement/proc-vendor/outline.md"
+        ],
+        "runtime_tools": [
+          "proc-vendor__eval"
+        ]
+      }
     },
     {
       "id": "equip",
@@ -842,9 +4174,83 @@
         "设备",
         "特种设备"
       ],
-      "pipeline": "理解任务 → 检索本库与大类库 → 提纲 → 独立成稿 → 自检",
+      "pipeline": "逐设备登记进场租赁与证件来源 → 组织维保、特种设备和故障待办 → 形成设备台账与验收复核清单",
       "builtin": true,
-      "enabled": true
+      "enabled": true,
+      "exclusive": [
+        "equip__ledger"
+      ],
+      "yibiao": [
+        "qa",
+        "kb",
+        "write"
+      ],
+      "aligned": true,
+      "tool_note": "不代检验设备或批准启用，不编承载或额定能力",
+      "capability": {
+        "inputs": [
+          "辖区（未提供则UNSPECIFIED；多个对象单独归属）",
+          "设备编号、型号及用途",
+          "进场和租赁资料",
+          "用户检验检定证书",
+          "维保计划和故障记录",
+          "操作人员证件及责任方"
+        ],
+        "steps": [
+          {
+            "action": "逐设备登记进场租赁与证件来源",
+            "tools": []
+          },
+          {
+            "action": "组织维保、特种设备和故障待办",
+            "tools": []
+          },
+          {
+            "action": "形成设备台账与验收复核清单",
+            "tools": [
+              "equip__ledger"
+            ]
+          }
+        ],
+        "output_sections": [
+          "范围声明",
+          "设备清单",
+          "进场租赁",
+          "证件检定",
+          "维保",
+          "故障停用",
+          "人员接口",
+          "资料"
+        ],
+        "output_tables": [
+          {
+            "name": "设备台账",
+            "columns": [
+              "设备编号",
+              "型号",
+              "证件来源",
+              "检定期限",
+              "维保事项",
+              "责任方",
+              "状态待核"
+            ]
+          }
+        ],
+        "acceptance": [
+          "证件号与到期日只抄用户，不把未核原件写成有效",
+          "停用故障不改写为恢复运行"
+        ],
+        "limitations": [
+          "不代检验设备或批准启用，不编承载或额定能力"
+        ],
+        "implementation": "dedicated_document_draft",
+        "reference_paths": [
+          "demo/kb/plant/equip/outline.md"
+        ],
+        "runtime_tools": [
+          "equip__ledger"
+        ]
+      }
     },
     {
       "id": "warehouse",
@@ -858,9 +4264,81 @@
         "仓库",
         "领料"
       ],
-      "pipeline": "理解任务 → 检索本库与大类库 → 提纲 → 独立成稿 → 自检",
+      "pipeline": "按物料批次登记收发存原始单据 → 分开核对领用限额与盘点差异 → 输出台账口径和追溯缺项",
       "builtin": true,
-      "enabled": true
+      "enabled": true,
+      "exclusive": [
+        "warehouse__log"
+      ],
+      "yibiao": [
+        "parse",
+        "kb",
+        "write"
+      ],
+      "aligned": true,
+      "tool_note": "不代库存盘点或改变真实库存，不编库存数量",
+      "capability": {
+        "inputs": [
+          "辖区（未提供则UNSPECIFIED；多个对象单独归属）",
+          "物料编码、品名规格及单位",
+          "入库出库原始记录",
+          "领用用途和限额资料",
+          "用户盘点结果",
+          "验收、批次及经办信息"
+        ],
+        "steps": [
+          {
+            "action": "按物料批次登记收发存原始单据",
+            "tools": []
+          },
+          {
+            "action": "分开核对领用限额与盘点差异",
+            "tools": []
+          },
+          {
+            "action": "输出台账口径和追溯缺项",
+            "tools": [
+              "warehouse__log"
+            ]
+          }
+        ],
+        "output_sections": [
+          "范围声明",
+          "入库验收",
+          "出库领用",
+          "库存记录",
+          "限额",
+          "盘点差异",
+          "批次追溯"
+        ],
+        "output_tables": [
+          {
+            "name": "收发存台账",
+            "columns": [
+              "物料批次",
+              "单位",
+              "入库记录",
+              "出库记录",
+              "用户库存",
+              "盘点差异待核"
+            ]
+          }
+        ],
+        "acceptance": [
+          "未给盘点不造盈亏，单位批次不能合并错位",
+          "验收状态必须有单据，不填已合格"
+        ],
+        "limitations": [
+          "不代库存盘点或改变真实库存，不编库存数量"
+        ],
+        "implementation": "dedicated_document_draft",
+        "reference_paths": [
+          "demo/kb/plant/warehouse/outline.md"
+        ],
+        "runtime_tools": [
+          "warehouse__log"
+        ]
+      }
     },
     {
       "id": "pack-ship",
@@ -876,9 +4354,95 @@
         "packing-agent",
         "集装箱"
       ],
-      "pipeline": "读物料表 → 检索 CTU/CSC 标题 → 调 packing-agent 或标 UNSPECIFIED → 作业单",
+      "pipeline": "检查solver快照可用性 → 列出装箱工具 → 投影装柜证据，不重算坐标 → 导出同源证据与失败缺项",
       "builtin": true,
-      "enabled": true
+      "enabled": true,
+      "exclusive": [
+        "pack-ship__list",
+        "pack-ship__plan",
+        "pack-ship__export",
+        "pack-ship__health"
+      ],
+      "yibiao": [
+        "outline",
+        "kb",
+        "write"
+      ],
+      "aligned": true,
+      "tool_note": "当前工具只投影已有solver快照，不在此处重跑packing引擎或编坐标",
+      "capability": {
+        "inputs": [
+          "辖区（未提供则UNSPECIFIED；多个对象单独归属）",
+          "用户物料尺寸、重量、数量原文",
+          "柜型和约束来源",
+          "packing solver快照及来源",
+          "连接状态和can_fit结果",
+          "系固待办与作业单范围"
+        ],
+        "steps": [
+          {
+            "action": "检查solver快照可用性",
+            "tools": [
+              "pack-ship__health"
+            ]
+          },
+          {
+            "action": "列出装箱工具",
+            "tools": [
+              "pack-ship__list"
+            ]
+          },
+          {
+            "action": "投影装柜证据，不重算坐标",
+            "tools": [
+              "pack-ship__plan"
+            ]
+          },
+          {
+            "action": "导出同源证据与失败缺项",
+            "tools": [
+              "pack-ship__export"
+            ]
+          }
+        ],
+        "output_sections": [
+          "用户物料",
+          "solver状态",
+          "装柜证据投影",
+          "系固待办",
+          "来源标题待核",
+          "缺项与失败边界"
+        ],
+        "output_tables": [
+          {
+            "name": "装柜证据",
+            "columns": [
+              "字段",
+              "solver原值",
+              "来源",
+              "连接状态",
+              "待核项"
+            ]
+          }
+        ],
+        "acceptance": [
+          "can_fit=false保持失败，断线数值全为字面UNSPECIFIED",
+          "plan与export必须同一solver来源，禁止重写xyz或柜数"
+        ],
+        "limitations": [
+          "当前工具只投影已有solver快照，不在此处重跑packing引擎或编坐标"
+        ],
+        "implementation": "solver_snapshot_projection",
+        "reference_paths": [
+          "demo/kb/plant/pack-ship/outline.md"
+        ],
+        "runtime_tools": [
+          "pack-ship__health",
+          "pack-ship__list",
+          "pack-ship__plan",
+          "pack-ship__export"
+        ]
+      }
     },
     {
       "id": "material-site",
@@ -892,9 +4456,82 @@
         "材料员",
         "料具"
       ],
-      "pipeline": "理解任务 → 检索本库与大类库 → 提纲 → 独立成稿 → 自检",
+      "pipeline": "按部位期间登记计划和实耗来源 → 对应领退、盘点及变更差异 → 输出节超待核和材料闭环清单",
       "builtin": true,
-      "enabled": true
+      "enabled": true,
+      "exclusive": [
+        "material-site__recon"
+      ],
+      "yibiao": [
+        "parse",
+        "kb",
+        "write"
+      ],
+      "aligned": true,
+      "tool_note": "不按经验估算耗用，不替真实盘点或成本核算",
+      "capability": {
+        "inputs": [
+          "辖区（未提供则UNSPECIFIED；多个对象单独归属）",
+          "部位、期间和材料规格",
+          "预算或计划用量来源",
+          "领退料与实耗记录",
+          "用户现场盘点",
+          "损耗、变更及责任资料"
+        ],
+        "steps": [
+          {
+            "action": "按部位期间登记计划和实耗来源",
+            "tools": []
+          },
+          {
+            "action": "对应领退、盘点及变更差异",
+            "tools": []
+          },
+          {
+            "action": "输出节超待核和材料闭环清单",
+            "tools": [
+              "material-site__recon"
+            ]
+          }
+        ],
+        "output_sections": [
+          "范围声明",
+          "计划用量",
+          "领退记录",
+          "实耗",
+          "盘点",
+          "节超待核",
+          "原因责任",
+          "闭环"
+        ],
+        "output_tables": [
+          {
+            "name": "材料核算",
+            "columns": [
+              "部位期间",
+              "材料单位",
+              "计划来源",
+              "实耗来源",
+              "盘点记录",
+              "节超待核"
+            ]
+          }
+        ],
+        "acceptance": [
+          "无盘点或计划基准不编盈亏与节超率",
+          "不同部位规格不能合并成伪汇总"
+        ],
+        "limitations": [
+          "不按经验估算耗用，不替真实盘点或成本核算"
+        ],
+        "implementation": "dedicated_document_draft",
+        "reference_paths": [
+          "demo/kb/plant/material-site/outline.md"
+        ],
+        "runtime_tools": [
+          "material-site__recon"
+        ]
+      }
     },
     {
       "id": "lab-mix",
@@ -908,9 +4545,83 @@
         "施工配合比",
         "配比"
       ],
-      "pipeline": "理解任务 → 检索本库与大类库 → 提纲 → 独立成稿 → 自检",
+      "pipeline": "登记原材来源和用户试验目标 → 组织试配、验证与调整证据链 → 输出配比报告提纲及待试验项",
       "builtin": true,
-      "enabled": true
+      "enabled": true,
+      "exclusive": [
+        "lab-mix__report"
+      ],
+      "yibiao": [
+        "outline",
+        "qa",
+        "kb",
+        "write"
+      ],
+      "aligned": true,
+      "tool_note": "未计算或试验配合比，不宣称材料达到强度或耐久要求",
+      "capability": {
+        "inputs": [
+          "辖区（未提供则UNSPECIFIED；多个对象单独归属）",
+          "混凝土或砂浆用途及要求",
+          "原材料批次与检测报告",
+          "用户试配记录",
+          "工作性、强度和耐久性数据",
+          "生产调整与批准资料"
+        ],
+        "steps": [
+          {
+            "action": "登记原材来源和用户试验目标",
+            "tools": []
+          },
+          {
+            "action": "组织试配、验证与调整证据链",
+            "tools": []
+          },
+          {
+            "action": "输出配比报告提纲及待试验项",
+            "tools": [
+              "lab-mix__report"
+            ]
+          }
+        ],
+        "output_sections": [
+          "范围声明",
+          "性能目标",
+          "原材",
+          "试配",
+          "工作性",
+          "强度耐久",
+          "验证调整",
+          "审批资料"
+        ],
+        "output_tables": [
+          {
+            "name": "试配证据",
+            "columns": [
+              "试配编号",
+              "原材批次",
+              "用户配比",
+              "工作性记录",
+              "强度来源",
+              "待核项"
+            ]
+          }
+        ],
+        "acceptance": [
+          "无试验数据不给施工配比，水胶比等不从模板补",
+          "试配记录与已批准生产配合比分栏"
+        ],
+        "limitations": [
+          "未计算或试验配合比，不宣称材料达到强度或耐久要求"
+        ],
+        "implementation": "dedicated_document_draft",
+        "reference_paths": [
+          "demo/kb/lab/lab-mix/outline.md"
+        ],
+        "runtime_tools": [
+          "lab-mix__report"
+        ]
+      }
     },
     {
       "id": "lab-sample",
@@ -925,9 +4636,81 @@
         "送检",
         "见证"
       ],
-      "pipeline": "理解任务 → 检索本库与大类库 → 提纲 → 独立成稿 → 自检",
+      "pipeline": "按材料批次核对取样依据与见证接口 → 登记样品标识、送检和报告追踪 → 输出异常升级与缺项清单",
       "builtin": true,
-      "enabled": true
+      "enabled": true,
+      "exclusive": [
+        "lab-sample__list"
+      ],
+      "yibiao": [
+        "qa",
+        "kb",
+        "write"
+      ],
+      "aligned": true,
+      "tool_note": "不实施真实取样，不认定样品或材料合格",
+      "capability": {
+        "inputs": [
+          "辖区（未提供则UNSPECIFIED；多个对象单独归属）",
+          "原材料类别、批次和数量来源",
+          "进场或工序取样范围",
+          "用户取样制度及检测要求",
+          "见证、送检和实验室信息",
+          "样品标识与不合格记录"
+        ],
+        "steps": [
+          {
+            "action": "按材料批次核对取样依据与见证接口",
+            "tools": []
+          },
+          {
+            "action": "登记样品标识、送检和报告追踪",
+            "tools": []
+          },
+          {
+            "action": "输出异常升级与缺项清单",
+            "tools": [
+              "lab-sample__list"
+            ]
+          }
+        ],
+        "output_sections": [
+          "范围声明",
+          "取样范围",
+          "依据待核",
+          "见证接口",
+          "样品标识",
+          "送检追踪",
+          "不合格升级"
+        ],
+        "output_tables": [
+          {
+            "name": "取样送检",
+            "columns": [
+              "材料批次",
+              "数量来源",
+              "取样要求来源",
+              "见证人",
+              "送检编号",
+              "报告待核"
+            ]
+          }
+        ],
+        "acceptance": [
+          "无制度或批量来源不编取样频次数量",
+          "见证签字与检测结论不代填"
+        ],
+        "limitations": [
+          "不实施真实取样，不认定样品或材料合格"
+        ],
+        "implementation": "dedicated_document_draft",
+        "reference_paths": [
+          "demo/kb/lab/lab-sample/outline.md"
+        ],
+        "runtime_tools": [
+          "lab-sample__list"
+        ]
+      }
     },
     {
       "id": "lab-record",
@@ -940,9 +4723,80 @@
       "aliases": [
         "试验资料"
       ],
-      "pipeline": "理解任务 → 检索本库与大类库 → 提纲 → 独立成稿 → 自检",
+      "pipeline": "按样品报告建立试验追溯链 → 对应仪器编号、检定与使用记录 → 输出台账与缺失报告待办",
       "builtin": true,
-      "enabled": true
+      "enabled": true,
+      "exclusive": [
+        "lab-record__ledger"
+      ],
+      "yibiao": [
+        "kb",
+        "write"
+      ],
+      "aligned": true,
+      "tool_note": "不生成检测报告结果，不代检定仪器",
+      "capability": {
+        "inputs": [
+          "辖区（未提供则UNSPECIFIED；多个对象单独归属）",
+          "试验项目及日期",
+          "用户报告编号与样品批次",
+          "仪器清单及检定记录",
+          "检测单位与委托记录",
+          "报告归档和异常信息"
+        ],
+        "steps": [
+          {
+            "action": "按样品报告建立试验追溯链",
+            "tools": []
+          },
+          {
+            "action": "对应仪器编号、检定与使用记录",
+            "tools": []
+          },
+          {
+            "action": "输出台账与缺失报告待办",
+            "tools": [
+              "lab-record__ledger"
+            ]
+          }
+        ],
+        "output_sections": [
+          "范围声明",
+          "委托样品",
+          "试验记录",
+          "报告目录",
+          "仪器检定",
+          "异常追踪",
+          "归档"
+        ],
+        "output_tables": [
+          {
+            "name": "试验台账",
+            "columns": [
+              "样品批次",
+              "试验项目",
+              "报告编号来源",
+              "仪器",
+              "检定记录",
+              "归档待核"
+            ]
+          }
+        ],
+        "acceptance": [
+          "报告和仪器编号只抄原件，日期缺失不推算有效期",
+          "缺报告明确待收集，不能标结果合格"
+        ],
+        "limitations": [
+          "不生成检测报告结果，不代检定仪器"
+        ],
+        "implementation": "dedicated_document_draft",
+        "reference_paths": [
+          "demo/kb/lab/lab-record/outline.md"
+        ],
+        "runtime_tools": [
+          "lab-record__ledger"
+        ]
+      }
     },
     {
       "id": "finance-book",
@@ -956,9 +4810,81 @@
         "会计",
         "报销"
       ],
-      "pipeline": "理解任务 → 检索本库与大类库 → 提纲 → 独立成稿 → 自检",
+      "pipeline": "按业务事项登记单据与期间 → 核对合同、发票、审批和科目资料 → 输出报销核算缺项与复核清单",
       "builtin": true,
-      "enabled": true
+      "enabled": true,
+      "exclusive": [
+        "finance-book__check"
+      ],
+      "yibiao": [
+        "qa",
+        "kb",
+        "write"
+      ],
+      "aligned": true,
+      "tool_note": "不记账或支付，不把检查表当正式会计意见",
+      "capability": {
+        "inputs": [
+          "辖区（未提供则UNSPECIFIED；多个对象单独归属）",
+          "核算期间和业务类型",
+          "用户报销单据与合同",
+          "企业科目或账套口径",
+          "金额币种及税票原文",
+          "审批和付款记录"
+        ],
+        "steps": [
+          {
+            "action": "按业务事项登记单据与期间",
+            "tools": []
+          },
+          {
+            "action": "核对合同、发票、审批和科目资料",
+            "tools": []
+          },
+          {
+            "action": "输出报销核算缺项与复核清单",
+            "tools": [
+              "finance-book__check"
+            ]
+          }
+        ],
+        "output_sections": [
+          "范围声明",
+          "业务单据",
+          "合同发票",
+          "科目口径",
+          "审批付款",
+          "差异待核",
+          "归档"
+        ],
+        "output_tables": [
+          {
+            "name": "核算检查",
+            "columns": [
+              "业务事项",
+              "期间",
+              "单据来源",
+              "用户金额",
+              "审批证据",
+              "缺项"
+            ]
+          }
+        ],
+        "acceptance": [
+          "无账套不编具体分录，凭证金额只抄输入",
+          "已报销、已批准与已付款分开登记"
+        ],
+        "limitations": [
+          "不记账或支付，不把检查表当正式会计意见"
+        ],
+        "implementation": "dedicated_document_draft",
+        "reference_paths": [
+          "demo/kb/finance/finance-book/outline.md"
+        ],
+        "runtime_tools": [
+          "finance-book__check"
+        ]
+      }
     },
     {
       "id": "finance-fund",
@@ -972,9 +4898,82 @@
         "资金计划",
         "现金流"
       ],
-      "pipeline": "理解任务 → 检索本库与大类库 → 提纲 → 独立成稿 → 自检",
+      "pipeline": "分开登记确定收支和预计收支 → 按期间组织回款与付款节点 → 输出资金平衡待核和审批事项",
       "builtin": true,
-      "enabled": true
+      "enabled": true,
+      "exclusive": [
+        "finance-fund__plan"
+      ],
+      "yibiao": [
+        "outline",
+        "kb",
+        "write"
+      ],
+      "aligned": true,
+      "tool_note": "不划款或融资承诺，不编现金余额与授信额度",
+      "capability": {
+        "inputs": [
+          "辖区（未提供则UNSPECIFIED；多个对象单独归属）",
+          "计划期间与项目",
+          "用户收款节点和回款证据",
+          "采购、分包和工资付款计划",
+          "币种及余额来源",
+          "融资限制与审批条件"
+        ],
+        "steps": [
+          {
+            "action": "分开登记确定收支和预计收支",
+            "tools": []
+          },
+          {
+            "action": "按期间组织回款与付款节点",
+            "tools": []
+          },
+          {
+            "action": "输出资金平衡待核和审批事项",
+            "tools": [
+              "finance-fund__plan"
+            ]
+          }
+        ],
+        "output_sections": [
+          "范围声明",
+          "期间余额",
+          "预计收款",
+          "付款需求",
+          "融资约束",
+          "平衡待核",
+          "审批跟踪"
+        ],
+        "output_tables": [
+          {
+            "name": "资金计划",
+            "columns": [
+              "期间",
+              "收支类别",
+              "用户金额",
+              "币种",
+              "确定性证据",
+              "节点",
+              "待核"
+            ]
+          }
+        ],
+        "acceptance": [
+          "预测与已到账严格分栏，余额无来源不填",
+          "未提供全量数据不宣布资金缺口或盈余已算清"
+        ],
+        "limitations": [
+          "不划款或融资承诺，不编现金余额与授信额度"
+        ],
+        "implementation": "dedicated_document_draft",
+        "reference_paths": [
+          "demo/kb/finance/finance-fund/outline.md"
+        ],
+        "runtime_tools": [
+          "finance-fund__plan"
+        ]
+      }
     },
     {
       "id": "finance-tax",
@@ -988,9 +4987,91 @@
         "税务",
         "发票"
       ],
-      "pipeline": "理解任务 → 检索本库与大类库 → 提纲 → 独立成稿 → 自检",
+      "pipeline": "按辖区主体登记税种与期间 → 列官方依据待核和申报准备事项 → 输出税务日历与资料复核表",
       "builtin": true,
-      "enabled": true
+      "enabled": true,
+      "exclusive": [
+        "finance-tax__calendar"
+      ],
+      "yibiao": [
+        "outline",
+        "kb",
+        "write"
+      ],
+      "aligned": true,
+      "tool_note": "不提供具体筹划或税务合规结论，不从记忆抄现行税率",
+      "capability": {
+        "inputs": [
+          "辖区（未提供则UNSPECIFIED；多个对象单独归属）",
+          "明确辖区及主体类型",
+          "用户税种和申报期间",
+          "税票、业务及税号资料",
+          "官方申报节点原文",
+          "企业税务复核接口"
+        ],
+        "steps": [
+          {
+            "action": "按辖区主体登记税种与期间",
+            "tools": []
+          },
+          {
+            "action": "列官方依据待核和申报准备事项",
+            "tools": []
+          },
+          {
+            "action": "输出税务日历与资料复核表",
+            "tools": [
+              "finance-tax__calendar"
+            ]
+          }
+        ],
+        "output_sections": [
+          "辖区、主体与申报日历",
+          "依据与资料核对",
+          "发票与申报准备",
+          "缺项与复核"
+        ],
+        "output_tables": [
+          {
+            "name": "税务日历",
+            "columns": [
+              "辖区",
+              "主体",
+              "税种",
+              "申报期",
+              "申报节点",
+              "用户税率（待核）",
+              "用户税额（待核）"
+            ]
+          },
+          {
+            "name": "依据核对",
+            "columns": [
+              "辖区",
+              "税种",
+              "用户税率原文",
+              "资料来源",
+              "资料日期",
+              "核验状态",
+              "责任人"
+            ]
+          }
+        ],
+        "acceptance": [
+          "未知辖区不默认SG，DUAL的申报依据各自分栏",
+          "用户明确给出的税率、节点和金额仅作待核输入；缺依据保留UNSPECIFIED，不能用历史KB认定现行税率"
+        ],
+        "limitations": [
+          "不提供具体筹划或税务合规结论，不从记忆抄现行税率"
+        ],
+        "implementation": "dedicated_document_draft",
+        "reference_paths": [
+          "demo/kb/finance/finance-tax/outline.md"
+        ],
+        "runtime_tools": [
+          "finance-tax__calendar"
+        ]
+      }
     },
     {
       "id": "supervision",
@@ -1005,9 +5086,83 @@
         "监理",
         "验收"
       ],
-      "pipeline": "理解任务 → 检索本库与大类库 → 提纲 → 独立成稿 → 自检",
+      "pipeline": "区分资料目录任务与逐条通知回复 → 按来文逐项对应事实、措施与附件证据 → 输出闭合台账和签发复查空栏",
       "builtin": true,
-      "enabled": true
+      "enabled": true,
+      "exclusive": [
+        "supervision__reply"
+      ],
+      "yibiao": [
+        "qa",
+        "kb",
+        "write"
+      ],
+      "aligned": true,
+      "tool_note": "草稿不是监理指令或验收依据，不伪造整改培训记录",
+      "capability": {
+        "inputs": [
+          "辖区（未提供则UNSPECIFIED；多个对象单独归属）",
+          "组卷范围或监理通知原文",
+          "来文编号、日期和部位",
+          "用户整改事实与拟办措施",
+          "影像检测和检查资料",
+          "责任方、期限及复查记录"
+        ],
+        "steps": [
+          {
+            "action": "区分资料目录任务与逐条通知回复",
+            "tools": []
+          },
+          {
+            "action": "按来文逐项对应事实、措施与附件证据",
+            "tools": []
+          },
+          {
+            "action": "输出闭合台账和签发复查空栏",
+            "tools": [
+              "supervision__reply"
+            ]
+          }
+        ],
+        "output_sections": [
+          "范围声明",
+          "来文或目录",
+          "事实问题",
+          "原因待核",
+          "拟办措施",
+          "期限",
+          "证据目录",
+          "签发与复查"
+        ],
+        "output_tables": [
+          {
+            "name": "通知回复闭合",
+            "columns": [
+              "来文条目",
+              "部位",
+              "用户事实",
+              "拟办措施",
+              "期限来源",
+              "附件",
+              "复查空栏"
+            ]
+          }
+        ],
+        "acceptance": [
+          "回复任务无通知原文不造来文，事项不得漏条",
+          "监理复查和签发意见保持空栏，不能自称闭合"
+        ],
+        "limitations": [
+          "草稿不是监理指令或验收依据，不伪造整改培训记录"
+        ],
+        "implementation": "dedicated_document_draft",
+        "reference_paths": [
+          "demo/kb/docs/supervision/outline.md"
+        ],
+        "runtime_tools": [
+          "supervision__reply"
+        ]
+      }
     },
     {
       "id": "hr-recruit",
@@ -1021,9 +5176,81 @@
         "招聘",
         "面试"
       ],
-      "pipeline": "理解任务 → 检索本库与大类库 → 提纲 → 独立成稿 → 自检",
+      "pipeline": "区分自有、派遣与分包人员需求 → 整理职责、任职和面试追问对应关系 → 输出核验清单及录用前待确认条件",
       "builtin": true,
-      "enabled": true
+      "enabled": true,
+      "exclusive": [
+        "hr-recruit__brief"
+      ],
+      "yibiao": [
+        "outline",
+        "kb",
+        "write"
+      ],
+      "aligned": true,
+      "tool_note": "不判断证件真实性或承诺录用，不提出与岗位无关的个人问题",
+      "capability": {
+        "inputs": [
+          "辖区（未提供则UNSPECIFIED；多个对象单独归属）",
+          "招聘岗位与需求项目部门",
+          "用工类型和到岗需求",
+          "用户职责与任职要求",
+          "工作地点和证件要求",
+          "用户明确薪资或企业制度"
+        ],
+        "steps": [
+          {
+            "action": "区分自有、派遣与分包人员需求",
+            "tools": []
+          },
+          {
+            "action": "整理职责、任职和面试追问对应关系",
+            "tools": []
+          },
+          {
+            "action": "输出核验清单及录用前待确认条件",
+            "tools": [
+              "hr-recruit__brief"
+            ]
+          }
+        ],
+        "output_sections": [
+          "岗位声明",
+          "职责界面",
+          "任职条件",
+          "工作地点",
+          "告知事项",
+          "面试提纲",
+          "证件核验",
+          "相邻岗位"
+        ],
+        "output_tables": [
+          {
+            "name": "招聘简报",
+            "columns": [
+              "职责",
+              "任职要求",
+              "面试问法",
+              "核验证据",
+              "待填项"
+            ]
+          }
+        ],
+        "acceptance": [
+          "职责任职面试三栏均有对应内容",
+          "未给薪资不编市场带宽，不写录用承诺"
+        ],
+        "limitations": [
+          "不判断证件真实性或承诺录用，不提出与岗位无关的个人问题"
+        ],
+        "implementation": "dedicated_document_draft",
+        "reference_paths": [
+          "demo/kb/hr/hr-recruit/outline.md"
+        ],
+        "runtime_tools": [
+          "hr-recruit__brief"
+        ]
+      }
     },
     {
       "id": "hr-labor",
@@ -1037,9 +5264,86 @@
         "劳动合同",
         "劳务"
       ],
-      "pipeline": "理解任务 → 检索本库与大类库 → 提纲 → 独立成稿 → 自检",
+      "pipeline": "按当事人与合同类型分开登记关系事实 → 逐项对应合同条款、工资和期限原文 → 输出补偿待核及辖区咨询资料清单",
       "builtin": true,
-      "enabled": true
+      "enabled": true,
+      "exclusive": [
+        "hr-labor__check"
+      ],
+      "yibiao": [
+        "qa",
+        "kb",
+        "write"
+      ],
+      "aligned": true,
+      "tool_note": "普法资料检查，不预测诉讼结果、不编法律条号或赔偿金额",
+      "capability": {
+        "inputs": [
+          "辖区（未提供则UNSPECIFIED；多个对象单独归属）",
+          "当事人与逐人合同文本",
+          "劳动、劳务、派遣或非全日制类型",
+          "工作地点、期限和岗位原文",
+          "用户薪资、工时及社保资料",
+          "变更解除与补偿证据"
+        ],
+        "steps": [
+          {
+            "action": "按当事人与合同类型分开登记关系事实",
+            "tools": []
+          },
+          {
+            "action": "逐项对应合同条款、工资和期限原文",
+            "tools": []
+          },
+          {
+            "action": "输出补偿待核及辖区咨询资料清单",
+            "tools": [
+              "hr-labor__check"
+            ]
+          }
+        ],
+        "output_sections": [
+          "材料登记",
+          "关系事实",
+          "劳动合同条款",
+          "劳务协议",
+          "派遣三方",
+          "非全日制",
+          "期限约定",
+          "工资资料",
+          "变更补偿",
+          "辖区补充",
+          "争议资料",
+          "依据自检"
+        ],
+        "output_tables": [
+          {
+            "name": "合同条款对照",
+            "columns": [
+              "当事人",
+              "合同类型",
+              "核对事项",
+              "用户原文",
+              "缺项",
+              "待核依据"
+            ]
+          }
+        ],
+        "acceptance": [
+          "多劳动者合同字段不串值，四类合同分别成表",
+          "未给年限工资及依据时补偿[A001]待填，不裁定效力"
+        ],
+        "limitations": [
+          "普法资料检查，不预测诉讼结果、不编法律条号或赔偿金额"
+        ],
+        "implementation": "dedicated_document_draft",
+        "reference_paths": [
+          "demo/kb/hr/hr-labor/outline.md"
+        ],
+        "runtime_tools": [
+          "hr-labor__check"
+        ]
+      }
     },
     {
       "id": "hr-train",
@@ -1053,9 +5357,84 @@
         "培训",
         "三级教育"
       ],
-      "pipeline": "理解任务 → 检索本库与大类库 → 提纲 → 独立成稿 → 自检",
+      "pipeline": "按公司、项目、班组三层区分对象与课题 → 安排四新专项及派遣实习的教育接口 → 输出签到空栏、考核与证件复审待办",
       "builtin": true,
-      "enabled": true
+      "enabled": true,
+      "exclusive": [
+        "hr-train__plan"
+      ],
+      "yibiao": [
+        "outline",
+        "kb",
+        "write"
+      ],
+      "aligned": true,
+      "tool_note": "不把培训计划当完成记录，不替代安全技术交底",
+      "capability": {
+        "inputs": [
+          "辖区（未提供则UNSPECIFIED；多个对象单独归属）",
+          "企业项目与进场批次",
+          "班组、岗位和人员范围",
+          "用户课题及培训目标",
+          "学时制度、讲师和日期",
+          "证件及已有考核记录"
+        ],
+        "steps": [
+          {
+            "action": "按公司、项目、班组三层区分对象与课题",
+            "tools": []
+          },
+          {
+            "action": "安排四新专项及派遣实习的教育接口",
+            "tools": []
+          },
+          {
+            "action": "输出签到空栏、考核与证件复审待办",
+            "tools": [
+              "hr-train__plan"
+            ]
+          }
+        ],
+        "output_sections": [
+          "计划登记",
+          "对象分层",
+          "三级课题",
+          "学时制度",
+          "专项接口",
+          "签到空表",
+          "考核档案",
+          "证件复审",
+          "依据自检"
+        ],
+        "output_tables": [
+          {
+            "name": "三级培训",
+            "columns": [
+              "层级",
+              "对象班组",
+              "课题",
+              "日期",
+              "学时来源",
+              "讲师",
+              "考核待核"
+            ]
+          }
+        ],
+        "acceptance": [
+          "公司项目班组均有专属课题，用户课题进入正文表",
+          "签到和考核结果不得预填，未给学时不套门槛"
+        ],
+        "limitations": [
+          "不把培训计划当完成记录，不替代安全技术交底"
+        ],
+        "implementation": "dedicated_document_draft",
+        "reference_paths": [
+          "demo/kb/hr/hr-train/outline.md"
+        ],
+        "runtime_tools": [
+          "hr-train__plan"
+        ]
+      }
     },
     {
       "id": "admin-doc",
@@ -1070,9 +5449,82 @@
         "印章",
         "用印"
       ],
-      "pipeline": "理解任务 → 检索本库与大类库 → 提纲 → 独立成稿 → 自检",
+      "pipeline": "区分请示报告通知函纪要的行文目的 → 将事实、请求或决议待定分开组织正文 → 核对附件与用印审批空栏后成稿",
       "builtin": true,
-      "enabled": true
+      "enabled": true,
+      "exclusive": [
+        "admin-doc__draft"
+      ],
+      "yibiao": [
+        "outline",
+        "kb",
+        "write"
+      ],
+      "aligned": true,
+      "tool_note": "不代签发、用印或对外承诺，不编正式文号",
+      "capability": {
+        "inputs": [
+          "辖区（未提供则UNSPECIFIED；多个对象单独归属）",
+          "文种、行文关系与目的",
+          "发文单位及主送抄送",
+          "用户事实、请求或会议记录",
+          "附件名称及文件版本",
+          "用印种类、份数和审批资料"
+        ],
+        "steps": [
+          {
+            "action": "区分请示报告通知函纪要的行文目的",
+            "tools": []
+          },
+          {
+            "action": "将事实、请求或决议待定分开组织正文",
+            "tools": []
+          },
+          {
+            "action": "核对附件与用印审批空栏后成稿",
+            "tools": [
+              "admin-doc__draft"
+            ]
+          }
+        ],
+        "output_sections": [
+          "草稿声明",
+          "文种标题",
+          "主送抄送",
+          "事实正文",
+          "请求或决议",
+          "附件",
+          "署名日期",
+          "用印审批"
+        ],
+        "output_tables": [
+          {
+            "name": "用印审批",
+            "columns": [
+              "文件名称",
+              "份数",
+              "印章种类",
+              "审批人",
+              "申请用途",
+              "待核项"
+            ]
+          }
+        ],
+        "acceptance": [
+          "用印审批四个核心字段齐全但不伪填批准",
+          "纪要已决与待定分开，不将讨论变成决定"
+        ],
+        "limitations": [
+          "不代签发、用印或对外承诺，不编正式文号"
+        ],
+        "implementation": "dedicated_document_draft",
+        "reference_paths": [
+          "demo/kb/admin/admin-doc/outline.md"
+        ],
+        "runtime_tools": [
+          "admin-doc__draft"
+        ]
+      }
     },
     {
       "id": "admin-office",
@@ -1087,9 +5539,82 @@
         "后勤",
         "会议"
       ],
-      "pipeline": "理解任务 → 检索本库与大类库 → 提纲 → 独立成稿 → 自检",
+      "pipeline": "按事项登记会务接待差旅的要素 → 分别列场地物资车辆食宿待办 → 输出责任时限与审批归还清单",
       "builtin": true,
-      "enabled": true
+      "enabled": true,
+      "exclusive": [
+        "admin-office__list"
+      ],
+      "yibiao": [
+        "outline",
+        "kb",
+        "write"
+      ],
+      "aligned": true,
+      "tool_note": "不发送通知、不订票派车，不执行后勤审批",
+      "capability": {
+        "inputs": [
+          "辖区（未提供则UNSPECIFIED；多个对象单独归属）",
+          "会议、接待或差旅事项",
+          "时间地点与人员原文",
+          "议程、路线或后勤需求",
+          "用户预算或公司费用制度",
+          "负责人及物资车辆条件"
+        ],
+        "steps": [
+          {
+            "action": "按事项登记会务接待差旅的要素",
+            "tools": []
+          },
+          {
+            "action": "分别列场地物资车辆食宿待办",
+            "tools": []
+          },
+          {
+            "action": "输出责任时限与审批归还清单",
+            "tools": [
+              "admin-office__list"
+            ]
+          }
+        ],
+        "output_sections": [
+          "事项声明",
+          "会议要素",
+          "接待",
+          "差旅",
+          "食堂宿舍",
+          "车辆",
+          "办公物资",
+          "会后闭环"
+        ],
+        "output_tables": [
+          {
+            "name": "会务后勤",
+            "columns": [
+              "事项",
+              "时间地点",
+              "人员",
+              "需求或议程",
+              "责任人",
+              "审批待核"
+            ]
+          }
+        ],
+        "acceptance": [
+          "用户时间地点议程进入对应事项，不互借其他会议值",
+          "无费用制度不填餐宿标准，不标已派车或已批准"
+        ],
+        "limitations": [
+          "不发送通知、不订票派车，不执行后勤审批"
+        ],
+        "implementation": "dedicated_document_draft",
+        "reference_paths": [
+          "demo/kb/admin/admin-office/outline.md"
+        ],
+        "runtime_tools": [
+          "admin-office__list"
+        ]
+      }
     },
     {
       "id": "it-ops",
@@ -1104,9 +5629,83 @@
         "权限",
         "账号"
       ],
-      "pipeline": "理解任务 → 检索本库与大类库 → 提纲 → 独立成稿 → 自检",
+      "pipeline": "按系统角色整理最小权限和账号流程 → 区分授权变更、故障分级及升级路径 → 输出运维检查表与留痕要求",
       "builtin": true,
-      "enabled": true
+      "enabled": true,
+      "exclusive": [
+        "it-ops__runbook"
+      ],
+      "yibiao": [
+        "outline",
+        "kb",
+        "write"
+      ],
+      "aligned": true,
+      "tool_note": "不操作生产系统或创建账号，不编IP、接口地址或密码",
+      "capability": {
+        "inputs": [
+          "辖区（未提供则UNSPECIFIED；多个对象单独归属）",
+          "系统名称及服务范围",
+          "业务角色与权限需求",
+          "脱敏的账号生命周期流程",
+          "变更窗口及审批路径",
+          "故障场景、联系人和恢复资料"
+        ],
+        "steps": [
+          {
+            "action": "按系统角色整理最小权限和账号流程",
+            "tools": []
+          },
+          {
+            "action": "区分授权变更、故障分级及升级路径",
+            "tools": []
+          },
+          {
+            "action": "输出运维检查表与留痕要求",
+            "tools": [
+              "it-ops__runbook"
+            ]
+          }
+        ],
+        "output_sections": [
+          "范围声明",
+          "系统清单",
+          "账号生命周期",
+          "角色权限",
+          "身份鉴别",
+          "变更留痕",
+          "故障升级",
+          "变更窗口",
+          "检查目录"
+        ],
+        "output_tables": [
+          {
+            "name": "权限矩阵",
+            "columns": [
+              "系统",
+              "角色",
+              "业务权限",
+              "申请审批",
+              "回收条件",
+              "审计证据"
+            ]
+          }
+        ],
+        "acceptance": [
+          "角色权限有业务用途，真实账号密钥不得进入草稿",
+          "权限开通与拟申请区分，不伪称已执行变更"
+        ],
+        "limitations": [
+          "不操作生产系统或创建账号，不编IP、接口地址或密码"
+        ],
+        "implementation": "dedicated_document_draft",
+        "reference_paths": [
+          "demo/kb/it/it-ops/outline.md"
+        ],
+        "runtime_tools": [
+          "it-ops__runbook"
+        ]
+      }
     },
     {
       "id": "it-data",
@@ -1120,9 +5719,82 @@
         "备份",
         "数据安全"
       ],
-      "pipeline": "理解任务 → 检索本库与大类库 → 提纲 → 独立成稿 → 自检",
+      "pipeline": "按数据等级登记恢复目标与备份范围 → 区分备份策略、恢复流程和演练证据 → 输出恢复验收待核与整改清单",
       "builtin": true,
-      "enabled": true
+      "enabled": true,
+      "exclusive": [
+        "it-data__backup"
+      ],
+      "yibiao": [
+        "outline",
+        "kb",
+        "write"
+      ],
+      "aligned": true,
+      "tool_note": "只起草策略，不访问数据、不执行备份或恢复",
+      "capability": {
+        "inputs": [
+          "辖区（未提供则UNSPECIFIED；多个对象单独归属）",
+          "系统与数据分类",
+          "业务给定RPO和RTO",
+          "备份范围及保留要求",
+          "脱敏的备份介质和责任",
+          "恢复演练步骤及真实记录"
+        ],
+        "steps": [
+          {
+            "action": "按数据等级登记恢复目标与备份范围",
+            "tools": []
+          },
+          {
+            "action": "区分备份策略、恢复流程和演练证据",
+            "tools": []
+          },
+          {
+            "action": "输出恢复验收待核与整改清单",
+            "tools": [
+              "it-data__backup"
+            ]
+          }
+        ],
+        "output_sections": [
+          "范围声明",
+          "RPO与RTO",
+          "系统分级",
+          "备份方式",
+          "保留介质",
+          "恢复演练",
+          "现场对象",
+          "验收目录"
+        ],
+        "output_tables": [
+          {
+            "name": "恢复演练",
+            "columns": [
+              "系统数据",
+              "RPO来源",
+              "RTO来源",
+              "恢复步骤",
+              "验证证据",
+              "待核项"
+            ]
+          }
+        ],
+        "acceptance": [
+          "未给RPO/RTO不编目标，备份成功不等于可恢复",
+          "无演练证据不填恢复成功或耗时结果"
+        ],
+        "limitations": [
+          "只起草策略，不访问数据、不执行备份或恢复"
+        ],
+        "implementation": "dedicated_document_draft",
+        "reference_paths": [
+          "demo/kb/it/it-data/outline.md"
+        ],
+        "runtime_tools": [
+          "it-data__backup"
+        ]
+      }
     },
     {
       "id": "it-app",
@@ -1136,9 +5808,84 @@
         "信息化",
         "需求"
       ],
-      "pipeline": "理解任务 → 检索本库与大类库 → 提纲 → 独立成稿 → 自检",
+      "pipeline": "从角色场景梳理业务问题与边界 → 建立功能、数据和接口需求对应关系 → 输出验收待填及变更追踪",
       "builtin": true,
-      "enabled": true
+      "enabled": true,
+      "exclusive": [
+        "it-app__srs"
+      ],
+      "yibiao": [
+        "parse",
+        "outline",
+        "kb",
+        "write"
+      ],
+      "aligned": true,
+      "tool_note": "不开发或部署系统，不写密钥连接串和真实账号",
+      "capability": {
+        "inputs": [
+          "辖区（未提供则UNSPECIFIED；多个对象单独归属）",
+          "业务系统目标与范围",
+          "用户角色及典型场景",
+          "明确功能和优先级",
+          "数据对象及脱敏接口需求",
+          "用户验收条件和非功能要求"
+        ],
+        "steps": [
+          {
+            "action": "从角色场景梳理业务问题与边界",
+            "tools": []
+          },
+          {
+            "action": "建立功能、数据和接口需求对应关系",
+            "tools": []
+          },
+          {
+            "action": "输出验收待填及变更追踪",
+            "tools": [
+              "it-app__srs"
+            ]
+          }
+        ],
+        "output_sections": [
+          "草稿声明",
+          "目标范围",
+          "用户角色",
+          "业务能力",
+          "功能需求",
+          "非功能",
+          "数据主数据",
+          "接口验收"
+        ],
+        "output_tables": [
+          {
+            "name": "需求条目",
+            "columns": [
+              "角色",
+              "场景",
+              "功能",
+              "数据",
+              "验收条件",
+              "来源",
+              "待核项"
+            ]
+          }
+        ],
+        "acceptance": [
+          "每条需求包含角色场景验收，未给指标不编性能阈值",
+          "需求和已实现功能分开，不捏造真实接口地址"
+        ],
+        "limitations": [
+          "不开发或部署系统，不写密钥连接串和真实账号"
+        ],
+        "implementation": "dedicated_document_draft",
+        "reference_paths": [
+          "demo/kb/it/it-app/outline.md"
+        ],
+        "runtime_tools": [
+          "it-app__srs"
+        ]
+      }
     },
     {
       "id": "worker-brief",
@@ -1153,9 +5900,78 @@
         "白话",
         "班前"
       ],
-      "pipeline": "理解任务 → 检索本库与大类库 → 提纲 → 独立成稿 → 自检",
+      "pipeline": "把工序与掉落碰撞淹埋等危险换成白话 → 整理三步动作及喊停找谁 → 输出班前短口播与缺项提示",
       "builtin": true,
-      "enabled": true
+      "enabled": true,
+      "exclusive": [
+        "worker-brief__talk"
+      ],
+      "yibiao": [
+        "outline",
+        "kb",
+        "write"
+      ],
+      "aligned": true,
+      "tool_note": "不是书面交底签认件，不宣称已交底或可以开工",
+      "capability": {
+        "inputs": [
+          "辖区（未提供则UNSPECIFIED；多个对象单独归属）",
+          "今天的工序和具体部位",
+          "班组与一线听众",
+          "已给危险点及防护做法",
+          "停工条件和报告对象",
+          "现场允许使用的数值来源"
+        ],
+        "steps": [
+          {
+            "action": "把工序与掉落碰撞淹埋等危险换成白话",
+            "tools": []
+          },
+          {
+            "action": "整理三步动作及喊停找谁",
+            "tools": []
+          },
+          {
+            "action": "输出班前短口播与缺项提示",
+            "tools": [
+              "worker-brief__talk"
+            ]
+          }
+        ],
+        "output_sections": [
+          "今天干什么",
+          "危险在哪里",
+          "三步怎么干",
+          "谁喊停找谁",
+          "结束提醒"
+        ],
+        "output_tables": [
+          {
+            "name": "班前要点",
+            "columns": [
+              "今天作业",
+              "危险点",
+              "动作",
+              "停工报告",
+              "待填项"
+            ]
+          }
+        ],
+        "acceptance": [
+          "口播面向工友能直接读，危险与动作对应",
+          "没有尺寸来源不报毫米，不填不存在的联系人"
+        ],
+        "limitations": [
+          "不是书面交底签认件，不宣称已交底或可以开工"
+        ],
+        "implementation": "dedicated_document_draft",
+        "reference_paths": [
+          "demo/kb/people/worker-brief/outline.md"
+        ],
+        "runtime_tools": [
+          "worker-brief__talk"
+        ]
+      }
     },
     {
       "id": "pm-daily",
@@ -1169,9 +5985,155 @@
         "日报",
         "工程日志"
       ],
-      "pipeline": "理解任务 → 检索本库与大类库 → 提纲 → 独立成稿 → 自检",
+      "pipeline": "按显式字段区分当日事实与明日安排 → 把部位进度、人机料和安全质量记事放入正文 → 列指令附件和待填项后输出日报",
       "builtin": true,
-      "enabled": true
+      "enabled": true,
+      "exclusive": [
+        "pm-daily__log"
+      ],
+      "yibiao": [
+        "outline",
+        "kb",
+        "write"
+      ],
+      "aligned": true,
+      "tool_note": "不编完成百分比、人数或天气，不把日报作为验收记录",
+      "capability": {
+        "inputs": [
+          "辖区（未提供则UNSPECIFIED；多个对象单独归属）",
+          "项目名称和日报日期",
+          "具体部位及形象进度事实",
+          "天气和出勤人数原文",
+          "机械材料记录",
+          "安全质量记事与明日计划"
+        ],
+        "steps": [
+          {
+            "action": "按显式字段区分当日事实与明日安排",
+            "tools": []
+          },
+          {
+            "action": "把部位进度、人机料和安全质量记事放入正文",
+            "tools": []
+          },
+          {
+            "action": "列指令附件和待填项后输出日报",
+            "tools": [
+              "pm-daily__log"
+            ]
+          }
+        ],
+        "output_sections": [
+          "报头声明",
+          "天气与部位",
+          "形象进度",
+          "人员",
+          "机械材料",
+          "指令外部",
+          "安全质量记事",
+          "明日计划",
+          "附件与待填"
+        ],
+        "output_tables": [
+          {
+            "name": "日报记录",
+            "columns": [
+              "日期部位",
+              "用户进度事实",
+              "天气",
+              "出勤",
+              "安全质量记事",
+              "明日计划"
+            ]
+          }
+        ],
+        "acceptance": [
+          "安全质量记事及明日计划进入对应章节，不能仅附原文",
+          "未给部位天气人数留待填，不把请求句当部位"
+        ],
+        "limitations": [
+          "不编完成百分比、人数或天气，不把日报作为验收记录"
+        ],
+        "implementation": "dedicated_document_draft",
+        "reference_paths": [
+          "demo/kb/people/pm-daily/outline.md"
+        ],
+        "runtime_tools": [
+          "pm-daily__log"
+        ]
+      }
     }
-  ]
+  ],
+  "schema": "civil.expert.catalog.v1",
+  "tool_map": {
+    "yibiao_pipeline": [
+      "parse",
+      "outline",
+      "qa",
+      "kb",
+      "write"
+    ],
+    "common_tools": [
+      "search_kb",
+      "read_kb",
+      "list_kb",
+      "write_deliverable",
+      "web_search",
+      "web_open",
+      "list_attachments",
+      "read_attachment",
+      "import_local",
+      "firm__bid_pack"
+    ],
+    "category_shared": {
+      "bid": [
+        "bid__scan_forbidden"
+      ],
+      "design": [
+        "design__scan_forbidden"
+      ],
+      "bim": [
+        "bim__scan_forbidden"
+      ],
+      "planning": [
+        "planning__scan_forbidden"
+      ],
+      "construction": [
+        "construction__scan_forbidden"
+      ],
+      "hse": [
+        "hse__scan_forbidden"
+      ],
+      "commercial": [
+        "commercial__scan_forbidden"
+      ],
+      "procurement": [
+        "procurement__scan_forbidden"
+      ],
+      "plant": [
+        "plant__scan_forbidden"
+      ],
+      "lab": [
+        "lab__scan_forbidden"
+      ],
+      "finance": [
+        "finance__scan_forbidden"
+      ],
+      "docs": [
+        "docs__scan_forbidden"
+      ],
+      "hr": [
+        "hr__scan_forbidden"
+      ],
+      "admin": [
+        "admin__scan_forbidden"
+      ],
+      "it": [
+        "it__scan_forbidden"
+      ],
+      "people": [
+        "people__scan_forbidden"
+      ]
+    }
+  }
 }

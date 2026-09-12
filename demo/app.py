@@ -1,19 +1,21 @@
 from __future__ import annotations
 
 import json
-import uuid
+from uuid import uuid4
 from pathlib import Path
 
-from fastapi import FastAPI, HTTPException
-from fastapi.responses import FileResponse, StreamingResponse
+from fastapi import FastAPI, HTTPException, Request
+from fastapi.responses import FileResponse, Response, StreamingResponse
 from fastapi.staticfiles import StaticFiles
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, StrictBool
+from starlette.background import BackgroundTask
+from starlette.datastructures import UploadFile
 
-from agent import run_expert, run_plain
+from agent import run_plain
 from catalog import catalog_payload, get_expert, resolve_mentions
 from config import DEMO_ROOT, OUT_ROOT, llm_model
 from kbio import MAX_FILE_BYTES, create_file, delete_file, format_bytes, read_text, write_text
-from llm import LLMError, has_key
+from llm import has_key
 from rag import list_kb
 from store import (
     disable_or_delete_expert,
@@ -29,11 +31,15 @@ app.mount("/static", StaticFiles(directory=STATIC), name="static")
 
 
 class ChatIn(BaseModel):
-    message: str
-    history: list[dict] = Field(default_factory=list)
-    expert_ids: list[str] = Field(default_factory=list)
-    confirm_ok: bool = False
-    session_id: str = ""
+    message: str = Field(min_length=1, max_length=40_000)
+    history: list[dict] = Field(default_factory=list, max_length=80)
+    expert_ids: list[str] = Field(default_factory=list, max_length=8)
+    confirm_ok: StrictBool = False
+    session_id: str = Field(default="", max_length=32)
+    project_id: str = Field(default="", max_length=64)
+    attachments: list[str] = Field(default_factory=list, max_length=12)
+    workflow_budget: dict | None = None
+    attachment_roles: dict[str, str] = Field(default_factory=dict)
 
 
 class ExpertIn(BaseModel):
@@ -62,6 +68,13 @@ class LimitIn(BaseModel):
     kb_soft_limit_kb: int
 
 
+class LLMConfigIn(BaseModel):
+    # Existing setting fields retain model_settings' validation and error text.
+    # The new flag is strict at the HTTP boundary, including rejecting null.
+    model_config = {"extra": "allow"}
+    semantic_summary: StrictBool = False
+
+
 @app.get("/")
 def index() -> FileResponse:
     return FileResponse(STATIC / "index.html")
@@ -78,6 +91,12 @@ def health() -> dict:
         "product_name": "Civil Buddy",
         "tagline": "土木版 Codex",
         "has_key": has_key(),
+        "mode": "configured" if has_key() else "offline",
+        "capabilities": {"chat": True, "drafts": True, "model_settings": True,
+                         "attachments": True, "audit": True, "packing": False,
+                         "session_backup": True, "cancel": True, "word_export": True,
+                         "task_memory": True, "local_rag": True, "task_routing": True,
+                         "expert_contracts": True, "tender_collaboration": True, "semantic_summary": True},
         "deepseek": has_key(),
         "model": llm_model(),
         "context": policy(),
@@ -87,6 +106,90 @@ def health() -> dict:
             "n": len(list_job_files()),
         },
     }
+
+
+@app.get("/api/llm-config")
+def llm_settings() -> dict:
+    from model_settings import get_settings
+    return get_settings()
+
+
+@app.get("/api/experts/{expert_id}/capability")
+def expert_capability(expert_id: str) -> dict:
+    from packing_assistant.expert_capabilities import get_capability
+    value = get_capability(expert_id)
+    if not value:
+        raise HTTPException(404, "岗位能力契约不存在")
+    return {"ok": True, **value}
+
+
+@app.post("/api/task-route")
+def task_route(body: ChatIn) -> dict:
+    from task_router import route_task
+    if any(not get_expert(eid) for eid in body.expert_ids):
+        raise HTTPException(400, "请选择有效岗位")
+    return {"ok": True, "route": route_task(body.message, body.expert_ids)}
+
+
+@app.get("/api/workflows/{session_id}/{run_id}")
+def workflow_detail(session_id: str, run_id: str) -> dict:
+    from packing_assistant.runtime.tender_workflow import load_workflow
+    from workflow_service import public_result
+    try:
+        value = load_workflow(OUT_ROOT, session_id, run_id)
+        return {"ok": True, "workflow": public_result(value), "active": value["active"]}
+    except (OSError, ValueError):
+        raise HTTPException(404, "协作运行记录不存在") from None
+
+
+@app.post("/api/llm-config")
+def llm_settings_update(body: LLMConfigIn) -> dict:
+    from model_settings import set_settings
+    try:
+        return set_settings(body.model_dump(exclude_unset=True))
+    except ValueError as exc:
+        raise HTTPException(400, str(exc)) from exc
+
+
+@app.post("/api/upload")
+async def upload(request: Request) -> dict:
+    from uploads import MAX_BYTES, MAX_REQUEST_BYTES, UploadError, UploadTooLarge, save_uploads
+    # Bound the body before multipart parsing, including chunked uploads without Content-Length.
+    data = bytearray()
+    async for chunk in request.stream():
+        if len(data) + len(chunk) > MAX_REQUEST_BYTES:
+            raise HTTPException(413, "一次上传不能超过 25 MB")
+        data.extend(chunk)
+    async def receive():
+        return {"type": "http.request", "body": bytes(data), "more_body": False}
+    bounded = Request(request.scope, receive)
+    try:
+        async with bounded.form(max_files=12, max_fields=1) as form:
+            sid = str(form.get("session_id") or "")
+            files = []
+            for _, value in form.multi_items():
+                if isinstance(value, UploadFile):
+                    payload = await value.read(MAX_BYTES + 1)
+                    if len(payload) > MAX_BYTES:
+                        raise UploadTooLarge("单个附件不能超过 20 MB")
+                    files.append((value.filename or "", payload))
+            from starlette.concurrency import run_in_threadpool
+            return await run_in_threadpool(save_uploads, sid, files)
+    except UploadTooLarge as exc:
+        raise HTTPException(413, str(exc)) from exc
+    except UploadError as exc:
+        raise HTTPException(400, str(exc)) from exc
+    except (OSError, PermissionError) as exc:
+        raise HTTPException(500, "无法保存附件，请检查工作台目录权限") from exc
+
+
+@app.get("/api/attachments")
+def attachments(session_id: str) -> dict:
+    from uploads import list_uploads
+    try:
+        return {"ok": True, "files": list_uploads(session_id)}
+    except ValueError as exc:
+        raise HTTPException(400, str(exc)) from exc
 
 
 @app.get("/api/job")
@@ -216,6 +319,10 @@ def set_config(body: PolicyIn) -> dict:
 
     from packing_assistant.runtime.civil_config import SANDBOX_MODES, APPROVAL_MODES, load_config
 
+    if body.sandbox and body.sandbox not in SANDBOX_MODES:
+        raise HTTPException(400, "bad sandbox")
+    if body.approval and body.approval not in APPROVAL_MODES:
+        raise HTTPException(400, "bad approval")
     if body.sandbox:
         os.environ["CIVIL_SANDBOX"] = body.sandbox
     if body.approval:
@@ -239,7 +346,7 @@ def set_config(body: PolicyIn) -> dict:
 def projects_list() -> dict:
     import projects as pj
 
-    return pj.list_projects(OUT_ROOT)
+    return pj.list_projects(OUT_ROOT, recorded_only=True)
 
 
 class ProjectIn(BaseModel):
@@ -292,17 +399,147 @@ def projects_merge(pid: str, body: MergeIn) -> dict:
 def sessions_list(project_id: str = "", q: str = "", limit: int = 0, offset: int = 0) -> dict:
     import projects as pj
 
-    return pj.list_sessions(OUT_ROOT, project_id, q, limit or pj.DEFAULT_LIMIT, offset)
+    return pj.list_sessions(OUT_ROOT, project_id, q, limit or pj.DEFAULT_LIMIT, offset, recorded_only=True)
 
 
 @app.get("/api/sessions/{sid}")
 def session_get(sid: str) -> dict:
-    import projects as pj
+    from chat_service import session_detail
 
     try:
-        return pj.session_detail(OUT_ROOT, sid)
+        return session_detail(OUT_ROOT, sid)
     except ValueError as e:
         raise HTTPException(400, str(e))
+
+
+@app.post("/api/sessions/{sid}/cancel")
+def session_cancel(sid: str) -> dict:
+    from chat_service import valid_session
+    from turn_control import cancel
+    try:
+        return cancel(valid_session(sid))
+    except ValueError as exc:
+        raise HTTPException(400, str(exc)) from exc
+
+
+@app.get("/api/context")
+def task_context(session_id: str) -> dict:
+    from chat_service import valid_session
+    from session_context import detail
+    try:
+        return {"ok": True, **detail(OUT_ROOT, valid_session(session_id))}
+    except ValueError as exc:
+        raise HTTPException(400, str(exc)) from exc
+
+
+class ContextSearchIn(BaseModel):
+    session_id: str = Field(min_length=4, max_length=32)
+    query: str = Field(min_length=1, max_length=2000)
+    attachments: list[str] = Field(default_factory=list, max_length=12)
+
+
+class ContextRebuildIn(BaseModel):
+    model_config = {"extra": "forbid"}
+    session_id: str = Field(min_length=4, max_length=32)
+
+
+@app.post("/api/context/rebuild")
+def rebuild_task_context(body: ContextRebuildIn) -> dict:
+    from chat_service import SessionBusy, SessionLease, valid_session
+    from context_maintenance import rebuild
+    lease = None
+    try:
+        sid = valid_session(body.session_id)
+        lease = SessionLease(sid)
+        return rebuild(OUT_ROOT, sid)
+    except SessionBusy as exc:
+        raise HTTPException(409, "当前任务正在运行，请停止或等待完成后重新整理记忆") from exc
+    except FileNotFoundError as exc:
+        raise HTTPException(404, "任务或原始资料不存在，无法重建；请核对当前任务的记录和附件") from exc
+    except PermissionError as exc:
+        raise HTTPException(403, "当前模式或文件权限不允许重建；原始资料未改动") from exc
+    except ValueError as exc:
+        raise HTTPException(400, str(exc)) from exc
+    except OSError as exc:
+        raise HTTPException(500, "重建未完成，请检查存储空间或文件占用后重试；原始资料未改动") from exc
+    finally:
+        if lease:
+            lease.release()
+
+
+@app.post("/api/context/search")
+def search_task_context(body: ContextSearchIn) -> dict:
+    from chat_service import valid_session
+    from session_context import citation
+    import local_retrieval
+    import projects
+    import uploads
+    try:
+        sid = valid_session(body.session_id)
+        documents = uploads.extracted_documents(sid, body.attachments)
+        documents = uploads.extracted_documents(sid, [d["id"] for d in uploads.list_uploads(sid)])
+        local_retrieval.sync_session(OUT_ROOT, sid, projects.read_full_history(OUT_ROOT, sid), documents)
+        hits = local_retrieval.search(OUT_ROOT, sid, body.query, attachment_ids=body.attachments, limit=8)
+        return {"ok": True, "citations": [citation(sid, hit) for hit in hits]}
+    except ValueError as exc:
+        raise HTTPException(400, str(exc)) from exc
+
+
+@app.get("/api/context/source")
+def context_source(session_id: str, source_id: str, start: int = 0, end: int = 8000) -> dict:
+    from chat_service import valid_session
+    import local_retrieval
+    try:
+        sid = valid_session(session_id)
+        if start < 0 or end <= start or end - start > 20_000:
+            raise ValueError("来源范围须为 1–20000 个字符")
+        value = local_retrieval.source(OUT_ROOT, sid, source_id)
+        if value is None:
+            raise HTTPException(404, "该来源已失效，请重新检索")
+        return {"ok": True, **{k: v for k, v in value.items() if k != "text"},
+                "text": value["text"][start:end], "start": start, "end": min(end, len(value["text"]))}
+    except ValueError as exc:
+        raise HTTPException(400, str(exc)) from exc
+
+
+@app.get("/api/sessions/{sid}/export")
+def session_export(sid: str) -> Response:
+    from chat_service import SessionBusy, SessionLease, valid_session
+    from session_bundle import export_session
+    lease = None
+    try:
+        valid_session(sid)
+        lease = SessionLease(sid)
+        content = export_session(OUT_ROOT, sid)
+        return Response(content, media_type="application/zip", headers={
+            "Content-Disposition": f'attachment; filename="civil-task-{sid}.zip"',
+        })
+    except SessionBusy as exc:
+        raise HTTPException(409, "当前任务正在运行，请停止或等待完成后备份") from exc
+    except (ValueError, OSError) as exc:
+        raise HTTPException(400, "备份失败：" + str(exc)) from exc
+    finally:
+        if lease:
+            lease.release()
+
+
+@app.post("/api/session-import")
+async def session_import(request: Request) -> dict:
+    from session_bundle import MAX_BYTES, BundleError, import_session
+    from starlette.concurrency import run_in_threadpool
+    data = bytearray()
+    async for chunk in request.stream():
+        if len(data) + len(chunk) > MAX_BYTES:
+            raise HTTPException(413, "备份包不能超过 128 MB")
+        data.extend(chunk)
+    try:
+        return await run_in_threadpool(import_session, OUT_ROOT, bytes(data))
+    except BundleError as exc:
+        raise HTTPException(400, str(exc)) from exc
+    except PermissionError as exc:
+        raise HTTPException(403, "当前模式或目录权限不允许导入任务") from exc
+    except OSError as exc:
+        raise HTTPException(500, "导入失败，请检查工作台目录空间和权限") from exc
 
 
 class SessionPatchIn(BaseModel):
@@ -313,11 +550,22 @@ class SessionPatchIn(BaseModel):
 @app.patch("/api/sessions/{sid}")
 def session_patch(sid: str, body: SessionPatchIn) -> dict:
     import projects as pj
+    from chat_service import valid_session
 
     try:
+        valid_session(sid)
         return {"ok": True, "session": pj.set_session_meta(OUT_ROOT, sid, body.project_id, body.title)}
     except ValueError as e:
         raise HTTPException(400, str(e))
+
+
+@app.get("/api/harness/audit/{sid}")
+def session_audit(sid: str) -> dict:
+    from chat_service import audit_session
+    try:
+        return audit_session(OUT_ROOT, sid)
+    except ValueError as exc:
+        raise HTTPException(400, str(exc)) from exc
 
 
 @app.get("/api/threads")
@@ -332,7 +580,7 @@ class ThreadIn(BaseModel):
     text: str = ""
     title: str = ""
     skill: str = ""
-    confirm_ok: bool = False
+    confirm_ok: StrictBool = False
     background: bool = False
     thread_id: str = ""
 
@@ -457,77 +705,35 @@ def studio_limit(body: LimitIn) -> dict:
 
 @app.post("/api/chat")
 def chat(body: ChatIn) -> StreamingResponse:
-    if not has_key():
-        raise HTTPException(
-            400,
-            "未配置 API Key。在 demo/.env 写入 CIVIL_API_KEY / OPENAI_API_KEY / DEEPSEEK_API_KEY。",
-        )
+    from chat_service import SessionBusy, SessionLease, prepare_turn, stream_turn, valid_session
 
-    session = body.session_id or uuid.uuid4().hex[:12]
-    OUT_ROOT.mkdir(parents=True, exist_ok=True)
-    skill_source = ""
-    ids = [i for i in body.expert_ids if get_expert(i)]
-    if ids:
-        skill_source = "given"
-    if not ids:
-        ids = resolve_mentions(body.message)
-        if ids:
-            skill_source = "given"
-    if not ids:
-        from packing_assistant.runtime.expert_skills import match_skill
-
-        hit = match_skill(body.message)
-        if hit and get_expert(hit):
-            ids = [hit]
-            skill_source = "matched"
-
-    history = []
-    for item in body.history[-80:]:
-        role = item.get("role")
-        content = item.get("content")
-        if role in {"user", "assistant"} and isinstance(content, str):
-            history.append({"role": role, "content": content})
-    history.append({"role": "user", "content": body.message})
-    from context import prepare_history
-
-    history, ctx_report = prepare_history(history)
+    lease = None
+    try:
+        payload = body.model_dump()
+        payload["session_id"] = valid_session(body.session_id or uuid4().hex[:12])
+        lease = SessionLease(payload["session_id"])
+        turn = prepare_turn(OUT_ROOT, payload)
+    except SessionBusy as exc:
+        raise HTTPException(409, str(exc)) from exc
+    except ValueError as exc:
+        if lease:
+            lease.release()
+        raise HTTPException(400, str(exc)) from exc
+    except Exception:
+        if lease:
+            lease.release()
+        raise
 
     def events():
         try:
-            yield _sse({"event": "context", "data": ctx_report})
-            if ctx_report.get("compressed"):
-                yield _sse({"event": "status", "data": {"phase": "compress", "text": ctx_report.get("note")}})
-            if not ids:
-                gen = run_plain(history)
-                for ev in gen:
-                    if ev.get("event") == "done" and isinstance(ev.get("data"), dict):
-                        ev["data"]["skill"] = ""
-                        ev["data"]["skill_source"] = ""
-                    yield _sse(ev)
-                return
-            n = len(ids)
-            for i, eid in enumerate(ids):
-                exp = get_expert(eid)
-                if not exp:
-                    continue
-                if n > 1:
-                    yield _sse(
-                        {
-                            "event": "status",
-                            "data": {"phase": "queue", "text": f"独立专家 {i + 1}/{n}：{exp.name}"},
-                        }
-                    )
-                for ev in run_expert(exp, history, confirm_ok=body.confirm_ok, session_id=session):
-                    if ev.get("event") == "done" and isinstance(ev.get("data"), dict):
-                        ev["data"]["skill"] = eid
-                        ev["data"]["skill_source"] = skill_source or "given"
-                    yield _sse(ev)
-        except LLMError as exc:
-            yield _sse({"event": "error", "data": {"text": str(exc)}})
-        except Exception as exc:  # noqa: BLE001
-            yield _sse({"event": "error", "data": {"text": f"内部错误：{exc}"}})
+            for event in stream_turn(OUT_ROOT, turn, key_available=has_key(), plain_runner=run_plain, lease=lease):
+                yield _sse(event)
+        finally:
+            lease.disconnect()
 
-    return StreamingResponse(events(), media_type="text/event-stream")
+    return StreamingResponse(events(), media_type="text/event-stream",
+                             headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"},
+                             background=BackgroundTask(lease.disconnect))
 
 
 def _sse(ev: dict) -> str:
@@ -543,4 +749,9 @@ def file(path: str) -> FileResponse:
         raise HTTPException(403, "not a deliverable") from exc
     if not target.is_file():
         raise HTTPException(404, "missing")
+    from packing_assistant.sandbox import assert_open
+    try:
+        assert_open(target)
+    except PermissionError as exc:
+        raise HTTPException(403, "not a deliverable") from exc
     return FileResponse(target)

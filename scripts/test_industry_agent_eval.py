@@ -37,7 +37,7 @@ def main() -> int:
     assert "完全合格" in track
     assert "可以开工" not in track or "禁止" in track
     kb = (ROOT / "demo" / "kb" / "finance" / "finance-tax" / "web-knowledge.md").read_text(encoding="utf-8")
-    assert "9%" in kb and "Current GST rates" in kb
+    assert "IRAS" in kb and "Current GST rates" in kb
     bid = (ROOT / "demo" / "kb" / "bid" / "bid-parse" / "web-knowledge.md").read_text(encoding="utf-8")
     assert "GeBIZ" in bid
     assert "评分办法" not in bid or "只抄" in bid or "PQM" in bid

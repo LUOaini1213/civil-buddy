@@ -77,7 +77,8 @@ def main() -> int:
     gst = run_agent("什么是 GST", session_id="cx-gst-overlay")
     assert gst.get("intent") == "chat"
     assert gst.get("wrote") is False
-    assert "9%" in (gst.get("reply") or "")
+    assert "UNSPECIFIED" in (gst.get("reply") or "")
+    assert "9%" not in (gst.get("reply") or "")
     assert "scheme-11.md" not in (gst.get("reply") or "")
     assert gst.get("skill_sop_loaded") is False
     assert gst.get("generic_shell") is False
@@ -129,7 +130,8 @@ def main() -> int:
     got = run_on_thread(th.thread_id, "什么是 GST")
     assert got.get("thread_id") == th.thread_id
     assert got.get("wrote") is False
-    assert "9%" in (got.get("reply") or "")
+    assert "UNSPECIFIED" in (got.get("reply") or "")
+    assert "9%" not in (got.get("reply") or "")
     bg = spawn("什么是 GST", title="bg-gst")
     assert bg.get("background") is True
     assert bg.get("thread_id")
@@ -176,7 +178,8 @@ def main() -> int:
         }
     )
     assert turn["result"].get("wrote") is False
-    assert "9%" in (turn["result"].get("reply") or "")
+    assert "UNSPECIFIED" in (turn["result"].get("reply") or "")
+    assert "9%" not in (turn["result"].get("reply") or "")
     assert turn["result"].get("generic_shell") is False
     bad = handle_rpc({"jsonrpc": "2.0", "id": 4, "method": "nope", "params": {}})
     assert bad.get("error")
@@ -191,7 +194,8 @@ def main() -> int:
         pack="construction",
     )
     assert mcp_turn.get("wrote") is False
-    assert "9%" in (mcp_turn.get("reply") or "")
+    assert "UNSPECIFIED" in (mcp_turn.get("reply") or "")
+    assert "9%" not in (mcp_turn.get("reply") or "")
     assert mcp_turn.get("submit_blocked") is True
 
     from fastapi.testclient import TestClient

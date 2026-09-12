@@ -1,6 +1,7 @@
 """Default-surface turn: understand first, write only on run/both.
 
-Chat replies copy official titles already in-repo. No tender pipeline, no files.
+Chat replies identify missing facts without turning historical tax notes into
+current advice. No tender pipeline, no files.
 """
 
 from __future__ import annotations
@@ -11,7 +12,6 @@ from typing import Any, Dict, Optional
 from packing_assistant.understand import understand
 
 _REPO = Path(__file__).resolve().parents[1]
-GST_LINE = "IRAS 页述：The current GST rate in Singapore is 9%（Current GST rates）。不是筹划意见，税额待持证办税人员按当期文件算。"
 HAZARD_LINE = (
     "临边/洞口是否危大、要不要专家论证，须由持证人员按专项目录与现场条件判定。"
     "本产品只做内部讨论，不判定可以开工，不出法定专项方案。"
@@ -19,11 +19,12 @@ HAZARD_LINE = (
 DRAFT_LINE = "内部讨论 AI 草稿。系统不判定可投标，不成稿则不写盘。"
 
 
-def explain(text: str) -> str:
+def explain(text: str, previous_jurisdiction: str = "") -> str:
     t = text or ""
     bits = [DRAFT_LINE]
     if "GST" in t.upper() or "税率" in t or "发票" in t:
-        bits.append(GST_LINE)
+        from packing_assistant.tax_context import explain_tax
+        bits.append(explain_tax(t, previous=previous_jurisdiction))
     if any(k in t for k in ("危大", "临边", "专家论证", "专项")):
         bits.append(HAZARD_LINE)
     if len(bits) == 1:
@@ -92,7 +93,7 @@ def run_turn(
     if intent == "chat":
         sched.transition(run, "done")
         sched.release(sid)
-        body = explain(text)
+        body = explain(text, previous_jurisdiction=str(ctx.get("jurisdiction") or ""))
         out["reply"] = f"{ctx_prefix}\n{body}".strip() if ctx_prefix else body
         out["state"] = run.state
         return out
@@ -113,7 +114,7 @@ def run_turn(
     )
     sched.transition(run, "done")
     sched.release(sid)
-    reply = explain(text) if intent == "both" else "已按招标节选进矩阵。仍是 AI 草稿，submit_blocked=true，不可递交。"
+    reply = explain(text, previous_jurisdiction=str(ctx.get("jurisdiction") or "")) if intent == "both" else "已按招标节选进矩阵。仍是 AI 草稿，submit_blocked=true，不可递交。"
     out.update(
         {
             "wrote": True,

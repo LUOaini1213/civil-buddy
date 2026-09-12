@@ -3,58 +3,204 @@ const state = {
   catalog: null,
   summoned: new Set(),
   history: [],
-  session: crypto.randomUUID().slice(0, 12),
+  session: cbSessionId(),
   modelName: "",
+  health: { capabilities: {} },
   /* ux(round21)：改回 attachments —— round19 拆掉入口后它一度没有写入方，
      叫这个名字等于给拖拽上传留后门；现在回形针是**唯一且显式**的写入方，名副其实。 */
   attachments: [],
+  attachmentRoles: {},
   jobRoot: "",
   threadId: "",
   lastSend: "", /* ux(round7)：纠偏卡「重试」重放同 payload */
   policy: { sandbox: "workspace-write", approval: "on-request" },
   context: {
-    limit: 1000000,
-    reserve: 16384,
+    limit: 32768,
+    reserve: 4096,
     compress_pct: 70,
     warn_pct: 50,
     keep_recent: 4,
-    compress_at: 86732,
+    compress_at: 20070,
   },
 };
 
 const $ = (id) => document.getElementById(id);
+let cbActiveRun = null;
+let cbSessionRequest = 0;
+let cbContextRequest = 0;
+let cbContextSearchRequest = 0;
+let cbContextSourceEpoch = 0;
+let cbContextRebuildRun = null;
+let cbCapabilityRequest = 0;
+let cbServerHitlInput = null;
+const CB_ACTIVE_SESSION_KEY = "cb_active_session_v1";
+
+function cbSessionId() {
+  return (globalThis.crypto && typeof globalThis.crypto.randomUUID === "function"
+    ? globalThis.crypto.randomUUID()
+    : Date.now().toString(36) + Math.random().toString(36).slice(2)).slice(0, 12);
+}
+
+function cbRememberSession(id) {
+  try {
+    if (id) localStorage.setItem(CB_ACTIVE_SESSION_KEY, id);
+    else localStorage.removeItem(CB_ACTIVE_SESSION_KEY);
+  } catch (_) { /* Session restoration is optional when storage is unavailable. */ }
+}
+
+function cbRememberedSession() {
+  try {
+    const id = localStorage.getItem(CB_ACTIVE_SESSION_KEY) || "";
+    return /^[A-Za-z0-9][A-Za-z0-9_-]{3,31}$/.test(id) ? id : "";
+  } catch (_) { return ""; }
+}
+
+async function cbResumeSession(id, request) {
+  if (!id || request !== cbSessionRequest || cbActiveRun || state.history.length) return false;
+  const session = cbProj.sessions.find((item) => item.session_id === id);
+  if (!session) return false;
+  await cbProjOpenSession(session);
+  return state.session === id;
+}
+
+function cbConfirmed() {
+  return !!($("confirmOk") && $("confirmOk").value === "我明白，将由持证人员签认");
+}
+
+function cbHitlPending(data) {
+  return !!(data && (data.hitl_pending === true || data.hitl && data.hitl.pending === true));
+}
+
+function cbEnableServerHitl(data) {
+  if (!cbHitlPending(data) && !(data && data.phase === "hitl_gate" && data.confirmed === false)) return;
+  const input = $("confirmOk");
+  if (!input) return;
+  // Only a current, session-guarded server event may override a disabled input.
+  // Keep this ephemeral: restored history and cached policy never enter here.
+  if (!cbServerHitlInput) cbServerHitlInput = { disabled: !!input.disabled, placeholder: input.placeholder || "" };
+  input.disabled = false;
+  input.placeholder = "服务器要求本轮确认，请键入完整签认句";
+}
+
+function cbClearServerHitl() {
+  const input = $("confirmOk");
+  if (input && cbServerHitlInput) {
+    input.disabled = cbServerHitlInput.disabled;
+    input.placeholder = cbServerHitlInput.placeholder;
+    input.value = "";
+  }
+  cbServerHitlInput = null;
+}
+
+function cbRunPaint(running) {
+  const send = $("send");
+  if (send) {
+    send.textContent = "↑";
+    send.setAttribute("aria-label", running ? "运行中…" : "发送");
+    if (running) {
+      send.dataset.running = "1";
+      send.disabled = true;
+    } else {
+      delete send.dataset.running;
+      cbSyncSend();
+    }
+  }
+  const stop = $("stop");
+  if (stop) { stop.hidden = !running; stop.disabled = false; stop.textContent = "停止"; }
+  const form = $("form");
+  if (form) form.setAttribute("aria-busy", String(running));
+}
+
+function cbCancelActiveRun() {
+  if (!cbActiveRun) return;
+  const run = cbActiveRun;
+  if (cbCapability("cancel") === true) cbRequestCancellation(run).catch(() => {});
+  run.controller.abort();
+  cbActiveRun = null;
+  cbRunPaint(false);
+}
+
+async function cbRequestCancellation(run) {
+  if (!run || run.cancelRequested) return;
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), 8000);
+  run.cancelRequested = true;
+  try {
+    const response = await fetch(`/api/sessions/${encodeURIComponent(run.session)}/cancel`, {
+      method: "POST", signal: controller.signal,
+    });
+    if (!response.ok) throw new Error(await apiError(response) || "停止请求失败");
+    return await response.json();
+  } catch (error) {
+    run.cancelRequested = false;
+    throw error;
+  } finally { clearTimeout(timer); }
+}
+
+function cbCapability(name) {
+  return state.health.capabilities && state.health.capabilities[name];
+}
+
+function cbApplyHealth(health) {
+  const capabilities = health && health.capabilities;
+  state.health = {
+    ...state.health, ...health,
+    capabilities: { ...state.health.capabilities, ...(capabilities && typeof capabilities === "object" ? capabilities : {}) },
+  };
+  const configured = !!(state.health.has_key || state.health.deepseek);
+  const offline = state.health.mode === "offline" && cbCapability("chat") === true;
+  const badge = $("keyBadge");
+  if (badge) {
+    badge.textContent = configured ? "模型已配置" : offline ? "离线工作台可用" : "未配置模型";
+    badge.className = configured || offline ? "pill ok" : "pill warn";
+    badge.title = configured ? "开放式问答使用当前配置；岗位工具按任务运行。" :
+      offline ? "无需 API Key 即可使用当前离线岗位功能。" : "可浏览岗位与知识库，模型能力尚未配置。";
+  }
+  const availability = $("cbAvailability");
+  if (availability) availability.textContent = offline
+    ? "无需 API Key：先问岗位能力" + (cbCapability("drafts") === true ? "，或生成模板草稿。" : "。") + "开放式问答可在模型设置中配置。"
+    : configured ? "模型已配置。选择岗位、添加材料，再描述你的任务。"
+      : "先浏览岗位与知识库。可用任务以当前工作台能力为准，开放式问答需配置模型。";
+  for (const [id, capability, title] of [
+    ["cbLlmOpen", "model_settings", "当前工作台未提供模型设置"],
+    ["cbEmptyModel", "model_settings", "当前工作台未提供模型设置"],
+    ["btnAttach", "attachments", "当前工作台未提供附件上传"],
+    ["cbPackSample", "packing", "当前工作台未连接装箱工具"],
+    ["cbBackupExport", "session_backup", "当前服务不支持任务备份"],
+    ["cbBackupImport", "session_backup", "当前服务不支持任务导入"],
+  ]) {
+    const element = $(id);
+    if (!element) continue;
+    element.disabled = cbCapability(capability) === false;
+    if (element.disabled) element.title = title;
+    else element.removeAttribute("title");
+  }
+  if (health.model) state.modelName = health.model;
+  cbSyncSend();
+}
 
 async function boot() {
+  const request = cbSessionRequest;
+  const remembered = cbRememberedSession();
   /* ux(round10)：后端未起/不可达 → 网关兜底空态（附录 I），不再裸 unhandled rejection */
   try {
-    const health = await fetch("/api/health").then((r) => {
-      if (!r.ok) throw new Error("HTTP " + r.status);
+    const health = await fetch("/api/health").then(async (r) => {
+      if (!r.ok) throw new Error(await apiError(r) || "HTTP " + r.status);
       return r.json();
     });
-    const badge = $("keyBadge");
-  if (health.has_key || health.deepseek) {
-    badge.textContent = "已配置 API Key";
-    badge.className = "pill ok";
-  } else {
-    badge.textContent = "缺少 API Key";
-    badge.className = "pill warn";
-  }
-  if (health.model) {
-    state.modelName = health.model;
-  }
-  if (health.context) {
-    state.context = { ...state.context, ...health.context };
-  }
-  /* ux(round16)：试用包判别蹭 boot 这一次 health，别在装箱直达时再发赶时间的请求——
-     真 exe 冷启动期 /api/health 要跑引擎 spawn_blocking 探针，实测可超 2s（附录 N.3）。 */
-  CB_PACK_TRIAL = cbPackTrialFrom(health);
-  paintContext(estimateLocalContext());
-  await reloadCatalog();
-  await loadJobRoot();
-  await loadPolicy();
-  await loadThreads();
+    cbApplyHealth(health);
+    if (health.context) state.context = { ...state.context, ...health.context };
+    CB_PACK_TRIAL = cbPackTrialFrom(health);
+    paintContext(estimateLocalContext());
+    await reloadCatalog();
+    await loadJobRoot();
+    await loadPolicy();
+    await loadThreads();
+    await cbResumeSession(remembered, request);
+    return true;
   } catch (err) {
     cbEmptyDownShow(err);
+    return false;
   }
 }
 
@@ -97,6 +243,21 @@ function cbAttachRender() {
     nm.textContent = f.name || f.id;
     nm.title = f.name || f.id;
     chip.appendChild(nm);
+    const role = document.createElement("select");
+    role.className = "cb-att-role";
+    role.setAttribute("aria-label", "资料用途：" + (f.name || f.id));
+    for (const [value, label] of [["", "自动判断"], ["tender", "招标原文"], ["response", "投标响应"], ["reference", "参考资料"]]) {
+      const option = document.createElement("option");
+      option.value = value;
+      option.textContent = label;
+      role.appendChild(option);
+    }
+    role.value = state.attachmentRoles[f.id] || "";
+    role.addEventListener("change", () => {
+      if (["tender", "response", "reference"].includes(role.value)) state.attachmentRoles[f.id] = role.value;
+      else delete state.attachmentRoles[f.id];
+    });
+    chip.appendChild(role);
     if (f.bytes != null) {
       const sz = document.createElement("span");
       sz.className = "cb-att-size";
@@ -110,6 +271,7 @@ function cbAttachRender() {
     x.setAttribute("aria-label", "移除附件 " + (f.name || f.id));
     x.addEventListener("click", () => {
       state.attachments = state.attachments.filter((a) => a.id !== f.id);
+      delete state.attachmentRoles[f.id];
       cbAttachRender();
     });
     chip.appendChild(x);
@@ -118,25 +280,34 @@ function cbAttachRender() {
 }
 
 async function cbAttachUpload(fileList) {
+  if (cbCapability("attachments") === false) {
+    addStatus("当前工作台未提供附件上传，可以将材料要点粘贴到输入框。");
+    return;
+  }
   const files = Array.from(fileList || []);
   if (!files.length) return;
+  const session = state.session;
   for (const file of files) {
+    if (state.session !== session) return;
     try {
       const fd = new FormData();
-      fd.append("session_id", state.session);
+      fd.append("session_id", session);
       fd.append("file", file);
       const r = await fetch("/api/upload", { method: "POST", body: fd });
-      if (!r.ok) throw new Error("HTTP " + r.status);
+      if (!r.ok) throw new Error(await apiError(r) || "HTTP " + r.status);
       const meta = await r.json();
+      if (state.session !== session) return;
       /* /api/upload 回的是 {ok, files:[{id,name,bytes,...}]}，不是裸 meta。
          首版按 meta.id 取，chip 永远是空的 —— 实测发现（返回体包了一层）。 */
       const items = Array.isArray(meta && meta.files) ? meta.files : (meta && meta.id ? [meta] : []);
+      if (!items.length) throw new Error("工作台未返回附件信息，请重试上传。");
       for (const item of items) {
         if (item && item.id && !state.attachments.some((a) => a.id === item.id)) {
           state.attachments.push(item);
         }
       }
     } catch (e) {
+      if (state.session !== session) return;
       addStatus("附件上传失败（" + file.name + "）：" + ((e && e.message) || e));
     }
   }
@@ -144,7 +315,9 @@ async function cbAttachUpload(fileList) {
   const tbl = state.attachments.some((a) =>
     /\.(xlsx|xlsm|csv|tsv)$/i.test(String(a.name || ""))
   );
-  if (tbl) addStatus("表格已上传：说「装箱」即可按这张表算，柜数与坐标仍由 tools 计算。");
+  if (tbl) addStatus(cbCapability("packing") === false
+    ? "表格已上传：可让岗位根据表格内容整理清单或草稿。"
+    : "表格已上传：说「装箱」即可按这张表算，柜数与坐标仍由 tools 计算。");
 }
 
 function cbAttachInit() {
@@ -283,14 +456,45 @@ if ($("btnNewProject")) {
 
 /* ux(round19)：本地新会话 —— 不依赖任何后端接口，任何后端上都生效。 */
 function cbNewLocalSession() {
+  cbClearServerHitl();
+  cbSessionRequest += 1;
+  cbCancelActiveRun();
+  cbRememberSession("");
+  if ($("confirmOk")) $("confirmOk").value = "";
   state.threadId = "";
   state.attachments = [];
+  state.attachmentRoles = {};
   cbAttachRender();
-  state.session = (crypto.randomUUID ? crypto.randomUUID() : String(Date.now())).slice(0, 12);
+  state.session = cbSessionId();
   state.history = [];
+  cbContextReset();
   state.summoned.clear();
   renderSummon();
   cbResetToEmpty();
+  paintContext(estimateLocalContext());
+}
+
+function cbContextReset() {
+  cbContextRequest += 1;
+  cbContextSearchRequest += 1;
+  cbContextSourceEpoch += 1;
+  cbContextRebuildRun = null;
+  cbCapabilityRequest += 1;
+  if ($("cbCapabilityBody")) {
+    $("cbCapabilityBody").replaceChildren();
+    $("cbCapabilityBody").textContent = "查看开始前需要的资料、可用工具与草稿检查标准。";
+    $("cbCapabilityBody").setAttribute("aria-busy", "false");
+  }
+  state.context.lastReport = null;
+  if ($("ctxMemory")) {
+    $("ctxMemory").textContent = "查看本任务记忆；检索仅使用本任务历史和当前选择的附件。";
+    $("ctxMemory").setAttribute("aria-busy", "false");
+  }
+  if ($("ctxQuery")) $("ctxQuery").value = "";
+  if ($("ctxResults")) $("ctxResults").replaceChildren();
+  if ($("ctxSearchStatus")) $("ctxSearchStatus").textContent = "";
+  if ($("ctxMemoryStatus")) $("ctxMemoryStatus").textContent = "";
+  cbContextRebuildControls(false);
 }
 
 /* ux(round14)：相对时间（参考图会话列表「名称 + 相对时间」；只抄线程 updated_at 字段） */
@@ -318,6 +522,7 @@ function cbHideWelcome() {
 }
 
 function cbResetToEmpty() {
+  CB_APR_WAITING.clear();
   const log = $("log");
   if (log) {
     for (const el of Array.from(log.children)) {
@@ -513,28 +718,69 @@ function cbProjRename(p) {
 
 /* 点会话：拉详情并**整体替换** state.history（不 merge，避免与浏览器内存分叉） */
 async function cbProjOpenSession(s) {
+  const request = ++cbSessionRequest;
+  cbCancelActiveRun();
+  cbContextReset();
   try {
-    const d = await fetch("/api/sessions/" + encodeURIComponent(s.session_id)).then((r) => r.json());
+    const response = await fetch("/api/sessions/" + encodeURIComponent(s.session_id));
+    if (!response.ok) throw new Error(await apiError(response));
+    const d = await response.json();
+    if (request !== cbSessionRequest) return;
+    if (!d || !d.session_id || !Array.isArray(d.transcript)) throw new Error("会话数据格式不完整");
     state.session = d.session_id;
+    cbRememberSession(d.session_id);
+    cbClearServerHitl();
+    if ($("confirmOk")) $("confirmOk").value = "";
     state.threadId = "";
+    state.attachments = Array.isArray(d.attachments) ? d.attachments.filter((file) =>
+      file && typeof file.id === "string" && file.id && !file.id.startsWith("job:")) : [];
+    state.attachmentRoles = Object.fromEntries(state.attachments.filter(file =>
+      d.attachment_roles && ["tender", "response", "reference"].includes(d.attachment_roles[file.id]))
+      .map(file => [file.id, d.attachment_roles[file.id]]));
+    cbAttachRender();
+    cbProj.cur = d.project_id || s.project_id || "";
+    state.summoned.clear();
+    const enabledExperts = new Set(state.experts.filter((expert) => expert && expert.enabled !== false).map((expert) => expert.id));
+    for (const id of Array.isArray(d.expert_ids) ? d.expert_ids : []) {
+      if (typeof id === "string" && enabledExperts.has(id)) state.summoned.add(id);
+    }
+    renderSummon();
     state.history = (d.transcript || [])
-      .filter((t) => t.role === "user" || t.role === "assistant")
+      .filter((t) => t && (t.role === "user" || t.role === "assistant"))
       .map((t) => ({ role: t.role, content: t.text || "" }));
     cbResetToEmpty();
     const log = $("log");
+    let restoredBody = null;
+    let restoredMessage = "";
     if (state.history.length) {
       cbHideWelcome();
       for (const t of state.history) {
-        addMsg(t.role === "user" ? "user" : "assistant", t.role === "user" ? "你" : "岗位", t.content);
+        const body = addMsg(t.role === "user" ? "user" : "assistant", t.role === "user" ? "你" : "岗位", t.content);
+        if (t.role === "assistant") restoredBody = body;
+        else restoredMessage = t.content;
       }
     } else {
       /* 诚实：没有留存正文就明说，不假装接上了 */
       addStatus("这条会话没有留存对话正文；上文从此刻重新开始。");
     }
-    if (d.truncated) addStatus("只载入了最近若干轮，更早的历史已截断。");
+    if (d.collaboration || d.route && (d.route.reason || d.route.ambiguous)) {
+      if (!restoredBody) restoredBody = addMsg("assistant", "本会话任务安排", "已恢复留存的任务状态。");
+      if (d.route && (d.route.reason || d.route.ambiguous)) cbTaskRoutePaint(d.route, restoredBody, restoredMessage);
+      if (d.collaboration) cbCollaborationPaint(d.collaboration, restoredBody);
+    }
+    const files = Array.isArray(d.deliverables) ? d.deliverables.filter((file) => file && typeof file.path === "string" && file.path) : [];
+    if (files.length) {
+      cbLastDeliverables = files;
+      cbHideWelcome();
+      appendDocCards(files, addMsg("assistant", "本会话交付物", "已恢复留存的草稿，可继续预览或下载。"));
+    }
+    if (d.truncated) addStatus("列表只展示近期对话节选。可在「任务记忆与本地搜索」找回已保留的历史原文。");
+    if (d.context && (d.context.note || Number(d.context.limit) > 0)) paintContext(d.context);
+    else paintContext(estimateLocalContext());
     if (log) log.scrollTop = log.scrollHeight;
     cbProjRender();
   } catch (e) {
+    if (request !== cbSessionRequest) return;
     addStatus("载入会话失败：" + ((e && e.message) || e));
   }
 }
@@ -547,6 +793,8 @@ if ($("btnNewThread")) {
        之前 —— 结果「+ 新建任务」在评委下载的 exe 上是**死键**，还留一条 unhandled
        rejection。现在先做本地清空（任何后端都生效），再尝试登记远端线程。 */
     cbNewLocalSession();
+    const request = cbSessionRequest;
+    const localSession = state.session;
     try {
       const r = await fetch("/api/threads", {
         method: "POST",
@@ -555,6 +803,7 @@ if ($("btnNewThread")) {
       });
       if (!r.ok) return;
       const data = await r.json();
+      if (request !== cbSessionRequest || state.session !== localSession || state.history.length || cbActiveRun) return;
       if (data && data.thread_id) {
         state.threadId = data.thread_id;
         state.session = data.session_id || data.thread_id;
@@ -581,7 +830,7 @@ async function cbRunBackground(text) {
       body: JSON.stringify({
         text: body,
         background: true,
-        confirm_ok: !!($("confirmOk") && $("confirmOk").checked),
+        confirm_ok: cbConfirmed(),
       }),
     });
     if (!r.ok) throw new Error("HTTP " + r.status);
@@ -661,6 +910,7 @@ async function reloadCatalog() {
     /* 静默：离线兜底由 posts.js 承担 */
   }
   renderSummon();
+  cbCapabilityCatalog();
 }
 
 window.reloadCatalog = reloadCatalog;
@@ -709,7 +959,13 @@ function renderSummon() {
     const e = state.experts.find((x) => x.id === id);
     const chip = document.createElement("span");
     chip.className = "cb-sum-chip";
-    chip.textContent = e ? `${e.category_name}/${e.name}` : id;
+    const details = document.createElement("button");
+    details.type = "button";
+    details.className = "cb-post-details";
+    details.textContent = e ? `${e.category_name}/${e.name}` : id;
+    details.setAttribute("aria-label", "查看 " + (e ? e.name : id) + " 的资料与工具");
+    details.addEventListener("click", () => cbExpertCapability(id));
+    chip.appendChild(details);
     const x = document.createElement("button");
     x.type = "button";
     x.className = "cb-sum-x";
@@ -749,7 +1005,7 @@ async function refreshKb() {
       const label = f.display || f.title || (f.path || "").split("/").pop();
       const layer = f.layer_label || layerName(f.layer);
       const sz = f.bytes != null ? ` · ${fmtBytes(f.bytes)}` : "";
-      btn.innerHTML = `<span class="layer ${f.layer}">${escapeHtml(layer)}</span>${escapeHtml(label)}<span class="kb-size">${sz}</span>`;
+      btn.innerHTML = `<span class="layer ${escapeHtml(f.layer)}">${escapeHtml(layer)}</span>${escapeHtml(label)}<span class="kb-size">${sz}</span>`;
       btn.title = f.path || "";
       btn.addEventListener("click", () => window.openStudio && window.openStudio(f.path, f.layer === "expert" ? id : null));
       li.appendChild(btn);
@@ -759,6 +1015,7 @@ async function refreshKb() {
 }
 
 function layerName(layer) {
+  if (layer === "history") return "任务历史";
   if (layer === "expert") return "本岗知识";
   if (layer === "category") return "大类共享";
   if (layer === "web") return "网上检索";
@@ -795,8 +1052,9 @@ function estimateTokens(text) {
 }
 
 function estimateLocalContext() {
+  if (state.context.lastReport) return state.context.lastReport;
   const policy = state.context;
-  const limit = policy.limit || 1000000;
+  const limit = policy.limit || 32768;
   const reserve = policy.reserve || 4096;
   const usable = Math.max(1, limit - reserve);
   let used = 0;
@@ -812,19 +1070,13 @@ function estimateLocalContext() {
   if (pct >= 90) zone = "full";
   else if (pct >= (policy.compress_pct || 70)) zone = "compact";
   else if (pct >= (policy.warn_pct || 50)) zone = "warn";
-  let note;
-  if (pct >= 90) {
-    note = `上下文快满（约 ${fmtNum(used)} / ${fmtNum(limit)}，${pct}%）。再发可能只留最近 ${keep} 条原文。`;
-  } else if (pct >= (policy.warn_pct || 50)) {
-    note = `已过半（约 ${fmtNum(used)} / ${fmtNum(limit)}，${pct}%）。用到 ${fmtNum(compressAt)} token（${policy.compress_pct || 70}%）会把更早对话压成摘要，近 ${keep} 条原文保留。`;
-  } else {
-    note = `还很宽裕（约 ${fmtNum(used)} / ${fmtNum(limit)}，${pct}%）。用到 ${fmtNum(compressAt)} token（${policy.compress_pct || 70}%）会压缩更早对话，近 ${keep} 条原文保留。`;
-  }
+  const note = `编辑中：仅对话文字约 ${fmtNum(used)} token。发送时按完整请求安排记忆和来源，上限 ${fmtNum(limit)}，回答预留 ${fmtNum(reserve)}。`;
   return { used, limit, usable, pct, zone, note, estimated: true, compress_at: compressAt, keep_recent: keep };
 }
 
 function paintContext(ctx) {
   if (!ctx) return;
+  if (ctx.components || ctx.mode === "local") state.context.lastReport = ctx;
   const bar = $("ctxBar");
   const fill = $("ctxFill");
   const text = $("ctxText");
@@ -832,17 +1084,30 @@ function paintContext(ctx) {
   const pct = Math.max(0, Math.min(100, Number(ctx.pct) || 0));
   fill.style.width = `${Math.max(pct, pct > 0 ? 2 : 0)}%`;
   bar.dataset.zone = ctx.zone || "room";
+  const meter = bar.querySelector('[role="meter"]');
+  if (meter) meter.setAttribute("aria-valuenow", String(pct));
   if (ctx.note) {
-    text.textContent = ctx.note;
+    text.textContent = ctx.note + (ctx.history_count != null ? ` · 历史 ${ctx.history_count} 条 · 找回 ${ctx.retrieved || 0} 段` : "");
   } else {
     text.textContent = `上下文 ${fmtNum(ctx.used)} / ${fmtNum(ctx.limit)} · ${pct}%`;
+  }
+  const semantic = ctx.semantic;
+  if (semantic && typeof semantic === "object" && !Array.isArray(semantic)) {
+    const parts = [];
+    if (typeof semantic.note === "string" && semantic.note) parts.push(semantic.note);
+    else if (typeof semantic.status === "string") parts.push("语义摘要状态：" + semantic.status);
+    for (const [key, label, unit] of [["model_calls", "摘要调用", " 次"], ["input_tokens", "摘要输入估算", " token"],
+      ["output_reserve", "摘要输出预留", " token"], ["covered_messages", "已处理历史", " 条"]]) {
+      if (Number.isSafeInteger(semantic[key]) && semantic[key] >= 0) parts.push(label + " " + fmtNum(semantic[key]) + unit);
+    }
+    if (parts.length) text.textContent += " · " + parts.join(" · ");
   }
 }
 
 function addMsg(role, who, text) {
   const div = document.createElement("div");
   div.className = `msg ${role}`;
-  div.innerHTML = `<div class="who">${who}</div><div class="body"></div>`;
+  div.innerHTML = `<div class="who">${escapeHtml(who)}</div><div class="body"></div>`;
   div.querySelector(".body").textContent = text;
   $("log").appendChild(div);
   $("log").scrollTop = $("log").scrollHeight;
@@ -895,8 +1160,20 @@ function cbFixMount(anchor, desc) {
 
 $("form").addEventListener("submit", async (ev) => {
   ev.preventDefault();
+  if (cbActiveRun) return;
+  if (cbContextRebuilding()) {
+    const note = "正在重新整理记忆，请完成后发送；输入内容已保留。";
+    if ($("ctxMemoryStatus")) $("ctxMemoryStatus").textContent = note;
+    cbAnnounce(note);
+    return;
+  }
+  if (cbCapability("chat") === false) {
+    addStatus("当前工作台暂未提供任务运行能力，请检查服务状态。");
+    return;
+  }
   let message = $("input").value.trim();
   if (!message) return;
+  cbSessionRequest += 1; // A new message takes precedence over pending navigation.
   /* ux(round9)：最近任务（点击重填的来源）+ /命令直达展开 */
   cbRecentPush(message);
   const navCmd = message.match(/^\/(audit|doc|eval)\s*$/);
@@ -943,30 +1220,114 @@ $("form").addEventListener("submit", async (ev) => {
   state.history.push({ role: "user", content: message });
   paintContext(estimateLocalContext());
   const bodyEl = addMsg("assistant", namesOrPlain(), "");
-  const sendBtn = $("send");
-  sendBtn.disabled = true;
-  sendBtn.dataset.running = "1";
-  sendBtn.textContent = "运行中…";
+  const run = { controller: new AbortController(), session: state.session, bodyEl };
+  cbRememberSession(state.session);
+  cbActiveRun = run;
+  cbRunPaint(true);
   try {
-    await streamChat(message, bodyEl);
+    await streamChat(message, bodyEl, run);
   } catch (err) {
-    /* ux(round7)：裸文本错误 → 纠偏卡（发生了什么+为什么+现在能做什么） */
-    const raw = String(err.message || err);
-    bodyEl.classList.add("err");
-    bodyEl.textContent = raw;
-    cbFixMount(bodyEl.parentElement, typeof CB_FIX !== "undefined" ? CB_FIX.classify(raw, { retryable: true }) : null);
+    if (cbActiveRun !== run) return;
+    const stopped = err.name === "AbortError";
+    const raw = stopped ? "已停止接收回答。已有内容已保留。" : String(err.message || err);
+    // Preserve partial output so an interrupted connection does not erase work.
+    const note = document.createElement("p");
+    note.className = stopped ? "status-line" : "status-line err";
+    note.textContent = raw;
+    run.bodyEl.parentElement.appendChild(note);
+    if (!stopped) cbFixMount(run.bodyEl.parentElement, typeof CB_FIX !== "undefined" ? CB_FIX.classify(raw, { retryable: true }) : null);
+    cbAnnounce(stopped ? "已停止接收回答" : "本轮失败：请看纠偏卡的建议动作");
   } finally {
-    sendBtn.textContent = "发送";
-    delete sendBtn.dataset.running;
-    cbSyncSend();
+    if (cbActiveRun === run) {
+      cbActiveRun = null;
+      cbRunPaint(false);
+    }
   }
+});
+
+if ($("stop")) $("stop").addEventListener("click", async () => {
+  const run = cbActiveRun;
+  if (!run) return;
+  if (cbCapability("cancel") !== true) { run.controller.abort(); return; }
+  $("stop").disabled = true;
+  $("stop").textContent = "停止中…";
+  try {
+    const result = await cbRequestCancellation(run);
+    if (cbActiveRun === run && result && result.cancel_requested) cbAnnounce("已请求停止，正在保存已有结果");
+  } catch (error) {
+    if (cbActiveRun === run) {
+      $("stop").disabled = false;
+      $("stop").textContent = "停止";
+      addStatus("停止请求未完成，请重试。" + String(error.message || error));
+    }
+  }
+});
+
+let cbBackupBusy = false;
+function cbBackupPaint(busy) {
+  cbBackupBusy = busy;
+  for (const id of ["cbBackupExport", "cbBackupImport"]) {
+    if ($(id)) $(id).disabled = busy || cbCapability("session_backup") === false;
+  }
+}
+
+if ($("cbBackupExport")) $("cbBackupExport").addEventListener("click", async () => {
+  if (cbBackupBusy) return;
+  if (cbActiveRun) { addStatus("请停止或等待本轮完成后备份任务。"); return; }
+  const session = state.session;
+  cbBackupPaint(true);
+  try {
+    const response = await fetch(`/api/sessions/${encodeURIComponent(session)}/export`);
+    if (!response.ok) throw new Error(await apiError(response) || "备份失败");
+    const blob = await response.blob();
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement("a");
+    link.href = url;
+    link.download = `civil-task-${session}.zip`;
+    document.body.appendChild(link);
+    link.click();
+    link.remove();
+    setTimeout(() => URL.revokeObjectURL(url), 30000);
+    if (state.session === session) addStatus("任务备份已生成并发起下载；请确认浏览器已保存 ZIP 文件。备份包含对话、上传资料和生成的文书。");
+  } catch (error) { addStatus(String(error.message || error)); }
+  finally { cbBackupPaint(false); }
+});
+
+if ($("cbBackupImport")) $("cbBackupImport").addEventListener("click", () => {
+  if (cbBackupBusy) return;
+  if (cbActiveRun) { addStatus("请停止或等待本轮完成后导入任务。"); return; }
+  $("cbBackupFile").click();
+});
+
+if ($("cbBackupFile")) $("cbBackupFile").addEventListener("change", async () => {
+  const file = $("cbBackupFile").files[0];
+  if (!file || cbBackupBusy) return;
+  if (file.size > 128 * 1024 * 1024) { addStatus("备份包不能超过 128 MB。"); $("cbBackupFile").value = ""; return; }
+  const request = cbSessionRequest;
+  cbBackupPaint(true);
+  try {
+    const response = await fetch("/api/session-import", {
+      method: "POST", headers: { "Content-Type": "application/zip" }, body: file,
+    });
+    if (!response.ok) throw new Error(await apiError(response) || "导入失败");
+    const result = await response.json();
+    await loadThreads();
+    if (request === cbSessionRequest && !cbActiveRun) {
+      await cbProjOpenSession({ session_id: result.session_id, title: result.title });
+      addStatus("已导入为新任务，原任务保持不变。可在左侧将它移动到工程项目；后续高风险操作需重新确认。");
+    }
+  } catch (error) { addStatus(String(error.message || error)); }
+  finally { $("cbBackupFile").value = ""; cbBackupPaint(false); }
 });
 
 function skillWho(id, source) {
   if (!id) return "未点名岗位";
-  const name = (state.experts.find((e) => e.id === id) || {}).name || id;
-  const how = source === "given" ? "显式" : source === "matched" ? "规则选用" : "未点名";
-  return `$${id} · ${name} · ${how}`;
+  const names = String(id).split(",").map((value) => value.trim()).filter(Boolean).map((value) => {
+    const name = (state.experts.find((e) => e.id === value) || {}).name || value;
+    return `$${value} · ${name}`;
+  });
+  const how = source === "given" ? "已点名" : source === "matched" ? "规则选用" : "当前岗位";
+  return names.join(" / ") + " · " + how;
 }
 
 function namesOrPlain() {
@@ -974,19 +1335,26 @@ function namesOrPlain() {
   return [...state.summoned].map((id) => skillWho(id, "given")).join(" / ");
 }
 
-async function streamChat(message, bodyEl) {
+async function streamChat(message, bodyEl, run) {
+  const confirmed = cbConfirmed();
+  cbClearServerHitl(); // Consume this turn's typed response; never reuse a server gate.
   const res = await fetch("/api/chat", {
     method: "POST",
+    signal: run.controller.signal,
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({
       message,
-      history: state.history.slice(0, -1),
+      // The server owns full history; this bounded fallback excludes this turn.
+      history: state.history.slice(-81, -1),
       expert_ids: [...state.summoned],
-      confirm_ok: !!($("confirmOk") && $("confirmOk").checked),
+      confirm_ok: confirmed,
       session_id: state.session,
+      project_id: cbProj.cur || "",
       attachments: state.attachments
         .filter((a) => !String(a.id || "").startsWith("job:"))
         .map((a) => a.id),
+      attachment_roles: Object.fromEntries(state.attachments.filter(a => !String(a.id || "").startsWith("job:") &&
+        ["tender", "response", "reference"].includes(state.attachmentRoles[a.id])).map(a => [a.id, state.attachmentRoles[a.id]])),
     }),
   });
   if (!res.ok) {
@@ -994,56 +1362,71 @@ async function streamChat(message, bodyEl) {
   }
   /* ux(round3)：本条消息挂一条阶段时间线（完成后折叠为一行摘要）；ux(round5)：消息原文供审批卡「确认并重提」 */
   const tl = cbTlCreate(bodyEl, message);
-  const reader = res.body.getReader();
-  const dec = new TextDecoder();
-  let buf = "";
   let acc = "";
-  let eventName = "message";
-  while (true) {
-    const { value, done } = await reader.read();
-    if (done) break;
-    buf += dec.decode(value, { stream: true });
-    const parts = buf.split("\n\n");
-    buf = parts.pop() || "";
-    for (const block of parts) {
-      let dataLine = "";
-      for (const line of block.split("\n")) {
-        if (line.startsWith("event: ")) eventName = line.slice(7).trim();
-        if (line.startsWith("data: ")) dataLine += line.slice(6);
+  let complete = false;
+  let recorded = false;
+  try {
+    await CB_CHAT_STREAM.read(res.body, (eventName, dataLine) => {
+      if (cbActiveRun !== run || state.session !== run.session) return;
+      if (!["context", "status", "token", "error", "done", "collaboration"].includes(eventName)) return;
+      let data;
+      try { data = JSON.parse(dataLine); }
+      catch (_) { throw new Error("服务器返回了无法解析的回答事件，请重试。"); }
+      if (!data || typeof data !== "object" || Array.isArray(data)) {
+        throw new Error("服务器返回的回答事件格式不完整，请重试。");
       }
-      if (!dataLine) continue;
-      const data = JSON.parse(dataLine);
       if (eventName === "context") {
         paintContext(data);
       }
       if (eventName === "status") {
+        cbEnableServerHitl(data);
+        if (data.phase === "routing" && data.route) cbTaskRoutePaint(data.route, bodyEl, message);
         if (tl) tl.status(data);
-        if (data.phase === "summon" && acc) {
-          state.history.push({ role: "assistant", content: acc });
-          acc = "";
-          bodyEl = addMsg("assistant", skillWho(data.expert || "", "given"), "");
+        if (data.phase === "summon") {
+          complete = false;
+          if (acc) {
+            if (!recorded) state.history.push({ role: "assistant", content: acc });
+            acc = "";
+            bodyEl = addMsg("assistant", skillWho(data.expert || "", "given"), "");
+            run.bodyEl = bodyEl;
+          }
+          recorded = false;
+          const who = bodyEl.parentElement && bodyEl.parentElement.querySelector(".who");
+          if (who && data.expert) who.textContent = skillWho(data.expert, data.skill_source || "");
         }
       }
+      if (eventName === "collaboration") cbCollaborationPaint(data, bodyEl);
       if (eventName === "token") {
+        complete = false;
         acc += data.text || "";
         bodyEl.textContent = acc;
         $("log").scrollTop = $("log").scrollHeight;
       }
       if (eventName === "error") {
-        if (tl) tl.error(data.text || "error");
-        cbAnnounce("本轮失败：请看纠偏卡的建议动作"); /* ux(round11)：屏读播报一行，不刷屏（附录 J） */
         throw new Error(data.text || "error");
       }
       if (eventName === "done") {
-        if (tl) tl.finish(data);
-        cbObStep(2); /* ux(round10)：时间线跑完（收口）→ 引导第 2 步打勾 */
+        if (cbHitlPending(data)) cbEnableServerHitl(data);
+        else cbClearServerHitl();
+        if (data.route) cbTaskRoutePaint(data.route, bodyEl, message);
+        if (data.collaboration) cbCollaborationPaint(data.collaboration, bodyEl);
+        complete = true;
+        if (tl) {
+          if (cbHitlPending(data)) tl.finish(data);
+          else if (data.ok === false) tl.error(data.text || "工具未完成本轮任务");
+          else tl.finish(data);
+        }
+        if (data.ok !== false && !cbHitlPending(data)) cbObStep(2);
         /* ux(round11)：流式收口才播报一行（只抄事件字段，不刷屏，附录 J） */
-        cbAnnounce("回答完毕" + (Array.isArray(data.deliverables) && data.deliverables.length ? " · 文书 " + data.deliverables.length + " 份" : ""));
+        cbAnnounce(data.cancelled ? "任务已停止，已有结果已保留。" : cbHitlPending(data) ? "等待签认：请在审批卡键入完整签认句后确认。" : data.ok === false ? "本轮未完成：请查看时间线和工具结果。" : "回答完毕" + (Array.isArray(data.deliverables) && data.deliverables.length ? " · 文书 " + data.deliverables.length + " 份" : ""));
         acc = data.text || acc;
         bodyEl.textContent = acc;
         const whoEl = bodyEl.parentElement && bodyEl.parentElement.querySelector(".who");
         if (whoEl) whoEl.textContent = skillWho(data.skill || data.expert || "", data.skill_source || "");
-        if (acc) state.history.push({ role: "assistant", content: acc });
+        if (acc && !recorded) {
+          state.history.push({ role: "assistant", content: acc });
+          recorded = true;
+        }
         if (data.context) paintContext(data.context);
         else paintContext(estimateLocalContext());
         renderCites(data.citations || [], bodyEl);
@@ -1054,8 +1437,12 @@ async function streamChat(message, bodyEl) {
         if (miss) cbFixMount(bodyEl.parentElement, miss);
         refreshAuditSoon(); /* ux(round6)：本轮完成 → 审计时间线增量刷新（含决策置顶） */
       }
-      eventName = "message";
-    }
+    }, { signal: run.controller.signal });
+    if (!complete) throw new Error("回答连接已中断，尚未收到完成结果。请重试。");
+    loadThreads().catch(() => {});
+  } catch (err) {
+    if (cbActiveRun === run && tl) tl.error(err.name === "AbortError" ? "已停止接收回答" : String(err.message || err));
+    throw err;
   }
 }
 
@@ -1079,12 +1466,449 @@ function renderCites(cites, hostEl) {
     const title = c.display || c.title || (c.path || "").split("/").pop();
     const layer = c.layer_label || layerName(c.layer);
     li.title = c.path || "";
-    li.innerHTML = `<span class="layer ${c.layer}">${escapeHtml(layer)}</span><b>${escapeHtml(title)}</b><br>${escapeHtml(c.snippet || c.path || "")}`;
+    li.innerHTML = `<span class="layer ${escapeHtml(c.layer)}">${escapeHtml(layer)}</span><b>${escapeHtml(title)}</b><br>${escapeHtml(c.snippet || c.path || "")}`;
+    if (typeof c.url === "string" && c.url.startsWith("/api/context/source?")) {
+      const sid = state.session;
+      const navigation = cbSessionRequest;
+      let readRequest = 0;
+      const button = document.createElement("button");
+      button.type = "button";
+      button.className = "top-btn";
+      button.textContent = `查看原文 · 字符 ${c.start}–${c.end}`;
+      button.addEventListener("click", async () => {
+        if (state.session !== sid || navigation !== cbSessionRequest || cbContextRebuilding()) return;
+        const epoch = cbContextSourceEpoch;
+        const request = ++readRequest;
+        const current = () => state.session === sid && navigation === cbSessionRequest &&
+          epoch === cbContextSourceEpoch && request === readRequest;
+        button.disabled = true;
+        try {
+          const response = await fetch(c.url);
+          if (!response.ok) throw new Error(await apiError(response));
+          const data = await response.json();
+          if (!current()) return;
+          const pre = document.createElement("pre");
+          pre.className = "cb-source-text";
+          pre.textContent = data.text;
+          li.appendChild(pre);
+          button.hidden = true;
+        } catch (error) { if (current()) button.textContent = `读取失败，点击重试：${error.message}`; }
+        finally { if (request === readRequest) button.disabled = false; }
+      });
+      li.appendChild(button);
+    }
     ul.appendChild(li);
   }
   card.appendChild(ul);
   host.appendChild(card);
 }
+
+function cbTaskText(value) {
+  if (typeof value === "string") return value;
+  if (!value || typeof value !== "object") return "";
+  return String(value.text || value.note || value.label || value.title || value.field || JSON.stringify(value));
+}
+
+function cbTaskList(host, title, values) {
+  const items = Array.isArray(values) ? values : [];
+  if (!items.length) return;
+  const heading = document.createElement("h4");
+  heading.textContent = title;
+  host.appendChild(heading);
+  const list = document.createElement("ul");
+  for (const item of items) {
+    const li = document.createElement("li");
+    li.textContent = cbTaskText(item);
+    list.appendChild(li);
+  }
+  host.appendChild(list);
+}
+
+function cbTaskRoutePaint(route, bodyEl, message) {
+  const host = bodyEl && bodyEl.parentElement;
+  if (!host || !route || typeof route !== "object") return;
+  let card = host.cbRouteCard;
+  if (!card) {
+    card = document.createElement("section");
+    card.className = "cb-route-card";
+    card.setAttribute("aria-label", "任务选择与步骤");
+    host.cbRouteCard = card;
+    host.appendChild(card);
+  }
+  card.replaceChildren();
+  const heading = document.createElement("h4");
+  heading.textContent = route.ambiguous ? "选择本次要处理的事项" : "本次任务安排";
+  card.appendChild(heading);
+  const reason = document.createElement("p");
+  reason.textContent = route.reason || "按本次明确选择的岗位处理。";
+  card.appendChild(reason);
+  const steps = Array.isArray(route.steps) ? route.steps : [];
+  if (steps.length > 1) {
+    const names = new Map(steps.map(step => [step.id, step.label]));
+    cbTaskList(card, "步骤与依赖", steps.map(step => step.label + (
+      Array.isArray(step.depends_on) && step.depends_on.length
+        ? " · 前置步骤：“" + step.depends_on.map(id => names.get(id) || id).join("、") + "”"
+        : " · 起始步骤")));
+  }
+  if (route.ambiguous) {
+    const sid = state.session;
+    for (const candidate of Array.isArray(route.candidates) ? route.candidates : []) {
+      const button = document.createElement("button");
+      button.type = "button";
+      button.className = "top-btn cb-route-choice";
+      button.textContent = candidate.label + " · " + (candidate.reason || "按此岗位处理");
+      button.addEventListener("click", () => {
+        if (state.session !== sid) return;
+        state.summoned = new Set((candidate.expert_ids || []).filter(id => typeof id === "string"));
+        renderSummon();
+        if ($("confirmOk")) $("confirmOk").value = "";
+        $("input").value = message || "";
+        cbAutosize($("input"));
+        cbSyncSend();
+        $("input").focus();
+        cbAnnounce("已选择岗位，检查任务内容后发送。");
+      });
+      card.appendChild(button);
+    }
+  }
+}
+
+function cbCollaborationPaint(data, bodyEl) {
+  const host = bodyEl && bodyEl.parentElement;
+  if (!host || !data || typeof data !== "object") return;
+  let card = host.cbCollaborationCard;
+  if (!card) {
+    card = document.createElement("section");
+    card.className = "cb-collaboration-card";
+    card.setAttribute("aria-label", "协作进度与证据");
+    host.cbCollaborationCard = card;
+    host.appendChild(card);
+  }
+  const snapshot = card.cbSnapshot || {};
+  card.cbSnapshot = { ...snapshot, ...data };
+  if (data.kind === "worker" && data.task_id) {
+    card.cbSnapshot.state = snapshot.state || "running";
+    const children = Array.isArray(snapshot.children) ? snapshot.children.slice() : [];
+    const previous = children.find(child => child.task_id === data.task_id);
+    if (previous) Object.assign(previous, { status: data.state, skill: data.skill || previous.skill });
+    else children.push({ task_id: data.task_id, skill: data.skill, status: data.state });
+    card.cbSnapshot.children = children;
+  }
+  const result = card.cbSnapshot;
+  card.replaceChildren();
+  const states = { pending: "待开始", parsing: "解析原文中", running: "处理中", done: "已完成",
+    failed: "未完成", cancelled: "已停止", timed_out: "已超时", interrupted: "已中断", restored: "已导入历史记录",
+    waiting_hitl: "等待本轮确认" };
+  const heading = document.createElement("h4");
+  heading.textContent = "协作进度 · " + (states[result.state] || "等待更新");
+  card.appendChild(heading);
+  for (const child of Array.isArray(result.children) ? result.children : []) {
+    const details = document.createElement("details");
+    const summary = document.createElement("summary");
+    const expert = state.experts.find(item => item.id === child.skill);
+    summary.textContent = (expert ? expert.name : child.skill || child.task_id || "子任务") + " · " + (states[child.status] || "待更新");
+    details.appendChild(summary);
+    cbTaskList(details, "结论", (child.conclusions || []).map(item => cbTaskText(item) + (item.origin === "model_analysis" ? "（模型分析，未核实）" : "")));
+    cbTaskList(details, "来源证据", (child.evidence || []).map(item =>
+      [item.title || item.source_id, item.source_id, item.quote].filter(Boolean).join(" · ")));
+    cbTaskList(details, "未解决事项", child.unresolved);
+    card.appendChild(details);
+  }
+  const review = result.review || {};
+  cbTaskList(card, "汇总待核项", [...(Array.isArray(review.gaps) ? review.gaps : []), ...(Array.isArray(review.conflicts) ? review.conflicts : [])]);
+  cbTaskList(card, "需修正的表述", review.forbidden_hits);
+  if (Array.isArray(review.response_comparison) && review.response_comparison.length) {
+    const heading = document.createElement("h4");
+    heading.textContent = "招标要求与投标响应对照（待核验）";
+    card.appendChild(heading);
+    const table = document.createElement("table");
+    const header = document.createElement("tr");
+    for (const label of ["招标要求", "响应原文", "状态"]) {
+      const th = document.createElement("th");
+      th.scope = "col";
+      th.textContent = label;
+      header.appendChild(th);
+    }
+    table.appendChild(header);
+    const statuses = { candidate_requires_review: "找到候选，待人工核验", not_matched: "未匹配到响应", not_provided: "未提供响应资料" };
+    for (const comparison of review.response_comparison) {
+      const row = document.createElement("tr");
+      for (const value of [comparison.requirement || comparison.requirement_ref,
+        (comparison.response_evidence || []).map(evidence => [evidence.source_id, evidence.quote].filter(Boolean).join(" · ")).join("\n") || "—",
+        statuses[comparison.status] || "待核验"]) {
+        const cell = document.createElement("td");
+        cell.textContent = value;
+        row.appendChild(cell);
+      }
+      table.appendChild(row);
+    }
+    card.appendChild(table);
+  }
+  if (result.submit_blocked === true || result.state === "done") {
+    const note = document.createElement("p");
+    note.textContent = "协作产出是内部讨论草稿，仍需人工核验与正式签认。";
+    card.appendChild(note);
+  }
+  const metrics = result.aggregate_metrics || result.metrics;
+  if (metrics && typeof metrics === "object") {
+    const box = document.createElement("div");
+    box.className = "cb-collaboration-budget";
+    const label = document.createElement("p");
+    const input = Number(metrics.input_tokens) || 0;
+    const output = Number(metrics.output_estimated) || 0;
+    const limit = Number(metrics.limit) || 0;
+    label.textContent = `汇总预算${metrics.estimated ? "（估算）" : ""}：输入 ${fmtNum(input)} · 输出 ${fmtNum(output)}` +
+      (limit > 0 ? ` · 总额度 ${fmtNum(limit)} · 总预留 ${fmtNum(metrics.reserved_tokens)}` : "") +
+      (metrics.counter === "utf8-bytes" ? " · 按 UTF-8 字节保守估算" : "");
+    box.appendChild(label);
+    if (limit > 0) {
+      const meter = document.createElement("meter");
+      meter.min = 0;
+      meter.max = limit;
+      meter.value = Math.min(limit, input + output);
+      meter.setAttribute("aria-label", "协作汇总预算使用量");
+      box.appendChild(meter);
+    }
+    card.appendChild(box);
+  }
+}
+
+function cbCapabilityCatalog() {
+  const select = $("cbCapabilityPost");
+  if (!select) return;
+  const selected = select.value;
+  select.replaceChildren();
+  const prompt = document.createElement("option");
+  prompt.value = "";
+  prompt.textContent = "请选择岗位";
+  select.appendChild(prompt);
+  for (const expert of state.experts) {
+    const option = document.createElement("option");
+    option.value = expert.id;
+    option.textContent = (expert.category_name ? expert.category_name + " / " : "") + expert.name;
+    select.appendChild(option);
+  }
+  select.value = selected;
+}
+
+async function cbExpertCapability(id) {
+  const box = $("cbCapabilityBody");
+  if (!box || !id) return;
+  const request = ++cbCapabilityRequest;
+  cbDockSet(true, true);
+  if ($("cbCapabilityPost")) $("cbCapabilityPost").value = id;
+  box.replaceChildren();
+  box.textContent = "正在读取岗位资料…";
+  box.setAttribute("aria-busy", "true");
+  try {
+    const response = await fetch("/api/experts/" + encodeURIComponent(id) + "/capability");
+    if (response.status === 404) throw new Error("本岗没有内置专用工具契约；自定义岗位请查看其用户 SOP，不借用其他岗位能力。");
+    if (!response.ok) throw new Error(await apiError(response));
+    const data = await response.json();
+    if (request !== cbCapabilityRequest) return;
+    if (!data || data.expert_id !== id) throw new Error("岗位能力数据不完整");
+    box.textContent = "";
+    const heading = document.createElement("h4");
+    heading.textContent = data.name + (data.risk === "high" ? " · 成稿需人工确认" : "");
+    box.appendChild(heading);
+    cbTaskList(box, "开始前需要的资料", data.inputs);
+    cbTaskList(box, "本岗工具", (data.tools || []).map(tool =>
+      (tool.label || tool.name) + "（" + tool.name + "） · " + (tool.available === true ? "可调用" : tool.available === false ? "未接通" : "状态待核")));
+    cbTaskList(box, "工作步骤", (data.steps || []).map(step => step.action));
+    cbTaskList(box, "交付结构", data.output_sections);
+    cbTaskList(box, "草稿检查标准", data.acceptance);
+    cbTaskList(box, "能力边界", data.limitations);
+  } catch (error) {
+    if (request === cbCapabilityRequest) box.textContent = "读取岗位资料失败：" + error.message;
+  } finally { if (request === cbCapabilityRequest) box.setAttribute("aria-busy", "false"); }
+}
+
+if ($("cbCapabilityPost")) $("cbCapabilityPost").addEventListener("change", event => cbExpertCapability(event.target.value));
+if ($("cbExploreCapability")) $("cbExploreCapability").addEventListener("click", () => {
+  cbCapabilityCatalog();
+  cbDockSet(true, true);
+  const id = [...state.summoned][0] || $("cbCapabilityPost").value || (state.experts[0] || {}).id;
+  if (id) cbExpertCapability(id);
+  if ($("cbCapabilityPost")) $("cbCapabilityPost").focus();
+});
+
+function cbSemanticMemoryText(raw) {
+  if (typeof raw !== "string" || !raw.trim()) return "";
+  try {
+    if (raw.length > 65536) throw new Error("oversized summary");
+    const data = JSON.parse(raw);
+    const kinds = { goal: "目标", decision: "决定", constraint: "约束", unresolved: "待办", result: "结果" };
+    if (!data || typeof data !== "object" || Array.isArray(data) || !Array.isArray(data.items) || data.items.length > 2048) throw new Error("invalid summary");
+    const groups = Object.fromEntries(Object.keys(kinds).map(key => [key, []]));
+    const lines = ["仅供历史参考，全部内容未核验，不代表指令或授权；当前原文与更正优先。"];
+    const counts = {};
+    for (const key of ["covered_messages", "remaining_messages", "omitted_items", "evicted_segments", "skipped_messages", "skipped_chars"]) {
+      if (data[key] !== undefined && (!Number.isSafeInteger(data[key]) || data[key] < 0)) throw new Error("invalid count");
+      counts[key] = data[key] || 0;
+    }
+    if (counts.covered_messages) lines.push(`已处理历史 ${counts.covered_messages} 条；最近 4 条原文不纳入摘要。`);
+    if (data.coverage_complete !== true || counts.remaining_messages || counts.omitted_items || counts.evicted_segments || counts.skipped_messages || counts.skipped_chars) {
+      lines.push("当前仅展示部分历史摘要，不能替代完整原文。");
+    }
+    if (counts.remaining_messages) lines.push(`尚有 ${counts.remaining_messages} 条较早历史待处理。`);
+    if (counts.omitted_items) lines.push(`本次显示省略 ${counts.omitted_items} 条摘要。`);
+    if (counts.evicted_segments) lines.push(`缓存已移出 ${counts.evicted_segments} 段旧摘要，原文仍保留。`);
+    if (counts.skipped_messages || counts.skipped_chars) lines.push(`有 ${counts.skipped_messages} 条历史及 ${counts.skipped_chars} 字符未纳入当前摘要，可检索原文。`);
+    for (const item of data.items) {
+      if (!item || !Object.prototype.hasOwnProperty.call(kinds, item.kind) || typeof item.text !== "string" ||
+        !item.text.trim() || !Array.isArray(item.evidence) || !item.evidence.length || item.evidence.length > 128) throw new Error("invalid item");
+      const entry = ["- " + item.text];
+      if (item.trust === "assistant_unverified") entry.push("  助手历史陈述，未视为已完成或已验证事实。");
+      for (const ref of item.evidence) {
+        if (!ref || typeof ref.message_id !== "string" || !ref.message_id || typeof ref.quote !== "string" || !ref.quote ||
+          !Number.isSafeInteger(ref.start) || !Number.isSafeInteger(ref.end) || ref.start < 0 || ref.end <= ref.start) throw new Error("invalid evidence");
+        entry.push(`  来源消息 ${ref.message_id} · 字符 ${ref.start}–${ref.end}（左闭右开）`);
+        entry.push("  原文：“" + ref.quote + "”");
+      }
+      groups[item.kind].push(entry.join("\n"));
+    }
+    for (const [key, label] of Object.entries(kinds)) {
+      if (groups[key].length) lines.push("\n" + label + "（未核验）\n" + groups[key].join("\n\n"));
+    }
+    if (!data.items.length) lines.push("当前没有可显示的摘要条目，请核对规则记忆或搜索原文。");
+    return lines.join("\n");
+  } catch (_) {
+    return "模型语义摘要暂不可用，请刷新后重试；规则记忆与原文仍可查看。";
+  }
+}
+
+function cbContextRebuilding() {
+  return cbContextRebuildRun && cbContextRebuildRun.session === state.session &&
+    cbContextRebuildRun.navigation === cbSessionRequest;
+}
+
+function cbContextRebuildControls(busy) {
+  for (const id of ["ctxRebuild", "ctxRefresh", "ctxSearch"]) {
+    if ($(id)) $(id).disabled = busy;
+  }
+  if ($("ctxRebuild")) $("ctxRebuild").textContent = busy ? "正在整理…" : "重新整理记忆";
+}
+
+function cbContextDetailPaint(data) {
+  const box = $("ctxMemory");
+  if (box) {
+    box.textContent = typeof data.memory_text === "string" ? data.memory_text : "当前任务尚无可显示的记忆。";
+    const semanticText = cbSemanticMemoryText(data.semantic_memory_text);
+    if (semanticText) box.textContent += "\n\n模型语义摘要（未核验）\n" + semanticText;
+  }
+  const notes = [data.note, data.memory_status && data.memory_status.note, data.semantic_status && data.semantic_status.note]
+    .filter(note => typeof note === "string" && note.trim());
+  if ($("ctxMemoryStatus")) $("ctxMemoryStatus").textContent = [...new Set(notes)].join("\n");
+  if (data.context && (data.context.note || Number(data.context.limit) > 0)) paintContext(data.context);
+}
+
+async function cbContextLoad() {
+  if (cbContextRebuilding()) return;
+  const sid = state.session;
+  const navigation = cbSessionRequest;
+  const request = ++cbContextRequest;
+  const current = () => state.session === sid && navigation === cbSessionRequest && request === cbContextRequest;
+  const box = $("ctxMemory");
+  if (!box) return;
+  box.textContent = "正在读取任务记忆…";
+  box.setAttribute("aria-busy", "true");
+  try {
+    const response = await fetch("/api/context?session_id=" + encodeURIComponent(sid));
+    if (!response.ok) throw new Error(await apiError(response));
+    const data = await response.json();
+    if (!current()) return;
+    cbContextDetailPaint(data);
+  } catch (error) {
+    if (current()) box.textContent = `读取失败：${error.message}`;
+  } finally { if (current()) box.setAttribute("aria-busy", "false"); }
+}
+
+async function cbContextRebuild() {
+  if (cbContextRebuilding()) return;
+  const status = $("ctxMemoryStatus");
+  const box = $("ctxMemory");
+  if (!box || !status) return;
+  if (cbActiveRun && cbActiveRun.session === state.session) {
+    status.textContent = "任务正在处理中，请结束后再重新整理记忆。";
+    return;
+  }
+  const run = { session: state.session, navigation: cbSessionRequest };
+  cbContextRebuildRun = run;
+  const current = () => cbContextRebuildRun === run && state.session === run.session && cbSessionRequest === run.navigation;
+  cbContextRequest += 1;
+  cbContextSearchRequest += 1;
+  cbContextSourceEpoch += 1;
+  cbContextRebuildControls(true);
+  box.setAttribute("aria-busy", "true");
+  status.textContent = "正在从原文重新整理记忆和本地搜索，不会调用模型…";
+  if ($("ctxSearchStatus")) $("ctxSearchStatus").textContent = "";
+  try {
+    const response = await fetch("/api/context/rebuild", { method: "POST", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ session_id: run.session }) });
+    if (!response.ok) throw new Error(await apiError(response));
+    const data = await response.json();
+    if (!current()) return;
+    if (!data || data.ok !== true || typeof data.memory_text !== "string") throw new Error("服务未返回有效的重建结果，请重新查看任务记忆。");
+    if ($("ctxResults")) $("ctxResults").replaceChildren();
+    state.context.lastReport = null;
+    cbContextDetailPaint(data);
+    if (!data.context || !(data.context.note || Number(data.context.limit) > 0)) paintContext(estimateLocalContext());
+    if (!status.textContent) status.textContent = "任务记忆已重新整理；原始对话、附件和交付物已保留。";
+    cbAnnounce("任务记忆已重新整理，原始资料已保留。");
+  } catch (error) {
+    if (current()) {
+      status.textContent = "重新整理失败：" + error.message;
+      if (box.textContent === "正在读取任务记忆…") box.textContent = "可重新查看任务记忆；原始对话、附件和交付物仍保留。";
+    }
+  } finally {
+    if (current()) {
+      cbContextRebuildRun = null;
+      cbContextRebuildControls(false);
+      box.setAttribute("aria-busy", "false");
+    }
+  }
+}
+
+async function cbContextSearch() {
+  if (cbContextRebuilding()) return;
+  const query = $("ctxQuery").value.trim();
+  if (!query) return;
+  const sid = state.session;
+  const navigation = cbSessionRequest;
+  const request = ++cbContextSearchRequest;
+  const current = () => state.session === sid && navigation === cbSessionRequest && request === cbContextSearchRequest;
+  const status = $("ctxSearchStatus");
+  const result = $("ctxResults");
+  const button = $("ctxSearch");
+  result.replaceChildren();
+  button.disabled = true;
+  status.textContent = "正在本机检索…";
+  try {
+    const response = await fetch("/api/context/search", { method: "POST", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ session_id: sid, query, attachments: state.attachments.filter(a => !String(a.id).startsWith("job:")).map(a => a.id) }) });
+    if (!response.ok) throw new Error(await apiError(response));
+    const data = await response.json();
+    if (!current()) return;
+    status.textContent = data.citations.length ? `找到 ${data.citations.length} 个原文片段。` : "没有找到匹配内容。可换用原文关键词，并检查附件是否已选择。";
+    const body = document.createElement("div");
+    result.appendChild(body);
+    renderCites(data.citations, body);
+  } catch (error) {
+    if (current()) status.textContent = `检索失败：${error.message}`;
+  } finally { if (current()) button.disabled = false; }
+}
+
+if ($("ctxOpen")) $("ctxOpen").addEventListener("click", () => {
+  cbDockSet(true, true);
+  cbContextLoad();
+  $("ctxQuery").focus();
+});
+if ($("ctxRefresh")) $("ctxRefresh").addEventListener("click", cbContextLoad);
+if ($("ctxRebuild")) $("ctxRebuild").addEventListener("click", cbContextRebuild);
+if ($("ctxSearch")) $("ctxSearch").addEventListener("click", cbContextSearch);
+if ($("ctxQuery")) $("ctxQuery").addEventListener("keydown", event => {
+  if (event.key === "Enter" && !event.isComposing) { event.preventDefault(); cbContextSearch(); }
+});
 
 function fileUrl(p) {
   /* Rust canonicalize 返回 \\?\ verbatim 前缀；/api/file 对该形态 404——
@@ -1161,7 +1985,9 @@ function escapeHtml(s) {
   return String(s)
     .replaceAll("&", "&amp;")
     .replaceAll("<", "&lt;")
-    .replaceAll(">", "&gt;");
+    .replaceAll(">", "&gt;")
+    .replaceAll('"', "&quot;")
+    .replaceAll("'", "&#39;");
 }
 
 if ($("input")) {
@@ -1280,7 +2106,7 @@ const CB_ONBOARD_KEY = "cb_onboarded_v1";
 const CB_ONBOARD_STEPS = [
   { t: "输入任务，或点一张示例卡（预填，不自动发送）" },
   { t: "看时间线跑完：8 阶段收口" },
-  { t: "在审批卡点确认 · 或文书预览 / 下载 .md" },
+  { t: "键入完整签认句后确认 · 或预览 / 下载文书" },
 ];
 
 function cbOnboardLoad() {
@@ -1376,7 +2202,20 @@ function cbEmptyPrefill(id) {
   const ta = $("input");
   if (!ta) return;
   let text = "";
-  if (id === "pack") {
+  const samples = {
+    skills: "@施工方案 你能做什么？",
+    daily: "@项目日报 写一份项目日报模板；项目、日期、人数与进度均未提供，缺失项保持待填，不编造完成情况。",
+    "bid-guide": "@招标解析 说明你能帮我检查哪些招标响应项，以及开始前需要哪些材料。",
+    "tender-review": "根据当前选择的附件，综合检查投标响应：先解析招标原文，再整理技术响应与响应缺口，汇总证据和未解决事项。未提供的内容保持待填，不判断可以投标。",
+    "backup-plan": "帮我制定备份策略；按系统整理数据分级、备份周期、介质与恢复演练记录，未提供的 RPO、RTO 和实测结果保持待填。",
+    "steel-note": "帮我写钢构说明草稿；项目地区、荷载、跨度与图号尚未提供，请列待补资料，不选择构件尺寸。",
+  };
+  if (samples[id]) {
+    text = samples[id];
+    state.summoned.clear();
+    if ($("confirmOk")) $("confirmOk").value = "";
+    renderSummon();
+  } else if (id === "pack") {
     const t = (window.CB_TICKETS || []).find((x) => x.id === "small_one_container") || null;
     text = cbSlashTemplate("pack", "", t ? { xlsx: t.xlsx, story: t.story } : {});
   } else {
@@ -1388,6 +2227,24 @@ function cbEmptyPrefill(id) {
   ta.focus();
   ta.setSelectionRange(ta.value.length, ta.value.length);
   cbObStep(1);
+}
+
+function cbBrowsePosts() {
+  const ta = $("input");
+  if (!ta) return;
+  if (!cbSlashQuery(ta.value, ta.selectionStart)) {
+    if (ta.value && !/\s$/.test(ta.value)) ta.value += " ";
+    ta.value += "/";
+    ta.selectionStart = ta.selectionEnd = ta.value.length;
+  }
+  cbAtClose();
+  cbCmd.mode = "cats";
+  cbCmd.dismissed = null;
+  cbCmd.dismissedAt = null;
+  cbAutosize(ta);
+  cbSyncSend();
+  cbCmdUpdate();
+  ta.focus();
 }
 
 /* 网关兜底空态：/api/health 不可达 → 纠偏卡（发生了什么 + 现在能做什么，命令一键复制） */
@@ -1429,9 +2286,8 @@ function cbEmptyDownShow(err) {
   retry.addEventListener("click", async () => {
     retry.textContent = "检测中…";
     try {
-      const r = await fetch("/api/health");
-      if (r.ok) { card.remove(); addStatus("后端已恢复 · 可以发任务了"); return; }
-      throw new Error("HTTP " + r.status);
+      if (await boot()) { card.remove(); addStatus("后端已恢复 · 工作台状态已更新"); return; }
+      throw new Error("工作台尚未恢复");
     } catch (e) {
       retry.textContent = "仍未启动";
       setTimeout(() => { retry.textContent = "重试检测"; }, 1600);
@@ -1520,57 +2376,129 @@ function cbLlmFillModels(vendor) {
   }
 }
 
+let cbLlmBusy = false;
+
+function cbLlmSetBusy(busy) {
+  cbLlmBusy = busy;
+  for (const id of ["cbLlmVendor", "cbLlmBase", "cbLlmModel", "cbLlmKey", "cbLlmContext", "cbLlmReserve", "cbLlmSemantic", "cbLlmSave", "cbLlmReset"]) {
+    if ($(id)) $(id).disabled = busy;
+  }
+  if ($("cbLlm")) $("cbLlm").setAttribute("aria-busy", String(busy));
+}
+
+function cbLlmNormalize(cfg) {
+  if (!cfg || typeof cfg.configured !== "boolean" || typeof cfg.model !== "string" || typeof cfg.base_url !== "string") {
+    throw new Error("工作台返回的模型配置不完整，请检查服务版本。");
+  }
+  let base = "";
+  if (cfg.base_url) {
+    const url = new URL(cfg.base_url);
+    url.username = "";
+    url.password = "";
+    url.search = "";
+    url.hash = "";
+    base = url.toString().replace(/\/$/, "");
+  }
+  const masked = typeof cfg.key_masked === "string" && /^[^*\s]{0,4}\*+[^*\s]{0,4}$/.test(cfg.key_masked)
+    ? cfg.key_masked : "已隐藏";
+  const semantic = cfg.semantic_summary !== undefined ? cfg.semantic_summary : cfg.context && cfg.context.semantic_summary;
+  if (semantic !== undefined && typeof semantic !== "boolean") throw new Error("工作台返回的语义摘要设置无效。");
+  return { configured: cfg.configured, model: cfg.model, base_url: base, key_masked: masked, source: cfg.source, context: cfg.context,
+    semantic_summary: semantic === true };
+}
+
+function cbLlmError(error, secret) {
+  let text = String(error && error.message || error);
+  if (secret) text = text.split(secret).join("[已隐藏]");
+  return text.replace(/sk-[A-Za-z0-9_-]+/g, "[已隐藏]");
+}
+
+async function cbLlmRequest(payload) {
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), 8000);
+  try {
+    const response = await fetch("/api/llm-config", {
+      signal: controller.signal,
+      ...(payload === undefined ? {} : { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(payload) }),
+    });
+    if (!response.ok) {
+      if (response.status === 404) throw new Error("当前工作台未提供模型设置，可继续使用已支持的岗位功能。");
+      throw new Error(await apiError(response) || "HTTP " + response.status);
+    }
+    try { return await response.json(); }
+    catch (_) {
+      const error = new Error("工作台返回了无法读取的模型配置。");
+      error.submitted = payload !== undefined;
+      throw error;
+    }
+  } catch (error) {
+    if (error.name === "AbortError") throw new Error("请求超时，请检查本地工作台状态。");
+    throw error;
+  } finally { clearTimeout(timeout); }
+}
+
 function cbLlmPaint(cfg, note, tone) {
   const st = $("cbLlmStatus");
   if (!st) return;
   st.className = "cb-llm-status" + (tone ? " " + tone : "");
-  if (note) { st.textContent = note; return; }
-  if (!cfg) { st.textContent = "读取失败：工作台未响应。"; return; }
-  const src = cfg.source === "runtime" ? "本次运行（界面设置）" : "demo/.env";
-  st.textContent = cfg.configured
+  if (!cfg) { st.textContent = note || "读取失败：工作台未响应。"; return; }
+  const src = cfg.source === "runtime" ? "本次运行（界面设置）" : "启动配置";
+  st.textContent = (note ? note + "。" : "") + (cfg.configured
     ? "当前：" + cfg.model + " · " + cfg.base_url + " · Key " + cfg.key_masked + " · 来源 " + src
-    : "当前未配置 Key（来源 " + src + "）。填 Key 后点「保存并生效」，无需重启。";
+    : "尚未配置开放式问答模型（来源 " + src + "）。填写后点「保存并生效」，无需重启。");
 }
 
-async function cbLlmLoad(note, tone) {
-  try {
-    const cfg = await fetch("/api/llm-config").then((r) => r.json());
+function cbLlmApply(cfg, note) {
     const vendor = cbLlmVendorOf(cfg.base_url);
     if ($("cbLlmVendor")) $("cbLlmVendor").value = vendor;
     cbLlmFillModels(vendor);
     if ($("cbLlmBase")) $("cbLlmBase").value = cfg.base_url || "";
     if ($("cbLlmModel")) $("cbLlmModel").value = cfg.model || "";
+    if (cfg.context) {
+      state.context = { ...state.context, ...cfg.context, lastReport: null };
+      if ($("cbLlmContext")) $("cbLlmContext").value = cfg.context.limit;
+      if ($("cbLlmReserve")) $("cbLlmReserve").value = cfg.context.reserve;
+      paintContext(estimateLocalContext());
+    }
+    state.context.semantic_summary = cfg.semantic_summary === true;
+    if ($("cbLlmSemantic")) $("cbLlmSemantic").checked = cfg.semantic_summary === true;
     if ($("cbLlmKey")) $("cbLlmKey").value = "";
-    cbLlmPaint(cfg, note, tone);
+    cbLlmPaint(cfg, note, note ? "ok" : "");
+    cbApplyHealth({ has_key: cfg.configured, deepseek: cfg.configured, model: cfg.model,
+      mode: cfg.configured ? "configured" : cbCapability("chat") === true ? "offline" : "" });
+}
+
+async function cbLlmLoad() {
+  if (cbLlmBusy) return null;
+  cbLlmSetBusy(true);
+  cbLlmPaint(null, "正在读取模型配置…");
+  if ($("cbLlmKey")) $("cbLlmKey").value = "";
+  try {
+    const cfg = cbLlmNormalize(await cbLlmRequest());
+    cbLlmApply(cfg);
     return cfg;
   } catch (e) {
-    cbLlmPaint(null, "读取失败：" + String((e && e.message) || e), "err");
+    cbLlmPaint(null, "读取失败：" + cbLlmError(e), "err");
     return null;
-  }
+  } finally { cbLlmSetBusy(false); }
 }
 
 async function cbLlmSubmit(payload, okNote) {
+  if (cbLlmBusy) return;
+  cbLlmSetBusy(true);
+  cbLlmPaint(null, payload.clear ? "正在恢复启动配置…" : "正在保存模型配置…");
+  const secret = String(payload.api_key || "");
+  if ($("cbLlmKey")) $("cbLlmKey").value = "";
+  let submitted = false;
   try {
-    const r = await fetch("/api/llm-config", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(payload),
-    });
-    if (!r.ok) throw new Error("HTTP " + r.status);
-    await cbLlmLoad(null, null);
-    const cfg = await fetch("/api/llm-config").then((x) => x.json());
-    cbLlmPaint(cfg, null, "ok");
-    /* 顶栏徽章跟着变，别让用户以为没生效 */
-    const badge = $("keyBadge");
-    if (badge) {
-      badge.textContent = cfg.configured ? "已配置 API Key" : "缺少 API Key";
-      badge.className = cfg.configured ? "pill ok" : "pill warn";
-    }
-    state.modelName = cfg.model || state.modelName;
-    addStatus(okNote + "：" + cfg.model + " · " + cfg.base_url);
+    await cbLlmRequest(payload);
+    submitted = true;
+    const cfg = cbLlmNormalize(await cbLlmRequest());
+    cbLlmApply(cfg, okNote);
   } catch (e) {
-    cbLlmPaint(null, "保存失败：" + String((e && e.message) || e), "err");
-  }
+    const prefix = submitted || e.submitted ? "设置已提交，但当前配置未能核对，请重新打开设置：" : "保存失败：";
+    cbLlmPaint(null, prefix + cbLlmError(e, secret), "err");
+  } finally { cbLlmSetBusy(false); }
 }
 
 function cbLlmOpen() {
@@ -1594,6 +2522,7 @@ function cbLlmClose() {
 function cbLlmWire() {
   const open = $("cbLlmOpen");
   if (open) open.addEventListener("click", cbLlmOpen);
+  if ($("cbEmptyModel")) $("cbEmptyModel").addEventListener("click", cbLlmOpen);
   const close = $("cbLlmClose");
   if (close) close.addEventListener("click", cbLlmClose);
   const box = $("cbLlm");
@@ -1620,12 +2549,15 @@ function cbLlmWire() {
         api_key: $("cbLlmKey").value,
         base_url: $("cbLlmBase").value,
         model: $("cbLlmModel").value,
+        context_limit: Number($("cbLlmContext").value),
+        output_reserve: Number($("cbLlmReserve").value),
+        semantic_summary: !!$("cbLlmSemantic").checked,
       }, "模型已切换");
     });
   }
   const reset = $("cbLlmReset");
   if (reset) {
-    reset.addEventListener("click", () => cbLlmSubmit({ clear: true }, "已回退到 .env 配置"));
+    reset.addEventListener("click", () => cbLlmSubmit({ clear: true }, "已恢复启动配置"));
   }
 }
 
@@ -1684,6 +2616,10 @@ async function cbDirectRun(it) {
   if (it.kind === "nav") {
     addStatus("直达：" + it.name);
     cbCmdNav(it.id);
+    return;
+  }
+  if (it.sub === "cats") {
+    cbBrowsePosts();
     return;
   }
   addStatus("直达：" + it.name + " —— 模板已填进输入框，改完再按发送（不自动发送）。");
@@ -2056,7 +2992,7 @@ function cbComposerInit() {
   const guard = cbComposeGuard(ta);
   cbSyncSend = () => {
     const btn = $("send");
-    if (btn && !btn.dataset.running) btn.disabled = !ta.value.trim();
+    if (btn && !btn.dataset.running) btn.disabled = !ta.value.trim() || cbCapability("chat") === false;
   };
   ta.addEventListener("input", () => {
     cbAutosize(ta);
@@ -2174,6 +3110,11 @@ function cbCmdSubItems(mode) {
   if (mode === "cats") return cbCmdCatItems();
   if (mode === "posts") return cbCmdPostItems(cbCmd.cat);
   return cbSlashCmds();
+}
+
+function cbCmdFiltered(mode, query) {
+  const items = cbCmdSubItems(mode);
+  return cbSlashFilter(items, query, mode === "cats" || mode === "posts" ? items.length : 9);
 }
 
 function cbCmdClose() {
@@ -2302,7 +3243,7 @@ function cbCmdUpdate() {
   cbCmd.open = true;
   cbCmd.start = tok.start;
   cbCmd.query = tok.query;
-  cbCmd.items = cbSlashFilter(cbCmdSubItems(cbCmd.mode), tok.query, 9);
+  cbCmd.items = cbCmdFiltered(cbCmd.mode, tok.query);
   cbCmd.idx = 0;
   cbCmdRender();
 }
@@ -2329,7 +3270,7 @@ function cbCmdEsc() {
   const parent = { tickets: "cmds", cats: "cmds", posts: "cats" };
   if (parent[cbCmd.mode]) {
     cbCmd.mode = parent[cbCmd.mode];
-    cbCmd.items = cbSlashFilter(cbCmdSubItems(cbCmd.mode), cbCmd.query, 9);
+    cbCmd.items = cbCmdFiltered(cbCmd.mode, cbCmd.query);
     cbCmd.idx = 0;
     cbCmdRender();
     return;
@@ -2375,7 +3316,7 @@ function cbCmdConfirm() {
     if (it.sub) {
       cbCmd.mode = it.sub;
       cbCmd.query = "";
-      cbCmd.items = cbSlashFilter(cbCmdSubItems(it.sub), "", 9);
+      cbCmd.items = cbCmdFiltered(it.sub, "");
       cbCmd.idx = 0;
       cbCmdRender();
       return;
@@ -2394,7 +3335,7 @@ function cbCmdConfirm() {
     cbCmd.mode = "posts";
     cbCmd.cat = it.id;
     cbCmd.query = "";
-    cbCmd.items = cbSlashFilter(cbCmdPostItems(it.id), "", 9);
+    cbCmd.items = cbCmdFiltered("posts", "");
     cbCmd.idx = 0;
     cbCmdRender();
     return;
@@ -2476,6 +3417,7 @@ cbThemeWire();
 document.querySelectorAll("[data-cb-sample]").forEach((btn) => {
   btn.addEventListener("click", () => cbEmptyPrefill(btn.dataset.cbSample));
 });
+if ($("cbBrowsePosts")) $("cbBrowsePosts").addEventListener("click", cbBrowsePosts);
 cbOnboardRender();
 if ($("onboardHelp")) {
   $("onboardHelp").addEventListener("click", cbOnboardReopen);
@@ -2496,6 +3438,16 @@ if ($("input")) {
    openai/codex history_cell（Apache-2.0）追加式会话流、完成后折叠为一行摘要；
    VS Code Tasks presentation（文档 pattern-only）长输出默认折叠、可展开。 */
 const CB_TL_STAGES = [
+  ["understand", "理解任务"],
+  ["summon", "召唤岗位"],
+  ["box", "读取资料"],
+  ["pack", "起草"],
+  ["hitl", "人工确认"],
+  ["risk", "检查"],
+  ["write", "保存"],
+  ["finalize", "完成"],
+];
+const CB_TL_PACK_STAGES = [
   ["understand", "理解任务"],
   ["summon", "召唤岗位"],
   ["box", "成箱"],
@@ -2523,6 +3475,9 @@ const CB_PHASE_STAGE = {
   summon: "summon",
   queue: "summon",
   plain: "summon",
+  search_kb: "box",
+  read_kb: "box",
+  retrieve: "box",
   harness: "box",
   scheme_gate: "box",
   scheme: "box",
@@ -2540,10 +3495,20 @@ const CB_PHASE_STAGE = {
   done: "finalize",
 };
 
+function cbTlStageDefinitions(packing) {
+  return packing ? CB_TL_PACK_STAGES : CB_TL_STAGES;
+}
+
+function cbTlPhase(phase, packing) {
+  if (!packing && phase === "deliver") return "pack";
+  return CB_PHASE_STAGE[phase] || "";
+}
+
 function cbTlCreate(bodyEl, sourceMessage) {
-  const STAGE_ORDER = CB_TL_STAGES.map((s) => s[0]);
+  let packing = state.summoned.has("pack-ship") || /^(?:pack\s|\$pack-ship\b|@装箱拼柜)/i.test(String(sourceMessage || "").trim());
+  let definitions = cbTlStageDefinitions(packing);
   const stages = {};
-  for (const [key, label] of CB_TL_STAGES) stages[key] = { state: "idle", label, note: "" };
+  for (const [key, label] of definitions) stages[key] = { state: "idle", label, note: "" };
   let activeKey = "";
   let hitlWait = false;
   let doneFolded = false;
@@ -2568,24 +3533,28 @@ function cbTlCreate(bodyEl, sourceMessage) {
   const linesEl = root.querySelector(".tl-lines");
   const auditEl = root.querySelector(".tl-audit");
 
-  const chips = [];
-  for (const [key, label] of CB_TL_STAGES) {
-    if (chips.length) {
-      const arrow = document.createElement("span");
-      arrow.className = "cb-tl-arrow";
-      arrow.textContent = "→";
-      arrow.setAttribute("aria-hidden", "true");
-      trackEl.appendChild(arrow);
+  function renderTrack() {
+    trackEl.textContent = "";
+    let count = 0;
+    for (const [key, label] of definitions) {
+      if (count++) {
+        const arrow = document.createElement("span");
+        arrow.className = "cb-tl-arrow";
+        arrow.textContent = "→";
+        arrow.setAttribute("aria-hidden", "true");
+        trackEl.appendChild(arrow);
+      }
+      const chip = stages[key].el || document.createElement("span");
+      chip.setAttribute("data-cb-stage", key);
+      chip.setAttribute("role", "listitem");
+      chip.title = label;
+      trackEl.appendChild(chip);
+      stages[key].el = chip;
+      stages[key].label = label;
+      paintStage(key);
     }
-    const chip = document.createElement("span");
-    chip.className = "cb-tl-stage idle";
-    chip.setAttribute("data-cb-stage", key);
-    chip.setAttribute("role", "listitem"); /* ux(round11)：时间线节点=listitem（附录 J） */
-    chip.innerHTML = '<span class="cb-tl-st" aria-hidden="true"></span>' + label; /* round14：状态=纯 CSS 圆点，无字符 */
-    chip.title = label;
-    trackEl.appendChild(chip);
-    stages[key].el = chip;
   }
+  renderTrack();
 
   function paintStage(key) {
     const st = stages[key];
@@ -2690,7 +3659,7 @@ function cbTlCreate(bodyEl, sourceMessage) {
     card.innerHTML =
       '<div class="cb-apr-bar" aria-hidden="true"></div>' +
       '<div class="cb-apr-head">' +
-      '<span class="cb-apr-title">人工确认 · ' + gateLabel(info.gate) + "</span>" +
+      '<span class="cb-apr-title">人工确认 · ' + escapeHtml(gateLabel(info.gate)) + "</span>" +
       '<span class="cb-apr-risk is-high">风险 · 高</span>' +
       '<span class="cb-apr-state apr-state" hidden></span>' +
       '<button type="button" class="cb-apr-x" title="关闭 = 驳回，永不放行" aria-label="关闭审批卡（等同驳回，不放行）">关闭</button>' +
@@ -2701,19 +3670,26 @@ function cbTlCreate(bodyEl, sourceMessage) {
       (info.runId ? '<span class="cb-apr-chip">run <b>' + escapeHtml(String(info.runId)) + "</b></span>" : "") +
       '<span class="cb-apr-chip is-warn">签认 <b>未确认</b> · 本岗未出稿</span>' +
       "</div>" +
-      '<div class="cb-apr-block" data-cb-approval-blockers="true">高风险动作须人工确认后才会写盘/出稿；流程层已强制 confirm_ok 门禁（未确认不出施工草稿）。</div>' +
+      '<div class="cb-apr-block" data-cb-approval-blockers="true">输入下方完整签认句后，才能重新提交这条任务并生成内部讨论草稿。</div>' +
+      '<label class="cb-apr-ack">请键入：我明白，将由持证人员签认' +
+      '<input class="cb-apr-ack-input" type="text" autocomplete="off" spellcheck="false" /></label>' +
       '<div class="cb-apr-actions" data-cb-approval-actions="true">' +
-      '<button type="button" class="cb-apr-confirm" aria-label="确认并重提（显式决策：勾选签认句并重新提交）">确认并重提</button>' +
+      '<button type="button" class="cb-apr-confirm" disabled aria-label="确认并重提（须完整键入签认句）">确认并重提</button>' +
       '<button type="button" class="cb-apr-reject" aria-label="驳回（显式决策：不放行，可修改输入后重跑）">驳回</button>' +
       '<button type="button" class="cb-apr-later" aria-label="稍后（折叠为等待条，不改变等待状态）">稍后</button>' +
       "</div>" +
-      '<div class="cb-apr-foot">确认 = 勾选确认句「我明白，将由持证人员签认」并重新提交本条任务 · ' +
+      '<div class="cb-apr-foot">完整键入「我明白，将由持证人员签认」后，才能重新提交本条任务 · ' +
       "<b>Esc、关闭 = 驳回，永不放行</b> · 决策写入下方审计行</div>" +
       "</div>" +
       '<div class="cb-apr-body apr-decided" hidden></div>';
     const stateChip = card.querySelector(".apr-state");
     const waitingBody = card.querySelector(".apr-waiting");
     const decidedBody = card.querySelector(".apr-decided");
+    const acknowledgment = card.querySelector(".cb-apr-ack-input");
+    const approve = card.querySelector(".cb-apr-confirm");
+    acknowledgment.addEventListener("input", () => {
+      approve.disabled = acknowledgment.value !== "我明白，将由持证人员签认";
+    });
 
     function settle(kind, reason) {
       if (state.decided) return;
@@ -2728,7 +3704,7 @@ function cbTlCreate(bodyEl, sourceMessage) {
         stateChip.hidden = false;
         stateChip.textContent = "已确认 · 已重新提交";
         setStage("hitl", "done", "已确认 · 已重新提交（续跑见新时间线）");
-        addLine("hitl", "hitl.confirm", "用户确认 · 勾选签认句并重新提交", "ok");
+        addLine("hitl", "hitl.confirm", "用户确认 · 键入签认句并重新提交", "ok");
         decidedBody.textContent = "已确认 · 已重新提交本条任务（confirm_ok=true）。本时间线定格为历史，续跑进度见新时间线。";
       } else {
         card.classList.add("is-rejected");
@@ -2746,17 +3722,20 @@ function cbTlCreate(bodyEl, sourceMessage) {
     }
 
     card.querySelector(".cb-apr-confirm").addEventListener("click", () => {
-      /* 显式决策=确认：勾选确认句（流程层 confirm_ok 门禁）并重新提交原文 */
+      if (state.decided || acknowledgment.value !== "我明白，将由持证人员签认") return;
+      if (cbActiveRun) {
+        cbAnnounce("请等待当前回答结束后，再确认重提");
+        return;
+      }
       cbObStep(3); /* ux(round10)：审批卡显式确认 → 引导第 3 步打勾 */
       const ok = $("confirmOk");
-      if (ok) ok.checked = true;
       const input = $("input");
       const form = $("form");
-      if (input && form && sourceMessage) {
-        input.value = sourceMessage;
-        if (form.requestSubmit) form.requestSubmit();
-        else form.dispatchEvent(new Event("submit", { cancelable: true }));
-      }
+      if (!ok || !input || !form || !sourceMessage) return;
+      ok.value = acknowledgment.value;
+      input.value = sourceMessage;
+      if (form.requestSubmit) form.requestSubmit();
+      else form.dispatchEvent(new Event("submit", { cancelable: true }));
       settle("approved", "");
     });
     card.querySelector(".cb-apr-reject").addEventListener("click", () => settle("rejected", "驳回按钮"));
@@ -2801,7 +3780,7 @@ function cbTlCreate(bodyEl, sourceMessage) {
 
   function finish(data) {
     settleActive();
-    const hitlPending = !!(data && data.hitl && data.hitl.pending);
+    const hitlPending = cbHitlPending(data);
     if (hitlPending) {
       /* HITL 闸门未过：运行已结束但未出稿——时间线不定格为「完成」，审批卡保持等待 */
       if (activeKey && stages[activeKey] && stages[activeKey].state === "run") {
@@ -2809,10 +3788,11 @@ function cbTlCreate(bodyEl, sourceMessage) {
         paintStage(activeKey);
       }
       setStage("hitl", "warn", "等待人工确认（闸门未过，本岗未出稿）");
-      setBadge("HITL 等待中", "hitl");
+      setBadge("等待签认", "hitl");
       hitlEl.hidden = false;
       if (!hitlEl.querySelector(".cb-apr")) {
-        mountApproval({ gate: (data.hitl || {}).gate, expert: (data && data.expert) || "", runId: (data && data.run_id) || "" });
+        mountApproval({ gate: (data.hitl || {}).gate || data.gate, expert: data.expert || data.skill || "",
+          runId: data.run_id || (Array.isArray(data.run_ids) ? data.run_ids.join(", ") : "") });
       }
       return;
     }
@@ -2850,13 +3830,21 @@ function cbTlCreate(bodyEl, sourceMessage) {
   function status(data) {
     const phase = String((data && data.phase) || "");
     const text = String((data && data.text) || "");
-    const stageKey = CB_PHASE_STAGE[phase] || "";
+    if (phase === "summon" && data.expert) {
+      const nextPacking = data.expert === "pack-ship";
+      if (nextPacking !== packing) {
+        packing = nextPacking;
+        definitions = cbTlStageDefinitions(packing);
+        renderTrack();
+      }
+    }
+    const stageKey = cbTlPhase(phase, packing);
     if (stageKey === "hitl") {
       settleActive();
       setStage("hitl", "run", text || "等待人工确认（HITL 闸门）");
       activeKey = "hitl";
       hitlWait = true;
-      setBadge("HITL 等待中", "hitl");
+      setBadge("等待签认", "hitl");
     } else if (stageKey) {
       settleActive();
       setStage(stageKey, "run", text || phase);
@@ -2872,7 +3860,7 @@ function cbTlCreate(bodyEl, sourceMessage) {
   }
 
   function stageLabel(key) {
-    const found = CB_TL_STAGES.find((s) => s[0] === key);
+    const found = definitions.find((s) => s[0] === key);
     return found ? found[1] : key;
   }
 
@@ -2880,7 +3868,7 @@ function cbTlCreate(bodyEl, sourceMessage) {
     const key = activeKey || "finalize";
     setStage(key, "warn", String(text).slice(0, 200));
     addLine(key, "error", text, "error");
-    setBadge("受阻 · 见子行", "hitl");
+    setBadge("未完成 · 见详情", "hitl");
   }
 
   /* 挂载：插到本条助手消息上方（追加式会话流中的一格，完成后折叠定格） */

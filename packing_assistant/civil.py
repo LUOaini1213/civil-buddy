@@ -19,8 +19,6 @@ import json
 import os
 import subprocess
 import sys
-import time
-import webbrowser
 from typing import List, Optional
 
 CONFIRM = "我明白，将由持证人员签认"
@@ -90,30 +88,10 @@ def _print_out(out: dict, *, as_json: bool) -> int:
     return 0 if out.get("ok", True) else 1
 
 
-def cmd_app(port: int) -> int:
-    from pathlib import Path
+def cmd_app(port: Optional[int], *, no_browser: bool = False) -> int:
+    from packing_assistant.runtime.launcher import run_workbench
 
-    root = Path(__file__).resolve().parents[1]
-    demo = root / "demo"
-    use = port or int(os.environ.get("CIVIL_PORT") or "8765")
-    env = os.environ.copy()
-    env.setdefault("CIVIL_PORT", str(use))
-    print(f"Civil Codex app  http://127.0.0.1:{use}", file=sys.stderr)
-    proc = subprocess.Popen(
-        [sys.executable, "-m", "uvicorn", "app:app", "--host", "127.0.0.1", "--port", str(use)],
-        cwd=str(demo),
-        env=env,
-    )
-    time.sleep(0.8)
-    try:
-        webbrowser.open(f"http://127.0.0.1:{use}")
-    except Exception:
-        pass
-    try:
-        return int(proc.wait())
-    except KeyboardInterrupt:
-        proc.terminate()
-        return 0
+    return run_workbench(port, no_browser=no_browser)
 
 
 def cmd_mcp(pack: str, expert: str) -> int:
@@ -140,7 +118,8 @@ def _common(p: argparse.ArgumentParser) -> None:
     p.add_argument("--sandbox", default="", help="read-only | workspace-write")
     p.add_argument("--approval", default="", help="untrusted | on-request | never")
     p.add_argument("--list-skills", action="store_true")
-    p.add_argument("--port", type=int, default=0)
+    p.add_argument("--port", type=int, default=None, help="工作台端口，默认 CIVIL_PORT 或 8765")
+    p.add_argument("--no-browser", action="store_true", help="启动工作台后不自动打开浏览器")
     p.add_argument("--pack", default="")
     p.add_argument("--expert", default="")
     p.add_argument("rest", nargs="*", help="任务或 resume 的 thread id")
@@ -176,7 +155,7 @@ def main(argv: Optional[List[str]] = None) -> int:
         print(HELP)
         return 0
     if verb == "app":
-        return cmd_app(args.port)
+        return cmd_app(args.port, no_browser=args.no_browser)
     if verb == "mcp":
         return cmd_mcp(args.pack or "construction", args.expert)
     if verb == "serve":

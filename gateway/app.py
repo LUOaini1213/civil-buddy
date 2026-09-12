@@ -26,7 +26,7 @@ from fastapi import FastAPI, File, Form, HTTPException, UploadFile, WebSocket, W
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse, StreamingResponse
 from fastapi.staticfiles import StaticFiles
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, StrictBool
 
 logger = logging.getLogger("civil.gateway")
 
@@ -39,7 +39,8 @@ if str(ROOT) not in sys.path:
 try:
     from dotenv import load_dotenv
 
-    load_dotenv(ROOT / ".env")
+    if os.getenv("PYTHON_DOTENV_DISABLED") != "1":
+        load_dotenv(ROOT / ".env")
 except Exception:
     pass
 # 默认：不强制挂死 skjolber。未起 Java 服务时只走 Python 3D，避免探活拖死单线程网关。
@@ -164,9 +165,9 @@ class ConfirmRequest(BaseModel):
     adjust_note: str = ""
     confirmed_box_ids: List[str] = Field(default_factory=list)
     # 装前/非标勾选写回
-    checklist_checked: Dict[str, bool] = Field(default_factory=dict)
+    checklist_checked: Dict[str, StrictBool] = Field(default_factory=dict)
     # 前端比赛路径默认 true；自动化测试勿传或 false
-    enforce_ns_checklist: bool = False
+    enforce_ns_checklist: StrictBool = False
 
 
 class ReviseNlRequest(BaseModel):
@@ -188,7 +189,7 @@ class DemoRequest(BaseModel):
     preset: str = "high_util"
     materials: Optional[List[Dict[str, Any]]] = None
     # 比赛演示默认 False：露出 HITL（await_user_confirm）；True=自动拼柜
-    enable_auto_confirm: bool = False
+    enable_auto_confirm: StrictBool = False
 
 
 @app.get("/")
@@ -467,6 +468,21 @@ def api_understand(body: dict = None):
     return {"ok": True, "intent": intent, "wrote": False, "schema": "civil.understand.v1"}
 
 
+def _json_confirmation(body: dict, *fields: str) -> bool:
+    """A string or number must never be promoted into a human confirmation."""
+    for field in fields:
+        if field in body and type(body[field]) is not bool:
+            raise HTTPException(422, f"{field} 必须是 JSON 布尔值 true 或 false")
+    return any(body.get(field) is True for field in fields)
+
+
+def _form_confirmation(value: str) -> bool:
+    # Multipart fields are text; accept only the two documented boolean literals.
+    if value not in {"true", "false"}:
+        raise HTTPException(422, "p0_confirmed 必须是 true 或 false")
+    return value == "true"
+
+
 @app.post("/api/turn")
 def api_turn(body: dict = None):
     """Default surface: chat does not write; run uses existing tender pipeline."""
@@ -475,7 +491,7 @@ def api_turn(body: dict = None):
     body = body or {}
     return run_turn(
         str(body.get("text") or body.get("message") or body.get("tender_text") or ""),
-        p0_confirmed=bool(body.get("p0_confirmed") or body.get("confirm_ok")),
+        p0_confirmed=_json_confirmation(body, "p0_confirmed", "confirm_ok"),
         project_name=str(body.get("project_name") or "幕墙项目投标应答（草稿）"),
         force_intent=str(body.get("intent") or "") or None,
         expert_id=str(body.get("expert_id") or ""),
@@ -494,7 +510,7 @@ def api_agent(body: dict = None):
         str(body.get("text") or body.get("message") or body.get("tender_text") or ""),
         session_id=str(body.get("session_id") or ""),
         expert_id=str(body.get("expert_id") or ""),
-        p0_confirmed=bool(body.get("p0_confirmed") or body.get("confirm_ok")),
+        p0_confirmed=_json_confirmation(body, "p0_confirmed", "confirm_ok"),
         force_intent=str(body.get("intent") or "") or None,
         packing_summary=body.get("packing_summary") if isinstance(body.get("packing_summary"), dict) else None,
         project_name=str(body.get("project_name") or "幕墙项目投标应答（草稿）"),
@@ -651,7 +667,7 @@ def api_tender_parse(body: dict = None):
         text=text,
         source="api",
         project_name=str(body.get("project_name") or "幕墙项目投标应答（草稿）"),
-        p0_confirmed=bool(body.get("p0_confirmed")),
+        p0_confirmed=_json_confirmation(body, "p0_confirmed"),
         packing_summary=packing_summary,
         ingest=ingest,
         intent=str(body.get("intent") or "run"),
@@ -665,13 +681,14 @@ async def api_tender_parse_file(
     project_name: str = Form("幕墙项目投标应答（草稿）"),
 ):
     """Upload one ITT excerpt: txt/md/csv/docx/xlsx. No scanned-PDF vision."""
+    confirmed = _form_confirmation(p0_confirmed)
     raw = await file.read()
     ingested = _tender_ingest_from_uploads([{"filename": file.filename, "bytes": raw}])
     out = _tender_parse_via_engine(
         text=ingested["text"],
         source="api-upload",
         project_name=project_name,
-        p0_confirmed=str(p0_confirmed).lower() in {"1", "true", "yes"},
+        p0_confirmed=confirmed,
         ingest=ingested,
         intent="run",
     )
@@ -689,6 +706,7 @@ async def api_tender_parse_files(
     project_name: str = Form("幕墙项目投标应答（草稿）"),
 ):
     """Several excerpts (须知 + 评分表 + …) → one matrix. Still not a bid book."""
+    confirmed = _form_confirmation(p0_confirmed)
     if not files:
         raise HTTPException(400, "没有收到文件")
     if len(files) > 8:
@@ -701,7 +719,7 @@ async def api_tender_parse_files(
         text=ingested["text"],
         source="api-uploads",
         project_name=project_name,
-        p0_confirmed=str(p0_confirmed).lower() in {"1", "true", "yes"},
+        p0_confirmed=confirmed,
         ingest=ingested,
         intent="run",
     )
@@ -795,7 +813,7 @@ def api_tender_delivery(body: dict = None):
         project_name=str(body.get("project_name") or "幕墙项目投标应答（草稿）"),
         enable_auto_confirm=True,
         save_artifacts=False,
-        p0_confirmed=bool(body.get("p0_confirmed")),
+        p0_confirmed=_json_confirmation(body, "p0_confirmed"),
     )
 
 
@@ -1335,7 +1353,7 @@ class PipelineRequest(BaseModel):
     session_id: str = "pipeline"
     max_containers: int = 0
     # True=跳过确认闸门自动跑到 finalize；False=停在 HITL
-    enable_auto_confirm: bool = True
+    enable_auto_confirm: StrictBool = True
     goal: str = Field(
         default="deliver_valid_pack_plan",
         description="deliver_valid_pack_plan | minimize_containers | safe_to_ship",
@@ -1397,7 +1415,7 @@ class ProfilePipelineRequest(BaseModel):
     profile: str = "balanced"
     packing_options: Optional[Dict[str, Any]] = None
     preset: str = ""
-    enable_auto_confirm: bool = True
+    enable_auto_confirm: StrictBool = True
 
 
 @app.get("/api/profiles")
@@ -2631,7 +2649,7 @@ class TraceRequest(BaseModel):
     session_id: str = "trace"
     max_containers: int = 0
     goal: str = "deliver_valid_pack_plan"
-    enable_auto_confirm: bool = True
+    enable_auto_confirm: StrictBool = True
 
 
 @app.post("/api/pipeline/trace")

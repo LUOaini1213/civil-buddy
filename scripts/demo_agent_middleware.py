@@ -33,7 +33,7 @@ def main() -> int:
         print(f"  原因  {beat.get('reason')}")
         if beat["id"] == "order":
             print(
-                f"  结果  wrote={beat.get('wrote')}  GST 9%={beat.get('gst9')}  "
+                f"  结果  wrote={beat.get('wrote')}  税率待核={beat.get('rate_unspecified')}  "
                 f"files={beat.get('files')}  run={beat.get('run_id')}"
             )
         elif beat["id"] == "unauthorized":

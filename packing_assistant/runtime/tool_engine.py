@@ -9,6 +9,7 @@ from __future__ import annotations
 import threading
 import time
 from dataclasses import dataclass, field
+from copy import deepcopy
 from typing import Any, Callable, Dict, List, Optional
 
 ERR_OK = "ok"
@@ -58,6 +59,8 @@ class ToolSpec:
     expert_id: Optional[str] = None
     writes: bool = False
     timeout_s: float = 30.0
+    input_schema: Optional[Dict[str, Any]] = None
+    output_schema: Optional[Dict[str, Any]] = None
 
 
 @dataclass
@@ -85,6 +88,8 @@ class ToolEngine:
         expert_id: Optional[str] = None,
         writes: bool = False,
         timeout_s: float = 30.0,
+        input_schema: Optional[Dict[str, Any]] = None,
+        output_schema: Optional[Dict[str, Any]] = None,
     ) -> None:
         self.tools[name] = ToolSpec(
             name=name,
@@ -93,6 +98,8 @@ class ToolEngine:
             expert_id=expert_id,
             writes=writes,
             timeout_s=timeout_s,
+            input_schema=deepcopy(input_schema),
+            output_schema=deepcopy(output_schema),
         )
 
     def list(self, *, expert_id: Optional[str] = None) -> List[str]:
@@ -115,6 +122,9 @@ class ToolEngine:
                     "expert_id": spec.expert_id,
                     "schema_keys": list(spec.schema_keys),
                     "timeout_s": spec.timeout_s,
+                    "schema_version": "civil.tool.v1",
+                    "input_schema": deepcopy(spec.input_schema),
+                    "output_schema": deepcopy(spec.output_schema),
                 }
             )
         return rows
@@ -150,8 +160,15 @@ class ToolEngine:
         cancelled: bool = False,
     ) -> Dict[str, Any]:
         t0 = time.perf_counter()
-        args = arguments or {}
+        args = {} if arguments is None else arguments
         spec = self.tools.get(name)
+        from packing_assistant.runtime.tool_contracts import validate
+        problem = ("arguments: expected object" if not isinstance(args, dict) else
+                   validate(args, spec.input_schema) if spec and spec.input_schema else None)
+        if problem:
+            self.audit_log.append(Audit(name, ERR_INVALID, 0, expert_id))
+            return {"ok": False, "error_code": ERR_INVALID, "name": name,
+                    "reason": "工具参数不符合契约：" + problem}
         from packing_assistant.runtime.policy import evaluate as policy_evaluate
 
         pol = policy_evaluate(
@@ -240,16 +257,25 @@ class ToolEngine:
                 "detail": str(err)[:200],
                 "reason": f"失败：工具 {name} 报错 {str(err)[:120]}",
             }
-        self._fail_streak[name] = 0
         data = box.get("data")
-        self.audit_log.append(Audit(name=name, error_code=ERR_OK, duration_ms=ms, expert_id=expert_id))
+        failed = isinstance(data, dict) and data.get("ok") is False
+        if not failed and spec.output_schema:
+            problem = validate(data, spec.output_schema, "result")
+            if problem:
+                self.audit_log.append(Audit(name, ERR_INVALID, ms, expert_id))
+                return {"ok": False, "error_code": ERR_INVALID, "name": name,
+                        "reason": "工具返回值不符合契约：" + problem,
+                        "duration_ms": ms, "contract_error": True}
+        error_code = str(data.get("error_code") or ERR_UNSPECIFIED) if failed else ERR_OK
+        self._fail_streak[name] = self._fail_streak.get(name, 0) + 1 if failed else 0
+        self.audit_log.append(Audit(name=name, error_code=error_code, duration_ms=ms, expert_id=expert_id))
         out: Dict[str, Any] = {
-            "ok": True,
-            "error_code": ERR_OK,
+            "ok": not failed,
+            "error_code": error_code,
             "name": name,
             "data": data,
             "duration_ms": ms,
-            "reason": pol.reason,
+            "reason": f"失败：工具 {name} 未完成（{error_code}）。" if failed else pol.reason,
             "policy": pol.to_dict(),
         }
         if sandbox_info:
@@ -303,7 +329,7 @@ def _tender_parse(args: Dict[str, Any]) -> Any:
         str(args.get("text") or ""),
         source=str(args.get("source") or "tool-engine"),
         project_name=str(args.get("project_name") or "幕墙项目投标应答（草稿）"),
-        p0_confirmed=bool(args.get("p0_confirmed")),
+        p0_confirmed=args.get("p0_confirmed") is True,
         packing_summary=packing if isinstance(packing, dict) else None,
         ingest=ingest if isinstance(ingest, dict) else None,
     )
@@ -340,7 +366,10 @@ def _register_exclusives(eng: ToolEngine) -> None:
         for name in exp.exclusive:
             if name in skip:
                 continue
-            writes = not name.endswith(("__list", "__health", "__scan_forbidden"))
+            # These handlers create expert drafts. A "list" can be a written
+            # checklist (admin-office, lab-sample, env), not a read operation.
+            # Actual read-only packing handlers are registered explicitly above.
+            writes = True
             timeout = 60.0 if "fill_scheme" in name or name.endswith("scheme_draft") else 30.0
             eng.register(
                 name,
@@ -368,6 +397,11 @@ def default_engine() -> ToolEngine:
     )
     eng.register("spawn_helper", _spawn_helper, writes=True)
     _register_exclusives(eng)
+    from packing_assistant.runtime.tool_contracts import contract_for
+    for spec in eng.tools.values():
+        contract = contract_for(spec.name, exclusive=bool(spec.expert_id))
+        spec.input_schema = contract["input_schema"]
+        spec.output_schema = contract["output_schema"]
     return eng
 
 

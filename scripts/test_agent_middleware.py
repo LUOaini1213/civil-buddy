@@ -20,7 +20,8 @@ def main() -> int:
     assert mw.get("layer") == "runtime"
     assert list(mw.get("chain") or []) == list(CHAIN)
     assert gst.get("wrote") is False
-    assert "9%" in (gst.get("reply") or "")
+    assert "UNSPECIFIED" in (gst.get("reply") or "")
+    assert "9%" not in (gst.get("reply") or "")
 
     script = live_script()
     assert script["chain"] == list(CHAIN)
@@ -29,7 +30,7 @@ def main() -> int:
 
     order = beats["order"]
     assert order["wrote"] is True, order
-    assert order["gst9"] is True, order
+    assert order["rate_unspecified"] is True, order
     assert order["files"] >= 1, order
     assert order["policy"] == "ALLOW"
 

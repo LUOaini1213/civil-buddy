@@ -17,10 +17,44 @@ cd civil-buddy
 python -m venv .venv
 # Windows: .venv\Scripts\activate
 source .venv/bin/activate   # Unix
-pip install -r requirements.txt
+python -m pip install -r requirements-dev.txt
 ```
 
-## One-shot demo (must pass before PR)
+## Checks before a PR
+
+Use Python 3.11+ and Node.js 22. `npm run check` selects the repository `.venv`
+when present; set `PYTHON` to an executable path to override it. All check names
+and timeouts live in `scripts/check_project.py`, which can also run directly
+with your selected Python interpreter.
+
+```bash
+npm run check
+npm run check -- --list
+npm run check -- --only chat-stream,runtime-threads,trace-artifacts
+```
+
+The gate clears model credentials, disables `.env` loading and Python assertion
+optimization, runs each check with a timeout, and reports all failures at the end.
+Its default job folder is `output/check-project/jobs`, so a configured working
+job folder is not passed to the checks.
+It covers the existing policy/skill gates plus the conversation transport,
+per-task concurrency, knowledge-base writes, Office documents and trace exports.
+
+For changes across the API, packing engine or Rust workbench:
+
+```bash
+cargo fetch --locked --manifest-path workbench/Cargo.toml  # first-time dependency cache
+npm run check:full
+python -m pytest demo/tests -q --basetemp=output/pytest-local
+```
+
+The Rust check uses `--locked --offline`; missing cached dependencies are a
+failure, not a skipped test. The HTTP fixtures use an `output/` temporary root
+because the product sandbox rejects business-file writes outside authorized roots.
+Set `PYTHON_DOTENV_DISABLED=1` before running individual Python tests directly
+if your local `.env` contains a live model configuration.
+
+## One-shot demo
 
 ```bash
 python scripts/demo_one_shot.py

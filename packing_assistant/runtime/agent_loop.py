@@ -49,6 +49,12 @@ def _scrub(text: str) -> str:
 
 
 def _explain(text: str, expert_id: str, prefix: str = "") -> str:
+    import re
+
+    # Read only the structured jurisdiction slot, never project names or
+    # incidental country words from the rest of the rendered context.
+    slot = re.match(r"本会话槽：辖区=(CN|SG|EU|DUAL|UNSPECIFIED)；", prefix or "")
+    previous_jurisdiction = slot.group(1) if slot else ""
     eid = (expert_id or "").strip()
     if eid:
         from packing_assistant.expert_roster import get_expert
@@ -57,13 +63,13 @@ def _explain(text: str, expert_id: str, prefix: str = "") -> str:
 
         exp = get_expert(eid)
         if exp:
-            body = explain_expert(exp, text)
+            body = explain_expert(exp, text, previous_jurisdiction=previous_jurisdiction)
             sop = prompt_suffix(eid)
             blob = f"{prefix}\n{body}\n{sop}".strip() if prefix else f"{body}\n{sop}".strip()
             return blob
     from packing_assistant.product_turn import explain
 
-    body = explain(text)
+    body = explain(text, previous_jurisdiction=previous_jurisdiction)
     return f"{prefix}\n{body}".strip() if prefix else body
 
 
@@ -213,6 +219,7 @@ def run_agent(
     tools: Optional[ToolEngine] = None,
     max_steps: int = 8,
     scheduler: Optional[Scheduler] = None,
+    cancel_event: Any = None,
 ) -> Dict[str, Any]:
     from packing_assistant.expert_roster import get_expert, list_experts
     from packing_assistant.otel_hooks import span
@@ -220,10 +227,37 @@ def run_agent(
     intent = force_intent if force_intent in {"chat", "run", "both"} else understand(text)
     eid = (expert_id or "").strip()
     skill_source = "given" if eid else ""
+    route = None
     if not eid:
+        from packing_assistant.runtime.task_router import route_task
+        route = route_task(text)
+        if force_intent not in {"chat", "run", "both"}:
+            intent = route["intent"]
+        if route["ambiguous"]:
+            return {"ok": True, "schema": "civil.agent.v1", "intent": "chat", "wrote": False,
+                    "files": [], "reply": route["reason"], "route": route, "submit_blocked": True}
+        if len(route["expert_ids"]) > 1 and not route["workflow"]:
+            children = []
+            sequence_sid = session_id or f"sess-{uuid4().hex[:8]}"
+            for selected in route["expert_ids"]:
+                child = run_agent(text, session_id=sequence_sid, expert_id=selected,
+                    p0_confirmed=p0_confirmed, force_intent=intent, packing_summary=packing_summary,
+                    project_name=project_name, tools=tools, max_steps=max_steps,
+                    scheduler=scheduler, cancel_event=cancel_event)
+                children.append(child)
+                if not child.get("ok") or child.get("hitl_pending") or child.get("cancelled"):
+                    break
+            return {"ok": all(c.get("ok") for c in children), "schema": "civil.agent.v1",
+                    "intent": intent, "session_id": sequence_sid, "route": route, "children": children,
+                    "wrote": any(c.get("wrote") for c in children), "submit_blocked": True,
+                    "hitl_pending": any(c.get("hitl_pending") for c in children),
+                    "cancelled": any(c.get("cancelled") for c in children),
+                    "pending_expert_ids": route["expert_ids"][len(children):],
+                    "reply": "\n\n".join(c.get("reply", "") for c in children),
+                    "files": [f for c in children for f in c.get("files", [])],
+                    "artifacts": [f for c in children for f in c.get("artifacts", [])]}
         from packing_assistant.runtime.expert_skills import match_skill
-
-        eid = match_skill(text) or ""
+        eid = (route["expert_ids"][0] if len(route["expert_ids"]) == 1 else "") or (match_skill(text) if not route["workflow"] else "") or ""
         skill_source = "matched" if eid else ""
     exp = get_expert(eid) if eid else None
     if eid and not exp:
@@ -255,7 +289,7 @@ def run_agent(
         project_name=project_name,
         p0_confirmed=p0_confirmed,
     )
-    p0_confirmed = bool(ctx.get("p0_confirmed"))
+    p0_confirmed = ctx.get("p0_confirmed") is True
     project_name = str(ctx.get("project") or project_name)
     ctx_prefix = prompt_prefix(ctx)
     sched = scheduler or get_scheduler()
@@ -362,11 +396,48 @@ def run_agent(
         )
         return out
 
+    def _cancel_requested() -> bool:
+        return run.cancelled or run.state == "cancelled" or bool(cancel_event is not None and cancel_event.is_set())
+
+    def _finish_cancelled() -> Dict[str, Any]:
+        run.cancelled = True
+        run.error_code = "cancelled"
+        if run.state not in {"done", "failed", "cancelled"}:
+            sched.transition(run, "cancelled")
+        out.update(ok=False, cancelled=True, error_code="cancelled",
+                   wrote=bool(out["files"] or out["artifacts"]),
+                   reply="本轮已取消，停止后续步骤；已完成的文件保留供下载和核对。")
+        messages.append({"role": "assistant", "content": out["reply"]})
+        bus.emit(run.run_id, "cancelled", {"wrote": out["wrote"]})
+        return _finish()
+
     try:
         with span(
             "civil.agent",
             {"run_id": run.run_id, "intent": intent, "expert_id": eid, "node": "agent_loop"},
         ):
+            if _cancel_requested():
+                return _finish_cancelled()
+            if route and route["workflow"] and intent != "chat" and gate == "go":
+                from packing_assistant.runtime.tender_workflow import run_tender_workflow
+                if max_steps < 4:
+                    out.update(ok=False, error_code="max_steps", reply="招标协作需要解析、两项检查与汇总，请提高步骤预算。")
+                    sched.transition(run, "failed")
+                    return _finish()
+                sched.transition(run, "acting")
+                result = run_tender_workflow(text, session_id=sid, output_root=_OUT,
+                    confirmed=p0_confirmed, cancel_event=cancel_event)
+                out.update({key: value for key, value in result.items() if key not in {"run_id", "session_id", "schema", "state"}})
+                out["route"], out["collaboration"] = route, result
+                out["tools_run"] = ["tender.parse", "bid-tech__expand", "bid-compliance__gaps", "tender.review"]
+                out["tools_used"] = list(out["tools_run"])
+                run.steps = 4
+                if _cancel_requested():
+                    return _finish_cancelled()
+                sched.transition(run, "reflecting")
+                sched.transition(run, "done" if result["ok"] else "failed")
+                messages.append({"role": "assistant", "content": out["reply"]})
+                return _finish()
             if intent == "chat":
                 reply = _explain(text, eid, ctx_prefix)
                 messages.append({"role": "assistant", "content": reply})
@@ -405,6 +476,8 @@ def run_agent(
                 packing_summary=packing_summary,
                 project_name=project_name,
             )
+            if _cancel_requested():
+                return _finish_cancelled()
             if planned.get("handoff"):
                 out["handoff"] = planned["handoff"]
             if planned.get("hitl"):
@@ -429,12 +502,8 @@ def run_agent(
             last_extract = ""
 
             for call in planned.get("calls") or []:
-                if run.cancelled or run.state in {"cancelled", "failed"}:
-                    out["reply"] = "run cancelled"
-                    out["wrote"] = False
-                    out["error_code"] = "permission_denied"
-                    bus.emit(run.run_id, "cancelled", {})
-                    return _finish()
+                if _cancel_requested():
+                    return _finish_cancelled()
                 name = str(call.get("name") or "")
                 args = dict(call.get("arguments") or {})
                 if not sched.transition(run, "waiting_tool"):
@@ -477,6 +546,14 @@ def run_agent(
                 out["tools_run"].append(label)
                 if result.get("sandbox"):
                     out["sandbox"].append(result["sandbox"])
+                if not result.get("ok"):
+                    out["ok"] = False
+                    run.error_code = str(result.get("error_code") or "tool_failed")
+                    out["error_code"] = run.error_code
+                    out["reply"] = f"工具 {label} 未完成（{run.error_code}），本轮已停止。已完成的文件保留供核对。"
+                    sched.transition(run, "failed")
+                    messages.append({"role": "assistant", "content": out["reply"]})
+                    return _finish()
                 data = result.get("data") if isinstance(result.get("data"), dict) else result
                 path = data.get("path") if isinstance(data, dict) else None
                 if result.get("ok") and path:
@@ -535,9 +612,12 @@ def run_agent(
                         last_export_md = str((data or {}).get("markdown") or data.get("markdown") or "")
                 if run.state == "waiting_tool":
                     sched.transition(run, "acting")
+                if _cancel_requested():
+                    return _finish_cancelled()
 
             # Follow-on writes (still through the engine + sandbox).
             follow: List[Dict[str, Any]] = []
+            office_reply = ""
             out_dir = _OUT / _safe_sid(sid) / (exp.id if exp else "ops")
             if last_export_md:
                 follow.append(
@@ -562,8 +642,8 @@ def run_agent(
                     }
                 )
             for call in follow:
-                if run.cancelled:
-                    break
+                if _cancel_requested():
+                    return _finish_cancelled()
                 name = str(call["name"])
                 if not sched.transition(run, "waiting_tool"):
                     out["ok"] = False
@@ -590,6 +670,14 @@ def run_agent(
                 )
                 if result.get("sandbox"):
                     out["sandbox"].append(result["sandbox"])
+                if not result.get("ok"):
+                    out["ok"] = False
+                    run.error_code = str(result.get("error_code") or "tool_failed")
+                    out["error_code"] = run.error_code
+                    out["reply"] = f"保存交付物未完成（{run.error_code}），本轮已停止。已完成的文件保留供核对。"
+                    sched.transition(run, "failed")
+                    messages.append({"role": "assistant", "content": out["reply"]})
+                    return _finish()
                 path = (result.get("data") or {}).get("path") if isinstance(result.get("data"), dict) else result.get("path")
                 if result.get("ok") and path:
                     out["artifacts"].append(str(path))
@@ -611,6 +699,50 @@ def run_agent(
                 )
                 if run.state == "waiting_tool":
                     sched.transition(run, "acting")
+
+                if _cancel_requested():
+                    return _finish_cancelled()
+
+                if path:
+                    # These two tools return Markdown rather than going through
+                    # expert_turn's draft writer. Export just the newly saved
+                    # document; other posts already attach their Office files.
+                    from packing_assistant.expert_turn import _attach_office
+
+                    office = _attach_office({
+                        "ok": True, "wrote": True,
+                        "files": [out["files"][-1]], "tools_run": [], "reply": "",
+                    })
+                    known = {item["path"] for item in out["files"]}
+                    for item in office.get("files", []):
+                        if item["path"] not in known:
+                            out["files"].append(item)
+                            out["artifacts"].append(item["path"])
+                            known.add(item["path"])
+                    for tool in office.get("tools_run", []):
+                        if tool not in out["tools_run"]:
+                            out["tools_run"].append(tool)
+                    out["tool_results"].append({
+                        "name": "office__export", "ok": office.get("ok", True),
+                        "error_code": office.get("error_code"),
+                    })
+                    if office.get("export_errors"):
+                        out["export_errors"] = office["export_errors"]
+                    # A current export may finish after cancellation. Register
+                    # its actual files before stopping any subsequent work.
+                    if _cancel_requested():
+                        return _finish_cancelled()
+                    if not office.get("ok", True):
+                        out["ok"] = False
+                        run.error_code = str(office.get("error_code") or "office_export_failed")
+                        out["reply"] = str(office.get("reply") or "Office 导出失败，已生成的文件保留。")
+                        sched.transition(run, "failed")
+                        messages.append({"role": "assistant", "content": out["reply"]})
+                        return _finish()
+                    office_reply = str(office.get("reply") or "")
+
+            if _cancel_requested():
+                return _finish_cancelled()
 
             if pack_ship:
                 plan = pack_ship.get("plan") or {}
@@ -634,6 +766,9 @@ def run_agent(
             else:
                 out["reply"] = "本轮未写盘。"
 
+            if office_reply:
+                out["reply"] += " " + office_reply
+
             if explain_prefix:
                 out["reply"] = explain_prefix + "\n\n" + str(out.get("reply") or "")
 
@@ -654,3 +789,7 @@ def run_agent(
         out["error_code"] = run.error_code
         out["reply"] = f"agent failed: {str(exc)[:200]}"
         return _finish()
+    finally:
+        # A persistence/annotation failure during _finish must not strand the
+        # scheduler lease and block every later turn in this session.
+        sched.release(sid)

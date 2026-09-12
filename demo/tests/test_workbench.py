@@ -17,12 +17,15 @@ from kbio import resolve_rel  # noqa: E402
 
 
 @pytest.fixture()
-def client():
+def client(tmp_path, monkeypatch):
     from fastapi.testclient import TestClient
 
-    from app import app
+    import app
+    import uploads
 
-    return TestClient(app)
+    monkeypatch.setattr(app, "OUT_ROOT", tmp_path / "out")
+    monkeypatch.setattr(uploads, "UPLOAD_ROOT", tmp_path / "uploads")
+    return TestClient(app.app)
 
 
 def test_index_and_static(client):
@@ -32,7 +35,12 @@ def test_index_and_static(client):
     js = client.get("/static/app.js")
     assert js.status_code == 200
     assert "reloadCatalog" in js.text
-    assert "全企业" in client.get("/").text or "任意专家" in client.get("/").text
+    assert "66 岗工作台" in r.text
+    assert 'id="input"' in r.text and 'id="stop"' in r.text
+    assert r.text.index('/static/chat-stream.js') < r.text.index('/static/app.js')
+    transport = client.get("/static/chat-stream.js")
+    assert transport.status_code == 200
+    assert "CB_CHAT_STREAM" in transport.text
 
 
 def test_catalog_sixteen(client):
@@ -124,3 +132,26 @@ def test_explicit_mention_still_works():
     ids2 = resolve_mentions("召唤危大识别：临边要不要论证")
     assert "method-hazard" in ids2
     assert "construction" not in ids2
+
+
+def test_model_disconnect_preserves_partial_answer_and_error_audit(client, monkeypatch):
+    from llm import LLMError
+    import chat_service
+
+    monkeypatch.setattr("app.has_key", lambda: True)
+
+    def disconnected(history):
+        yield {"event": "token", "data": {"text": "已经收到的部分回答"}}
+        raise LLMError("模型连接已结束但未收到完成标记")
+
+    monkeypatch.setattr("app.run_plain", disconnected)
+    sid = "stream-interrupted"
+    response = client.post("/api/chat", json={"message": "你好", "session_id": sid})
+    assert response.status_code == 200
+    assert "event: error" in response.text
+    assert "event: done" not in response.text
+    restored = client.get(f"/api/sessions/{sid}").json()
+    assert "已经收到的部分回答" in restored["transcript"][-1]["text"]
+    assert "中断" in restored["transcript"][-1]["text"]
+    assert client.get(f"/api/harness/audit/{sid}").json()["counts"]["errors"] == 1
+    assert sid not in chat_service._ACTIVE

@@ -1,5 +1,42 @@
 ﻿# Scripts
 
+## 统一质量检查
+
+`npm run check` 与 `python scripts/check_project.py` 使用同一份检查清单。
+默认检查覆盖运行时、界面、业务文件和产品冒烟；`--full` 加跑 API、装箱链路
+与 Rust（需提前缓存 Cargo 依赖）。每项有超时，失败会汇总。
+
+```bash
+npm run check
+npm run check:full
+npm run check -- --list
+npm run check -- --only chat-stream,runtime-threads,business-files,trace-artifacts
+```
+
+工作台完整使用流程的独立回归：
+
+```powershell
+npm run check -- --only app-launcher,workbench-settings,workbench-uploads,workbench-flow
+```
+
+覆盖真实本地 HTTP 启停、模型配置与模拟模型流、PDF/Office 附件解析、无 Key 起草、下载和会话恢复。`check:full` 还运行 `demo/tests` 的 HTTP 回归，需要 `requirements-dev.txt`。
+
+可选语义摘要的来源校验、服务隔离与本地模拟模型 HTTP 回归：
+
+```powershell
+npm run check -- --only semantic-memory,semantic-integration,semantic-http
+```
+
+任务记忆重建与问答不误生成文件的 HTTP 回归：
+
+```powershell
+npm run check -- --only context-rebuild,readonly-routing,task-routing
+```
+
+新增回归分别验证 SSE 分块与会话隔离、后台任务防重入、知识库索引与 Office
+文件保护，以及 JSON/dual/SQLite 的轨迹保真。旧的 `run_precommit_tests.py`
+保留为历史比赛与较大数据集检查入口。
+
 ## One-shot（新人 / 开源首页入口）
 
 | 脚本 | 用途 |
@@ -37,6 +74,15 @@ python scripts/eval_harness_cli.py
 ## Windows 启动
 
 见 `scripts/win/`（`start-gateway.bat` 等）。
+
+当前 Python 工作台分发包（不上传发布）：
+
+```powershell
+.\.venv\Scripts\python.exe scripts/build_workbench_release.py --version 0.9.0-preview
+.\.venv\Scripts\python.exe scripts/smoke_workbench_release.py dist/civil-buddy-python-workbench-0.9.0-preview.zip --all-experts
+```
+
+打包使用明确允许列表，包含新岗位源码、66 份 skills、KB 及静态资源；排除环境密钥、会话和本机附件。zip 及逐文件清单带 SHA-256。冒烟脚本独立解压，从批处理启动，验证 HTTP、文书、附件、重启恢复并清理测试进程。首次安装会在包内创建 `.venv`，需要 Python 和网络；参数见 `scripts/start_workbench.py`。
 
 ## 本地实验
 

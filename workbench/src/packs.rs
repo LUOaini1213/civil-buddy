@@ -951,7 +951,7 @@ fn pack_tools(pack: &str) -> Vec<ToolDef> {
             ToolDef {
                 name: "finance-tax__calendar",
                 description: "税种与申报节点检查表，不当税务筹划意见。",
-                parameters: obj(json!({"jurisdiction": {"type": "string"}}), &[]),
+                parameters: obj(json!({"jurisdiction": {"type": "string"}, "text": {"type": "string"}, "entity": {"type": "string"}, "tax": {"type": "string"}, "period": {"type": "string"}, "deadline": {"type": "string"}, "tax_rate": {"type": "string"}, "source": {"type": "string"}}), &[]),
             },
             ToolDef {
                 name: "finance-book__check",
@@ -3656,23 +3656,36 @@ fn fund_plan(ctx: &mut ToolCtx, args: &Value) -> String {
 }
 
 fn tax_calendar(ctx: &mut ToolCtx, args: &Value) -> String {
-    let (jur, banner) = zone_banner(args);
-    let rows = if jur == "DUAL" {
-        "| GST（SG 栏） | 申报期空栏 | 页述现行 9%；税额待填 |\n| CPF（SG 栏） | 待核雇主义务 |  |\n| 增值税（另一辖区栏） | 待按主管机关核对 | 仅当另一辖区为 CN 时用此行 |"
-    } else if jur == "SG" {
-        "| GST | 申报期空栏（IRAS F5 当期待填） | 页述现行 9%；税额待填；不是筹划意见 |\n| 企业所得税 | 申报期空栏 | 税额待填 |\n| CPF | 待核雇主义务 |  |"
-    } else {
-        "| 增值税 | 待按主管机关核对 | 不是筹划意见 |\n| 附加税费 | 待核 |  |\n| 企业所得税 | 待核 |  |"
+    // Harness tickets historically defaulted jurisdiction to SG. When the
+    // actual request is present, infer from it instead of that fallback.
+    let brief = nonempty(&s(args, "brief"), &s(args, "text"));
+    let input = if brief.is_empty() { s(args, "jurisdiction") } else { brief.clone() };
+    let jur = crate::agent::tax_jurisdiction(&input);
+    let rate_input = nonempty(&s(args, "tax_rate"), &s(args, "rate"));
+    let rate = crate::agent::tax_rate_input(
+        &format!("{input}\n税率：{rate_input}"), jur,
+    );
+    let cell = |value: String| nonempty(&value, "UNSPECIFIED")
+        .replace('&', "&amp;").replace('<', "&lt;").replace('>', "&gt;")
+        .replace('|', "&#124;").replace(['\r', '\n'], "；");
+    let field = |key: &str, labels: &str| {
+        if brief.is_empty() { return cell(s(args, key)); }
+        // fat_args has historical defaults such as period=2026-08. A source
+        // request must explicitly provide a value before it enters this table.
+        let pattern = format!(r"(?:^|[;；\r\n])\s*(?:{labels})\s*[:：=]\s*([^;；\r\n]+)");
+        let re = regex::Regex::new(&pattern).unwrap();
+        let values: Vec<_> = re.captures_iter(&brief).collect();
+        if values.len() == 1 { cell(values[0][1].trim().to_string()) }
+        else { "UNSPECIFIED".to_string() }
     };
+    let entity = field("entity", "主体|纳税主体|主体类型");
+    let tax = field("tax", "税种");
+    let period = field("period", "申报期间|申报期|期间");
+    let deadline = field("deadline", "申报节点|申报截止日期|申报截止|截止日期");
+    let source = field("source", "来源|资料来源|来源文件|依据来源");
     let md = format!(
-        "{}{banner}\n| 税种 | 申报节点 | 备注 |\n| --- | --- | --- |\n{rows}\n\n[A001] 税率与节点以主管机关原文为准，禁止编造条款号。{}{}\n",
+        "{}- 辖区：{jur}\n\n| 辖区 | 主体 | 税种 | 申报期 | 申报节点（待核） | 用户税率（待核） | 税额 | 资料来源 |\n| --- | --- | --- | --- | --- | --- | --- | --- |\n| {jur} | {entity} | {tax} | {period} | {deadline} | {rate} | UNSPECIFIED | {source} |\n\n[A001] 缺项保留 UNSPECIFIED。税种、节点、税率及其适用性未核验；不得从 IRAS 等历史 KB 推断现行税率，不计算税额。DUAL 须提供独立地区记录，不能共用税率。submit_blocked=true。\n",
         header("税务日历/检查表"),
-        sg_only(&jur, "SG 施工服务征 GST 以 IRAS Construction 页为准；Current GST rates 页述现行标准税率 9%。境外土地零税率不代判。禁止把 7%/8% 写成现行税率。"),
-        if jur == "DUAL" {
-            "DUAL 分栏，不得把另一辖区税种写进 SG 栏。"
-        } else {
-            ""
-        },
     );
     match ctx.write_md("税务检查表.md", &md) {
         Ok(m) => m,

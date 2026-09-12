@@ -1,90 +1,947 @@
 {
-  "yibiao_pipeline": ["parse", "outline", "qa", "kb", "write"],
-  "common_tools": ["search_kb", "read_kb", "list_kb", "write_deliverable", "web_search", "web_open", "list_attachments", "read_attachment", "import_local", "firm__bid_pack"],
+  "yibiao_pipeline": [
+    "parse",
+    "outline",
+    "qa",
+    "kb",
+    "write"
+  ],
+  "common_tools": [
+    "search_kb",
+    "read_kb",
+    "list_kb",
+    "write_deliverable",
+    "web_search",
+    "web_open",
+    "list_attachments",
+    "read_attachment",
+    "import_local",
+    "firm__bid_pack"
+  ],
   "category_shared": {
-    "bid": ["bid__scan_forbidden"],
-    "design": ["design__scan_forbidden"],
-    "bim": ["bim__scan_forbidden"],
-    "planning": ["planning__scan_forbidden"],
-    "construction": ["construction__scan_forbidden"],
-    "hse": ["hse__scan_forbidden"],
-    "commercial": ["commercial__scan_forbidden"],
-    "procurement": ["procurement__scan_forbidden"],
-    "plant": ["plant__scan_forbidden"],
-    "lab": ["lab__scan_forbidden"],
-    "finance": ["finance__scan_forbidden"],
-    "docs": ["docs__scan_forbidden"],
-    "hr": ["hr__scan_forbidden"],
-    "admin": ["admin__scan_forbidden"],
-    "it": ["it__scan_forbidden"],
-    "people": ["people__scan_forbidden"]
+    "bid": [
+      "bid__scan_forbidden"
+    ],
+    "design": [
+      "design__scan_forbidden"
+    ],
+    "bim": [
+      "bim__scan_forbidden"
+    ],
+    "planning": [
+      "planning__scan_forbidden"
+    ],
+    "construction": [
+      "construction__scan_forbidden"
+    ],
+    "hse": [
+      "hse__scan_forbidden"
+    ],
+    "commercial": [
+      "commercial__scan_forbidden"
+    ],
+    "procurement": [
+      "procurement__scan_forbidden"
+    ],
+    "plant": [
+      "plant__scan_forbidden"
+    ],
+    "lab": [
+      "lab__scan_forbidden"
+    ],
+    "finance": [
+      "finance__scan_forbidden"
+    ],
+    "docs": [
+      "docs__scan_forbidden"
+    ],
+    "hr": [
+      "hr__scan_forbidden"
+    ],
+    "admin": [
+      "admin__scan_forbidden"
+    ],
+    "it": [
+      "it__scan_forbidden"
+    ],
+    "people": [
+      "people__scan_forbidden"
+    ]
   },
+  "generated_from": "workbench/seed.json",
   "experts": [
-    {"id": "bid-parse", "yibiao": ["parse", "kb", "write"], "exclusive": ["bid-parse__extract"], "aligned": true, "note": "易标解析招标；独有 extract，同大类看不见"},
-    {"id": "bid-compliance", "yibiao": ["qa", "kb", "write"], "exclusive": ["bid-compliance__gaps"], "aligned": true, "note": "易标废标检查；独有 gaps"},
-    {"id": "bid-tech", "yibiao": ["outline", "kb", "write"], "exclusive": ["bid-tech__expand"], "aligned": true, "note": "易标技术标目录扩写；独有 expand"},
-    {"id": "architecture", "yibiao": ["outline", "kb", "write"], "exclusive": ["architecture__memo"], "aligned": true, "note": "建筑说明独有"},
-    {"id": "structure", "yibiao": ["outline", "qa", "kb", "write"], "exclusive": ["structure__calc_outline"], "aligned": true, "note": "结构计算提纲独有"},
-    {"id": "geotech", "yibiao": ["parse", "outline", "kb", "write"], "exclusive": ["geotech__brief"], "aligned": true, "note": "岩土提纲独有"},
-    {"id": "plumbing", "yibiao": ["outline", "kb", "write"], "exclusive": ["plumbing__memo"], "aligned": true, "note": "给排水说明独有"},
-    {"id": "hvac", "yibiao": ["outline", "kb", "write"], "exclusive": ["hvac__memo"], "aligned": true, "note": "暖通说明独有"},
-    {"id": "electrical", "yibiao": ["outline", "kb", "write"], "exclusive": ["electrical__memo"], "aligned": true, "note": "电气说明独有"},
-    {"id": "fire-protect", "yibiao": ["outline", "qa", "kb", "write"], "exclusive": ["fire-protect__brief"], "aligned": true, "note": "消防专篇独有；不替代审图"},
-    {"id": "steel", "yibiao": ["outline", "kb", "write"], "exclusive": ["steel__memo"], "aligned": true, "note": "钢结构说明独有"},
-    {"id": "landscape", "yibiao": ["outline", "kb", "write"], "exclusive": ["landscape__memo"], "aligned": true, "note": "景观说明独有"},
-    {"id": "interior", "yibiao": ["outline", "kb", "write"], "exclusive": ["interior__schedule"], "aligned": true, "note": "室内界面表独有"},
-    {"id": "facade", "yibiao": ["outline", "qa", "kb", "write"], "exclusive": ["facade__brief"], "aligned": true, "note": "幕墙专篇独有"},
-    {"id": "intel-weak", "yibiao": ["outline", "kb", "write"], "exclusive": ["intel-weak__memo"], "aligned": true, "note": "弱电说明独有"},
-    {"id": "civil-defense", "yibiao": ["outline", "qa", "kb", "write"], "exclusive": ["civil-defense__brief"], "aligned": true, "note": "人防/掩蔽所专篇独有"},
-    {"id": "hydraulic", "yibiao": ["outline", "kb", "write"], "exclusive": ["hydraulic__outline"], "aligned": true, "note": "水利提纲独有"},
-    {"id": "port", "yibiao": ["outline", "kb", "write"], "exclusive": ["port__outline"], "aligned": true, "note": "港航提纲独有"},
-    {"id": "municipal", "yibiao": ["outline", "kb", "write"], "exclusive": ["municipal__memo"], "aligned": true, "note": "市政道路原则独有"},
-    {"id": "bridge", "yibiao": ["outline", "qa", "kb", "write"], "exclusive": ["bridge__outline"], "aligned": true, "note": "桥梁提纲独有"},
-    {"id": "tunnel", "yibiao": ["outline", "qa", "kb", "write"], "exclusive": ["tunnel__outline"], "aligned": true, "note": "隧道提纲独有"},
-    {"id": "traffic", "yibiao": ["outline", "kb", "write"], "exclusive": ["traffic__skeleton"], "aligned": true, "note": "交通报告骨架独有"},
-    {"id": "design-coord", "yibiao": ["qa", "kb", "write"], "exclusive": ["design-coord__minutes"], "aligned": true, "note": "会审纪要独有"},
-    {"id": "bim-coord", "yibiao": ["qa", "kb", "write"], "exclusive": ["bim-coord__clash"], "aligned": true, "note": "碰撞纪要独有"},
-    {"id": "bim-qto", "yibiao": ["parse", "kb", "write"], "exclusive": ["bim-qto__rules"], "aligned": true, "note": "算量口径独有"},
-    {"id": "bim-deliver", "yibiao": ["outline", "kb", "write"], "exclusive": ["bim-deliver__lod"], "aligned": true, "note": "BIM 交付清单独有"},
-    {"id": "plan-master", "yibiao": ["outline", "kb", "write"], "exclusive": ["plan-master__network"], "aligned": true, "note": "总控提纲独有"},
-    {"id": "plan-lookahead", "yibiao": ["outline", "kb", "write"], "exclusive": ["plan-lookahead__week"], "aligned": true, "note": "周月计划独有"},
-    {"id": "plan-resource", "yibiao": ["outline", "kb", "write"], "exclusive": ["plan-resource__peak"], "aligned": true, "note": "资源峰值表头独有"},
-    {"id": "construction", "yibiao": ["outline", "qa", "kb", "write"], "exclusive": ["construction__scheme_draft", "construction__fill_scheme_docx"], "aligned": true, "note": "易标技术标扩写→11章专项方案；新加坡工地默认 SG；质检走大类 scan"},
-    {"id": "method-hazard", "yibiao": ["qa", "kb", "write"], "exclusive": ["method-hazard__judge_hazard"], "aligned": true, "note": "高风险作业判定；SG 默认 WSH/PTW，不套 37 号令"},
-    {"id": "survey", "yibiao": ["parse", "kb", "write"], "exclusive": ["survey__record"], "aligned": true, "note": "测量记录独有；无坐标不编点号"},
-    {"id": "dispatch", "yibiao": ["outline", "kb", "write"], "exclusive": ["dispatch__daily"], "aligned": true, "note": "调度日报独有"},
-    {"id": "safety-brief", "yibiao": ["outline", "kb", "write"], "exclusive": ["safety-brief__talk"], "aligned": true, "note": "交底稿独有"},
-    {"id": "quality", "yibiao": ["qa", "kb", "write"], "exclusive": ["quality__lot"], "aligned": true, "note": "检验批质检独有"},
-    {"id": "env", "yibiao": ["outline", "kb", "write"], "exclusive": ["env__list"], "aligned": true, "note": "环保清单独有"},
-    {"id": "emergency", "yibiao": ["outline", "kb", "write"], "exclusive": ["emergency__plan"], "aligned": true, "note": "预案提纲独有"},
-    {"id": "cost", "yibiao": ["parse", "kb", "write"], "exclusive": ["cost__takeoff"], "aligned": true, "note": "工程量拆分独有；无清单单价 TBD"},
-    {"id": "variation", "yibiao": ["parse", "outline", "kb", "write"], "exclusive": ["variation__form"], "aligned": true, "note": "签证单独有"},
-    {"id": "claim", "yibiao": ["parse", "outline", "kb", "write"], "exclusive": ["claim__notice"], "aligned": true, "note": "索赔意向独有"},
-    {"id": "subcontract", "yibiao": ["parse", "kb", "write"], "exclusive": ["subcontract__sheet"], "aligned": true, "note": "分包结算独有"},
-    {"id": "interim", "yibiao": ["parse", "kb", "write"], "exclusive": ["interim__measure"], "aligned": true, "note": "验工计价独有"},
-    {"id": "proc-plan", "yibiao": ["outline", "kb", "write"], "exclusive": ["proc-plan__schedule"], "aligned": true, "note": "采购计划独有"},
-    {"id": "proc-compare", "yibiao": ["qa", "kb", "write"], "exclusive": ["proc-compare__table"], "aligned": true, "note": "比价独有"},
-    {"id": "proc-vendor", "yibiao": ["qa", "kb", "write"], "exclusive": ["proc-vendor__eval"], "aligned": true, "note": "供方评价独有"},
-    {"id": "equip", "yibiao": ["qa", "kb", "write"], "exclusive": ["equip__ledger"], "aligned": true, "note": "设备台账独有"},
-    {"id": "warehouse", "yibiao": ["parse", "kb", "write"], "exclusive": ["warehouse__log"], "aligned": true, "note": "收发存独有"},
-    {"id": "pack-ship", "yibiao": ["outline", "kb", "write"], "exclusive": ["pack-ship__list", "pack-ship__plan", "pack-ship__export", "pack-ship__health"], "aligned": true, "note": "装箱拼柜独有；数值走 packing-agent 工具"},
-    {"id": "material-site", "yibiao": ["parse", "kb", "write"], "exclusive": ["material-site__recon"], "aligned": true, "note": "耗用核算独有"},
-    {"id": "lab-mix", "yibiao": ["outline", "qa", "kb", "write"], "exclusive": ["lab-mix__report"], "aligned": true, "note": "配比提纲独有；无试验数据不给施工配比"},
-    {"id": "lab-sample", "yibiao": ["qa", "kb", "write"], "exclusive": ["lab-sample__list"], "aligned": true, "note": "取样清单独有"},
-    {"id": "lab-record", "yibiao": ["kb", "write"], "exclusive": ["lab-record__ledger"], "aligned": true, "note": "试验台账独有"},
-    {"id": "finance-book", "yibiao": ["qa", "kb", "write"], "exclusive": ["finance-book__check"], "aligned": true, "note": "核算检查独有"},
-    {"id": "finance-fund", "yibiao": ["outline", "kb", "write"], "exclusive": ["finance-fund__plan"], "aligned": true, "note": "资金计划独有"},
-    {"id": "finance-tax", "yibiao": ["outline", "kb", "write"], "exclusive": ["finance-tax__calendar"], "aligned": true, "note": "税务日历独有；默认 SG"},
-    {"id": "supervision", "yibiao": ["qa", "kb", "write"], "exclusive": ["supervision__reply"], "aligned": true, "note": "监理回复独有"},
-    {"id": "hr-recruit", "yibiao": ["outline", "kb", "write"], "exclusive": ["hr-recruit__brief"], "aligned": true, "note": "招聘简报独有：职责|任职|面试问法"},
-    {"id": "hr-labor", "yibiao": ["qa", "kb", "write"], "exclusive": ["hr-labor__check"], "aligned": true, "note": "合同检查独有"},
-    {"id": "hr-train", "yibiao": ["outline", "kb", "write"], "exclusive": ["hr-train__plan"], "aligned": true, "note": "培训计划独有"},
-    {"id": "admin-doc", "yibiao": ["outline", "kb", "write"], "exclusive": ["admin-doc__draft"], "aligned": true, "note": "公文草稿独有"},
-    {"id": "admin-office", "yibiao": ["outline", "kb", "write"], "exclusive": ["admin-office__list"], "aligned": true, "note": "会务清单独有"},
-    {"id": "it-ops", "yibiao": ["outline", "kb", "write"], "exclusive": ["it-ops__runbook"], "aligned": true, "note": "运维提纲独有"},
-    {"id": "it-data", "yibiao": ["outline", "kb", "write"], "exclusive": ["it-data__backup"], "aligned": true, "note": "备份策略独有"},
-    {"id": "it-app", "yibiao": ["parse", "outline", "kb", "write"], "exclusive": ["it-app__srs"], "aligned": true, "note": "需求说明书独有"},
-    {"id": "worker-brief", "yibiao": ["outline", "kb", "write"], "exclusive": ["worker-brief__talk"], "aligned": true, "note": "班前白话独有"},
-    {"id": "pm-daily", "yibiao": ["outline", "kb", "write"], "exclusive": ["pm-daily__log"], "aligned": true, "note": "项目日报独有"}
+    {
+      "id": "bid-parse",
+      "yibiao": [
+        "parse",
+        "kb",
+        "write"
+      ],
+      "exclusive": [
+        "bid-parse__extract"
+      ],
+      "aligned": true,
+      "note": "未提供可读正文时不生成项目事实；submit_blocked=true，不作投标资格结论"
+    },
+    {
+      "id": "bid-compliance",
+      "yibiao": [
+        "qa",
+        "kb",
+        "write"
+      ],
+      "exclusive": [
+        "bid-compliance__gaps"
+      ],
+      "aligned": true,
+      "note": "仅提供响应缺口检查，不宣布废标成立或可以投标"
+    },
+    {
+      "id": "bid-tech",
+      "yibiao": [
+        "outline",
+        "kb",
+        "write"
+      ],
+      "exclusive": [
+        "bid-tech__expand"
+      ],
+      "aligned": true,
+      "note": "不承诺分数或中标结果，不把技术标草稿视为已论证专项"
+    },
+    {
+      "id": "architecture",
+      "yibiao": [
+        "outline",
+        "kb",
+        "write"
+      ],
+      "exclusive": [
+        "architecture__memo"
+      ],
+      "aligned": true,
+      "note": "未连接建筑设计或疏散计算；不编面积、宽度、图号或审图结论"
+    },
+    {
+      "id": "structure",
+      "yibiao": [
+        "outline",
+        "qa",
+        "kb",
+        "write"
+      ],
+      "exclusive": [
+        "structure__calc_outline"
+      ],
+      "aligned": true,
+      "note": "仅计算书提纲，未连接结构求解器，不出经验算满足结论"
+    },
+    {
+      "id": "geotech",
+      "yibiao": [
+        "parse",
+        "outline",
+        "kb",
+        "write"
+      ],
+      "exclusive": [
+        "geotech__brief"
+      ],
+      "aligned": true,
+      "note": "不替代勘察报告，不计算承载力、液化或边坡稳定"
+    },
+    {
+      "id": "plumbing",
+      "yibiao": [
+        "outline",
+        "kb",
+        "write"
+      ],
+      "exclusive": [
+        "plumbing__memo"
+      ],
+      "aligned": true,
+      "note": "未执行水力计算，不以原则稿替代消防水或给排水设计"
+    },
+    {
+      "id": "hvac",
+      "yibiao": [
+        "outline",
+        "kb",
+        "write"
+      ],
+      "exclusive": [
+        "hvac__memo"
+      ],
+      "aligned": true,
+      "note": "未执行冷热负荷、水力或排烟计算，不选主机与风管断面"
+    },
+    {
+      "id": "electrical",
+      "yibiao": [
+        "outline",
+        "kb",
+        "write"
+      ],
+      "exclusive": [
+        "electrical__memo"
+      ],
+      "aligned": true,
+      "note": "未执行负荷、短路或电缆计算，不凭经验选容量"
+    },
+    {
+      "id": "fire-protect",
+      "yibiao": [
+        "outline",
+        "qa",
+        "kb",
+        "write"
+      ],
+      "exclusive": [
+        "fire-protect__brief"
+      ],
+      "aligned": true,
+      "note": "不替代消防审图与验收，未计算疏散、水量或排烟量"
+    },
+    {
+      "id": "steel",
+      "yibiao": [
+        "outline",
+        "kb",
+        "write"
+      ],
+      "exclusive": [
+        "steel__memo"
+      ],
+      "aligned": true,
+      "note": "不替代钢结构计算书或焊缝检测，未连接截面求解器"
+    },
+    {
+      "id": "landscape",
+      "yibiao": [
+        "outline",
+        "kb",
+        "write"
+      ],
+      "exclusive": [
+        "landscape__memo"
+      ],
+      "aligned": true,
+      "note": "不编苗木单价、坡度或荷载，不替代种植施工图签章"
+    },
+    {
+      "id": "interior",
+      "yibiao": [
+        "outline",
+        "kb",
+        "write"
+      ],
+      "exclusive": [
+        "interior__schedule"
+      ],
+      "aligned": true,
+      "note": "不编材料厚度和防火性能，不替代精装深化或消防审查"
+    },
+    {
+      "id": "facade",
+      "yibiao": [
+        "outline",
+        "qa",
+        "kb",
+        "write"
+      ],
+      "exclusive": [
+        "facade__brief"
+      ],
+      "aligned": true,
+      "note": "未执行抗风或锚固计算，不编风压与挠度限值"
+    },
+    {
+      "id": "intel-weak",
+      "yibiao": [
+        "outline",
+        "kb",
+        "write"
+      ],
+      "exclusive": [
+        "intel-weak__memo"
+      ],
+      "aligned": true,
+      "note": "不编品牌、IP地址、账号或链路性能，不宣称系统已接通"
+    },
+    {
+      "id": "civil-defense",
+      "yibiao": [
+        "outline",
+        "qa",
+        "kb",
+        "write"
+      ],
+      "exclusive": [
+        "civil-defense__brief"
+      ],
+      "aligned": true,
+      "note": "不裁定防护等级或设备能力，不替代人防审图"
+    },
+    {
+      "id": "hydraulic",
+      "yibiao": [
+        "outline",
+        "kb",
+        "write"
+      ],
+      "exclusive": [
+        "hydraulic__outline"
+      ],
+      "aligned": true,
+      "note": "不凭缺失水文选泵或定断面，不替代水利设计文件"
+    },
+    {
+      "id": "port",
+      "yibiao": [
+        "outline",
+        "kb",
+        "write"
+      ],
+      "exclusive": [
+        "port__outline"
+      ],
+      "aligned": true,
+      "note": "未执行港工荷载、波浪或疏浚算量，不编靠泊能力"
+    },
+    {
+      "id": "municipal",
+      "yibiao": [
+        "outline",
+        "kb",
+        "write"
+      ],
+      "exclusive": [
+        "municipal__memo"
+      ],
+      "aligned": true,
+      "note": "未计算路面厚度、管径或土方量，不编设计速度"
+    },
+    {
+      "id": "bridge",
+      "yibiao": [
+        "outline",
+        "qa",
+        "kb",
+        "write"
+      ],
+      "exclusive": [
+        "bridge__outline"
+      ],
+      "aligned": true,
+      "note": "不定量选桥型、截面或基础，不替代桥梁计算书"
+    },
+    {
+      "id": "tunnel",
+      "yibiao": [
+        "outline",
+        "qa",
+        "kb",
+        "write"
+      ],
+      "exclusive": [
+        "tunnel__outline"
+      ],
+      "aligned": true,
+      "note": "未执行围岩、衬砌或支护计算，不生成施工放行结论"
+    },
+    {
+      "id": "traffic",
+      "yibiao": [
+        "outline",
+        "kb",
+        "write"
+      ],
+      "exclusive": [
+        "traffic__skeleton"
+      ],
+      "aligned": true,
+      "note": "未运行交通仿真或信号优化，不承诺通行能力改善"
+    },
+    {
+      "id": "design-coord",
+      "yibiao": [
+        "qa",
+        "kb",
+        "write"
+      ],
+      "exclusive": [
+        "design-coord__minutes"
+      ],
+      "aligned": true,
+      "note": "不代签设计变更或审图意见，不假装读取缺失图纸"
+    },
+    {
+      "id": "bim-coord",
+      "yibiao": [
+        "qa",
+        "kb",
+        "write"
+      ],
+      "exclusive": [
+        "bim-coord__clash"
+      ],
+      "aligned": true,
+      "note": "不扫描IFC、不运行碰撞检测，不将清单当成检测结果"
+    },
+    {
+      "id": "bim-qto",
+      "yibiao": [
+        "parse",
+        "kb",
+        "write"
+      ],
+      "exclusive": [
+        "bim-qto__rules"
+      ],
+      "aligned": true,
+      "note": "不读取未知模型算量，不编单价或计算未给构件数量"
+    },
+    {
+      "id": "bim-deliver",
+      "yibiao": [
+        "outline",
+        "kb",
+        "write"
+      ],
+      "exclusive": [
+        "bim-deliver__lod"
+      ],
+      "aligned": true,
+      "note": "不承诺模型达到LOD等级，不把交付清单称为已验收模型"
+    },
+    {
+      "id": "plan-master",
+      "yibiao": [
+        "outline",
+        "kb",
+        "write"
+      ],
+      "exclusive": [
+        "plan-master__network"
+      ],
+      "aligned": true,
+      "note": "不运行CPM或排程优化，不编活动工期"
+    },
+    {
+      "id": "plan-lookahead",
+      "yibiao": [
+        "outline",
+        "kb",
+        "write"
+      ],
+      "exclusive": [
+        "plan-lookahead__week"
+      ],
+      "aligned": true,
+      "note": "不自动优化工期，不以计划草稿授权开工"
+    },
+    {
+      "id": "plan-resource",
+      "yibiao": [
+        "outline",
+        "kb",
+        "write"
+      ],
+      "exclusive": [
+        "plan-resource__peak"
+      ],
+      "aligned": true,
+      "note": "不做资源优化求解，不估算台班和材料耗用"
+    },
+    {
+      "id": "construction",
+      "yibiao": [
+        "outline",
+        "qa",
+        "kb",
+        "write"
+      ],
+      "exclusive": [
+        "construction__scheme_draft",
+        "construction__fill_scheme_docx"
+      ],
+      "aligned": true,
+      "note": "不构成法定专项、专家论证或开工依据；不计算支架荷载"
+    },
+    {
+      "id": "method-hazard",
+      "yibiao": [
+        "qa",
+        "kb",
+        "write"
+      ],
+      "exclusive": [
+        "method-hazard__judge_hazard"
+      ],
+      "aligned": true,
+      "note": "不签发PTW、不作法定危大认定或开工放行"
+    },
+    {
+      "id": "survey",
+      "yibiao": [
+        "parse",
+        "kb",
+        "write"
+      ],
+      "exclusive": [
+        "survey__record"
+      ],
+      "aligned": true,
+      "note": "未执行测量平差或精度判定，不编坐标或合格结论"
+    },
+    {
+      "id": "dispatch",
+      "yibiao": [
+        "outline",
+        "kb",
+        "write"
+      ],
+      "exclusive": [
+        "dispatch__daily"
+      ],
+      "aligned": true,
+      "note": "不代领导下达指令，不编产值或完成率"
+    },
+    {
+      "id": "safety-brief",
+      "yibiao": [
+        "outline",
+        "kb",
+        "write"
+      ],
+      "exclusive": [
+        "safety-brief__talk"
+      ],
+      "aligned": true,
+      "note": "不替代专项方案或现场交底签认，不宣称可以施工"
+    },
+    {
+      "id": "quality",
+      "yibiao": [
+        "qa",
+        "kb",
+        "write"
+      ],
+      "exclusive": [
+        "quality__lot"
+      ],
+      "aligned": true,
+      "note": "不作质量合格或验收结论，不代签检验批"
+    },
+    {
+      "id": "env",
+      "yibiao": [
+        "outline",
+        "kb",
+        "write"
+      ],
+      "exclusive": [
+        "env__list"
+      ],
+      "aligned": true,
+      "note": "不作排放合规认定，不编监测数据或处罚金额"
+    },
+    {
+      "id": "emergency",
+      "yibiao": [
+        "outline",
+        "kb",
+        "write"
+      ],
+      "exclusive": [
+        "emergency__plan"
+      ],
+      "aligned": true,
+      "note": "不签发应急指令，不编救援能力或演练完成记录"
+    },
+    {
+      "id": "cost",
+      "yibiao": [
+        "parse",
+        "kb",
+        "write"
+      ],
+      "exclusive": [
+        "cost__takeoff"
+      ],
+      "aligned": true,
+      "note": "未接造价算量或计价引擎，不编综合单价"
+    },
+    {
+      "id": "variation",
+      "yibiao": [
+        "parse",
+        "outline",
+        "kb",
+        "write"
+      ],
+      "exclusive": [
+        "variation__form"
+      ],
+      "aligned": true,
+      "note": "不代业主确认变更，不计算签证金额或认定索赔成立"
+    },
+    {
+      "id": "claim",
+      "yibiao": [
+        "parse",
+        "outline",
+        "kb",
+        "write"
+      ],
+      "exclusive": [
+        "claim__notice"
+      ],
+      "aligned": true,
+      "note": "不判断索赔胜率或法定权利，不代算工期损失"
+    },
+    {
+      "id": "subcontract",
+      "yibiao": [
+        "parse",
+        "kb",
+        "write"
+      ],
+      "exclusive": [
+        "subcontract__sheet"
+      ],
+      "aligned": true,
+      "note": "不出最终结算或支付批准结论，不计算未知合同金额"
+    },
+    {
+      "id": "interim",
+      "yibiao": [
+        "parse",
+        "kb",
+        "write"
+      ],
+      "exclusive": [
+        "interim__measure"
+      ],
+      "aligned": true,
+      "note": "不代签付款证书，不把申报金额写成业主应付"
+    },
+    {
+      "id": "proc-plan",
+      "yibiao": [
+        "outline",
+        "kb",
+        "write"
+      ],
+      "exclusive": [
+        "proc-plan__schedule"
+      ],
+      "aligned": true,
+      "note": "不代下采购单，不编供应周期或预算单价"
+    },
+    {
+      "id": "proc-compare",
+      "yibiao": [
+        "qa",
+        "kb",
+        "write"
+      ],
+      "exclusive": [
+        "proc-compare__table"
+      ],
+      "aligned": true,
+      "note": "不编市场价、不自动选定中标供应商"
+    },
+    {
+      "id": "proc-vendor",
+      "yibiao": [
+        "qa",
+        "kb",
+        "write"
+      ],
+      "exclusive": [
+        "proc-vendor__eval"
+      ],
+      "aligned": true,
+      "note": "不编证书业绩、不代准入审批或信用评级"
+    },
+    {
+      "id": "equip",
+      "yibiao": [
+        "qa",
+        "kb",
+        "write"
+      ],
+      "exclusive": [
+        "equip__ledger"
+      ],
+      "aligned": true,
+      "note": "不代检验设备或批准启用，不编承载或额定能力"
+    },
+    {
+      "id": "warehouse",
+      "yibiao": [
+        "parse",
+        "kb",
+        "write"
+      ],
+      "exclusive": [
+        "warehouse__log"
+      ],
+      "aligned": true,
+      "note": "不代库存盘点或改变真实库存，不编库存数量"
+    },
+    {
+      "id": "pack-ship",
+      "yibiao": [
+        "outline",
+        "kb",
+        "write"
+      ],
+      "exclusive": [
+        "pack-ship__list",
+        "pack-ship__plan",
+        "pack-ship__export",
+        "pack-ship__health"
+      ],
+      "aligned": true,
+      "note": "当前工具只投影已有solver快照，不在此处重跑packing引擎或编坐标"
+    },
+    {
+      "id": "material-site",
+      "yibiao": [
+        "parse",
+        "kb",
+        "write"
+      ],
+      "exclusive": [
+        "material-site__recon"
+      ],
+      "aligned": true,
+      "note": "不按经验估算耗用，不替真实盘点或成本核算"
+    },
+    {
+      "id": "lab-mix",
+      "yibiao": [
+        "outline",
+        "qa",
+        "kb",
+        "write"
+      ],
+      "exclusive": [
+        "lab-mix__report"
+      ],
+      "aligned": true,
+      "note": "未计算或试验配合比，不宣称材料达到强度或耐久要求"
+    },
+    {
+      "id": "lab-sample",
+      "yibiao": [
+        "qa",
+        "kb",
+        "write"
+      ],
+      "exclusive": [
+        "lab-sample__list"
+      ],
+      "aligned": true,
+      "note": "不实施真实取样，不认定样品或材料合格"
+    },
+    {
+      "id": "lab-record",
+      "yibiao": [
+        "kb",
+        "write"
+      ],
+      "exclusive": [
+        "lab-record__ledger"
+      ],
+      "aligned": true,
+      "note": "不生成检测报告结果，不代检定仪器"
+    },
+    {
+      "id": "finance-book",
+      "yibiao": [
+        "qa",
+        "kb",
+        "write"
+      ],
+      "exclusive": [
+        "finance-book__check"
+      ],
+      "aligned": true,
+      "note": "不记账或支付，不把检查表当正式会计意见"
+    },
+    {
+      "id": "finance-fund",
+      "yibiao": [
+        "outline",
+        "kb",
+        "write"
+      ],
+      "exclusive": [
+        "finance-fund__plan"
+      ],
+      "aligned": true,
+      "note": "不划款或融资承诺，不编现金余额与授信额度"
+    },
+    {
+      "id": "finance-tax",
+      "yibiao": [
+        "outline",
+        "kb",
+        "write"
+      ],
+      "exclusive": [
+        "finance-tax__calendar"
+      ],
+      "aligned": true,
+      "note": "不提供具体筹划或税务合规结论，不从记忆抄现行税率"
+    },
+    {
+      "id": "supervision",
+      "yibiao": [
+        "qa",
+        "kb",
+        "write"
+      ],
+      "exclusive": [
+        "supervision__reply"
+      ],
+      "aligned": true,
+      "note": "草稿不是监理指令或验收依据，不伪造整改培训记录"
+    },
+    {
+      "id": "hr-recruit",
+      "yibiao": [
+        "outline",
+        "kb",
+        "write"
+      ],
+      "exclusive": [
+        "hr-recruit__brief"
+      ],
+      "aligned": true,
+      "note": "不判断证件真实性或承诺录用，不提出与岗位无关的个人问题"
+    },
+    {
+      "id": "hr-labor",
+      "yibiao": [
+        "qa",
+        "kb",
+        "write"
+      ],
+      "exclusive": [
+        "hr-labor__check"
+      ],
+      "aligned": true,
+      "note": "普法资料检查，不预测诉讼结果、不编法律条号或赔偿金额"
+    },
+    {
+      "id": "hr-train",
+      "yibiao": [
+        "outline",
+        "kb",
+        "write"
+      ],
+      "exclusive": [
+        "hr-train__plan"
+      ],
+      "aligned": true,
+      "note": "不把培训计划当完成记录，不替代安全技术交底"
+    },
+    {
+      "id": "admin-doc",
+      "yibiao": [
+        "outline",
+        "kb",
+        "write"
+      ],
+      "exclusive": [
+        "admin-doc__draft"
+      ],
+      "aligned": true,
+      "note": "不代签发、用印或对外承诺，不编正式文号"
+    },
+    {
+      "id": "admin-office",
+      "yibiao": [
+        "outline",
+        "kb",
+        "write"
+      ],
+      "exclusive": [
+        "admin-office__list"
+      ],
+      "aligned": true,
+      "note": "不发送通知、不订票派车，不执行后勤审批"
+    },
+    {
+      "id": "it-ops",
+      "yibiao": [
+        "outline",
+        "kb",
+        "write"
+      ],
+      "exclusive": [
+        "it-ops__runbook"
+      ],
+      "aligned": true,
+      "note": "不操作生产系统或创建账号，不编IP、接口地址或密码"
+    },
+    {
+      "id": "it-data",
+      "yibiao": [
+        "outline",
+        "kb",
+        "write"
+      ],
+      "exclusive": [
+        "it-data__backup"
+      ],
+      "aligned": true,
+      "note": "只起草策略，不访问数据、不执行备份或恢复"
+    },
+    {
+      "id": "it-app",
+      "yibiao": [
+        "parse",
+        "outline",
+        "kb",
+        "write"
+      ],
+      "exclusive": [
+        "it-app__srs"
+      ],
+      "aligned": true,
+      "note": "不开发或部署系统，不写密钥连接串和真实账号"
+    },
+    {
+      "id": "worker-brief",
+      "yibiao": [
+        "outline",
+        "kb",
+        "write"
+      ],
+      "exclusive": [
+        "worker-brief__talk"
+      ],
+      "aligned": true,
+      "note": "不是书面交底签认件，不宣称已交底或可以开工"
+    },
+    {
+      "id": "pm-daily",
+      "yibiao": [
+        "outline",
+        "kb",
+        "write"
+      ],
+      "exclusive": [
+        "pm-daily__log"
+      ],
+      "aligned": true,
+      "note": "不编完成百分比、人数或天气，不把日报作为验收记录"
+    }
   ]
 }

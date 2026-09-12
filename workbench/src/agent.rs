@@ -320,25 +320,50 @@ pub fn is_explain_only(blob: &str) -> bool {
     understand(blob) == Intent::Chat
 }
 
-/// Deterministic chat from company KB. GST must copy the IRAS 9% sentence; no live model.
-pub fn offline_explain(paths: &Paths, blob: &str) -> Option<String> {
-    let gst = blob.contains("GST") || blob.contains("消费税") || blob.contains("gst");
+/// Tax evidence is explicit input. Historical KB rates are not current advice.
+pub fn offline_explain(_paths: &Paths, blob: &str) -> Option<String> {
+    let gst = blob.to_ascii_uppercase().contains("GST") || blob.contains("消费税") || blob.contains("税率");
     if !gst {
         return None;
     }
-    let page = paths.kb_root.join("company").join("web-portals.md");
-    let kb = fs::read_to_string(page).ok()?;
-    if !kb.contains("9%") {
-        return None;
-    }
-    let copied = kb
-        .lines()
-        .find(|l| l.contains("9%") && (l.contains("GST") || l.contains("税率") || l.contains("Current GST")))
-        .map(str::trim)
-        .unwrap_or("IRAS Current GST rates 页述现行标准税率 **9%**。");
+    let jurisdiction = tax_jurisdiction(blob);
+    let rate = tax_rate_input(blob, jurisdiction);
     Some(format!(
-        "新加坡现行 GST 税率按 IRAS Current GST rates 页述为 9%。\n{copied}\n内部讨论 AI 草稿，不是税务意见书。submit_blocked。禁止把 7%/8% 写成现行税率。"
+        "辖区：{jurisdiction}。GST 税率：{rate}（用户输入待核，非现行适用结论）。\n请补主体、税种、申报期间及可定位的资料原文；IRAS 等历史 KB 条目不证明当前税率。本次未联网核验、未计算税额。内部讨论 AI 草稿，不是税务意见书。submit_blocked=true。"
     ))
+}
+
+pub(crate) fn tax_jurisdiction(blob: &str) -> &'static str {
+    let words = regex::Regex::new(r"(?i)\b(CN|SG|EU|DUAL|CHINA|SINGAPORE)\b").unwrap();
+    let mut cn = blob.contains("中国") || blob.contains("大陆");
+    let mut sg = blob.contains("新加坡");
+    let mut eu = blob.contains("欧盟");
+    let mut dual = blob.contains("双辖区") || blob.contains("多辖区");
+    for cap in words.captures_iter(blob) {
+        match cap[1].to_ascii_uppercase().as_str() {
+            "CN" | "CHINA" => cn = true,
+            "SG" | "SINGAPORE" => sg = true,
+            "EU" => eu = true,
+            "DUAL" => dual = true,
+            _ => {},
+        }
+    }
+    if dual || [cn, sg, eu].into_iter().filter(|v| *v).count() > 1 { "DUAL" }
+    else if cn { "CN" } else if sg { "SG" } else if eu { "EU" } else { "UNSPECIFIED" }
+}
+
+pub(crate) fn tax_rate_input(blob: &str, jurisdiction: &str) -> String {
+    if !matches!(jurisdiction, "CN" | "SG" | "EU") {
+        return "UNSPECIFIED".into();
+    }
+    let explicit = regex::Regex::new(r"(?i)(?:用户税率|税率|\bGST(?:\s+rate)?)\s*[:：=]?\s*(\d+(?:\.\d+)?\s*[%％])").unwrap();
+    let all_rates = regex::Regex::new(r"\d+(?:\.\d+)?\s*[%％]").unwrap();
+    let rates: Vec<_> = explicit.captures_iter(blob).collect();
+    if rates.len() == 1 && all_rates.find_iter(blob).count() == 1 {
+        rates[0][1].to_string()
+    } else {
+        "UNSPECIFIED".into()
+    }
 }
 
 pub fn detect_jurisdiction(blob: &str) -> &'static str {

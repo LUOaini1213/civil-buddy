@@ -5,6 +5,7 @@ from __future__ import annotations
 
 import sys
 from pathlib import Path
+from unittest.mock import patch
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
@@ -25,7 +26,8 @@ def main() -> int:
     chat = run_expert_turn(q, "finance-tax")
     assert chat["intent"] == "chat" and chat["wrote"] is False
     assert chat["files"] == []
-    assert "9%" in chat["reply"]
+    assert "UNSPECIFIED" in chat["reply"]
+    assert "9%" not in chat["reply"]
     assert "可以开工" not in chat["reply"]
 
     hz = run_expert_turn("临边防护算不算危大？要不要专家论证？", "method-hazard")
@@ -39,7 +41,7 @@ def main() -> int:
     )
     assert hz_block["wrote"] is False and hz_block.get("hitl_pending") is True
     hz_ok = run_expert_turn(
-        "写一份危大判定书 临边开挖",
+        "写一份危大判定书 临边开挖\nSG",
         "method-hazard",
         confirm_ok=True,
         force_intent="run",
@@ -67,8 +69,9 @@ def main() -> int:
     assert "finance-tax__calendar" in cal["tools_run"]
     assert cal["files"] and Path(cal["files"][0]["path"]).is_file()
     cal_text = Path(cal["files"][0]["path"]).read_text(encoding="utf-8")
-    assert "9%" in cal_text
-    assert "空栏" in cal_text or "待按 IRAS" in cal_text
+    assert "UNSPECIFIED" in cal_text
+    assert "9%" not in cal_text
+    assert "申报期" in cal_text and "待核" in cal_text
     assert "待填" in cal_text
 
     cost = run_expert_turn("写一份工程量拆分表 临边栏杆", "cost", session_id="t006-cost")
@@ -370,7 +373,7 @@ def main() -> int:
     )
     assert mx_hitl["wrote"] is False and mx_hitl.get("hitl_pending") is True
     mx_empty = run_expert_turn(
-        "写一份配比报告提纲 C40",
+        "写一份配比报告提纲 C40\nSG",
         "lab-mix",
         confirm_ok=True,
         force_intent="run",
@@ -663,7 +666,7 @@ def main() -> int:
     pp_chat = run_expert_turn("提前期怎么理解？", "proc-plan")
     assert pp_chat["intent"] == "chat" and pp_chat["wrote"] is False
     pp_ok = run_expert_turn(
-        "写一份采购计划 rebar",
+        "写一份采购计划 rebar\nSG",
         "proc-plan",
         force_intent="run",
         session_id="t037-pp",
@@ -696,7 +699,7 @@ def main() -> int:
     pc_chat = run_expert_turn("询价和比价怎么理解？", "proc-compare")
     assert pc_chat["intent"] == "chat" and pc_chat["wrote"] is False
     pc_ok = run_expert_turn(
-        "写一份比价表 rebar",
+        "写一份比价表 rebar\nSG",
         "proc-compare",
         force_intent="run",
         session_id="t037-pc",
@@ -729,7 +732,7 @@ def main() -> int:
     pv_chat = run_expert_turn("准入和短名单怎么理解？", "proc-vendor")
     assert pv_chat["intent"] == "chat" and pv_chat["wrote"] is False
     pv_ok = run_expert_turn(
-        "写一份供方评价 local fab",
+        "写一份供方评价 local fab\nSG",
         "proc-vendor",
         force_intent="run",
         session_id="t037-pv",
@@ -758,7 +761,7 @@ def main() -> int:
     fb_chat = run_expert_turn("报销怎么理解？", "finance-book")
     assert fb_chat["intent"] == "chat" and fb_chat["wrote"] is False
     fb_ok = run_expert_turn(
-        "写一份核算检查 2026-08",
+        "写一份核算检查 2026-08\nSG",
         "finance-book",
         force_intent="run",
         session_id="t038-fb",
@@ -822,7 +825,7 @@ def main() -> int:
     wb_chat = run_expert_turn("班前会怎么理解？", "worker-brief")
     assert wb_chat["intent"] == "chat" and wb_chat["wrote"] is False
     wb_ok = run_expert_turn(
-        "写一份班前白话 edge",
+        "写一份班前白话 edge\nSG",
         "worker-brief",
         force_intent="run",
         session_id="t039-wb",
@@ -848,7 +851,7 @@ def main() -> int:
     pd_chat = run_expert_turn("项目日报怎么理解？", "pm-daily")
     assert pd_chat["intent"] == "chat" and pd_chat["wrote"] is False
     pd_ok = run_expert_turn(
-        "写一份项目日报 临边防护",
+        "写一份项目日报 临边防护\nSG",
         "pm-daily",
         force_intent="run",
         session_id="t039-pmd",
@@ -865,7 +868,7 @@ def main() -> int:
     assert "可以开工" not in pdt
     assert "office__xlsx" in pd_ok["tools_run"]
     pd_wx = run_expert_turn(
-        "写一份项目日报 临边 晴 木工",
+        "写一份项目日报 临边 晴 木工12人",
         "pm-daily",
         force_intent="run",
         session_id="t039-pmd-wx",
@@ -898,7 +901,7 @@ def main() -> int:
     hr_chat = run_expert_turn("招聘简报怎么理解？", "hr-recruit", session_id="t040-hr-chat")
     assert hr_chat["intent"] == "chat" and hr_chat["wrote"] is False
     hr_ok = run_expert_turn(
-        "写一份招聘简报 施工员",
+        "写一份招聘简报 施工员\nSG",
         "hr-recruit",
         force_intent="run",
         session_id="t040-hr",
@@ -974,10 +977,8 @@ def main() -> int:
         c = run_expert_turn("这是什么意思，先别写", e.id)
         assert c["wrote"] is False, e.id
         n_chat += 1
-        if e.risk == "high":
+        with patch("packing_assistant.expert_turn._draft_markdown", side_effect=AssertionError(f"{e.id} used generic fallback")):
             r = run_expert_turn("写一份草稿提纲", e.id, confirm_ok=True, session_id=f"t-{e.id}")
-        else:
-            r = run_expert_turn("写一份草稿提纲", e.id, session_id=f"t-{e.id}")
         assert r["intent"] == "run", e.id
         assert r["wrote"] is True, e.id
         assert r["tools_run"], e.id

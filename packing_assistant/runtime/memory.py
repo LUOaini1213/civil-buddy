@@ -10,6 +10,8 @@ import json
 from pathlib import Path
 from typing import Any, Dict, Optional
 
+from packing_assistant.jurisdiction import infer_jurisdiction
+
 _ROOT = Path(__file__).resolve().parents[2]
 _OUT = _ROOT / "demo" / "out"
 DEFAULT_PROJECT = "幕墙项目投标应答（草稿）"
@@ -38,7 +40,7 @@ def save_summary(
     payload = {
         "jurisdiction": jurisdiction or "UNSPECIFIED",
         "project": project or "UNSPECIFIED",
-        "p0_confirmed": bool(p0_confirmed),
+        "p0_confirmed": p0_confirmed is True,
         "compressed": bool(compressed),
         "dropped_note": dropped_note
         or (DROPPED if compressed else ""),
@@ -60,27 +62,6 @@ def load_summary(session_id: str) -> Optional[Dict[str, Any]]:
     return data if isinstance(data, dict) else None
 
 
-def infer_jurisdiction(text: str, previous: str = "") -> str:
-    blob = text or ""
-    low = blob.lower()
-    if "DUAL" in blob or "双辖区" in blob:
-        return "DUAL"
-    cn_hits = ("37 号令", "37号令", "JGJ", "住建部", "中国大陆", "国内定额")
-    sg_hits = ("新加坡", "singapore", "iras", "psscoc", "mom wsh", "gebiz")
-    has_cn = any(k in blob for k in cn_hits)
-    has_sg = any(k in blob or k in low for k in sg_hits)
-    if has_cn and has_sg:
-        return "DUAL"
-    if has_cn:
-        return "CN"
-    if has_sg:
-        return "SG"
-    prev = (previous or "").strip()
-    if prev in {"SG", "CN", "EU", "DUAL"}:
-        return prev
-    return "SG"
-
-
 def _real_project(name: str) -> str:
     n = (name or "").strip()
     if not n or n == DEFAULT_PROJECT or n == "UNSPECIFIED":
@@ -100,7 +81,7 @@ def assemble_context(
     prev = load_summary(session_id) or {}
     jur = infer_jurisdiction(text, str(prev.get("jurisdiction") or ""))
     project = _real_project(project_name) or _real_project(str(prev.get("project") or "")) or "UNSPECIFIED"
-    p0 = bool(p0_confirmed) or bool(prev.get("p0_confirmed"))
+    p0 = p0_confirmed is True or prev.get("p0_confirmed") is True
     comp = bool(prev.get("compressed")) if compressed is None else bool(compressed)
     note = str(prev.get("dropped_note") or "")
     if comp and not note:

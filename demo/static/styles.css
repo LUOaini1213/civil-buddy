@@ -111,8 +111,10 @@ html, body {
    仍需顶栏高度的只剩窄屏 fixed 覆盖层，统一引用 --cb-topbar-h。 */
 body {
   display: grid;
-  grid-template-rows: auto 1fr;
+  grid-template-rows: auto minmax(0, 1fr);
+  height: 100vh;
   height: 100dvh;
+  overflow: hidden;
 }
 .top { min-height: var(--cb-topbar-h); }
 .top {
@@ -142,6 +144,7 @@ body {
   display: grid;
   /* ux(round19)：三栏 → 两栏；审计移入右侧抽屉，展开时才占第三列 */
   grid-template-columns: var(--cb-rail-w) minmax(0, 1fr);
+  grid-template-rows: minmax(0, 1fr);
   min-height: 0;
 }
 body[data-dock="open"] .layout { grid-template-columns: var(--cb-rail-w) minmax(0, 1fr) var(--cb-dock-w); }
@@ -221,7 +224,7 @@ body[data-dock="open"] .layout { grid-template-columns: var(--cb-rail-w) minmax(
 /* ux(round19)：常驻名册（.skill-q / .cat / .exp*）随 renderWall 一并删除，
    66 岗改由 composer 的「岗位」两级面板按需召唤。 */
 .stage {
-  display: flex; flex-direction: column; min-width: 0;
+  display: flex; flex-direction: column; min-width: 0; min-height: 0;
   background: var(--panel);
 }
 /* ux(round19) 点名 chip 行：贴着输入框，空时整条隐藏（renderSummon 控制 hidden） */
@@ -261,7 +264,15 @@ body[data-dock="open"] .layout { grid-template-columns: var(--cb-rail-w) minmax(
 .ctx-bar[data-zone="compact"] .ctx-meter i { background: var(--accent); }
 .ctx-bar[data-zone="full"] .ctx-meter i { background: var(--cb-red); }
 .ctx-text { margin: 4px 0 0; font-size: 11px; color: var(--cb-text-faint); }
-.log { flex: 1; overflow: auto; padding: 20px 24px 8px; }
+.ctx-bar { padding: 4px 0 0; }
+.ctx-bar .top-btn { margin-top: 4px; font-size: 12px; }
+.cb-context-panel { padding: 12px; border-bottom: 1px solid var(--cb-border); }
+.cb-context-memory { white-space: pre-wrap; overflow-wrap: anywhere; font: inherit; font-size: 12px; max-height: 280px; overflow: auto; }
+.cb-context-panel input { width: 100%; box-sizing: border-box; margin: 8px 0; padding: 8px; }
+.cb-source-text { white-space: pre-wrap; overflow-wrap: anywhere; max-height: 320px; overflow: auto; font: inherit; font-size: 12px; }
+/* Allow the transcript to shrink inside both grid levels. Its contents scroll,
+   while the composer keeps its own height even when onboarding is visible. */
+.log { flex: 1 1 0; min-height: 0; overflow: auto; overscroll-behavior: contain; padding: 20px 24px 8px; }
 .welcome { color: var(--muted); font-size: 14px; max-width: 36rem; margin: 12vh auto 0; text-align: center; }
 .msg { margin: 0 0 16px; max-width: 40rem; }
 .msg.user {
@@ -271,6 +282,7 @@ body[data-dock="open"] .layout { grid-template-columns: var(--cb-rail-w) minmax(
 .msg .who { font-size: 11px; color: var(--muted); margin-bottom: 4px; }
 .status-line { font-size: 12px; color: var(--accent-2); margin: 0 0 8px; }
 .composer {
+  flex: 0 0 auto;
   border-top: 1px solid var(--line); padding: 12px 20px 16px; background: var(--panel);
 }
 .composer.drop { outline: 2px dashed var(--accent); outline-offset: -4px; }
@@ -368,7 +380,9 @@ body[data-dock="open"] .layout { grid-template-columns: var(--cb-rail-w) minmax(
 }
 .composer-note { font-size: var(--cb-fs-xs); color: var(--cb-text-muted); margin: 0 0 6px; }
 #send:disabled { background: var(--cb-gray-200); color: var(--cb-gray-500); cursor: not-allowed; }
-.confirm { display: flex; gap: 8px; align-items: flex-start; font-size: 12px; color: var(--muted); margin-bottom: 8px; }
+.confirm { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; font-size: 12px; color: var(--muted); margin-bottom: 8px; }
+.confirm input, .cb-apr-ack-input { min-width: 0; max-width: 100%; box-sizing: border-box; padding: 6px 8px; border: 1px solid var(--cb-line); border-radius: var(--cb-radius-sm); background: var(--cb-panel); color: var(--cb-text); font: inherit; }
+.confirm input { flex: 1 1 220px; }
 .row { display: flex; justify-content: space-between; align-items: center; gap: 12px; margin-top: 8px; flex-wrap: wrap; }
 .hints { display: flex; flex-wrap: wrap; gap: 6px; }
 /* ux(round19) 审计抽屉：宽屏是第三列，窄屏是 fixed 浮层（附录 P） */
@@ -444,10 +458,10 @@ body[data-dock="open"] .layout { grid-template-columns: var(--cb-rail-w) minmax(
   }
 }
 @media (max-width: 1100px) {
-  .layout { grid-template-columns: 200px minmax(0, 1fr); }
+  :root { --cb-rail-w: 200px; }
 }
-@media (max-width: 720px) {
-  .layout { grid-template-columns: minmax(0, 1fr); }
+@media (max-width: 768px) {
+  .layout, body[data-dock="open"] .layout { grid-template-columns: minmax(0, 1fr); }
   .rail { display: none; }
 }
 
@@ -590,6 +604,7 @@ body[data-dock="open"] .layout { grid-template-columns: var(--cb-rail-w) minmax(
 .cb-apr-later:hover { color: var(--cb-text); border-color: var(--cb-gray-400); }
 .cb-apr-foot { margin-top: 6px; font-size: 11px; color: var(--cb-text-muted); line-height: 1.5; }
 .cb-apr-confirm-phrase { color: var(--cb-orange); }
+.cb-apr-ack { display: flex; flex-direction: column; gap: 6px; margin-top: 10px; font-size: var(--cb-fs-xs); }
 @media (max-width: 768px) {
   /* R8 打底：窄屏审批卡按钮全宽、决策区纵排 */
   .cb-apr-actions { flex-direction: column; }
@@ -704,7 +719,7 @@ body.cb-doc-open { overflow: hidden; }
 /* 打印：只留文书本体，隐藏聊天 chrome；@page A4 + 页眉页脚由文书自绘 */
 @media print {
   body > :not(.cb-doc-overlay) { display: none !important; }
-  body.cb-doc-open { overflow: visible; }
+  body.cb-doc-open { display: block; height: auto; overflow: visible; }
   .cb-doc-overlay { position: static; display: block; }
   .cb-doc-backdrop, .cb-doc-toolbar { display: none !important; }
   .cb-doc-modal { margin: 0; width: auto; max-height: none; }
@@ -900,6 +915,9 @@ html.cb-large {
   max-width: 36rem;
 }
 .cb-empty-cards { display: grid; grid-template-columns: repeat(3, 1fr); gap: var(--cb-space-3); }
+.cb-empty-actions { display: flex; flex-wrap: wrap; justify-content: center; gap: 8px; margin-top: 16px; }
+.cb-empty-actions .cb-empty-tool { display: inline-block; font: inherit; font-size: 12px; padding: 5px 10px; }
+.cb-empty-actions button:disabled { opacity: .55; cursor: not-allowed; }
 .cb-empty-card {
   display: flex; flex-direction: column; align-items: flex-start; gap: 4px;
   padding: var(--cb-space-3) var(--cb-space-3) var(--cb-space-2);
@@ -1143,3 +1161,24 @@ html.cb-large {
 .cb-att-x:focus-visible { outline: 2px solid var(--cb-focus); outline-offset: 1px; }
 /* 拖拽反馈：round19 删拖拽是因为它当时看不见；现在有 chip 与这个高亮，不再是隐藏通道 */
 .composer.drop { outline: 2px dashed var(--cb-blue); outline-offset: -4px; }
+
+.cb-post-details { border: 0; padding: 0; background: transparent; color: inherit; font: inherit; cursor: pointer; }
+.cb-post-details:focus-visible { outline: 2px solid var(--cb-focus); outline-offset: 3px; }
+.cb-capability-panel, .cb-route-card, .cb-collaboration-card {
+  min-width: 0; margin: 12px 0; padding: 12px; border: 1px solid var(--cb-line);
+  border-radius: var(--cb-radius-sm); background: var(--cb-panel); text-align: left; overflow-wrap: anywhere;
+}
+.cb-capability-panel h4, .cb-route-card h4, .cb-collaboration-card h4 { margin: 8px 0; font-size: var(--cb-fs-sm); }
+.cb-capability-panel ul, .cb-route-card ul, .cb-collaboration-card ul { margin: 6px 0; padding-left: 20px; }
+.cb-capability-panel li, .cb-route-card li, .cb-collaboration-card li { margin: 4px 0; font-size: var(--cb-fs-xs); line-height: 1.6; }
+.cb-capability-panel select { width: 100%; margin: 8px 0; padding: 8px; color: var(--cb-text); background: var(--cb-bg); border: 1px solid var(--cb-line); }
+.cb-route-choice { display: block; margin: 8px 0; max-width: 100%; white-space: normal; text-align: left; }
+.cb-collaboration-card details { border-top: 1px solid var(--cb-line); padding: 8px 0; }
+.cb-collaboration-card summary { cursor: pointer; font-size: var(--cb-fs-sm); }
+.cb-collaboration-budget { font-size: var(--cb-fs-xs); color: var(--cb-text-muted); }
+.cb-collaboration-budget meter { width: 100%; }
+.cb-collaboration-card table { width: 100%; border-collapse: collapse; table-layout: fixed; font-size: var(--cb-fs-xs); }
+.cb-collaboration-card th, .cb-collaboration-card td { padding: 6px; border: 1px solid var(--cb-line); text-align: left; vertical-align: top; white-space: pre-wrap; }
+.cb-att-role { max-width: 100px; padding: 2px; font: inherit; color: var(--cb-text); background: var(--cb-panel); border: 1px solid var(--cb-line); border-radius: 4px; }
+.cb-att-chip:has(.cb-att-role) { max-width: min(420px, 100%); }
+.cb-att-role:focus-visible { outline: 2px solid var(--cb-focus); outline-offset: 1px; }

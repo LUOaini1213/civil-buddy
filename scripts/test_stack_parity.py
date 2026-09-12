@@ -20,10 +20,10 @@
    Rust 侧行为由 workbench/tests/intents_golden.rs 用同一份金句实跑（cargo test）。
 
 3) SKILL.md 镜像：.agents/skills 与 .codex/skills 由 scripts/build_codex_expert_skills.py
-   从 catalog_seed / yibiao-map / demo/kb 单源生成，两侧逐文件一致、目录集合一致，
+   从 workbench/seed.json 的完整岗位契约生成，两侧逐文件一致、目录集合一致，
    且 .agents（canonical）与生成器现输出一致（防两侧同时手改）。
 
-4) 名册单源：demo/catalog_seed.py（66 岗）与 workbench/seed.json 的 id+name 一致。
+4) 名册单源：demo/catalog_seed.py 消费 workbench/seed.json；66 岗 id+name 一致。
 """
 
 from __future__ import annotations
@@ -366,13 +366,15 @@ def check_skill_mirrors() -> None:
         drift(f"无法执行生成器比对（build_codex_expert_skills）：{e}")
         return
     for rel, want in sorted(expected.items()):
+        if "不默认国家" not in want or any(x in want for x in ("默认 SG", "SG 默认", "默认新加坡")):
+            drift(f"{rel} 的辖区规则应与运行时一致：未提供则 UNSPECIFIED")
         got = agents.get(rel + "/SKILL.md")
         if got is None:
             drift(f".agents/skills 缺生成器产物: {rel}/SKILL.md")
         elif got != want:
             drift(
                 f".agents/skills/{rel}/SKILL.md 与生成器输出不一致（疑似手改；"
-                "请改 catalog_seed / KB_NOTES / demo/kb 后重跑 scripts/build_codex_expert_skills.py）"
+                "请改 workbench/seed.json 后重跑 scripts/build_codex_expert_skills.py）"
             )
     extra = sorted(set(agents) - {r + "/SKILL.md" for r in expected})
     if extra:

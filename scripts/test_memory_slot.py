@@ -46,7 +46,8 @@ def main() -> int:
     assert second.get("wrote") is False
     assert (second.get("context") or {}).get("project") == "滨河路"
     assert (second.get("context") or {}).get("p0_confirmed") is True
-    assert "9%" in (second.get("reply") or "")
+    assert "UNSPECIFIED" in (second.get("reply") or "")
+    assert "9%" not in (second.get("reply") or "")
     sticky = load_summary("mem-sticky")
     assert sticky and sticky["project"] == "滨河路"
 

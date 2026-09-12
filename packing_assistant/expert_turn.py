@@ -48,21 +48,23 @@ def _kb_snip(expert: ExpertRec, query: str, limit: int = 900) -> str:
     return "\n".join(chunks)[:limit].strip()
 
 
-def explain_expert(expert: ExpertRec, text: str) -> str:
+def explain_expert(expert: ExpertRec, text: str, previous_jurisdiction: str = "") -> str:
     bits = [
         f"本岗：{expert.name}（{expert.category_name} / {expert.id}）。内部讨论 AI 草稿。提问不写盘，不判定可投标。",
         expert.title,
     ]
     blob = text or ""
-    if "GST" in blob.upper() or "税率" in blob or expert.id == "finance-tax":
-        bits.append(
-            "IRAS 页述：The current GST rate in Singapore is 9%（Current GST rates）。税额待持证办税人员按当期文件算。"
-        )
+    tax_question = "GST" in blob.upper() or "税率" in blob or expert.id == "finance-tax"
+    if tax_question:
+        from packing_assistant.tax_context import explain_tax
+        bits.append(explain_tax(blob, previous=previous_jurisdiction))
     if any(k in blob for k in ("危大", "临边", "专家论证")) or expert.id == "method-hazard":
         bits.append(
             "是否危大、要不要专家论证，须由持证人员按专项目录与现场判定。本岗不判定可以开工。"
         )
-    snip = _kb_snip(expert, blob)
+    # Static KB excerpts are historical reference material, not evidence of a
+    # current tax rate. They cannot undo the unknown-rate boundary above.
+    snip = "" if tax_question else _kb_snip(expert, blob)
     if snip:
         bits.append("本岗可见知识摘录：\n" + snip)
     bits.append("要成稿请明说写/编制/出一份。高风险写盘须确认句：「" + CONFIRM + "」。")
@@ -650,12 +652,37 @@ _PD_SKIP = {
     "待填",
 }
 
+_PD_WEATHER_WORDS = r"晴天|晴|多云|阴天|阴|雷阵雨|暴雨|大雨|中雨|小雨|阵雨|雨|大雪|中雪|小雪|雪|大雾|雾|台风|fine|rainy|cloudy|overcast"
+_PD_WEATHER_VALUE = rf"(?:{_PD_WEATHER_WORDS})(?:转(?:{_PD_WEATHER_WORDS}))?"
 _PD_WEATHER_RE = re.compile(
-    r"(晴|多云|阴|雨|雪|雾|台风|暴雨|fine|rainy|cloudy|overcast)",
+    rf"(?<![A-Za-z\u4e00-\u9fff])({_PD_WEATHER_VALUE})(?![A-Za-z\u4e00-\u9fff])",
     re.I,
 )
-
-_PD_LABOR_RE = re.compile(r"(\d+\s*人|出勤|木工|钢筋工|砼工|架子工|电焊|普工)")
+_PD_WEATHER_FIELD_RE = re.compile(
+    rf"(?:天气|weather|今日天气|今天天气|上午|下午)\s*[:：=]?\s*({_PD_WEATHER_VALUE})(?![A-Za-z\u4e00-\u9fff])",
+    re.I,
+)
+_PD_LABOR_RE = re.compile(
+    r"(?:(?:木工|钢筋工|砼工|混凝土工|架子工|电焊工?|普工|电工|瓦工|工人|管理人员|劳务人员|出勤|到场|实到|到岗|人数)\s*[:：=]?\s*)?\d+\s*人"
+)
+_PD_SITE_FIELD_RE = re.compile(r"(?:施工部位|作业部位|作业位置|部位|位置|site)\s*[:：=]\s*([^；;，,。\n]+)", re.I)
+_PD_SITE_TOKEN_RE = re.compile(
+    r"(?:[A-Za-z0-9一二三四五六七八九十]+(?:号楼|栋|层|区)|\d+#|地下室|楼梯间|基坑|承台|桩基|桥墩|桥台|隧道|临边|屋面|楼板|轴线)"
+)
+_PD_NONFACT = re.compile(r"(?:待填|未填|未提供|未知|不确定|未确定|未说明|UNSPECIFIED|例如|比如|示例|预报|预计|计划|明日|明天|安排|需填写|要填写|请填写|不要填写|不少于|至少|上限|容纳)", re.I)
+_PD_NAMED_FIELDS = {
+    "项目名称": "project", "工程名称": "project", "项目": "project",
+    "填报日期": "date", "报告日期": "date", "日期": "date",
+    "安全质量记事": "hse", "安全质量记录": "hse", "安全质量": "hse",
+    "安全记事": "hse", "质量记事": "hse",
+    "明日计划": "tomorrow", "明日拟安排": "tomorrow", "明日安排": "tomorrow",
+    "形象进度": "progress", "施工进度": "progress", "今日进度": "progress",
+    "机械材料": "resources", "机械材料记事": "resources", "人机料": "resources",
+}
+_PD_FIELD_RE = re.compile(
+    r"(?<![A-Za-z0-9_\u4e00-\u9fff])(" + "|".join(_PD_NAMED_FIELDS)
+    + r"|施工部位|作业部位|作业位置|部位|位置|天气|出勤|人数|辖区)\s*[:：=]\s*"
+)
 
 _HR_CHAPTERS = ("职责", "任职", "面试问法")
 
@@ -755,7 +782,7 @@ def _survey_record_md(text: str) -> str:
         "",
         DISCLAIMER,
         "",
-        "不是复测签认件。只抄用户已给点号/坐标。缺数 [A001]。条款 UNSPECIFIED。辖区：SG。",
+        f"不是复测签认件。只抄用户已给点号/坐标。缺数 [A001]。条款 UNSPECIFIED。辖区：{_mix_zone(text)}。",
         "",
         "## 用户原文",
         "",
@@ -1501,12 +1528,9 @@ def _mix_has_trial(blob: str) -> bool:
 
 
 def _mix_zone(blob: str) -> str:
-    t = blob or ""
-    if "DUAL" in t:
-        return "DUAL"
-    if any(k in t for k in ("JGJ", "37 号令", "GB 50", "住建部", "配合比设计规程")):
-        return "CN"
-    return "SG"
+    from packing_assistant.jurisdiction import infer_jurisdiction
+
+    return infer_jurisdiction(blob or "")
 
 
 def _lab_mix_md(text: str) -> str:
@@ -1820,8 +1844,6 @@ def _lab_record_md(text: str) -> str:
 def _supervision_md(text: str) -> str:
     blob = text or ""
     zone = _mix_zone(blob)
-    if any(k in blob for k in ("监理规范", "GB/T 50319", "归档规范")):
-        zone = "CN" if zone == "SG" else zone
     notice = blob.strip() or "待填"
     notice = re.sub(r"^写一份\S*\s*", "", notice).strip() or "待填"
     if notice in {"草稿提纲", "监理回复", "待填"}:
@@ -2234,8 +2256,6 @@ def _copy_equip_certs(blob: str) -> List[tuple]:
 def _equip_md(text: str) -> str:
     blob = text or ""
     zone = _mix_zone(blob)
-    if "特种设备安全法" in blob:
-        zone = "CN" if zone == "SG" else zone
     names = _parse_equip_names(blob)
     certs = _copy_equip_certs(blob)
     cert_cell = "特种设备证件待核"
@@ -3324,37 +3344,73 @@ def _worker_brief_md(text: str) -> str:
 
 
 def _pd_site(blob: str) -> str:
-    t = (blob or "").strip()
-    t = re.sub(r"^写一份\S*\s*", "", t).strip()
-    t = re.sub(r"^(项目日报草稿|项目日报|工程日志|日报)\s*", "", t).strip()
-    for piece in t.replace("；", "\n").replace(";", "\n").splitlines():
-        p = piece.strip()
-        if not p or p in _PD_SKIP or p.lower() in _PD_SKIP:
+    explicit = _PD_SITE_FIELD_RE.search(blob or "")
+    if explicit:
+        value = re.split(r"\s+(?:天气|出勤|人数|日期|weather)\s*[:：=]?", explicit.group(1), maxsplit=1)[0].strip()
+        if value and not _PD_NONFACT.search(value):
+            return value[:80]
+        return "[A001] 待填部位"
+    text = re.sub(r"[@$][\w-]+", "", blob or "")
+    text = re.sub(r"(?:请|帮我)?(?:写|编制|生成|出)(?:一份|个|一张)?\s*(?:项目日报|日报|工程日志)(?:草稿|模板|提纲)?", "", text)
+    for piece in re.split(r"[；;，,。\n]", text):
+        if _PD_NONFACT.search(piece) or not _PD_SITE_TOKEN_RE.search(piece):
             continue
-        if p.startswith("#") or p.startswith("内部"):
-            continue
-        if p in {"JGJ", "SAC", "CN", "SG", "DUAL", "住建部"}:
-            continue
-        p = re.sub(r"\s+", " ", p)
-        p = re.sub(r"\d+(?:\.\d+)?\s*%", "", p).strip()
-        if not p:
-            continue
-        return p[:80]
+        piece = _PD_WEATHER_FIELD_RE.sub("", piece)
+        piece = _PD_WEATHER_RE.sub("", piece)
+        piece = _PD_LABOR_RE.sub("", piece)
+        piece = re.sub(r"(?:完成率?|进度)?\s*\d+(?:\.\d+)?\s*%", "", piece)
+        piece = re.sub(r"\b(?:SG|CN|EU|DUAL|JGJ|SAC|BCA)\b|住建部", "", piece, flags=re.I)
+        piece = re.sub(r"\s+", " ", piece).strip(" ：:")
+        if piece and _PD_SITE_TOKEN_RE.search(piece):
+            return piece[:80]
     return "[A001] 待填部位"
 
 
 def _pd_weather(blob: str) -> str:
-    m = _PD_WEATHER_RE.search(blob or "")
-    if not m:
+    facts: List[str] = []
+    for piece in re.split(r"[；;，,。\n]", blob or ""):
+        if _PD_NONFACT.search(piece):
+            continue
+        matches = list(_PD_WEATHER_FIELD_RE.finditer(piece)) or list(_PD_WEATHER_RE.finditer(piece))
+        facts.extend(match.group(1) for match in matches)
+    if not facts:
         return "天气待填"
-    return f"用户口述：{m.group(1)}。非气象站记录。"
+    return f"用户口述：{'；'.join(dict.fromkeys(facts))}。非气象站记录。"
 
 
 def _pd_labor(blob: str) -> str:
-    m = _PD_LABOR_RE.search(blob or "")
-    if not m:
+    facts = []
+    for piece in re.split(r"[；;，,。\n]", blob or ""):
+        if not _PD_NONFACT.search(piece):
+            facts.extend(match.group(0) for match in _PD_LABOR_RE.finditer(piece))
+    if not facts:
         return "出勤待填"
-    return f"用户给出的出勤记事：{m.group(1)}。未给的工种不编人数。"
+    return f"用户给出的出勤记事：{'；'.join(dict.fromkeys(facts))}。未给的工种不编人数。"
+
+
+def _pd_named_fields(blob: str) -> Dict[str, str]:
+    """Copy labelled report fields, without interpreting free-form sentences."""
+    found: Dict[str, str] = {}
+    seen: Dict[str, set] = {}
+    matches = list(_PD_FIELD_RE.finditer(blob or ""))
+    for index, match in enumerate(matches):
+        key = _PD_NAMED_FIELDS.get(match.group(1))
+        if key is None:
+            continue
+        end = matches[index + 1].start() if index + 1 < len(matches) else len(blob)
+        value = blob[match.end():end]
+        for separator in re.finditer(r"[；;\r\n]", value):
+            if separator.group() == ";" and re.search(r"&(?:#\d+|#x[\da-fA-F]+|[A-Za-z][A-Za-z0-9]*);$", value[:separator.end()]):
+                continue
+            value = value[:separator.start()]
+            break
+        value = value.strip(" ,，；")
+        if not value or re.fullmatch(r"[（(]?(?:待填|未填|未提供|未知|未说明|不确定|UNSPECIFIED|TBD|N/A|空)[）)]?[。.]?", value, re.I):
+            continue
+        if value not in seen.setdefault(key, set()):
+            found[key] = f"{found[key]}；{value}" if key in found else value
+            seen[key].add(value)
+    return found
 
 
 def _pm_daily_md(text: str) -> str:
@@ -3363,13 +3419,24 @@ def _pm_daily_md(text: str) -> str:
     site = _pd_site(blob)
     weather = _pd_weather(blob)
     labor = _pd_labor(blob)
+    named = _pd_named_fields(blob)
+    import html
+
+    def cell(value):
+        return html.escape(value, quote=False).replace("|", "&#124;")
+
     four = (
         "| 栏 | 本稿 |\n"
         "| --- | --- |\n"
-        f"| 天气 | {weather} |\n"
-        f"| 部位 | {site} |\n"
-        "| 形象 | 只写部位，不写百分比 |\n"
-        f"| 出勤 | {labor} |\n"
+        f"| 项目名称 | {cell(named.get('project') or '待填')} |\n"
+        f"| 日期 | {cell(named.get('date') or '待填')} |\n"
+        f"| 天气 | {cell(weather)} |\n"
+        f"| 部位 | {cell(site)} |\n"
+        f"| 形象进度 | {cell(named.get('progress') or '待填')} |\n"
+        f"| 出勤 | {cell(labor)} |\n"
+        f"| 机械材料 | {cell(named.get('resources') or '待填')} |\n"
+        f"| 安全质量记事 | {cell(named.get('hse') or '待填')} |\n"
+        f"| 明日计划 | {cell(named.get('tomorrow') or '待填')} |\n"
     )
     lines = [
         "# 项目日报草稿（AI 草稿 · 内部讨论）",
@@ -3391,23 +3458,35 @@ def _pm_daily_md(text: str) -> str:
         lines.append(f"## {i} {title}")
         lines.append("")
         if i == 1:
-            lines.append("项目名称待填。日期待填。填报人空栏。审核人空栏。按单位工程分篇。")
+            project_line = f"项目名称：{named['project']}。" if named.get("project") else "项目名称待填。"
+            date_line = f"日期：{named['date']}。" if named.get("date") else "日期待填。"
+            lines.append(project_line + date_line + "填报人空栏。审核人空栏。按单位工程分篇。")
         elif i == 2:
             lines.append(weather)
         elif i == 3:
             lines.append(site)
         elif i == 4:
-            lines.append(f"今日作业位置：{site}。只写看得见的位置，不写百分比，不编完成率。")
+            lines.append(f"用户提供的形象进度：{named['progress']}" if named.get("progress") else "形象进度待填。")
+            lines.append(f"今日作业位置：{site}。未给完成率不计算；用户记录未核验。")
         elif i == 5:
             lines.append(labor)
         elif i == 6:
-            lines.append("机、料无过磅单不编吨数。无盘点不编盈亏。数量 TBD。")
+            lines.append(f"用户提供的机械材料记事：{named['resources']}" if named.get("resources") else "机械材料记事待填。数量 TBD。")
+            lines.append("未给过磅和盘点资料不推算吨数或盈亏；记录状态不视为验收合格。")
         elif i == 7:
-            lines.append("用户未提供巡查事实则本栏不编。隐患未改就写未改。不签发合格。班前是否开过只摘事实。")
+            if named.get("hse"):
+                lines.append(f"用户提供的安全质量记事：{named['hse']}")
+            else:
+                lines.append("安全质量记事待填。用户未提供巡查事实则本栏不编。")
+            lines.append("隐患未改就写未改。不签发合格。班前是否开过只摘事实。")
         else:
+            if named.get("tomorrow"):
+                lines.append(f"用户提供的明日计划：{named['tomorrow']}")
+            else:
+                lines.append("明日计划待填。")
             lines.append("继续哪段视书面交底与现场防护。条件未知不编全面铺开。本稿不下开工结论。")
         lines.append("")
-    lines.append("[A001] 天气无记录则待填。出勤无点名则待填。形象不写百分比。本稿不是监理日志。")
+    lines.append("[A001] 天气无记录则待填。出勤无点名则待填。未给完成率不推算百分比。本稿不是监理日志。")
     if zone in ("SG", "DUAL"):
         lines.append("SG：BCA Construction site records / site record book 只写标题。本岗不是这份法定现场簿。")
     if zone in ("CN", "DUAL"):
@@ -3417,20 +3496,6 @@ def _pm_daily_md(text: str) -> str:
 
 
 def _hr_zone(blob: str) -> str:
-    t = blob or ""
-    if "DUAL" in t:
-        return "DUAL"
-    if any(
-        k in t
-        for k in (
-            "劳动合同法",
-            "就业促进法",
-            "住建部",
-            "人力资源市场",
-            "JGJ",
-        )
-    ):
-        return "CN"
     return _mix_zone(blob)
 
 
@@ -3599,13 +3664,15 @@ def _dispatch_daily_md(text: str) -> str:
     return "\n".join(lines)
 
 
-def _try_fill_scheme_docx(out_dir: Path, project: str) -> Dict[str, Any]:
+def _try_fill_scheme_docx(out_dir: Path, project: str, jurisdiction: str = "UNSPECIFIED") -> Dict[str, Any]:
     """T005: attempt skill fill_scheme_docx; fail → docx_pending."""
     scripts = _ROOT / "skills" / "civil-buddy" / "scripts"
     fill_py = scripts / "fill_scheme_template.py"
     scan_py = scripts / "scan_forbidden_inventions.py"
     template = _ROOT / "skills" / "civil-buddy" / "references" / "templates" / "scheme-cn-a4.docx"
     draft = out_dir / "construction__scheme_draft.md"
+    if jurisdiction not in {"CN", "SG", "EU", "DUAL"}:
+        return {"docx_pending": True, "reason": "辖区未提供，Word 模板待确认辖区后填充"}
     if not fill_py.is_file() or not template.is_file() or not draft.is_file():
         return {"docx_pending": True}
     assumptions = out_dir / "assumptions.md"
@@ -3630,7 +3697,7 @@ def _try_fill_scheme_docx(out_dir: Path, project: str) -> Dict[str, Any]:
         "--citations",
         str(citations),
         "--jurisdiction",
-        "SG",
+        jurisdiction,
         "--stamp",
         "AI-DRAFT",
         "--project-name",
@@ -3665,7 +3732,7 @@ def _try_fill_scheme_docx(out_dir: Path, project: str) -> Dict[str, Any]:
                     "--citations",
                     str(citations),
                     "--jurisdiction",
-                    "SG",
+                    jurisdiction,
                 ],
                 capture_output=True,
                 text=True,
@@ -3689,7 +3756,7 @@ def _construction_eleven(text: str) -> str:
         "",
         DISCLAIMER,
         "",
-        "不是法定专项方案，不是签认件。缺数 [A001]。条款 UNSPECIFIED。辖区：SG。",
+        f"不是法定专项方案，不是签认件。缺数 [A001]。条款 UNSPECIFIED。辖区：{_mix_zone(text)}。",
         "",
         "## 用户原文",
         "",
@@ -3767,17 +3834,18 @@ def _draft_markdown(expert: ExpertRec, tool: str, text: str) -> str:
         f"- 缺的数字 [A001] / UNSPECIFIED\n\n"
         f"## 用户原文\n\n{text.strip() or '（未提供）'}\n\n"
         f"## 草稿\n\n按本岗独有工具出内部讨论提纲。规范只写全名，条款 UNSPECIFIED。"
-        f"不是签认件，不判定可投标，不判定可以开工。\n"
+        f"不是签认件，不作为投标或开工依据。\n"
     )
 
 
 def _attach_office(out: Dict[str, Any]) -> Dict[str, Any]:
-    """After a successful md write, also drop Excel into the authorized job folder."""
+    """Export real Word/Excel files and keep partial results if an export fails."""
     if not out.get("wrote"):
         return out
-    from packing_assistant.office_job import export_md_to_xlsx
+    from packing_assistant.office_job import export_md_to_docx, export_md_to_xlsx
 
     extra: List[Dict[str, str]] = []
+    errors = []
     for f in list(out.get("files") or []):
         p = Path(str(f.get("path") or ""))
         if p.suffix.lower() != ".md":
@@ -3785,20 +3853,59 @@ def _attach_office(out: Dict[str, Any]) -> Dict[str, Any]:
         try:
             for xp in export_md_to_xlsx(p):
                 extra.append({"name": xp.name, "path": str(xp), "tool": "office__xlsx"})
-        except (OSError, PermissionError, RuntimeError):
-            continue
+        except (OSError, RuntimeError, ValueError):
+            errors.append("Excel 导出失败")
+        try:
+            word = export_md_to_docx(p)
+            if word is not None:
+                extra.append({"name": word.name, "path": str(word), "tool": "office__docx"})
+        except (OSError, RuntimeError, ValueError):
+            errors.append("Word 导出失败")
     if extra:
         files = list(out.get("files") or [])
         files.extend(extra)
         out["files"] = files
         ran = list(out.get("tools_run") or [])
-        if "office__xlsx" not in ran:
-            ran.append("office__xlsx")
+        for item in extra:
+            if item["tool"] not in ran:
+                ran.append(item["tool"])
         out["tools_run"] = ran
         reply = str(out.get("reply") or "")
-        if "Excel" not in reply:
-            out["reply"] = (reply + " 已另存 Excel，可在作业根用 Excel 打开。").strip()
+        formats = [label for tool, label in (("office__docx", "Word"), ("office__xlsx", "Excel"))
+                   if any(item["tool"] == tool for item in extra)]
+        out["reply"] = (reply + " 已另存 " + "、".join(formats) + "，可下载编辑。").strip()
+    if errors:
+        out.update(ok=False, error_code="office_export_failed", export_errors=list(dict.fromkeys(errors)))
+        out["reply"] = str(out.get("reply") or "") + " " + "、".join(dict.fromkeys(errors)) + "；已生成的文件已保留，请检查目录权限后重试。"
     return out
+
+
+def _save_drafts(out_dir: Path, drafts: List[tuple[str, str]], reply: str) -> Dict[str, Any]:
+    """Validate all drafts before writing; report only artifacts actually saved."""
+    from packing_assistant.tools.tender_review import forbidden_hits
+
+    result: Dict[str, Any] = {
+        "wrote": False, "hitl_pending": False, "files": [], "tools_run": [],
+        "submit_blocked": True,
+    }
+    for _, markdown in drafts:
+        hits = forbidden_hits(markdown)
+        if hits:
+            return {**result, "ok": False, "error_code": "forbidden_content",
+                    "reply": "禁语扫描命中，未报成功：" + "、".join(hits)}
+    for tool, markdown in drafts:
+        path = out_dir / f"{tool}.md"
+        try:
+            guarded_write_text(path, markdown)
+        except (OSError, RuntimeError) as exc:
+            code = "permission_denied" if isinstance(exc, PermissionError) else "write_failed"
+            return {**result, "ok": False, "error_code": code,
+                    "reply": "草稿保存失败。已保存的文件保留供核对，请检查作业目录权限后重试。"}
+        result["files"].append({"name": path.name, "path": str(path), "tool": tool})
+        result["tools_run"].append(tool)
+        result["wrote"] = True
+    result["reply"] = reply
+    return result
 
 
 def _run_exclusive(
@@ -3809,15 +3916,57 @@ def _run_exclusive(
     session_id: str,
     packing_summary: Optional[Dict[str, Any]] = None,
 ) -> Dict[str, Any]:
-    return _attach_office(
+    from packing_assistant.office_job import job_files_blob
+    from packing_assistant.runtime.civil_config import high_risk_unconfirmed, load_config
+
+    extra = ""
+    if load_config().allow_write() and not high_risk_unconfirmed(risk=expert.risk, confirmed=confirm_ok):
+        extra = job_files_blob(text)
+    run_text = f"{text}\n\n{extra}".strip() if extra else text
+    result = _attach_office(
         _run_exclusive_body(
             expert,
-            text,
+            run_text,
             confirm_ok=confirm_ok,
             session_id=session_id,
             packing_summary=packing_summary,
         )
     )
+    if extra:
+        result["job_files"] = True
+    return result
+
+
+# All simple post writers use the same scan, save and export path.
+_SIMPLE_DRAFTS = {
+    'survey': (_survey_record_md, 'survey__record', '已出测量记录草稿。只抄已给点号。submit_blocked=true。'),
+    'dispatch': (_dispatch_daily_md, 'dispatch__daily', '已出调度日报草稿。敏感作业交 method-hazard。submit_blocked=true。'),
+    'variation': (_variation_form_md, 'variation__form', '已出变更签证草稿。金额 TBD。submit_blocked=true。'),
+    'claim': (_claim_notice_md, 'claim__notice', '已出索赔意向草稿。条款原文待贴。工期金额 TBD。submit_blocked=true。'),
+    'subcontract': (_subcontract_sheet_md, 'subcontract__sheet', '已出分包结算表头。无总包/业主确认金额 TBD。submit_blocked=true。'),
+    'interim': (_interim_measure_md, 'interim__measure', '已出验工计价草稿。监理审/业主核空栏。不编应付合价。submit_blocked=true。'),
+    'plan-master': (_plan_master_md, 'plan-master__network', '已出总控计划草稿。关键线路=待计算。submit_blocked=true。'),
+    'plan-lookahead': (_plan_lookahead_md, 'plan-lookahead__week', '已出四周滚动草稿。制约未清不得写入本周承诺。submit_blocked=true。'),
+    'plan-resource': (_plan_resource_md, 'plan-resource__peak', '已出资源负荷三表。数量待填。submit_blocked=true。'),
+    'lab-mix': (_lab_mix_md, 'lab-mix__report', '已出配比报告提纲。无试验数据不给施工配合比。submit_blocked=true。'),
+    'lab-sample': (_lab_sample_md, 'lab-sample__list', '已出取样送检清单。见证人空栏。组数 [A001]。submit_blocked=true。'),
+    'lab-record': (_lab_record_md, 'lab-record__ledger', '已出试验台账骨架。报告编号待核。结论待填。submit_blocked=true。'),
+    'supervision': (_supervision_md, 'supervision__reply', '已出监理通知回复草稿。暂停/复工只出目录。submit_blocked=true。'),
+    'safety-brief': (_safety_brief_md, 'safety-brief__talk', '已出安全交底草稿。毫米/电话 [A001]。submit_blocked=true。'),
+    'quality': (_quality_md, 'quality__lot', '已出质量检查表。主控/一般/隐蔽结果=未检。submit_blocked=true。'),
+    'env': (_env_md, 'env__list', '已出环保文明清单。五行限值 UNSPECIFIED。submit_blocked=true。'),
+    'emergency': (_emergency_md, 'emergency__plan', '已出应急预案提纲。电话医院待填。submit_blocked=true。'),
+    'equip': (_equip_md, 'equip__ledger', '已出设备台账。只抄用户设备名与已给证件。无证件不编进场结论。submit_blocked=true。'),
+    'warehouse': (_warehouse_md, 'warehouse__log', '已出收发存台账。有数只抄。无盘点不编盈亏。submit_blocked=true。'),
+    'material-site': (_material_site_md, 'material-site__recon', '已出材料核算表头。算不出节超则 TBD。submit_blocked=true。'),
+    'proc-plan': (_proc_plan_md, 'proc-plan__schedule', '已出采购计划表。先分甲供/甲指/自采。提前期 UNSPECIFIED。submit_blocked=true。'),
+    'proc-vendor': (_vendor_eval_md, 'proc-vendor__eval', '已出供方评价表头。准入/考察/短名单。分数结论待核。submit_blocked=true。'),
+    'finance-book': (_finance_book_md, 'finance-book__check', '已出核算检查表。报销勾选/科目对照/对账缺口。金额 [A001]。submit_blocked=true。'),
+    'finance-fund': (_fund_plan_md, 'finance-fund__plan', '已出资金计划草稿。收入/支出窗口。金额 TBD。不是付款指令。submit_blocked=true。'),
+    'worker-brief': (_worker_brief_md, 'worker-brief__talk', '已出班前白话稿。三段口播。无尺寸不报未给的尺寸。submit_blocked=true。'),
+    'pm-daily': (_pm_daily_md, 'pm-daily__log', '已出项目日报草稿。天气待填｜部位｜形象不写百分比｜出勤待填。不是监理日志。submit_blocked=true。'),
+    'hr-recruit': (_hr_recruit_md, 'hr-recruit__brief', '已出招聘简报。职责｜任职｜面试问法。薪资未给则待填。不是录用通知。submit_blocked=true。'),
+}
 
 
 def _run_exclusive_body(
@@ -3829,7 +3978,14 @@ def _run_exclusive_body(
     packing_summary: Optional[Dict[str, Any]] = None,
 ) -> Dict[str, Any]:
     tools = _write_tools(expert)
-    from packing_assistant.runtime.civil_config import high_risk_unconfirmed, hitl_reply
+    from packing_assistant.runtime.civil_config import high_risk_unconfirmed, hitl_reply, load_config
+
+    if not load_config().allow_write():
+        return {
+            "ok": False, "error_code": "permission_denied", "wrote": False,
+            "hitl_pending": False, "files": [], "tools_run": [], "submit_blocked": True,
+            "reply": "当前为只读模式，未生成业务文件。",
+        }
 
     if high_risk_unconfirmed(risk=expert.risk, confirmed=confirm_ok):
         return {
@@ -3989,35 +4145,39 @@ def _run_exclusive_body(
 
     if expert.id == "method-hazard":
         blob = text or ""
-        sg = "JGJ" not in blob and "37 号令" not in blob
+        zone = _mix_zone(blob)
         depth = "未提供"
         height = "未提供"
         md = (
             f"# 危大判定书（AI 草稿）\n\n{DISCLAIMER}\n\n"
-            f"- 辖区：{'SG' if sg else 'CN'}\n"
+            f"- 辖区：{zone}\n"
             f"- 作业名称：{blob[:80] or '未说明作业'}\n"
             f"- 触发词：临边 / 开挖 / 起重（仅当用户写了才勾）\n"
             f"- 是否危大：信息不足\n"
             f"- 是否可能超规模需论证：信息不足\n"
             f"- 高度 m：{height}\n- 开挖深度 m：{depth}\n"
         )
-        if sg:
+        if zone in {"SG", "DUAL"}:
             md += (
                 "- 依据：Workplace Safety and Health Act / WSH (Construction) Regulations 2007 PTW。"
-                "不套用中国危大工程规定。\n"
+                "需按对应辖区核实。\n"
                 "- 建议下一步：交施工方案专家出讨论提纲。本岗不签发 PTW。\n"
             )
-        else:
+        if zone in {"CN", "DUAL"}:
             md += (
                 "- 依据：住建部令第 37 号要点 + 用户尺寸（无尺寸则信息不足）。\n"
                 "- 建议下一步：交施工方案专家出讨论提纲。\n"
             )
+        if zone not in {"CN", "SG", "DUAL"}:
+            md += "- 依据：UNSPECIFIED，须补充项目辖区及适用文件后核实。\n"
         md += "\n本岗不签发、不给开工许可。条款 UNSPECIFIED。\n"
         from packing_assistant.tools.tender_review import forbidden_hits
 
         hits = forbidden_hits(md)
         if hits:
             return {
+                "ok": False,
+                "error_code": "forbidden_content",
                 "wrote": False,
                 "hitl_pending": False,
                 "files": [],
@@ -4039,593 +4199,17 @@ def _run_exclusive_body(
         }
 
     if expert.id == "finance-tax":
-        md = (
-            f"# 税务日历/检查表（AI 草稿）\n\n{DISCLAIMER}\n\n"
-            "| 税种 | 申报期 | 税额 |\n| --- | --- | --- |\n"
-            "| GST（SG） | （空栏，待按 IRAS F5 当期） | 待填 |\n"
-            "| 企业所得税 | （空栏） | 待填 |\n\n"
-            "IRAS Current GST rates 页述现行标准税率 **9%**。税额待持证办税人员算。"
-            "禁止把 7%/8% 写成现行税率。不是税务意见书。\n"
+        from packing_assistant.tax_context import draft_tax
+        return _save_drafts(
+            out_dir, [("finance-tax__calendar", draft_tax(text, DISCLAIMER))],
+            "已出税务日历草稿。未核验的辖区、税率及申报节点保持 UNSPECIFIED，税额待专业复核。submit_blocked=true。",
         )
-        path = out_dir / "finance-tax__calendar.md"
-        guarded_write_text(path, md)
-        files.append({"name": path.name, "path": str(path), "tool": "finance-tax__calendar"})
-        ran.append("finance-tax__calendar")
-        return {
-            "wrote": True,
-            "hitl_pending": False,
-            "files": files,
-            "tools_run": ran,
-            "reply": "已出税务日历草稿。页述 9%。税额待填。submit_blocked=true。",
-            "submit_blocked": True,
-        }
 
-    if expert.id == "survey":
-        md = _survey_record_md(text)
-        from packing_assistant.tools.tender_review import forbidden_hits
+    spec = _SIMPLE_DRAFTS.get(expert.id)
+    if spec is not None:
+        builder, tool, reply = spec
+        return _save_drafts(out_dir, [(tool, builder(text))], reply)
 
-        hits = forbidden_hits(md)
-        if hits:
-            return {
-                "wrote": False,
-                "hitl_pending": False,
-                "files": [],
-                "tools_run": [],
-                "reply": "禁语扫描命中，未报成功：" + "、".join(hits),
-                "submit_blocked": True,
-            }
-        path = out_dir / "survey__record.md"
-        guarded_write_text(path, md)
-        files.append({"name": path.name, "path": str(path), "tool": "survey__record"})
-        ran.append("survey__record")
-        return {
-            "wrote": True,
-            "hitl_pending": False,
-            "files": files,
-            "tools_run": ran,
-            "reply": "已出测量记录草稿。只抄已给点号。submit_blocked=true。",
-            "submit_blocked": True,
-        }
-
-    if expert.id == "dispatch":
-        md = _dispatch_daily_md(text)
-        from packing_assistant.tools.tender_review import forbidden_hits
-
-        hits = forbidden_hits(md)
-        if hits:
-            return {
-                "wrote": False,
-                "hitl_pending": False,
-                "files": [],
-                "tools_run": [],
-                "reply": "禁语扫描命中，未报成功：" + "、".join(hits),
-                "submit_blocked": True,
-            }
-        path = out_dir / "dispatch__daily.md"
-        guarded_write_text(path, md)
-        files.append({"name": path.name, "path": str(path), "tool": "dispatch__daily"})
-        ran.append("dispatch__daily")
-        return {
-            "wrote": True,
-            "hitl_pending": False,
-            "files": files,
-            "tools_run": ran,
-            "reply": "已出调度日报草稿。敏感作业交 method-hazard。submit_blocked=true。",
-            "submit_blocked": True,
-        }
-
-    if expert.id == "variation":
-        md = _variation_form_md(text)
-        from packing_assistant.tools.tender_review import forbidden_hits
-
-        hits = forbidden_hits(md)
-        if hits:
-            return {
-                "wrote": False,
-                "hitl_pending": False,
-                "files": [],
-                "tools_run": [],
-                "reply": "禁语扫描命中，未报成功：" + "、".join(hits),
-                "submit_blocked": True,
-            }
-        path = out_dir / "variation__form.md"
-        guarded_write_text(path, md)
-        files.append({"name": path.name, "path": str(path), "tool": "variation__form"})
-        ran.append("variation__form")
-        return {
-            "wrote": True,
-            "hitl_pending": False,
-            "files": files,
-            "tools_run": ran,
-            "reply": "已出变更签证草稿。金额 TBD。submit_blocked=true。",
-            "submit_blocked": True,
-        }
-
-    if expert.id == "claim":
-        md = _claim_notice_md(text)
-        from packing_assistant.tools.tender_review import forbidden_hits
-
-        hits = forbidden_hits(md)
-        if hits:
-            return {
-                "wrote": False,
-                "hitl_pending": False,
-                "files": [],
-                "tools_run": [],
-                "reply": "禁语扫描命中，未报成功：" + "、".join(hits),
-                "submit_blocked": True,
-            }
-        path = out_dir / "claim__notice.md"
-        guarded_write_text(path, md)
-        files.append({"name": path.name, "path": str(path), "tool": "claim__notice"})
-        ran.append("claim__notice")
-        return {
-            "wrote": True,
-            "hitl_pending": False,
-            "files": files,
-            "tools_run": ran,
-            "reply": "已出索赔意向草稿。条款原文待贴。工期金额 TBD。submit_blocked=true。",
-            "submit_blocked": True,
-        }
-
-    if expert.id == "subcontract":
-        md = _subcontract_sheet_md(text)
-        from packing_assistant.tools.tender_review import forbidden_hits
-
-        hits = forbidden_hits(md)
-        if hits:
-            return {
-                "wrote": False,
-                "hitl_pending": False,
-                "files": [],
-                "tools_run": [],
-                "reply": "禁语扫描命中，未报成功：" + "、".join(hits),
-                "submit_blocked": True,
-            }
-        path = out_dir / "subcontract__sheet.md"
-        guarded_write_text(path, md)
-        files.append({"name": path.name, "path": str(path), "tool": "subcontract__sheet"})
-        ran.append("subcontract__sheet")
-        return {
-            "wrote": True,
-            "hitl_pending": False,
-            "files": files,
-            "tools_run": ran,
-            "reply": "已出分包结算表头。无总包/业主确认金额 TBD。submit_blocked=true。",
-            "submit_blocked": True,
-        }
-
-    if expert.id == "interim":
-        md = _interim_measure_md(text)
-        from packing_assistant.tools.tender_review import forbidden_hits
-
-        hits = forbidden_hits(md)
-        if hits:
-            return {
-                "wrote": False,
-                "hitl_pending": False,
-                "files": [],
-                "tools_run": [],
-                "reply": "禁语扫描命中，未报成功：" + "、".join(hits),
-                "submit_blocked": True,
-            }
-        path = out_dir / "interim__measure.md"
-        guarded_write_text(path, md)
-        files.append({"name": path.name, "path": str(path), "tool": "interim__measure"})
-        ran.append("interim__measure")
-        return {
-            "wrote": True,
-            "hitl_pending": False,
-            "files": files,
-            "tools_run": ran,
-            "reply": "已出验工计价草稿。监理审/业主核空栏。不编应付合价。submit_blocked=true。",
-            "submit_blocked": True,
-        }
-
-    if expert.id == "plan-master":
-        md = _plan_master_md(text)
-        from packing_assistant.tools.tender_review import forbidden_hits
-
-        hits = forbidden_hits(md)
-        if hits:
-            return {
-                "wrote": False,
-                "hitl_pending": False,
-                "files": [],
-                "tools_run": [],
-                "reply": "禁语扫描命中，未报成功：" + "、".join(hits),
-                "submit_blocked": True,
-            }
-        path = out_dir / "plan-master__network.md"
-        guarded_write_text(path, md)
-        files.append({"name": path.name, "path": str(path), "tool": "plan-master__network"})
-        ran.append("plan-master__network")
-        return {
-            "wrote": True,
-            "hitl_pending": False,
-            "files": files,
-            "tools_run": ran,
-            "reply": "已出总控计划草稿。关键线路=待计算。submit_blocked=true。",
-            "submit_blocked": True,
-        }
-
-    if expert.id == "plan-lookahead":
-        md = _plan_lookahead_md(text)
-        from packing_assistant.tools.tender_review import forbidden_hits
-
-        hits = forbidden_hits(md)
-        if hits:
-            return {
-                "wrote": False,
-                "hitl_pending": False,
-                "files": [],
-                "tools_run": [],
-                "reply": "禁语扫描命中，未报成功：" + "、".join(hits),
-                "submit_blocked": True,
-            }
-        path = out_dir / "plan-lookahead__week.md"
-        guarded_write_text(path, md)
-        files.append({"name": path.name, "path": str(path), "tool": "plan-lookahead__week"})
-        ran.append("plan-lookahead__week")
-        return {
-            "wrote": True,
-            "hitl_pending": False,
-            "files": files,
-            "tools_run": ran,
-            "reply": "已出四周滚动草稿。制约未清不得写入本周承诺。submit_blocked=true。",
-            "submit_blocked": True,
-        }
-
-    if expert.id == "plan-resource":
-        md = _plan_resource_md(text)
-        from packing_assistant.tools.tender_review import forbidden_hits
-
-        hits = forbidden_hits(md)
-        if hits:
-            return {
-                "wrote": False,
-                "hitl_pending": False,
-                "files": [],
-                "tools_run": [],
-                "reply": "禁语扫描命中，未报成功：" + "、".join(hits),
-                "submit_blocked": True,
-            }
-        path = out_dir / "plan-resource__peak.md"
-        guarded_write_text(path, md)
-        files.append({"name": path.name, "path": str(path), "tool": "plan-resource__peak"})
-        ran.append("plan-resource__peak")
-        return {
-            "wrote": True,
-            "hitl_pending": False,
-            "files": files,
-            "tools_run": ran,
-            "reply": "已出资源负荷三表。数量待填。submit_blocked=true。",
-            "submit_blocked": True,
-        }
-
-    if expert.id == "lab-mix":
-        md = _lab_mix_md(text)
-        from packing_assistant.tools.tender_review import forbidden_hits
-
-        hits = forbidden_hits(md)
-        if hits:
-            return {
-                "wrote": False,
-                "hitl_pending": False,
-                "files": [],
-                "tools_run": [],
-                "reply": "禁语扫描命中，未报成功：" + "、".join(hits),
-                "submit_blocked": True,
-            }
-        path = out_dir / "lab-mix__report.md"
-        guarded_write_text(path, md)
-        files.append({"name": path.name, "path": str(path), "tool": "lab-mix__report"})
-        ran.append("lab-mix__report")
-        return {
-            "wrote": True,
-            "hitl_pending": False,
-            "files": files,
-            "tools_run": ran,
-            "reply": "已出配比报告提纲。无试验数据不给施工配合比。submit_blocked=true。",
-            "submit_blocked": True,
-        }
-
-    if expert.id == "lab-sample":
-        md = _lab_sample_md(text)
-        from packing_assistant.tools.tender_review import forbidden_hits
-
-        hits = forbidden_hits(md)
-        if hits:
-            return {
-                "wrote": False,
-                "hitl_pending": False,
-                "files": [],
-                "tools_run": [],
-                "reply": "禁语扫描命中，未报成功：" + "、".join(hits),
-                "submit_blocked": True,
-            }
-        path = out_dir / "lab-sample__list.md"
-        guarded_write_text(path, md)
-        files.append({"name": path.name, "path": str(path), "tool": "lab-sample__list"})
-        ran.append("lab-sample__list")
-        return {
-            "wrote": True,
-            "hitl_pending": False,
-            "files": files,
-            "tools_run": ran,
-            "reply": "已出取样送检清单。见证人空栏。组数 [A001]。submit_blocked=true。",
-            "submit_blocked": True,
-        }
-
-    if expert.id == "lab-record":
-        md = _lab_record_md(text)
-        from packing_assistant.tools.tender_review import forbidden_hits
-
-        hits = forbidden_hits(md)
-        if hits:
-            return {
-                "wrote": False,
-                "hitl_pending": False,
-                "files": [],
-                "tools_run": [],
-                "reply": "禁语扫描命中，未报成功：" + "、".join(hits),
-                "submit_blocked": True,
-            }
-        path = out_dir / "lab-record__ledger.md"
-        guarded_write_text(path, md)
-        files.append({"name": path.name, "path": str(path), "tool": "lab-record__ledger"})
-        ran.append("lab-record__ledger")
-        return {
-            "wrote": True,
-            "hitl_pending": False,
-            "files": files,
-            "tools_run": ran,
-            "reply": "已出试验台账骨架。报告编号待核。结论待填。submit_blocked=true。",
-            "submit_blocked": True,
-        }
-
-    if expert.id == "supervision":
-        md = _supervision_md(text)
-        from packing_assistant.tools.tender_review import forbidden_hits
-
-        hits = forbidden_hits(md)
-        if hits:
-            return {
-                "wrote": False,
-                "hitl_pending": False,
-                "files": [],
-                "tools_run": [],
-                "reply": "禁语扫描命中，未报成功：" + "、".join(hits),
-                "submit_blocked": True,
-            }
-        path = out_dir / "supervision__reply.md"
-        guarded_write_text(path, md)
-        files.append({"name": path.name, "path": str(path), "tool": "supervision__reply"})
-        ran.append("supervision__reply")
-        return {
-            "wrote": True,
-            "hitl_pending": False,
-            "files": files,
-            "tools_run": ran,
-            "reply": "已出监理通知回复草稿。暂停/复工只出目录。submit_blocked=true。",
-            "submit_blocked": True,
-        }
-
-    if expert.id == "safety-brief":
-        md = _safety_brief_md(text)
-        from packing_assistant.tools.tender_review import forbidden_hits
-
-        hits = forbidden_hits(md)
-        if hits:
-            return {
-                "wrote": False,
-                "hitl_pending": False,
-                "files": [],
-                "tools_run": [],
-                "reply": "禁语扫描命中，未报成功：" + "、".join(hits),
-                "submit_blocked": True,
-            }
-        path = out_dir / "safety-brief__talk.md"
-        guarded_write_text(path, md)
-        files.append({"name": path.name, "path": str(path), "tool": "safety-brief__talk"})
-        ran.append("safety-brief__talk")
-        return {
-            "wrote": True,
-            "hitl_pending": False,
-            "files": files,
-            "tools_run": ran,
-            "reply": "已出安全交底草稿。毫米/电话 [A001]。submit_blocked=true。",
-            "submit_blocked": True,
-        }
-
-    if expert.id == "quality":
-        md = _quality_md(text)
-        from packing_assistant.tools.tender_review import forbidden_hits
-
-        hits = forbidden_hits(md)
-        if hits:
-            return {
-                "wrote": False,
-                "hitl_pending": False,
-                "files": [],
-                "tools_run": [],
-                "reply": "禁语扫描命中，未报成功：" + "、".join(hits),
-                "submit_blocked": True,
-            }
-        path = out_dir / "quality__lot.md"
-        guarded_write_text(path, md)
-        files.append({"name": path.name, "path": str(path), "tool": "quality__lot"})
-        ran.append("quality__lot")
-        return {
-            "wrote": True,
-            "hitl_pending": False,
-            "files": files,
-            "tools_run": ran,
-            "reply": "已出质量检查表。主控/一般/隐蔽结果=未检。submit_blocked=true。",
-            "submit_blocked": True,
-        }
-
-    if expert.id == "env":
-        md = _env_md(text)
-        from packing_assistant.tools.tender_review import forbidden_hits
-
-        hits = forbidden_hits(md)
-        if hits:
-            return {
-                "wrote": False,
-                "hitl_pending": False,
-                "files": [],
-                "tools_run": [],
-                "reply": "禁语扫描命中，未报成功：" + "、".join(hits),
-                "submit_blocked": True,
-            }
-        path = out_dir / "env__list.md"
-        guarded_write_text(path, md)
-        files.append({"name": path.name, "path": str(path), "tool": "env__list"})
-        ran.append("env__list")
-        return {
-            "wrote": True,
-            "hitl_pending": False,
-            "files": files,
-            "tools_run": ran,
-            "reply": "已出环保文明清单。五行限值 UNSPECIFIED。submit_blocked=true。",
-            "submit_blocked": True,
-        }
-
-    if expert.id == "emergency":
-        md = _emergency_md(text)
-        from packing_assistant.tools.tender_review import forbidden_hits
-
-        hits = forbidden_hits(md)
-        if hits:
-            return {
-                "wrote": False,
-                "hitl_pending": False,
-                "files": [],
-                "tools_run": [],
-                "reply": "禁语扫描命中，未报成功：" + "、".join(hits),
-                "submit_blocked": True,
-            }
-        path = out_dir / "emergency__plan.md"
-        guarded_write_text(path, md)
-        files.append({"name": path.name, "path": str(path), "tool": "emergency__plan"})
-        ran.append("emergency__plan")
-        return {
-            "wrote": True,
-            "hitl_pending": False,
-            "files": files,
-            "tools_run": ran,
-            "reply": "已出应急预案提纲。电话医院待填。submit_blocked=true。",
-            "submit_blocked": True,
-        }
-
-    if expert.id == "equip":
-        md = _equip_md(text)
-        from packing_assistant.tools.tender_review import forbidden_hits
-
-        hits = forbidden_hits(md)
-        if hits:
-            return {
-                "wrote": False,
-                "hitl_pending": False,
-                "files": [],
-                "tools_run": [],
-                "reply": "禁语扫描命中，未报成功：" + "、".join(hits),
-                "submit_blocked": True,
-            }
-        path = out_dir / "equip__ledger.md"
-        guarded_write_text(path, md)
-        files.append({"name": path.name, "path": str(path), "tool": "equip__ledger"})
-        ran.append("equip__ledger")
-        return {
-            "wrote": True,
-            "hitl_pending": False,
-            "files": files,
-            "tools_run": ran,
-            "reply": "已出设备台账。只抄用户设备名与已给证件。无证件不编进场结论。submit_blocked=true。",
-            "submit_blocked": True,
-        }
-
-    if expert.id == "warehouse":
-        md = _warehouse_md(text)
-        from packing_assistant.tools.tender_review import forbidden_hits
-
-        hits = forbidden_hits(md)
-        if hits:
-            return {
-                "wrote": False,
-                "hitl_pending": False,
-                "files": [],
-                "tools_run": [],
-                "reply": "禁语扫描命中，未报成功：" + "、".join(hits),
-                "submit_blocked": True,
-            }
-        path = out_dir / "warehouse__log.md"
-        guarded_write_text(path, md)
-        files.append({"name": path.name, "path": str(path), "tool": "warehouse__log"})
-        ran.append("warehouse__log")
-        return {
-            "wrote": True,
-            "hitl_pending": False,
-            "files": files,
-            "tools_run": ran,
-            "reply": "已出收发存台账。有数只抄。无盘点不编盈亏。submit_blocked=true。",
-            "submit_blocked": True,
-        }
-
-    if expert.id == "material-site":
-        md = _material_site_md(text)
-        from packing_assistant.tools.tender_review import forbidden_hits
-
-        hits = forbidden_hits(md)
-        if hits:
-            return {
-                "wrote": False,
-                "hitl_pending": False,
-                "files": [],
-                "tools_run": [],
-                "reply": "禁语扫描命中，未报成功：" + "、".join(hits),
-                "submit_blocked": True,
-            }
-        path = out_dir / "material-site__recon.md"
-        guarded_write_text(path, md)
-        files.append({"name": path.name, "path": str(path), "tool": "material-site__recon"})
-        ran.append("material-site__recon")
-        return {
-            "wrote": True,
-            "hitl_pending": False,
-            "files": files,
-            "tools_run": ran,
-            "reply": "已出材料核算表头。算不出节超则 TBD。submit_blocked=true。",
-            "submit_blocked": True,
-        }
-
-    if expert.id == "proc-plan":
-        md = _proc_plan_md(text)
-        from packing_assistant.tools.tender_review import forbidden_hits
-
-        hits = forbidden_hits(md)
-        if hits:
-            return {
-                "wrote": False,
-                "hitl_pending": False,
-                "files": [],
-                "tools_run": [],
-                "reply": "禁语扫描命中，未报成功：" + "、".join(hits),
-                "submit_blocked": True,
-            }
-        path = out_dir / "proc-plan__schedule.md"
-        guarded_write_text(path, md)
-        files.append({"name": path.name, "path": str(path), "tool": "proc-plan__schedule"})
-        ran.append("proc-plan__schedule")
-        return {
-            "wrote": True,
-            "hitl_pending": False,
-            "files": files,
-            "tools_run": ran,
-            "reply": "已出采购计划表。先分甲供/甲指/自采。提前期 UNSPECIFIED。submit_blocked=true。",
-            "submit_blocked": True,
-        }
 
     if expert.id == "proc-compare":
         md = _compare_md(text)
@@ -4634,6 +4218,8 @@ def _run_exclusive_body(
         hits = forbidden_hits(md)
         if hits:
             return {
+                "ok": False,
+                "error_code": "forbidden_content",
                 "wrote": False,
                 "hitl_pending": False,
                 "files": [],
@@ -4649,6 +4235,8 @@ def _run_exclusive_body(
         ran.append("procurement__scan_forbidden")
         if post:
             return {
+                "ok": False,
+                "error_code": "forbidden_content",
                 "wrote": False,
                 "hitl_pending": False,
                 "files": files,
@@ -4665,167 +4253,6 @@ def _run_exclusive_body(
             "submit_blocked": True,
         }
 
-    if expert.id == "proc-vendor":
-        md = _vendor_eval_md(text)
-        from packing_assistant.tools.tender_review import forbidden_hits
-
-        hits = forbidden_hits(md)
-        if hits:
-            return {
-                "wrote": False,
-                "hitl_pending": False,
-                "files": [],
-                "tools_run": [],
-                "reply": "禁语扫描命中，未报成功：" + "、".join(hits),
-                "submit_blocked": True,
-            }
-        path = out_dir / "proc-vendor__eval.md"
-        guarded_write_text(path, md)
-        files.append({"name": path.name, "path": str(path), "tool": "proc-vendor__eval"})
-        ran.append("proc-vendor__eval")
-        return {
-            "wrote": True,
-            "hitl_pending": False,
-            "files": files,
-            "tools_run": ran,
-            "reply": "已出供方评价表头。准入/考察/短名单。分数结论待核。submit_blocked=true。",
-            "submit_blocked": True,
-        }
-
-    if expert.id == "finance-book":
-        md = _finance_book_md(text)
-        from packing_assistant.tools.tender_review import forbidden_hits
-
-        hits = forbidden_hits(md)
-        if hits:
-            return {
-                "wrote": False,
-                "hitl_pending": False,
-                "files": [],
-                "tools_run": [],
-                "reply": "禁语扫描命中，未报成功：" + "、".join(hits),
-                "submit_blocked": True,
-            }
-        path = out_dir / "finance-book__check.md"
-        guarded_write_text(path, md)
-        files.append({"name": path.name, "path": str(path), "tool": "finance-book__check"})
-        ran.append("finance-book__check")
-        return {
-            "wrote": True,
-            "hitl_pending": False,
-            "files": files,
-            "tools_run": ran,
-            "reply": "已出核算检查表。报销勾选/科目对照/对账缺口。金额 [A001]。submit_blocked=true。",
-            "submit_blocked": True,
-        }
-
-    if expert.id == "finance-fund":
-        md = _fund_plan_md(text)
-        from packing_assistant.tools.tender_review import forbidden_hits
-
-        hits = forbidden_hits(md)
-        if hits:
-            return {
-                "wrote": False,
-                "hitl_pending": False,
-                "files": [],
-                "tools_run": [],
-                "reply": "禁语扫描命中，未报成功：" + "、".join(hits),
-                "submit_blocked": True,
-            }
-        path = out_dir / "finance-fund__plan.md"
-        guarded_write_text(path, md)
-        files.append({"name": path.name, "path": str(path), "tool": "finance-fund__plan"})
-        ran.append("finance-fund__plan")
-        return {
-            "wrote": True,
-            "hitl_pending": False,
-            "files": files,
-            "tools_run": ran,
-            "reply": "已出资金计划草稿。收入/支出窗口。金额 TBD。不是付款指令。submit_blocked=true。",
-            "submit_blocked": True,
-        }
-
-    if expert.id == "worker-brief":
-        md = _worker_brief_md(text)
-        from packing_assistant.tools.tender_review import forbidden_hits
-
-        hits = forbidden_hits(md)
-        if hits:
-            return {
-                "wrote": False,
-                "hitl_pending": False,
-                "files": [],
-                "tools_run": [],
-                "reply": "禁语扫描命中，未报成功：" + "、".join(hits),
-                "submit_blocked": True,
-            }
-        path = out_dir / "worker-brief__talk.md"
-        guarded_write_text(path, md)
-        files.append({"name": path.name, "path": str(path), "tool": "worker-brief__talk"})
-        ran.append("worker-brief__talk")
-        return {
-            "wrote": True,
-            "hitl_pending": False,
-            "files": files,
-            "tools_run": ran,
-            "reply": "已出班前白话稿。三段口播。无尺寸不报未给的尺寸。submit_blocked=true。",
-            "submit_blocked": True,
-        }
-
-    if expert.id == "pm-daily":
-        md = _pm_daily_md(text)
-        from packing_assistant.tools.tender_review import forbidden_hits
-
-        hits = forbidden_hits(md)
-        if hits:
-            return {
-                "wrote": False,
-                "hitl_pending": False,
-                "files": [],
-                "tools_run": [],
-                "reply": "禁语扫描命中，未报成功：" + "、".join(hits),
-                "submit_blocked": True,
-            }
-        path = out_dir / "pm-daily__log.md"
-        guarded_write_text(path, md)
-        files.append({"name": path.name, "path": str(path), "tool": "pm-daily__log"})
-        ran.append("pm-daily__log")
-        return {
-            "wrote": True,
-            "hitl_pending": False,
-            "files": files,
-            "tools_run": ran,
-            "reply": "已出项目日报草稿。天气待填｜部位｜形象不写百分比｜出勤待填。不是监理日志。submit_blocked=true。",
-            "submit_blocked": True,
-        }
-
-    if expert.id == "hr-recruit":
-        md = _hr_recruit_md(text)
-        from packing_assistant.tools.tender_review import forbidden_hits
-
-        hits = forbidden_hits(md)
-        if hits:
-            return {
-                "wrote": False,
-                "hitl_pending": False,
-                "files": [],
-                "tools_run": [],
-                "reply": "禁语扫描命中，未报成功：" + "、".join(hits),
-                "submit_blocked": True,
-            }
-        path = out_dir / "hr-recruit__brief.md"
-        guarded_write_text(path, md)
-        files.append({"name": path.name, "path": str(path), "tool": "hr-recruit__brief"})
-        ran.append("hr-recruit__brief")
-        return {
-            "wrote": True,
-            "hitl_pending": False,
-            "files": files,
-            "tools_run": ran,
-            "reply": "已出招聘简报。职责｜任职｜面试问法。薪资未给则待填。不是录用通知。submit_blocked=true。",
-            "submit_blocked": True,
-        }
 
     if expert.id == "cost":
         md = (
@@ -4854,6 +4281,8 @@ def _run_exclusive_body(
         hits = forbidden_hits(md)
         if hits:
             return {
+                "ok": False,
+                "error_code": "forbidden_content",
                 "wrote": False,
                 "hitl_pending": False,
                 "files": [],
@@ -4866,7 +4295,7 @@ def _run_exclusive_body(
         guarded_write_text(path, md)
         files.append({"name": path.name, "path": str(path), "tool": "construction__scheme_draft"})
         ran.append("construction__scheme_draft")
-        fill = _try_fill_scheme_docx(out_dir, (text or "").strip()[:40] or "未命名工程")
+        fill = _try_fill_scheme_docx(out_dir, (text or "").strip()[:40] or "未命名工程", _mix_zone(text))
         pending = bool(fill.get("docx_pending", True))
         if fill.get("docx"):
             dp = Path(str(fill["docx"]))
@@ -4892,20 +4321,16 @@ def _run_exclusive_body(
 
     if not tools:
         tools = [f"{expert.id}__draft"]
+    from packing_assistant.post_drafts import build_draft
+
+    drafts = []
     for tool in tools:
-        md = _draft_markdown(expert, tool, text)
-        path = out_dir / f"{tool}.md"
-        guarded_write_text(path, md)
-        files.append({"name": path.name, "path": str(path), "tool": tool})
-        ran.append(tool)
-    return {
-        "wrote": True,
-        "hitl_pending": False,
-        "files": files,
-        "tools_run": ran,
-        "reply": f"{expert.name} 已出内部讨论草稿（{', '.join(ran)}）。不可递交。",
-        "submit_blocked": True,
-    }
+        md = build_draft(expert.id, tool, text)
+        drafts.append((tool, md if md is not None else _draft_markdown(expert, tool, text)))
+    return _save_drafts(
+        out_dir, drafts,
+        f"{expert.name} 已出内部讨论草稿（{', '.join(tools)}）。不可递交。",
+    )
 
 
 def run_named_exclusive(name: str, args: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
@@ -4976,7 +4401,10 @@ def run_named_exclusive(name: str, args: Optional[Dict[str, Any]] = None) -> Dic
     ):
         v = args.get(k)
         if v:
-            bits.append(str(v).strip())
+            label = {"site": "部位", "weather": "天气", "labor": "出勤", "attendance": "出勤"}.get(k)
+            bits.append(f"{label}：{str(v).strip()}" if exp.id == "pm-daily" and label else str(v).strip())
+    if args.get("jurisdiction"):
+        bits.append(f"辖区：{args['jurisdiction']}")
     if args.get("has_trial_data") is True:
         bits.append("已有试验数据")
     elif args.get("has_trial_data") is False:
@@ -4984,7 +4412,7 @@ def run_named_exclusive(name: str, args: Optional[Dict[str, Any]] = None) -> Dic
     return _run_exclusive(
         exp,
         "\n".join(b for b in bits if b),
-        confirm_ok=bool(args.get("confirm_ok") or args.get("p0_confirmed")),
+        confirm_ok=args.get("confirm_ok") is True or args.get("p0_confirmed") is True,
         session_id=str(args.get("session_id") or "tool"),
         packing_summary=args.get("packing_summary") if isinstance(args.get("packing_summary"), dict) else None,
     )
@@ -5015,10 +4443,18 @@ def run_expert_turn(
     from packing_assistant.runtime.memory import assemble_context, prompt_prefix
 
     ctx = assemble_context(sid, text=text, p0_confirmed=confirm_ok)
-    confirm_ok = bool(confirm_ok) or bool(ctx.get("p0_confirmed"))
+    confirm_ok = confirm_ok is True or ctx.get("p0_confirmed") is True
     ctx_prefix = prompt_prefix(ctx)
     sched = get_scheduler()
     run = sched.create_run(sid, expert_id=exp.id, intent=intent)
+    if run.error_code == "session_busy":
+        return {
+            "ok": False, "schema": "civil.expert_turn.v1", "intent": intent,
+            "expert_id": exp.id, "session_id": sid, "run_id": run.run_id,
+            "state": run.state, "error_code": "session_busy", "wrote": False,
+            "hitl_pending": False, "files": [], "tools_run": [], "submit_blocked": True,
+            "reply": "当前任务仍在执行，请等待完成后重试。",
+        }
     sched.transition(run, "planning")
     base: Dict[str, Any] = {
         "ok": True,
@@ -5048,40 +4484,38 @@ def run_expert_turn(
             "has_packing": ctx.get("has_packing"),
         },
     }
-    if intent == "chat":
-        sched.transition(run, "done")
-        sched.release(sid)
-        body = explain_expert(exp, text)
-        base["reply"] = f"{ctx_prefix}\n{body}".strip() if ctx_prefix else body
-        base["state"] = run.state
-        return base
-    from packing_assistant.office_job import job_files_blob
-
-    extra = job_files_blob(text)
-    run_text = f"{text}\n\n{extra}".strip() if extra else text
-    if extra:
-        base["job_files"] = True
-    ran = _run_exclusive(
-        exp, run_text, confirm_ok=confirm_ok, session_id=sid, packing_summary=packing_summary
-    )
-    if ran.get("hitl_pending"):
-        sched.transition(run, "waiting_hitl")
-    else:
-        sched.transition(run, "acting")
-        if run.cancelled:
-            ran["wrote"] = False
-            ran["files"] = []
-            ran["reply"] = "run cancelled"
-        else:
+    try:
+        if intent == "chat":
+            body = explain_expert(exp, text, previous_jurisdiction=str(ctx.get("jurisdiction") or ""))
+            base["reply"] = f"{ctx_prefix}\n{body}".strip() if ctx_prefix else body
             sched.transition(run, "done")
-    sched.release(sid)
-    if intent == "both" and not ran.get("hitl_pending"):
-        explained = explain_expert(exp, text)
-        if ctx_prefix:
-            explained = f"{ctx_prefix}\n{explained}"
-        ran["reply"] = explained + "\n\n" + str(ran.get("reply") or "")
-    base.update(ran)
-    base["session_id"] = sid
-    base["run_id"] = run.run_id
+        else:
+            ran = _run_exclusive(
+                exp, text, confirm_ok=confirm_ok, session_id=sid, packing_summary=packing_summary
+            )
+            base.update(ran)
+            if ran.get("hitl_pending"):
+                sched.transition(run, "waiting_hitl")
+            elif ran.get("ok") is False:
+                run.error_code = str(ran.get("error_code") or "tool_failed")
+                sched.transition(run, "failed")
+            elif run.cancelled:
+                base.update(ok=False, error_code="cancelled", reply="任务已取消，已保存的文件保留供核对。")
+            else:
+                sched.transition(run, "acting")
+                sched.transition(run, "done")
+            if intent == "both" and run.state == "done":
+                explained = explain_expert(exp, text, previous_jurisdiction=str(ctx.get("jurisdiction") or ""))
+                if ctx_prefix:
+                    explained = f"{ctx_prefix}\n{explained}"
+                base["reply"] = explained + "\n\n" + str(ran.get("reply") or "")
+    except Exception:
+        run.error_code = "expert_failed"
+        if run.state not in {"done", "failed", "cancelled"}:
+            sched.transition(run, "failed")
+        base.update(ok=False, error_code=run.error_code,
+                    reply="岗位任务未完成，请检查输入与作业目录后重试。已保存的文件保留供核对。")
+    finally:
+        sched.release(sid)
     base["state"] = run.state
     return base

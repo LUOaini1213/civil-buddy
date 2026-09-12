@@ -1,15 +1,12 @@
-"""66-expert roster from seed + yibiao-map. No personality copies."""
+"""66-expert roster from the canonical seed; no duplicate tool ownership map."""
 
 from __future__ import annotations
 
-import json
 from dataclasses import dataclass
 from functools import lru_cache
-from pathlib import Path
 from typing import Any, Dict, List, Optional
 
-_ROOT = Path(__file__).resolve().parents[1]
-
+from packing_assistant.expert_capabilities import load_seed
 
 @dataclass(frozen=True)
 class ExpertRec:
@@ -41,13 +38,10 @@ class ExpertRec:
 
 @lru_cache(maxsize=1)
 def _load() -> List[ExpertRec]:
-    seed = json.loads((_ROOT / "workbench" / "seed.json").read_text(encoding="utf-8"))
-    yib = json.loads((_ROOT / "workbench" / "yibiao-map.json").read_text(encoding="utf-8"))
-    ymap = {e["id"]: e for e in yib.get("experts") or []}
+    seed = load_seed()
     cats = {c["id"]: c.get("name") or c["id"] for c in seed.get("categories") or []}
     out: List[ExpertRec] = []
     for e in seed.get("experts") or []:
-        ym = ymap.get(e["id"]) or {}
         out.append(
             ExpertRec(
                 id=e["id"],
@@ -58,8 +52,8 @@ def _load() -> List[ExpertRec]:
                 delivers=e.get("delivers") or "",
                 risk=e.get("risk") or "low",
                 aliases=tuple(e.get("aliases") or []),
-                exclusive=tuple(ym.get("exclusive") or []),
-                aligned=bool(ym.get("aligned", True)),
+                exclusive=tuple(e["exclusive"]),
+                aligned=bool(e["aligned"]),
             )
         )
     return out

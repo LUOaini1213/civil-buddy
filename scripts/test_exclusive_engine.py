@@ -55,7 +55,8 @@ def main() -> int:
     assert data.get("wrote") is True
     path = Path(data["files"][0]["path"])
     text = path.read_text(encoding="utf-8")
-    assert "9%" in text
+    assert "UNSPECIFIED" in text
+    assert "9%" not in text
     assert "可以开工" not in text
 
     hz = eng.execute(

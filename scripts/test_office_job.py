@@ -44,6 +44,10 @@ def main() -> int:
     assert sheets[0][0] == "6 报销勾选"
     assert sheets[0][1][0] == ["检查项", "本稿"]
     assert ["发票查验", "待核"] in sheets[0][1]
+    compact = tables_from_md("|编号|系统|数量|\n|---|---|---|\n||系统B||\n|A||\n|||\n")
+    assert compact[0][1] == [
+        ["编号", "系统", "数量"], ["", "系统B", ""], ["A", ""], ["", ""]
+    ], compact
 
     src = job / "finance-book__check.md"
     src.write_text(md, encoding="utf-8")

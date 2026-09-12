@@ -481,10 +481,11 @@ class Storage:
             )
             self.write_conn.commit()
 
-    def read_trace_events(self, run_id: str, *, limit: int = 5000) -> List[dict]:
+    def read_trace_events(self, run_id: str, *, limit: int | None = 5000) -> List[dict]:
+        """Read a bounded replay, or the complete trace for an explicit export."""
         rows = self._read_conn().execute(
             "SELECT payload_json FROM events WHERE run_id=? ORDER BY id LIMIT ?",
-            (str(run_id), max(1, int(limit))),
+            (str(run_id), -1 if limit is None else max(1, int(limit))),
         ).fetchall()
         out = []
         for (payload,) in rows:

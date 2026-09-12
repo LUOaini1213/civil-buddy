@@ -36,7 +36,7 @@ def main() -> int:
     assert "不准空转" in plan
     assert "T001" in plan and "T047" in plan
     assert "APPBCA-2026-12" in plan
-    assert "The current GST rate in Singapore is 9%" in plan or "9%" in plan
+    assert "GST" in plan and "IRAS" in plan
     assert (DOCS / "mcp-host.example.toml").is_file()
     host = (DOCS / "mcp-host.example.toml").read_text(encoding="utf-8")
     for pack in (

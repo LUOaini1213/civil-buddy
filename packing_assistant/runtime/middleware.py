@@ -81,9 +81,9 @@ def live_script() -> Dict[str, Any]:
     blob = str(order.get("reply") or "")
     for f in order.get("files") or []:
         p = Path(str((f or {}).get("path") or ""))
-        if p.is_file():
+        if p.is_file() and p.suffix.lower() in {".md", ".txt"}:
             blob += p.read_text(encoding="utf-8", errors="ignore")
-    order_gst9 = "9%" in blob
+    order_rate_unspecified = "UNSPECIFIED" in blob and "9%" not in blob
 
     eng = get_engine()
     cross = eng.execute(
@@ -144,7 +144,7 @@ def live_script() -> Dict[str, Any]:
                 or order.get("reason")
                 or "允许：finance-tax 出税务日历",
                 "wrote": order.get("wrote"),
-                "gst9": order_gst9,
+                "rate_unspecified": order_rate_unspecified,
                 "run_id": order.get("run_id"),
                 "files": len(order.get("files") or order.get("artifacts") or []),
             },
@@ -195,7 +195,7 @@ def demo_bundle() -> Dict[str, Any]:
         "happy": {
             "intent": "run",
             "wrote": order.get("wrote"),
-            "gst9": order.get("gst9"),
+            "rate_unspecified": order.get("rate_unspecified"),
             "run_id": order.get("run_id"),
             "middleware": {"chain": list(CHAIN)},
         },

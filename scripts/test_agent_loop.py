@@ -73,7 +73,8 @@ def main() -> int:
     assert chat["wrote"] is False
     assert chat["artifacts"] == []
     assert chat.get("matrix") is None
-    assert "9%" in (chat.get("reply") or "")
+    assert "UNSPECIFIED" in (chat.get("reply") or "")
+    assert "9%" not in (chat.get("reply") or "")
     assert "可以投标" not in (chat.get("reply") or "")
     assert chat.get("submit_blocked") is True
     assert chat.get("run_id")
@@ -96,7 +97,8 @@ def main() -> int:
     body = art.read_text(encoding="utf-8")
     assert "可以开工" not in body or "不判定可以开工" in body
     assert "finance-tax__calendar" in (tax.get("tools_used") or tax.get("tools_run") or [])
-    assert "9%" in body
+    assert "UNSPECIFIED" in body
+    assert "9%" not in body
 
     # Pack-ship disconnected: UNSPECIFIED, still through engine
     pack = run_agent(
@@ -145,7 +147,8 @@ def main() -> int:
     assert http_chat.status_code == 200, http_chat.text
     jc = http_chat.json()
     assert jc.get("intent") == "chat" and jc.get("wrote") is False
-    assert "9%" in (jc.get("reply") or "")
+    assert "UNSPECIFIED" in (jc.get("reply") or "")
+    assert "9%" not in (jc.get("reply") or "")
     assert jc.get("run_id")
     got = client.get(f"/api/runs/{jc['run_id']}")
     assert got.status_code == 200
@@ -251,7 +254,7 @@ def main() -> int:
     assert lj.get("ok") is True, lj.get("gates")
     ids = {n["id"] for n in lj.get("needles") or []}
     assert {
-        "gst-9",
+        "gst-source-title",
         "fire-code",
         "ctu-2014",
         "gebiz-not-scoring",

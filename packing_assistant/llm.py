@@ -5,7 +5,28 @@ from __future__ import annotations
 import json
 import os
 import re
+from threading import RLock
 from typing import Any, Dict, List, Optional
+
+_RUNTIME_LOCK = RLock()
+_RUNTIME_LLM: Optional[Dict[str, str]] = None
+
+
+def runtime_llm() -> Optional[Dict[str, str]]:
+    """A snapshot of the in-memory override; never persisted to session state."""
+    with _RUNTIME_LOCK:
+        return dict(_RUNTIME_LLM) if _RUNTIME_LLM is not None else None
+
+
+def set_runtime_llm(config: Optional[Dict[str, str]]) -> None:
+    """Replace the process override, or clear it to resume environment defaults."""
+    global _RUNTIME_LLM
+    if config is not None:
+        if any(not isinstance(config.get(name), str) for name in ("api_key", "base_url", "model")):
+            raise ValueError("模型配置字段必须为文本")
+        config = {name: config[name] for name in ("api_key", "base_url", "model")}
+    with _RUNTIME_LOCK:
+        _RUNTIME_LLM = config
 
 
 def _first(*names: str) -> str:
@@ -21,10 +42,14 @@ def llm_config() -> Dict[str, str]:
     OpenAI 兼容 Chat Completions。试用者自带 Key，不必 DeepSeek。
 
     优先级：
+    0) 工作台本次进程内的模型设置（不写盘）
     1) CIVIL_API_KEY + CIVIL_API_BASE + CIVIL_MODEL
     2) OPENAI_API_KEY / LLM_API_KEY + OPENAI_BASE_URL
     3) DEEPSEEK_API_KEY + 官方 base（仍可用）
     """
+    override = runtime_llm()
+    if override is not None:
+        return override
     api_key = _first("CIVIL_API_KEY", "OPENAI_API_KEY", "LLM_API_KEY", "DEEPSEEK_API_KEY")
     explicit_base = _first(
         "CIVIL_API_BASE", "OPENAI_BASE_URL", "LLM_BASE_URL", "DEEPSEEK_BASE_URL"

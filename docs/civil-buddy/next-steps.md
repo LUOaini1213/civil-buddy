@@ -1,8 +1,10 @@
-# 下一步（推仓后）
+# 产品完成流水与当前验收
+
+> 当前状态：**本地发布验收已完成，后续按用户试用反馈迭代**。本页编号是历史已做记录，不是新待办队列；权威状态见 [product-plan.md](product-plan.md) §7.2 / §11 / §15。设计 20 岗已按逐岗字段与 105 项回归完成；66 岗源码包已完成本地验收。
 
 对照 [github-directions-2026-08-17.md](github-directions-2026-08-17.md)。抽取并表（horizon B）已做，不再重开。
 
-## 下一刀（按这个顺序）
+## 已做流水（历史顺序）
 
 1. **招标文件进矩阵** ✅ 2026-08-17  
    粘贴 / 多节选 / `.txt` `.md` `.csv` `.docx` `.xlsx` → 同一套矩阵 + P0。表格按行抄进 `exact_text`。`POST /api/tender/parse`（`sections`）· `/parse/file` · `/parse/files`。扫描 PDF 仍拒绝。验收：`python scripts/test_tender_ingest.py`。
@@ -149,7 +151,7 @@
     `scripts/civil-buddy-desktop.ps1` 起本机工作台并用 Edge/Chrome `--app` 开窗口。不是腾讯桌面壳、不是 IM 遥控。禁止 `D:\layout`。主链头指针仍 **T039 pm-daily**。行业总判仍 **部分合格**。
 
 49. **T068 可下载试用** ✅ 2026-08-20  
-    仓库根 MIT LICENSE；工作台 OpenAI 兼容 Key（不必 DeepSeek）；`cargo build --release` 的 exe 打进 GitHub Release；一页 [给试用的人.md](../../给试用的人.md)（安装、填 Key、选作业根、点岗试「写一份」）。主链头指针仍 **T039 pm-daily**。行业总判仍 **部分合格**。
+    历史 T068 记录已由 2026-09-12 的 Python 源码分发包取代：MIT LICENSE、启动器与依赖安装、无 Key 本地起草；[给试用的人.md](../../给试用的人.md) 写明安装与使用边界。旧 Rust exe 不代表当前 Python 工作台；本轮未发布 GitHub Release。主链头指针仍 **T039 pm-daily**。行业总判仍 **部分合格**。
 
 50. **T039 pm-daily 一岗（T039 批次完）** ✅ 2026-08-20  
     pm-daily__log 出天气待填｜部位｜形象（不编百分比）｜出勤待填。不是监理日志、不是施工日志签认件。主链头指针改为 **T040**（hr-recruit 先）。T040–T047 不得一行勾完。行业总判仍 **部分合格**。
@@ -190,7 +192,43 @@
 62. **K4 66 岗内容闸** ✅ 2026-08-28  
     每岗 faq≥5、README 字段表、outline 缺数栏；`search_kb`/`list_kb` 命中本岗私库、不见兄弟私库。验收：`python scripts/test_kb_k4_depth.py`。K3 隔离一并收口。**不勾** 独有写盘，主链头指针仍 **T040 hr-labor**。不做 16 类 embedding 季更。行业总判仍 **部分合格**。
 
-平台内核见 [product-improvement-handbook.md](product-improvement-handbook.md)。岗独有写盘下一刀仍按 [post-horizon-2026-08-17.md](post-horizon-2026-08-17.md)。
+63. **T040 hr-labor** ✅ 2026-09-12：合同类型分表、多人记录隔离，补偿 [A001]；`test_hr_drafts.py`。
+64. **T040 hr-train** ✅ 2026-09-12：三层课题及签到空栏，用户资料进入真实 Excel；同上。
+65. **T041 admin-doc** ✅ 2026-09-12：请示、纪要、用印专用栏，逐条决议不借期限；`test_admin_drafts.py`。
+66. **T041 admin-office** ✅ 2026-09-12：场地、议程、与会、资料及后勤表，决定栏空；同上。
+67. **T042 it-ops** ✅ 2026-09-12：系统权限矩阵、升级路径、凭据不进稿；`test_it_drafts.py`。
+68. **T042 it-data** ✅ 2026-09-12：逐系统恢复目标、备份及演练记录；不宣称已执行；同上。
+69. **T042 it-app** ✅ 2026-09-12：角色、流程、功能、验收分条，过滤接口凭据；同上。
+70. **T043 bim-coord** ✅ 2026-09-12：模型、问题及提资接口独立记录，不假装碰撞扫描；`test_bim_drafts.py`。
+71. **T043 bim-qto** ✅ 2026-09-12：过滤/扣减/来源校核，用户数量明示才抄；同上。
+72. **T043 bim-deliver** ✅ 2026-09-12：LOD、命名、拆分、交付检查表，核验保持未知；同上。
+
+73. **T044 architecture** ✅ 2026-09-12：单体总平面、分区面积与功能、消防分区及疏散用户值、无障碍、竖向、节能和专业接口；缺面积、宽度不推算；`scripts/test_design_basic_drafts.py`。
+74. **T044 structure** ✅ 2026-09-12：单体体系、构件荷载与组合、材料、基础输入、抗震资料及复核清单；承载力、配筋和截面计算结果保持 UNSPECIFIED；`scripts/test_design_basic_drafts.py`。
+75. **T044 geotech** ✅ 2026-09-12：孔号与分层、c/φ/水位和来源、勘探试验、地基比选、监测及提资；孔层缺项不借值，不替正式勘察报告；`scripts/test_design_basic_drafts.py`。
+76. **T044 facade** ✅ 2026-09-12：幕墙体系、风压与分格、预埋后锚固、气密水密变位、防火防雷、加工检测和维护接口；不选厚度或签验收结论；`scripts/test_design_basic_drafts.py`。
+77. **T045 plumbing** ✅ 2026-09-12：系统水源/水压、市政接驳、室内出户及井标高、给排水分区、雨水回用、消防水资料；管径和选泵计算待核；`scripts/test_design_services_drafts.py`。
+78. **T045 hvac** ✅ 2026-09-12：室内外参数、逐时冷热负荷、风水系统、防排烟联锁、机房竖井与消声保温；主机、风管及排烟量不代算；`scripts/test_design_services_drafts.py`。
+79. **T045 electrical** ✅ 2026-09-12：市政电源、容量和负荷系数、变配电用户方案、照明、防雷接地、线路及消防/弱电接口；不选变压器或电缆；`scripts/test_design_services_drafts.py`。
+80. **T045 fire-protect** ✅ 2026-09-12：救援条件、防火分区、疏散避难、消防水、防排烟、报警联动、电气及报审目录；不作审图通过或放行结论；`scripts/test_design_services_drafts.py`。
+81. **T045 steel** ✅ 2026-09-12：构件体系与跨度、荷载、材料规格、螺栓焊缝、稳定支撑、防腐防火及加工安装接口；截面和连接计算未执行；`scripts/test_design_services_drafts.py`。
+82. **T046 landscape** ✅ 2026-09-12：软硬分区、竖向灌排、铺装及苗木规格数量、顶板覆土、室外设施和消防交通接口；未给苗木表不选规格；`scripts/test_design_specialties_drafts.py`。
+83. **T046 interior** ✅ 2026-09-12：房间地墙顶及隔墙、防水材料厚度上翻、防潮隔声、门窗五金、天花开洞和外窗收口；只抄用户样板资料；`scripts/test_design_specialties_drafts.py`。
+84. **T046 intel-weak** ✅ 2026-09-12：子系统范围、点数及品牌、桥架路由、点位关联、供电 UPS 接地与消防网络接口；不编品牌或布点；`scripts/test_design_specialties_drafts.py`。
+85. **T046 civil-defense** ✅ 2026-09-12：防护单元等级及平战功能、口部/设备归属、通风滤毒超压、给排水和转换接口；不互换 CN/SG 概念或代审图；`scripts/test_design_specialties_drafts.py`。
+86. **T046 hydraulic** ✅ 2026-09-12：水工对象、水文断面和地勘孔、堤防护岸、闸泵用户参数、导流度汛和观测；无水文地质不选尺寸或流量；`scripts/test_design_specialties_drafts.py`。
+87. **T047 port** ✅ 2026-09-12：泊位船型、水位波浪潮流、结构比选、前沿尺度、航道回旋水域、装卸堆场与水利接口；不计算桩长或靠船力；`scripts/test_design_infrastructure_drafts.py`。
+88. **T047 municipal** ✅ 2026-09-12：路段桩号、平纵横断、路面结构、排水标高、管线权属及导改接口；不拆算车道宽或选路面厚度；`scripts/test_design_infrastructure_drafts.py`。
+89. **T047 bridge** ✅ 2026-09-12：桥位跨径及桥型比较、上下部结构、支座桥面、水文通航抗震及施工接口；不锁最优桥型或计算钢束桩长；`scripts/test_design_infrastructure_drafts.py`。
+90. **T047 tunnel** ✅ 2026-09-12：用途净空、工法地层、开挖支护、防水接缝、监控量测、洞口及机电防灾接口；支护参数和监测阈值待核；`scripts/test_design_infrastructure_drafts.py`。
+91. **T047 traffic** ✅ 2026-09-12：交通影响/施工导改任务、调查来源与独立情景、组织及标志信号、仿真资料和指标；未运行仿真或优化配时；`scripts/test_design_infrastructure_drafts.py`。
+92. **T047 design-coord** ✅ 2026-09-12：图纸版本、会审问题、提资责任期限、变更记录、逐条决议和闭环证据；不代签发，不内置审批面积阈值；`scripts/test_design_infrastructure_drafts.py`。
+
+设计新增 20 岗均有各自章节、提资及缺项表，L2 为 66/66；设计四组 105 项回归及统一检查 40/40 通过，T044–T047 已逐岗认领完成。新稿规范引用来自用户资料、未核验，CN/SG/EU 依据与接口分栏；本轮不改变既有法规范事实或历史行业总判。
+
+平台内核见 [product-improvement-handbook.md](product-improvement-handbook.md)。当前主链状态按 [product-plan.md](product-plan.md) §11 / §15：**本地发布验收已完成，后续按用户试用反馈迭代**。0.5.0-preview 已基于 66 岗源码完成解压复验；尚未发布 GitHub Release。没有新设虚构任务号；延期项保持延期。
+
+93. **0.5.0-preview 本地发布验收** ✅ 2026-09-12：隔离依赖、解压模块来源、无 Key 聊天、66 岗起草、CSV/DOCX/XLSX 表格上传→实际 Markdown/Excel 下载与恢复、非法确认 HTTP 422、重启及进程清理通过。开发仓库验收入口 `scripts/smoke_workbench_release.py --all-experts`；zip 散列与 `acceptance.json` 另存包外，不宣称 GitHub 已发布。
 
 ## 有宿主再做
 

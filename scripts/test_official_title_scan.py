@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""T007/T008: GST 9% if a post writes GST; CORENET anti-example not current."""
+"""T007/T008: tax sources must be locatable; this does not certify tax rates."""
 
 from __future__ import annotations
 
@@ -21,13 +21,7 @@ def _gst_ok(text: str) -> bool:
     blob = _body(text)
     if "GST" not in blob and "gst" not in blob:
         return True
-    if "9%" not in blob:
-        return False
-    for line in blob.splitlines():
-        if "7%" in line or "8%" in line:
-            if not any(k in line for k in ("背景", "历史", "升档", "2023", "2024", "曾", "旧")):
-                return False
-    return True
+    return "IRAS" in blob or "iras.gov.sg" in text or "UNSPECIFIED" in blob
 
 
 def _corenet_ok(text: str) -> bool:
@@ -45,7 +39,7 @@ def _corenet_ok(text: str) -> bool:
 
 def main() -> int:
     company = COMPANY.read_text(encoding="utf-8")
-    assert "9%" in company and "APPBCA-2026-12" in company
+    assert "IRAS" in company and "Current GST rates" in company and "APPBCA-2026-12" in company
     fails: list[str] = []
     for path in KB.rglob("web-knowledge.md"):
         text = path.read_text(encoding="utf-8")
@@ -58,7 +52,7 @@ def main() -> int:
     if not _corenet_ok(portals):
         fails.append("T008 company/web-portals.md")
     assert not fails, "\n".join(fails)
-    print("PASS official_title_scan gst=9 corenet=appbca")
+    print("PASS official_title_scan gst=source_only corenet=appbca")
     return 0
 
 

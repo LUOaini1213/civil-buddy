@@ -1,11 +1,13 @@
 # 66 岗对照易标 / pack-agent 的长程规划（2026-08-17）
 
-> 已做/未做以全量规划书 [product-plan.md](product-plan.md) §7 / §15 为准。本文保留每岗「下一刀」原文；bid 三岗 handoff 与 construction 十一章 md **已经落地**，勿再当缺口。  
-> 2026-08-28：K4 岗库内容闸（faq≥5 / README 字段表 / `search_kb` 本岗命中）已对 **66/66** 收口，见 `scripts/test_kb_k4_depth.py`。本文「下一刀」仍指**独有写盘栏位**，不是再补四件套。
+> 当前税务工具已取消默认 9%：只记录用户明确资料和来源，未知税率为 `UNSPECIFIED`。以下税率记录属于历史背景，不能当作本轮核验结论。
 
-每岗一条。车道 = `lane-<大类>`（子代理分批，不是 16 份大类摘要冒充）。
+> 2026-09-12 更新：已做/未做以 [product-plan.md](product-plan.md) §7 / §15 为准；K4 内容闸已覆盖 66/66。
+> 本页保留 2026-08-17 的对照结构；设计 20 岗更新为实际专业栏位与测试证据，其余历史下一刀不得单独当成当前队列。
+
+每岗一条。车道 = `lane-<大类>`。设计岗新文书只整理用户明确给定的数字、规范名称和版本，全部未核验；未知辖区 UNSPECIFIED，DUAL 的依据与接口分别登记。历史 KB 的官方标题、版本或门槛不是新起草器自动填充的规则，不据此宣称法规范已复核。
 易标完成度 = parse → outline → qa → kb → write。pack-agent = 数字只抄 solver + list/plan/export + 断线 UNSPECIFIED。
-内部讨论草稿。不以可以投标、可以开工、中标率 +N% 为完成目标。本轮只规划，不实现缺口。
+内部讨论草稿。不以可以投标、可以开工、中标率 +N% 为完成目标。L2 专业文书不等于设计求解、IFC 检查或法定签认；L3 仍仅 pack-ship。
 
 ## 长程总序
 
@@ -13,8 +15,8 @@
 - 2. bid-parse / bid-compliance / bid-tech 与经营岗矩阵、再审共用同一 handoff。
 - 3. pack-ship 把真实 packing_summary 抄进 list/plan/export，断线 UNSPECIFIED。
 - 4. construction / method-hazard 高风险确认句后出讨论提纲，不写法定专项。
-- 5. 其余岗按大类补独有工具栏位（造价/计划/试验/财务/监理…），缺数不编。
-- 6. 有宿主后再做 kb:// 分页；扫描 PDF 仅可选 CLI，失败拒绝。
+- 5. T044–T047 的 20 岗已有逐岗专业文书；四组岗位回归见 product-plan §7.2，整体交付已通过本地解压验收。
+- 6. 本地发布验收已完成，后续按用户试用反馈迭代；未发布 GitHub Release。分页订阅等延期项不自动成为新主链。
 
 ## 覆盖
 
@@ -34,7 +36,7 @@
 - qa：已有 · bid__scan_forbidden
 - kb：已有 · 分层 KB + search_kb/read_kb（demo/kb）
 - write：已有 · 独有 bid-parse__extract；chat 不写盘
-- 下一刀：expert_turn 把 run_tender_pipeline 的 handoff 另存 tender.handoff.json，供后岗读；本岗 submit_blocked 仍 true。
+- 历史下一刀 / 保持边界：expert_turn 把 run_tender_pipeline 的 handoff 另存 tender.handoff.json，供后岗读；本岗 submit_blocked 仍 true。
 
 ### bid-compliance
 
@@ -47,7 +49,7 @@
 - qa：已有 · bid__scan_forbidden
 - kb：已有 · 分层 KB + search_kb/read_kb（demo/kb）
 - write：已有 · 独有 bid-compliance__gaps；chat 不写盘
-- 下一刀：expert_turn 专用 gaps：读 handoff 或重跑 pipeline，落盘三列已响应/未响应/招标未提供正文，不代判废标。
+- 历史下一刀 / 保持边界：expert_turn 专用 gaps：读 handoff 或重跑 pipeline，落盘三列已响应/未响应/招标未提供正文，不代判废标。
 
 ### bid-tech
 
@@ -60,7 +62,7 @@
 - qa：已有 · bid__scan_forbidden
 - kb：已有 · 分层 KB + search_kb/read_kb（demo/kb）
 - write：已有 · 独有 bid-tech__expand；chat 不写盘
-- 下一刀：expert_turn 读 scoring_points 调 build_tech_outline_from_handoff；无评分点不套上个项目目录。
+- 历史下一刀 / 保持边界：expert_turn 读 scoring_points 调 build_tech_outline_from_handoff；无评分点不套上个项目目录。
 
 
 ## 大类 `design` · 车道 `lane-design`
@@ -71,12 +73,13 @@
 - 子代理/车道：`lane-design`
 - 对照：yibiao
 - 独有：architecture__memo
-- parse：缺口 · 本岗不解析招标；用户原文进草稿，扫描 PDF 仍拒绝
-- outline：已有 · architecture__memo 提纲/说明
+- parse：已有 · 用户字段与附件表格按对象登记；扫描图像无 OCR 不读取，原始资料未核验
+- outline：已有 · 本专业章节、提资与缺项表；Markdown + Excel，未连接设计计算引擎
 - qa：已有 · design__scan_forbidden
 - kb：已有 · 分层 KB + search_kb/read_kb（demo/kb）
 - write：已有 · 独有 architecture__memo；chat 不写盘
-- 下一刀：architecture__memo 按 outline.md 一次写 10 章，面积/疏散 [A001]，文末只贴已核官方标题。
+- 专业实现与边界：已实现 T044 architecture：单体总平面、分区面积与功能、消防分区及疏散用户值、无障碍、竖向、节能和专业接口；缺面积、宽度不推算。依据仅抄用户资料、未核验；辖区与接口分栏。
+- 岗位回归：`scripts/test_design_basic_drafts.py`（给定/缺失输入、真实 Markdown/Excel、chat 与高风险门）
 
 ### structure
 
@@ -84,12 +87,13 @@
 - 子代理/车道：`lane-design`
 - 对照：yibiao
 - 独有：structure__calc_outline
-- parse：缺口 · 本岗不解析招标；用户原文进草稿，扫描 PDF 仍拒绝
-- outline：已有 · structure__calc_outline 提纲/说明
+- parse：已有 · 用户字段与附件表格按对象登记；扫描图像无 OCR 不读取，原始资料未核验
+- outline：已有 · 本专业章节、提资与缺项表；Markdown + Excel，未连接设计计算引擎
 - qa：已有 · design__scan_forbidden + 高风险确认句
 - kb：已有 · 分层 KB + search_kb/read_kb（demo/kb）
 - write：已有 · 独有 structure__calc_outline；chat 不写盘
-- 下一刀：structure__calc_outline 按大纲落十章 + qa 自检表；无地勘不定承载力。
+- 专业实现与边界：已实现 T044 structure：单体体系、构件荷载与组合、材料、基础输入、抗震资料及复核清单；承载力、配筋和截面计算结果保持 UNSPECIFIED。依据仅抄用户资料、未核验；辖区与接口分栏。
+- 岗位回归：`scripts/test_design_basic_drafts.py`（给定/缺失输入、真实 Markdown/Excel、chat 与高风险门）
 
 ### geotech
 
@@ -97,12 +101,13 @@
 - 子代理/车道：`lane-design`
 - 对照：yibiao
 - 独有：geotech__brief
-- parse：缺口 · 本岗不解析招标；用户原文进草稿，扫描 PDF 仍拒绝
-- outline：已有 · geotech__brief 提纲/说明
+- parse：已有 · 用户字段与附件表格按对象登记；扫描图像无 OCR 不读取，原始资料未核验
+- outline：已有 · 本专业章节、提资与缺项表；Markdown + Excel，未连接设计计算引擎
 - qa：已有 · design__scan_forbidden + 高风险确认句
 - kb：已有 · 分层 KB + search_kb/read_kb（demo/kb）
 - write：已有 · 独有 geotech__brief；chat 不写盘
-- 下一刀：geotech__brief 只抄用户 SI 分层/孔号；未出现的 c/φ、水位写未在原文检出。
+- 专业实现与边界：已实现 T044 geotech：孔号与分层、c/φ/水位和来源、勘探试验、地基比选、监测及提资；孔层缺项不借值，不替正式勘察报告。依据仅抄用户资料、未核验；辖区与接口分栏。
+- 岗位回归：`scripts/test_design_basic_drafts.py`（给定/缺失输入、真实 Markdown/Excel、chat 与高风险门）
 
 ### plumbing
 
@@ -110,12 +115,13 @@
 - 子代理/车道：`lane-design`
 - 对照：yibiao
 - 独有：plumbing__memo
-- parse：缺口 · 本岗不解析招标；用户原文进草稿，扫描 PDF 仍拒绝
-- outline：已有 · plumbing__memo 提纲/说明
+- parse：已有 · 用户字段与附件表格按对象登记；扫描图像无 OCR 不读取，原始资料未核验
+- outline：已有 · 本专业章节、提资与缺项表；Markdown + Excel，未连接设计计算引擎
 - qa：已有 · design__scan_forbidden
 - kb：已有 · 分层 KB + search_kb/read_kb（demo/kb）
 - write：已有 · 独有 plumbing__memo；chat 不写盘
-- 下一刀：plumbing__memo 按大纲落十章；管径/水压只抄用户资料，消防水量交消防岗。
+- 专业实现与边界：已实现 T045 plumbing：系统水源/水压、市政接驳、室内出户及井标高、给排水分区、雨水回用、消防水资料；管径和选泵计算待核。依据仅抄用户资料、未核验；辖区与接口分栏。
+- 岗位回归：`scripts/test_design_services_drafts.py`（给定/缺失输入、真实 Markdown/Excel、chat 与高风险门）
 
 ### hvac
 
@@ -123,12 +129,13 @@
 - 子代理/车道：`lane-design`
 - 对照：yibiao
 - 独有：hvac__memo
-- parse：缺口 · 本岗不解析招标；用户原文进草稿，扫描 PDF 仍拒绝
-- outline：已有 · hvac__memo 提纲/说明
+- parse：已有 · 用户字段与附件表格按对象登记；扫描图像无 OCR 不读取，原始资料未核验
+- outline：已有 · 本专业章节、提资与缺项表；Markdown + Excel，未连接设计计算引擎
 - qa：已有 · design__scan_forbidden
 - kb：已有 · 分层 KB + search_kb/read_kb（demo/kb）
 - write：已有 · 独有 hvac__memo；chat 不写盘
-- 下一刀：hvac__memo 按大纲扩写；无负荷则主机/风管/排烟量 [A001]。
+- 专业实现与边界：已实现 T045 hvac：室内外参数、逐时冷热负荷、风水系统、防排烟联锁、机房竖井与消声保温；主机、风管及排烟量不代算。依据仅抄用户资料、未核验；辖区与接口分栏。
+- 岗位回归：`scripts/test_design_services_drafts.py`（给定/缺失输入、真实 Markdown/Excel、chat 与高风险门）
 
 ### electrical
 
@@ -136,12 +143,13 @@
 - 子代理/车道：`lane-design`
 - 对照：yibiao
 - 独有：electrical__memo
-- parse：缺口 · 本岗不解析招标；用户原文进草稿，扫描 PDF 仍拒绝
-- outline：已有 · electrical__memo 提纲/说明
+- parse：已有 · 用户字段与附件表格按对象登记；扫描图像无 OCR 不读取，原始资料未核验
+- outline：已有 · 本专业章节、提资与缺项表；Markdown + Excel，未连接设计计算引擎
 - qa：已有 · design__scan_forbidden
 - kb：已有 · 分层 KB + search_kb/read_kb（demo/kb）
 - write：已有 · 独有 electrical__memo；chat 不写盘
-- 下一刀：electrical__memo 落供配电/应急/防雷/消防电源；弱电整节交 intel-weak。
+- 专业实现与边界：已实现 T045 electrical：市政电源、容量和负荷系数、变配电用户方案、照明、防雷接地、线路及消防/弱电接口；不选变压器或电缆。依据仅抄用户资料、未核验；辖区与接口分栏。
+- 岗位回归：`scripts/test_design_services_drafts.py`（给定/缺失输入、真实 Markdown/Excel、chat 与高风险门）
 
 ### fire-protect
 
@@ -149,12 +157,13 @@
 - 子代理/车道：`lane-design`
 - 对照：yibiao
 - 独有：fire-protect__brief
-- parse：缺口 · 本岗不解析招标；用户原文进草稿，扫描 PDF 仍拒绝
-- outline：已有 · fire-protect__brief 提纲/说明
+- parse：已有 · 用户字段与附件表格按对象登记；扫描图像无 OCR 不读取，原始资料未核验
+- outline：已有 · 本专业章节、提资与缺项表；Markdown + Excel，未连接设计计算引擎
 - qa：已有 · design__scan_forbidden + 高风险确认句
 - kb：已有 · 分层 KB + search_kb/read_kb（demo/kb）
 - write：已有 · 独有 fire-protect__brief；chat 不写盘
-- 下一刀：fire-protect__brief 按大纲写 11 章专篇目录；无来源限值，不替代审图。
+- 专业实现与边界：已实现 T045 fire-protect：救援条件、防火分区、疏散避难、消防水、防排烟、报警联动、电气及报审目录；不作审图通过或放行结论。依据仅抄用户资料、未核验；辖区与接口分栏。
+- 岗位回归：`scripts/test_design_services_drafts.py`（给定/缺失输入、真实 Markdown/Excel、chat 与高风险门）
 
 ### steel
 
@@ -162,12 +171,13 @@
 - 子代理/车道：`lane-design`
 - 对照：yibiao
 - 独有：steel__memo
-- parse：缺口 · 本岗不解析招标；用户原文进草稿，扫描 PDF 仍拒绝
-- outline：已有 · steel__memo 提纲/说明
+- parse：已有 · 用户字段与附件表格按对象登记；扫描图像无 OCR 不读取，原始资料未核验
+- outline：已有 · 本专业章节、提资与缺项表；Markdown + Excel，未连接设计计算引擎
 - qa：已有 · design__scan_forbidden + 高风险确认句
 - kb：已有 · 分层 KB + search_kb/read_kb（demo/kb）
 - write：已有 · 独有 steel__memo；chat 不写盘
-- 下一刀：steel__memo 按大纲落体系/材料/连接；无跨度荷载不写梁高螺栓焊缝。
+- 专业实现与边界：已实现 T045 steel：构件体系与跨度、荷载、材料规格、螺栓焊缝、稳定支撑、防腐防火及加工安装接口；截面和连接计算未执行。依据仅抄用户资料、未核验；辖区与接口分栏。
+- 岗位回归：`scripts/test_design_services_drafts.py`（给定/缺失输入、真实 Markdown/Excel、chat 与高风险门）
 
 ### landscape
 
@@ -175,12 +185,13 @@
 - 子代理/车道：`lane-design`
 - 对照：yibiao
 - 独有：landscape__memo
-- parse：缺口 · 本岗不解析招标；用户原文进草稿，扫描 PDF 仍拒绝
-- outline：已有 · landscape__memo 提纲/说明
+- parse：已有 · 用户字段与附件表格按对象登记；扫描图像无 OCR 不读取，原始资料未核验
+- outline：已有 · 本专业章节、提资与缺项表；Markdown + Excel，未连接设计计算引擎
 - qa：已有 · design__scan_forbidden
 - kb：已有 · 分层 KB + search_kb/read_kb（demo/kb）
 - write：已有 · 独有 landscape__memo；chat 不写盘
-- 下一刀：官方标题表锁定 Greenery 5.1；landscape__memo 只准抄表，胸径无苗木表则待填。
+- 专业实现与边界：已实现 T046 landscape：软硬分区、竖向灌排、铺装及苗木规格数量、顶板覆土、室外设施和消防交通接口；未给苗木表不选规格。依据仅抄用户资料、未核验；辖区与接口分栏。
+- 岗位回归：`scripts/test_design_specialties_drafts.py`（给定/缺失输入、真实 Markdown/Excel、chat 与高风险门）
 
 ### interior
 
@@ -188,12 +199,13 @@
 - 子代理/车道：`lane-design`
 - 对照：yibiao
 - 独有：interior__schedule
-- parse：缺口 · 本岗不解析招标；用户原文进草稿，扫描 PDF 仍拒绝
-- outline：部分 · run 出内部提纲骨架，未对照易标目录扩写器
+- parse：已有 · 用户字段与附件表格按对象登记；扫描图像无 OCR 不读取，原始资料未核验
+- outline：已有 · 本专业章节、提资与缺项表；Markdown + Excel，未连接设计计算引擎
 - qa：已有 · design__scan_forbidden
 - kb：已有 · 分层 KB + search_kb/read_kb（demo/kb）
 - write：已有 · 独有 interior__schedule；chat 不写盘
-- 下一刀：interior__schedule 收成房间×饰面界面表；无样板不编品牌。
+- 专业实现与边界：已实现 T046 interior：房间地墙顶及隔墙、防水材料厚度上翻、防潮隔声、门窗五金、天花开洞和外窗收口；只抄用户样板资料。依据仅抄用户资料、未核验；辖区与接口分栏。
+- 岗位回归：`scripts/test_design_specialties_drafts.py`（给定/缺失输入、真实 Markdown/Excel、chat 与高风险门）
 
 ### facade
 
@@ -201,12 +213,13 @@
 - 子代理/车道：`lane-design`
 - 对照：yibiao
 - 独有：facade__brief
-- parse：缺口 · 本岗不解析招标；用户原文进草稿，扫描 PDF 仍拒绝
-- outline：已有 · facade__brief 提纲/说明
+- parse：已有 · 用户字段与附件表格按对象登记；扫描图像无 OCR 不读取，原始资料未核验
+- outline：已有 · 本专业章节、提资与缺项表；Markdown + Excel，未连接设计计算引擎
 - qa：已有 · design__scan_forbidden + 高风险确认句
 - kb：已有 · 分层 KB + search_kb/read_kb（demo/kb）
 - write：已有 · 独有 facade__brief；chat 不写盘
-- 下一刀：facade__brief 按大纲落体系；无风压不写厚度；SG 稿禁 38 号/JGJ。
+- 专业实现与边界：已实现 T044 facade：幕墙体系、风压与分格、预埋后锚固、气密水密变位、防火防雷、加工检测和维护接口；不选厚度或签验收结论。依据仅抄用户资料、未核验；辖区与接口分栏。
+- 岗位回归：`scripts/test_design_basic_drafts.py`（给定/缺失输入、真实 Markdown/Excel、chat 与高风险门）
 
 ### intel-weak
 
@@ -214,12 +227,13 @@
 - 子代理/车道：`lane-design`
 - 对照：yibiao
 - 独有：intel-weak__memo
-- parse：缺口 · 本岗不解析招标；用户原文进草稿，扫描 PDF 仍拒绝
-- outline：已有 · intel-weak__memo 提纲/说明
+- parse：已有 · 用户字段与附件表格按对象登记；扫描图像无 OCR 不读取，原始资料未核验
+- outline：已有 · 本专业章节、提资与缺项表；Markdown + Excel，未连接设计计算引擎
 - qa：已有 · design__scan_forbidden
 - kb：已有 · 分层 KB + search_kb/read_kb（demo/kb）
 - write：已有 · 独有 intel-weak__memo；chat 不写盘
-- 下一刀：标题表锁定 COPIF 2018；2026 征求意见标非已生效；点数品牌待填。
+- 专业实现与边界：已实现 T046 intel-weak：子系统范围、点数及品牌、桥架路由、点位关联、供电 UPS 接地与消防网络接口；不编品牌或布点。依据仅抄用户资料、未核验；辖区与接口分栏。
+- 岗位回归：`scripts/test_design_specialties_drafts.py`（给定/缺失输入、真实 Markdown/Excel、chat 与高风险门）
 
 ### civil-defense
 
@@ -227,12 +241,13 @@
 - 子代理/车道：`lane-design`
 - 对照：yibiao
 - 独有：civil-defense__brief
-- parse：缺口 · 本岗不解析招标；用户原文进草稿，扫描 PDF 仍拒绝
-- outline：已有 · civil-defense__brief 提纲/说明
+- parse：已有 · 用户字段与附件表格按对象登记；扫描图像无 OCR 不读取，原始资料未核验
+- outline：已有 · 本专业章节、提资与缺项表；Markdown + Excel，未连接设计计算引擎
 - qa：已有 · design__scan_forbidden + 高风险确认句
 - kb：已有 · 分层 KB + search_kb/read_kb（demo/kb）
 - write：已有 · 独有 civil-defense__brief；chat 不写盘
-- 下一刀：成稿强制 SG/CN 分栏；SG 只抄 HS/SS 与 TRHS/THSS 标题，不写墙厚门樘。
+- 专业实现与边界：已实现 T046 civil-defense：防护单元等级及平战功能、口部/设备归属、通风滤毒超压、给排水和转换接口；不互换 CN/SG 概念或代审图。依据仅抄用户资料、未核验；辖区与接口分栏。
+- 岗位回归：`scripts/test_design_specialties_drafts.py`（给定/缺失输入、真实 Markdown/Excel、chat 与高风险门）
 
 ### hydraulic
 
@@ -240,12 +255,13 @@
 - 子代理/车道：`lane-design`
 - 对照：yibiao
 - 独有：hydraulic__outline
-- parse：缺口 · 本岗不解析招标；用户原文进草稿，扫描 PDF 仍拒绝
-- outline：已有 · hydraulic__outline 提纲/说明
+- parse：已有 · 用户字段与附件表格按对象登记；扫描图像无 OCR 不读取，原始资料未核验
+- outline：已有 · 本专业章节、提资与缺项表；Markdown + Excel，未连接设计计算引擎
 - qa：已有 · design__scan_forbidden + 高风险确认句
 - kb：已有 · 分层 KB + search_kb/read_kb（demo/kb）
 - write：已有 · 独有 hydraulic__outline；chat 不写盘
-- 下一刀：三本 PUB COP 带生效日；Coastal Protection 必须同时写 2028 生效。
+- 专业实现与边界：已实现 T046 hydraulic：水工对象、水文断面和地勘孔、堤防护岸、闸泵用户参数、导流度汛和观测；无水文地质不选尺寸或流量。依据仅抄用户资料、未核验；辖区与接口分栏。
+- 岗位回归：`scripts/test_design_specialties_drafts.py`（给定/缺失输入、真实 Markdown/Excel、chat 与高风险门）
 
 ### port
 
@@ -253,12 +269,13 @@
 - 子代理/车道：`lane-design`
 - 对照：yibiao
 - 独有：port__outline
-- parse：缺口 · 本岗不解析招标；用户原文进草稿，扫描 PDF 仍拒绝
-- outline：已有 · port__outline 提纲/说明
+- parse：已有 · 用户字段与附件表格按对象登记；扫描图像无 OCR 不读取，原始资料未核验
+- outline：已有 · 本专业章节、提资与缺项表；Markdown + Excel，未连接设计计算引擎
 - qa：已有 · design__scan_forbidden + 高风险确认句
 - kb：已有 · 分层 KB + search_kb/read_kb（demo/kb）
 - write：已有 · 独有 port__outline；chat 不写盘
-- 下一刀：CN/SG 分栏标题表；SG 稿无 JTS；无水位波浪不写桩长。
+- 专业实现与边界：已实现 T047 port：泊位船型、水位波浪潮流、结构比选、前沿尺度、航道回旋水域、装卸堆场与水利接口；不计算桩长或靠船力。依据仅抄用户资料、未核验；辖区与接口分栏。
+- 岗位回归：`scripts/test_design_infrastructure_drafts.py`（给定/缺失输入、真实 Markdown/Excel、chat 与高风险门）
 
 ### municipal
 
@@ -266,12 +283,13 @@
 - 子代理/车道：`lane-design`
 - 对照：yibiao
 - 独有：municipal__memo
-- parse：缺口 · 本岗不解析招标；用户原文进草稿，扫描 PDF 仍拒绝
-- outline：已有 · municipal__memo 提纲/说明
+- parse：已有 · 用户字段与附件表格按对象登记；扫描图像无 OCR 不读取，原始资料未核验
+- outline：已有 · 本专业章节、提资与缺项表；Markdown + Excel，未连接设计计算引擎
 - qa：已有 · design__scan_forbidden
 - kb：已有 · 分层 KB + search_kb/read_kb（demo/kb）
 - write：已有 · 独有 municipal__memo；chat 不写盘
-- 下一刀：municipal__memo 灌 principles.md；只抄 CDC A3 / SDRE Rev I 标题。
+- 专业实现与边界：已实现 T047 municipal：路段桩号、平纵横断、路面结构、排水标高、管线权属及导改接口；不拆算车道宽或选路面厚度。依据仅抄用户资料、未核验；辖区与接口分栏。
+- 岗位回归：`scripts/test_design_infrastructure_drafts.py`（给定/缺失输入、真实 Markdown/Excel、chat 与高风险门）
 
 ### bridge
 
@@ -279,12 +297,13 @@
 - 子代理/车道：`lane-design`
 - 对照：yibiao
 - 独有：bridge__outline
-- parse：缺口 · 本岗不解析招标；用户原文进草稿，扫描 PDF 仍拒绝
-- outline：已有 · bridge__outline 提纲/说明
+- parse：已有 · 用户字段与附件表格按对象登记；扫描图像无 OCR 不读取，原始资料未核验
+- outline：已有 · 本专业章节、提资与缺项表；Markdown + Excel，未连接设计计算引擎
 - qa：已有 · design__scan_forbidden + 高风险确认句
 - kb：已有 · 分层 KB + search_kb/read_kb（demo/kb）
 - write：已有 · 独有 bridge__outline；chat 不写盘
-- 下一刀：bridge__outline 比选不锁定最优；无跨径则梁高钢束失败。
+- 专业实现与边界：已实现 T047 bridge：桥位跨径及桥型比较、上下部结构、支座桥面、水文通航抗震及施工接口；不锁最优桥型或计算钢束桩长。依据仅抄用户资料、未核验；辖区与接口分栏。
+- 岗位回归：`scripts/test_design_infrastructure_drafts.py`（给定/缺失输入、真实 Markdown/Excel、chat 与高风险门）
 
 ### tunnel
 
@@ -292,12 +311,13 @@
 - 子代理/车道：`lane-design`
 - 对照：yibiao
 - 独有：tunnel__outline
-- parse：缺口 · 本岗不解析招标；用户原文进草稿，扫描 PDF 仍拒绝
-- outline：已有 · tunnel__outline 提纲/说明
+- parse：已有 · 用户字段与附件表格按对象登记；扫描图像无 OCR 不读取，原始资料未核验
+- outline：已有 · 本专业章节、提资与缺项表；Markdown + Excel，未连接设计计算引擎
 - qa：已有 · design__scan_forbidden + 高风险确认句
 - kb：已有 · 分层 KB + search_kb/read_kb（demo/kb）
 - write：已有 · 独有 tunnel__outline；chat 不写盘
-- 下一刀：按用户工法分节；无地质不写支护参数；防火标题公路/轨交/房建不混。
+- 专业实现与边界：已实现 T047 tunnel：用途净空、工法地层、开挖支护、防水接缝、监控量测、洞口及机电防灾接口；支护参数和监测阈值待核。依据仅抄用户资料、未核验；辖区与接口分栏。
+- 岗位回归：`scripts/test_design_infrastructure_drafts.py`（给定/缺失输入、真实 Markdown/Excel、chat 与高风险门）
 
 ### traffic
 
@@ -305,12 +325,13 @@
 - 子代理/车道：`lane-design`
 - 对照：yibiao
 - 独有：traffic__skeleton
-- parse：缺口 · 本岗不解析招标；用户原文进草稿，扫描 PDF 仍拒绝
-- outline：部分 · run 出内部提纲骨架，未对照易标目录扩写器
+- parse：已有 · 用户字段与附件表格按对象登记；扫描图像无 OCR 不读取，原始资料未核验
+- outline：已有 · 本专业章节、提资与缺项表；Markdown + Excel，未连接设计计算引擎
 - qa：已有 · design__scan_forbidden
 - kb：已有 · 分层 KB + search_kb/read_kb（demo/kb）
 - write：已有 · 独有 traffic__skeleton；chat 不写盘
-- 下一刀：traffic__skeleton 先选建成后 TIA 或施工导改；无流量不写饱和度。
+- 专业实现与边界：已实现 T047 traffic：交通影响/施工导改任务、调查来源与独立情景、组织及标志信号、仿真资料和指标；未运行仿真或优化配时。依据仅抄用户资料、未核验；辖区与接口分栏。
+- 岗位回归：`scripts/test_design_infrastructure_drafts.py`（给定/缺失输入、真实 Markdown/Excel、chat 与高风险门）
 
 ### design-coord
 
@@ -318,12 +339,13 @@
 - 子代理/车道：`lane-design`
 - 对照：yibiao
 - 独有：design-coord__minutes
-- parse：缺口 · 本岗不解析招标；用户原文进草稿，扫描 PDF 仍拒绝
-- outline：部分 · run 出内部提纲骨架，未对照易标目录扩写器
+- parse：已有 · 用户字段与附件表格按对象登记；扫描图像无 OCR 不读取，原始资料未核验
+- outline：已有 · 本专业章节、提资与缺项表；Markdown + Excel，未连接设计计算引擎
 - qa：已有 · design__scan_forbidden
 - kb：已有 · 分层 KB + search_kb/read_kb（demo/kb）
 - write：已有 · 独有 design-coord__minutes；chat 不写盘
-- 下一刀：纪要收成表；文首只抄 APPBCA-2026-12（GFA≥5000 强制 Gateway）。
+- 专业实现与边界：已实现 T047 design-coord：图纸版本、会审问题、提资责任期限、变更记录、逐条决议和闭环证据；不代签发，不内置审批面积阈值。依据仅抄用户资料、未核验；辖区与接口分栏。
+- 岗位回归：`scripts/test_design_infrastructure_drafts.py`（给定/缺失输入、真实 Markdown/Excel、chat 与高风险门）
 
 
 ## 大类 `bim` · 车道 `lane-bim`
@@ -339,7 +361,7 @@
 - qa：已有 · bim__scan_forbidden
 - kb：已有 · 分层 KB + search_kb/read_kb（demo/kb）
 - write：已有 · 独有 bim-coord__clash；chat 不写盘
-- 下一刀：bim-coord__clash 按 outline 出碰撞表（硬/间隙/留洞/4D），无模型整表待填。
+- 历史下一刀 / 保持边界：已做 T043 bim-coord。bim-coord__clash 按 outline 出碰撞表（硬/间隙/留洞/4D），无模型整表待填。
 
 ### bim-qto
 
@@ -352,7 +374,7 @@
 - qa：已有 · bim__scan_forbidden
 - kb：已有 · 分层 KB + search_kb/read_kb（demo/kb）
 - write：已有 · 独有 bim-qto__rules；chat 不写盘
-- 下一刀：bim-qto__rules 把过滤说明拆成行表，工程量单价列固定 TBD。不接 IFC 真抽量。
+- 历史下一刀 / 保持边界：已做 T043 bim-qto。bim-qto__rules 把过滤说明拆成行表，工程量只抄用户明确值，否则 UNSPECIFIED；单价 TBD。不接 IFC 真抽量。
 
 ### bim-deliver
 
@@ -365,7 +387,7 @@
 - qa：已有 · bim__scan_forbidden
 - kb：已有 · 分层 KB + search_kb/read_kb（demo/kb）
 - write：已有 · 独有 bim-deliver__lod；chat 不写盘
-- 下一刀：bim-deliver__lod 一次写出坐标系/拆分/命名/LOD 表头，不宣称报审。
+- 历史下一刀 / 保持边界：已做 T043 bim-deliver。bim-deliver__lod 一次写出坐标系/拆分/命名/LOD 表头，不宣称报审。
 
 
 ## 大类 `planning` · 车道 `lane-planning`
@@ -381,7 +403,7 @@
 - qa：已有 · planning__scan_forbidden
 - kb：已有 · 分层 KB + search_kb/read_kb（demo/kb）
 - write：已有 · 独有 plan-master__network；chat 不写盘
-- 下一刀：已做 T032 plan-master。plan-master__network 固定 WBS|紧前|里程碑待填|关键线路=待计算。
+- 历史下一刀 / 保持边界：plan-master__network 固定 WBS|紧前|里程碑待填|关键线路=待计算。
 
 ### plan-lookahead
 
@@ -394,7 +416,7 @@
 - qa：已有 · planning__scan_forbidden
 - kb：已有 · 分层 KB + search_kb/read_kb（demo/kb）
 - write：已有 · 独有 plan-lookahead__week；chat 不写盘
-- 下一刀：已做 T032 plan-lookahead。plan-lookahead__week 出四周表；制约未清不得写入本周承诺。
+- 历史下一刀 / 保持边界：已做 T032 plan-lookahead。plan-lookahead__week 出四周表；制约未清不得写入本周承诺。
 
 ### plan-resource
 
@@ -407,7 +429,7 @@
 - qa：已有 · planning__scan_forbidden
 - kb：已有 · 分层 KB + search_kb/read_kb（demo/kb）
 - write：已有 · 独有 plan-resource__peak；chat 不写盘
-- 下一刀：已做 T032 plan-resource。plan-resource__peak 拆劳动力|机具|材料三表，数量待填。
+- 历史下一刀 / 保持边界：已做 T032 plan-resource。plan-resource__peak 拆劳动力|机具|材料三表，数量待填。
 
 
 ## 大类 `construction` · 车道 `lane-construction`
@@ -423,7 +445,7 @@
 - qa：已有 · construction__scan_forbidden + 高风险确认句
 - kb：已有 · 分层 KB + search_kb/read_kb（demo/kb）
 - write：已有 · 独有 construction__scheme_draft, construction__fill_scheme_docx；chat 不写盘
-- 下一刀：run_expert_steps 在 scheme_draft 之后调用 fill_scheme_docx，不再跳过；仍是讨论提纲。
+- 历史下一刀 / 保持边界：run_expert_steps 在 scheme_draft 之后调用 fill_scheme_docx，不再跳过；仍是讨论提纲。
 
 ### method-hazard
 
@@ -436,7 +458,7 @@
 - qa：已有 · construction__scan_forbidden + 高风险确认句
 - kb：已有 · 分层 KB + search_kb/read_kb（demo/kb）
 - write：已有 · 独有 method-hazard__judge_hazard；chat 不写盘
-- 下一刀：重写 judge-card.md 默认 SG WSH/PTW + 信息不足；37 号令只放 CN 栏。
+- 历史下一刀 / 保持边界：重写 judge-card.md 默认 SG WSH/PTW + 信息不足；37 号令只放 CN 栏。
 
 ### survey
 
@@ -449,7 +471,7 @@
 - qa：已有 · construction__scan_forbidden + 高风险确认句
 - kb：已有 · 分层 KB + search_kb/read_kb（demo/kb）
 - write：已有 · 独有 survey__record；chat 不写盘
-- 下一刀：已做 T030。survey__record 只抄已给点号/坐标；都无则表头+[A001]。
+- 历史下一刀 / 保持边界：survey__record 读本会话附件，只抄已给点号坐标；都无则表头+[A001]。
 
 ### dispatch
 
@@ -462,7 +484,7 @@
 - qa：已有 · construction__scan_forbidden
 - kb：已有 · 分层 KB + search_kb/read_kb（demo/kb）
 - write：已有 · 独有 dispatch__daily；chat 不写盘
-- 下一刀：已做 T030。dispatch__daily 按 outline 十一章落表头；敏感作业只列名，判定交 method-hazard。
+- 历史下一刀 / 保持边界：dispatch__daily 按 outline 十一章落表头；敏感作业只列名，判定交 method-hazard。
 
 
 ## 大类 `hse` · 车道 `lane-hse`
@@ -478,7 +500,7 @@
 - qa：已有 · hse__scan_forbidden + 高风险确认句
 - kb：已有 · 分层 KB + search_kb/read_kb（demo/kb）
 - write：已有 · 独有 safety-brief__talk；chat 不写盘
-- 下一刀：已做 T035 safety-brief。safety-brief__talk 按 outline 写全 11 栏；毫米/电话 [A001]；确认句后才写盘。
+- 历史下一刀 / 保持边界：已做 T035 safety-brief。safety-brief__talk 按 outline 写全 11 栏；毫米/电话 [A001]；确认句后才写盘。
 
 ### quality
 
@@ -491,7 +513,7 @@
 - qa：已有 · hse__scan_forbidden + 高风险确认句
 - kb：已有 · 分层 KB + search_kb/read_kb（demo/kb）
 - write：已有 · 独有 quality__lot；chat 不写盘
-- 下一刀：已做 T035 quality。quality__lot 出主控|一般|隐蔽三表，结果=未检；写盘后 hse__scan_forbidden。
+- 历史下一刀 / 保持边界：已做 T035 quality。quality__lot 出主控|一般|隐蔽三表，结果=未检；写盘后 hse__scan_forbidden。
 
 ### env
 
@@ -504,7 +526,7 @@
 - qa：已有 · hse__scan_forbidden
 - kb：已有 · 分层 KB + search_kb/read_kb（demo/kb）
 - write：已有 · 独有 env__list；chat 不写盘
-- 下一刀：已做 T035 env。env__list 拆扬尘/弃土/污水/夜间/市容五行，限值 UNSPECIFIED。
+- 历史下一刀 / 保持边界：已做 T035 env。env__list 拆扬尘/弃土/污水/夜间/市容五行，限值 UNSPECIFIED。
 
 ### emergency
 
@@ -517,7 +539,7 @@
 - qa：已有 · hse__scan_forbidden + 高风险确认句
 - kb：已有 · 分层 KB + search_kb/read_kb（demo/kb）
 - write：已有 · 独有 emergency__plan；chat 不写盘
-- 下一刀：已做 T035 emergency。emergency__plan 出综合目录+用户点名专项+演练表头，电话医院待填。
+- 历史下一刀 / 保持边界：已做 T035 emergency。emergency__plan 出综合目录+用户点名专项+演练表头，电话医院待填。
 
 
 ## 大类 `commercial` · 车道 `lane-commercial`
@@ -533,7 +555,7 @@
 - qa：已有 · commercial__scan_forbidden
 - kb：已有 · 分层 KB + search_kb/read_kb（demo/kb）
 - write：已有 · 独有 cost__takeoff；chat 不写盘
-- 下一刀：cost__takeoff 按行 parse 清单成规则|量待填|单价 TBD，不编综合单价。
+- 历史下一刀 / 保持边界：cost__takeoff 按行 parse 清单成规则|量待填|单价 TBD，不编综合单价。
 
 ### variation
 
@@ -546,7 +568,7 @@
 - qa：已有 · commercial__scan_forbidden
 - kb：已有 · 分层 KB + search_kb/read_kb（demo/kb）
 - write：已有 · 独有 variation__form；chat 不写盘
-- 下一刀：已做 T031 variation。variation__form 先判定文种再出事实|依据|签认空栏；无变更编号则依据待填。
+- 历史下一刀 / 保持边界：variation__form 先判定文种再出事实|依据|签认空栏；无变更编号则依据待填。
 
 ### claim
 
@@ -559,7 +581,7 @@
 - qa：已有 · commercial__scan_forbidden
 - kb：已有 · 分层 KB + search_kb/read_kb（demo/kb）
 - write：已有 · 独有 claim__notice；chat 不写盘
-- 下一刀：已做 T031 claim。claim__notice 出意向栏+证据行+条款原文待贴；工期金额 TBD。
+- 历史下一刀 / 保持边界：claim__notice 出意向栏+证据行+条款原文待贴；工期金额 TBD。
 
 ### subcontract
 
@@ -572,7 +594,7 @@
 - qa：已有 · commercial__scan_forbidden
 - kb：已有 · 分层 KB + search_kb/read_kb（demo/kb）
 - write：已有 · 独有 subcontract__sheet；chat 不写盘
-- 下一刀：已做 T031 subcontract。subcontract__sheet 按行 parse 细目；无总包/业主确认不编金额。
+- 历史下一刀 / 保持边界：subcontract__sheet 按行 parse 细目；无总包/业主确认不编金额。
 
 ### interim
 
@@ -585,7 +607,7 @@
 - qa：已有 · commercial__scan_forbidden
 - kb：已有 · 分层 KB + search_kb/read_kb（demo/kb）
 - write：已有 · 独有 interim__measure；chat 不写盘
-- 下一刀：已做 T031 interim。interim__measure 出开累/本期/监理审/业主核空表；无确认不编应付合价。
+- 历史下一刀 / 保持边界：interim__measure 出开累/本期/监理审/业主核空表；无确认不编应付合价。
 
 
 ## 大类 `procurement` · 车道 `lane-procurement`
@@ -601,7 +623,7 @@
 - qa：已有 · procurement__scan_forbidden
 - kb：已有 · 分层 KB + search_kb/read_kb（demo/kb）
 - write：已有 · 独有 proc-plan__schedule；chat 不写盘
-- 下一刀：已做 T037 proc-plan。proc-plan__schedule 先分甲供/甲指/自采再列表；无供方周期则提前期 UNSPECIFIED。
+- 历史下一刀 / 保持边界：已做 T037 proc-plan。proc-plan__schedule 先分甲供/甲指/自采再列表；无供方周期则提前期 UNSPECIFIED。
 
 ### proc-compare
 
@@ -614,7 +636,7 @@
 - qa：已有 · procurement__scan_forbidden
 - kb：已有 · 分层 KB + search_kb/read_kb（demo/kb）
 - write：已有 · 独有 proc-compare__table；chat 不写盘
-- 下一刀：已做 T037 proc-compare。proc-compare__table 一行一家多列；定商标待制度定；写盘后 scan_forbidden。
+- 历史下一刀 / 保持边界：已做 T037 proc-compare。proc-compare__table 一行一家多列；定商标待制度定；写盘后 scan_forbidden。
 
 ### proc-vendor
 
@@ -627,7 +649,7 @@
 - qa：已有 · procurement__scan_forbidden
 - kb：已有 · 分层 KB + search_kb/read_kb（demo/kb）
 - write：已有 · 独有 proc-vendor__eval；chat 不写盘
-- 下一刀：已做 T037 proc-vendor。proc-vendor__eval 出准入|考察|短名单；分数/结论待核；禁止成交结论。
+- 历史下一刀 / 保持边界：已做 T037 proc-vendor。proc-vendor__eval 出准入|考察|短名单；分数/结论待核；禁止成交结论。
 
 
 ## 大类 `plant` · 车道 `lane-plant`
@@ -643,7 +665,7 @@
 - qa：已有 · plant__scan_forbidden + 高风险确认句
 - kb：已有 · 分层 KB + search_kb/read_kb（demo/kb）
 - write：已有 · 独有 equip__ledger；chat 不写盘
-- 下一刀：已做 T036 equip。equip__ledger 写出与 Rust 同表头台账，只抄用户设备名与已给证件。
+- 历史下一刀 / 保持边界：已做 T036 equip。equip__ledger 写出与 Rust 同表头台账，只抄用户设备名与已给证件。
 
 ### warehouse
 
@@ -656,7 +678,7 @@
 - qa：已有 · plant__scan_forbidden
 - kb：已有 · 分层 KB + search_kb/read_kb（demo/kb）
 - write：已有 · 独有 warehouse__log；chat 不写盘
-- 下一刀：已做 T036 warehouse。warehouse__log 按行 parse 收发原文；有数只抄、无数 TBD；无盘点不编盈亏。
+- 历史下一刀 / 保持边界：已做 T036 warehouse。warehouse__log 按行 parse 收发原文；有数只抄、无数 TBD；无盘点不编盈亏。
 
 ### pack-ship
 
@@ -671,7 +693,7 @@
 - mid50：已有 · 只抄 solver；断线 UNSPECIFIED
 - utilization：已有 · 只抄 solver；断线 UNSPECIFIED
 - xyz：禁止编造 · 未接通不写坐标
-- 下一刀：sidecar/packing_summary 快照抄进 pack-ship__plan/export；先 health；无则四字段字面 UNSPECIFIED；禁止重算 xyz。
+- 历史下一刀 / 保持边界：sidecar/packing_summary 快照抄进 pack-ship__plan/export；先 health；无则四字段字面 UNSPECIFIED；禁止重算 xyz。
 
 ### material-site
 
@@ -684,7 +706,7 @@
 - qa：已有 · plant__scan_forbidden
 - kb：已有 · 分层 KB + search_kb/read_kb（demo/kb）
 - write：已有 · 独有 material-site__recon；chat 不写盘
-- 下一刀：已做 T036 material-site。material-site__recon 按行 parse 应耗/领料/盘点；算不出节超则 TBD。
+- 历史下一刀 / 保持边界：已做 T036 material-site。material-site__recon 按行 parse 应耗/领料/盘点；算不出节超则 TBD。
 
 
 ## 大类 `lab` · 车道 `lane-lab`
@@ -700,7 +722,7 @@
 - qa：已有 · lab__scan_forbidden + 高风险确认句
 - kb：已有 · 分层 KB + search_kb/read_kb（demo/kb）
 - write：已有 · 独有 lab-mix__report；chat 不写盘
-- 下一刀：已做 T033 lab-mix。lab-mix__report 四层目录；无试验数据则施工配比整节待填。
+- 历史下一刀 / 保持边界：已做 T033 lab-mix。lab-mix__report 四层目录；无试验数据则施工配比整节待填。
 
 ### lab-sample
 
@@ -713,7 +735,7 @@
 - qa：已有 · lab__scan_forbidden + 高风险确认句
 - kb：已有 · 分层 KB + search_kb/read_kb（demo/kb）
 - write：已有 · 独有 lab-sample__list；chat 不写盘
-- 下一刀：已做 T033 lab-sample。lab-sample__list 出类别|部位|见证人空|升级路径；组数 [A001]。
+- 历史下一刀 / 保持边界：已做 T033 lab-sample。lab-sample__list 出类别|部位|见证人空|升级路径；组数 [A001]。
 
 ### lab-record
 
@@ -726,7 +748,7 @@
 - qa：已有 · lab__scan_forbidden
 - kb：已有 · 分层 KB + search_kb/read_kb（demo/kb）
 - write：已有 · 独有 lab-record__ledger；chat 不写盘
-- 下一刀：已做 T033 lab-record。lab-record__ledger 加报告编号待核|仪器检定|结论待填。
+- 历史下一刀 / 保持边界：已做 T033 lab-record。lab-record__ledger 加报告编号待核|仪器检定|结论待填。
 
 
 ## 大类 `finance` · 车道 `lane-finance`
@@ -742,7 +764,7 @@
 - qa：已有 · finance__scan_forbidden
 - kb：已有 · 分层 KB + search_kb/read_kb（demo/kb）
 - write：已有 · 独有 finance-book__check；chat 不写盘
-- 下一刀：已做 T038 finance-book。finance-book__check 出报销勾选+科目对照+对账缺口，金额 [A001]。
+- 历史下一刀 / 保持边界：已做 T038 finance-book。finance-book__check 出报销勾选+科目对照+对账缺口，金额 [A001]。
 
 ### finance-fund
 
@@ -755,7 +777,7 @@
 - qa：已有 · finance__scan_forbidden
 - kb：已有 · 分层 KB + search_kb/read_kb（demo/kb）
 - write：已有 · 独有 finance-fund__plan；chat 不写盘
-- 下一刀：已做 T038 finance-fund。finance-fund__plan 出收入/支出窗口，金额 TBD，不当付款指令。
+- 历史下一刀 / 保持边界：已做 T038 finance-fund。finance-fund__plan 出收入/支出窗口，金额 TBD，不当付款指令。
 
 ### finance-tax
 
@@ -768,7 +790,7 @@
 - qa：已有 · finance__scan_forbidden
 - kb：已有 · 分层 KB + search_kb/read_kb（demo/kb）
 - write：已有 · 独有 finance-tax__calendar；chat 不写盘
-- 下一刀：finance-tax__calendar 加税种|节点|资料是否齐全；税率空白，只可抄 IRAS 页述 9%。
+- 历史下一刀 / 保持边界：finance-tax__calendar 加税种|节点|资料是否齐全；税率空白，只可抄 IRAS 页述 9%。
 
 
 ## 大类 `docs` · 车道 `lane-docs`
@@ -784,7 +806,7 @@
 - qa：已有 · docs__scan_forbidden
 - kb：已有 · 分层 KB + search_kb/read_kb（demo/kb）
 - write：已有 · 独有 supervision__reply；chat 不写盘
-- 下一刀：已做 T034 supervision。supervision__reply：来文复述|拟办|证据目录；暂停/复工只出目录，不写复工许可。
+- 历史下一刀 / 保持边界：已做 T034 supervision。supervision__reply：来文复述|拟办|证据目录；暂停/复工只出目录，不写复工许可。
 
 
 ## 大类 `hr` · 车道 `lane-hr`
@@ -800,7 +822,7 @@
 - qa：已有 · hr__scan_forbidden
 - kb：已有 · 分层 KB + search_kb/read_kb（demo/kb）
 - write：已有 · 独有 hr-recruit__brief；chat 不写盘
-- 下一刀：已做 T040 hr-recruit。hr-recruit__brief 出职责|任职|面试问法；薪资仅当用户给数才抄。
+- 历史下一刀 / 保持边界：已做 T040 hr-recruit。hr-recruit__brief 出职责|任职|面试问法；薪资仅当用户给数才抄。
 
 ### hr-labor
 
@@ -811,9 +833,9 @@
 - parse：缺口 · 本岗不解析招标；用户原文进草稿，扫描 PDF 仍拒绝
 - outline：部分 · run 出内部提纲骨架，未对照易标目录扩写器
 - qa：已有 · hr__scan_forbidden
-- kb：已做 K4（2026-08-28）· README 字段表 + faq≥5 必问（含 SG KETs/TADM）+ outline 补 SG 分表；search_kb 命中本岗 web-knowledge，看不见 hr-recruit
+- kb：已有 · 分层 KB + search_kb/read_kb（demo/kb）
 - write：已有 · 独有 hr-labor__check；chat 不写盘
-- 下一刀：hr-labor__check 按合同类型分表+必备条款对照；补偿 [A001]。
+- 历史下一刀 / 保持边界：已做 T040 hr-labor。hr-labor__check 按合同类型分表+必备条款对照；补偿 [A001]。
 
 ### hr-train
 
@@ -826,7 +848,7 @@
 - qa：已有 · hr__scan_forbidden
 - kb：已有 · 分层 KB + search_kb/read_kb（demo/kb）
 - write：已有 · 独有 hr-train__plan；chat 不写盘
-- 下一刀：hr-train__plan 出公司/项目/班组三层课题表+签到空栏。
+- 历史下一刀 / 保持边界：已做 T040 hr-train。hr-train__plan 出公司/项目/班组三层课题表+签到空栏。
 
 
 ## 大类 `admin` · 车道 `lane-admin`
@@ -842,7 +864,7 @@
 - qa：已有 · admin__scan_forbidden
 - kb：已有 · 分层 KB + search_kb/read_kb（demo/kb）
 - write：已有 · 独有 admin-doc__draft；chat 不写盘
-- 下一刀：admin-doc__draft 按文种套请示/纪要/用印三套栏，禁止代用印。
+- 历史下一刀 / 保持边界：已做 T041 admin-doc。admin-doc__draft 按文种套请示/纪要/用印三套栏，禁止代用印。
 
 ### admin-office
 
@@ -855,7 +877,7 @@
 - qa：已有 · admin__scan_forbidden
 - kb：已有 · 分层 KB + search_kb/read_kb（demo/kb）
 - write：已有 · 独有 admin-office__list；chat 不写盘
-- 下一刀：admin-office__list 出场地|议程|与会|资料目录，决定栏留空。
+- 历史下一刀 / 保持边界：已做 T041 admin-office。admin-office__list 出场地|议程|与会|资料目录，决定栏留空。
 
 
 ## 大类 `it` · 车道 `lane-it`
@@ -871,7 +893,7 @@
 - qa：已有 · it__scan_forbidden
 - kb：已有 · 分层 KB + search_kb/read_kb（demo/kb）
 - write：已有 · 独有 it-ops__runbook；chat 不写盘
-- 下一刀：it-ops__runbook 出系统|角色|升级路径|联系人待填，禁止写密钥。
+- 历史下一刀 / 保持边界：已做 T042 it-ops。it-ops__runbook 出系统|角色|升级路径|联系人待填，禁止写密钥。
 
 ### it-data
 
@@ -884,7 +906,7 @@
 - qa：已有 · it__scan_forbidden
 - kb：已有 · 分层 KB + search_kb/read_kb（demo/kb）
 - write：已有 · 独有 it-data__backup；chat 不写盘
-- 下一刀：it-data__backup 按系统行出 RPO/RTO/介质/演练空，禁止编小时数。
+- 历史下一刀 / 保持边界：已做 T042 it-data。it-data__backup 按系统行出 RPO/RTO/介质/演练空，禁止编小时数。
 
 ### it-app
 
@@ -897,7 +919,7 @@
 - qa：已有 · it__scan_forbidden
 - kb：已有 · 分层 KB + search_kb/read_kb（demo/kb）
 - write：已有 · 独有 it-app__srs；chat 不写盘
-- 下一刀：it-app__srs 按行 parse 需求笔记成角色|场景|验收待填，禁止接口地址。
+- 历史下一刀 / 保持边界：已做 T042 it-app。it-app__srs 按行 parse 需求笔记成角色|场景|验收待填，禁止接口地址。
 
 
 ## 大类 `people` · 车道 `lane-people`
@@ -913,7 +935,7 @@
 - qa：已有 · people__scan_forbidden
 - kb：已有 · 分层 KB + search_kb/read_kb（demo/kb）
 - write：已有 · 独有 worker-brief__talk；chat 不写盘
-- 下一刀：已做 T039 worker-brief。worker-brief__talk 按 script.md 写三段口播；无尺寸不报毫米。
+- 历史下一刀 / 保持边界：已做 T039 worker-brief。worker-brief__talk 按 script.md 写三段口播；无尺寸不报毫米。
 
 ### pm-daily
 
@@ -926,4 +948,4 @@
 - qa：已有 · people__scan_forbidden
 - kb：已有 · 分层 KB + search_kb/read_kb（demo/kb）
 - write：已有 · 独有 pm-daily__log；chat 不写盘
-- 下一刀：已做 T039 pm-daily。pm-daily__log 出天气待填|部位|形象（不编百分比）|出勤待填。不是监理日志。
+- 历史下一刀 / 保持边界：已做 T039 pm-daily。pm-daily__log 出天气待填|部位|形象（不编百分比）|出勤待填。

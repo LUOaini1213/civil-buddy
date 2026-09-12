@@ -119,8 +119,16 @@ def _scope(expert_id: str | None, pack: str | None):
 
 
 def _spec(name: str, description: str, extra: dict | None = None) -> dict[str, Any]:
-    schema: dict[str, Any] = {"type": "object", "properties": extra or {}}
-    return {"name": name, "description": description, "inputSchema": schema}
+    from packing_assistant.runtime.tool_engine import get_engine
+    from packing_assistant.runtime.tool_contracts import contract_for
+    from copy import deepcopy
+    spec = get_engine().tools.get(name)
+    contract = contract_for(name, exclusive=bool(spec and spec.expert_id))
+    schema = deepcopy(spec.input_schema) if spec and spec.input_schema else contract["input_schema"]
+    if extra:
+        schema["properties"].update(extra)
+    return {"name": name, "description": description, "inputSchema": schema,
+            "outputSchema": deepcopy(spec.output_schema) if spec and spec.output_schema else contract["output_schema"]}
 
 
 def initialize_capabilities() -> dict[str, Any]:
@@ -289,6 +297,9 @@ def call_tool(
     pack: str | None = None,
     intent: str = "run",
 ) -> dict[str, Any]:
+    from packing_assistant.runtime.tool_contracts import validate
+    if arguments is not None and not isinstance(arguments, dict):
+        return {"ok": False, "error_code": "invalid_args", "error": "参数必须为对象", "content": []}
     args = dict(arguments or {})
     intent = str(args.get("intent") or intent or "run")
     eid, cat, rec = _scope(expert_id, pack)
@@ -300,6 +311,10 @@ def call_tool(
         return {"ok": False, "error": f"未知工具 {name}", "content": []}
     if tool not in visible:
         return {"ok": False, "error": "拒绝：当前专家看不见该工具", "content": []}
+    schema = next((s["inputSchema"] for s in list_tools(expert_id=expert_id, pack=pack) if s["name"] == tool), {})
+    problem = validate(args, schema)
+    if problem:
+        return {"ok": False, "error_code": "invalid_args", "error": problem, "content": []}
 
     if tool in {"civil.turn", "agent.turn"}:
         from packing_assistant.runtime.agent_loop import run_agent
@@ -309,7 +324,7 @@ def call_tool(
             str(args.get("text") or args.get("task") or ""),
             session_id=sid,
             expert_id=str(args.get("skill") or args.get("expert_id") or eid or ""),
-            p0_confirmed=bool(args.get("confirm_ok") or args.get("p0_confirmed")),
+            p0_confirmed=args.get("confirm_ok") is True or args.get("p0_confirmed") is True,
         )
 
     if tool in TOOL_NAMES:

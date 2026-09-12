@@ -1,17 +1,21 @@
 # Civil Buddy 全量产品规划书
 
+> 2026-09-12 补充：当前任务路由、统一岗位契约和分层上下文以 [COLLABORATION.md](COLLABORATION.md) 为准。以下含 2026-08 的实现记录与联网快照；其中“默认回复/日历含 9%”的旧要求已废止。当前税务起草只整理用户明确提供的税率及来源，未知值为 `UNSPECIFIED`，静态 KB 与历史联网记录不证明本轮适用税率。
+
 | 项 | 值 |
 |----|----|
 | 产品 | Civil Buddy |
-| 版本 | 2026-08-19 · **联网审阅同日** |
+| 版本 | 2026-09-12 · 专业文书实现更新；§13 保留 2026-08-19 联网审阅记录 |
 | 仓库 | https://github.com/LUOaini1213/civil-buddy |
 | 岗 / 大类 | **66 / 16**（`workbench/seed.json`） |
 | 总判 | **部分合格**的内部起草搭子，不是签认/递交机器人 |
 | 纪律 | **不定时限 · 不准空转**。墙钟和睡眠评测环不是交付 |
 | 本文地位 | **产品规划唯一总入口**。切片文档只执行、不另开第三套「下一步」 |
 
-**怎么用：** 改产品前先读 §1 边界、§10 不做、§13 联网口径。开工只取 **§15 主链头指针**（此刻 = §11 的 T040）。岗栏位细节可读 post-horizon 该 id；已做/未做以 §7 / §15 为准。  
+**怎么用：** 改产品前先读 §1 边界、§10 不做、§13 联网口径。开工只取 **§15 主链头指针**（此刻 = §11 的本地发布验收已完成，后续按试用反馈迭代）。岗栏位细节可读 post-horizon 该 id；已做/未做以 §7 / §15 为准。
 2026-08-19：§1–§15 各派一子代理对照现网，结论已并入本文。
+
+2026-09-12 可用性基线：源码入口 `civil app` 已连接离线工具、模型设置、附件、会话恢复、文书快照与审计。浏览器验证了上传资料→生成日报→预览/下载→刷新恢复；高风险任务等待签认。工程证据与能力边界见 [本次重构说明](../refactoring-2026-09.md)，安装步骤见 [GETTING-STARTED.md](GETTING-STARTED.md)。设计 20 岗已加入专用起草器，逐岗栏位与四组回归见 §7.2。0.5.0-preview 已完成 66 岗本地解压验收；0.5.1-preview 补充可编辑 Word、任务备份与导入、后台取消，以及项目索引的并发和损坏保护。各版本验收记录在重构说明中分开留存；未发布 GitHub Release。
 
 切片（从属于本文，不平行）：
 
@@ -78,7 +82,7 @@ pack-ship 岗 **不是第二套装箱**。它只投影本仓 solver 快照。断
 
 - 岗 **66**，大类 **16**（`workbench/seed.json`）。  
 - 确认句：`我明白，将由持证人员签认`。闸是 `confirm_ok` / `p0_confirmed` **布尔**，只挡 **high** 写盘；不是从用户正文抽句。  
-- GST：抄 IRAS 页述 **9%**。抓门户失败不得改口「官方没写 9%」。7%/8% 只可当历史升档。  
+- GST：先核对用户提供的辖区、税率、来源和适用期；未知值为 `UNSPECIFIED`。抓门户失败不能推断税率，也不把历史 KB 升格为本轮已核验证据。
 - GeBIZ **不是**评分办法。Fire Code **2023**。CTU Code **2014** 非强制（权威句在 `demo/kb/company/web-portals.md`；pack-ship 岗页链同一句）。  
 - CORENET X 2026-10-01 强制范围以 APPBCA-2026-12 为准（GFA≥5,000 m²）。  
 - pack-ship 断线四字段：`utilization` / `can_fit` / `mid50` / `系固待办` 字面 `UNSPECIFIED`。`xyz` 恒不投影。  
@@ -100,7 +104,7 @@ pack-ship 岗 **不是第二套装箱**。它只投影本仓 solver 快照。断
 
 ### 关键路径（必须永远能走）
 
-1. 问「什么是 GST」→ `chat`、不写盘、回复含 **9%**。  
+1. 问「什么是 GST」→ `chat`、不写盘、解释概念且不默认税率。
 2. 「解析招标…」→ 矩阵行有 `exact_text`，`submit_blocked=true`。  
 3. 选岗 `construction`，勾选 `confirm_ok`（不是把确认句糊进正文）→ 十一章 md，无「可以开工」。未勾选 0 份稿。  
 4. pack-ship 无会话 `packing_summary` → 四字段 `UNSPECIFIED`；有注入/落盘快照则原样抄，`xyz` 永不编。先 delivery 再抄的 HTTP 联测见 T052。  
@@ -130,13 +134,13 @@ docs/                 装箱架构、主线 C、研究/归档
 
 | 面 | 约 | 已有 | 缺口 |
 |----|----|------|------|
-| 运行时 | 80% | Scheduler、ToolEngine、沙箱、`/api/agent`、Run 回放、Memory slot | 岗栏位仍多数骨架 |
+| 运行时 | 80% | Scheduler、ToolEngine、沙箱、`/api/agent`、Run 回放、Memory slot | 设计专用文书已经接入；计算/审查结果不代填 |
 | 主线 C | 80% | ingest/矩阵/handoff/再审/delivery；parse 走 ToolEngine；扫描 PDF 默认拒绝 | 资格栏仍人填 |
 | 装箱引擎 | 80% | 大 Team A/B、3D、CoG、HITL | 非本规划主战场；禁止第二套 packer |
 | MCP | 75% | Python stdio；bid 可见 KB+招标；pack-ship 投影；Host 样例 16 pack 可复制 | 默认仍挂 3 大类；分页/订阅延期 |
 | Skill | 65% | SOP 与 66 岗关系写清；施工十一章接 turn；fill_scheme 失败则 `docx_pending` | 其余 5 个 Grok 专家仍提纲 |
-| 岗 KB | 目录 100% / K4 内容闸 66/66 | **66/66** 四件套；faq≥5 + README 字段表 + `search_kb` 命中本岗（`test_kb_k4_depth.py`） | outline 指针：construction→`scheme-11.md`，危大→`judge-card.md`。**真写盘仍 36/66**（K4 不是独有写盘） |
-| 工作台 66 岗 | 平台齐、栏位 36/66 | 同一套 chat/run | 其余 ~30 岗 `_draft_markdown` |
+| 岗 KB | 目录 100% / K4 内容闸 66/66 | **66/66** 四件套；faq≥5 + README 字段表 + `search_kb` 命中本岗（`test_kb_k4_depth.py`） | outline 指针：construction→`scheme-11.md`，危大→`judge-card.md`。**专用写盘 66/66**（K4 不是独有写盘；逐岗证据见 §7.2） |
+| 工作台 66 岗 | 平台齐、专用栏位实现 66/66 | 同一套 chat/run；设计 20 岗分四模块接入统一保存与 Office 导出 | 专业文书仅组织用户输入；未接设计计算或 IFC 引擎，本地发布验收已完成 |
 | 技术文档 | 80% | GETTING-STARTED/PROTOCOL/MCP/SKILLS/KB；Grok/Cursor 最小 Host；刀后快闸 | 研究笔记不得冒充必读 |
 | 评测 | 75% | 离线闸 + `GET /api/eval/live` 五针（company 页）+ 岗 GST/CORENET 扫描 | 行业总判仍部分合格 |
 
@@ -231,28 +235,28 @@ xyz 只抄 solver。分页/订阅 = 有真 Host list/call 稳定之后（horizon
 
 ## 6. 16 车道（全量岗规划，不复制 66 遍下一刀）
 
-易标完成度 = parse / outline / qa / kb / write。每岗「下一刀」以 post-horizon 该 id 为准。本文只定 **车道目标与富化顺序**。
+易标完成度 = parse / outline / qa / kb / write。每岗「下一刀」以 post-horizon 该 id 为准。本文记录 **车道目标与当前专业文书实现**；历史顺序不构成新的待办队列。
 
 | 车道 | 大类 | 岗数 | 产品目标 | 现网富化 |
 |------|------|------|----------|----------|
 | `lane-bid` | 经营投标 | 3 | 解析→交接→三列废标检查→按评分点排技术标目录 | **已富** handoff / gaps / expand |
-| `lane-design` | 勘察设计 | **20** | 各专业说明/计算提纲；条款 UNSPECIFIED；DUAL 分栏 | **0/20** 骨架 |
-| `lane-bim` | BIM | 3 | 协同/算量/交付目录；不假装 IFC 全量抽量 | **0/3** |
+| `lane-design` | 勘察设计 | **20** | 各专业说明/计算提纲；条款 UNSPECIFIED；DUAL 分栏 | **20/20** 专业文书；四组测试见 §7.2 |
+| `lane-bim` | BIM | 3 | 协同/算量/交付目录；不假装 IFC 全量抽量 | **3/3**；逐岗证据见 §7.2 |
 | `lane-planning` | 计划 | 3 | 总控/近看/资源栏位；无进度数据不编工期 | **3/3** plan-master + lookahead + resource |
-| `lane-construction` | 施工生产 | 4 | 十一章提纲；危大判定卡；测量/调度作业单 | **1/4**：十一章 md；危大/测量/调度仍骨架 |
+| `lane-construction` | 施工生产 | 4 | 十一章提纲；危大判定卡；测量/调度作业单 | **4/4**；施工模板缺失仍可 `docx_pending` |
 | `lane-hse` | 安质环 | 4 | 交底/质量/环保/应急草稿；SG 走 WSH 标题 | **4/4** |
-| `lane-commercial` | 商务造价 | 5 | 造价 takeoff 栏、变更/索赔/分包/报量；无单价不编 | **0/5** |
+| `lane-commercial` | 商务造价 | 5 | 造价 takeoff 栏、变更/索赔/分包/报量；无单价不编 | **5/5**；逐岗证据见 §7.2 |
 | `lane-procurement` | 采购 | 3 | 计划/比价/合格名录栏；GeBIZ 只当门户 | **3/3** proc-plan + proc-compare + proc-vendor |
 | `lane-plant` | 物机 | 4 | pack-ship 投影 solver；设备/仓/现场料栏 | **4/4** |
 | `lane-lab` | 试验室 | 3 | 配比/取样/台账栏；无报告号不编 | **3/3** |
 | `lane-finance` | 财务 | 3 | 税务日历抄 9%；记账/资金栏待填 | **3/3** finance-tax + finance-book + finance-fund |
 | `lane-docs` | 资料监理 | 1 | 闭合目录；不代替监理指令 | **1/1** supervision |
-| `lane-hr` | 人力 | 3 | 招聘/用工/培训草稿；法律口吻 | **1/3** hr-recruit |
-| `lane-admin` | 行政 | 2 | 印章/公文目录；不自动盖章 | **0/2** |
-| `lane-it` | IT | 3 | 运维/数据/应用草稿；禁止密钥进稿 | **0/3** |
+| `lane-hr` | 人力 | 3 | 招聘/用工/培训草稿；法律口吻 | **3/3** hr-recruit / hr-labor / hr-train |
+| `lane-admin` | 行政 | 2 | 印章/公文目录；不自动盖章 | **2/2**；逐岗证据见 §7.2 |
+| `lane-it` | IT | 3 | 运维/数据/应用草稿；禁止密钥进稿 | **3/3**；逐岗证据见 §7.2 |
 | `lane-people` | 项目与工人 | 2 | 工人白话交底 / 日报；与技术稿分开 | **2/2** worker-brief + pm-daily |
 
-**富化总序（全量）：** 保持 chat/run → 投标三岗（已做）→ pack-ship（已做）→ construction（十一章 + fill_scheme/`docx_pending` 已做）→ method-hazard 判定书（已做）→ cost takeoff（已做）→ finance-tax 日历栏（已做）→ survey/dispatch（T030 ✅）→ commercial 四岗（T031 ✅）→ 计划（T032 ✅）→ 试验/监理（T033+）→ 其余设计专业按 post-horizon。
+**专业文书实现已覆盖 66 岗。** T030–T047 的逐岗记录见 §7.2；主链本地发布验收已完成，后续按用户试用反馈迭代。L2 仅表示独立专业栏位与可写盘产物；L3 仍为 pack-ship 1 岗，不把文书表格当成设计计算、模型碰撞或 IFC 抽量。
 
 每岗完成定义：
 
@@ -285,7 +289,7 @@ xyz 只抄 solver。分页/订阅 = 有真 Host list/call 稳定之后（horizon
 | S5 | construction 填 docx 模板 | ✅ | 无 docx 则 `docx_pending`；有则扫描 0（T005） |
 | RT-P1-3 | Memory：辖区/项目/P0 slot | ✅ | 压缩可见、不装读过（T010） |
 | RT-P1-4 | Run 回放 | ✅ | `GET /api/runs/{id}` 两次同 identity（messages/tools/artifacts）。装箱 SSE `/replay` 是另一套 |
-| RT-P1-5 | 危大判定书 + 确认句 | ✅ | 默认 SG WSH/PTW；37 号令只在 CN 栏；未确认 0 稿（T002） |
+| RT-P1-5 | 危大判定书 + 确认句 | ✅ | 2026-09：辖区未提供为 UNSPECIFIED；37 号令只在 CN 栏；未确认 0 稿（T002） |
 | RT-P2 | MinerU 可选、Go 热路径、多用户 ACL | 延期 | 见 handbook P2 |
 | H1 | 技能目录预算闸（≤8000 字） | ✅ | `catalog_preamble` ≤8000；未选用不灌 66 SOP |
 | H2 | HITL T013 收口 | ✅ | high 岗未确认 0 稿 |
@@ -293,14 +297,14 @@ xyz 只抄 solver。分页/订阅 = 有真 Host list/call 稳定之后（horizon
 | H4 | 面可见 skill_source | ✅ | 显式 / 规则选用 / 未点名 |
 | MW1 | 赛道 1 Agent Middleware 交卷面 | ✅ | `npm run check`；一页架构；3 分钟 GST+HITL+UNSPECIFIED |
 
-### 7.2 岗写盘（指向 horizon，不展开）
+### 7.2 岗写盘（逐岗栏位与证据）
 
 | 优先 | 岗 | 状态 |
 |------|----|------|
 | 1 | bid-parse / compliance / tech | ✅ handoff 三列 + 评分点目录 |
 | 2 | pack-ship | ✅ 投影 |
 | 3 | construction | ✅ 十一章 md；fill_scheme 失败则 `docx_pending` |
-| 4 | method-hazard | ✅ 判定书栏；默认 SG；HITL |
+| 4 | method-hazard | ✅ 判定书栏；辖区未提供为 UNSPECIFIED；HITL |
 | 5 | cost | ✅ takeoff 栏；无单价 UNSPECIFIED |
 | 6 | finance-tax | ✅ 日历栏页述 9%、申报期空栏 |
 | 7 | survey / dispatch | ✅ 点号只抄；敏感作业交危大岗（T030） |
@@ -329,7 +333,39 @@ xyz 只抄 solver。分页/订阅 = 有真 Host list/call 稳定之后（horizon
 | 30 | finance-fund | ✅ 收入/支出窗口；金额 TBD；不当付款指令（T038 ✅） |
 | 31 | worker-brief | ✅ 三段口播；无尺寸不报毫米 |
 | 32 | pm-daily | ✅ 天气待填｜部位｜形象不编百分比｜出勤待填（T039 ✅） |
-| 33+ | 其余 ~31 岗 | 骨架；下一刀在 post-horizon（已富岗勿再当缺口） |
+| 33 | hr-recruit | ✅ 职责、任职、面试及用户薪资（T040） |
+| 34 | hr-labor | ✅ 按合同类型分表、必备事项对照；多人不借用工资，补偿 [A001]；`test_hr_drafts.py` |
+| 35 | hr-train | ✅ 公司/项目/班组课题、人员与证件登记、签到空栏；`test_hr_drafts.py` |
+| 36 | admin-doc | ✅ 请示/纪要/用印三套栏；决议逐行、审批不代填；`test_admin_drafts.py` |
+| 37 | admin-office | ✅ 场地/议程/与会/资料目录与后勤表；决定空栏；`test_admin_drafts.py` |
+| 38 | it-ops | ✅ 系统/角色权限、升级路径及联系人；凭据不进稿；`test_it_drafts.py` |
+| 39 | it-data | ✅ 各系统恢复目标、备份计划与演练记录独立；不宣称执行；`test_it_drafts.py` |
+| 40 | it-app | ✅ 角色/流程/需求/验收逐项对照，敏感接口资料省略；`test_it_drafts.py` |
+| 41 | bim-coord | ✅ 模型与问题分条、碰撞类型/提资接口；未做模型扫描；`test_bim_drafts.py` |
+| 42 | bim-qto | ✅ 构件过滤/扣减/校核来源；数量只抄明确输入，不抽 IFC；`test_bim_drafts.py` |
+| 43 | bim-deliver | ✅ 坐标/拆分/命名/LOD/交付物/检查表；验收保持未核；`test_bim_drafts.py` |
+| 44 | architecture | ✅ T044：单体总平面、分区面积与功能、消防分区及疏散用户值、无障碍、竖向、节能和专业接口；缺面积、宽度不推算；`scripts/test_design_basic_drafts.py` |
+| 45 | structure | ✅ T044：单体体系、构件荷载与组合、材料、基础输入、抗震资料及复核清单；承载力、配筋和截面计算结果保持 UNSPECIFIED；`scripts/test_design_basic_drafts.py` |
+| 46 | geotech | ✅ T044：孔号与分层、c/φ/水位和来源、勘探试验、地基比选、监测及提资；孔层缺项不借值，不替正式勘察报告；`scripts/test_design_basic_drafts.py` |
+| 47 | facade | ✅ T044：幕墙体系、风压与分格、预埋后锚固、气密水密变位、防火防雷、加工检测和维护接口；不选厚度或签验收结论；`scripts/test_design_basic_drafts.py` |
+| 48 | plumbing | ✅ T045：系统水源/水压、市政接驳、室内出户及井标高、给排水分区、雨水回用、消防水资料；管径和选泵计算待核；`scripts/test_design_services_drafts.py` |
+| 49 | hvac | ✅ T045：室内外参数、逐时冷热负荷、风水系统、防排烟联锁、机房竖井与消声保温；主机、风管及排烟量不代算；`scripts/test_design_services_drafts.py` |
+| 50 | electrical | ✅ T045：市政电源、容量和负荷系数、变配电用户方案、照明、防雷接地、线路及消防/弱电接口；不选变压器或电缆；`scripts/test_design_services_drafts.py` |
+| 51 | fire-protect | ✅ T045：救援条件、防火分区、疏散避难、消防水、防排烟、报警联动、电气及报审目录；不作审图通过或放行结论；`scripts/test_design_services_drafts.py` |
+| 52 | steel | ✅ T045：构件体系与跨度、荷载、材料规格、螺栓焊缝、稳定支撑、防腐防火及加工安装接口；截面和连接计算未执行；`scripts/test_design_services_drafts.py` |
+| 53 | landscape | ✅ T046：软硬分区、竖向灌排、铺装及苗木规格数量、顶板覆土、室外设施和消防交通接口；未给苗木表不选规格；`scripts/test_design_specialties_drafts.py` |
+| 54 | interior | ✅ T046：房间地墙顶及隔墙、防水材料厚度上翻、防潮隔声、门窗五金、天花开洞和外窗收口；只抄用户样板资料；`scripts/test_design_specialties_drafts.py` |
+| 55 | intel-weak | ✅ T046：子系统范围、点数及品牌、桥架路由、点位关联、供电 UPS 接地与消防网络接口；不编品牌或布点；`scripts/test_design_specialties_drafts.py` |
+| 56 | civil-defense | ✅ T046：防护单元等级及平战功能、口部/设备归属、通风滤毒超压、给排水和转换接口；不互换 CN/SG 概念或代审图；`scripts/test_design_specialties_drafts.py` |
+| 57 | hydraulic | ✅ T046：水工对象、水文断面和地勘孔、堤防护岸、闸泵用户参数、导流度汛和观测；无水文地质不选尺寸或流量；`scripts/test_design_specialties_drafts.py` |
+| 58 | port | ✅ T047：泊位船型、水位波浪潮流、结构比选、前沿尺度、航道回旋水域、装卸堆场与水利接口；不计算桩长或靠船力；`scripts/test_design_infrastructure_drafts.py` |
+| 59 | municipal | ✅ T047：路段桩号、平纵横断、路面结构、排水标高、管线权属及导改接口；不拆算车道宽或选路面厚度；`scripts/test_design_infrastructure_drafts.py` |
+| 60 | bridge | ✅ T047：桥位跨径及桥型比较、上下部结构、支座桥面、水文通航抗震及施工接口；不锁最优桥型或计算钢束桩长；`scripts/test_design_infrastructure_drafts.py` |
+| 61 | tunnel | ✅ T047：用途净空、工法地层、开挖支护、防水接缝、监控量测、洞口及机电防灾接口；支护参数和监测阈值待核；`scripts/test_design_infrastructure_drafts.py` |
+| 62 | traffic | ✅ T047：交通影响/施工导改任务、调查来源与独立情景、组织及标志信号、仿真资料和指标；未运行仿真或优化配时；`scripts/test_design_infrastructure_drafts.py` |
+| 63 | design-coord | ✅ T047：图纸版本、会审问题、提资责任期限、变更记录、逐条决议和闭环证据；不代签发，不内置审批面积阈值；`scripts/test_design_infrastructure_drafts.py` |
+
+设计各行均有给定数据、缺项和实际 Markdown/Excel 测试，不以目录存在代替验收。对象/系统/构件的空字段不借相邻行；附件表格保留行列与原值。新稿的引用只来自用户资料并标未核验，辖区未知为 UNSPECIFIED，DUAL 依据及专业接口分栏。上述是文书能力，不代表计算书、审图、签发或自动采用历史法规范阈值。最终岗位回归 basic 37、services 20、specialties 28、infrastructure 20，共 105 项通过；统一 40/40 检查日志见 `output/workbench-complete-full-check.log`。本地整包验收证据范围见 §11；末次相关 10/10 复验见 `output/workbench-complete-final-check.log`。
 
 ---
 
@@ -374,7 +410,7 @@ python scripts/test_industry_agent_eval.py # 08-17 历史「部分合格」保�
 
 ```
 1. 取号：只取 §15 主链上第一个状态≠✅/延期 的 T 号。
-   当前指针见 §11（此刻 = T040）。
+   当前状态见 §11（本地发布验收已完成，后续按用户试用反馈迭代）。
    禁止 OR §7、切片勾选表、next-steps、post-horizon 原文、handbook「下一刀」。
    岗栏位细节可读 post-horizon 该 id；已做/未做以 §7/§15 为准。
 2. 改最少文件。绿之前必须指出新路径（代码 / KB / MCP / SKILL / 测试之一）。指不出 = 没做。
@@ -388,7 +424,7 @@ python scripts/test_industry_agent_eval.py # 08-17 历史「部分合格」保�
 5. 红：修好或回滚到本刀起点。禁止带着红测试停手、睡眠再测、跳号。
 ```
 
-K4「进行中」不是可抢的下一号。H1–H4 插在 T040 之前。P 车道（T040+）不得在主链头指针未走到 T040 时开工。T001 / T030–T039 已 ✅。
+上述保留任务记录纪律；T001、H1–H4 及 T030–T047 已完成。后续任务来自实际试用反馈，不把历史「进行中」或旧 horizon 原文重新当成主链队列。
 
 ---
 
@@ -405,13 +441,24 @@ GeBIZ 代交 / 自动中标；法定专项方案 / PE·QP·RTO 签认件；十�
 
 ---
 
-## 11. 下一刀（立刻）
+## 11. 本地发布验收已完成，后续按用户试用反馈迭代
 
-**T040 · hr 进行中：下一岗 hr-labor。**
+**T044–T047 已按 §7.2 的 20 岗逐项完成，本地发布验收已完成。** 设计 105 项回归通过，统一检查 40/40 及末次相关复验 10/10 通过；后续按用户试用反馈迭代，不新增虚构任务号。
 
 H1–H4 ✅（08-25 宿主短块）：目录预算闸、全部 high 岗 HITL、MCP 假宿主 list/call、面上标 skill 来源。不做 Seatbelt / 原生 App / 商店扩展。hr-recruit ✅。
 
-T040 下一岗：hr-labor 按合同类型分表+必备条款对照；补偿 [A001]。T040 其余岗不得一行勾完。
+2026-09-12：T040–T043 十岗和 T044–T047 二十岗均已提供独立专业文书模块。四个设计回归脚本核对用户事实、空字段、对象隔离与真实 Office 产物；统一验证入口为 `python scripts/check_project.py`。L2 已验证 66/66，L3 仍仅 pack-ship。
+
+本地验收已验证：zip 与逐文件校验、解压目录模块来源、使用先前首次联网安装成功的独立虚拟环境、无 Key 聊天、CSV/DOCX/XLSX 表格上传后生成并下载真实 Markdown/Excel、会话恢复、66 岗生成边界、高风险未确认不写盘、非法确认值 HTTP 422、服务重启和进程清理。发布目录另存 zip SHA256，验收目录另存 `acceptance.json`，不把包自身散列写回包内形成循环。本地打包和验收不等于 GitHub Release 已发布。
+
+开发仓库可复跑：
+
+```powershell
+python scripts/build_workbench_release.py --version 0.5.1-preview
+python scripts/smoke_workbench_release.py dist/civil-buddy-python-workbench-0.5.1-preview.zip --python "独立虚拟环境路径/python.exe" --all-experts
+```
+
+首次安装另可加 `--fresh-install`，只在解压包本地建立 `.venv` 并安装依赖。后续验收复用的是已真实安装成功的隔离解释器，产品模块仍来自本次解压目录。
 
 ---
 
@@ -489,7 +536,7 @@ T 号是开工 ID：K1=T001，P1-5=T002，K2=T003，P1-3=T010。handbook 不得�
 | 「其余 57 岗」 | 已富约 5 岗（bid×3 + pack-ship + construction 十一章），其余 **61** | §7.2 已改正 |
 | K1「目录齐但无闸」 | 当时 64/66；只缺 construction 与 method-hazard 的 `outline.md` | 已做 T001 ✅；§11 现为 T040 |
 | post-horizon bid 三岗「下一刀=handoff/gaps/评分点」 | P1-1 **已做** | 以本文 §7 为准；horizon 文当历史下一刀 |
-| post-horizon construction「下一刀=十一章接 turn」 | S2 **已做** md；fill_scheme / `docx_pending` 已接（T005 ✅） | 岗栏下一刀 = T040 hr-labor（hr-recruit ✅） |
+| post-horizon construction「下一刀=十一章接 turn」 | S2 **已做** md；fill_scheme / `docx_pending` 已接（T005 ✅） | 岗栏完成记录见 §7.2；本地发布验收已完成，后续按用户试用反馈迭代 |
 | 行业评测「缺 Python eval/live、MCP 几乎只有 pack-ship」 | 2026-08-19 已有 `GET /api/eval/live` 与 `mcp_stdio --pack bid` | 不改 08-17 历史总判日期；现网能力以本文 §3 为准 |
 | 营销博客「CORENET X 2026-10-01 全部新项目」 | 已被 APPBCA-2026-12 收窄为 GFA≥5,000 m² | §13 列为反例 |
 | §15「T030–T047 = 61 岗」 | 展开约 **56**（已扣 bid×3、pack-ship、construction、method-hazard、finance-tax、cost、survey、dispatch） | 下表已改 |
@@ -553,16 +600,16 @@ T 号是开工 ID：K1=T001，P1-5=T002，K2=T003，P1-3=T010。handbook 不得�
 | T037 | procurement | proc-plan ✅ → proc-compare ✅ → proc-vendor ✅（金额门槛不默写） |
 | T038 | finance 其余 | finance-book ✅ → finance-fund ✅（tax 见 T004） |
 | T039 | people | worker-brief ✅ → pm-daily ✅ |
-| T040 | hr | hr-recruit ✅ → hr-labor → hr-train |
-| T041 | admin | admin-doc → admin-office（不自动盖章） |
-| T042 | it | it-ops → it-data → it-app（禁止密钥进稿） |
-| T043 | bim | bim-coord → bim-qto → bim-deliver（不假装 IFC 全量） |
-| T044 | design 批次 1 | architecture（10 章面积[A001]）→ structure → geotech → facade |
-| T045 | design 批次 2 | plumbing → hvac → electrical → fire-protect → steel |
-| T046 | design 批次 3 | landscape → interior → intel-weak → civil-defense → hydraulic |
-| T047 | design 批次 4 | port → municipal → bridge → tunnel → traffic → design-coord |
+| T040 | hr | hr-recruit ✅ → hr-labor ✅ → hr-train ✅；逐岗证据见 §7.2 |
+| T041 | admin | admin-doc ✅ → admin-office ✅（不自动盖章）；`test_admin_drafts.py` |
+| T042 | it | it-ops ✅ → it-data ✅ → it-app ✅（凭据过滤）；`test_it_drafts.py` |
+| T043 | bim | bim-coord ✅ → bim-qto ✅ → bim-deliver ✅（不假装 IFC 全量）；`test_bim_drafts.py` |
+| T044 | design 批次 1 | architecture ✅ → structure ✅ → geotech ✅ → facade ✅；`test_design_basic_drafts.py` |
+| T045 | design 批次 2 | plumbing ✅ → hvac ✅ → electrical ✅ → fire-protect ✅ → steel ✅；`test_design_services_drafts.py` |
+| T046 | design 批次 3 | landscape ✅ → interior ✅ → intel-weak ✅ → civil-defense ✅ → hydraulic ✅；`test_design_specialties_drafts.py` |
+| T047 | design 批次 4 | port ✅ → municipal ✅ → bridge ✅ → tunnel ✅ → traffic ✅ → design-coord ✅；`test_design_infrastructure_drafts.py` |
 
-T030–T047 是**批次合同**（T030–T039 ✅ 后约 **30** 岗，hr-recruit ✅）。**一行不得一次勾完**；每岗一 commit。细节读 post-horizon 该 id。
+T030–T047 是**批次合同**，设计 20 岗的实际字段与证据已在 §7.2 逐行登记；四批次已在 105 项岗位回归和统一检查通过后逐岗认领完成。代码、专业内容及门控证据必须对应每个岗位，不按单个通用模板一行勾完。
 
 ### E. 主线 C 与装箱（插件，不另起炉灶）
 
@@ -585,7 +632,7 @@ T030–T047 是**批次合同**（T030–T039 ✅ 后约 **30** 岗，hr-recruit
 | T065 | 作业根直接读本机 xlsx/docx/csv/txt，不必再上传 | `GET /api/job` + run 时注入 | ✅ |
 | T066 | 点名已有 xlsx 时写入 `CB草稿-*` 表，保留业主表 | 授权夹内原地改草稿表 | ✅ |
 | T067 | 本机桌面窗口：启动器打开 127.0.0.1 应用窗 | `scripts/civil-buddy-desktop.ps1` | ✅ |
-| T068 | 可下载试用：LICENSE + 自带 API Key + 工作台 Release + 给试用的人.md | MIT · OpenAI 兼容 Key · `cargo build --release` 上 Releases | ✅ |
+| T068 | 可分发 Python 工作台：LICENSE、启动器、依赖与试用说明 | 66 岗 Python 源码包本地解压验收；三种 Office 输入、严格确认、重启恢复及清理；未发布 GitHub Release | ✅ 本地验收完成 |
 
 ### G. 土木版 Codex 宿主短块（08-25 评测）
 
@@ -599,6 +646,6 @@ T030–T047 是**批次合同**（T030–T039 ✅ 后约 **30** 岗，hr-recruit
 
 **主链（不定时限；头指针 = 第一个非 ✅/延期）：**
 
-T001 → T021 → T023 → T003 → T007 → T008 → T002 → T004 → T006 → T005 → T014 → T011 → T010 → T020+T024 → T030 → T031 → T032 ✅ → T033 ✅ → T034 ✅ → T035 ✅ → T036 ✅ → T037 ✅ → T038 ✅ → T039 ✅ → H1 ✅ → H2 ✅ → H3 ✅ → H4 ✅ → **T040**（hr-labor）→ T041…T047（T050 / T052 / T062 / T064–T068 文档与平台已 ✅，不占岗栏。H5 延期）。
+T001 → T021 → T023 → T003 → T007 → T008 → T002 → T004 → T006 → T005 → T014 → T011 → T010 → T020+T024 → T030 → T031 → T032 ✅ → T033 ✅ → T034 ✅ → T035 ✅ → T036 ✅ → T037 ✅ → T038 ✅ → T039 ✅ → H1 ✅ → H2 ✅ → H3 ✅ → H4 ✅ → T040 ✅ → T041 ✅ → T042 ✅ → T043 ✅ → T044 ✅ → T045 ✅ → T046 ✅ → T047 ✅→ **本地发布验收 ✅**。T050 / T052 / T062 / T064–T068 已 ✅；后续按用户试用反馈迭代。H5 延期，不自动开启。
 
 T012/T060/T061/T051/T053 不占刀。中途红则停在该号，不准跳号。

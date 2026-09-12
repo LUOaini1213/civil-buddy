@@ -1,7 +1,7 @@
 """Python GET /api/eval/live: offline official-title needles + agent loop smoke.
 
-Does not scrape IRAS. If a KB file has 9%, the needle is pass — never claim
-the official page omitted 9% from a failed scrape.
+Does not scrape IRAS or certify current tax rates. Source-title availability
+and unknown-rate behavior are separate offline checks.
 """
 
 from __future__ import annotations
@@ -15,10 +15,10 @@ COMPANY = "demo/kb/company/web-portals.md"
 
 NEEDLES = (
     {
-        "id": "gst-9",
+        "id": "gst-source-title",
         "path": COMPANY,
-        "must": ("9%", "Current GST rates"),
-        "note": "IRAS 页述 GST 9%；离线闸抄 company 页，不改口「官方没写」。",
+        "must": ("Current GST rates", "IRAS"),
+        "note": "只检查本地 IRAS 来源标题可定位，不核验税率现行性。",
     },
     {
         "id": "fire-code",
@@ -84,7 +84,8 @@ def live_eval() -> Dict[str, Any]:
     chat_ok = (
         chat.get("intent") == "chat"
         and chat.get("wrote") is False
-        and "9%" in str(chat.get("reply") or "")
+        and "UNSPECIFIED" in str(chat.get("reply") or "")
+        and "9%" not in str(chat.get("reply") or "")
         and "可以投标" not in str(chat.get("reply") or "")
     )
     gates = {
@@ -101,14 +102,14 @@ def live_eval() -> Dict[str, Any]:
         "schema": "civil.eval.live.v1",
         "live_web": False,
         "verdict": "offline_gate_pass" if ok else "offline_gate_fail",
-        "note": "发版前可另开联网评测。日常闸不抓 IRAS。官方页有 9% 时不得改口「官方没写」。",
+        "note": "离线检查来源标题与问答不写入；无明确辖区和税率依据保留 UNSPECIFIED，不把历史 KB 当现行税务依据。",
         "understand": {"chat": u_chat, "run": u_run},
         "needles": needles,
         "agent": {
             "run_id": chat.get("run_id"),
             "intent": chat.get("intent"),
             "wrote": chat.get("wrote"),
-            "has_gst_9": "9%" in str(chat.get("reply") or ""),
+            "rate_unspecified": "UNSPECIFIED" in str(chat.get("reply") or "") and "9%" not in str(chat.get("reply") or ""),
         },
         "sandbox": {
             "env": env_deny.to_dict(),

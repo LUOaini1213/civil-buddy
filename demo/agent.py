@@ -310,7 +310,10 @@ def _plain_system() -> str:
 
 
 def run_plain(history: list[dict[str, str]]) -> Iterator[dict[str, Any]]:
-    messages = [{"role": "system", "content": _plain_system()}, *history]
+    from context import prepare_request
+    # Workbench admission supplies the complete, budgeted request. Legacy callers
+    # still get a router system prompt and the same budget handling.
+    messages = history if history and history[0].get("role") == "system" else prepare_request(_plain_system(), history)[0]
     yield {"event": "status", "data": {"phase": "plain", "text": "土木版 Codex · 未选用 skill · 路由器"}}
     buf = []
     for piece in stream_plain(messages):

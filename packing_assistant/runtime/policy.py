@@ -142,6 +142,10 @@ def evaluate(
             cost,
             extra={"actor": expert_id, "owner": owner, "tool": tool},
         )
+    from packing_assistant.runtime.civil_config import load_config
+
+    if writes and not load_config().allow_write():
+        return PolicyDecision(False, CODE_SANDBOX, "拒绝：当前为只读模式，工具未执行。", ERR_DENIED, cost)
     if fail_streak >= circuit_threshold:
         return PolicyDecision(
             False,

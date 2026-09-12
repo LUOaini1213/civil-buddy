@@ -23,7 +23,8 @@ def main() -> int:
     assert chat["intent"] == "chat"
     assert chat["wrote"] is False
     assert chat.get("matrix") is None
-    assert "9%" in chat["reply"]
+    assert "UNSPECIFIED" in chat["reply"]
+    assert "9%" not in chat["reply"]
     assert "可以开工" not in chat["reply"]
     assert "可以投标" not in chat["reply"]
     assert "中标率" not in chat["reply"]
@@ -50,7 +51,8 @@ def main() -> int:
     assert jq.get("intent") == "chat"
     assert jq.get("wrote") is False
     assert jq.get("matrix") is None
-    assert "9%" in (jq.get("reply") or "")
+    assert "UNSPECIFIED" in (jq.get("reply") or "")
+    assert "9%" not in (jq.get("reply") or "")
 
     u = client.post("/api/understand", json={"text": "写临边防护方案讨论提纲"})
     assert u.status_code == 200

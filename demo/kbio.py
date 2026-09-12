@@ -1,9 +1,12 @@
 from __future__ import annotations
 
+import logging
 import re
 from pathlib import Path
 
-from config import KB_ROOT, SKILL_HARD_RULES
+from config import KB_ROOT, REPO_ROOT, SKILL_HARD_RULES
+
+logger = logging.getLogger("civil.demo_kbio")
 
 ALLOWED_SUFFIX = {".md", ".txt"}
 MAX_FILE_BYTES = 512 * 1024
@@ -186,7 +189,7 @@ def _kb_index_hook(rel_posix: str) -> None:
             title_resolver=lambda p, text: display_title(p.name, text),
         )
     except Exception:
-        pass
+        logger.warning("KB 索引更新失败 path=%s", rel_posix, exc_info=True)
 
 
 def write_text(rel: str, content: str) -> dict:
@@ -199,21 +202,11 @@ def write_text(rel: str, content: str) -> dict:
         raise ValueError("只允许 .md / .txt")
     if not valid_filename(path.name):
         raise ValueError("文件名只能用中文、字母、数字、_ -")
-    try:
-        import sys
+    from packing_assistant.sandbox import guarded_write_text
 
-        from config import REPO_ROOT
-
-        if str(REPO_ROOT) not in sys.path:
-            sys.path.insert(0, str(REPO_ROOT))
-        from packing_assistant.sandbox import guarded_write_text
-
-        guarded_write_text(path, content)
-    except PermissionError:
-        raise
-    except Exception:
-        path.parent.mkdir(parents=True, exist_ok=True)
-        path.write_text(content, encoding="utf-8")
+    # A failed guard must never become an unguarded write. Only indexing is
+    # best-effort: the file write itself must succeed before the hook runs.
+    guarded_write_text(path, content)
     rel_posix = str(path.relative_to(KB_ROOT)).replace("\\", "/")
     _kb_index_hook(rel_posix)
     return file_stat(path, rel_posix, "")
@@ -229,10 +222,15 @@ def create_file(rel: str) -> dict:
 
 
 def delete_file(rel: str) -> None:
+    from packing_assistant.sandbox import assert_write
+
     path = resolve_rel(rel)
     if path is None or not path.is_file():
         raise ValueError("文件不存在")
-    path.unlink()
+    if path.suffix.lower() not in ALLOWED_SUFFIX:
+        raise ValueError("只允许 .md / .txt")
+    assert_write(path).unlink()
+    _kb_index_hook(path.relative_to(KB_ROOT).as_posix())
 
 
 def ensure_expert_kb(category: str, expert_id: str, name: str) -> None:

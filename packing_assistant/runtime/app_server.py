@@ -73,7 +73,7 @@ def dispatch(method: str, params: Dict[str, Any]) -> Any:
     if method in {"config/get", "config.get"}:
         return load_config().to_dict()
     if method in {"thread/start", "thread.start"}:
-        th = new_thread(str(params.get("title") or params.get("text") or ""), confirm=bool(params.get("confirm")))
+        th = new_thread(str(params.get("title") or params.get("text") or ""), confirm=params.get("confirm") is True)
         return th.to_dict()
     if method in {"thread/list", "thread.list"}:
         return {"threads": [t.to_dict() for t in list_threads()]}
@@ -86,12 +86,12 @@ def dispatch(method: str, params: Dict[str, Any]) -> Any:
             raise ValueError("turn/start 需要 text")
         tid = str(params.get("thread_id") or "")
         if not tid:
-            tid = new_thread(text[:40], confirm=bool(params.get("confirm"))).thread_id
+            tid = new_thread(text[:40], confirm=params.get("confirm") is True).thread_id
         return run_on_thread(
             tid,
             text,
             skill=str(params.get("skill") or ""),
-            confirm=bool(params.get("confirm")),
+            confirm=params.get("confirm") is True,
             background=bool(params.get("background")),
         )
     raise ValueError(f"unknown method {method}")

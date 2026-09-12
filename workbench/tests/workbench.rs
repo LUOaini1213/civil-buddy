@@ -865,12 +865,11 @@ fn test_finance_tax_and_env_sg_titles() {
     let out = packs::execute(&mut tax, "finance-tax__calendar", &json!({}));
     assert!(out.contains("已写入"), "{out}");
     let text = std::fs::read_to_string(tax.out_dir.join("税务检查表.md")).unwrap();
-    assert!(text.contains("SG"), "{text}");
-    assert!(text.contains("GST") && text.contains("IRAS"), "{text}");
-    assert!(text.contains("9%"), "{text}");
-    assert!(text.contains("申报期空栏") || text.contains("空栏"), "{text}");
+    assert!(text.contains("辖区：UNSPECIFIED"), "{text}");
+    assert!(text.contains("申报期") && text.contains("IRAS"), "{text}");
+    assert!(!text.contains("9%"), "{text}");
+    assert!(text.contains("UNSPECIFIED"), "{text}");
     assert!(!text.contains("增值税"), "{text}");
-    assert!(text.contains("辖区：SG"), "{text}");
 
     let mut book = ToolCtx::new(p.clone(), "finance-book", "finance", "low", true, "iter-book-sg");
     let bo = packs::execute(&mut book, "finance-book__check", &json!({"period":"2026-08"}));
@@ -884,9 +883,9 @@ fn test_finance_tax_and_env_sg_titles() {
     let dout = packs::execute(&mut dual, "finance-tax__calendar", &json!({"jurisdiction":"DUAL","other_jurisdiction":"CN"}));
     assert!(dout.contains("已写入"), "{dout}");
     let dt = std::fs::read_to_string(dual.out_dir.join("税务检查表.md")).unwrap();
-    assert!(dt.contains("DUAL（SG + CN）"), "{dt}");
-    assert!(dt.contains("GST（SG 栏）"), "{dt}");
-    assert!(dt.contains("增值税（另一辖区栏）"), "{dt}");
+    assert!(dt.contains("辖区：DUAL"), "{dt}");
+    assert!(dt.contains("独立地区记录"), "{dt}");
+    assert!(!dt.contains("9%"), "{dt}");
     assert!(text.contains("[A001]"), "{text}");
     let mut sib = ToolCtx::new(p.clone(), "finance-fund", "finance", "low", true, "iter-tax-sib");
     assert!(packs::execute(&mut sib, "finance-tax__calendar", &json!({})).contains("拒绝"));
@@ -3882,7 +3881,8 @@ async fn test_harness_expert_api_and_shadow() {
     assert_eq!(gst["intent"], "chat", "{gst}");
     assert_eq!(gst["wrote"], false, "{gst}");
     assert_eq!(gst["submit_blocked"], true);
-    assert!(gst["reply"].as_str().unwrap_or("").contains("9%"), "{gst}");
+    assert!(gst["reply"].as_str().unwrap_or("").contains("UNSPECIFIED"), "{gst}");
+    assert!(!gst["reply"].as_str().unwrap_or("").contains("9%"), "{gst}");
     assert!(gst["files"].as_array().map(|a| a.is_empty()).unwrap_or(false), "{gst}");
 
     let (st, body) = send(
@@ -4139,7 +4139,8 @@ fn test_harness_gst_question_no_write() {
     let run = civil_workbench::harness::run_turn(&p, &exp, ticket);
     assert_eq!(run.intent, "chat");
     assert!(run.files.is_empty(), "{:?}", run.files);
-    assert!(run.reply.contains("9%"), "{}", run.reply);
+    assert!(run.reply.contains("UNSPECIFIED"), "{}", run.reply);
+    assert!(!run.reply.contains("9%"), "{}", run.reply);
     let v = run.to_value();
     assert_eq!(v["wrote"], false);
     assert_eq!(v["submit_blocked"], true);

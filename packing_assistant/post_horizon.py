@@ -1,4 +1,4 @@
-"""Per-post horizon plans vs 易标 or pack-agent. Planning only — no gap implementation."""
+"""Per-post capability records and boundaries vs 易标 or pack-agent."""
 
 from __future__ import annotations
 
@@ -27,12 +27,16 @@ def _step_status(exp, step: str) -> str:
             " + 高风险确认句" if exp.risk == "high" else ""
         )
     if step == "parse":
+        if exp.category == "design":
+            return "已有 · 用户字段与附件表格按对象登记；扫描图像无 OCR 不读取，原始资料未核验"
         if exp.id == "bid-parse":
             return "已有 · bid-parse__extract / run_tender_pipeline（exact_text）"
         if any(x in " ".join(exp.exclusive) for x in ("extract", "takeoff", "parse", "record", "recon")):
             return f"部分 · 独有 {', '.join(exp.exclusive)} 可抄用户原文，无扫描 PDF"
         return "缺口 · 本岗不解析招标；用户原文进草稿，扫描 PDF 仍拒绝"
     if step == "outline":
+        if exp.category == "design":
+            return "已有 · 本专业章节、提资与缺项表；Markdown + Excel，未连接设计计算引擎"
         if any(x in " ".join(exp.exclusive) for x in ("outline", "expand", "draft", "brief", "memo", "plan", "network", "week")):
             return f"已有 · {', '.join(exp.exclusive)} 提纲/说明"
         return "部分 · run 出内部提纲骨架，未对照易标目录扩写器"
@@ -67,29 +71,29 @@ _NEXT = {
     "bid-parse": "expert_turn 把 run_tender_pipeline 的 handoff 另存 tender.handoff.json，供后岗读；本岗 submit_blocked 仍 true。",
     "bid-compliance": "expert_turn 专用 gaps：读 handoff 或重跑 pipeline，落盘三列已响应/未响应/招标未提供正文，不代判废标。",
     "bid-tech": "expert_turn 读 scoring_points 调 build_tech_outline_from_handoff；无评分点不套上个项目目录。",
-    "architecture": "architecture__memo 按 outline.md 一次写 10 章，面积/疏散 [A001]，文末只贴已核官方标题。",
-    "structure": "structure__calc_outline 按大纲落十章 + qa 自检表；无地勘不定承载力。",
-    "geotech": "geotech__brief 只抄用户 SI 分层/孔号；未出现的 c/φ、水位写未在原文检出。",
-    "plumbing": "plumbing__memo 按大纲落十章；管径/水压只抄用户资料，消防水量交消防岗。",
-    "hvac": "hvac__memo 按大纲扩写；无负荷则主机/风管/排烟量 [A001]。",
-    "electrical": "electrical__memo 落供配电/应急/防雷/消防电源；弱电整节交 intel-weak。",
-    "fire-protect": "fire-protect__brief 按大纲写 11 章专篇目录；无来源限值，不替代审图。",
-    "steel": "steel__memo 按大纲落体系/材料/连接；无跨度荷载不写梁高螺栓焊缝。",
-    "landscape": "官方标题表锁定 Greenery 5.1；landscape__memo 只准抄表，胸径无苗木表则待填。",
-    "interior": "interior__schedule 收成房间×饰面界面表；无样板不编品牌。",
-    "facade": "facade__brief 按大纲落体系；无风压不写厚度；SG 稿禁 38 号/JGJ。",
-    "intel-weak": "标题表锁定 COPIF 2018；2026 征求意见标非已生效；点数品牌待填。",
-    "civil-defense": "成稿强制 SG/CN 分栏；SG 只抄 HS/SS 与 TRHS/THSS 标题，不写墙厚门樘。",
-    "hydraulic": "三本 PUB COP 带生效日；Coastal Protection 必须同时写 2028 生效。",
-    "port": "CN/SG 分栏标题表；SG 稿无 JTS；无水位波浪不写桩长。",
-    "municipal": "municipal__memo 灌 principles.md；只抄 CDC A3 / SDRE Rev I 标题。",
-    "bridge": "bridge__outline 比选不锁定最优；无跨径则梁高钢束失败。",
-    "tunnel": "按用户工法分节；无地质不写支护参数；防火标题公路/轨交/房建不混。",
-    "traffic": "traffic__skeleton 先选建成后 TIA 或施工导改；无流量不写饱和度。",
-    "design-coord": "纪要收成表；文首只抄 APPBCA-2026-12（GFA≥5000 强制 Gateway）。",
-    "bim-coord": "bim-coord__clash 按 outline 出碰撞表（硬/间隙/留洞/4D），无模型整表待填。",
-    "bim-qto": "bim-qto__rules 把过滤说明拆成行表，工程量单价列固定 TBD。不接 IFC 真抽量。",
-    "bim-deliver": "bim-deliver__lod 一次写出坐标系/拆分/命名/LOD 表头，不宣称报审。",
+    "architecture": "已实现 T044 architecture：单体总平面、分区面积与功能、消防分区及疏散用户值、无障碍、竖向、节能和专业接口；缺面积、宽度不推算。依据仅抄用户资料、未核验；辖区与接口分栏。",
+    "structure": "已实现 T044 structure：单体体系、构件荷载与组合、材料、基础输入、抗震资料及复核清单；承载力、配筋和截面计算结果保持 UNSPECIFIED。依据仅抄用户资料、未核验；辖区与接口分栏。",
+    "geotech": "已实现 T044 geotech：孔号与分层、c/φ/水位和来源、勘探试验、地基比选、监测及提资；孔层缺项不借值，不替正式勘察报告。依据仅抄用户资料、未核验；辖区与接口分栏。",
+    "plumbing": "已实现 T045 plumbing：系统水源/水压、市政接驳、室内出户及井标高、给排水分区、雨水回用、消防水资料；管径和选泵计算待核。依据仅抄用户资料、未核验；辖区与接口分栏。",
+    "hvac": "已实现 T045 hvac：室内外参数、逐时冷热负荷、风水系统、防排烟联锁、机房竖井与消声保温；主机、风管及排烟量不代算。依据仅抄用户资料、未核验；辖区与接口分栏。",
+    "electrical": "已实现 T045 electrical：市政电源、容量和负荷系数、变配电用户方案、照明、防雷接地、线路及消防/弱电接口；不选变压器或电缆。依据仅抄用户资料、未核验；辖区与接口分栏。",
+    "fire-protect": "已实现 T045 fire-protect：救援条件、防火分区、疏散避难、消防水、防排烟、报警联动、电气及报审目录；不作审图通过或放行结论。依据仅抄用户资料、未核验；辖区与接口分栏。",
+    "steel": "已实现 T045 steel：构件体系与跨度、荷载、材料规格、螺栓焊缝、稳定支撑、防腐防火及加工安装接口；截面和连接计算未执行。依据仅抄用户资料、未核验；辖区与接口分栏。",
+    "landscape": "已实现 T046 landscape：软硬分区、竖向灌排、铺装及苗木规格数量、顶板覆土、室外设施和消防交通接口；未给苗木表不选规格。依据仅抄用户资料、未核验；辖区与接口分栏。",
+    "interior": "已实现 T046 interior：房间地墙顶及隔墙、防水材料厚度上翻、防潮隔声、门窗五金、天花开洞和外窗收口；只抄用户样板资料。依据仅抄用户资料、未核验；辖区与接口分栏。",
+    "facade": "已实现 T044 facade：幕墙体系、风压与分格、预埋后锚固、气密水密变位、防火防雷、加工检测和维护接口；不选厚度或签验收结论。依据仅抄用户资料、未核验；辖区与接口分栏。",
+    "intel-weak": "已实现 T046 intel-weak：子系统范围、点数及品牌、桥架路由、点位关联、供电 UPS 接地与消防网络接口；不编品牌或布点。依据仅抄用户资料、未核验；辖区与接口分栏。",
+    "civil-defense": "已实现 T046 civil-defense：防护单元等级及平战功能、口部/设备归属、通风滤毒超压、给排水和转换接口；不互换 CN/SG 概念或代审图。依据仅抄用户资料、未核验；辖区与接口分栏。",
+    "hydraulic": "已实现 T046 hydraulic：水工对象、水文断面和地勘孔、堤防护岸、闸泵用户参数、导流度汛和观测；无水文地质不选尺寸或流量。依据仅抄用户资料、未核验；辖区与接口分栏。",
+    "port": "已实现 T047 port：泊位船型、水位波浪潮流、结构比选、前沿尺度、航道回旋水域、装卸堆场与水利接口；不计算桩长或靠船力。依据仅抄用户资料、未核验；辖区与接口分栏。",
+    "municipal": "已实现 T047 municipal：路段桩号、平纵横断、路面结构、排水标高、管线权属及导改接口；不拆算车道宽或选路面厚度。依据仅抄用户资料、未核验；辖区与接口分栏。",
+    "bridge": "已实现 T047 bridge：桥位跨径及桥型比较、上下部结构、支座桥面、水文通航抗震及施工接口；不锁最优桥型或计算钢束桩长。依据仅抄用户资料、未核验；辖区与接口分栏。",
+    "tunnel": "已实现 T047 tunnel：用途净空、工法地层、开挖支护、防水接缝、监控量测、洞口及机电防灾接口；支护参数和监测阈值待核。依据仅抄用户资料、未核验；辖区与接口分栏。",
+    "traffic": "已实现 T047 traffic：交通影响/施工导改任务、调查来源与独立情景、组织及标志信号、仿真资料和指标；未运行仿真或优化配时。依据仅抄用户资料、未核验；辖区与接口分栏。",
+    "design-coord": "已实现 T047 design-coord：图纸版本、会审问题、提资责任期限、变更记录、逐条决议和闭环证据；不代签发，不内置审批面积阈值。依据仅抄用户资料、未核验；辖区与接口分栏。",
+    "bim-coord": "已做 T043 bim-coord。bim-coord__clash 按 outline 出碰撞表（硬/间隙/留洞/4D），无模型整表待填。",
+    "bim-qto": "已做 T043 bim-qto。bim-qto__rules 把过滤说明拆成行表，工程量只抄用户明确值，否则 UNSPECIFIED；单价 TBD。不接 IFC 真抽量。",
+    "bim-deliver": "已做 T043 bim-deliver。bim-deliver__lod 一次写出坐标系/拆分/命名/LOD 表头，不宣称报审。",
     "plan-master": "plan-master__network 固定 WBS|紧前|里程碑待填|关键线路=待计算。",
     "plan-lookahead": "已做 T032 plan-lookahead。plan-lookahead__week 出四周表；制约未清不得写入本周承诺。",
     "plan-resource": "已做 T032 plan-resource。plan-resource__peak 拆劳动力|机具|材料三表，数量待填。",
@@ -118,18 +122,41 @@ _NEXT = {
     "lab-record": "已做 T033 lab-record。lab-record__ledger 加报告编号待核|仪器检定|结论待填。",
     "finance-book": "已做 T038 finance-book。finance-book__check 出报销勾选+科目对照+对账缺口，金额 [A001]。",
     "finance-fund": "已做 T038 finance-fund。finance-fund__plan 出收入/支出窗口，金额 TBD，不当付款指令。",
-    "finance-tax": "finance-tax__calendar 加税种|节点|资料是否齐全；税率空白，只可抄 IRAS 页述 9%。",
+    "finance-tax": "finance-tax__calendar 按辖区分行核对主体、税种、期间与来源；缺税率依据保留 UNSPECIFIED，用户给值仅作待核输入，不抄历史 KB 当现行税率。",
     "supervision": "已做 T034 supervision。supervision__reply：来文复述|拟办|证据目录；暂停/复工只出目录，不写复工许可。",
     "hr-recruit": "已做 T040 hr-recruit。hr-recruit__brief 出职责|任职|面试问法；薪资仅当用户给数才抄。",
-    "hr-labor": "已做 K4 岗库。下一刀仍是 hr-labor__check 按合同类型分表+必备条款对照；补偿 [A001]。",
-    "hr-train": "hr-train__plan 出公司/项目/班组三层课题表+签到空栏。",
-    "admin-doc": "admin-doc__draft 按文种套请示/纪要/用印三套栏，禁止代用印。",
-    "admin-office": "admin-office__list 出场地|议程|与会|资料目录，决定栏留空。",
-    "it-ops": "it-ops__runbook 出系统|角色|升级路径|联系人待填，禁止写密钥。",
-    "it-data": "it-data__backup 按系统行出 RPO/RTO/介质/演练空，禁止编小时数。",
-    "it-app": "it-app__srs 按行 parse 需求笔记成角色|场景|验收待填，禁止接口地址。",
+    "hr-labor": "已做 T040 hr-labor。hr-labor__check 按合同类型分表+必备条款对照；补偿 [A001]。",
+    "hr-train": "已做 T040 hr-train。hr-train__plan 出公司/项目/班组三层课题表+签到空栏。",
+    "admin-doc": "已做 T041 admin-doc。admin-doc__draft 按文种套请示/纪要/用印三套栏，禁止代用印。",
+    "admin-office": "已做 T041 admin-office。admin-office__list 出场地|议程|与会|资料目录，决定栏留空。",
+    "it-ops": "已做 T042 it-ops。it-ops__runbook 出系统|角色|升级路径|联系人待填，禁止写密钥。",
+    "it-data": "已做 T042 it-data。it-data__backup 按系统行出 RPO/RTO/介质/演练空，禁止编小时数。",
+    "it-app": "已做 T042 it-app。it-app__srs 按行 parse 需求笔记成角色|场景|验收待填，禁止接口地址。",
     "worker-brief": "已做 T039 worker-brief。worker-brief__talk 按 script.md 写三段口播；无尺寸不报毫米。",
     "pm-daily": "已做 T039 pm-daily。pm-daily__log 出天气待填|部位|形象（不编百分比）|出勤待填。",
+}
+
+_DESIGN_TESTS = {
+    "architecture": "scripts/test_design_basic_drafts.py",
+    "structure": "scripts/test_design_basic_drafts.py",
+    "geotech": "scripts/test_design_basic_drafts.py",
+    "facade": "scripts/test_design_basic_drafts.py",
+    "plumbing": "scripts/test_design_services_drafts.py",
+    "hvac": "scripts/test_design_services_drafts.py",
+    "electrical": "scripts/test_design_services_drafts.py",
+    "fire-protect": "scripts/test_design_services_drafts.py",
+    "steel": "scripts/test_design_services_drafts.py",
+    "landscape": "scripts/test_design_specialties_drafts.py",
+    "interior": "scripts/test_design_specialties_drafts.py",
+    "intel-weak": "scripts/test_design_specialties_drafts.py",
+    "civil-defense": "scripts/test_design_specialties_drafts.py",
+    "hydraulic": "scripts/test_design_specialties_drafts.py",
+    "port": "scripts/test_design_infrastructure_drafts.py",
+    "municipal": "scripts/test_design_infrastructure_drafts.py",
+    "bridge": "scripts/test_design_infrastructure_drafts.py",
+    "tunnel": "scripts/test_design_infrastructure_drafts.py",
+    "traffic": "scripts/test_design_infrastructure_drafts.py",
+    "design-coord": "scripts/test_design_infrastructure_drafts.py",
 }
 
 
@@ -153,6 +180,8 @@ def build_post_plans() -> List[Dict[str, Any]]:
             "exclusive": list(exp.exclusive),
             "next_knife": _next_knife(exp),
         }
+        if exp.id in _DESIGN_TESTS:
+            rec["evidence"] = _DESIGN_TESTS[exp.id]
         if bench == "yibiao":
             rec["steps"] = {s: _step_status(exp, s) for s in YIBIAO_STEPS}
         else:
@@ -171,8 +200,8 @@ def horizon_order() -> List[str]:
         "2. bid-parse / bid-compliance / bid-tech 与经营岗矩阵、再审共用同一 handoff。",
         "3. pack-ship 把真实 packing_summary 抄进 list/plan/export，断线 UNSPECIFIED。",
         "4. construction / method-hazard 高风险确认句后出讨论提纲，不写法定专项。",
-        "5. 其余岗按大类补独有工具栏位（造价/计划/试验/财务/监理…），缺数不编。",
-        "6. 有宿主后再做 kb:// 分页；扫描 PDF 仅可选 CLI，失败拒绝。",
+        "5. T044–T047 的 20 岗已有逐岗专业文书；四组岗位回归见 product-plan §7.2，整体交付已通过本地解压验收。",
+        "6. 本地发布验收已完成，后续按用户试用反馈迭代；未发布 GitHub Release。分页订阅等延期项不自动成为新主链。",
     ]
 
 
@@ -181,9 +210,12 @@ def render_markdown(plans: List[Dict[str, Any]] | None = None) -> str:
     lines = [
         "# 66 岗对照易标 / pack-agent 的长程规划（2026-08-17）",
         "",
-        "每岗一条。车道 = `lane-<大类>`（子代理分批，不是 16 份大类摘要冒充）。",
+        "> 2026-09-12 更新：已做/未做以 [product-plan.md](product-plan.md) §7 / §15 为准；K4 内容闸已覆盖 66/66。",
+        "> 本页保留 2026-08-17 的对照结构；设计 20 岗更新为实际专业栏位与测试证据，其余历史下一刀不得单独当成当前队列。",
+        "",
+        "每岗一条。车道 = `lane-<大类>`。设计岗新文书只整理用户明确给定的数字、规范名称和版本，全部未核验；未知辖区 UNSPECIFIED，DUAL 的依据与接口分别登记。历史 KB 的官方标题、版本或门槛不是新起草器自动填充的规则，不据此宣称法规范已复核。",
         "易标完成度 = parse → outline → qa → kb → write。pack-agent = 数字只抄 solver + list/plan/export + 断线 UNSPECIFIED。",
-        "内部讨论草稿。不以可以投标、可以开工、中标率 +N% 为完成目标。本轮只规划，不实现缺口。",
+        "内部讨论草稿。不以可以投标、可以开工、中标率 +N% 为完成目标。L2 专业文书不等于设计求解、IFC 检查或法定签认；L3 仍仅 pack-ship。",
         "",
         "## 长程总序",
         "",
@@ -205,5 +237,9 @@ def render_markdown(plans: List[Dict[str, Any]] | None = None) -> str:
         ]
         for k, v in (p.get("steps") or {}).items():
             lines.append(f"- {k}：{v}")
-        lines += [f"- 下一刀：{p['next_knife']}", ""]
+        label = "专业实现与边界" if p.get("evidence") else "历史下一刀 / 保持边界"
+        lines += [f"- {label}：{p['next_knife']}"]
+        if p.get("evidence"):
+            lines.append(f"- 岗位回归：`{p['evidence']}`（给定/缺失输入、真实 Markdown/Excel、chat 与高风险门）")
+        lines.append("")
     return "\n".join(lines)

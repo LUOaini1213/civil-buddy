@@ -64,7 +64,9 @@ def handle(msg: dict[str, Any], *, pack: str | None = None, expert: str | None =
         return ok({"tools": list_tools(expert_id=expert or eid or None, pack=pack or None)})
     if method == "tools/call":
         name = str(params.get("name") or "")
-        args = params.get("arguments") if isinstance(params.get("arguments"), dict) else {}
+        if params.get("arguments") is not None and not isinstance(params["arguments"], dict):
+            return err(-32602, "arguments must be an object")
+        args = params.get("arguments") or {}
         out = call_tool(name, args, expert_id=expert or eid or None, pack=pack)
         text = json.dumps(out, ensure_ascii=False, default=str)
         return ok({"content": [{"type": "text", "text": text}], "isError": not out.get("ok", True)})

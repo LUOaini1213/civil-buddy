@@ -54,7 +54,7 @@ def main() -> int:
     router = load_skill("civil-buddy")
     assert router and router["name"] == "civil-buddy"
     assert "bid-parse" in router["body"] and "pack-ship" in router["body"]
-    assert "不要把 66 份人格读进同一次上下文" in router["body"]
+    assert "不能把 66 份 SOP 一次灌入模型" in router["body"]
 
     cons = load_skill("construction")
     assert cons and "11 章" in cons["body"]
@@ -64,6 +64,10 @@ def main() -> int:
     assert "xyz" in pack["body"]
     bid = load_skill("bid-parse")
     assert bid and "submit_blocked" in bid["body"]
+    hazard = load_skill("method-hazard")
+    assert hazard and "未知辖区" in hazard["body"] and "UNSPECIFIED" in hazard["body"]
+    assert "DUAL分别列依据" in hazard["body"]
+    assert "SG 默认" not in hazard["body"]
 
     from agent import build_expert_prompt, _plain_system
     from catalog_seed import EXPERTS as E
