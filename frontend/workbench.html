@@ -53,6 +53,17 @@
       --cb-gray-50: #f8fafc; --cb-gray-100: #f1f5f9; --cb-gray-200: #e2e8f0;
       --cb-gray-400: #94a3b8; --cb-gray-500: #64748b; --cb-gray-900: #0f172a;
       --cb-text: var(--cb-gray-900); --cb-text-muted: var(--cb-gray-500);
+      --cb-font: "Segoe UI", "PingFang SC", "Microsoft YaHei", system-ui, sans-serif;
+      --cb-mono: ui-monospace, "Cascadia Code", Consolas, monospace;
+      --cb-fs-xs: 12px; --cb-fs-sm: 13px; --cb-fs-md: 14px; --cb-fs-lg: 16px;
+      --cb-fs-xl: 18px; --cb-fs-2xl: 22px; --cb-fs-3xl: 28px;
+      --cb-space-1: 4px; --cb-space-2: 8px; --cb-space-3: 12px; --cb-space-4: 16px;
+      --cb-space-5: 24px; --cb-space-6: 32px; --cb-space-7: 48px;
+      --cb-radius-sm: 6px; --cb-radius-md: 10px; --cb-radius-lg: 14px; --cb-radius-full: 999px;
+      --cb-shadow-sm: 0 1px 2px rgba(15, 23, 42, 0.06);
+      --cb-shadow-md: 0 4px 18px rgba(15, 23, 42, 0.10);
+      --cb-shadow-lg: 0 10px 32px rgba(15, 23, 42, 0.16);
+      --cb-touch-min: 44px;
       /* === ux(round11) 双主题语义 token（water.css pattern：同名变量明暗两套，见附录 J）=== */
       --cb-bg: #f8fafc; --cb-panel: #ffffff; --cb-panel-soft: #f1f5f9;
       --cb-line: var(--cb-gray-200); --cb-line-soft: var(--cb-gray-100);
@@ -425,10 +436,8 @@
     }
     .shell.demo-simple .empty-hero .actions .soft,
     .shell.demo-simple .empty-hero .actions .ghost { display: none; }
-    /*
-     * 简洁无结果落地：用 absolute inset 铺满 .workspace，不依赖脆弱的 height% 链。
-     * 根因：.main 无确定高度时 flex:1 不撑开 → min-height:72vh 的 inner 只撑出空洞。
-     */
+    /* Landing content shares one scroll container. A fixed-height demo card used
+       to squeeze its siblings and clip the onboarding steps below the viewport. */
     .shell.demo-simple.no-result .body {
       min-height: 0;
       height: 100%;
@@ -453,52 +462,58 @@
       flex: 1 1 auto;
       min-height: 0;
       height: 100%;
-      overflow: hidden; /* landing fills; no outer scroll void */
-      padding: 0;
+      overflow: auto;
+      padding: 24px;
       display: block;
     }
     .shell.demo-simple.no-result .workspace-inner.is-landing {
-      position: absolute;
-      inset: 12px 16px 16px;
-      max-width: none;
-      width: auto;
+      position: static;
+      max-width: 1180px;
+      width: 100%;
       height: auto;
-      min-height: 0 !important; /* kill base min(72vh,680px) hole */
-      margin: 0;
+      min-height: 0;
+      margin: 0 auto;
       padding: 0;
-      display: flex;
-      flex-direction: column;
-      justify-content: stretch;
-      align-items: stretch;
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 20px;
+      align-items: start;
       box-sizing: border-box;
     }
+    .shell.demo-simple.no-result .workspace-inner.is-landing > * { min-width: 0; }
+    .shell.demo-simple.no-result .workspace-inner.is-landing > .cb-ob,
+    .shell.demo-simple.no-result .workspace-inner.is-landing > .cb-empty {
+      width: 100%; max-width: none; margin: 0;
+    }
+    .shell.demo-simple.no-result .workspace-inner.is-landing > .cb-empty {
+      padding: 20px; border: 1px solid var(--border); border-radius: var(--cb-radius-md);
+      background: var(--bg-panel);
+    }
+    .shell.demo-simple.no-result .workspace-inner.is-landing > .cb-empty-down {
+      grid-column: 1 / -1; width: 100%; max-width: none; margin: 0;
+    }
     .shell.demo-simple.no-result .workspace-inner.is-landing .demo-script {
-      flex: 1 1 auto;
+      grid-column: 1 / -1;
       width: 100%;
-      height: 100%;
-      min-height: 0 !important;
+      height: auto;
+      min-height: 0;
       margin: 0;
-      padding: 20px 22px 18px;
+      padding: 24px;
       box-sizing: border-box;
       display: flex;
       flex-direction: column;
-      gap: 12px;
-      overflow: auto;
-      background:
-        linear-gradient(155deg, rgba(91,141,239,0.34), rgba(28,40,60,0.98) 36%, rgba(14,20,32,0.99));
-      border: 1px solid rgba(140, 180, 255, 0.5);
-      border-radius: 18px;
-      box-shadow:
-        0 16px 40px rgba(0,0,0,0.4),
-        inset 0 1px 0 rgba(255,255,255,0.1);
+      gap: 20px;
+      overflow: visible;
+      background: var(--bg-panel);
+      border: 1px solid var(--border);
+      border-radius: 14px;
+      box-shadow: none;
     }
     .shell.demo-simple.no-result .workspace-inner.is-landing .demo-script .ds-head {
       flex: 0 0 auto;
     }
     .shell.demo-simple.no-result .workspace-inner.is-landing .demo-steps {
-      flex: 1 1 auto;
       align-content: start;
-      min-height: 120px;
       gap: 12px;
     }
     .shell.demo-simple.no-result .workspace-inner.is-landing .ds-features {
@@ -507,13 +522,13 @@
     }
     .shell.demo-simple.no-result .workspace-inner.is-landing .ds-actions {
       flex: 0 0 auto;
-      margin-top: auto;
-      padding-top: 14px;
-      border-top: 1px solid rgba(255,255,255,0.12);
+      margin-top: 0;
+      padding-top: 20px;
+      border-top: 1px solid var(--border);
     }
     .shell.demo-simple.no-result .workspace-inner.is-landing .ds-title {
       font-size: 22px;
-      color: #fff;
+      color: var(--text);
     }
     .shell.demo-simple.no-result .workspace-inner.is-landing .ds-sub {
       font-size: 13.5px;
@@ -523,12 +538,12 @@
     .shell.demo-simple.no-result .workspace-inner.is-landing .demo-step {
       padding: 16px 14px;
       min-height: 100px;
-      background: rgba(6, 10, 18, 0.55);
-      border-color: rgba(255,255,255,0.14);
+      background: var(--bg-soft);
+      border-color: var(--border);
     }
     .shell.demo-simple.no-result .workspace-inner.is-landing .demo-step .ds-k {
       font-size: 15px;
-      color: #fff;
+      color: var(--text);
     }
     .shell.demo-simple.no-result .workspace-inner.is-landing .demo-step .ds-v {
       font-size: 12.5px;
@@ -541,6 +556,17 @@
     }
     .shell.demo-simple.no-result .workspace-inner.is-landing .empty-hero {
       display: none !important;
+    }
+    .shell.demo-simple.no-result .workspace-inner.is-landing .demo-step.active {
+      background: var(--accent-soft); border-color: var(--accent);
+    }
+    .shell.demo-simple.no-result .workspace-inner.is-landing .empty-feature {
+      background: var(--bg-soft); border-color: var(--border);
+    }
+    .ds-preflight { font-size: var(--cb-fs-xs); color: var(--muted); }
+    .ds-preflight summary { cursor: pointer; width: fit-content; }
+    .demo-script .ds-preflight .status-line {
+      max-height: none; overflow: visible; overflow-wrap: anywhere;
     }
     /* 简洁无结果：隐藏 Tabs，避免点到空页 */
     .shell.demo-simple.no-result .tabs {
@@ -579,6 +605,10 @@
     @media (max-width: 720px) {
       .demo-steps { grid-template-columns: 1fr; }
       .demo-script .ds-features { grid-template-columns: 1fr; }
+      .shell.demo-simple.no-result .workspace { padding: 12px; }
+      .shell.demo-simple.no-result .workspace-inner.is-landing { grid-template-columns: minmax(0, 1fr); gap: 16px; }
+      .shell.demo-simple.no-result .workspace-inner.is-landing .demo-script { padding: 18px; }
+      .shell.demo-simple.no-result .workspace-inner.is-landing .ds-actions .primary-lg { width: 100%; min-width: 0; }
     }
     .pill {
       display: inline-flex;
@@ -1256,16 +1286,24 @@
       .split-2 { grid-template-columns: 1fr; }
       .body { grid-template-columns: 240px 1fr; }
     }
+    .sidebar-mobile-head { display: none; }
     @media (max-width: 820px) {
       .body { grid-template-columns: 1fr; }
       .sidebar { display: none; }
       .sidebar.mobile-open {
         display: flex;
         position: fixed;
-        inset: var(--top-h) 0 0 0;
+        inset: 0 auto 0 0;
         z-index: 30;
         width: min(100%, 320px);
+        height: 100dvh;
+        overflow: hidden;
       }
+      .sidebar-mobile-head {
+        display: flex; flex: 0 0 auto; align-items: center; justify-content: space-between;
+        padding: 8px 12px; border-bottom: 1px solid var(--border); font-size: 14px;
+      }
+      .sidebar-mobile-head button { min-height: var(--cb-touch-min); }
     }
 
     table.data {
@@ -2037,6 +2075,17 @@ button.primary, button.primary-lg {
 }
 button.ghost { background: transparent; border: 1px solid var(--cb-line-soft); }
 button.soft { background: var(--cb-panel-soft); border: 1px solid var(--cb-line-soft); }
+.top-actions a.soft {
+  padding: 8px 12px; border: 1px solid var(--cb-line-soft); border-radius: 10px;
+  color: var(--text); background: var(--cb-panel-soft); font-size: 13px;
+}
+.top-actions a.soft:hover { border-color: var(--cb-blue); }
+.shell { height: 100dvh; grid-template-rows: auto minmax(0, 1fr); }
+@media screen and (max-width: 768px) {
+  .topbar-row { min-width: 0; }
+  .top-actions { flex: 1 1 100%; width: 100%; min-width: 0; max-width: 100%; }
+  .top-actions a.soft { min-height: var(--cb-touch-min); }
+}
 button.danger { background: var(--cb-red); box-shadow: none; }
 .sidebar {
   background: var(--cb-side);
@@ -2173,7 +2222,7 @@ button.danger { background: var(--cb-red); box-shadow: none; }
         </div>
         <div class="top-actions">
           <!-- ux(round8) 汉堡键：≤820 显示，展开左侧团队/岗位栏（.sidebar.mobile-open，附录 G） -->
-          <button type="button" class="soft cb-nav-toggle" aria-label="展开或收起侧栏"
+          <button type="button" class="soft cb-nav-toggle" v-show="!demoSimpleMode" aria-label="展开或收起侧栏"
                   aria-expanded="false"
                   onclick="var sb=document.querySelector('.sidebar');if(sb){var o=sb.classList.toggle('mobile-open');this.setAttribute('aria-expanded',o?'true':'false')}">菜单</button>
           <!-- ux(round10) 三步引导重开入口：首访自动弹 checklist，之后点 ? 随时重开（localStorage cb_onboarded_v1） -->
@@ -2277,6 +2326,11 @@ button.danger { background: var(--cb-red); box-shadow: none; }
     <div class="body">
       <!-- Left: 三层组织图 + roster -->
       <aside class="sidebar">
+        <div class="sidebar-mobile-head">
+          <strong>任务输入</strong>
+          <button type="button" class="ghost" aria-label="收起侧栏"
+                  onclick="this.closest('.sidebar').classList.remove('mobile-open');var b=document.querySelector('.cb-nav-toggle');if(b){b.setAttribute('aria-expanded','false');b.focus()}">收起</button>
+        </div>
         <!-- ux(round14) 左侧会话栏（参考图）：顶部「新建任务」（=清空当前会话回空态）+ 最近会话列表（/api/audit session 索引，只读） -->
         <div class="side-sessions">
           <button type="button" class="rail-new" @click="cbNewTask" title="清空当前会话，回到空态卡">+ 新建任务</button>
@@ -2546,9 +2600,12 @@ button.danger { background: var(--cb-red); box-shadow: none; }
               </button>
               <span class="ds-hint">{{ demoScriptHint }}</span>
             </div>
-            <div class="status-line" v-if="!hasAnyResult && preflightHints.length" style="margin-top:12px">
-              <div v-for="(h,i) in preflightHints" :key="'phs'+i">· {{ h }}</div>
-            </div>
+            <details class="ds-preflight" v-if="!hasAnyResult && preflightHints.length">
+              <summary>运行环境</summary>
+              <div class="status-line">
+                <div v-for="(h,i) in preflightHints" :key="'phs'+i">· {{ h }}</div>
+              </div>
+            </details>
           </div>
 
           <!-- ===== ux(round3) 阶段时间线：事件流 → 8 阶段轨道（映射表见 docs/ux/ux-design-spec.md 附录 B）===== -->
@@ -6003,10 +6060,19 @@ window.CB_POSTS = [{"id":"bid-parse","name":"招标解析","aliases":["招标","
           this.cbObPersist();
         },
         cbEmptySample(id) {
+          this.demoSimpleMode = false;
           this.cmdApplyDraft(id === 'pack'
             ? cbSlashTemplate('pack', '', (window.CB_TICKETS || []).find((t) => t.id === 'small_one_container') || {})
             : cbSlashTemplate(id, ''));
           this.cbObStep(1);
+          this.$nextTick(() => {
+            const sidebar = document.querySelector('.sidebar');
+            if (sidebar && window.innerWidth <= 820) {
+              sidebar.classList.add('mobile-open');
+              const toggle = document.querySelector('.cb-nav-toggle');
+              if (toggle) toggle.setAttribute('aria-expanded', 'true');
+            }
+          });
         },
         async cbCopyGatewayCmd() {
           const text = 'python -m uvicorn gateway.app:app --port 8000';
