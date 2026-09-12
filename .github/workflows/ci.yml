@@ -111,6 +111,10 @@ jobs:
         run: python scripts/eval_workteams_cli.py --tiny-only
       - name: Trace store creates the parent session row (issue 22 regression)
         run: python scripts/test_storage_ensure_run.py
+      - name: Downloadable trace preserves SQLite tool and terminal events
+        run: python scripts/test_trace_artifact_export.py
+      - name: Complete no-key product demo
+        run: python scripts/demo_one_shot.py --all
       - name: Agent middleware four-beat script (policy deny / recovery chain / cost fuse)
         # The three guarantees the README leads with, asserted rather than demoed.
         run: python scripts/test_agent_middleware.py

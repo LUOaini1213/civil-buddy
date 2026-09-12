@@ -2,7 +2,7 @@
 
 data(round2) 起改为 storage 薄壳：CB_STORAGE 三态分派（packing_assistant/storage.py）。
   json/dual：JSONL 文件照写（dual 另写 SQLite，失败仅告警）
-  sqlite：只写 events 表；读优先 SQLite、无则回退 JSONL 文件（旧数据可读）
+  sqlite：优先写 events 表，失败落 JSONL；读取/导出合并两者，保留失败期间的事件
 """
 
 from __future__ import annotations
@@ -10,8 +10,11 @@ from __future__ import annotations
 import json
 import logging
 import time
+from collections import Counter
 from datetime import datetime, timezone
 from pathlib import Path
+from tempfile import NamedTemporaryFile
+from threading import RLock
 from typing import Any, Dict, Optional
 
 from packing_assistant.config import HARNESS_VERSION, TRACE_DIR
@@ -20,6 +23,8 @@ from packing_assistant import storage as _storage
 logger = logging.getLogger("civil.trace_events")
 
 RUNS_DIR = Path(TRACE_DIR).resolve().parent / "runs"
+# Serialize snapshot replacement with fallback appends in this process.
+_TRACE_LOCK = RLock()
 
 
 def _now_iso() -> str:
@@ -74,6 +79,11 @@ def append_trace_event(
     also_global: bool = True,
 ) -> Dict[str, Any]:
     """追加一行 JSONL（json/dual）或写 events 表（sqlite），返回规范化事件。"""
+    with _TRACE_LOCK:
+        return _append_trace_event(run_id, event, also_global=also_global)
+
+
+def _append_trace_event(run_id: str, event: Dict[str, Any], *, also_global: bool) -> Dict[str, Any]:
     ev = normalize_event(run_id, event)
     mode = _storage.storage_mode()
 
@@ -92,9 +102,20 @@ def append_trace_event(
                     }
                 )
             st.insert_event(ev)
-            return ev
         except Exception:
             logger.warning("sqlite insert_event failed, fallback to JSONL", exc_info=True)
+        else:
+            # A downloadable trace is a snapshot of the authoritative event
+            # store. Finalization can precede the terminal event, so refresh an
+            # existing export once that event has also been committed.
+            try:
+                if ev.get("type") == "done" and run_trace_path(run_id).exists():
+                    export_trace_jsonl(run_id)
+            except Exception:
+                # The event is already committed. An export failure must not be
+                # misreported as an insert failure or append a second done.
+                logger.warning("trace snapshot refresh failed; SQLite event is committed", exc_info=True)
+            return ev
 
     line = json.dumps(ev, ensure_ascii=False, default=str) + "\n"
     path = run_trace_path(run_id)
@@ -126,17 +147,101 @@ def append_trace_event(
     return ev
 
 
+def export_trace_jsonl(run_id: str) -> Optional[Path]:
+    """Atomically export SQLite plus real JSONL fallback events.
+
+    An unavailable DB must not replace a complete snapshot with a partial file.
+    The caller can retry after a read/write failure; the old file is preserved.
+    """
+    with _TRACE_LOCK:
+        rows = _read_trace(run_id, limit=10**9, strict_sqlite=True)
+        if not rows:
+            return None
+        target = run_trace_path(run_id)
+        temporary = None
+        try:
+            with NamedTemporaryFile(mode="w", encoding="utf-8", dir=target.parent,
+                                    prefix=".trace-", suffix=".jsonl.tmp", delete=False) as f:
+                temporary = Path(f.name)
+                for ev in rows:
+                    f.write(json.dumps(ev, ensure_ascii=False, default=str) + "\n")
+            temporary.replace(target)
+        finally:
+            if temporary is not None:
+                temporary.unlink(missing_ok=True)
+        return target
+
+
+def _event_time(event: dict) -> Optional[float]:
+    value = event.get("t_ms")
+    if isinstance(value, (int, float)) and not isinstance(value, bool):
+        return float(value)
+    try:
+        stamp = datetime.fromisoformat(str(event.get("ts", "")).replace("Z", "+00:00"))
+        return stamp.replace(tzinfo=stamp.tzinfo or timezone.utc).timestamp() * 1000
+    except (ValueError, OverflowError):
+        return None
+
+
+def _merge_events(primary: list, fallback: list) -> list:
+    """SQLite wins duplicate (run_id, integer seq) identities.
+
+    Legacy events without seq keep their full payload and occurrence count:
+    identical events in a snapshot are copies, but repeated events inside one
+    source may be real repetitions. Use the larger per-source occurrence count.
+    Timestamped legacy events are placed among numbered events where possible;
+    events with neither seq nor time retain source order at the end.
+    """
+    primary = [ev for ev in primary if isinstance(ev, dict)]
+    fallback = [ev for ev in fallback if isinstance(ev, dict)]
+    if any(ev.get("source") != "agent_steps_snapshot" for ev in primary + fallback):
+        primary = [ev for ev in primary if ev.get("source") != "agent_steps_snapshot"]
+        fallback = [ev for ev in fallback if ev.get("source") != "agent_steps_snapshot"]
+    numbered, legacy = {}, []
+    primary_counts, fallback_counts = Counter(), Counter()
+    for source, rows in enumerate((primary, fallback)):
+        for ev in rows:
+            seq = ev.get("seq")
+            if isinstance(seq, int) and not isinstance(seq, bool):
+                numbered.setdefault((ev.get("run_id"), seq), ev)
+                continue
+            identity = json.dumps(ev, ensure_ascii=False, sort_keys=True, default=str)
+            if source == 0:
+                primary_counts[identity] += 1
+            else:
+                fallback_counts[identity] += 1
+                if fallback_counts[identity] <= primary_counts[identity]:
+                    continue
+            legacy.append(ev)
+    result = sorted(numbered.values(), key=lambda ev: ev["seq"])
+    # Preserve normal sequence order even if wall-clock timestamps moved back.
+    for ev in sorted(legacy, key=lambda ev: (_event_time(ev) is None, _event_time(ev) or 0)):
+        stamp = _event_time(ev)
+        before = next((i for i, current in enumerate(result)
+                       if stamp is not None and _event_time(current) is not None
+                       and _event_time(current) > stamp), len(result))
+        result.insert(before, ev)
+    return result
+
+
 def read_trace_jsonl(run_id: str, *, limit: int = 5000) -> list:
+    with _TRACE_LOCK:
+        return _read_trace(run_id, limit=limit)
+
+
+def _read_trace(run_id: str, *, limit: int, strict_sqlite: bool = False) -> list:
+    limit = max(1, int(limit))
+    primary = []
     if _storage.storage_mode() == "sqlite":
         try:
-            rows = _storage.get_storage().read_trace_events(run_id, limit=limit)
-            if rows:
-                return rows
+            primary = _storage.get_storage().read_trace_events(run_id, limit=limit)
         except Exception:
+            if strict_sqlite:
+                raise
             logger.warning("sqlite read_trace_events failed, fallback to JSONL", exc_info=True)
     path = run_trace_path(run_id)
     if not path.exists():
-        return []
+        return _merge_events(primary, [])[:limit]
     out = []
     with path.open(encoding="utf-8") as f:
         for i, line in enumerate(f):
@@ -149,6 +254,8 @@ def read_trace_jsonl(run_id: str, *, limit: int = 5000) -> list:
                 out.append(json.loads(line))
             except Exception:
                 continue
+    if _storage.storage_mode() == "sqlite":
+        return _merge_events(primary, out)[:limit]
     return out
 
 

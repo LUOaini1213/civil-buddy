@@ -28,6 +28,9 @@ def _run(label: str, argv: list[str]) -> int:
     print(f"[demo_one_shot] {label}")
     print(" ", " ".join(argv))
     print("=" * 64)
+    # Keep the same UTF-8 console contract in child interpreters on Windows,
+    # including when a caller redirects the demo output to a file.
+    argv = [argv[0], "-X", "utf8", *argv[1:]]
     proc = subprocess.run(argv, cwd=str(ROOT))
     if proc.returncode != 0:
         print(f"[demo_one_shot] FAIL: {label} (exit {proc.returncode})")

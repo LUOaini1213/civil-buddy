@@ -7,6 +7,7 @@
 from __future__ import annotations
 
 import json
+import logging
 import shutil
 from datetime import datetime
 from pathlib import Path
@@ -144,20 +145,31 @@ def save_run_artifacts(
     # agent steps / tool trajectory
     traj = steps or state.get("agent_steps") or []
     paths["trace"] = _write_json(d / "agent_trace.json", traj)
-    # 流式 JSONL（若 pipeline 已写则保留；否则从 steps 合成一份）
+    # Export the canonical SQLite stream too. File absence does not mean the
+    # pipeline had no events: sqlite mode deliberately keeps them in its DB.
+    from packing_assistant import storage as _storage
+    from packing_assistant.trace_events import export_trace_jsonl, normalize_event
+
     jsonl_path = d / "trace.jsonl"
+    if _storage.storage_mode() == "sqlite":
+        try:
+            export_trace_jsonl(rid)
+        except Exception:
+            logging.getLogger("civil.run_artifacts").warning(
+                "trace snapshot export failed; retaining existing trace", exc_info=True)
     if not jsonl_path.exists() and traj:
         with jsonl_path.open("w", encoding="utf-8") as f:
             for i, st in enumerate(traj):
                 f.write(
                     json.dumps(
-                        {
+                        normalize_event(rid, {
                             "type": "agent_end",
                             "seq": i + 1,
                             "run_id": rid,
                             "node": st.get("node"),
                             "step": st,
-                        },
+                            "source": "agent_steps_snapshot",
+                        }),
                         ensure_ascii=False,
                         default=str,
                     )

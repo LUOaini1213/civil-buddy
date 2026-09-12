@@ -116,7 +116,9 @@ Python 参考实现：`demo/`（`uvicorn app:app --host 127.0.0.1 --port 8765`�
 
 ```powershell
 pip install -r requirements.txt
-python scripts/demo_agent_middleware.py      # 冒烟（四拍剧本），无需 API Key；demo_one_shot.py 的 trace 断言回归待修，见 issues
+python scripts/demo_agent_middleware.py      # 冒烟（四拍剧本），无需 API Key
+python scripts/demo_one_shot.py --all        # 产品冒烟 + tiny 闭环 + 影子评测，无需 API Key
+python scripts/test_trace_artifact_export.py # SQLite / JSONL 失败恢复、快照与终止事件回归
 python scripts/test_storage_ensure_run.py    # issue #22 回归：run_start 先于会话落盘时不再触发外键回退（CI 覆盖）
 uvicorn gateway.app:app --host 127.0.0.1 --port 8000
 ```
