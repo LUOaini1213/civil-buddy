@@ -139,7 +139,7 @@ class TraceArtifactsTest(unittest.TestCase):
             path = trace_events.export_trace_jsonl("old-run", steps=[{"node": "loader"}])
             event = json.loads(path.read_text(encoding="utf-8"))
             self.assertEqual(event["schema"], "packing.stream.v1")
-            self.assertEqual(event["source"], "step_summary")
+            self.assertEqual(event["source"], trace_events.STEP_SUMMARY_SOURCE)
             self.assertEqual(event["agent_id"], "loader")
             self.assertEqual(event["type"], "agent_end")
 

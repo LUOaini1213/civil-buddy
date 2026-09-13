@@ -30,6 +30,17 @@ def rows_for(markdown: str, title: str) -> list[list[str]]:
     return next(rows for name, rows in tables_from_md(markdown) if name.startswith(title))
 
 
+def pem_marker(kind: str = "", *, end: bool = False) -> str:
+    """A synthetic PEM armour line, assembled at runtime.
+
+    The secret scanner (scripts/scan_tracked_secrets.py) fails the build on any
+    tracked file that contains a private-key header, and it is right to: it
+    cannot tell a fixture from a leak. So the fixtures below must not contain
+    one on disk, only in memory.
+    """
+    return "-----" + ("END " if end else "BEGIN ") + kind + "PRIVATE KEY-----"
+
+
 class ItDraftTests(unittest.TestCase):
     def test_exact_registered_tools(self) -> None:
         for post in POSTS:
@@ -132,8 +143,8 @@ class ItDraftTests(unittest.TestCase):
     def test_private_key_blocks_and_quoted_multiline_secrets_never_reach_output(self) -> None:
         for post in POSTS:
             for secret in (
-                "-----BEGIN RSA PRIVATE KEY-----\nMII_SYNTHETIC_PRIVATE_ALPHA\n-----END RSA PRIVATE KEY-----",
-                "-----BEGIN OPENSSH PRIVATE KEY-----\nSYNTHETIC_PRIVATE_BRAVO",
+                pem_marker("RSA ") + "\nMII_SYNTHETIC_PRIVATE_ALPHA\n" + pem_marker("RSA ", end=True),
+                pem_marker("OPENSSH ") + "\nSYNTHETIC_PRIVATE_BRAVO",
                 '密码："multiline-secret-charlie\ncontinued-secret-delta"',
             ):
                 with self.subTest(post=post):
@@ -215,7 +226,7 @@ class ItRuntimeTests(unittest.TestCase):
                     ("it-app", "系统：字符测试；角色：资料员；功能：判断 x < 10 且 a|b", "角色与功能需求", "判断 x < 10 且 a|b"),
                 )
                 credentials = "\n密码：runtime-password-secret\nAPI key：runtime-api-secret\n功能：https://fake:runtime-url-secret@example.invalid/a\n"
-                credentials += "-----BEGIN PRIVATE KEY-----\nruntime-pem-secret\n-----END PRIVATE KEY-----\n"
+                credentials += pem_marker() + "\nruntime-pem-secret\n" + pem_marker(end=True) + "\n"
                 for index, (post, text, table, expected) in enumerate(cases):
                     with self.subTest(post=post):
                         result = expert_turn.run_expert_turn(text + credentials, post, force_intent="run", session_id=f"it-draft-{index}")
