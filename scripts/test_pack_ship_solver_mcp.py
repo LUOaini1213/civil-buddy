@@ -85,6 +85,31 @@ def main():
     # 引擎只装 N 个同型柜，不要在任何地方把它说成「箱型组合」
     assert plan["container_mix_supported"] is False, plan
 
+    # 两处对外动作必须停在人工签认
+    vgm = payload_of(rpc([
+        {"jsonrpc": "2.0", "id": 1, "method": "initialize",
+         "params": {"protocolVersion": "2025-03-26", "capabilities": {},
+                    "clientInfo": {"name": "ci", "version": "0"}}},
+        {"jsonrpc": "2.0", "id": 5, "method": "tools/call",
+         "params": {"name": "pack-ship__vgm", "arguments": {"file_path": str(SAMPLE)}}},
+    ])[5])
+    assert vgm["ok"] is True, vgm
+    assert vgm["method"] == 2, vgm
+    assert vgm["status"] == "needs_shipper_signature", vgm
+    assert vgm["auto_submit_forbidden"] is True, vgm
+    assert vgm["human_signoff_required"] is True, vgm
+
+    booking = payload_of(rpc([
+        {"jsonrpc": "2.0", "id": 1, "method": "initialize",
+         "params": {"protocolVersion": "2025-03-26", "capabilities": {},
+                    "clientInfo": {"name": "ci", "version": "0"}}},
+        {"jsonrpc": "2.0", "id": 6, "method": "tools/call",
+         "params": {"name": "pack-ship__booking_draft", "arguments": {"file_path": str(SAMPLE)}}},
+    ])[6])
+    assert booking["ok"] is True, booking
+    assert booking["dry_run"] is True and booking["submitted"] is False, booking
+    assert booking["booking_request"]["schema"].startswith("packing.tms.booking_request"), booking
+
     # 缺重量必须停下来问人，而不是当 0 公斤照装
     from packing_assistant.tools.pack_ship_solve import run_plan
     from packing_assistant.tools.table_mapper import rows_to_ir
@@ -110,10 +135,18 @@ def main():
     guessed = run_plan(materials="20 crates steel brackets 1.2t each")
     assert guessed["ok"] is False and guessed["error"] == "no_materials", guessed
 
+    # 两个草稿工具也必须被闸门拦住
+    from packing_assistant.tools.pack_ship_solve import draft_booking, draft_vgm
+
+    for fn in (draft_vgm, draft_booking):
+        blocked = fn(materials=materials)
+        assert blocked["ok"] is False and blocked["error"] == "missing_weight", (fn.__name__, blocked)
+
     print(
         f"PASS pack_ship_solver_mcp tools={len(names)} rows={ingest['n_rows']} "
         f"containers={plan['containers_used']} n0={plan['n0']} "
-        f"util={plan['utilization']} gate=needs_human"
+        f"util={plan['utilization']} vgm={vgm['status']} "
+        f"booking=dry_run gate=needs_human"
     )
     return 0
 

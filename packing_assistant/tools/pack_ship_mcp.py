@@ -16,7 +16,9 @@ TOOL_PLAN = "pack-ship__plan"
 TOOL_EXPORT = "pack-ship__export"
 TOOL_HEALTH = "pack-ship__health"
 TOOL_INGEST = "pack-ship__ingest"
-TOOL_NAMES = (TOOL_LIST, TOOL_PLAN, TOOL_EXPORT, TOOL_HEALTH, TOOL_INGEST)
+TOOL_VGM = "pack-ship__vgm"
+TOOL_BOOKING = "pack-ship__booking_draft"
+TOOL_NAMES = (TOOL_LIST, TOOL_PLAN, TOOL_EXPORT, TOOL_HEALTH, TOOL_INGEST, TOOL_VGM, TOOL_BOOKING)
 
 EVIDENCE_FIELDS = ("utilization", "can_fit", "mid50", "系固待办")
 
@@ -31,6 +33,10 @@ _ALIASES = {
     "civil.pack-ship.health": TOOL_HEALTH,
     "ingest": TOOL_INGEST,
     "civil.pack-ship.ingest": TOOL_INGEST,
+    "vgm": TOOL_VGM,
+    "civil.pack-ship.vgm": TOOL_VGM,
+    "booking_draft": TOOL_BOOKING,
+    "civil.pack-ship.booking_draft": TOOL_BOOKING,
 }
 
 _UTIL_KEYS = ("utilization", "util", "volume_util", "volume_utilization", "util_ratio")
@@ -121,6 +127,38 @@ def list_pack_ship_tools() -> List[Dict[str, Any]]:
             },
         },
         {
+            "name": TOOL_VGM,
+            "description": (
+                "SOLAS 方法二 VGM 草稿：逐件货重 + 包装系数 + 垫料 + 箱皮重。"
+                "只起草，状态停在 needs_shipper_signature，系统不替人提交。"
+                "对账口径是装箱单行重，不是地磅读数。"
+            ),
+            "inputSchema": {
+                "type": "object",
+                "properties": {
+                    "file_path": {"type": "string"},
+                    "materials": {"type": ["string", "array", "null"]},
+                    "container_type": {"type": "string"},
+                },
+            },
+        },
+        {
+            "name": TOOL_BOOKING,
+            "description": (
+                "订舱请求草稿（dry run）：落盘一份 TMS 入站契约，submitted 恒为 false。"
+                "任何对外发送都要人工签认。"
+            ),
+            "inputSchema": {
+                "type": "object",
+                "properties": {
+                    "file_path": {"type": "string"},
+                    "materials": {"type": ["string", "array", "null"]},
+                    "container_type": {"type": "string"},
+                    "max_containers": {"type": ["integer", "null"]},
+                },
+            },
+        },
+        {
             "name": TOOL_HEALTH,
             "description": "探测本仓 solver 快照是否可用。不编数字。",
             "inputSchema": {"type": "object", "properties": {"solver": {"type": "object"}}},
@@ -151,6 +189,8 @@ def list_tool() -> Dict[str, Any]:
         "export": TOOL_EXPORT,
         "health": TOOL_HEALTH,
         "ingest": TOOL_INGEST,
+        "vgm": TOOL_VGM,
+        "booking_draft": TOOL_BOOKING,
     }
 
 
@@ -274,6 +314,24 @@ def call_tool(name: str, arguments: Optional[Dict[str, Any]] = None) -> Dict[str
         connected = connected.lower() in {"1", "true", "yes"}
     if tool == TOOL_LIST:
         return list_tool()
+    if tool in (TOOL_VGM, TOOL_BOOKING):
+        from packing_assistant.tools.pack_ship_solve import draft_booking, draft_vgm
+
+        mats = args.get("materials")
+        if not isinstance(mats, list):
+            mats = None
+        fp = str(args.get("file_path") or "")
+        ctype = str(args.get("container_type") or "40HQ")
+        if tool == TOOL_VGM:
+            out = draft_vgm(materials=mats, file_path=fp, container_type=ctype)
+            out.setdefault("schema", "pack-ship.vgm.v1")
+        else:
+            mc = args.get("max_containers")
+            out = draft_booking(materials=mats, file_path=fp, container_type=ctype,
+                                max_containers=int(mc) if isinstance(mc, int) else None)
+            out.setdefault("schema", "pack-ship.booking_draft.v1")
+        out.setdefault("tool", tool)
+        return out
     if tool == TOOL_INGEST:
         return ingest_tool(args.get("materials"), str(args.get("file_path") or ""))
     if tool == TOOL_PLAN:

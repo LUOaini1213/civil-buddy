@@ -48,7 +48,7 @@ def contract_for(name: str, *, exclusive: bool = False) -> dict:
         properties.update(solver={"type": ["object", "null"]}, connected={"type": ["boolean", "null"]},
                           materials={"type": ["string", "array", "null"]}, file_path=TEXT,
                           container_type=TEXT, max_containers={"type": ["integer", "null"]})
-        if name.endswith("__ingest"):
+        if name.endswith(("__ingest", "__vgm", "__booking_draft")):
             output = obj({"ok": BOOL, "n_rows": {"type": "integer"},
                           "needs_human": {"type": "array"}}, ("ok",), extra=True)
         elif name.endswith("__list"):

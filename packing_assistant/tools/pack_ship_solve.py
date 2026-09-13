@@ -124,26 +124,14 @@ def run_plan(
             "elapsed_s": round(time.time() - t0, 3),
         }
 
-    from packing_assistant.agents.box_scheme import agent_box_scheme
-    from packing_assistant.agents.loader import agent_loader
-
-    state: Dict[str, Any] = {
-        "materials": mats,
-        "container_type": container_type,
-        "packing_options": dict(packing_options or {}),
-    }
-    if max_containers:
-        state["packing_options"].setdefault("n_max", int(max_containers))
-
-    scheme = agent_box_scheme(state)
-    boxes = scheme.get("boxes") or []
-    after_boxes = dict(state)
-    after_boxes.update(scheme)
-    loaded_plan = agent_loader(after_boxes)
-
-    plan = loaded_plan.get("container_plan") or {}
-    booking = loaded_plan.get("booking") or plan.get("booking") or {}
-    feasibility = scheme.get("cargo_feasibility") or {}
+    solved = _solve_boxes(
+        mats, container_type=container_type, max_containers=max_containers,
+        packing_options=packing_options,
+    )
+    boxes = solved["boxes"]
+    plan = solved["plan"]
+    booking = solved["booking"]
+    feasibility = solved["feasibility"]
 
     return {
         "ok": bool(plan),
@@ -153,7 +141,7 @@ def run_plan(
         "utilization": plan.get("space_utilization", UNSPECIFIED),
         "can_fit": plan.get("can_fit", UNSPECIFIED),
         "mid50": plan.get("worst_mid50", UNSPECIFIED),
-        "系固待办": plan.get("系固待办", loaded_plan.get("系固待办", UNSPECIFIED)),
+        "系固待办": plan.get("系固待办", solved["state"].get("系固待办", UNSPECIFIED)),
         # 真实数字
         "containers_used": plan.get("containers_used", UNSPECIFIED),
         "container_type": plan.get("container_type", container_type),
@@ -174,4 +162,108 @@ def run_plan(
         # pack_with_auto_containers 装 N 个同型柜），不要说成"箱型组合"。
         "container_mix_supported": False,
         "elapsed_s": round(time.time() - t0, 3),
+    }
+
+
+def _solve_boxes(
+    materials: Sequence[Dict[str, Any]],
+    *,
+    container_type: str = "40HQ",
+    max_containers: Optional[int] = None,
+    packing_options: Optional[Dict[str, Any]] = None,
+) -> Dict[str, Any]:
+    """跑工作台那两个 agent，返回原始产物（boxes / container_plan / booking）。"""
+    from packing_assistant.agents.box_scheme import agent_box_scheme
+    from packing_assistant.agents.loader import agent_loader
+
+    state: Dict[str, Any] = {
+        "materials": list(materials),
+        "container_type": container_type,
+        "packing_options": dict(packing_options or {}),
+    }
+    if max_containers:
+        state["packing_options"].setdefault("n_max", int(max_containers))
+
+    scheme = agent_box_scheme(state)
+    after_boxes = dict(state)
+    after_boxes.update(scheme)
+    loaded_plan = agent_loader(after_boxes)
+
+    plan = loaded_plan.get("container_plan") or {}
+    merged = dict(after_boxes)
+    merged.update(loaded_plan)
+    merged["container_plan"] = plan
+    return {
+        "boxes": scheme.get("boxes") or [],
+        "plan": plan,
+        "booking": loaded_plan.get("booking") or plan.get("booking") or {},
+        "feasibility": scheme.get("cargo_feasibility") or {},
+        "state": merged,
+    }
+
+
+def _prepared(materials: Any, file_path: str) -> Dict[str, Any]:
+    """解析 + 闸门，两个草稿工具共用。失败时返回 run_plan 同形状的错误。"""
+    loaded = load_materials(materials, file_path)
+    mats = loaded["materials"]
+    if not loaded["ok"]:
+        return {"ok": False, "error": "no_materials", "detail": loaded["errors"],
+                "solver_connected": False, "source": "unparsed"}
+    needs = rows_needing_human(mats)
+    if needs:
+        return {"ok": False, "error": NEEDS_HUMAN_MISSING_WEIGHT, "needs_human": needs,
+                "solver_connected": False, "source": "needs_human", "n_rows": len(mats)}
+    return {"ok": True, "materials": mats}
+
+
+def draft_vgm(
+    *,
+    materials: Any = None,
+    file_path: str = "",
+    container_type: str = "40HQ",
+) -> Dict[str, Any]:
+    """SOLAS 方法二 VGM 草稿。只起草，auto_submit_forbidden 由引擎自己设。"""
+    prep = _prepared(materials, file_path)
+    if not prep["ok"]:
+        return prep
+    from packing_assistant.tools.vgm_draft import draft_vgm_method2
+
+    solved = _solve_boxes(prep["materials"], container_type=container_type)
+    draft = draft_vgm_method2(solved["plan"], solved["boxes"])
+    out = {"ok": True, "solver_connected": True, "source": "solver",
+           "container_type": container_type, "n_boxes": len(solved["boxes"])}
+    out.update(draft)
+    # 对账口径：与装箱单行重 + 皮重 + 包装系数对账，不是与地磅比对。
+    out.setdefault("reconciled_against", "packing_list_lines+tare+packaging_factor")
+    return out
+
+
+def draft_booking(
+    *,
+    materials: Any = None,
+    file_path: str = "",
+    container_type: str = "40HQ",
+    max_containers: Optional[int] = None,
+) -> Dict[str, Any]:
+    """订舱请求草稿（dry run）。生成文件，不替人发出。"""
+    prep = _prepared(materials, file_path)
+    if not prep["ok"]:
+        return prep
+    from packing_assistant.tms_booking import build_booking_request
+
+    solved = _solve_boxes(
+        prep["materials"], container_type=container_type, max_containers=max_containers
+    )
+    req = build_booking_request(solved["state"])
+    return {
+        "ok": True,
+        "solver_connected": True,
+        "source": "solver",
+        "dry_run": True,
+        "submitted": False,
+        "note": "草稿只落盘，不向承运人提交；提交需人工签认。",
+        "booking_request": req,
+        "containers_used": solved["plan"].get("containers_used", UNSPECIFIED),
+        "n0": solved["booking"].get("n0", UNSPECIFIED),
+        "container_mix_supported": False,
     }
