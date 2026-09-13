@@ -60,6 +60,28 @@ def main():
     assert "表头零件A" in keep_names, keep_names
     assert "跳过梁-备用" in keep_names, keep_names
     assert "这是注释行" not in keep_names, keep_names
+    # 吨位单位回归：_norm_header 会删掉空白，"Gross Weight (t)" 规范化成
+    # "grossweight(t)"；旧代码因为里面含 "weight" 而排除了吨换算，系数落回 1.0，
+    # 把吨当成公斤——1000 倍少报，直接污染 N0 按重计算、载重校验与 VGM 草稿。
+    from packing_assistant.tools.table_mapper import _infer_weight_scale
+    _scale_cases = [
+        ("Gross Weight (t)", 1000.0), ("G.W.(T)", 1000.0), ("毛重(吨)", 1000.0),
+        ("总重(T)", 1000.0), ("weight_t", 1000.0), ("单重t", 1000.0), ("t", 1000.0),
+        ("Net Weight (kg)", 1.0), ("N.W. (kg)", 1.0), ("gross_weight_kg", 1.0),
+        ("Weight", 1.0), ("Total", 1.0), ("Tare", 1.0), ("净重 (g)", 0.001),
+    ]
+    for _h, _want in _scale_cases:
+        _got = _infer_weight_scale(_h, [1.35, 2.0, 3.1])
+        assert _got == _want, (_h, _got, _want)
+    # 端到端：一行 1.35 吨必须落成 1350 kg
+    _tonne = rows_to_ir(
+        [{"name": "steel bracket", "qty": 2, "length_mm": 1200,
+          "width_mm": 400, "height_mm": 300, "Gross Weight (t)": 1.35}],
+        headers=["name", "qty", "length_mm", "width_mm", "height_mm", "Gross Weight (t)"],
+    )
+    assert _tonne, "吨位行被整行丢弃"
+    assert abs(_tonne[0]["weight_kg"] - 1350.0) < 1e-6, _tonne[0]
+
     print("ALL_PASS table_mapper_unit")
     return 0
 if __name__ == "__main__":

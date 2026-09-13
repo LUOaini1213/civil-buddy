@@ -272,11 +272,14 @@ def _infer_weight_scale(header: str, values: List[Optional[float]]) -> float:
     """返回乘到 kg 的系数。注意：不可用 `'t' in header`（weight 含字母 t）。"""
     h = _norm_header(header)
     raw = str(header or "")
-    # 明确吨：_t / (t) / 吨 / weight_t / 单重t —— 排除 weight/net_weight 等
+    # 明确吨：_t / (t) / 吨 / weight_t / 单重t
+    # 只排除 kg。上面的正则已要求 t 是独立词元（^t / _t / 结尾 t / "(t)"），
+    # "weight" 里的字母 t 不满足该条件，无需再排除；排除它会让 "Gross Weight (t)"
+    # 规范化后的 "grossweight(t)" 落回 1.0，把吨当公斤，1000 倍少报。
     if "吨" in raw:
         return 1000.0
     if re.search(r"(^|_)(t)($|[^a-z])", h) or h.endswith("_t") or "(t)" in h:
-        if "kg" not in h and "weight" not in h:
+        if "kg" not in h:
             return 1000.0
     if (
         h in ("weight_t", "total_t", "单重t", "总重t", "吨")
