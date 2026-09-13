@@ -714,7 +714,53 @@ def load_table(path: PathLike, **kwargs: Any) -> List[Dict[str, Any]]:
         return load_xlsx(path, sheet=kwargs.get("sheet"))
     if suf == ".json":
         return load_json(path)
+    if suf == ".pdf":
+        return load_packing_list_pdf(path)
     raise ValueError(f"unsupported table type: {suf}")
+
+
+def load_packing_list_pdf(path: PathLike) -> List[Dict[str, Any]]:
+    """PDF 装箱单 → IR 行。
+
+    正式装箱单常常没有单件 L×W×H，解析器按品名 + 单重 + 包装类型做工程估算。
+    估算出来的尺寸一路会变成柜数，所以每行都带 dims_estimated=True 且把置信度
+    压到 0.45，让上层把它和量出来的尺寸区分开。
+    """
+    from packing_assistant.tools.packing_list_parser import parse_packing_list_pdf
+
+    parsed = parse_packing_list_pdf(path)
+    rows: List[Dict[str, Any]] = []
+    for m in parsed.get("materials") or []:
+        estimated = bool(m.get("dims_estimated"))
+        total_kg = float(m.get("total_weight_kg") or 0.0)
+        rows.append(
+            {
+                "id": m.get("id") or "",
+                "name": m.get("name") or "",
+                "spec": m.get("spec") or "",
+                "quantity": int(m.get("quantity") or 1),
+                "weight_kg": float(m.get("weight_kg") or 0.0),
+                "total_weight_kg": total_kg,
+                "length_mm": float(m.get("length_mm") or 0.0),
+                "width_mm": float(m.get("width_mm") or 0.0),
+                "height_mm": float(m.get("height_mm") or 0.0),
+                "part_no": "",
+                "category": m.get("category") or "generic",
+                "note": m.get("package") or "",
+                "meta": {
+                    "source": "pdf",
+                    "source_path": str(path),
+                    "column_map": {},
+                    "units_in": {},
+                    "confidence": 0.45 if estimated else 0.8,
+                    "dims_estimated": estimated,
+                    "weight_missing": total_kg <= 0,
+                    "profile_hint": "packing_list_pdf",
+                    "container_no": m.get("container_no") or "",
+                },
+            }
+        )
+    return rows
 
 
 def ir_to_materials(rows: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
@@ -739,6 +785,17 @@ def ir_to_materials(rows: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
             }
         )
     return mats
+
+
+def _no_rows_reason(path: "Path") -> str:
+    """一行都没解析出来时，说清楚下一步该做什么。"""
+    if str(path).lower().endswith(".pdf"):
+        return (
+            "PDF 里没有识别出物料行：行版式解析是按某一类装箱单调的，"
+            "换一种版式就认不出来。请把这份单子另存为 xlsx/csv 再上传，"
+            "或提供一份该版式的样本以便补充规则。"
+        )
+    return "no material rows parsed"
 
 
 def parse_table_file(path: PathLike, **kwargs: Any) -> Dict[str, Any]:
@@ -771,7 +828,7 @@ def parse_table_file(path: PathLike, **kwargs: Any) -> Dict[str, Any]:
             "n_skip_zero_placeholder": clean.get("n_skip_zero_placeholder"),
             "clean": clean,
         },
-        "errors": [] if mats else ["no material rows parsed"],
+        "errors": [] if mats else [_no_rows_reason(path)],
     }
 
 
@@ -785,7 +842,7 @@ def parse_table_bytes(
     import tempfile
 
     suf = Path(filename or "upload.csv").suffix.lower() or ".csv"
-    if suf not in (".csv", ".tsv", ".txt", ".xlsx", ".xlsm", ".json"):
+    if suf not in (".csv", ".tsv", ".txt", ".xlsx", ".xlsm", ".json", ".pdf"):
         suf = ".csv"
     tmp_path = None
     try:
