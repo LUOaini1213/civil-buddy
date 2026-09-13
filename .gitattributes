@@ -1,0 +1,18 @@
+# 二进制夹具不得做行尾转换。generic_en.pdf 这类 reportlab 输出前 8KB 内没有
+# NUL 字节，git 会把它判成文本，在 core.autocrlf=true 的机器上 checkout 时
+# LF 被换成 CRLF，文件当场损坏。xlsx 装箱单夹具同理。
+*.pdf  binary
+*.xlsx binary
+*.xlsm binary
+*.xls  binary
+*.docx binary
+*.zip  binary
+*.png  binary
+*.jpg  binary
+*.jpeg binary
+*.gif  binary
+*.mp4  binary
+*.ico  binary
+*.ttf  binary
+*.woff binary
+*.woff2 binary
