@@ -94,6 +94,14 @@ def handle(msg: dict[str, Any], *, pack: str | None = None, expert: str | None =
 
 
 def main() -> int:
+    # 工具描述与拒绝语都是中文，而协议帧直接写 sys.stdout。POSIX/C locale 下
+    # （systemd、Docker）默认编码不是 UTF-8，第一条含中文的响应就会
+    # UnicodeEncodeError，服务器死在半条消息上。
+    for _stream in (sys.stdout, sys.stderr):
+        try:
+            _stream.reconfigure(encoding="utf-8")
+        except (AttributeError, ValueError):
+            pass
     ap = argparse.ArgumentParser()
     ap.add_argument("--pack", default="")
     ap.add_argument("--expert", default="")
