@@ -114,6 +114,39 @@ def _stream_content(response: httpx.Response) -> Iterator[str]:
     raise LLMError("模型连接已结束但未收到完成标记，回复可能不完整，请重试")
 
 
+class ModelConnection:
+    """An httpx client plus every network stream its requests open.
+
+    Cancellation (demo/turn_control.py) has to shut down the socket a request
+    is blocked on. httpx only exposes that socket on a response, and a request
+    still waiting for response headers has no response yet — so this records
+    the streams as httpcore opens them, through httpcore's documented ``trace``
+    request extension. A TLS stream supersedes the TCP stream it wrapped.
+    """
+
+    _OPENED = (".connect_tcp.complete", ".connect_unix_socket.complete", ".start_tls.complete")
+
+    def __init__(self, timeout: float = 120.0):
+        self.client = httpx.Client(timeout=timeout)
+        self.network_streams: list[Any] = []
+
+    def _trace(self, name: str, info: dict) -> None:
+        if name.endswith(self._OPENED) and info.get("return_value") is not None:
+            self.network_streams.append(info["return_value"])
+
+    def stream(self, method: str, url: str, **kwargs):
+        return self.client.stream(method, url, extensions={"trace": self._trace}, **kwargs)
+
+    def close(self) -> None:
+        self.client.close()
+
+    def __enter__(self) -> "ModelConnection":
+        return self
+
+    def __exit__(self, *exc) -> None:
+        self.close()
+
+
 def chat(
     messages: list[dict[str, Any]],
     *,
@@ -138,9 +171,9 @@ def chat(
         payload["tool_choice"] = "auto"
     try:
         from turn_control import interrupt_http, interrupt_event
-        with httpx.Client(timeout=120.0) as client, interrupt_http(client), interrupt_event(client, cancel_event):
-            with client.stream("POST", f"{config['base_url']}/chat/completions",
-                               headers=_headers(config["api_key"]), json=payload) as response:
+        with ModelConnection() as connection, interrupt_http(connection), interrupt_event(connection, cancel_event):
+            with connection.stream("POST", f"{config['base_url']}/chat/completions",
+                                   headers=_headers(config["api_key"]), json=payload) as response:
                 with interrupt_http(response), interrupt_event(response, cancel_event):
                     _check_status(response)
                     response.read()
@@ -180,8 +213,8 @@ def stream_plain(messages: list[dict[str, Any]], temperature: float = 0.6) -> It
         "max_tokens": budget["reserve"],
     }
     try:
-        with httpx.Client(timeout=120.0) as client, interrupt_http(client):
-            with client.stream(
+        with ModelConnection() as connection, interrupt_http(connection):
+            with connection.stream(
                 "POST",
                 f"{config['base_url']}/chat/completions",
                 headers=_headers(config["api_key"]),

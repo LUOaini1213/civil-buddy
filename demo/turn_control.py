@@ -109,6 +109,50 @@ def using(control: TurnControl):
         _CURRENT.reset(token)
 
 
+def _network_sockets(resource) -> list:
+    """Every socket under a transport resource, newest first.
+
+    An httpx response exposes its stream as ``extensions["network_stream"]``.
+    A client cannot: while the request is still waiting for response headers
+    there is no response object yet, so ``llm.ModelConnection`` records the
+    streams httpcore opens (``network_streams``). A TLS stream wraps the TCP
+    stream it was started on, and the wrapped socket is detached, so the
+    newest stream is the live one.
+    """
+    streams = []
+    extensions = getattr(resource, "extensions", None)
+    if isinstance(extensions, dict) and extensions.get("network_stream") is not None:
+        streams.append(extensions["network_stream"])
+    streams.extend(getattr(resource, "network_streams", None) or ())
+    sockets = []
+    for stream in reversed(streams):
+        try:
+            connection = stream.get_extra_info("socket")
+        except Exception:
+            connection = None
+        if connection is not None and all(connection is not seen for seen in sockets):
+            sockets.append(connection)
+    return sockets
+
+
+def _interrupt_transport(resource):
+    """Shut the socket down, then close the resource.
+
+    The order matters. On Linux, close() from another thread does not wake a
+    recv() that is already blocked: the descriptor goes away but the kernel
+    socket stays referenced by the blocked call, no FIN is sent, and the
+    upstream never learns we left. shutdown(SHUT_RDWR) is what interrupts the
+    read and tells the peer. Windows happens to abort the recv on close, which
+    is why this only ever failed in CI.
+    """
+    for connection in _network_sockets(resource):
+        try:
+            connection.shutdown(socket.SHUT_RDWR)
+        except OSError:
+            pass
+    resource.close()
+
+
 @contextmanager
 def interrupt_http(resource):
     """Close this turn's HTTP connection, including a currently blocked socket read."""
@@ -117,18 +161,7 @@ def interrupt_http(resource):
         yield
         return
 
-    def close():
-        stream = getattr(resource, "extensions", {}).get("network_stream")
-        if stream is not None:
-            connection = stream.get_extra_info("socket")
-            if connection is not None:
-                try:
-                    connection.shutdown(socket.SHUT_RDWR)
-                except OSError:
-                    pass
-        resource.close()
-
-    with control.interrupt_on_cancel(close):
+    with control.interrupt_on_cancel(lambda: _interrupt_transport(resource)):
         yield
         control.check()
 
@@ -148,14 +181,7 @@ def interrupt_event(resource, event=None):
             if not event.is_set():
                 continue
             try:
-                stream = getattr(resource, "extensions", {}).get("network_stream")
-                connection = stream.get_extra_info("socket") if stream is not None else None
-                if connection is not None:
-                    try:
-                        connection.shutdown(socket.SHUT_RDWR)
-                    except OSError:
-                        pass
-                resource.close()
+                _interrupt_transport(resource)
             except Exception:
                 pass
             return
