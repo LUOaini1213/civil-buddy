@@ -194,41 +194,96 @@ def _norm_header(h: Any) -> str:
     return s
 
 
+# 模糊匹配规则：(子串, 标准字段, 分数)，按顺序命中第一条。
+# 分数用来解决一张表里多个表头抢同一个字段的情况——出口装箱单常同时有
+# N.W. 与 G.W.，装柜看的是毛重，所以毛重必须赢，而不是看谁排在前面。
+_FUZZY_RULES: Tuple[Tuple[str, str, int], ...] = (
+    # 合并尺寸列要排在长/宽/高之前，否则「尺寸(长x宽x高)」会被当成长度列
+    ("lxwxh", "__dims__", 95),
+    ("l*w*h", "__dims__", 95),
+    ("dimension", "__dims__", 90),
+    ("尺寸", "__dims__", 90),
+    ("g.w", "weight_kg", 88),
+    ("gross", "weight_kg", 86),
+    ("毛重", "weight_kg", 86),
+    ("n.w", "weight_kg", 82),
+    ("net", "weight_kg", 80),
+    ("净重", "weight_kg", 80),
+    ("description", "name", 85),
+    ("品名", "name", 85),
+    ("goods", "name", 84),
+    ("commodity", "name", 84),
+    ("货物", "name", 84),
+    ("名称", "name", 83),
+    ("length", "length_mm", 80),
+    ("width", "width_mm", 80),
+    ("height", "height_mm", 80),
+    ("weight", "weight_kg", 78),
+    ("qty", "quantity", 80),
+    ("数量", "quantity", 80),
+    ("长", "length_mm", 75),
+    ("宽", "width_mm", 75),
+    ("高", "height_mm", 75),
+)
+
+
+def _weight_pref(key: str) -> int:
+    """同为 weight_kg 候选时的偏好：毛重 > 未标明 > 净重。"""
+    if "g.w" in key or "gross" in key or "毛重" in key:
+        return 6
+    if "n.w" in key or "net" in key or "净重" in key:
+        return -4
+    return 0
+
+
 def build_column_map(headers: Sequence[Any]) -> Dict[str, str]:
-    """原表头 → 标准字段。"""
+    """原表头 → 标准字段。同名字段按分数取优，平手时取靠前的表头。"""
     inv: Dict[str, str] = {}
     for std, syns in COLUMN_SYNONYMS.items():
         for s in syns:
             inv[_norm_header(s)] = std
 
-    mapping: Dict[str, str] = {}
-    used_std: set[str] = set()
-    for h in headers:
+    best: Dict[str, Tuple[int, int, str]] = {}  # std -> (score, order, raw)
+    for order, h in enumerate(headers):
         raw = str(h or "").strip()
         if not raw:
             continue
         key = _norm_header(raw)
         std = inv.get(key)
+        score = 100 if std else 0
         if not std:
-            # 模糊：含 length/长 等
-            for cand, field in (
-                ("length", "length_mm"),
-                ("width", "width_mm"),
-                ("height", "height_mm"),
-                ("weight", "weight_kg"),
-                ("qty", "quantity"),
-                ("数量", "quantity"),
-                ("长", "length_mm"),
-                ("宽", "width_mm"),
-                ("高", "height_mm"),
-            ):
-                if cand in key and field not in used_std:
-                    std = field
+            for cand, field, sc in _FUZZY_RULES:
+                if cand in key:
+                    std, score = field, sc
                     break
-        if std and std not in used_std:
-            mapping[raw] = std
-            used_std.add(std)
-    return mapping
+        if not std:
+            continue
+        if std == "weight_kg":
+            score += _weight_pref(key)
+        cur = best.get(std)
+        if cur is None or score > cur[0]:
+            best[std] = (score, order, raw)
+    ordered = sorted(best.items(), key=lambda kv: kv[1][1])
+    return {raw: std for std, (_score, _order, raw) in ordered}
+
+
+_DIM_TRIPLE_RE = re.compile(
+    r"(\d+(?:\.\d+)?)\s*[x×*✕]\s*(\d+(?:\.\d+)?)\s*[x×*✕]\s*(\d+(?:\.\d+)?)",
+    re.I,
+)
+
+
+def _parse_dim_triple(v: Any) -> Optional[Tuple[float, float, float]]:
+    """从「1200 x 400 x 300」这类合并尺寸单元格里取出三个数。"""
+    if v is None:
+        return None
+    m = _DIM_TRIPLE_RE.search(str(v))
+    if not m:
+        return None
+    try:
+        return (float(m.group(1)), float(m.group(2)), float(m.group(3)))
+    except ValueError:
+        return None
 
 
 def _to_float(v: Any) -> Optional[float]:
@@ -375,6 +430,16 @@ def rows_to_ir(
         std_to_raw.get("total_weight_kg", "total_weight_kg"), series("total_weight_kg")
     )
 
+    # 合并尺寸列：先整表解析一遍，用所有数字一起推单位，避免逐行各推各的
+    dims_raw_h = std_to_raw.get("__dims__")
+    dims_triples: List[Optional[Tuple[float, float, float]]] = (
+        [_parse_dim_triple(r.get(dims_raw_h)) for r in rows] if dims_raw_h else []
+    )
+    dims_scale = 1.0
+    if dims_raw_h:
+        _flat = [x for tri in dims_triples if tri for x in tri]
+        dims_scale = _infer_length_scale(dims_raw_h, _flat)
+
     out: List[Dict[str, Any]] = []
     # 汇总/小计行（整行品名，不误杀「合计架」类真货子串尾）
     _SUMMARY_EXACT = {
@@ -460,6 +525,16 @@ def rows_to_ir(
             return round(v * len_scale[std], 3)
 
         L, W, H = dim("length_mm"), dim("width_mm"), dim("height_mm")
+        if dims_raw_h and (L <= 0 or W <= 0 or H <= 0):
+            tri = dims_triples[i - 1] if i - 1 < len(dims_triples) else None
+            if tri:
+                cand = [round(x * dims_scale, 3) for x in tri]
+                if L <= 0:
+                    L = cand[0]
+                if W <= 0:
+                    W = cand[1]
+                if H <= 0:
+                    H = cand[2]
         dims_estimated = L <= 0 or W <= 0 or H <= 0
 
         unit_w = _to_float(got.get("weight_kg"))

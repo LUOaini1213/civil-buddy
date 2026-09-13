@@ -82,6 +82,42 @@ def main():
     assert _tonne, "吨位行被整行丢弃"
     assert abs(_tonne[0]["weight_kg"] - 1350.0) < 1e-6, _tonne[0]
 
+    # 真实出口装箱单表头回归：这一组以前整表解析出 0 行——没有 name 列的模糊
+    # 匹配，"Description of Goods" 映射不到，于是每行都在空品名处被丢掉；
+    # 合并尺寸列没有拆分器；N.W./G.W. 两个缩写都不认。
+    _real = ["S/N", "Description of Goods", "Q'ty",
+             "Dimensions (L x W x H) cm", "N.W. (kg)", "G.W. (kg)", "CTN"]
+    _m = build_column_map(_real)
+    assert _m.get("Description of Goods") == "name", _m
+    assert _m.get("Q'ty") == "quantity", _m
+    assert _m.get("Dimensions (L x W x H) cm") == "__dims__", _m
+    # 装柜看毛重：G.W. 必须赢 N.W.，且与列序无关
+    assert _m.get("G.W. (kg)") == "weight_kg", _m
+    assert _m.get("N.W. (kg)") != "weight_kg", _m
+    _swapped = build_column_map(["Description of Goods", "G.W. (kg)", "N.W. (kg)"])
+    assert _swapped.get("G.W. (kg)") == "weight_kg", _swapped
+    _swapped2 = build_column_map(["Description of Goods", "N.W. (kg)", "G.W. (kg)"])
+    assert _swapped2.get("G.W. (kg)") == "weight_kg", _swapped2
+
+    _ir = rows_to_ir(
+        [
+            {"S/N": 1, "Description of Goods": "Steel bracket ST-100", "Q'ty": 20,
+             "Dimensions (L x W x H) cm": "120 x 40 x 30",
+             "N.W. (kg)": 60.0, "G.W. (kg)": 66.5, "CTN": 2},
+            {"S/N": 2, "Description of Goods": "Galvanised rail GR-22", "Q'ty": 8,
+             "Dimensions (L x W x H) cm": "600*25*25",
+             "N.W. (kg)": 210.0, "G.W. (kg)": 228.0, "CTN": 1},
+        ],
+        headers=_real,
+    )
+    assert len(_ir) == 2, ("真实表头整表被丢弃", _ir)
+    assert abs(_ir[0]["length_mm"] - 1200) < 1e-6, _ir[0]
+    assert abs(_ir[0]["width_mm"] - 400) < 1e-6, _ir[0]
+    assert abs(_ir[0]["height_mm"] - 300) < 1e-6, _ir[0]
+    assert abs(_ir[1]["length_mm"] - 6000) < 1e-6, _ir[1]   # '*' 分隔符
+    assert abs(_ir[0]["weight_kg"] - 66.5) < 1e-6, ("毛重未优先", _ir[0])
+    assert _ir[0]["meta"]["dims_estimated"] is False, _ir[0]["meta"]
+
     print("ALL_PASS table_mapper_unit")
     return 0
 if __name__ == "__main__":
