@@ -33,6 +33,11 @@ def summary(r: dict) -> dict:
     phases: dict[str, int] = {}
     for rd in rounds:
         phases[str(rd.get("phase"))] = phases.get(str(rd.get("phase")), 0) + 1
+    # PASS in this archive means the pipeline completed and returned a plan
+    # (scripts/fanout16x8_online_cargo.py::_pass_criteria). Whether that plan
+    # fits is a separate number, and the one a reader actually wants.
+    can_fit_true = sum(1 for rd in rounds if rd.get("can_fit") is True)
+    can_fit_false = sum(1 for rd in rounds if rd.get("can_fit") is False)
     return {
         "lanes": int(r["lanes"]),
         "rounds_per_lane": int(r["rounds_per_lane"]),
@@ -47,6 +52,8 @@ def summary(r: dict) -> dict:
         "dt_median_s": dts[len(dts) // 2] if dts else None,
         "dt_max_s": dts[-1] if dts else None,
         "phases": phases,
+        "can_fit_true": can_fit_true,
+        "can_fit_false": can_fit_false,
         "finished_at": r.get("finished_at"),
         "entry": r.get("entry"),
     }
@@ -63,6 +70,7 @@ def table(s: dict) -> str:
         f"| wall time ({s['workers']} workers) | {s['wall_s']:.1f} s |",
         f"| per-run time, median / max | {s['dt_median_s']:.1f} s / {s['dt_max_s']:.1f} s |",
         f"| terminal phases | {', '.join(f'{k}: {v}' for k, v in sorted(s['phases'].items()))} |",
+        f"| can_fit True / False (PASS = the pipeline completed, not that the cargo fits) | {s['can_fit_true']} / {s['can_fit_false']} |",
         f"| entry | `{s['entry']}` |",
         f"| finished | {s['finished_at']} |",
     ]
@@ -84,6 +92,14 @@ def check_readme(readme: Path, s: dict) -> list[str]:
             problems.append(f"README says {npass}/{nexp} PASS; archive has {s['pass']}/{s['expected']}")
         if not s["all_green"] or s["attempts"] != s["expected"]:
             problems.append("archive is not all-green or attempts != expected")
+    # The fit count must be quoted next to the PASS count, and must match.
+    m2 = re.search(r"`can_fit=True` \*\*(\d+)/(\d+)\*\*", text)
+    if not m2:
+        problems.append("README does not state the can_fit=True count next to the PASS figure")
+    else:
+        fit, of = (int(x) for x in m2.groups())
+        if (fit, of) != (s["can_fit_true"], s["expected"]):
+            problems.append(f"README says can_fit=True {fit}/{of}; archive has {s['can_fit_true']}/{s['expected']}")
     if s["records"] != s["expected"]:
         problems.append(f"archive holds {s['records']} per-run records, expected {s['expected']}")
     return problems
