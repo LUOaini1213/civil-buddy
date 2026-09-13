@@ -67,7 +67,7 @@ python demo/mcp_stdio.py --expert pack-ship
 | `write_deliverable` | run；chat 拒绝 |
 | `tender.parse` `tender.review` | bid 大类 / bid-parse |
 | `bid-parse__extract` 等独有 | 仅该 `expert_id` |
-| `pack-ship__list/plan/export/health` | 仅 pack-ship / plant |
+| `pack-ship__list/ingest/plan/vgm/booking_draft/export/health` | 仅 pack-ship / plant |
 | `*__scan_forbidden` | 本大类 |
 
 `kb://` 越权返回「拒绝：…」，不装成空库。chat 调写盘 → `permission_denied`。xyz 只抄 solver 或 `UNSPECIFIED`。岗独有（`survey__record` 等）是 ToolEngine 工具名，Host `tools/call` 走同一鉴权，不是 `write_deliverable` 贴标签。

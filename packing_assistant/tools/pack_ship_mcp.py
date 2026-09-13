@@ -1,8 +1,11 @@
-"""Discoverable pack-ship MCP tools: list / plan / export.
+"""Discoverable pack-ship MCP tools: list / ingest / plan / vgm / booking_draft / export / health.
 
-Projection only. Utilization, can_fit, mid50, 系固待办 are copied from an
-in-repo solver snapshot. Missing / disconnected → literal UNSPECIFIED.
-Never invents xyz / N0 / 条款号. Never re-packs.
+Given a materials table or a packing-list file, plan / vgm / booking_draft run
+the repository's own packing engine (pack_ship_solve — the same two agents the
+workbench uses), so container counts and utilisation have a source. Given only
+a solver snapshot, plan projects that snapshot as before: utilization, can_fit,
+mid50, 系固待办 are copied, and missing / disconnected → literal UNSPECIFIED.
+Never invents xyz / N0 / 条款号. The model never packs; the engine does.
 """
 
 from __future__ import annotations

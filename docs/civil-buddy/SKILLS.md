@@ -60,6 +60,6 @@ Grok `/civil-buddy` 选岗之后读 `.agents/skills/<id>/SKILL.md`。离线仍�
 |---------------|-----|
 | `material.parse` `structure.calc` `bin3d.pack` `booking.volume` | **无**。坐标/N0 只在引擎内。禁止暴露成模型可改 MCP |
 | `hitl.confirm` `vgm.draft` | 无代签 MCP |
-| （岗）pack-ship 投影 | `pack-ship__list` / `plan` / `export` / `health` |
+| （岗）pack-ship | `pack-ship__ingest` / `plan` / `vgm` / `booking_draft` / `export` / `list` / `health`。给装箱单（表或文件）时 plan / vgm / booking_draft 调本仓引擎；只给快照时 plan 投影快照 |
 
 完整契约表仍见 [docs/skills/README.md](../skills/README.md)。

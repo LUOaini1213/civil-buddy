@@ -28,7 +28,7 @@ cargo run --release --bin civil-workbench
 
 打开 http://127.0.0.1:8765 ，召唤 **装箱拼柜 / pack-ship**，贴物料表，出《装箱作业单》。
 
-`GET /api/health` 里有 `packing_agent` 探测。MCP：`--pack plant` 或召唤 `pack-ship` 时带 `pack-ship__plan` / `pack-ship__health`。
+`GET /api/health` 里有 `packing_agent` 探测。MCP：`--pack plant` 或召唤 `pack-ship` 时带 `pack-ship__ingest` / `plan` / `vgm` / `booking_draft` / `export` / `health`（给表或文件即真算，守门测试 `scripts/test_pack_ship_solver_mcp.py`）。
 
 招标解析与装箱共用 sidecar：`workbench/scripts/run_packing_sidecar.py` 的 stdin 若为 `{"mode":"tender_parse","tender_text":"..."}`，走同一套 `run_tender_pipeline`（handoff / P0 / 技术标目录），不另写一套抽取。
 
