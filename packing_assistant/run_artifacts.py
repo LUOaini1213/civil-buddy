@@ -26,6 +26,12 @@ def run_dir(run_id: str) -> Path:
     return d
 
 
+def _affirmed(value: Any) -> bool:
+    """A real yes. Unconnected solver fields hold the literal string
+    ``UNSPECIFIED``, which is truthy, and must never count as achieved."""
+    return not isinstance(value, str) and bool(value)
+
+
 def _write_json(path: Path, obj: Any) -> str:
     from packing_assistant.sandbox import guarded_write_text
 
@@ -85,7 +91,7 @@ def save_run_artifacts(
         "goal": state.get("goal") or (state.get("orchestrator") or {}).get("goal"),
         "goal_status": state.get("goal_status") or {},
         "ship_ok": bool(
-            container_plan.get("can_fit")
+            _affirmed(container_plan.get("can_fit"))
             and (risk.get("decision") not in ("REJECT",))
             and not risk.get("blockers")
         ),
@@ -145,38 +151,21 @@ def save_run_artifacts(
     # agent steps / tool trajectory
     traj = steps or state.get("agent_steps") or []
     paths["trace"] = _write_json(d / "agent_trace.json", traj)
-    # Export the canonical SQLite stream too. File absence does not mean the
-    # pipeline had no events: sqlite mode deliberately keeps them in its DB.
-    from packing_assistant import storage as _storage
-    from packing_assistant.trace_events import export_trace_jsonl, normalize_event
+    # The downloadable trace is a snapshot of the recorded events, whichever
+    # store holds them (sqlite mode keeps them in its DB, so file absence does
+    # not mean there were none). A run that recorded nothing gets a labelled
+    # step summary instead; a failed export keeps whatever file already exists.
+    from packing_assistant.trace_events import export_trace_jsonl
 
     jsonl_path = d / "trace.jsonl"
-    if _storage.storage_mode() == "sqlite":
-        try:
-            export_trace_jsonl(rid)
-        except Exception:
-            logging.getLogger("civil.run_artifacts").warning(
-                "trace snapshot export failed; retaining existing trace", exc_info=True)
-    if not jsonl_path.exists() and traj:
-        with jsonl_path.open("w", encoding="utf-8") as f:
-            for i, st in enumerate(traj):
-                f.write(
-                    json.dumps(
-                        normalize_event(rid, {
-                            "type": "agent_end",
-                            "seq": i + 1,
-                            "run_id": rid,
-                            "node": st.get("node"),
-                            "step": st,
-                            "source": "agent_steps_snapshot",
-                        }),
-                        ensure_ascii=False,
-                        default=str,
-                    )
-                    + "\n"
-                )
-    if jsonl_path.exists():
-        paths["trace_jsonl"] = str(jsonl_path)
+    try:
+        exported = export_trace_jsonl(rid, steps=traj)
+    except Exception:
+        logging.getLogger("civil.run_artifacts").warning(
+            "trace snapshot export failed; retaining existing trace", exc_info=True)
+        exported = jsonl_path if jsonl_path.exists() else None
+    if exported is not None:
+        paths["trace_jsonl"] = str(exported)
 
     # 总览
     index = {

@@ -31,9 +31,18 @@ def _now_iso() -> str:
     return datetime.now(timezone.utc).isoformat()
 
 
-def run_trace_path(run_id: str) -> Path:
+# A run whose events were never recorded gets a labelled summary of its agent
+# steps instead. Real events supersede it (see _merge_events).
+STEP_SUMMARY_SOURCE = "agent_steps_snapshot"
+_SUMMARY_SOURCES = frozenset({STEP_SUMMARY_SOURCE, "step_summary"})
+
+
+def run_trace_path(run_id: str, *, create: bool = False) -> Path:
+    """Where a run's JSONL trace lives. Only writers create the directory:
+    looking up a run that never existed must not leave an empty folder behind."""
     d = RUNS_DIR / str(run_id)
-    d.mkdir(parents=True, exist_ok=True)
+    if create:
+        d.mkdir(parents=True, exist_ok=True)
     return d / "trace.jsonl"
 
 
@@ -118,7 +127,7 @@ def _append_trace_event(run_id: str, event: Dict[str, Any], *, also_global: bool
             return ev
 
     line = json.dumps(ev, ensure_ascii=False, default=str) + "\n"
-    path = run_trace_path(run_id)
+    path = run_trace_path(run_id, create=True)
     with path.open("a", encoding="utf-8") as f:
         f.write(line)
     if also_global:
@@ -147,17 +156,39 @@ def _append_trace_event(run_id: str, event: Dict[str, Any], *, also_global: bool
     return ev
 
 
-def export_trace_jsonl(run_id: str) -> Optional[Path]:
+def _step_summary(run_id: str, steps: Optional[list]) -> list:
+    """One labelled agent_end event per pipeline step, for a run with no recorded events."""
+    events = []
+    for i, step in enumerate(steps or []):
+        if not isinstance(step, dict):
+            continue
+        events.append(normalize_event(run_id, {
+            "type": "agent_end",
+            "seq": i + 1,
+            "run_id": str(run_id),
+            "node": step.get("node"),
+            "step": step,
+            "source": STEP_SUMMARY_SOURCE,
+        }))
+    return events
+
+
+def export_trace_jsonl(run_id: str, *, steps: Optional[list] = None) -> Optional[Path]:
     """Atomically export SQLite plus real JSONL fallback events.
 
-    An unavailable DB must not replace a complete snapshot with a partial file.
-    The caller can retry after a read/write failure; the old file is preserved.
+    ``steps`` (the pipeline's agent_steps) is written as a labelled summary only
+    when the run recorded no events at all, so a summary never stands in for
+    real events. An unavailable DB must not replace a complete snapshot with a
+    partial file: the failure is logged and raised, the old file is preserved,
+    and the caller can retry.
     """
     with _TRACE_LOCK:
         rows = _read_trace(run_id, limit=10**9, strict_sqlite=True)
         if not rows:
+            rows = _step_summary(run_id, steps)
+        if not rows:
             return None
-        target = run_trace_path(run_id)
+        target = run_trace_path(run_id, create=True)
         temporary = None
         try:
             with NamedTemporaryFile(mode="w", encoding="utf-8", dir=target.parent,
@@ -194,9 +225,9 @@ def _merge_events(primary: list, fallback: list) -> list:
     """
     primary = [ev for ev in primary if isinstance(ev, dict)]
     fallback = [ev for ev in fallback if isinstance(ev, dict)]
-    if any(ev.get("source") != "agent_steps_snapshot" for ev in primary + fallback):
-        primary = [ev for ev in primary if ev.get("source") != "agent_steps_snapshot"]
-        fallback = [ev for ev in fallback if ev.get("source") != "agent_steps_snapshot"]
+    if any(ev.get("source") not in _SUMMARY_SOURCES for ev in primary + fallback):
+        primary = [ev for ev in primary if ev.get("source") not in _SUMMARY_SOURCES]
+        fallback = [ev for ev in fallback if ev.get("source") not in _SUMMARY_SOURCES]
     numbered, legacy = {}, []
     primary_counts, fallback_counts = Counter(), Counter()
     for source, rows in enumerate((primary, fallback)):
@@ -237,6 +268,7 @@ def _read_trace(run_id: str, *, limit: int, strict_sqlite: bool = False) -> list
             primary = _storage.get_storage().read_trace_events(run_id, limit=limit)
         except Exception:
             if strict_sqlite:
+                logger.warning("sqlite read_trace_events failed; the existing export is kept", exc_info=True)
                 raise
             logger.warning("sqlite read_trace_events failed, fallback to JSONL", exc_info=True)
     path = run_trace_path(run_id)
