@@ -1,8 +1,11 @@
-"""Discoverable pack-ship MCP tools: list / plan / export.
+"""Discoverable pack-ship MCP tools: list / ingest / plan / vgm / booking_draft / export / health.
 
-Projection only. Utilization, can_fit, mid50, 系固待办 are copied from an
-in-repo solver snapshot. Missing / disconnected → literal UNSPECIFIED.
-Never invents xyz / N0 / 条款号. Never re-packs.
+Given a materials table or a packing-list file, plan / vgm / booking_draft run
+the repository's own packing engine (pack_ship_solve — the same two agents the
+workbench uses), so container counts and utilisation have a source. Given only
+a solver snapshot, plan projects that snapshot as before: utilization, can_fit,
+mid50, 系固待办 are copied, and missing / disconnected → literal UNSPECIFIED.
+Never invents xyz / N0 / 条款号. The model never packs; the engine does.
 """
 
 from __future__ import annotations
@@ -15,7 +18,10 @@ TOOL_LIST = "pack-ship__list"
 TOOL_PLAN = "pack-ship__plan"
 TOOL_EXPORT = "pack-ship__export"
 TOOL_HEALTH = "pack-ship__health"
-TOOL_NAMES = (TOOL_LIST, TOOL_PLAN, TOOL_EXPORT, TOOL_HEALTH)
+TOOL_INGEST = "pack-ship__ingest"
+TOOL_VGM = "pack-ship__vgm"
+TOOL_BOOKING = "pack-ship__booking_draft"
+TOOL_NAMES = (TOOL_LIST, TOOL_PLAN, TOOL_EXPORT, TOOL_HEALTH, TOOL_INGEST, TOOL_VGM, TOOL_BOOKING)
 
 EVIDENCE_FIELDS = ("utilization", "can_fit", "mid50", "系固待办")
 
@@ -28,6 +34,12 @@ _ALIASES = {
     "civil.pack-ship.export": TOOL_EXPORT,
     "health": TOOL_HEALTH,
     "civil.pack-ship.health": TOOL_HEALTH,
+    "ingest": TOOL_INGEST,
+    "civil.pack-ship.ingest": TOOL_INGEST,
+    "vgm": TOOL_VGM,
+    "civil.pack-ship.vgm": TOOL_VGM,
+    "booking_draft": TOOL_BOOKING,
+    "civil.pack-ship.booking_draft": TOOL_BOOKING,
 }
 
 _UTIL_KEYS = ("utilization", "util", "volume_util", "volume_utilization", "util_ratio")
@@ -86,13 +98,66 @@ def list_pack_ship_tools() -> List[Dict[str, Any]]:
         },
         {
             "name": TOOL_PLAN,
-            "description": "装柜计划投影。利用率/can_fit/mid50/系固待办只抄 solver；未接通写 UNSPECIFIED。",
+            "description": (
+                "装柜计划。给 file_path 或已解析的 materials 数组即真算："
+                "柜数/N0/利用率/载重校验全部来自确定性工具。"
+                "只给 solver 快照时退回投影；都没有则 UNSPECIFIED。单一箱型 × N，不支持混柜。"
+            ),
             "inputSchema": {
                 "type": "object",
                 "properties": {
-                    "solver": {"type": "object", "description": "本仓 solver 回传快照"},
+                    "file_path": {"type": "string", "description": "装箱表路径（xlsx/csv）"},
+                    "materials": {"type": ["string", "array", "null"], "description": "已解析的行数组"},
+                    "container_type": {"type": "string", "description": "默认 40HQ"},
+                    "max_containers": {"type": ["integer", "null"]},
+                    "solver": {"type": "object", "description": "本仓 solver 回传快照（旧投影路径）"},
                     "connected": {"type": "boolean"},
-                    "materials": {"type": "string"},
+                },
+            },
+        },
+        {
+            "name": TOOL_INGEST,
+            "description": (
+                "读装箱表，只解析不装箱：返回行数、字段映射与缺字段台账。"
+                "缺重量的行会被列进 needs_human，必须人工补齐后才能出方案。"
+            ),
+            "inputSchema": {
+                "type": "object",
+                "properties": {
+                    "file_path": {"type": "string"},
+                    "materials": {"type": ["string", "array", "null"]},
+                },
+            },
+        },
+        {
+            "name": TOOL_VGM,
+            "description": (
+                "SOLAS 方法二 VGM 草稿：逐件货重 + 包装系数 + 垫料 + 箱皮重。"
+                "只起草，状态停在 needs_shipper_signature，系统不替人提交。"
+                "对账口径是装箱单行重，不是地磅读数。"
+            ),
+            "inputSchema": {
+                "type": "object",
+                "properties": {
+                    "file_path": {"type": "string"},
+                    "materials": {"type": ["string", "array", "null"]},
+                    "container_type": {"type": "string"},
+                },
+            },
+        },
+        {
+            "name": TOOL_BOOKING,
+            "description": (
+                "订舱请求草稿（dry run）：落盘一份 TMS 入站契约，submitted 恒为 false。"
+                "任何对外发送都要人工签认。"
+            ),
+            "inputSchema": {
+                "type": "object",
+                "properties": {
+                    "file_path": {"type": "string"},
+                    "materials": {"type": ["string", "array", "null"]},
+                    "container_type": {"type": "string"},
+                    "max_containers": {"type": ["integer", "null"]},
                 },
             },
         },
@@ -126,6 +191,9 @@ def list_tool() -> Dict[str, Any]:
         "plan": TOOL_PLAN,
         "export": TOOL_EXPORT,
         "health": TOOL_HEALTH,
+        "ingest": TOOL_INGEST,
+        "vgm": TOOL_VGM,
+        "booking_draft": TOOL_BOOKING,
     }
 
 
@@ -145,8 +213,27 @@ def plan_tool(
     solver: Optional[Dict[str, Any]] = None,
     *,
     connected: Optional[bool] = None,
-    materials: str = "",
+    materials: Any = None,
+    file_path: str = "",
+    container_type: str = "40HQ",
+    max_containers: Optional[int] = None,
 ) -> Dict[str, Any]:
+    # 有表就真算：走工作台在用的那两个 agent，柜数与利用率都有出处。
+    if file_path or isinstance(materials, list):
+        from packing_assistant.tools.pack_ship_solve import run_plan
+
+        solved = run_plan(
+            materials=materials,
+            file_path=file_path,
+            container_type=container_type,
+            max_containers=max_containers,
+        )
+        out = {"schema": "pack-ship.plan.v1", "tool": TOOL_PLAN, "xyz": UNSPECIFIED}
+        out.update(solved)
+        out.setdefault("can_fit", UNSPECIFIED)
+        return out
+
+    # 没有表：维持旧的投影行为，只抄调用方给的快照，绝不自己编。
     ev = project_evidence(solver, connected=connected)
     return {
         "schema": "pack-ship.plan.v1",
@@ -156,6 +243,32 @@ def plan_tool(
         "xyz": UNSPECIFIED,
         "n0": UNSPECIFIED if ev["source"] == "disconnected" else _copy_field(solver, ("n0", "N0", "n0_star")),
         **ev,
+    }
+
+
+def ingest_tool(materials: Any = None, file_path: str = "") -> Dict[str, Any]:
+    """只解析不装箱：行数、字段映射、以及必须人工补齐的行。"""
+    from packing_assistant.tools.pack_ship_solve import load_materials, rows_needing_human
+
+    loaded = load_materials(materials, file_path)
+    mats = loaded["materials"]
+    needs = rows_needing_human(mats)
+    if needs:
+        nxt = "先补齐 needs_human 里这些行的重量，再调 pack-ship__plan。"
+    elif mats:
+        nxt = "全部行都有重量，可以调 pack-ship__plan 出方案。"
+    else:
+        nxt = "没有解析出任何行；确认表头与文件格式。"
+    return {
+        "schema": "pack-ship.ingest.v1",
+        "ok": bool(loaded["ok"]) and not needs,
+        "tool": TOOL_INGEST,
+        "n_rows": len(mats),
+        "column_map": loaded["column_map"],
+        "stats": loaded["stats"],
+        "needs_human": needs,
+        "errors": loaded["errors"],
+        "next": nxt,
     }
 
 
@@ -204,8 +317,39 @@ def call_tool(name: str, arguments: Optional[Dict[str, Any]] = None) -> Dict[str
         connected = connected.lower() in {"1", "true", "yes"}
     if tool == TOOL_LIST:
         return list_tool()
+    if tool in (TOOL_VGM, TOOL_BOOKING):
+        from packing_assistant.tools.pack_ship_solve import draft_booking, draft_vgm
+
+        mats = args.get("materials")
+        if not isinstance(mats, list):
+            mats = None
+        fp = str(args.get("file_path") or "")
+        ctype = str(args.get("container_type") or "40HQ")
+        if tool == TOOL_VGM:
+            out = draft_vgm(materials=mats, file_path=fp, container_type=ctype)
+            out.setdefault("schema", "pack-ship.vgm.v1")
+        else:
+            mc = args.get("max_containers")
+            out = draft_booking(materials=mats, file_path=fp, container_type=ctype,
+                                max_containers=int(mc) if isinstance(mc, int) else None)
+            out.setdefault("schema", "pack-ship.booking_draft.v1")
+        out.setdefault("tool", tool)
+        return out
+    if tool == TOOL_INGEST:
+        return ingest_tool(args.get("materials"), str(args.get("file_path") or ""))
     if tool == TOOL_PLAN:
-        return plan_tool(solver, connected=connected, materials=str(args.get("materials") or ""))
+        mats = args.get("materials")
+        if not isinstance(mats, list):
+            mats = str(mats or "")
+        max_c = args.get("max_containers")
+        return plan_tool(
+            solver,
+            connected=connected,
+            materials=mats,
+            file_path=str(args.get("file_path") or ""),
+            container_type=str(args.get("container_type") or "40HQ"),
+            max_containers=int(max_c) if isinstance(max_c, int) else None,
+        )
     if tool == TOOL_EXPORT:
         return export_tool(solver, connected=connected)
     if tool == TOOL_HEALTH:

@@ -43,8 +43,15 @@ def contract_for(name: str, *, exclusive: bool = False) -> dict:
         output = obj({"wrote": BOOL, "files": FILES, "submit_blocked": {"const": True},
                       "hitl_pending": BOOL, "reply": TEXT}, ("wrote", "files", "submit_blocked"), extra=True)
     elif name.startswith("pack-ship__"):
-        properties.update(solver={"type": ["object", "null"]}, connected={"type": ["boolean", "null"]}, materials=TEXT)
-        if name.endswith("__list"):
+        # materials 现在也接已解析的行数组，并可给 file_path —— 之前只收字符串，
+        # 任何真实装箱表都在 schema 校验这一步就被拒掉，工具面等于不可用。
+        properties.update(solver={"type": ["object", "null"]}, connected={"type": ["boolean", "null"]},
+                          materials={"type": ["string", "array", "null"]}, file_path=TEXT,
+                          container_type=TEXT, max_containers={"type": ["integer", "null"]})
+        if name.endswith(("__ingest", "__vgm", "__booking_draft")):
+            output = obj({"ok": BOOL, "n_rows": {"type": "integer"},
+                          "needs_human": {"type": "array"}}, ("ok",), extra=True)
+        elif name.endswith("__list"):
             output = obj({"ok": BOOL, "tools": {"type": "array"}}, ("ok", "tools"), extra=True)
         elif name.endswith("__health"):
             output = obj({"ok": BOOL, "connected": BOOL}, ("ok", "connected"), extra=True)

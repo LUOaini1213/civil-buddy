@@ -12,10 +12,17 @@ from typing import Any, Dict, List, Optional, Tuple
 
 
 def extract_pdf_text(path: str | Path) -> str:
-    import fitz
+    """用 pypdf 取文本。
 
-    doc = fitz.open(str(path))
-    return "\n".join(page.get_text() for page in doc)
+    原来 import 的是 fitz（PyMuPDF）：它不在 requirements.txt 里，按依赖清单
+    干净安装的机器上这里直接 ImportError；而且 PyMuPDF 是 AGPL，本仓是 MIT，
+    把它当运行期依赖带进来是许可证冲突。pypdf 是 BSD，requirements.txt 第 16
+    行本来就声明了 pypdf>=5.0。
+    """
+    from pypdf import PdfReader
+
+    reader = PdfReader(str(path))
+    return chr(10).join((page.extract_text() or "") for page in reader.pages)
 
 
 def _estimate_dims(name: str, unit_kg: float, package: str) -> Tuple[float, float, float]:

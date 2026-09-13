@@ -65,7 +65,7 @@
 | **主线 C** | 这个标怎么应、货怎么交 | :8000 默认页 · `/api/tender/*` · `/api/agent` | 招标 `exact_text`；装柜 solver |
 | **装箱引擎** | 这批料怎么装进柜 | :8000/workbench · `run_big_team` | 仅 tools：xyz / N0 / can_fit / mid50 |
 
-pack-ship 岗 **不是第二套装箱**。它只投影本仓 solver 快照。断线四字段字面 `UNSPECIFIED`。
+pack-ship 岗 **不是第二套装箱**。给装箱单时它调用本仓 solver（与工作台同一条链：`agent_box_scheme` → `agent_loader`），只给快照时投影快照。断线四字段字面 `UNSPECIFIED`；不支持箱型组合——引擎只装 N 个同型柜。
 
 ### 1.3 我们不是
 

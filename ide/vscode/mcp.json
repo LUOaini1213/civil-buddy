@@ -3,12 +3,29 @@
     "civil-construction": {
       "type": "stdio",
       "command": "python",
-      "args": ["-m", "packing_assistant.civil", "mcp", "--pack", "construction"]
+      "args": [
+        "${workspaceFolder}/demo/mcp_stdio.py",
+        "--pack",
+        "construction"
+      ]
     },
     "civil-bid": {
       "type": "stdio",
       "command": "python",
-      "args": ["-m", "packing_assistant.civil", "mcp", "--pack", "bid"]
+      "args": [
+        "${workspaceFolder}/demo/mcp_stdio.py",
+        "--pack",
+        "bid"
+      ]
+    },
+    "civil-pack-ship": {
+      "type": "stdio",
+      "command": "python",
+      "args": [
+        "${workspaceFolder}/demo/mcp_stdio.py",
+        "--expert",
+        "pack-ship"
+      ]
     }
   }
 }

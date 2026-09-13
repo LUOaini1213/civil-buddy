@@ -46,6 +46,13 @@ jobs:
         run: python -m pytest demo/tests -q --basetemp=output/pytest-ci
       - name: Import package
         run: python -c "from packing_assistant.config import HARNESS_VERSION; from packing_assistant.harness import iter_agent_pipeline; print(HARNESS_VERSION)"
+      - name: MCP tool surface (stdio protocol, scoped tools, host client, solver wiring)
+        run: |
+          python scripts/test_mcp_stdio.py
+          python scripts/test_mcp_surface.py
+          python scripts/test_mcp_host_client.py
+          python scripts/test_pack_ship_solver_mcp.py
+          python scripts/test_packing_list_pdf.py
       - name: Frontend static checks
         run: |
           # UX R12: 零外链红线（内网断网可用）+ JS 语法门禁（node --check 固化 U-R10 esprima 检查）

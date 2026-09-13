@@ -194,41 +194,96 @@ def _norm_header(h: Any) -> str:
     return s
 
 
+# 模糊匹配规则：(子串, 标准字段, 分数)，按顺序命中第一条。
+# 分数用来解决一张表里多个表头抢同一个字段的情况——出口装箱单常同时有
+# N.W. 与 G.W.，装柜看的是毛重，所以毛重必须赢，而不是看谁排在前面。
+_FUZZY_RULES: Tuple[Tuple[str, str, int], ...] = (
+    # 合并尺寸列要排在长/宽/高之前，否则「尺寸(长x宽x高)」会被当成长度列
+    ("lxwxh", "__dims__", 95),
+    ("l*w*h", "__dims__", 95),
+    ("dimension", "__dims__", 90),
+    ("尺寸", "__dims__", 90),
+    ("g.w", "weight_kg", 88),
+    ("gross", "weight_kg", 86),
+    ("毛重", "weight_kg", 86),
+    ("n.w", "weight_kg", 82),
+    ("net", "weight_kg", 80),
+    ("净重", "weight_kg", 80),
+    ("description", "name", 85),
+    ("品名", "name", 85),
+    ("goods", "name", 84),
+    ("commodity", "name", 84),
+    ("货物", "name", 84),
+    ("名称", "name", 83),
+    ("length", "length_mm", 80),
+    ("width", "width_mm", 80),
+    ("height", "height_mm", 80),
+    ("weight", "weight_kg", 78),
+    ("qty", "quantity", 80),
+    ("数量", "quantity", 80),
+    ("长", "length_mm", 75),
+    ("宽", "width_mm", 75),
+    ("高", "height_mm", 75),
+)
+
+
+def _weight_pref(key: str) -> int:
+    """同为 weight_kg 候选时的偏好：毛重 > 未标明 > 净重。"""
+    if "g.w" in key or "gross" in key or "毛重" in key:
+        return 6
+    if "n.w" in key or "net" in key or "净重" in key:
+        return -4
+    return 0
+
+
 def build_column_map(headers: Sequence[Any]) -> Dict[str, str]:
-    """原表头 → 标准字段。"""
+    """原表头 → 标准字段。同名字段按分数取优，平手时取靠前的表头。"""
     inv: Dict[str, str] = {}
     for std, syns in COLUMN_SYNONYMS.items():
         for s in syns:
             inv[_norm_header(s)] = std
 
-    mapping: Dict[str, str] = {}
-    used_std: set[str] = set()
-    for h in headers:
+    best: Dict[str, Tuple[int, int, str]] = {}  # std -> (score, order, raw)
+    for order, h in enumerate(headers):
         raw = str(h or "").strip()
         if not raw:
             continue
         key = _norm_header(raw)
         std = inv.get(key)
+        score = 100 if std else 0
         if not std:
-            # 模糊：含 length/长 等
-            for cand, field in (
-                ("length", "length_mm"),
-                ("width", "width_mm"),
-                ("height", "height_mm"),
-                ("weight", "weight_kg"),
-                ("qty", "quantity"),
-                ("数量", "quantity"),
-                ("长", "length_mm"),
-                ("宽", "width_mm"),
-                ("高", "height_mm"),
-            ):
-                if cand in key and field not in used_std:
-                    std = field
+            for cand, field, sc in _FUZZY_RULES:
+                if cand in key:
+                    std, score = field, sc
                     break
-        if std and std not in used_std:
-            mapping[raw] = std
-            used_std.add(std)
-    return mapping
+        if not std:
+            continue
+        if std == "weight_kg":
+            score += _weight_pref(key)
+        cur = best.get(std)
+        if cur is None or score > cur[0]:
+            best[std] = (score, order, raw)
+    ordered = sorted(best.items(), key=lambda kv: kv[1][1])
+    return {raw: std for std, (_score, _order, raw) in ordered}
+
+
+_DIM_TRIPLE_RE = re.compile(
+    r"(\d+(?:\.\d+)?)\s*[x×*✕]\s*(\d+(?:\.\d+)?)\s*[x×*✕]\s*(\d+(?:\.\d+)?)",
+    re.I,
+)
+
+
+def _parse_dim_triple(v: Any) -> Optional[Tuple[float, float, float]]:
+    """从「1200 x 400 x 300」这类合并尺寸单元格里取出三个数。"""
+    if v is None:
+        return None
+    m = _DIM_TRIPLE_RE.search(str(v))
+    if not m:
+        return None
+    try:
+        return (float(m.group(1)), float(m.group(2)), float(m.group(3)))
+    except ValueError:
+        return None
 
 
 def _to_float(v: Any) -> Optional[float]:
@@ -272,11 +327,14 @@ def _infer_weight_scale(header: str, values: List[Optional[float]]) -> float:
     """返回乘到 kg 的系数。注意：不可用 `'t' in header`（weight 含字母 t）。"""
     h = _norm_header(header)
     raw = str(header or "")
-    # 明确吨：_t / (t) / 吨 / weight_t / 单重t —— 排除 weight/net_weight 等
+    # 明确吨：_t / (t) / 吨 / weight_t / 单重t
+    # 只排除 kg。上面的正则已要求 t 是独立词元（^t / _t / 结尾 t / "(t)"），
+    # "weight" 里的字母 t 不满足该条件，无需再排除；排除它会让 "Gross Weight (t)"
+    # 规范化后的 "grossweight(t)" 落回 1.0，把吨当公斤，1000 倍少报。
     if "吨" in raw:
         return 1000.0
     if re.search(r"(^|_)(t)($|[^a-z])", h) or h.endswith("_t") or "(t)" in h:
-        if "kg" not in h and "weight" not in h:
+        if "kg" not in h:
             return 1000.0
     if (
         h in ("weight_t", "total_t", "单重t", "总重t", "吨")
@@ -337,6 +395,7 @@ def rows_to_ir(
         "n_skip_zero_qty": 0,
         "n_skip_zero_placeholder": 0,
         "n_skip_summary_row": 0,
+        "n_missing_weight": 0,
     }
     if not rows:
         _LAST_CLEAN_STATS = {**clean_stats, "n_skipped_total": 0}
@@ -371,6 +430,16 @@ def rows_to_ir(
     tw_scale = _infer_weight_scale(
         std_to_raw.get("total_weight_kg", "total_weight_kg"), series("total_weight_kg")
     )
+
+    # 合并尺寸列：先整表解析一遍，用所有数字一起推单位，避免逐行各推各的
+    dims_raw_h = std_to_raw.get("__dims__")
+    dims_triples: List[Optional[Tuple[float, float, float]]] = (
+        [_parse_dim_triple(r.get(dims_raw_h)) for r in rows] if dims_raw_h else []
+    )
+    dims_scale = 1.0
+    if dims_raw_h:
+        _flat = [x for tri in dims_triples if tri for x in tri]
+        dims_scale = _infer_length_scale(dims_raw_h, _flat)
 
     out: List[Dict[str, Any]] = []
     # 汇总/小计行（整行品名，不误杀「合计架」类真货子串尾）
@@ -457,6 +526,16 @@ def rows_to_ir(
             return round(v * len_scale[std], 3)
 
         L, W, H = dim("length_mm"), dim("width_mm"), dim("height_mm")
+        if dims_raw_h and (L <= 0 or W <= 0 or H <= 0):
+            tri = dims_triples[i - 1] if i - 1 < len(dims_triples) else None
+            if tri:
+                cand = [round(x * dims_scale, 3) for x in tri]
+                if L <= 0:
+                    L = cand[0]
+                if W <= 0:
+                    W = cand[1]
+                if H <= 0:
+                    H = cand[2]
         dims_estimated = L <= 0 or W <= 0 or H <= 0
 
         unit_w = _to_float(got.get("weight_kg"))
@@ -479,10 +558,17 @@ def rows_to_ir(
         cat_raw = got.get("category") or ""
         cat = normalize_category(cat_raw) if cat_raw else _guess_category(L, W, H, unit_w, name_s)
 
+        # 整行没有任何重量：不是「0 公斤」，是不知道。照 0 装箱会算出一个
+        # 建立在零质量上的方案，N0 按重、载重余量与 VGM 全部失真且无告警，
+        # 所以这里如实标记，由入口（MCP ingest / 上传）拦下转人工。
+        weight_missing = unit_w <= 0 and total_w <= 0
+        if weight_missing:
+            clean_stats["n_missing_weight"] += 1
+
         conf = 0.95
         if dims_estimated:
             conf -= 0.35
-        if unit_w <= 0 and total_w <= 0:
+        if weight_missing:
             conf -= 0.2
         conf = max(0.1, min(1.0, conf))
 
@@ -510,6 +596,7 @@ def rows_to_ir(
                 },
                 "confidence": round(conf, 3),
                 "dims_estimated": dims_estimated,
+                "weight_missing": weight_missing,
                 "profile_hint": profile_hint,
             },
         }
@@ -627,7 +714,53 @@ def load_table(path: PathLike, **kwargs: Any) -> List[Dict[str, Any]]:
         return load_xlsx(path, sheet=kwargs.get("sheet"))
     if suf == ".json":
         return load_json(path)
+    if suf == ".pdf":
+        return load_packing_list_pdf(path)
     raise ValueError(f"unsupported table type: {suf}")
+
+
+def load_packing_list_pdf(path: PathLike) -> List[Dict[str, Any]]:
+    """PDF 装箱单 → IR 行。
+
+    正式装箱单常常没有单件 L×W×H，解析器按品名 + 单重 + 包装类型做工程估算。
+    估算出来的尺寸一路会变成柜数，所以每行都带 dims_estimated=True 且把置信度
+    压到 0.45，让上层把它和量出来的尺寸区分开。
+    """
+    from packing_assistant.tools.packing_list_parser import parse_packing_list_pdf
+
+    parsed = parse_packing_list_pdf(path)
+    rows: List[Dict[str, Any]] = []
+    for m in parsed.get("materials") or []:
+        estimated = bool(m.get("dims_estimated"))
+        total_kg = float(m.get("total_weight_kg") or 0.0)
+        rows.append(
+            {
+                "id": m.get("id") or "",
+                "name": m.get("name") or "",
+                "spec": m.get("spec") or "",
+                "quantity": int(m.get("quantity") or 1),
+                "weight_kg": float(m.get("weight_kg") or 0.0),
+                "total_weight_kg": total_kg,
+                "length_mm": float(m.get("length_mm") or 0.0),
+                "width_mm": float(m.get("width_mm") or 0.0),
+                "height_mm": float(m.get("height_mm") or 0.0),
+                "part_no": "",
+                "category": m.get("category") or "generic",
+                "note": m.get("package") or "",
+                "meta": {
+                    "source": "pdf",
+                    "source_path": str(path),
+                    "column_map": {},
+                    "units_in": {},
+                    "confidence": 0.45 if estimated else 0.8,
+                    "dims_estimated": estimated,
+                    "weight_missing": total_kg <= 0,
+                    "profile_hint": "packing_list_pdf",
+                    "container_no": m.get("container_no") or "",
+                },
+            }
+        )
+    return rows
 
 
 def ir_to_materials(rows: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
@@ -652,6 +785,17 @@ def ir_to_materials(rows: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
             }
         )
     return mats
+
+
+def _no_rows_reason(path: "Path") -> str:
+    """一行都没解析出来时，说清楚下一步该做什么。"""
+    if str(path).lower().endswith(".pdf"):
+        return (
+            "PDF 里没有识别出物料行：行版式解析是按某一类装箱单调的，"
+            "换一种版式就认不出来。请把这份单子另存为 xlsx/csv 再上传，"
+            "或提供一份该版式的样本以便补充规则。"
+        )
+    return "no material rows parsed"
 
 
 def parse_table_file(path: PathLike, **kwargs: Any) -> Dict[str, Any]:
@@ -684,7 +828,7 @@ def parse_table_file(path: PathLike, **kwargs: Any) -> Dict[str, Any]:
             "n_skip_zero_placeholder": clean.get("n_skip_zero_placeholder"),
             "clean": clean,
         },
-        "errors": [] if mats else ["no material rows parsed"],
+        "errors": [] if mats else [_no_rows_reason(path)],
     }
 
 
@@ -698,7 +842,7 @@ def parse_table_bytes(
     import tempfile
 
     suf = Path(filename or "upload.csv").suffix.lower() or ".csv"
-    if suf not in (".csv", ".tsv", ".txt", ".xlsx", ".xlsm", ".json"):
+    if suf not in (".csv", ".tsv", ".txt", ".xlsx", ".xlsm", ".json", ".pdf"):
         suf = ".csv"
     tmp_path = None
     try:
