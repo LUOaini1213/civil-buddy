@@ -395,6 +395,7 @@ def rows_to_ir(
         "n_skip_zero_qty": 0,
         "n_skip_zero_placeholder": 0,
         "n_skip_summary_row": 0,
+        "n_missing_weight": 0,
     }
     if not rows:
         _LAST_CLEAN_STATS = {**clean_stats, "n_skipped_total": 0}
@@ -557,10 +558,17 @@ def rows_to_ir(
         cat_raw = got.get("category") or ""
         cat = normalize_category(cat_raw) if cat_raw else _guess_category(L, W, H, unit_w, name_s)
 
+        # 整行没有任何重量：不是「0 公斤」，是不知道。照 0 装箱会算出一个
+        # 建立在零质量上的方案，N0 按重、载重余量与 VGM 全部失真且无告警，
+        # 所以这里如实标记，由入口（MCP ingest / 上传）拦下转人工。
+        weight_missing = unit_w <= 0 and total_w <= 0
+        if weight_missing:
+            clean_stats["n_missing_weight"] += 1
+
         conf = 0.95
         if dims_estimated:
             conf -= 0.35
-        if unit_w <= 0 and total_w <= 0:
+        if weight_missing:
             conf -= 0.2
         conf = max(0.1, min(1.0, conf))
 
@@ -588,6 +596,7 @@ def rows_to_ir(
                 },
                 "confidence": round(conf, 3),
                 "dims_estimated": dims_estimated,
+                "weight_missing": weight_missing,
                 "profile_hint": profile_hint,
             },
         }
