@@ -30,13 +30,23 @@ def rows_needing_human(materials: Sequence[Dict[str, Any]]) -> List[Dict[str, An
     out: List[Dict[str, Any]] = []
     for m in materials or []:
         meta = m.get("meta") or {}
-        if meta.get("weight_missing"):
+
+        weight = m.get("total_weight_kg")
+        if weight in (None, ""):
+            weight = m.get("weight_kg")
+
+        try:
+            weight_invalid = float(weight) <= 0
+        except (TypeError, ValueError):
+            weight_invalid = True
+
+        if meta.get("weight_missing") or weight_invalid:
             out.append(
                 {
                     "id": m.get("id") or "",
                     "name": m.get("name") or "",
                     "reason": NEEDS_HUMAN_MISSING_WEIGHT,
-                    "ask": "这一行没有重量，请补一个毛重（kg 或 t），或确认它不参与装箱。",
+                    "ask": "这一行没有有效重量，请补一个大于 0 的毛重（kg 或 t），或确认它不参与装箱。",
                 }
             )
     return out
