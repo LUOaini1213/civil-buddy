@@ -719,6 +719,17 @@ body.cb-doc-open { overflow: hidden; }
   border-radius: var(--cb-radius-sm); padding: 2px 10px; cursor: pointer; color: var(--cb-text); text-decoration: none;
 }
 .cb-doc-card button:hover, .cb-doc-card a.dl:hover { border-color: var(--cb-blue); color: var(--cb-blue); }
+/* 交付物卡片：一份文书一行（标题 + 预览 + 各格式），轮次头一行（标签 + 岗位/时间 + 打包） */
+.cb-doc-card { flex-direction: column; align-items: stretch; gap: 6px; }
+.cb-doc-card-head, .cb-doc-row { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.cb-doc-card-run { font-size: 11px; color: var(--cb-text-muted); }
+.cb-doc-card-zip { margin-left: auto; }
+.cb-doc-row .cb-doc-card-t { flex: 1 1 160px; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.cb-doc-note { margin: 0; font-size: 12px; color: var(--cb-amber, #a35d00); }
+@media screen and (max-width: 430px) {
+  .cb-doc-card button, .cb-doc-card a.dl { min-height: var(--cb-touch-min, 44px); display: inline-flex; align-items: center; }
+  .cb-doc-card-zip { margin-left: 0; flex: 1 1 100%; justify-content: center; }
+}
 /* 打印：只留文书本体，隐藏聊天 chrome；@page A4 + 页眉页脚由文书自绘 */
 @media print {
   body > :not(.cb-doc-overlay) { display: none !important; }

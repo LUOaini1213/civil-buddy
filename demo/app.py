@@ -768,6 +768,52 @@ def _sse(ev: dict) -> str:
     return f"event: {ev['event']}\ndata: {json.dumps(ev['data'], ensure_ascii=False)}\n\n"
 
 
+@app.get("/api/deliverables.zip")
+def deliverables_zip(session_id: str, run_id: str = "") -> Response:
+    """One download for a whole run's files (md + docx + xlsx) — three save
+    dialogs on a phone is how files get lost. run_id empty = every run."""
+    import io
+    import re
+    import zipfile
+    from chat_service import read_runs, valid_session
+
+    try:
+        sid = valid_session(session_id)
+    except ValueError as exc:
+        raise HTTPException(400, str(exc)) from exc
+    rid = str(run_id or "")
+    if rid and not re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9_-]{0,63}", rid):
+        raise HTTPException(400, "run_id 无效")
+    runs = [r for r in read_runs(OUT_ROOT, sid) if not rid or r.get("run_id") == rid]
+    buf = io.BytesIO()
+    count = 0
+    with zipfile.ZipFile(buf, "w", zipfile.ZIP_DEFLATED) as bundle:
+        for r in runs:
+            folder = r.get("run_id", "")[:8]
+            used: set[str] = set()
+            for f in r.get("deliverables", []):
+                src = Path(str(f.get("path") or "")).resolve()
+                try:
+                    src.relative_to(OUT_ROOT.resolve())
+                except ValueError:
+                    continue
+                if not src.is_file():
+                    continue
+                name = str(f.get("name") or src.name)
+                if name in used:
+                    name = f"{Path(name).stem}-{src.name.split('-', 1)[0]}{Path(name).suffix}"
+                used.add(name)
+                arc = f"{folder}/{name}" if not rid and folder else name
+                bundle.write(src, arc)
+                count += 1
+    if not count:
+        raise HTTPException(404, "这轮没有可下载的文书")
+    label = f"civil-docs-{sid}" + (f"-{rid[:8]}" if rid else "")
+    return Response(buf.getvalue(), media_type="application/zip", headers={
+        "Content-Disposition": f'attachment; filename="{label}.zip"',
+    })
+
+
 @app.get("/api/file")
 def file(path: str, name: str = "") -> FileResponse:
     target = Path(path).resolve()

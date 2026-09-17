@@ -168,3 +168,40 @@ def test_project_name_limit(client):
     assert r.status_code == 200 and r.json()["project"]["name"] == "正常 名称"
     pid = r.json()["project"]["id"]
     assert client.patch(f"/api/projects/{pid}", json={"name": "工" * 61}).status_code == 400
+
+
+def test_deliverables_grouped_by_run_and_zip(client, monkeypatch):
+    """交付物按轮分组（done 事件与会话详情一致），一轮多文件可打包下载。"""
+    import app
+    from chat_service import read_runs
+    from packing_assistant import expert_turn
+    from packing_assistant.runtime import agent_loop
+
+    # 引擎把稿写到 demo/out；夹具把 OUT_ROOT 指到临时目录，两边要指向同一根，
+    # _deliverables 才会把文件快照到会话目录下。
+    monkeypatch.setattr(agent_loop, "_OUT", app.OUT_ROOT)
+    monkeypatch.setattr(expert_turn, "_OUT", app.OUT_ROOT)
+    sid = "deliv-zip-01"
+    r = client.post("/api/chat", json={"session_id": sid, "message": "帮我写一份项目日报，今天完成了基坑支护第三层锚索张拉",
+                                       "expert_ids": ["pm-daily"]})
+    assert r.status_code == 200
+    done = [l for l in r.text.splitlines() if l.startswith("data: ")][-1]
+    import json
+    data = json.loads(done[6:])
+    runs = data["deliverable_runs"]
+    assert len(runs) == 1 and runs[0]["expert_id"] == "pm-daily" and runs[0]["export_errors"] == []
+    names = sorted(f["name"] for f in runs[0]["deliverables"])
+    assert names == ["pm-daily__log.docx", "pm-daily__log.md", "pm-daily__log.xlsx"]
+    detail = client.get(f"/api/sessions/{sid}").json()
+    assert [x["run_id"] for x in detail["deliverable_runs"]] == [runs[0]["run_id"]]
+    assert read_runs(app.OUT_ROOT, sid)[-1]["export_errors"] == []
+    import io
+    import zipfile
+    z = client.get("/api/deliverables.zip", params={"session_id": sid, "run_id": runs[0]["run_id"]})
+    assert z.status_code == 200 and z.headers["content-disposition"].startswith("attachment;")
+    assert sorted(zipfile.ZipFile(io.BytesIO(z.content)).namelist()) == names
+    z = client.get("/api/deliverables.zip", params={"session_id": sid})
+    assert all(n.startswith(runs[0]["run_id"][:8] + "/") for n in zipfile.ZipFile(io.BytesIO(z.content)).namelist())
+    assert client.get("/api/deliverables.zip", params={"session_id": sid, "run_id": "nope"}).status_code == 404
+    assert client.get("/api/deliverables.zip", params={"session_id": "../x"}).status_code == 400
+    assert client.get("/api/deliverables.zip", params={"session_id": sid, "run_id": "../../x"}).status_code == 400

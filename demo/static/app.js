@@ -197,7 +197,8 @@ function cbPaintRecovered(d, options) {
   const target = options.bodyEl && options.bodyEl.isConnected ? options.bodyEl : null;
   if (files.length && target) {
     cbLastDeliverables = files;
-    appendDocCards(files, target);
+    const runs = Array.isArray(d.deliverable_runs) ? d.deliverable_runs.slice(0, 1) : [];
+    appendDocCards(files, target, { runs });
   }
   const st = d.turn_state && d.turn_state.state;
   addStatus(options.reason
@@ -860,7 +861,9 @@ async function cbProjOpenSession(s) {
     if (files.length) {
       cbLastDeliverables = files;
       cbHideWelcome();
-      appendDocCards(files, addMsg("assistant", "本会话交付物", "已恢复留存的草稿，可继续预览或下载。"));
+      const runs = Array.isArray(d.deliverable_runs) ? d.deliverable_runs : [];
+      const intro = runs.length > 1 ? `已恢复 ${runs.length} 轮留存的草稿（最近的在前），可继续预览或下载。` : "已恢复留存的草稿，可继续预览或下载。";
+      appendDocCards(files, addMsg("assistant", "本会话交付物", intro), { runs });
     }
     if (d.truncated) addStatus("列表只展示近期对话节选。可在「任务记忆与本地搜索」找回已保留的历史原文。");
     if (d.turn_state && d.turn_state.active) {
@@ -1542,7 +1545,7 @@ async function streamChat(message, bodyEl, run) {
         else paintContext(estimateLocalContext());
         renderCites(data.citations || [], bodyEl);
         cbLastDeliverables = Array.isArray(data.deliverables) ? data.deliverables : []; /* ux(round9)：/doc 最近交付物 */
-        appendDocCards(data.deliverables || [], bodyEl);
+        appendDocCards(data.deliverables || [], bodyEl, { runs: data.deliverable_runs });
         /* ux(round7)：缺数引导条——UNSPECIFIED/[A001] 徽章旁的「去补数」，预填草稿不自动发送 */
         const miss = typeof CB_FIX !== "undefined" ? CB_FIX.classifyMissing(acc) : null;
         if (miss) cbFixMount(bodyEl.parentElement, miss);
@@ -2051,41 +2054,115 @@ async function openDeliverable(f) {
 }
 
 /* 聊天流内交付物卡片：点开即预览，另留 .md 下载 */
-function appendDocCards(files, bodyEl) {
-  if (!files || !files.length) return;
-  const host = bodyEl && bodyEl.parentElement ? bodyEl.parentElement : $("log");
-  const card = document.createElement("div");
-  card.className = "cb-doc-card";
-  const tag = document.createElement("span");
-  tag.className = "cb-doc-card-tag";
-  tag.textContent = "交付物文书";
-  card.appendChild(tag);
-  for (const f of files) {
-    const t = document.createElement("span");
-    t.className = "cb-doc-card-t";
-    t.textContent = `${f.expert || ""} · ${f.name || f.path || "文书"}`.replace(/^ · /, "");
-    card.appendChild(t);
-    if (isDocMd(f)) {
-      const b = document.createElement("button");
-      b.type = "button";
-      b.textContent = "文书预览";
-      b.addEventListener("click", () => openDeliverable(f));
-      card.appendChild(b);
-    }
-    const a = document.createElement("a");
-    a.className = "dl";
-    a.href = fileUrl(f.path, f.name);
-    a.setAttribute("download", f.name || "文书.md");
-    a.textContent = "下载";
-    a.addEventListener("click", () => cbObStep(3)); /* ux(round10)：下载 .md → 引导第 3 步打勾 */
-    card.appendChild(a);
+/* 交付物卡片。files：扁平文件列表（done 事件 / 恢复）；runs：按轮分组（服务端
+   deliverable_runs，带 export_errors / docx_pending）。同一份文书的 md / docx / xlsx
+   折成一行：标题 + 预览 + 各格式下载；多文件的轮次给「打包下载」一个 zip。 */
+function cbDocStem(name) {
+  return String(name || "").replace(/\.(md|markdown|docx|xlsx|csv|pdf|txt|json)$/i, "");
+}
+function cbDocExt(name) {
+  const m = /\.([A-Za-z0-9]+)$/.exec(String(name || ""));
+  return m ? m[1].toLowerCase() : "";
+}
+function cbGroupDeliverables(files) {
+  const rows = new Map();
+  for (const f of files || []) {
+    if (!f || typeof f.path !== "string" || !f.path) continue;
+    const key = `${f.run_id || ""}|${cbDocStem(f.name || f.path)}`;
+    if (!rows.has(key)) rows.set(key, { stem: cbDocStem(f.name || f.path), expert: f.expert || "", run_id: f.run_id || "", formats: [] });
+    rows.get(key).formats.push(f);
   }
-  const k = document.createElement("span");
-  k.className = "cb-doc-card-k";
-  k.textContent = "AI 草稿 · 不签认";
-  card.appendChild(k);
-  host.appendChild(card);
-  $("log").scrollTop = $("log").scrollHeight;
+  for (const row of rows.values()) {
+    const order = { md: 0, markdown: 0, docx: 1, xlsx: 2 };
+    row.formats.sort((a, b) => (order[cbDocExt(a.name)] ?? 9) - (order[cbDocExt(b.name)] ?? 9));
+  }
+  return [...rows.values()];
+}
+function cbRunLabel(run) {
+  const when = run && run.mtime ? cbRelTime(Math.floor(Date.parse(run.mtime) / 1000)) : "";
+  return [run && run.expert, when].filter(Boolean).join(" · ");
+}
+function appendDocCards(files, bodyEl, opts) {
+  const options = opts || {};
+  const runs = Array.isArray(options.runs) && options.runs.length
+    ? options.runs
+    : [{ run_id: "", expert: "", deliverables: files || [], export_errors: options.export_errors || [], docx_pending: options.docx_pending }];
+  const host = bodyEl && bodyEl.parentElement ? bodyEl.parentElement : $("log");
+  let painted = 0;
+  for (const run of runs) {
+    const groups = cbGroupDeliverables(run.deliverables);
+    const notes = [];
+    if (run.docx_pending) notes.push("Word 稿待生成：本轮只有 Markdown，稍后可在「本会话交付物」里取 Word。");
+    for (const e of run.export_errors || []) notes.push(`${e}：只有 Markdown 稿可下载。`);
+    if (!groups.length && !notes.length) continue;
+    const card = document.createElement("div");
+    card.className = "cb-doc-card";
+    const head = document.createElement("div");
+    head.className = "cb-doc-card-head";
+    const tag = document.createElement("span");
+    tag.className = "cb-doc-card-tag";
+    tag.textContent = "交付物文书";
+    head.appendChild(tag);
+    const label = cbRunLabel(run);
+    if (label) {
+      const who = document.createElement("span");
+      who.className = "cb-doc-card-run";
+      who.textContent = label;
+      head.appendChild(who);
+    }
+    const nFiles = groups.reduce((n, g) => n + g.formats.length, 0);
+    if (nFiles > 1 && run.run_id && state.session) {
+      const zip = document.createElement("a");
+      zip.className = "dl cb-doc-card-zip";
+      zip.href = `/api/deliverables.zip?session_id=${encodeURIComponent(state.session)}&run_id=${encodeURIComponent(run.run_id)}`;
+      zip.setAttribute("download", `civil-docs-${run.run_id.slice(0, 8)}.zip`);
+      zip.textContent = `打包下载（${nFiles} 个文件）`;
+      zip.addEventListener("click", () => cbObStep(3));
+      head.appendChild(zip);
+    }
+    card.appendChild(head);
+    for (const g of groups) {
+      const row = document.createElement("div");
+      row.className = "cb-doc-row";
+      const t = document.createElement("span");
+      t.className = "cb-doc-card-t";
+      t.textContent = g.stem || "文书";
+      t.title = g.formats.map((f) => f.name).join(" / ");
+      row.appendChild(t);
+      const md = g.formats.find(isDocMd);
+      if (md) {
+        const b = document.createElement("button");
+        b.type = "button";
+        b.textContent = "预览";
+        b.addEventListener("click", () => openDeliverable(md));
+        row.appendChild(b);
+      }
+      for (const f of g.formats) {
+        const a = document.createElement("a");
+        a.className = "dl";
+        a.href = fileUrl(f.path, f.name);
+        a.setAttribute("download", f.name || "文书.md");
+        a.textContent = "." + (cbDocExt(f.name) || "文件");
+        a.title = "下载 " + (f.name || "");
+        a.addEventListener("click", () => cbObStep(3)); /* ux(round10)：下载 → 引导第 3 步打勾 */
+        row.appendChild(a);
+      }
+      card.appendChild(row);
+    }
+    for (const n of notes) {
+      const w = document.createElement("p");
+      w.className = "cb-doc-note";
+      w.textContent = n;
+      card.appendChild(w);
+    }
+    const k = document.createElement("span");
+    k.className = "cb-doc-card-k";
+    k.textContent = "AI 草稿 · 不签认";
+    card.appendChild(k);
+    host.appendChild(card);
+    painted += 1;
+  }
+  if (painted) $("log").scrollTop = $("log").scrollHeight;
 }
 
 async function apiError(res) {
