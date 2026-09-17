@@ -56,6 +56,10 @@ python scripts/demo_one_shot.py --all
 | `demo_agent_closed_loop.py` | 闭环自检（感知→规划→工具→目标） |
 | `eval_harness_cli.py` | tiny/20t 评测 |
 | `eval_workteams_cli.py` | steps vs llm 影子评测 + KPI |
+| `eval_tender_response_match.py` | 招标要求 ↔ 投标响应对照的基准评测（`--variant all` 消融表，`--check` 为 CI 下限）；用例与标注口径见 `test/benchmarks/tender_response/` |
+| `test_tender_response_match.py` | 对照表行为契约：一条原文一行、单位换算、状态码、偏移量、整条流程 |
+| `test_table_mapper_unit.py` | 装箱表解析回归：吨 / 磅 / 英寸、真实出口表头、合并尺寸格 |
+| `test_pack_ship_dimension_gate.py` | pack-ship 缺尺寸闸门与「0 个箱不算成功」 |
 | `test_agent_auto_mode.py` | 自动模式 |
 | `test_whatif_accept.py` | what-if |
 | `test_continue_improve.py` | 持续改进项 |
