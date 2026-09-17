@@ -248,15 +248,15 @@ def plan_tool(
 
 def ingest_tool(materials: Any = None, file_path: str = "") -> Dict[str, Any]:
     """只解析不装箱：行数、字段映射、以及必须人工补齐的行。"""
-    from packing_assistant.tools.pack_ship_solve import load_materials, rows_needing_human
+    from packing_assistant.tools.pack_ship_solve import load_materials, rows_blocking_plan
 
     loaded = load_materials(materials, file_path)
     mats = loaded["materials"]
-    needs = rows_needing_human(mats)
+    needs = rows_blocking_plan(mats)
     if needs:
-        nxt = "先补齐 needs_human 里这些行的重量，再调 pack-ship__plan。"
+        nxt = "先补齐 needs_human 里这些行缺的重量或尺寸，再调 pack-ship__plan。"
     elif mats:
-        nxt = "全部行都有重量，可以调 pack-ship__plan 出方案。"
+        nxt = "全部行都有重量和尺寸，可以调 pack-ship__plan 出方案。"
     else:
         nxt = "没有解析出任何行；确认表头与文件格式。"
     return {

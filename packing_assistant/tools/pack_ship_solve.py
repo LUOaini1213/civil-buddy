@@ -16,6 +16,7 @@ containers_used=1、利用率恒为 0），因为引擎吃的是 material_api_to
 
 from __future__ import annotations
 
+import math
 import time
 from typing import Any, Dict, List, Optional, Sequence
 
@@ -83,6 +84,72 @@ def load_materials(
     }
 
 
+#: 缺外形尺寸与缺重量同理：0×0×0 不是"很小"，是"不知道"。引擎拿到这种行一个箱
+#: 都出不了，方案会以 ok=True、0 个柜收场——看起来像成功，其实什么都没装。
+NEEDS_HUMAN_MISSING_DIMENSIONS = "missing_dimensions"
+
+#: 引擎没有产出任何箱。闸门之后仍可能发生（例如整表被成箱规则拒收），不能算成功。
+NO_BOXES = "no_boxes"
+
+_DIMENSION_SOURCES = (
+    ("length_mm", "l", "长"),
+    ("width_mm", "w", "宽"),
+    ("height_mm", "h", "高"),
+)
+
+
+def _dimension_mm(row: Dict[str, Any], key: str, short: str, cn: str) -> Optional[float]:
+    """引擎将会用到的那个边长；取不到或不可用返回 None。
+
+    取值与 adapters.material_api_to_internal 是同一条 `or` 链（length_mm →
+    sizeMm → 外尺寸_mm，取第一个真值），这样闸门判的就是引擎实际拿到的数，
+    而不是"表里某处有个数"。
+    """
+    size = row.get("sizeMm") if isinstance(row.get("sizeMm"), dict) else {}
+    outer = row.get("外尺寸_mm") if isinstance(row.get("外尺寸_mm"), dict) else {}
+    value = row.get(key) or size.get(short) or outer.get(cn)
+    if value in (None, "") or isinstance(value, bool):
+        return None
+    try:
+        number = float(value)
+    except (TypeError, ValueError):
+        return None
+    return number if math.isfinite(number) and number > 0 else None
+
+
+def rows_missing_dimensions(materials: Sequence[Dict[str, Any]]) -> List[Dict[str, Any]]:
+    out: List[Dict[str, Any]] = []
+    for m in materials or []:
+        missing = [key for key, short, cn in _DIMENSION_SOURCES if _dimension_mm(m, key, short, cn) is None]
+        if missing:
+            out.append(
+                {
+                    "id": m.get("id") or "",
+                    "name": m.get("name") or "",
+                    "reason": NEEDS_HUMAN_MISSING_DIMENSIONS,
+                    "missing": missing,
+                    "ask": "这一行缺少外形尺寸（" + "、".join(missing) + "），请补齐长宽高（mm），或确认它不参与装箱。",
+                }
+            )
+    return out
+
+
+def rows_blocking_plan(materials: Sequence[Dict[str, Any]]) -> List[Dict[str, Any]]:
+    """出方案之前必须由人补齐的全部行：先列缺重量的，再列缺尺寸的，一次问完。"""
+    return rows_needing_human(materials) + rows_missing_dimensions(materials)
+
+
+def _no_boxes(n_rows: int) -> Dict[str, Any]:
+    return {
+        "ok": False,
+        "solver_connected": True,
+        "source": "solver",
+        "error": NO_BOXES,
+        "detail": "引擎没有从这些行产出任何箱，因此没有柜数可报；请检查尺寸、重量与品类。",
+        "n_rows": n_rows,
+    }
+
+
 def run_plan(
     *,
     materials: Any = None,
@@ -109,15 +176,15 @@ def run_plan(
             "parse": {k: loaded[k] for k in ("column_map", "stats", "source")},
         }
 
-    needs_human = rows_needing_human(mats)
+    needs_human = rows_blocking_plan(mats)
     if needs_human:
-        # 硬闸门：有行不知道重量就不出方案。宁可停下来问，也不给一个
-        # 看起来可以直接拿去订舱、实际算在零质量上的柜型结论。
+        # 硬闸门：有行不知道重量或尺寸就不出方案。宁可停下来问，也不给一个
+        # 看起来可以直接拿去订舱、实际算在零质量或零体积上的柜型结论。
         return {
             "ok": False,
             "solver_connected": False,
             "source": "needs_human",
-            "error": NEEDS_HUMAN_MISSING_WEIGHT,
+            "error": needs_human[0]["reason"],
             "needs_human": needs_human,
             "n_rows": len(mats),
             "parse": {k: loaded[k] for k in ("column_map", "stats", "source")},
@@ -132,6 +199,11 @@ def run_plan(
     plan = solved["plan"]
     booking = solved["booking"]
     feasibility = solved["feasibility"]
+    if not boxes:
+        failed = _no_boxes(len(mats))
+        failed["parse"] = {k: loaded[k] for k in ("column_map", "stats", "source")}
+        failed["elapsed_s"] = round(time.time() - t0, 3)
+        return failed
 
     return {
         "ok": bool(plan),
@@ -209,9 +281,9 @@ def _prepared(materials: Any, file_path: str) -> Dict[str, Any]:
     if not loaded["ok"]:
         return {"ok": False, "error": "no_materials", "detail": loaded["errors"],
                 "solver_connected": False, "source": "unparsed"}
-    needs = rows_needing_human(mats)
+    needs = rows_blocking_plan(mats)
     if needs:
-        return {"ok": False, "error": NEEDS_HUMAN_MISSING_WEIGHT, "needs_human": needs,
+        return {"ok": False, "error": needs[0]["reason"], "needs_human": needs,
                 "solver_connected": False, "source": "needs_human", "n_rows": len(mats)}
     return {"ok": True, "materials": mats}
 
@@ -229,6 +301,8 @@ def draft_vgm(
     from packing_assistant.tools.vgm_draft import draft_vgm_method2
 
     solved = _solve_boxes(prep["materials"], container_type=container_type)
+    if not solved["boxes"]:
+        return _no_boxes(len(prep["materials"]))
     draft = draft_vgm_method2(solved["plan"], solved["boxes"])
     out = {"ok": True, "solver_connected": True, "source": "solver",
            "container_type": container_type, "n_boxes": len(solved["boxes"])}
@@ -254,6 +328,8 @@ def draft_booking(
     solved = _solve_boxes(
         prep["materials"], container_type=container_type, max_containers=max_containers
     )
+    if not solved["boxes"]:
+        return _no_boxes(len(prep["materials"]))
     req = build_booking_request(solved["state"])
     return {
         "ok": True,

@@ -118,6 +118,27 @@ def main():
     assert abs(_ir[0]["weight_kg"] - 66.5) < 1e-6, ("毛重未优先", _ir[0])
     assert _ir[0]["meta"]["dims_estimated"] is False, _ir[0]["meta"]
 
+    # 单字母加单位的尺寸表头：修复前 8 种写法里只认得 3 种，
+    # 「L (mm)」这类整表会以 0×0×0 进引擎，得到一个 ok=True、0 个柜的空方案。
+    for _hs in (
+        ["L", "W", "H"], ["L (mm)", "W (mm)", "H (mm)"], ["L(cm)", "W(cm)", "H(cm)"],
+        ["L mm", "W mm", "H mm"], ["Len.", "Wid.", "Ht."], ["L/mm", "W/mm", "H/mm"],
+        ["Length (mm)", "Width (mm)", "Height (mm)"], ["长", "宽", "高"],
+    ):
+        _m = build_column_map(_hs)
+        assert [_m.get(h) for h in _hs] == ["length_mm", "width_mm", "height_mm"], (_hs, _m)
+    # 单字母规则不能抢别的列：Lot / Weight / Hs Code 都不是尺寸
+    _other = build_column_map(["Lot No", "Weight (kg)", "HS Code", "Line"])
+    assert not {"length_mm", "width_mm", "height_mm"} & set(_other.values()), _other
+
+    _short = rows_to_ir(
+        [{"Description of Goods": "Steel bracket", "Q'ty": 4, "L (cm)": 120, "W (cm)": 40, "H (cm)": 30, "G.W. (kg)": 12.5}],
+        headers=["Description of Goods", "Q'ty", "L (cm)", "W (cm)", "H (cm)", "G.W. (kg)"],
+    )
+    assert len(_short) == 1, _short
+    assert (_short[0]["length_mm"], _short[0]["width_mm"], _short[0]["height_mm"]) == (1200.0, 400.0, 300.0), _short[0]
+    assert _short[0]["meta"]["dims_estimated"] is False, _short[0]["meta"]
+
     print("ALL_PASS table_mapper_unit")
     return 0
 if __name__ == "__main__":

@@ -227,6 +227,18 @@ _FUZZY_RULES: Tuple[Tuple[str, str, int], ...] = (
 )
 
 
+# 出口装箱单最常见的尺寸表头其实是单字母加单位：「L (mm)」「W(cm)」「H/mm」「Len.」。
+# 同义词表只收了裸的 l / w / h 和 l_mm 这类下划线写法，模糊规则又按子串匹配
+# length / width / height，于是这几种写法一个都对不上——三列尺寸全丢，行以
+# 0×0×0 进引擎。单字母不能放进子串规则（任何表头都含字母 l），所以用整词正则。
+_SHORT_DIM_RE = re.compile(r"^(l|w|h|len|wid|ht|hgt)\.?[(\[/_\-]?(?:mm|cm|m|毫米|厘米|米)?[)\]]?\.?$")
+_SHORT_DIM_FIELDS = {
+    "l": "length_mm", "len": "length_mm",
+    "w": "width_mm", "wid": "width_mm",
+    "h": "height_mm", "ht": "height_mm", "hgt": "height_mm",
+}
+
+
 def _weight_pref(key: str) -> int:
     """同为 weight_kg 候选时的偏好：毛重 > 未标明 > 净重。"""
     if "g.w" in key or "gross" in key or "毛重" in key:
@@ -251,6 +263,10 @@ def build_column_map(headers: Sequence[Any]) -> Dict[str, str]:
         key = _norm_header(raw)
         std = inv.get(key)
         score = 100 if std else 0
+        if not std:
+            short = _SHORT_DIM_RE.match(key)
+            if short:
+                std, score = _SHORT_DIM_FIELDS[short.group(1)], 92
         if not std:
             for cand, field, sc in _FUZZY_RULES:
                 if cand in key:
