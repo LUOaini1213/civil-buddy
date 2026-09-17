@@ -219,6 +219,7 @@ body[data-dock="open"] .layout { grid-template-columns: var(--cb-rail-w) minmax(
 }
 .sess-row .t-name { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .sess-row .t-time { flex: none; font-size: 11px; color: #7d838d; }
+.sess-row .t-time.t-running { color: var(--cb-blue); font-weight: 600; }
 .sess-row:hover, .sess-row.on { background: #2a2d31; color: var(--rail-ink); }
 .sess-none { font-size: 11px; color: #6f747c; padding: 4px 10px; }
 /* ux(round19)：常驻名册（.skill-q / .cat / .exp*）随 renderWall 一并删除，

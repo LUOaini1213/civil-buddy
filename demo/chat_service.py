@@ -77,8 +77,7 @@ class SessionLease:
         self.release()
 
     def disconnect(self):
-        if self.running and not self.released:
-            self.control.request_cancel()
+        """HTTP teardown. A running turn is left alone; produce() finishes it."""
         self.release()
 
 
@@ -541,6 +540,8 @@ def stream_turn(root: Path, turn: dict, *, key_available: bool, plain_runner, le
                 continue
             yield event
     finally:
+        # A dropped connection (mobile lock screen, app switch, Wi-Fi to 4G,
+        # task switch in the UI) only detaches the browser. The turn keeps its
+        # lease, finishes, and persists; the client recovers the result from
+        # GET /api/sessions/{sid}. Only POST /api/sessions/{sid}/cancel cancels.
         detached.set()
-        if not finished.is_set():
-            lease.control.request_cancel()

@@ -120,6 +120,92 @@ function cbCancelActiveRun() {
   cbRunPaint(false);
 }
 
+/* 切换任务 / 新建任务时只断开浏览器这一端，不向服务端发取消：
+   服务端的 turn 持有 lease 直到落盘，回到该任务时由 cbWatchSession 把结果拉回来。
+   显式「停止」按钮仍走 cbCancelActiveRun。 */
+function cbDetachActiveRun() {
+  if (!cbActiveRun) return;
+  const run = cbActiveRun;
+  run.detached = true;
+  run.controller.abort();
+  cbActiveRun = null;
+  cbRunPaint(false);
+  cbBackgroundSessions.add(run.session);
+  cbAnnounce("任务继续在后台运行，回到该任务可查看结果");
+  loadThreads().catch(() => {});
+}
+
+const cbBackgroundSessions = new Set();
+let cbWatchTimer = null;
+
+/* 手机回到前台（iOS 后台会掐掉 fetch 流）：没有活动流时，检查当前任务是否还在服务端跑。 */
+document.addEventListener("visibilitychange", () => {
+  if (document.visibilityState !== "visible" || cbActiveRun || !state.session) return;
+  fetch("/api/sessions/" + encodeURIComponent(state.session))
+    .then((r) => (r.ok ? r.json() : null))
+    .then((d) => {
+      if (d && d.turn_state && d.turn_state.active && !cbActiveRun && state.session === d.session_id) {
+        cbWatchSession(d.session_id, { bodyEl: null, reason: "回到前台；" });
+      }
+    })
+    .catch(() => {});
+});
+
+/* 轮询 /api/sessions/{sid}，直到服务端这一轮结束；若仍停留在该任务，则把留存的结果补画出来。 */
+async function cbWatchSession(sid, opts) {
+  const options = opts || {};
+  const request = cbSessionRequest;
+  const started = Date.now();
+  const maxMs = Number(options.maxMs) || 10 * 60 * 1000;
+  if (cbWatchTimer) { clearTimeout(cbWatchTimer); cbWatchTimer = null; }
+  const tick = async () => {
+    if (state.session !== sid || request !== cbSessionRequest || cbActiveRun) return;
+    let d = null;
+    try {
+      const r = await fetch("/api/sessions/" + encodeURIComponent(sid));
+      if (r.ok) d = await r.json();
+    } catch (_) { /* 网络抖动：下一拍再试 */ }
+    if (state.session !== sid || request !== cbSessionRequest || cbActiveRun) return;
+    const active = !!(d && d.turn_state && d.turn_state.active);
+    if (active && Date.now() - started < maxMs) {
+      cbWatchTimer = setTimeout(tick, 1500);
+      return;
+    }
+    cbBackgroundSessions.delete(sid);
+    if (d) cbPaintRecovered(d, options);
+    loadThreads().catch(() => {});
+  };
+  tick();
+}
+
+/* 把服务端留存的最后一条助手回复 + 交付物补画到当前视图（断流恢复 / 后台任务完成）。 */
+function cbPaintRecovered(d, options) {
+  const transcript = Array.isArray(d.transcript) ? d.transcript : [];
+  const last = transcript.filter((t) => t && t.role === "assistant").slice(-1)[0];
+  const text = last ? String(last.text || "") : "";
+  const bodyEl = options.bodyEl && options.bodyEl.isConnected ? options.bodyEl : null;
+  if (bodyEl) {
+    if (text) bodyEl.textContent = text;
+    const known = state.history.filter((h) => h.role === "assistant").slice(-1)[0];
+    if (text && (!known || known.content !== text)) state.history.push({ role: "assistant", content: text });
+  } else if (text && !state.history.some((h) => h.role === "assistant" && h.content === text)) {
+    const el = addMsg("assistant", "岗位", text);
+    state.history.push({ role: "assistant", content: text });
+    options.bodyEl = el;
+  }
+  const files = Array.isArray(d.deliverables) ? d.deliverables.filter((f) => f && typeof f.path === "string" && f.path) : [];
+  const target = options.bodyEl && options.bodyEl.isConnected ? options.bodyEl : null;
+  if (files.length && target) {
+    cbLastDeliverables = files;
+    appendDocCards(files, target);
+  }
+  const st = d.turn_state && d.turn_state.state;
+  addStatus(options.reason
+    ? options.reason + (st === "cancelled" ? "该任务已被停止。" : "任务已在后台完成，结果已恢复。")
+    : "后台任务已完成，结果已恢复。");
+  refreshAuditSoon();
+}
+
 async function cbRequestCancellation(run) {
   if (!run || run.cancelRequested) return;
   const controller = new AbortController();
@@ -458,7 +544,7 @@ if ($("btnNewProject")) {
 function cbNewLocalSession() {
   cbClearServerHitl();
   cbSessionRequest += 1;
-  cbCancelActiveRun();
+  cbDetachActiveRun();
   cbRememberSession("");
   if ($("confirmOk")) $("confirmOk").value = "";
   state.threadId = "";
@@ -660,7 +746,9 @@ function cbProjRender() {
       t1.textContent = s.title || s.session_id;
       const t2 = document.createElement("span");
       t2.className = "t-time";
-      t2.textContent = cbRelTime(s.updated_at);
+      const running = s.running === true || cbBackgroundSessions.has(s.session_id);
+      t2.textContent = running ? "运行中" : cbRelTime(s.updated_at);
+      if (running) t2.classList.add("t-running");
       b.append(t1, t2);
       b.addEventListener("click", () => cbProjOpenSession(s));
       kidBox.appendChild(b);
@@ -719,7 +807,7 @@ function cbProjRename(p) {
 /* 点会话：拉详情并**整体替换** state.history（不 merge，避免与浏览器内存分叉） */
 async function cbProjOpenSession(s) {
   const request = ++cbSessionRequest;
-  cbCancelActiveRun();
+  cbDetachActiveRun();
   cbContextReset();
   try {
     const response = await fetch("/api/sessions/" + encodeURIComponent(s.session_id));
@@ -775,6 +863,10 @@ async function cbProjOpenSession(s) {
       appendDocCards(files, addMsg("assistant", "本会话交付物", "已恢复留存的草稿，可继续预览或下载。"));
     }
     if (d.truncated) addStatus("列表只展示近期对话节选。可在「任务记忆与本地搜索」找回已保留的历史原文。");
+    if (d.turn_state && d.turn_state.active) {
+      addStatus("这个任务仍在后台运行，完成后会自动显示结果。");
+      cbWatchSession(d.session_id, { bodyEl: null });
+    }
     if (d.context && (d.context.note || Number(d.context.limit) > 0)) paintContext(d.context);
     else paintContext(estimateLocalContext());
     if (log) log.scrollTop = log.scrollHeight;
@@ -1229,7 +1321,20 @@ $("form").addEventListener("submit", async (ev) => {
   } catch (err) {
     if (cbActiveRun !== run) return;
     const stopped = err.name === "AbortError";
+    const dropped = err.name === "StreamDroppedError";
     const raw = stopped ? "已停止接收回答。已有内容已保留。" : String(err.message || err);
+    if (dropped) {
+      /* 断流（锁屏 / 切 App / 网络切换）：服务端这一轮不会被取消，轮询拿回结果。 */
+      const note = document.createElement("p");
+      note.className = "status-line";
+      note.textContent = raw;
+      run.bodyEl.parentElement.appendChild(note);
+      cbAnnounce("连接中断，正在恢复结果");
+      cbActiveRun = null;
+      cbRunPaint(false);
+      cbWatchSession(run.session, { bodyEl: run.bodyEl, reason: "连接曾中断；" });
+      return;
+    }
     // Preserve partial output so an interrupted connection does not erase work.
     const note = document.createElement("p");
     note.className = stopped ? "status-line" : "status-line err";
@@ -1438,7 +1543,11 @@ async function streamChat(message, bodyEl, run) {
         refreshAuditSoon(); /* ux(round6)：本轮完成 → 审计时间线增量刷新（含决策置顶） */
       }
     }, { signal: run.controller.signal });
-    if (!complete) throw new Error("回答连接已中断，尚未收到完成结果。请重试。");
+    if (!complete) {
+      const dropped = new Error("回答连接已中断，正在从服务端恢复结果…");
+      dropped.name = "StreamDroppedError";
+      throw dropped;
+    }
     loadThreads().catch(() => {});
   } catch (err) {
     if (cbActiveRun === run && tl) tl.error(err.name === "AbortError" ? "已停止接收回答" : String(err.message || err));

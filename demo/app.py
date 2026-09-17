@@ -398,8 +398,13 @@ def projects_merge(pid: str, body: MergeIn) -> dict:
 @app.get("/api/sessions")
 def sessions_list(project_id: str = "", q: str = "", limit: int = 0, offset: int = 0) -> dict:
     import projects as pj
+    import turn_control
 
-    return pj.list_sessions(OUT_ROOT, project_id, q, limit or pj.DEFAULT_LIMIT, offset, recorded_only=True)
+    listing = pj.list_sessions(OUT_ROOT, project_id, q, limit or pj.DEFAULT_LIMIT, offset, recorded_only=True)
+    for row in listing.get("sessions", []):
+        # A turn detached from its browser keeps running; the list must say so.
+        row["running"] = turn_control.status(row["session_id"])["active"]
+    return listing
 
 
 @app.get("/api/sessions/{sid}")
