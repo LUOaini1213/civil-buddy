@@ -155,9 +155,13 @@ def _historical_collaboration(value, sid, artifacts=(), documents=()):
     def comparison(rows):
         return [{"requirement_ref": _text(row.get("requirement_ref", ""), 256),
                  "requirement": _text(row.get("requirement", "")),
-                 "status": (row.get("status") if row.get("status") in {"candidate_requires_review", "not_matched", "not_provided"}
+                 "status": (row.get("status") if row.get("status") in {"candidate_requires_review", "conflict_requires_review",
+                                                                       "not_matched", "not_provided"}
                             else "candidate_requires_review" if row.get("response_evidence") else "not_provided"),
                  "original_status": _text(row.get("status", ""), 128), "verified": False,
+                 "kinds": [_text(kind, 64) for kind in _rows(row.get("kinds", []), 16)],
+                 "conflicts": [{key: _text(item.get(key, ""), 512) for key in ("label", "required", "offered", "note")}
+                               for item in _rows(row.get("conflicts", []), 32) if isinstance(item, dict)],
                  "response_evidence": [evidence(e) for e in _rows(row.get("response_evidence", []))]}
                 for row in _rows(rows)]
 

@@ -142,6 +142,18 @@ _DEADLINE_RE = re.compile(
 )
 
 
+def rule_patterns_for_line(line: str) -> List[str]:
+    """主题规则里命中这一行的关键词模式。响应对照复用同一套词表：招标句因为
+    「许可证」被抽出来，响应里提到「许可证」的句子就是它的候选。"""
+    text = line or ""
+    found = [pat for _rid, _cat, patterns, _title, _owner, _risk in _RULES for pat in patterns
+             if re.search(pat, text, flags=re.I)]
+    # 逐行条目（电子标 / 保证金 / 专项）没有主题规则，用它们在这一行里实际命中的词
+    for rx in (_EBID_RE, _BOND_RE, _SPECIAL_RE):
+        found.extend(re.escape(m.group(0)) for m in rx.finditer(text))
+    return list(dict.fromkeys(found))
+
+
 def _is_star_line(ln: str) -> bool:
     return bool(_STAR_RE.search(ln or ""))
 
