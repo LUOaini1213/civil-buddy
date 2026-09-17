@@ -153,6 +153,8 @@ def llm_settings_update(body: LLMConfigIn) -> dict:
 
 @app.post("/api/upload")
 async def upload(request: Request) -> dict:
+    from starlette.exceptions import HTTPException as StarletteHTTPException
+    from starlette.formparsers import MultiPartException
     from uploads import MAX_BYTES, MAX_REQUEST_BYTES, UploadError, UploadTooLarge, save_uploads
     # Bound the body before multipart parsing, including chunked uploads without Content-Length.
     data = bytearray()
@@ -179,6 +181,18 @@ async def upload(request: Request) -> dict:
         raise HTTPException(413, str(exc)) from exc
     except UploadError as exc:
         raise HTTPException(400, str(exc)) from exc
+    except (MultiPartException, StarletteHTTPException) as exc:
+        # Starlette's own limits (max_files / max_fields / malformed body) come
+        # back as English text (re-raised as HTTPException inside request.form);
+        # the UI shows the detail verbatim, so translate the known ones.
+        detail = str(getattr(exc, "detail", None) or getattr(exc, "message", None) or exc)
+        if "Too many files" in detail:
+            raise HTTPException(400, "一次最多上传 12 个附件") from exc
+        if "Too many fields" in detail:
+            raise HTTPException(400, "上传表单字段过多") from exc
+        if isinstance(exc, StarletteHTTPException) and exc.status_code != 400:
+            raise
+        raise HTTPException(400, "上传内容格式无效，请重新选择文件后再试") from exc
     except (OSError, PermissionError) as exc:
         raise HTTPException(500, "无法保存附件，请检查工作台目录权限") from exc
 
@@ -357,8 +371,11 @@ class ProjectIn(BaseModel):
 def projects_create(body: ProjectIn) -> dict:
     import projects as pj
 
+    name = " ".join(str(body.name or "").split())
+    if len(name) > PROJECT_NAME_MAX:
+        raise HTTPException(400, f"项目名称最多 {PROJECT_NAME_MAX} 个字符")
     try:
-        item, merged = pj.create_project(OUT_ROOT, body.name)
+        item, merged = pj.create_project(OUT_ROOT, name)
     except ValueError as e:
         raise HTTPException(400, str(e))
     return {"ok": True, "project": item, "merged": merged}
@@ -369,9 +386,15 @@ class ProjectPatchIn(BaseModel):
     archived: bool | None = None
 
 
+PROJECT_NAME_MAX = 60  # 手机侧栏一行能放下的上限；超过就换行溢出
+
+
 @app.patch("/api/projects/{pid}")
 def projects_patch(pid: str, body: ProjectPatchIn) -> dict:
     import projects as pj
+
+    if body.name is not None and len(" ".join(body.name.split())) > PROJECT_NAME_MAX:
+        raise HTTPException(400, f"项目名称最多 {PROJECT_NAME_MAX} 个字符")
 
     try:
         item = pj.patch_project(OUT_ROOT, pid, body.name, body.archived)

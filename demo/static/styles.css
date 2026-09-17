@@ -285,6 +285,8 @@ body[data-dock="open"] .layout { grid-template-columns: var(--cb-rail-w) minmax(
 .composer {
   flex: 0 0 auto;
   border-top: 1px solid var(--line); padding: 12px 20px 16px; background: var(--panel);
+  /* viewport-fit=cover 后 iPhone 底部 Home 条会盖住输入区：留出安全区 */
+  padding-bottom: calc(16px + env(safe-area-inset-bottom, 0px));
 }
 .composer.drop { outline: 2px dashed var(--accent); outline-offset: -4px; }
 /* === ux(round14) 输入条重做（参考图）：大圆角容器 · 左"+"开指令面板 · 中间 textarea · 右下圆形发送键 === */
@@ -862,7 +864,7 @@ html.cb-large {
   .log { padding: 12px 14px 8px; }
   .msg, .welcome { font-size: 14px; line-height: 1.6; }
   .welcome { margin-top: 8vh; }
-  #send, .top-btn, .hints button, .local-row button { min-height: var(--cb-touch-min, 44px); }
+  #send, #stop, .composer-attach, .top-btn, .hints button, .local-row button { min-height: var(--cb-touch-min, 44px); }
   .ghost.tiny { min-height: var(--cb-touch-min, 44px); }
   .thread-row { display: flex; align-items: center; min-height: var(--cb-touch-min, 44px); }
   .confirm, .composer-note { font-size: 13px; line-height: 1.6; }
