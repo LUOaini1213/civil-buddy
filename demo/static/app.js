@@ -1382,18 +1382,24 @@ if ($("cbBackupExport")) $("cbBackupExport").addEventListener("click", async () 
   const session = state.session;
   cbBackupPaint(true);
   try {
-    const response = await fetch(`/api/sessions/${encodeURIComponent(session)}/export`);
-    if (!response.ok) throw new Error(await apiError(response) || "备份失败");
-    const blob = await response.blob();
-    const url = URL.createObjectURL(blob);
+    /* 先问一次服务端状态：后台可能还有本会话的轮次在跑（断流 / 切走后继续），导出会 409。 */
+    const probe = await fetch(`/api/sessions/${encodeURIComponent(session)}`);
+    const detail = probe.ok ? await probe.json() : null;
+    if (detail && detail.turn_state && detail.turn_state.active) {
+      addStatus("这个任务仍在后台运行，请等待完成后再备份。");
+      return;
+    }
+    /* 不再 fetch→blob→createObjectURL：128 MB 的包会整个进内存，手机上直接崩；
+       服务端已带 Content-Disposition: attachment，直接让浏览器下载即可。 */
+    const url = `/api/sessions/${encodeURIComponent(session)}/export`;
     const link = document.createElement("a");
     link.href = url;
     link.download = `civil-task-${session}.zip`;
+    link.rel = "noopener";
     document.body.appendChild(link);
     link.click();
     link.remove();
-    setTimeout(() => URL.revokeObjectURL(url), 30000);
-    if (state.session === session) addStatus("任务备份已生成并发起下载；请确认浏览器已保存 ZIP 文件。备份包含对话、上传资料和生成的文书。");
+    if (state.session === session) addStatus("已发起任务备份下载；请确认浏览器已保存 ZIP 文件。备份包含对话、上传资料和生成的文书。");
   } catch (error) { addStatus(String(error.message || error)); }
   finally { cbBackupPaint(false); }
 });
@@ -2019,10 +2025,12 @@ if ($("ctxQuery")) $("ctxQuery").addEventListener("keydown", event => {
   if (event.key === "Enter" && !event.isComposing) { event.preventDefault(); cbContextSearch(); }
 });
 
-function fileUrl(p) {
+function fileUrl(p, name) {
   /* Rust canonicalize 返回 \\?\ verbatim 前缀；/api/file 对该形态 404——
-     剥掉后端点自会 canonicalize（自测发现：此前侧栏下载链接全部 404）。 */
-  return `/api/file?path=${encodeURIComponent(String(p || "").replace(/^\\\\\?\\/, ""))}`;
+     剥掉后端点自会 canonicalize（自测发现：此前侧栏下载链接全部 404）。
+     name：卡片显示名，服务端据此写 Content-Disposition（手机端不认 download 属性）。 */
+  const q = `/api/file?path=${encodeURIComponent(String(p || "").replace(/^\\\\\?\\/, ""))}`;
+  return name ? q + `&name=${encodeURIComponent(String(name))}` : q;
 }
 
 function isDocMd(f) {
@@ -2066,7 +2074,7 @@ function appendDocCards(files, bodyEl) {
     }
     const a = document.createElement("a");
     a.className = "dl";
-    a.href = fileUrl(f.path);
+    a.href = fileUrl(f.path, f.name);
     a.setAttribute("download", f.name || "文书.md");
     a.textContent = "下载";
     a.addEventListener("click", () => cbObStep(3)); /* ux(round10)：下载 .md → 引导第 3 步打勾 */

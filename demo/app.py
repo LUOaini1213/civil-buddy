@@ -746,7 +746,7 @@ def _sse(ev: dict) -> str:
 
 
 @app.get("/api/file")
-def file(path: str) -> FileResponse:
+def file(path: str, name: str = "") -> FileResponse:
     target = Path(path).resolve()
     try:
         target.relative_to(OUT_ROOT.resolve())
@@ -759,4 +759,11 @@ def file(path: str) -> FileResponse:
         assert_open(target)
     except PermissionError as exc:
         raise HTTPException(403, "not a deliverable") from exc
-    return FileResponse(target)
+    # Name the download server-side: iOS Safari / PWA ignore <a download> and
+    # would otherwise save "file" or open .md inline. Starlette emits
+    # filename*=UTF-8'' for non-ASCII names. The card's display name may be
+    # used only when it is a plain basename with the same extension.
+    from uploads import safe_filename
+    shown = safe_filename(name) if name else ""
+    download_name = shown if shown and Path(shown).suffix.lower() == target.suffix.lower() else target.name
+    return FileResponse(target, filename=download_name, content_disposition_type="attachment")
