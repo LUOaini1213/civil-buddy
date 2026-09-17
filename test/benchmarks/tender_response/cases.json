@@ -1,0 +1,444 @@
+{
+  "schema": "civil.tender.response_match.bench.v1",
+  "note": "Synthetic tender and bid-response lines written for this benchmark; no client data. `links` are (tender line, response line) pairs a reviewer should be shown as candidates. `conflicts` are linked pairs whose stated quantity does not meet the tender's number. Lines are indexed from 0.",
+  "cases": [
+    {
+      "id": "cn-sample",
+      "tender": [
+        "★投标人须提供营业执照复印件。",
+        "技术方案评分20分，须编制施工专项方案。",
+        "工期60日历天。"
+      ],
+      "response": [
+        "已附营业执照复印件。",
+        "施工方案资料待补。",
+        "供应商自述工期999日历天。"
+      ],
+      "links": [
+        [
+          0,
+          0
+        ],
+        [
+          1,
+          1
+        ],
+        [
+          2,
+          2
+        ]
+      ],
+      "conflicts": [
+        [
+          2,
+          2
+        ]
+      ]
+    },
+    {
+      "id": "cn-qualification",
+      "tender": [
+        "投标人须具备建筑工程施工总承包二级及以上资质。",
+        "须提供近三年类似项目业绩不少于2项。",
+        "须提供有效的安全生产许可证。",
+        "投标人须通过ISO9001质量管理体系认证。"
+      ],
+      "response": [
+        "我司具备建筑工程施工总承包一级资质，证书见附件3。",
+        "近三年类似项目业绩3项，合同复印件见附件5。",
+        "安全生产许可证在有效期内，见附件4。",
+        "公司成立于2005年，注册资金5000万元。",
+        "已通过ISO9001质量管理体系认证，证书见附件6。"
+      ],
+      "links": [
+        [
+          0,
+          0
+        ],
+        [
+          1,
+          1
+        ],
+        [
+          2,
+          2
+        ],
+        [
+          3,
+          4
+        ]
+      ],
+      "conflicts": []
+    },
+    {
+      "id": "cn-delivery-bond",
+      "tender": [
+        "★交货期：合同签订后45天内到货。",
+        "★投标保证金人民币20万元，须在投标截止前到账。",
+        "货物须采用木箱包装并做防潮处理。"
+      ],
+      "response": [
+        "交货期为合同签订后60天。",
+        "投标保证金10万元已于9月1日汇出。",
+        "包装采用出口木箱，内衬防潮膜。",
+        "付款方式接受货到付款。"
+      ],
+      "links": [
+        [
+          0,
+          0
+        ],
+        [
+          1,
+          1
+        ],
+        [
+          2,
+          2
+        ]
+      ],
+      "conflicts": [
+        [
+          0,
+          0
+        ],
+        [
+          1,
+          1
+        ]
+      ]
+    },
+    {
+      "id": "cn-transport",
+      "tender": [
+        "单件货载不得超过25吨。",
+        "须采用40HQ集装箱海运。",
+        "超长件须使用框架柜运输。",
+        "须提供货物运输保险及原产地证明。"
+      ],
+      "response": [
+        "最重单件货载为28吨的变压器底座。",
+        "全部货物装入3个40HQ集装箱。",
+        "12米超长钢梁拟用框架柜。",
+        "运输保险由我司投保，原产地证明随货提供。",
+        "我司拥有自有车队20辆。"
+      ],
+      "links": [
+        [
+          0,
+          0
+        ],
+        [
+          1,
+          1
+        ],
+        [
+          2,
+          2
+        ],
+        [
+          3,
+          3
+        ]
+      ],
+      "conflicts": [
+        [
+          0,
+          0
+        ]
+      ]
+    },
+    {
+      "id": "cn-scoring-special",
+      "tender": [
+        "商务分30分，其中业绩10分。",
+        "危大工程须编制专项施工方案并组织专家论证。",
+        "本项目采用电子投标，投标文件须使用CA锁加密。"
+      ],
+      "response": [
+        "业绩证明材料共5项，见商务标第3章。",
+        "深基坑专项施工方案已编制，专家论证会议纪要见附件。",
+        "投标文件已用CA锁加密并上传。",
+        "项目团队共计35人。",
+        "付款方案：预付30%，到货付60%，质保金10%。"
+      ],
+      "links": [
+        [
+          0,
+          0
+        ],
+        [
+          1,
+          1
+        ],
+        [
+          2,
+          2
+        ]
+      ],
+      "conflicts": []
+    },
+    {
+      "id": "en-works",
+      "tender": [
+        "The Works shall be completed within 60 calendar days.",
+        "Tenderer shall submit a method statement for working at height.",
+        "Price 60% Quality 40%."
+      ],
+      "response": [
+        "We propose to complete the Works in 75 calendar days.",
+        "A method statement for working at height is enclosed as Appendix C.",
+        "Our company was incorporated in Singapore in 2011."
+      ],
+      "links": [
+        [
+          0,
+          0
+        ],
+        [
+          1,
+          1
+        ]
+      ],
+      "conflicts": [
+        [
+          0,
+          0
+        ]
+      ]
+    },
+    {
+      "id": "cn-hard-negatives",
+      "tender": [
+        "工期90日历天。",
+        "须提供近三年类似项目业绩不少于3项。"
+      ],
+      "response": [
+        "我司承诺按期完成全部工作。",
+        "质保期24个月。",
+        "类似项目业绩2项：A小区、B厂房。",
+        "项目经理从业15年。",
+        "计划工期85日历天，分三个阶段实施。"
+      ],
+      "links": [
+        [
+          0,
+          0
+        ],
+        [
+          0,
+          4
+        ],
+        [
+          1,
+          2
+        ]
+      ],
+      "conflicts": [
+        [
+          1,
+          2
+        ]
+      ]
+    },
+    {
+      "id": "cn-warranty-validity",
+      "tender": [
+        "★质保期不少于24个月。",
+        "★投标有效期不少于90天。",
+        "★交货期不超过30天。"
+      ],
+      "response": [
+        "质保期2年，自验收合格之日起计算。",
+        "投标有效期60天。",
+        "交货期25天。",
+        "售后服务响应时间2小时。"
+      ],
+      "links": [
+        [
+          0,
+          0
+        ],
+        [
+          1,
+          1
+        ],
+        [
+          2,
+          2
+        ]
+      ],
+      "conflicts": [
+        [
+          1,
+          1
+        ]
+      ]
+    },
+    {
+      "id": "en-sg",
+      "tender": [
+        "★ Tenderer shall hold a valid bizSAFE Level 3 certificate.",
+        "★ The defects liability period shall be not less than 12 months.",
+        "Delivery shall be within 14 calendar days from the purchase order."
+      ],
+      "response": [
+        "Our bizSAFE Level 3 certificate is valid until March 2027.",
+        "We offer a defects liability period of 6 months.",
+        "Delivery will take 10 calendar days.",
+        "We have 12 full-time engineers."
+      ],
+      "links": [
+        [
+          0,
+          0
+        ],
+        [
+          1,
+          1
+        ],
+        [
+          2,
+          2
+        ]
+      ],
+      "conflicts": [
+        [
+          1,
+          1
+        ]
+      ]
+    },
+    {
+      "id": "cn-two-durations",
+      "tender": [
+        "总工期180日历天，其中主体结构封顶不超过90日历天。",
+        "★投标人须提供近三年经审计的财务报表。"
+      ],
+      "response": [
+        "我司计划总工期175日历天，主体结构封顶100日历天。",
+        "近三年财务审计报告见商务标附件2。"
+      ],
+      "links": [
+        [
+          0,
+          0
+        ],
+        [
+          1,
+          1
+        ]
+      ],
+      "conflicts": [
+        [
+          0,
+          0
+        ]
+      ]
+    },
+    {
+      "id": "cn-unrelated-response",
+      "tender": [
+        "工期60日历天。",
+        "★投标人须提供营业执照复印件。"
+      ],
+      "response": [
+        "感谢贵司邀请，我司将全力配合。",
+        "联系人：王经理，电话见名片。",
+        "公司简介：成立于1998年，员工600人。"
+      ],
+      "links": [],
+      "conflicts": []
+    },
+    {
+      "id": "cn-compliant-numbers",
+      "tender": [
+        "工期120日历天。",
+        "★质保期不少于12个月。",
+        "★投标保证金人民币5万元。"
+      ],
+      "response": [
+        "承诺工期110日历天。",
+        "质保期18个月。",
+        "投标保证金5万元已缴纳，回单见附件。",
+        "拟投入挖掘机6台。"
+      ],
+      "links": [
+        [
+          0,
+          0
+        ],
+        [
+          1,
+          1
+        ],
+        [
+          2,
+          2
+        ]
+      ],
+      "conflicts": []
+    },
+    {
+      "id": "cn-boilerplate-negatives",
+      "tender": [
+        "须提供近三年类似项目业绩不少于2项。",
+        "★投标人须提供近三年经审计的财务报表。",
+        "须提供货物运输保险及原产地证明。",
+        "技术方案评分20分，须编制施工专项方案。"
+      ],
+      "response": [
+        "近三年无重大安全事故。",
+        "货物运输由我司车队承担。",
+        "施工现场已完成三通一平。",
+        "类似项目业绩4项，详见业绩表。",
+        "近三年财务审计报告见附件2。",
+        "货物运输保险已投保，保单见附件。",
+        "施工专项方案见技术标第4章。"
+      ],
+      "links": [
+        [
+          0,
+          3
+        ],
+        [
+          1,
+          4
+        ],
+        [
+          2,
+          5
+        ],
+        [
+          3,
+          6
+        ]
+      ],
+      "conflicts": []
+    },
+    {
+      "id": "en-boilerplate-negatives",
+      "tender": [
+        "★ Tenderer shall submit audited financial statements for the last three years.",
+        "★ Tenderer shall provide a safety plan for working at height."
+      ],
+      "response": [
+        "Audited financial statements for FY2023 to FY2025 are attached.",
+        "Our safety record for the last three years shows zero lost-time incidents.",
+        "The safety plan for working at height is in Section 4.",
+        "Our office is located at 10 Anson Road."
+      ],
+      "links": [
+        [
+          0,
+          0
+        ],
+        [
+          1,
+          2
+        ]
+      ],
+      "conflicts": []
+    }
+  ]
+}

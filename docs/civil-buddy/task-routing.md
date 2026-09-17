@@ -32,7 +32,7 @@ route_task(message, expert_ids=None)
 - SSE `status` 事件：`phase="routing"`，携带 `route`；`done.route` 可再次包含最终选择。
 - SSE `collaboration` 事件及 `done.collaboration`：工作流状态、`children`、`review` 和 `aggregate_metrics`（或 `metrics`）。
 - 子任务包括 `task_id,skill,status,conclusions,evidence,unresolved`。模型分析显式标未核实；证据按原文与来源显示。
-- `review.response_comparison` 区分响应候选、未匹配和未提供；不得将候选呈现为合格结论。
+- `review.response_comparison` 一条招标原文一行，区分响应候选（`candidate_requires_review`）、数值与招标不一致（`conflict_requires_review`，逐条列在 `conflicts[].note`，同时进 `review.conflicts`）、未匹配和未提供；不得将候选呈现为合格结论，数值不一致也只陈述、不裁决。匹配口径与基准见 `scripts/eval_tender_response_match.py`。
 - 汇总预算展示 `input_tokens,output_estimated,limit,reserved_tokens,estimated,counter`。UTF-8 字节口径标为保守估算，不称为供应商账单用量。
 - 聊天请求的 `attachment_roles` 是所选附件 ID 到 `tender/response/reference` 的映射；会话详情用同名字段恢复。
 

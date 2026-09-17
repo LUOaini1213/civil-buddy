@@ -1330,6 +1330,19 @@ test("tender response comparison distinguishes evidence candidates from verified
   assert.doesNotMatch(text, /核验通过|响应合格/);
 });
 
+test("tender response comparison shows a numeric mismatch as a review item, not a verdict", () => {
+  const h = ui(() => assert.fail("rendering is local"));
+  h.evaluate('var body = addMsg("assistant", "岗位", ""); cbCollaborationPaint({ state: "done", submit_blocked: true, review: {' +
+    'response_comparison: [{ requirement: "工期60日历天。", status: "conflict_requires_review",' +
+    ' response_evidence: [{ source_id: "response-1", quote: "供应商自述工期999日历天。" }],' +
+    ' conflicts: [{ label: "工期", note: "工期：响应 999日历天 超过招标 60日历天，待人工核验" }] }] } }, body);');
+  const text = shownText(h.messages[0].body.parentElement.cbCollaborationCard);
+  assert.match(text, /数值与招标不一致，待人工核验/);
+  assert.match(text, /响应 999日历天 超过招标 60日历天/);
+  assert.match(text, /response-1.*供应商自述工期999日历天/);
+  assert.doesNotMatch(text, /不合格|废标|核验通过|响应合格/);
+});
+
 test("restoring a collaboration shows saved routing, evidence and unresolved work without re-executing", async () => {
   let calls = 0;
   const h = ui(async () => {

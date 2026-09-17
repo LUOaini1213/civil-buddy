@@ -1630,12 +1630,13 @@ function cbCollaborationPaint(data, bodyEl) {
       header.appendChild(th);
     }
     table.appendChild(header);
-    const statuses = { candidate_requires_review: "找到候选，待人工核验", not_matched: "未匹配到响应", not_provided: "未提供响应资料" };
+    const statuses = { candidate_requires_review: "找到候选，待人工核验", conflict_requires_review: "数值与招标不一致，待人工核验",
+      not_matched: "未匹配到响应", not_provided: "未提供响应资料" };
     for (const comparison of review.response_comparison) {
       const row = document.createElement("tr");
       for (const value of [comparison.requirement || comparison.requirement_ref,
         (comparison.response_evidence || []).map(evidence => [evidence.source_id, evidence.quote].filter(Boolean).join(" · ")).join("\n") || "—",
-        statuses[comparison.status] || "待核验"]) {
+        [statuses[comparison.status] || "待核验", ...(comparison.conflicts || []).map(conflict => conflict.note)].filter(Boolean).join("\n")]) {
         const cell = document.createElement("td");
         cell.textContent = value;
         row.appendChild(cell);

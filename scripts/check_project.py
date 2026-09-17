@@ -35,6 +35,8 @@ CHECKS = (
     Check("task-routing", ("scripts/test_task_router.py",)),
     Check("readonly-routing", ("scripts/test_readonly_routing.py",)),
     Check("tender-workflow", ("scripts/test_tender_workflow.py",)),
+    Check("tender-response-match", ("scripts/test_tender_response_match.py",)),
+    Check("tender-response-bench", ("scripts/eval_tender_response_match.py", "--check")),
     Check("workbench-collaboration", ("scripts/test_workbench_collaboration.py",)),
     Check("middleware", ("scripts/test_agent_middleware.py",)),
     Check("sandbox", ("scripts/test_sandbox.py",)),
