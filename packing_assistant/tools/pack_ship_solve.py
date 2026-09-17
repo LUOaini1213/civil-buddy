@@ -31,14 +31,20 @@ def rows_needing_human(materials: Sequence[Dict[str, Any]]) -> List[Dict[str, An
     for m in materials or []:
         meta = m.get("meta") or {}
 
-        weight = m.get("total_weight_kg")
-        if weight in (None, ""):
-            weight = m.get("weight_kg")
+        import math
 
-        try:
-            weight_invalid = float(weight) <= 0
-        except (TypeError, ValueError):
-            weight_invalid = True
+        def valid_weight(value):
+            try:
+                number = float(value)
+                return math.isfinite(number) and number > 0
+            except (TypeError, ValueError):
+                return False
+
+        total_weight = m.get("total_weight_kg")
+        unit_weight = m.get("weight_kg")
+        weight_invalid = not (
+            valid_weight(total_weight) or valid_weight(unit_weight)
+        )
 
         if meta.get("weight_missing") or weight_invalid:
             out.append(
