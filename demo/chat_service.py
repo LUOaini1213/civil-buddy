@@ -77,8 +77,7 @@ class SessionLease:
         self.release()
 
     def disconnect(self):
-        if self.running and not self.released:
-            self.control.request_cancel()
+        """HTTP teardown. A running turn is left alone; produce() finishes it."""
         self.release()
 
 
@@ -271,6 +270,10 @@ def _record(root: Path, turn: dict, result: dict, deliverables: list[dict], node
                "deliverables": deliverables, "attachments": turn["attachments"],
                "error_code": result.get("error_code", "")}
     payload["context"] = turn.get("context", {})
+    # Office export outcome per run, so the card can say "Word 导出失败 / 待生成"
+    # instead of silently showing fewer files.
+    payload["export_errors"] = [str(e) for e in (result.get("export_errors") or [])]
+    payload["docx_pending"] = result.get("docx_pending")
     payload["state"] = result.get("state", "cancelled" if result.get("cancelled") else "done" if result.get("ok", True) else "failed")
     payload["cancelled"] = result.get("cancelled", False)
     payload["engine_run_id"] = result.get("engine_run_id", "")
@@ -298,6 +301,22 @@ def read_runs(root: Path, sid: str) -> list[dict]:
     return sorted(rows, key=lambda r: r.get("mtime", ""))
 
 
+def deliverable_runs(runs: list[dict]) -> list[dict]:
+    """One entry per run that produced files, newest first: the card groups by run."""
+    out = []
+    for r in reversed(runs):
+        files = [f for f in r.get("deliverables", []) if Path(f["path"]).is_file()]
+        notes = {"export_errors": r.get("export_errors") or [], "docx_pending": r.get("docx_pending")}
+        if not files and not notes["export_errors"] and not notes["docx_pending"]:
+            continue
+        expert = get_expert(r.get("expert_id", ""))
+        out.append({"run_id": r.get("run_id", ""), "expert_id": r.get("expert_id", ""),
+                    "expert": expert.name if expert else r.get("expert_id", ""),
+                    "mtime": r.get("mtime", ""), "state": r.get("state", "done"),
+                    "deliverables": files, **notes})
+    return out
+
+
 def session_detail(root: Path, sid: str) -> dict:
     valid_session(sid)
     detail = projects.session_detail(root, sid)
@@ -306,6 +325,7 @@ def session_detail(root: Path, sid: str) -> dict:
     detail["collaboration"] = runs[-1].get("collaboration") if runs else None
     detail["attachment_roles"] = runs[-1].get("attachment_roles", {}) if runs else {}
     detail["deliverables"] = [f for r in runs for f in r.get("deliverables", []) if Path(f["path"]).is_file()]
+    detail["deliverable_runs"] = deliverable_runs(runs)
     # Restore only the last turn's selected attachments, not every uploaded file.
     from uploads import list_uploads
     selected = set(runs[-1].get("attachments", [])) if runs else set()
@@ -456,7 +476,8 @@ def _stream_turn(root: Path, turn: dict, *, key_available: bool, plain_runner, l
                      skill_source=turn["skill_source"], deliverables=files, citations=citations,
                      wrote=bool(files), hitl_pending=pending, submit_blocked=True, run_ids=run_ids, ok=ok,
                      state=control.state, cancelled=False, context=turn["context"],
-                     route=turn["route"], collaboration=collaboration_result)
+                     route=turn["route"], collaboration=collaboration_result,
+                     deliverable_runs=deliverable_runs([r for r in read_runs(root, sid) if r.get("run_id") in run_ids]))
     except TurnCancelled:
         control.seal("cancelled")
         text = "\n\n".join(texts) or "".join(partial)
@@ -541,6 +562,8 @@ def stream_turn(root: Path, turn: dict, *, key_available: bool, plain_runner, le
                 continue
             yield event
     finally:
+        # A dropped connection (mobile lock screen, app switch, Wi-Fi to 4G,
+        # task switch in the UI) only detaches the browser. The turn keeps its
+        # lease, finishes, and persists; the client recovers the result from
+        # GET /api/sessions/{sid}. Only POST /api/sessions/{sid}/cancel cancels.
         detached.set()
-        if not finished.is_set():
-            lease.control.request_cancel()

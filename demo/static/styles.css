@@ -219,6 +219,7 @@ body[data-dock="open"] .layout { grid-template-columns: var(--cb-rail-w) minmax(
 }
 .sess-row .t-name { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .sess-row .t-time { flex: none; font-size: 11px; color: #7d838d; }
+.sess-row .t-time.t-running { color: var(--cb-blue); font-weight: 600; }
 .sess-row:hover, .sess-row.on { background: #2a2d31; color: var(--rail-ink); }
 .sess-none { font-size: 11px; color: #6f747c; padding: 4px 10px; }
 /* ux(round19)：常驻名册（.skill-q / .cat / .exp*）随 renderWall 一并删除，
@@ -284,6 +285,8 @@ body[data-dock="open"] .layout { grid-template-columns: var(--cb-rail-w) minmax(
 .composer {
   flex: 0 0 auto;
   border-top: 1px solid var(--line); padding: 12px 20px 16px; background: var(--panel);
+  /* viewport-fit=cover 后 iPhone 底部 Home 条会盖住输入区：留出安全区 */
+  padding-bottom: calc(16px + env(safe-area-inset-bottom, 0px));
 }
 .composer.drop { outline: 2px dashed var(--accent); outline-offset: -4px; }
 /* === ux(round14) 输入条重做（参考图）：大圆角容器 · 左"+"开指令面板 · 中间 textarea · 右下圆形发送键 === */
@@ -716,6 +719,17 @@ body.cb-doc-open { overflow: hidden; }
   border-radius: var(--cb-radius-sm); padding: 2px 10px; cursor: pointer; color: var(--cb-text); text-decoration: none;
 }
 .cb-doc-card button:hover, .cb-doc-card a.dl:hover { border-color: var(--cb-blue); color: var(--cb-blue); }
+/* 交付物卡片：一份文书一行（标题 + 预览 + 各格式），轮次头一行（标签 + 岗位/时间 + 打包） */
+.cb-doc-card { flex-direction: column; align-items: stretch; gap: 6px; }
+.cb-doc-card-head, .cb-doc-row { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.cb-doc-card-run { font-size: 11px; color: var(--cb-text-muted); }
+.cb-doc-card-zip { margin-left: auto; }
+.cb-doc-row .cb-doc-card-t { flex: 1 1 160px; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.cb-doc-note { margin: 0; font-size: 12px; color: var(--cb-amber, #a35d00); }
+@media screen and (max-width: 430px) {
+  .cb-doc-card button, .cb-doc-card a.dl { min-height: var(--cb-touch-min, 44px); display: inline-flex; align-items: center; }
+  .cb-doc-card-zip { margin-left: 0; flex: 1 1 100%; justify-content: center; }
+}
 /* 打印：只留文书本体，隐藏聊天 chrome；@page A4 + 页眉页脚由文书自绘 */
 @media print {
   body > :not(.cb-doc-overlay) { display: none !important; }
@@ -861,7 +875,7 @@ html.cb-large {
   .log { padding: 12px 14px 8px; }
   .msg, .welcome { font-size: 14px; line-height: 1.6; }
   .welcome { margin-top: 8vh; }
-  #send, .top-btn, .hints button, .local-row button { min-height: var(--cb-touch-min, 44px); }
+  #send, #stop, .composer-attach, .top-btn, .hints button, .local-row button { min-height: var(--cb-touch-min, 44px); }
   .ghost.tiny { min-height: var(--cb-touch-min, 44px); }
   .thread-row { display: flex; align-items: center; min-height: var(--cb-touch-min, 44px); }
   .confirm, .composer-note { font-size: 13px; line-height: 1.6; }

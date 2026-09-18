@@ -120,6 +120,93 @@ function cbCancelActiveRun() {
   cbRunPaint(false);
 }
 
+/* 切换任务 / 新建任务时只断开浏览器这一端，不向服务端发取消：
+   服务端的 turn 持有 lease 直到落盘，回到该任务时由 cbWatchSession 把结果拉回来。
+   显式「停止」按钮仍走 cbCancelActiveRun。 */
+function cbDetachActiveRun() {
+  if (!cbActiveRun) return;
+  const run = cbActiveRun;
+  run.detached = true;
+  run.controller.abort();
+  cbActiveRun = null;
+  cbRunPaint(false);
+  cbBackgroundSessions.add(run.session);
+  cbAnnounce("任务继续在后台运行，回到该任务可查看结果");
+  loadThreads().catch(() => {});
+}
+
+const cbBackgroundSessions = new Set();
+let cbWatchTimer = null;
+
+/* 手机回到前台（iOS 后台会掐掉 fetch 流）：没有活动流时，检查当前任务是否还在服务端跑。 */
+document.addEventListener("visibilitychange", () => {
+  if (document.visibilityState !== "visible" || cbActiveRun || !state.session) return;
+  fetch("/api/sessions/" + encodeURIComponent(state.session))
+    .then((r) => (r.ok ? r.json() : null))
+    .then((d) => {
+      if (d && d.turn_state && d.turn_state.active && !cbActiveRun && state.session === d.session_id) {
+        cbWatchSession(d.session_id, { bodyEl: null, reason: "回到前台；" });
+      }
+    })
+    .catch(() => {});
+});
+
+/* 轮询 /api/sessions/{sid}，直到服务端这一轮结束；若仍停留在该任务，则把留存的结果补画出来。 */
+async function cbWatchSession(sid, opts) {
+  const options = opts || {};
+  const request = cbSessionRequest;
+  const started = Date.now();
+  const maxMs = Number(options.maxMs) || 10 * 60 * 1000;
+  if (cbWatchTimer) { clearTimeout(cbWatchTimer); cbWatchTimer = null; }
+  const tick = async () => {
+    if (state.session !== sid || request !== cbSessionRequest || cbActiveRun) return;
+    let d = null;
+    try {
+      const r = await fetch("/api/sessions/" + encodeURIComponent(sid));
+      if (r.ok) d = await r.json();
+    } catch (_) { /* 网络抖动：下一拍再试 */ }
+    if (state.session !== sid || request !== cbSessionRequest || cbActiveRun) return;
+    const active = !!(d && d.turn_state && d.turn_state.active);
+    if (active && Date.now() - started < maxMs) {
+      cbWatchTimer = setTimeout(tick, 1500);
+      return;
+    }
+    cbBackgroundSessions.delete(sid);
+    if (d) cbPaintRecovered(d, options);
+    loadThreads().catch(() => {});
+  };
+  tick();
+}
+
+/* 把服务端留存的最后一条助手回复 + 交付物补画到当前视图（断流恢复 / 后台任务完成）。 */
+function cbPaintRecovered(d, options) {
+  const transcript = Array.isArray(d.transcript) ? d.transcript : [];
+  const last = transcript.filter((t) => t && t.role === "assistant").slice(-1)[0];
+  const text = last ? String(last.text || "") : "";
+  const bodyEl = options.bodyEl && options.bodyEl.isConnected ? options.bodyEl : null;
+  if (bodyEl) {
+    if (text) bodyEl.textContent = text;
+    const known = state.history.filter((h) => h.role === "assistant").slice(-1)[0];
+    if (text && (!known || known.content !== text)) state.history.push({ role: "assistant", content: text });
+  } else if (text && !state.history.some((h) => h.role === "assistant" && h.content === text)) {
+    const el = addMsg("assistant", "岗位", text);
+    state.history.push({ role: "assistant", content: text });
+    options.bodyEl = el;
+  }
+  const files = Array.isArray(d.deliverables) ? d.deliverables.filter((f) => f && typeof f.path === "string" && f.path) : [];
+  const target = options.bodyEl && options.bodyEl.isConnected ? options.bodyEl : null;
+  if (files.length && target) {
+    cbLastDeliverables = files;
+    const runs = Array.isArray(d.deliverable_runs) ? d.deliverable_runs.slice(0, 1) : [];
+    appendDocCards(files, target, { runs });
+  }
+  const st = d.turn_state && d.turn_state.state;
+  addStatus(options.reason
+    ? options.reason + (st === "cancelled" ? "该任务已被停止。" : "任务已在后台完成，结果已恢复。")
+    : "后台任务已完成，结果已恢复。");
+  refreshAuditSoon();
+}
+
 async function cbRequestCancellation(run) {
   if (!run || run.cancelRequested) return;
   const controller = new AbortController();
@@ -458,7 +545,7 @@ if ($("btnNewProject")) {
 function cbNewLocalSession() {
   cbClearServerHitl();
   cbSessionRequest += 1;
-  cbCancelActiveRun();
+  cbDetachActiveRun();
   cbRememberSession("");
   if ($("confirmOk")) $("confirmOk").value = "";
   state.threadId = "";
@@ -660,7 +747,9 @@ function cbProjRender() {
       t1.textContent = s.title || s.session_id;
       const t2 = document.createElement("span");
       t2.className = "t-time";
-      t2.textContent = cbRelTime(s.updated_at);
+      const running = s.running === true || cbBackgroundSessions.has(s.session_id);
+      t2.textContent = running ? "运行中" : cbRelTime(s.updated_at);
+      if (running) t2.classList.add("t-running");
       b.append(t1, t2);
       b.addEventListener("click", () => cbProjOpenSession(s));
       kidBox.appendChild(b);
@@ -719,7 +808,7 @@ function cbProjRename(p) {
 /* 点会话：拉详情并**整体替换** state.history（不 merge，避免与浏览器内存分叉） */
 async function cbProjOpenSession(s) {
   const request = ++cbSessionRequest;
-  cbCancelActiveRun();
+  cbDetachActiveRun();
   cbContextReset();
   try {
     const response = await fetch("/api/sessions/" + encodeURIComponent(s.session_id));
@@ -772,9 +861,15 @@ async function cbProjOpenSession(s) {
     if (files.length) {
       cbLastDeliverables = files;
       cbHideWelcome();
-      appendDocCards(files, addMsg("assistant", "本会话交付物", "已恢复留存的草稿，可继续预览或下载。"));
+      const runs = Array.isArray(d.deliverable_runs) ? d.deliverable_runs : [];
+      const intro = runs.length > 1 ? `已恢复 ${runs.length} 轮留存的草稿（最近的在前），可继续预览或下载。` : "已恢复留存的草稿，可继续预览或下载。";
+      appendDocCards(files, addMsg("assistant", "本会话交付物", intro), { runs });
     }
     if (d.truncated) addStatus("列表只展示近期对话节选。可在「任务记忆与本地搜索」找回已保留的历史原文。");
+    if (d.turn_state && d.turn_state.active) {
+      addStatus("这个任务仍在后台运行，完成后会自动显示结果。");
+      cbWatchSession(d.session_id, { bodyEl: null });
+    }
     if (d.context && (d.context.note || Number(d.context.limit) > 0)) paintContext(d.context);
     else paintContext(estimateLocalContext());
     if (log) log.scrollTop = log.scrollHeight;
@@ -1229,7 +1324,20 @@ $("form").addEventListener("submit", async (ev) => {
   } catch (err) {
     if (cbActiveRun !== run) return;
     const stopped = err.name === "AbortError";
+    const dropped = err.name === "StreamDroppedError";
     const raw = stopped ? "已停止接收回答。已有内容已保留。" : String(err.message || err);
+    if (dropped) {
+      /* 断流（锁屏 / 切 App / 网络切换）：服务端这一轮不会被取消，轮询拿回结果。 */
+      const note = document.createElement("p");
+      note.className = "status-line";
+      note.textContent = raw;
+      run.bodyEl.parentElement.appendChild(note);
+      cbAnnounce("连接中断，正在恢复结果");
+      cbActiveRun = null;
+      cbRunPaint(false);
+      cbWatchSession(run.session, { bodyEl: run.bodyEl, reason: "连接曾中断；" });
+      return;
+    }
     // Preserve partial output so an interrupted connection does not erase work.
     const note = document.createElement("p");
     note.className = stopped ? "status-line" : "status-line err";
@@ -1277,18 +1385,24 @@ if ($("cbBackupExport")) $("cbBackupExport").addEventListener("click", async () 
   const session = state.session;
   cbBackupPaint(true);
   try {
-    const response = await fetch(`/api/sessions/${encodeURIComponent(session)}/export`);
-    if (!response.ok) throw new Error(await apiError(response) || "备份失败");
-    const blob = await response.blob();
-    const url = URL.createObjectURL(blob);
+    /* 先问一次服务端状态：后台可能还有本会话的轮次在跑（断流 / 切走后继续），导出会 409。 */
+    const probe = await fetch(`/api/sessions/${encodeURIComponent(session)}`);
+    const detail = probe.ok ? await probe.json() : null;
+    if (detail && detail.turn_state && detail.turn_state.active) {
+      addStatus("这个任务仍在后台运行，请等待完成后再备份。");
+      return;
+    }
+    /* 不再 fetch→blob→createObjectURL：128 MB 的包会整个进内存，手机上直接崩；
+       服务端已带 Content-Disposition: attachment，直接让浏览器下载即可。 */
+    const url = `/api/sessions/${encodeURIComponent(session)}/export`;
     const link = document.createElement("a");
     link.href = url;
     link.download = `civil-task-${session}.zip`;
+    link.rel = "noopener";
     document.body.appendChild(link);
     link.click();
     link.remove();
-    setTimeout(() => URL.revokeObjectURL(url), 30000);
-    if (state.session === session) addStatus("任务备份已生成并发起下载；请确认浏览器已保存 ZIP 文件。备份包含对话、上传资料和生成的文书。");
+    if (state.session === session) addStatus("已发起任务备份下载；请确认浏览器已保存 ZIP 文件。备份包含对话、上传资料和生成的文书。");
   } catch (error) { addStatus(String(error.message || error)); }
   finally { cbBackupPaint(false); }
 });
@@ -1431,14 +1545,18 @@ async function streamChat(message, bodyEl, run) {
         else paintContext(estimateLocalContext());
         renderCites(data.citations || [], bodyEl);
         cbLastDeliverables = Array.isArray(data.deliverables) ? data.deliverables : []; /* ux(round9)：/doc 最近交付物 */
-        appendDocCards(data.deliverables || [], bodyEl);
+        appendDocCards(data.deliverables || [], bodyEl, { runs: data.deliverable_runs });
         /* ux(round7)：缺数引导条——UNSPECIFIED/[A001] 徽章旁的「去补数」，预填草稿不自动发送 */
         const miss = typeof CB_FIX !== "undefined" ? CB_FIX.classifyMissing(acc) : null;
         if (miss) cbFixMount(bodyEl.parentElement, miss);
         refreshAuditSoon(); /* ux(round6)：本轮完成 → 审计时间线增量刷新（含决策置顶） */
       }
     }, { signal: run.controller.signal });
-    if (!complete) throw new Error("回答连接已中断，尚未收到完成结果。请重试。");
+    if (!complete) {
+      const dropped = new Error("回答连接已中断，正在从服务端恢复结果…");
+      dropped.name = "StreamDroppedError";
+      throw dropped;
+    }
     loadThreads().catch(() => {});
   } catch (err) {
     if (cbActiveRun === run && tl) tl.error(err.name === "AbortError" ? "已停止接收回答" : String(err.message || err));
@@ -1911,10 +2029,12 @@ if ($("ctxQuery")) $("ctxQuery").addEventListener("keydown", event => {
   if (event.key === "Enter" && !event.isComposing) { event.preventDefault(); cbContextSearch(); }
 });
 
-function fileUrl(p) {
+function fileUrl(p, name) {
   /* Rust canonicalize 返回 \\?\ verbatim 前缀；/api/file 对该形态 404——
-     剥掉后端点自会 canonicalize（自测发现：此前侧栏下载链接全部 404）。 */
-  return `/api/file?path=${encodeURIComponent(String(p || "").replace(/^\\\\\?\\/, ""))}`;
+     剥掉后端点自会 canonicalize（自测发现：此前侧栏下载链接全部 404）。
+     name：卡片显示名，服务端据此写 Content-Disposition（手机端不认 download 属性）。 */
+  const q = `/api/file?path=${encodeURIComponent(String(p || "").replace(/^\\\\\?\\/, ""))}`;
+  return name ? q + `&name=${encodeURIComponent(String(name))}` : q;
 }
 
 function isDocMd(f) {
@@ -1935,41 +2055,115 @@ async function openDeliverable(f) {
 }
 
 /* 聊天流内交付物卡片：点开即预览，另留 .md 下载 */
-function appendDocCards(files, bodyEl) {
-  if (!files || !files.length) return;
-  const host = bodyEl && bodyEl.parentElement ? bodyEl.parentElement : $("log");
-  const card = document.createElement("div");
-  card.className = "cb-doc-card";
-  const tag = document.createElement("span");
-  tag.className = "cb-doc-card-tag";
-  tag.textContent = "交付物文书";
-  card.appendChild(tag);
-  for (const f of files) {
-    const t = document.createElement("span");
-    t.className = "cb-doc-card-t";
-    t.textContent = `${f.expert || ""} · ${f.name || f.path || "文书"}`.replace(/^ · /, "");
-    card.appendChild(t);
-    if (isDocMd(f)) {
-      const b = document.createElement("button");
-      b.type = "button";
-      b.textContent = "文书预览";
-      b.addEventListener("click", () => openDeliverable(f));
-      card.appendChild(b);
-    }
-    const a = document.createElement("a");
-    a.className = "dl";
-    a.href = fileUrl(f.path);
-    a.setAttribute("download", f.name || "文书.md");
-    a.textContent = "下载";
-    a.addEventListener("click", () => cbObStep(3)); /* ux(round10)：下载 .md → 引导第 3 步打勾 */
-    card.appendChild(a);
+/* 交付物卡片。files：扁平文件列表（done 事件 / 恢复）；runs：按轮分组（服务端
+   deliverable_runs，带 export_errors / docx_pending）。同一份文书的 md / docx / xlsx
+   折成一行：标题 + 预览 + 各格式下载；多文件的轮次给「打包下载」一个 zip。 */
+function cbDocStem(name) {
+  return String(name || "").replace(/\.(md|markdown|docx|xlsx|csv|pdf|txt|json)$/i, "");
+}
+function cbDocExt(name) {
+  const m = /\.([A-Za-z0-9]+)$/.exec(String(name || ""));
+  return m ? m[1].toLowerCase() : "";
+}
+function cbGroupDeliverables(files) {
+  const rows = new Map();
+  for (const f of files || []) {
+    if (!f || typeof f.path !== "string" || !f.path) continue;
+    const key = `${f.run_id || ""}|${cbDocStem(f.name || f.path)}`;
+    if (!rows.has(key)) rows.set(key, { stem: cbDocStem(f.name || f.path), expert: f.expert || "", run_id: f.run_id || "", formats: [] });
+    rows.get(key).formats.push(f);
   }
-  const k = document.createElement("span");
-  k.className = "cb-doc-card-k";
-  k.textContent = "AI 草稿 · 不签认";
-  card.appendChild(k);
-  host.appendChild(card);
-  $("log").scrollTop = $("log").scrollHeight;
+  for (const row of rows.values()) {
+    const order = { md: 0, markdown: 0, docx: 1, xlsx: 2 };
+    row.formats.sort((a, b) => (order[cbDocExt(a.name)] ?? 9) - (order[cbDocExt(b.name)] ?? 9));
+  }
+  return [...rows.values()];
+}
+function cbRunLabel(run) {
+  const when = run && run.mtime ? cbRelTime(Math.floor(Date.parse(run.mtime) / 1000)) : "";
+  return [run && run.expert, when].filter(Boolean).join(" · ");
+}
+function appendDocCards(files, bodyEl, opts) {
+  const options = opts || {};
+  const runs = Array.isArray(options.runs) && options.runs.length
+    ? options.runs
+    : [{ run_id: "", expert: "", deliverables: files || [], export_errors: options.export_errors || [], docx_pending: options.docx_pending }];
+  const host = bodyEl && bodyEl.parentElement ? bodyEl.parentElement : $("log");
+  let painted = 0;
+  for (const run of runs) {
+    const groups = cbGroupDeliverables(run.deliverables);
+    const notes = [];
+    if (run.docx_pending) notes.push("Word 稿待生成：本轮只有 Markdown，稍后可在「本会话交付物」里取 Word。");
+    for (const e of run.export_errors || []) notes.push(`${e}：只有 Markdown 稿可下载。`);
+    if (!groups.length && !notes.length) continue;
+    const card = document.createElement("div");
+    card.className = "cb-doc-card";
+    const head = document.createElement("div");
+    head.className = "cb-doc-card-head";
+    const tag = document.createElement("span");
+    tag.className = "cb-doc-card-tag";
+    tag.textContent = "交付物文书";
+    head.appendChild(tag);
+    const label = cbRunLabel(run);
+    if (label) {
+      const who = document.createElement("span");
+      who.className = "cb-doc-card-run";
+      who.textContent = label;
+      head.appendChild(who);
+    }
+    const nFiles = groups.reduce((n, g) => n + g.formats.length, 0);
+    if (nFiles > 1 && run.run_id && state.session) {
+      const zip = document.createElement("a");
+      zip.className = "dl cb-doc-card-zip";
+      zip.href = `/api/deliverables.zip?session_id=${encodeURIComponent(state.session)}&run_id=${encodeURIComponent(run.run_id)}`;
+      zip.setAttribute("download", `civil-docs-${run.run_id.slice(0, 8)}.zip`);
+      zip.textContent = `打包下载（${nFiles} 个文件）`;
+      zip.addEventListener("click", () => cbObStep(3));
+      head.appendChild(zip);
+    }
+    card.appendChild(head);
+    for (const g of groups) {
+      const row = document.createElement("div");
+      row.className = "cb-doc-row";
+      const t = document.createElement("span");
+      t.className = "cb-doc-card-t";
+      t.textContent = g.stem || "文书";
+      t.title = g.formats.map((f) => f.name).join(" / ");
+      row.appendChild(t);
+      const md = g.formats.find(isDocMd);
+      if (md) {
+        const b = document.createElement("button");
+        b.type = "button";
+        b.textContent = "预览";
+        b.addEventListener("click", () => openDeliverable(md));
+        row.appendChild(b);
+      }
+      for (const f of g.formats) {
+        const a = document.createElement("a");
+        a.className = "dl";
+        a.href = fileUrl(f.path, f.name);
+        a.setAttribute("download", f.name || "文书.md");
+        a.textContent = "." + (cbDocExt(f.name) || "文件");
+        a.title = "下载 " + (f.name || "");
+        a.addEventListener("click", () => cbObStep(3)); /* ux(round10)：下载 → 引导第 3 步打勾 */
+        row.appendChild(a);
+      }
+      card.appendChild(row);
+    }
+    for (const n of notes) {
+      const w = document.createElement("p");
+      w.className = "cb-doc-note";
+      w.textContent = n;
+      card.appendChild(w);
+    }
+    const k = document.createElement("span");
+    k.className = "cb-doc-card-k";
+    k.textContent = "AI 草稿 · 不签认";
+    card.appendChild(k);
+    host.appendChild(card);
+    painted += 1;
+  }
+  if (painted) $("log").scrollTop = $("log").scrollHeight;
 }
 
 async function apiError(res) {
