@@ -1142,6 +1142,20 @@ html.cb-large {
 }
 .composer-attach:hover { color: var(--cb-blue-strong); border-color: var(--cb-blue); }
 .composer-attach:focus-visible { outline: 2px solid var(--cb-focus); outline-offset: 2px; }
+/* 语音输入：空闲只显示内联 SVG 麦克风（不是 emoji，不违反符号纪律）；录音中变红并显示计时，时间位数固定，读秒时按钮不跳宽 */
+.composer-voice { font-variant-numeric: tabular-nums; display: inline-flex; align-items: center; justify-content: center; gap: 4px; min-width: 32px; }
+.composer-voice .cb-mic { flex: none; display: block; }
+.cb-voice-label:empty { display: none; }
+.composer-voice.is-rec { color: var(--cb-red); border-color: var(--cb-red); background: var(--cb-red-soft); }
+/* 录音时按钮变宽，输入框的提示字会折成两行，第二行被切掉半截；提示字只排一行，放不下就截断 */
+.composer textarea::placeholder { white-space: nowrap; overflow: hidden; }
+.composer-voice:disabled { opacity: .55; cursor: default; }
+.composer-voice[aria-disabled="true"] { opacity: .55; cursor: progress; }
+.cb-voice-status { margin: 4px 0 0; font-size: 11px; color: var(--cb-text-muted); }
+.cb-voice-interim { margin: 2px 0 0; font-size: 11px; color: var(--cb-text-faint); }
+.cb-voice-status:empty, .cb-voice-interim:empty { margin: 0; }
+.cb-voice-status[data-kind="warn"] { color: var(--warn); }
+.cb-voice-status[data-kind="ok"] { color: var(--ok); }
 .attaches { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 6px; }
 .attaches[hidden] { display: none; }
 .cb-att-chip {

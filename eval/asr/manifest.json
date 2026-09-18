@@ -1,0 +1,482 @@
+[
+ {
+  "clip": "L01_huihui.webm",
+  "id": "L01",
+  "voice": "huihui",
+  "seconds": 6.36,
+  "bytes": 25901,
+  "sha256": "f5a1444076b61ee7e92c9f0e413bd0a1df9697fcb799ea2018fafe17a6ceb8c7"
+ },
+ {
+  "clip": "L01_yaoyao.webm",
+  "id": "L01",
+  "voice": "yaoyao",
+  "seconds": 5.73,
+  "bytes": 23815,
+  "sha256": "316d940eabb1962c449ef27bbb281739d13b239099e649d84ff56bc5b4efe9bf"
+ },
+ {
+  "clip": "L02_huihui.webm",
+  "id": "L02",
+  "voice": "huihui",
+  "seconds": 5.66,
+  "bytes": 22994,
+  "sha256": "fc63ec8c4f5f32e92c86a5e0fdb16af8de8b456ccb78323569ad91bf0dd465bd"
+ },
+ {
+  "clip": "L02_yaoyao.webm",
+  "id": "L02",
+  "voice": "yaoyao",
+  "seconds": 5.2,
+  "bytes": 21607,
+  "sha256": "1d4816b309661f9bc1546eedb1a1b386fdbb4b3c47e9fcc9ab6abe3ce9af628d"
+ },
+ {
+  "clip": "L03_huihui.webm",
+  "id": "L03",
+  "voice": "huihui",
+  "seconds": 5.1,
+  "bytes": 20543,
+  "sha256": "8dfcab34a33d0744d97bebeeeca4ddaa591acb1abcb8f870dc405865a2e033c8"
+ },
+ {
+  "clip": "L03_yaoyao.webm",
+  "id": "L03",
+  "voice": "yaoyao",
+  "seconds": 4.64,
+  "bytes": 19155,
+  "sha256": "8850cdb243ae5884c40d76832c0949137e048cc22afe6aed080195af47dcd3d6"
+ },
+ {
+  "clip": "L04_huihui.webm",
+  "id": "L04",
+  "voice": "huihui",
+  "seconds": 5.17,
+  "bytes": 20921,
+  "sha256": "1392666df265f3e9c0f7834a78dce75175c79aba6a059bfbc7d22ac45439ce62"
+ },
+ {
+  "clip": "L04_yaoyao.webm",
+  "id": "L04",
+  "voice": "yaoyao",
+  "seconds": 4.7,
+  "bytes": 19428,
+  "sha256": "fbdbd4afce5685b25dc2e6465be1c0523b96b4768c66492dadc4221b0cc25351"
+ },
+ {
+  "clip": "L05_huihui.webm",
+  "id": "L05",
+  "voice": "huihui",
+  "seconds": 4.55,
+  "bytes": 18692,
+  "sha256": "34eaea0460fbb359416002fd47bc6213046125e814ba212c8d5153e027196845"
+ },
+ {
+  "clip": "L05_yaoyao.webm",
+  "id": "L05",
+  "voice": "yaoyao",
+  "seconds": 4.19,
+  "bytes": 17485,
+  "sha256": "9fa6849256d9c84c3b4fea41b5f39ba2f361122dee852df24c7667f552a30a84"
+ },
+ {
+  "clip": "L06_huihui.webm",
+  "id": "L06",
+  "voice": "huihui",
+  "seconds": 6.2,
+  "bytes": 25243,
+  "sha256": "8dc0b3093b9576ecf2038df786345dac1c81375f149654926ba706bd31697902"
+ },
+ {
+  "clip": "L06_yaoyao.webm",
+  "id": "L06",
+  "voice": "yaoyao",
+  "seconds": 5.51,
+  "bytes": 22871,
+  "sha256": "b16127c6d0b6b792632f016b2843ca6076decd5fd72a4236fe4b9a92dd014f7a"
+ },
+ {
+  "clip": "L07_huihui.webm",
+  "id": "L07",
+  "voice": "huihui",
+  "seconds": 5.99,
+  "bytes": 24319,
+  "sha256": "430b77faa743771fe421136763d48a7b0308cef3225e7c68f223aca64fa60c16"
+ },
+ {
+  "clip": "L07_yaoyao.webm",
+  "id": "L07",
+  "voice": "yaoyao",
+  "seconds": 5.44,
+  "bytes": 22521,
+  "sha256": "92d771324b3c407a2dd653712f50f1a7dce39e6e4b35f2e9c2c9d3a09f5a2703"
+ },
+ {
+  "clip": "L08_huihui.webm",
+  "id": "L08",
+  "voice": "huihui",
+  "seconds": 5.16,
+  "bytes": 21373,
+  "sha256": "9b4aeabed92ad30c4c5623f9bd4f1c0baec69c25ee5a31c0059f671d9a9c02ed"
+ },
+ {
+  "clip": "L08_yaoyao.webm",
+  "id": "L08",
+  "voice": "yaoyao",
+  "seconds": 4.99,
+  "bytes": 20885,
+  "sha256": "56ef9796d61f636e56489c7a3989e081a718a889aac086e9fe6cdcde9c79e430"
+ },
+ {
+  "clip": "L09_huihui.webm",
+  "id": "L09",
+  "voice": "huihui",
+  "seconds": 5.28,
+  "bytes": 21290,
+  "sha256": "ab68df58c7e433a66651669a20f7af55934a3e392926f6a47b1373890f9c7b5d"
+ },
+ {
+  "clip": "L09_yaoyao.webm",
+  "id": "L09",
+  "voice": "yaoyao",
+  "seconds": 4.72,
+  "bytes": 19534,
+  "sha256": "ddf5ff568826fb9477ea201722c20ab798a9f7555d17e5d721675dc73e41d5f5"
+ },
+ {
+  "clip": "L10_huihui.webm",
+  "id": "L10",
+  "voice": "huihui",
+  "seconds": 4.45,
+  "bytes": 18290,
+  "sha256": "15af60ffb793165b7681057e3639bf7e6289f95a9eda38124363d85d0af8fb18"
+ },
+ {
+  "clip": "L10_yaoyao.webm",
+  "id": "L10",
+  "voice": "yaoyao",
+  "seconds": 4.2,
+  "bytes": 17487,
+  "sha256": "f6dadc56d3e90808979b02647cb75e70c6bc507cae4122a61435f90c8e7aecf4"
+ },
+ {
+  "clip": "L11_huihui.webm",
+  "id": "L11",
+  "voice": "huihui",
+  "seconds": 4.43,
+  "bytes": 18218,
+  "sha256": "e85959e5361ef665c21431922320e8a4d90877f2a6c4d9af30c131ff640bb5b6"
+ },
+ {
+  "clip": "L11_yaoyao.webm",
+  "id": "L11",
+  "voice": "yaoyao",
+  "seconds": 4.27,
+  "bytes": 17786,
+  "sha256": "778a3458be6b7156178e511e4f9c0deedfc00be821293ae20892af35b4bdf988"
+ },
+ {
+  "clip": "L12_huihui.webm",
+  "id": "L12",
+  "voice": "huihui",
+  "seconds": 4.04,
+  "bytes": 16520,
+  "sha256": "11bb83f9598560e132c025dd1ac980c30bb611d327f1ed42ce5bf2cf97bf91c0"
+ },
+ {
+  "clip": "L12_yaoyao.webm",
+  "id": "L12",
+  "voice": "yaoyao",
+  "seconds": 3.86,
+  "bytes": 16057,
+  "sha256": "f8e371745af07dae84c2feea5760035f241be35bc09cdb453ad0de30842311d1"
+ },
+ {
+  "clip": "L13_huihui.webm",
+  "id": "L13",
+  "voice": "huihui",
+  "seconds": 3.46,
+  "bytes": 13838,
+  "sha256": "a43628e3a048d741fea171dc1e38f6eec93ee1712329e63e5a57181cd2249563"
+ },
+ {
+  "clip": "L13_yaoyao.webm",
+  "id": "L13",
+  "voice": "yaoyao",
+  "seconds": 3.31,
+  "bytes": 13500,
+  "sha256": "0b443e0cbe3820e5c43ce5006f70a3320f13ff723928a9c10134f90429c2f506"
+ },
+ {
+  "clip": "L14_huihui.webm",
+  "id": "L14",
+  "voice": "huihui",
+  "seconds": 3.78,
+  "bytes": 15347,
+  "sha256": "08139ff3c24a39d37533f7b02afa719a1d3c1f1ee12381266f82dc150e0c8f81"
+ },
+ {
+  "clip": "L14_yaoyao.webm",
+  "id": "L14",
+  "voice": "yaoyao",
+  "seconds": 3.53,
+  "bytes": 14555,
+  "sha256": "adbbb482a536dff5e0e6e9ff99905334b6885e72f4e7132633d30e3c3c4136e7"
+ },
+ {
+  "clip": "L15_huihui.webm",
+  "id": "L15",
+  "voice": "huihui",
+  "seconds": 4.08,
+  "bytes": 16636,
+  "sha256": "b6eab507526a6f8bbe616a43b7c5a6323eee7c8f5fc4fd6f42371946781d3b6f"
+ },
+ {
+  "clip": "L15_yaoyao.webm",
+  "id": "L15",
+  "voice": "yaoyao",
+  "seconds": 3.81,
+  "bytes": 15856,
+  "sha256": "171ea708ee625187ac0afd8a37d7c34bfb6e40c3dec7ad085f8d165d4e52a6cd"
+ },
+ {
+  "clip": "L16_huihui.webm",
+  "id": "L16",
+  "voice": "huihui",
+  "seconds": 3.81,
+  "bytes": 15423,
+  "sha256": "6616fb896bc6566483c279d93d4dab8ccc1b881b180c75b6e261a4cbab05113b"
+ },
+ {
+  "clip": "L16_yaoyao.webm",
+  "id": "L16",
+  "voice": "yaoyao",
+  "seconds": 3.7,
+  "bytes": 15279,
+  "sha256": "a5e5b9de251e210c883f40bfcb165b810e20ac1dadb3218762bf14f06247c33d"
+ },
+ {
+  "clip": "L17_huihui.webm",
+  "id": "L17",
+  "voice": "huihui",
+  "seconds": 4.31,
+  "bytes": 17618,
+  "sha256": "70e191a1d81e8038463c71a8823cdc2ab8828d13d0e07aa56b3c462df68ca994"
+ },
+ {
+  "clip": "L17_yaoyao.webm",
+  "id": "L17",
+  "voice": "yaoyao",
+  "seconds": 4.09,
+  "bytes": 16985,
+  "sha256": "3108372d28951de6b4195ed7b11e92564c7513256707dbc91df35384c34f2c43"
+ },
+ {
+  "clip": "L18_huihui.webm",
+  "id": "L18",
+  "voice": "huihui",
+  "seconds": 3.82,
+  "bytes": 15595,
+  "sha256": "f8a7a2e5fcd6afba283dd82c18db9d969e54b5bae18b42443e086b3ebbaae4d2"
+ },
+ {
+  "clip": "L18_yaoyao.webm",
+  "id": "L18",
+  "voice": "yaoyao",
+  "seconds": 3.58,
+  "bytes": 14804,
+  "sha256": "297c3a8baa4ec7f74acf662c41a594839c5214bd22ecc13b5acf23cad8ab42a9"
+ },
+ {
+  "clip": "L19_huihui.webm",
+  "id": "L19",
+  "voice": "huihui",
+  "seconds": 4.75,
+  "bytes": 18993,
+  "sha256": "8324d194e06cb2105c2f5500f3d6266e9c0b18676122cc2eeb517b13f6d7608e"
+ },
+ {
+  "clip": "L19_yaoyao.webm",
+  "id": "L19",
+  "voice": "yaoyao",
+  "seconds": 4.24,
+  "bytes": 17254,
+  "sha256": "1e22ad53e50e53a008eeb3925eb68d95cfcdee472bb7ba4754802744f808b4f4"
+ },
+ {
+  "clip": "L20_huihui.webm",
+  "id": "L20",
+  "voice": "huihui",
+  "seconds": 4.88,
+  "bytes": 20118,
+  "sha256": "64545ac8a4f251eea24004f44c43d7c30fcd294e96de9392ccbbddc8bcf442d2"
+ },
+ {
+  "clip": "L20_yaoyao.webm",
+  "id": "L20",
+  "voice": "yaoyao",
+  "seconds": 4.63,
+  "bytes": 19332,
+  "sha256": "bfb13454867d48f7be197a98484144624f65bd05da18571dbb8b8524b927e0ca"
+ },
+ {
+  "clip": "H01_huihui.webm",
+  "id": "H01",
+  "voice": "huihui",
+  "seconds": 4.37,
+  "bytes": 17946,
+  "sha256": "a076d7c55068d9c58c04d0861c17ec4bd66e32c7c1434972f002faf26fc71b38"
+ },
+ {
+  "clip": "H01_yaoyao.webm",
+  "id": "H01",
+  "voice": "yaoyao",
+  "seconds": 4.18,
+  "bytes": 17412,
+  "sha256": "1118973c8f180431926df34cfc57839fcf0e3b8400a4e33bfb2e53ca5537ce07"
+ },
+ {
+  "clip": "H02_huihui.webm",
+  "id": "H02",
+  "voice": "huihui",
+  "seconds": 4.04,
+  "bytes": 16508,
+  "sha256": "2db7270c42d0f26b6e67e60f2653b6bd0e395c09e7cd33132289a8260ebe84d4"
+ },
+ {
+  "clip": "H02_yaoyao.webm",
+  "id": "H02",
+  "voice": "yaoyao",
+  "seconds": 3.84,
+  "bytes": 15940,
+  "sha256": "cfa427a7a805bdb1b91904be93ec001cff1ec7568dacbb96ce8a1148c2900ff5"
+ },
+ {
+  "clip": "H03_huihui.webm",
+  "id": "H03",
+  "voice": "huihui",
+  "seconds": 4.12,
+  "bytes": 16861,
+  "sha256": "172c6e9f121dc8d05191cb62b3f5678c6cd53b8cb4651fddd6d175d29e3ecbaf"
+ },
+ {
+  "clip": "H03_yaoyao.webm",
+  "id": "H03",
+  "voice": "yaoyao",
+  "seconds": 4.02,
+  "bytes": 16717,
+  "sha256": "0f2d4d5ce370898aa948f845c5568d375dd8e721862c03a3d4f5d81379576fb1"
+ },
+ {
+  "clip": "H04_huihui.webm",
+  "id": "H04",
+  "voice": "huihui",
+  "seconds": 3.79,
+  "bytes": 15292,
+  "sha256": "3ebc1fff109b5650643ab93d750ea5e44e43a7ea50a75acbcfad1e96b0328996"
+ },
+ {
+  "clip": "H04_yaoyao.webm",
+  "id": "H04",
+  "voice": "yaoyao",
+  "seconds": 3.59,
+  "bytes": 14777,
+  "sha256": "05b10a54137e657b012119269d57204853c1ef700840b98a3f7cfe6355c0051e"
+ },
+ {
+  "clip": "H05_huihui.webm",
+  "id": "H05",
+  "voice": "huihui",
+  "seconds": 4.31,
+  "bytes": 17691,
+  "sha256": "45fbec26ecd5dcc0f885e665cb0fa34e771060ba923efece0bf498aff26ab142"
+ },
+ {
+  "clip": "H05_yaoyao.webm",
+  "id": "H05",
+  "voice": "yaoyao",
+  "seconds": 3.99,
+  "bytes": 16578,
+  "sha256": "6ea8c981b2a82dcaed6b9f76a4d0bcce56e84eb5247631c41fe93dd17b27c56b"
+ },
+ {
+  "clip": "H06_huihui.webm",
+  "id": "H06",
+  "voice": "huihui",
+  "seconds": 4.75,
+  "bytes": 19648,
+  "sha256": "a95227272c6087cb6f60935af14754c14da5f0da7854a95787183f56bae24018"
+ },
+ {
+  "clip": "H06_yaoyao.webm",
+  "id": "H06",
+  "voice": "yaoyao",
+  "seconds": 4.48,
+  "bytes": 18743,
+  "sha256": "99ad72d0d2c8aa8df302249c563cd42ae7165b2c07828c81e2f7428ff6704af4"
+ },
+ {
+  "clip": "H07_huihui.webm",
+  "id": "H07",
+  "voice": "huihui",
+  "seconds": 4.09,
+  "bytes": 16753,
+  "sha256": "ffde90baf5b7ac5181835766ee2b87924f87427235431d538917ad9e9c9c4855"
+ },
+ {
+  "clip": "H07_yaoyao.webm",
+  "id": "H07",
+  "voice": "yaoyao",
+  "seconds": 3.88,
+  "bytes": 16114,
+  "sha256": "d1efd765f774ad0e75ca4ccfe8d1ef271261e055dac29b0155c2320fd6737f46"
+ },
+ {
+  "clip": "H08_huihui.webm",
+  "id": "H08",
+  "voice": "huihui",
+  "seconds": 4.22,
+  "bytes": 17146,
+  "sha256": "af1ec63f4985c557c41b496a04ebc795259dc4d03f68f6cc52203992b6c656db"
+ },
+ {
+  "clip": "H08_yaoyao.webm",
+  "id": "H08",
+  "voice": "yaoyao",
+  "seconds": 4.09,
+  "bytes": 16804,
+  "sha256": "a5854cafedb17ec7186343e6b9feb43f162147be71a64a0f042e05284916bf3f"
+ },
+ {
+  "clip": "H09_huihui.webm",
+  "id": "H09",
+  "voice": "huihui",
+  "seconds": 4.96,
+  "bytes": 19922,
+  "sha256": "f0f1d1435866799bc5ff0f93284fe1f5b29a9e7a4d2b22c4fae4a7b1bebc69da"
+ },
+ {
+  "clip": "H09_yaoyao.webm",
+  "id": "H09",
+  "voice": "yaoyao",
+  "seconds": 4.55,
+  "bytes": 18632,
+  "sha256": "67abe19264f5b9b76197ddceaddd39bc8270eb87071c3ed44e80d6812d668af6"
+ },
+ {
+  "clip": "H10_huihui.webm",
+  "id": "H10",
+  "voice": "huihui",
+  "seconds": 4.34,
+  "bytes": 17870,
+  "sha256": "9dbf74a1e8cc14cd4da57c5d80db1a138c347b22022defff0ccba3f933a52160"
+ },
+ {
+  "clip": "H10_yaoyao.webm",
+  "id": "H10",
+  "voice": "yaoyao",
+  "seconds": 4.13,
+  "bytes": 17185,
+  "sha256": "b7f2be3849148dba94be21426ae85f14a3e55688150d97202733e13b7f9df946"
+ }
+]

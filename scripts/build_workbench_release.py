@@ -17,7 +17,7 @@ ROOT = Path(__file__).resolve().parents[1]
 VERSION = re.compile(r"[0-9]+\.[0-9]+\.[0-9]+(?:-[0-9A-Za-z]+(?:[.-][0-9A-Za-z]+)*)?")
 STATIC = (
     "app.js", "chat-stream.js", "docpreview.js", "fixcard.js", "index.html",
-    "manifest.webmanifest", "posts.js", "studio.js", "styles.css", "tickets.js",
+    "manifest.webmanifest", "posts.js", "studio.js", "styles.css", "tickets.js", "voice.js",
     "icons/cb-icon-192.png", "icons/cb-icon-512.png", "icons/cb-icon.svg",
     "vendor/marked.LICENSE.md", "vendor/marked.min.js",
 )
@@ -30,6 +30,8 @@ EXPLICIT = (
     "contract/intents.v1.json", "contract/projects.v1.json", "contract/kb_boosts.v1.json",
     "workbench/seed.json", "workbench/yibiao-map.json",
     "scripts/start_workbench.py",
+    # 语音输入：页面加载 voice.js；本机识别需要术语表，装依赖的说明在 requirements-asr.txt 里
+    "demo/asr_lexicon.txt", "requirements-asr.txt", "docs/voice-input.md",
 )
 ASSET_ROOTS = ("demo/kb", "knowledge", "knowledge_base", "skills/civil-buddy", ".agents/skills")
 
