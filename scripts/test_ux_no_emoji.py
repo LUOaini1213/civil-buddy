@@ -33,6 +33,7 @@ TARGETS = [
     "demo/static/styles.css",
     "demo/static/docpreview.js",
     "demo/static/fixcard.js",
+    "demo/static/voice.js",
     "frontend/vendor/cb-doc.js",
     "frontend/vendor/cb-fix.js",
 ]

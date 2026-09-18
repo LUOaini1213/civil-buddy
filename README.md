@@ -109,6 +109,8 @@ cargo run --release --bin civil-workbench
 
 Python 参考实现：`demo/`（`uvicorn app:app --host 127.0.0.1 --port 8765`）。
 
+**语音输入（可选）**：输入框左边的「语音」按钮，说完只把文字回填到输入框、**不会自动发送**，核对后自己按发送。Python 参考实现装了 `requirements-asr.txt` 后用本机 faster-whisper 识别（带 35 个土木术语的提示，录音不出本机）；否则退回浏览器自带识别，首次使用前说明录音会发给浏览器厂商。设计与边界见 [docs/voice-input.md](docs/voice-input.md)，术语表修好了什么、没修好什么见 [eval/asr](eval/asr/README.md)。
+
 产品 CLI（土木版 Codex）：`python -m packing_assistant.civil`（TUI）· `python -m packing_assistant.civil app` · `python -m packing_assistant.civil mcp --pack construction`。技能一岗一份：`.agents/skills/<id>/SKILL.md`。IDE：`ide/README.md`。Grok 总控：`skills/civil-buddy`。  
 **全量产品规划书**：[docs/civil-buddy/product-plan.md](docs/civil-buddy/product-plan.md)。切片执行：[product-completion-plan.md](docs/civil-buddy/product-completion-plan.md)。
 

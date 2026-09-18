@@ -61,6 +61,19 @@ class TrialPackTests(unittest.TestCase):
         self.assertIn(".env.example", included)
         self.assertIn("demo/static/chat-stream.js", included)
 
+    def test_every_static_file_the_real_page_loads_is_allowlisted(self) -> None:
+        # The release copies demo/static by allowlist; a script the page loads but the list
+        # forgets ships a dead button (voice.js was missed once). Read the real page, not the fixture.
+        import re
+
+        html = (ROOT / "demo" / "static" / "index.html").read_text(encoding="utf-8")
+        loaded = {m.split("?", 1)[0] for m in re.findall(r'(?:src|href)="/static/([^"]+)"', html)}
+        self.assertIn("voice.js", loaded)
+        self.assertFalse(loaded - set(release.STATIC), sorted(loaded - set(release.STATIC)))
+        included = release.release_inputs(self.root)
+        for name in ("demo/static/voice.js", "demo/asr_lexicon.txt", "requirements-asr.txt"):
+            self.assertIn(name, included)
+
     def test_actual_zip_contains_hidden_skills_and_verified_manifest(self) -> None:
         archive, stage = release.build_release(self.root, "1.2.3-test")
         self.assertTrue(stage.is_dir())

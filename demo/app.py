@@ -96,7 +96,8 @@ def health() -> dict:
                          "attachments": True, "audit": True, "packing": False,
                          "session_backup": True, "cancel": True, "word_export": True,
                          "task_memory": True, "local_rag": True, "task_routing": True,
-                         "expert_contracts": True, "tender_collaboration": True, "semantic_summary": True},
+                         "expert_contracts": True, "tender_collaboration": True, "semantic_summary": True,
+                         "asr": _asr_installed()},
         "deepseek": has_key(),
         "model": llm_model(),
         "context": policy(),
@@ -181,6 +182,60 @@ async def upload(request: Request) -> dict:
         raise HTTPException(400, str(exc)) from exc
     except (OSError, PermissionError) as exc:
         raise HTTPException(500, "无法保存附件，请检查工作台目录权限") from exc
+
+
+def _asr_installed() -> bool:
+    import asr
+
+    return asr.engine_installed()
+
+
+@app.get("/api/asr/status")
+def asr_status() -> dict:
+    import asr
+
+    return {"ok": True, **asr.status()}
+
+
+@app.post("/api/asr/prepare")
+def asr_prepare() -> dict:
+    """Load (first time: download) the model in the background; the page polls status until ready."""
+    import asr
+
+    try:
+        return {"ok": True, "state": asr.prepare()}
+    except asr.AsrUnavailable as exc:
+        raise HTTPException(503, str(exc)) from exc
+
+
+@app.post("/api/asr")
+async def asr_transcribe(request: Request) -> dict:
+    """Speech to text for the composer. Returns text only: no chat, no task, no file."""
+    import logging
+
+    import asr
+    from starlette.concurrency import run_in_threadpool
+
+    data = bytearray()
+    async for chunk in request.stream():
+        if len(data) + len(chunk) > asr.MAX_AUDIO_BYTES:
+            raise HTTPException(413, "录音不能超过 8 MB")
+        data.extend(chunk)
+    try:
+        return {"ok": True, **(await run_in_threadpool(asr.transcribe, bytes(data)))}
+    except asr.AsrTooLarge as exc:
+        raise HTTPException(413, str(exc)) from exc
+    except asr.AsrInputError as exc:
+        raise HTTPException(400, str(exc)) from exc
+    except asr.AsrNotReady as exc:
+        raise HTTPException(409, str(exc)) from exc
+    except asr.AsrBusy as exc:
+        raise HTTPException(429, str(exc)) from exc
+    except asr.AsrUnavailable as exc:
+        raise HTTPException(503, str(exc)) from exc
+    except Exception as exc:  # anything else is an engine fault: 503 lets the page fall back
+        logging.getLogger(__name__).exception("asr failed")
+        raise HTTPException(503, f"本机识别出错：{type(exc).__name__}") from exc
 
 
 @app.get("/api/attachments")
