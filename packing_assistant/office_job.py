@@ -275,6 +275,10 @@ def list_job_files() -> List[Dict[str, Any]]:
     for p in names:
         if p.suffix.lower() not in JOB_EXTS:
             continue
+        # CIVIL.md 是给 Civil Buddy 的工程说明，不是待处理的业务资料：当资料读进去，
+        # 整份模板（含 "CN / SG / EU / DUAL" 的填写提示）会被抄进成稿并把辖区带偏。
+        if p.name == "CIVIL.md":
+            continue
         try:
             resolved = _resolve_job_file(p)
             if not resolved.is_file():
