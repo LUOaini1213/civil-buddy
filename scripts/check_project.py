@@ -41,6 +41,7 @@ CHECKS = (
     Check("middleware", ("scripts/test_agent_middleware.py",)),
     Check("sandbox", ("scripts/test_sandbox.py",)),
     Check("civil-cli", ("scripts/test_civil_codex.py",)),
+    Check("civil-workspace", ("scripts/test_civil_workspace.py",)),
     Check("runtime-threads", ("scripts/test_runtime_threads.py",)),
     Check("app-launcher", ("scripts/test_app_launcher.py",)),
     Check("workbench-settings", ("scripts/test_workbench_settings.py",)),

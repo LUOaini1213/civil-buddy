@@ -3,6 +3,7 @@
 - **This product is 土木版 Codex.** Host = Civil Buddy. Skills = 66 experts. Not an export pack for OpenAI Codex CLI.
 - **Experts are skills.** One `SKILL.md` per post: `.agents/skills/<id>/SKILL.md`. Router: `.agents/skills/civil-buddy/SKILL.md`. Catalog (name+description) first; load full SOP only after `$id` or implicit match. Do not load all 66 into one prompt.
 - CLI: `python -m packing_assistant.civil` (TUI) · `civil exec` · `civil app` · `civil mcp --pack construction` · `civil serve` (JSON-RPC on this harness, not openai/codex)
+- **Job folder = workspace.** `civil init` writes `CIVIL.md` (the job's AGENTS.md: stated facts only, blanks stay `UNSPECIFIED`); run `civil` inside that folder or with `-C <dir>` and session state plus drafts live in `<job>/.civil-buddy/out`, not in this repo. `civil exec --jsonl` streams `thread.started → turn.started → item.* → turn.completed`; `civil status`; `civil resume --last`.
 - Slash: `/skills` `/new` `/bg` `/threads` `/sandbox` `/approvals` `/confirm`
 - Sandbox `read-only|workspace-write`. Approval `untrusted|on-request|never`. No danger-full-access (secrets/spawn stay denied).
 - **Procedural memory ≠ user memory.** Skills are SOP. Session slots (`jurisdiction` / `project` / `P0`) live in `session.summary.json`. Do not invent a user profile.

@@ -166,8 +166,11 @@ def _plan_calls(
             return {"hitl": False, "calls": calls, "out_dir": str(out_dir), "handoff": ho}
 
     tools = [t for t in (exp.exclusive or ()) if "fill_scheme" not in t] or [f"{exp.id}__draft"]
+    from packing_assistant.runtime.project_instructions import with_facts
     from packing_assistant.runtime.tool_engine import get_engine
 
+    # CIVIL.md 里写明的项目事实随任务一起交给起草工具；用户本次写了的以用户为准。
+    text = with_facts(text)
     eng = get_engine()
     primary = tools[0]
     if primary in eng.tools:
@@ -282,7 +285,9 @@ def run_agent(
     )
     sid = session_id or f"sess-{uuid4().hex[:8]}"
     from packing_assistant.runtime.memory import assemble_context, prompt_prefix
+    from packing_assistant.runtime.project_instructions import seed_session
 
+    seed_session(sid)
     ctx = assemble_context(
         sid,
         text=text,

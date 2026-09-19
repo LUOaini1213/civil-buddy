@@ -9,7 +9,9 @@ from typing import Any, Dict, List, Optional
 from packing_assistant.runtime.civil_config import CONFIRM, APPROVAL_MODES, SANDBOX_MODES, load_config
 
 HELP = """/help              本页
-/status            sandbox · approval · thread · 作业根 · 会话槽
+/status            作业文件夹 · CIVIL.md · sandbox · approval · 模型 · thread · 会话槽
+/init              在当前文件夹写一份 CIVIL.md（本工程说明）
+/model [名称]      查看 / 切换本进程用的模型（不写盘，不显示 Key）
 /skills [词]       技能目录（name + description）
 /approvals [mode]  untrusted | on-request | never
 /sandbox [mode]    read-only | workspace-write
@@ -70,7 +72,7 @@ def _banner(st: TuiState) -> None:
         f"approval {st.cfg.approval}  skills {n}"
     )
     print(f"  job {root}")
-    print(_c("2", "  /help  /skills  /new  /bg  /approvals  /sandbox   空行退出"))
+    print(_c("2", "  /help  /status  /init  /skills  /new  /bg  /approvals  /sandbox   空行退出"))
     print()
 
 
@@ -95,9 +97,10 @@ def _print_out(out: Dict[str, Any]) -> None:
     if out.get("hitl_pending"):
         print(_c("33", f"approval 须确认句：{CONFIRM}"))
     print(out.get("reply") or "")
-    files = out.get("artifacts") or out.get("files") or []
-    if files:
-        print(_c("2", "files: " + ", ".join(str(f) for f in files)))
+    from packing_assistant.civil import _file_paths, display_path
+
+    for path in _file_paths(out):
+        print(_c("2", "  + " + display_path(path)))
     print()
 
 
@@ -130,18 +133,37 @@ def handle_slash(line: str, st: TuiState) -> Optional[str]:
     if cmd == "status":
         from packing_assistant.runtime.memory import assemble_context, prompt_prefix
 
+        from packing_assistant.civil import status_text
+
         ctx = assemble_context(st.thread.session_id)
         src = st.last_skill_source
-        how = "显式" if src == "given" else "规则选用" if src == "matched" else "未点名"
+        how = {"given": "显式", "matched": "规则选用", "model": "模型选用"}.get(src, "未点名")
         skill = f"${st.last_skill}" if st.last_skill else "（未点名）"
         return (
-            f"thread {st.thread.thread_id}\n"
-            f"skill {skill} · {how}\n"
-            f"sandbox {st.cfg.sandbox}\n"
-            f"approval {st.cfg.approval}\n"
-            f"confirm {st.confirm}\n"
+            f"thread   {st.thread.thread_id}\n"
+            f"skill    {skill} · {how}\n"
+            f"{status_text()}\n"
+            f"confirm  {st.confirm}\n"
             f"{prompt_prefix(ctx) or '会话槽空'}"
         )
+    if cmd == "init":
+        from packing_assistant.runtime.project_instructions import init
+        from packing_assistant.runtime.workspace import activate
+        from pathlib import Path
+
+        path, created = init(Path.cwd())
+        activate(Path.cwd())
+        return (f"已写入 {path.name}。填上你确认过的项目事实；留空的栏在成稿里保持 UNSPECIFIED。"
+                if created else f"{path.name} 已存在，未改动。")
+    if cmd == "model":
+        from packing_assistant.llm import llm_config, set_runtime_llm
+
+        current = llm_config()
+        if arg.strip():
+            set_runtime_llm({"api_key": current["api_key"], "base_url": current["base_url"], "model": arg.strip()})
+            current = llm_config()
+        key = "已配置" if current.get("api_key") else "未配置（走确定性 steps 路径）"
+        return f"model = {current['model']}\nbase  = {current['base_url']}\nkey   = {key}"
     if cmd == "skills":
         return _slash_skills(arg)
     if cmd in {"approvals", "approval"}:
