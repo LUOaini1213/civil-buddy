@@ -22,6 +22,7 @@ HELP = """/help              本页
 /bg <任务>         在新 thread 后台跑
 /files             本 thread 交付物
 /plan              上一轮模型列的步骤
+/review <文稿>     不调模型：文稿里的数字有没有出处、有没有不该下的结论
 /confirm           本 thread 视同已打确认句
 /mcp               IDE/MCP 怎么挂
 /quit              退出
@@ -184,6 +185,10 @@ def handle_slash(line: str, st: TuiState) -> Optional[str]:
             return "上一轮没有列步骤（steps 模式不列；model 模式里多步任务才列）。"
         marks = {"done": "x", "in_progress": ">", "pending": " "}
         return "\n".join(f"[{marks.get(row.get('status'), ' ')}] {row.get('step')}" for row in st.last_plan)
+    if cmd == "review":
+        from packing_assistant.runtime.review import review_file
+
+        return review_file(arg)["reply"] if arg.strip() else "用法：/review pm-daily__log.md（文件名或相对作业文件夹的路径）"
     if cmd == "skills":
         return _slash_skills(arg)
     if cmd in {"approvals", "approval"}:

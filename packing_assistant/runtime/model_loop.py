@@ -35,7 +35,6 @@ from packing_assistant.runtime.bus import get_bus
 CONFIRM = "我明白，将由持证人员签认"
 MAX_STEPS = 10
 _RESULT_CHARS = 6000
-_LISTED_FILES = 40
 
 Complete = Callable[[List[Dict[str, Any]], Optional[List[Dict[str, Any]]]], Dict[str, Any]]
 Approve = Callable[[Dict[str, Any]], bool]
@@ -127,68 +126,22 @@ class _Turn:
 # the job folder
 # ---------------------------------------------------------------------------
 
-def _job_path(name: Any, *, by_name: bool = True) -> Optional[Path]:
-    """A readable file inside the job folder — same root and secret guard as every other job read.
+def _job_path(name: Any) -> Optional[Path]:
+    from packing_assistant.office_job import job_file_by_name
 
-    Models drop the sub-folder ("packing.csv" for "资料/packing.csv"); a bare name that matches exactly
-    one listed file is that file. Two matches stay unresolved — guessing between them is not routing.
-    """
-    from packing_assistant.office_job import _resolve_job_file, job_root, job_root_granted
-
-    raw = str(name or "").strip().strip('"').strip("'")
-    if not raw or not job_root_granted():
-        return None
-    candidate = Path(raw)
-    try:
-        target = _resolve_job_file(candidate if candidate.is_absolute() else job_root() / candidate)
-    except (OSError, RuntimeError, ValueError):
-        return None
-    if target.is_file():
-        return target
-    if by_name and not candidate.is_absolute():
-        matches = [row["name"] for row in job_files() if Path(row["name"]).name.lower() == candidate.name.lower()]
-        if len(matches) == 1:
-            return _job_path(matches[0], by_name=False)
-    return None
+    return job_file_by_name(name)
 
 
 def job_files() -> List[Dict[str, Any]]:
-    """The job folder and one level of sub-folders; state (.civil-buddy), CIVIL.md and lock files are not material."""
-    from packing_assistant.office_job import JOB_EXTS, job_root, job_root_granted
+    from packing_assistant.office_job import job_tree_files
 
-    if not job_root_granted():
-        return []
-    root = job_root().resolve()
-    try:
-        folders = [root] + sorted((d for d in root.iterdir() if d.is_dir() and not d.name.startswith((".", "_", "~"))),
-                                  key=lambda d: d.name.lower())
-    except OSError:
-        return []
-    rows: List[Dict[str, Any]] = []
-    for folder in folders:
-        try:
-            entries = sorted(folder.iterdir(), key=lambda p: p.name.lower())
-        except OSError:
-            continue
-        for path in entries:
-            if len(rows) >= _LISTED_FILES:
-                return rows
-            if path.suffix.lower() not in JOB_EXTS | {".pdf"} or path.name == "CIVIL.md" or path.name.startswith("~$"):
-                continue
-            if _job_path(path) is None:
-                continue
-            rows.append({"name": path.relative_to(root).as_posix(), "bytes": path.stat().st_size})
-    return rows
+    return [{"name": row["name"], "bytes": row["bytes"]} for row in job_tree_files()]
 
 
 def _file_text(path: Path, limit: int) -> str:
-    if path.suffix.lower() == ".pdf":
-        from packing_assistant.tools.packing_list_parser import extract_pdf_text
+    from packing_assistant.office_job import read_material
 
-        return extract_pdf_text(path)[:limit]
-    from packing_assistant.office_job import read_job_file
-
-    return read_job_file(path, limit)
+    return read_material(path, limit)
 
 
 def _not_found(name: Any) -> Dict[str, Any]:
@@ -335,31 +288,9 @@ _PLAN_KEYS = ("ok", "source", "error", "detail", "needs_human", "n_rows", "can_f
 
 
 def pack_report_md(result: Dict[str, Any], file_name: str) -> str:
-    """The engine's numbers, copied. Nothing here is computed or rounded."""
-    def value(key: str) -> str:
-        return str(result.get(key, "UNSPECIFIED"))
+    from packing_assistant.tools.pack_ship_solve import plan_report_md
 
-    lines = ["# 装柜方案（装箱引擎结果）", "",
-             "内部讨论 AI 草稿。柜数与利用率由装箱引擎算出，未经人工复核，不可直接订舱；系固与 VGM 另行签认。", "",
-             f"- 装箱单：{file_name}"]
-    if not result.get("ok"):
-        lines += [f"- 结果：未出方案（{value('error')}）"]
-        for row in (result.get("needs_human") or [])[:20]:
-            lines.append(f"  - {row.get('name') or row.get('id') or '（未命名行）'}：{row.get('ask') or row.get('reason')}")
-        return "\n".join(lines) + "\n"
-    lines += [f"- 柜型：{value('container_type')}（单一柜型 × N；引擎不支持混柜）",
-              f"- 物料行：{value('n_materials')} · 成箱：{value('n_boxes')}",
-              f"- 用柜数：{value('containers_used')} · 订柜下限 N0：{value('n0')}",
-              f"- can_fit：{value('can_fit')}",
-              f"- 空间利用率：{value('utilization')} · 载重利用率：{value('weight_utilization')} · 地板利用率：{value('floor_utilization_avg')}",
-              f"- 约束：{value('binding_constraint')} · mid50：{value('mid50')}",
-              f"- 系固待办：{value('系固待办')}"]
-    limits = result.get("cargo_feasibility") or {}
-    if limits:
-        lines.append(f"- 柜体额定载重（不是货重）：{limits.get('payload_kg', 'UNSPECIFIED')} kg · "
-                     f"单箱安全上限（额定载重 × 安全系数 {limits.get('margin', 'UNSPECIFIED')}）：{limits.get('safe_cap_kg', 'UNSPECIFIED')} kg"
-                     f" · 超限判定：{limits.get('failure_class', 'UNSPECIFIED')}")
-    return "\n".join(lines) + "\n"
+    return plan_report_md(result, file_name)
 
 
 def _pack_plan(turn: _Turn, args: Dict[str, Any]) -> Dict[str, Any]:
