@@ -91,6 +91,13 @@ def review_file(name: str) -> Dict[str, Any]:
                 "reply": f"{target.name} 读不出来：{type(exc).__name__}"}
     sources: List[str] = []
     evidence: List[str] = [load().text, *_thread_user_text(), *_QUOTED_SECTIONS.findall(draft)]
+    record = target.with_suffix(".json")          # a tool result kept beside the document it explains (pack-plan.json)
+    if record.is_file() and record != target:
+        try:
+            evidence.append(read_material(record, _FILE_CHARS))
+            sources.append(record.name + "（工具结果记录）")
+        except Exception:  # noqa: BLE001
+            pass
     for row in job_tree_files():
         path = Path(row["path"])
         if path == target:

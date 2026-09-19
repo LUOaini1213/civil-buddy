@@ -574,6 +574,7 @@ def run_agent(
             explain_prefix = _explain(text, eid, ctx_prefix) if intent == "both" else ""
             pack_ship: Dict[str, Any] = {}
             last_export_md = ""
+            plan_record = ""
             export_name = "pack-ship__export"
             last_extract = ""
 
@@ -693,9 +694,10 @@ def run_agent(
                     if name == "pack-ship__export":
                         last_export_md = str((data or {}).get("markdown") or data.get("markdown") or "")
                     if name == "pack-ship__plan" and packing_list and data.get("source") == "solver":
-                        from packing_assistant.tools.pack_ship_solve import plan_report_md
+                        from packing_assistant.tools.pack_ship_solve import plan_record_json, plan_report_md
 
                         last_export_md, export_name = plan_report_md(data, Path(packing_list).name), "pack-plan"
+                        plan_record = plan_record_json(data, Path(packing_list).name)
                 if run.state == "waiting_tool":
                     sched.transition(run, "acting")
                 if _cancel_requested():
@@ -716,6 +718,9 @@ def run_agent(
                         "tool_label": "pack-ship__plan" if export_name == "pack-plan" else "pack-ship__export",
                     }
                 )
+                if plan_record:       # the tool result the report's numbers come from, kept beside it
+                    follow.append({"name": "write_deliverable", "tool_label": "pack-ship__plan",
+                                   "arguments": {"path": str(out_dir / "pack-plan.json"), "text": plan_record}})
             elif last_extract:
                 follow.append(
                     {
