@@ -237,6 +237,59 @@ def run_plan(
     }
 
 
+def plan_report_md(result: Dict[str, Any], file_name: str) -> str:
+    """run_plan 的结果写成带中文标签的报告：数字只抄不算，每个数都说清是什么。
+
+    给人看，也给模型看。实测小模型会把裸键 payload_kg（柜体额定载重）读成「货物总重」，
+    所以凡是要交给模型转述的地方都用这份报告，不给裸键。
+    """
+    def value(key: str) -> str:
+        return str(result.get(key, UNSPECIFIED))
+
+    lines = ["# 装柜方案（装箱引擎结果）", "",
+             "内部讨论 AI 草稿。柜数与利用率由装箱引擎算出，未经人工复核，不可直接订舱；系固与 VGM 另行签认。", "",
+             f"- 装箱单：{file_name}"]
+    if not result.get("ok"):
+        lines += [f"- 结果：未出方案（{value('error')}）"]
+        for row in (result.get("needs_human") or [])[:20]:
+            lines.append(f"  - {row.get('name') or row.get('id') or '（未命名行）'}：{row.get('ask') or row.get('reason')}")
+        return "\n".join(lines) + "\n"
+    lines += [f"- 柜型：{value('container_type')}（单一柜型 × N；引擎不支持混柜）",
+              f"- 物料行：{value('n_materials')} · 成箱：{value('n_boxes')}",
+              f"- 用柜数：{value('containers_used')} · 订柜下限 N0：{value('n0')}",
+              f"- can_fit：{value('can_fit')}",
+              f"- 空间利用率：{value('utilization')} · 载重利用率：{value('weight_utilization')} · 地板利用率：{value('floor_utilization_avg')}",
+              f"- 约束：{value('binding_constraint')} · mid50：{value('mid50')}",
+              f"- 系固待办：{value('系固待办')}"]
+    limits = result.get("cargo_feasibility") or {}
+    if limits:
+        lines.append(f"- 柜体额定载重（不是货重）：{limits.get('payload_kg', UNSPECIFIED)} kg · "
+                     f"单箱安全上限（额定载重 × 安全系数 {limits.get('margin', UNSPECIFIED)}）：{limits.get('safe_cap_kg', UNSPECIFIED)} kg"
+                     f" · 超限判定：{limits.get('failure_class', UNSPECIFIED)}")
+    return "\n".join(lines) + "\n"
+
+
+def plan_reply(result: Dict[str, Any], file_name: str) -> str:
+    """一句话交代：算出了什么，或者为什么没算。数字同样只抄。"""
+    if result.get("ok") and result.get("can_fit") is False:
+        # can_fit=False 是失败，不是「方案已出」：柜数此时只是引擎停手时的数，不能拿去订舱。
+        return (f"装箱引擎按 {file_name} 算过了，但判定装不下（can_fit=False，约束：{result.get('binding_constraint', UNSPECIFIED)}）。"
+                f"这不是可用方案；引擎停手时用了 {result.get('containers_used', UNSPECIFIED)} 个 "
+                f"{result.get('container_type', UNSPECIFIED)}。明细见 pack-plan.md，请核对超限件或换柜型后再算。")
+    if result.get("ok"):
+        return (f"装箱引擎已按 {file_name} 算出方案：{result.get('containers_used', UNSPECIFIED)} 个 "
+                f"{result.get('container_type', UNSPECIFIED)}，订柜下限 N0={result.get('n0', UNSPECIFIED)}，"
+                f"can_fit={result.get('can_fit', UNSPECIFIED)}，空间利用率 {result.get('utilization', UNSPECIFIED)}、"
+                f"载重利用率 {result.get('weight_utilization', UNSPECIFIED)}。明细见 pack-plan.md。内部草稿，不可直接订舱。")
+    rows = result.get("needs_human") or []
+    if rows:
+        asks = "\n".join(f"- {row.get('name') or row.get('id') or '（未命名行）'}：{row.get('ask') or row.get('reason')}" for row in rows[:20])
+        return f"{file_name} 里有 {len(rows)} 行缺重量或尺寸，引擎没有出方案，也就没有柜数可报。请补齐后再算：\n{asks}"
+    detail = result.get("detail")
+    detail = "；".join(str(item) for item in detail) if isinstance(detail, list) else str(detail or "")
+    return f"{file_name} 没有算出方案（{result.get('error', UNSPECIFIED)}）。{detail}".strip()
+
+
 def _solve_boxes(
     materials: Sequence[Dict[str, Any]],
     *,

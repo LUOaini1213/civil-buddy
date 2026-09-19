@@ -21,15 +21,18 @@ test/benchmarks/number_provenance/cases.json 与 scripts/eval_number_provenance.
 型号与标准号（C30、HRB400、40HQ、GB 50010-2010、合同号）、占位符 [A001] / UNSPECIFIED、
 以及「3 个文件 / 2 行」这类对本轮自身的描述。
 
-基准上的数字（34 例、30 个必报项、19 份干净稿；scripts/eval_number_provenance.py --variant all）：
+基准上的数字（37 例、35 个必报项、20 份干净稿；scripts/eval_number_provenance.py --variant all）：
 
-    exact_only                    P 0.698  R 1.000
-    +rounding                     P 0.732  R 1.000
-    +percent                      P 0.882  R 1.000
+    exact_only                    P 0.729  R 1.000
+    +rounding                     P 0.761  R 1.000
+    +percent                      P 0.897  R 1.000
     +scale（现行）                P 1.000  R 1.000
-    去掉型号/标准号遮罩           P 1.000  R 0.967   「JGJ 130」替「130 cm」作证
-    去掉计数分族                  P 1.000  R 0.900   "n_rows": 4 替「4 个柜」作证
-    去掉条款号检查                P 1.000  R 0.967
+    去掉型号/标准号遮罩           P 1.000  R 0.971   「JGJ 130」替「130 cm」作证
+    去掉计数分族                  P 1.000  R 0.914   "n_rows": 4 替「4 个柜」作证
+    去掉条款号检查                P 1.000  R 0.914
+
+拿去扫整篇文稿（civil review）时又量出两类误报，各有用例：Markdown 标题序号（「## 2 天气」读成 2 天，
+修前 P 0.917）、条款号被当成裸小数再报一遍（「第7.2条」→ 7.2，修前 P 0.946）。
 
 它查不出的一类错：数字有出处、标签贴错（实测小模型把柜体额定载重说成货物总重）。那一类靠
 工具结果不给裸键、只给带标签的文字来防，见 runtime/model_loop.py 的 _pack_plan。
@@ -90,6 +93,9 @@ _MASKS: Tuple[re.Pattern, ...] = tuple(re.compile(p, re.I | re.M) for p in (
     r"(?:表|图|附件|附录|步骤|step|appendix|table|figure|section|§)\s*\d+(?:[.\-]\d+)*",
     r"\d+\s*(?:号|#)",
     r"\d+(?:\.\d+){2,}",
+    # Markdown 标题的序号：「## 2 天气」「### 3.2 层间防护」里的 2、3.2 是章节号。整篇文稿里才会遇到，
+    # 短回复的用例测不出来——这一条是拿护栏去扫整份日报草稿时发现的。
+    r"^\s{0,3}#{1,6}\s*\d+(?:\.\d+)*",
 ))
 _CLAUSE = re.compile(r"第\s*\d+(?:\.\d+)*\s*条|(?:clause|cl\.)\s*\d+(?:\.\d+)*", re.I)
 _RATIO = re.compile(r"(?<![\d.:：])1\s*[:：]\s*\d+(?:\.\d+)?(?![\d:：])")
@@ -171,6 +177,8 @@ def quantities(text: str, *, identifiers: bool = True) -> List[Quantity]:
         found.append(Quantity(raw[m.start():m.end()].rstrip(" ×xX*个") + " 个柜", value, decimals, "count", None,
                               m.start(), m.end(), family="container"))
     masked = _mask(raw, identifiers=identifiers)
+    # 条款号由条款检查单独报；这里不再把「第7.2条」里的 7.2 当成一个裸小数再报一遍。
+    masked = _CLAUSE.sub(lambda m: " " * len(m.group(0)), masked)
     taken = [(q.start, q.end) for q in found]
     for m in _RATIO.finditer(masked):
         found.append(Quantity(re.sub(r"\s+", "", m.group(0)).replace("：", ":"), 0.0, 0, "slope", None, m.start(), m.end(), "ratio"))

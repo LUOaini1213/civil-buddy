@@ -9,6 +9,7 @@
   civil -C <文件夹> ...       把该文件夹当作业文件夹（同 cd 进去再运行）
   civil init                  在当前文件夹写一份 CIVIL.md（本工程说明，相当于 Codex 的 AGENTS.md）
   civil status                作业文件夹、工程说明、sandbox / approval、模型
+  civil review <文稿>         不调模型：文稿里的数字在工地资料里有没有出处、有没有不该下的结论
   civil app                   打开工作台应用
   civil mcp --pack bid        IDE stdio MCP
   civil serve                 JSON-RPC app-server（土木 harness，不是官方 Codex 二进制）
@@ -28,7 +29,7 @@ from pathlib import Path
 from typing import Any, Dict, List, Optional
 
 CONFIRM = "我明白，将由持证人员签认"
-VERBS = ("tui", "exec", "app", "mcp", "serve", "skills", "resume", "help", "init", "status")
+VERBS = ("tui", "exec", "app", "mcp", "serve", "skills", "resume", "help", "init", "status", "review")
 
 
 def run_task(
@@ -397,6 +398,15 @@ def main(argv: Optional[List[str]] = None) -> int:
     if verb == "status":
         print(status_text())
         return 0
+    if verb == "review":
+        from packing_assistant.runtime.review import review_file
+
+        if not rest:
+            print("civil review <文稿>    （文件名或相对作业文件夹的路径）", file=sys.stderr)
+            return 2
+        found = review_file(" ".join(rest))
+        print(json.dumps(found, ensure_ascii=False, indent=2, default=str) if args.json else found["reply"])
+        return 0 if found.get("ok") and found.get("clean") else 1 if found.get("ok") else 2
     if verb == "app":
         return cmd_app(args.port, no_browser=args.no_browser)
     if verb == "mcp":

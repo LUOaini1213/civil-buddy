@@ -73,6 +73,51 @@ def _explain(text: str, expert_id: str, prefix: str = "") -> str:
     return f"{prefix}\n{body}".strip() if prefix else body
 
 
+_TABLE_EXTS = (".xlsx", ".csv", ".pdf")
+_DOCUMENT_EXTS = (".docx", ".pdf", ".txt", ".md")
+_TENDER_FILE = ("招标", "tender", "itt", "rfp", "rfq")
+_RESPONSE_FILE = ("响应", "应答", "投标", "response", "bid", "proposal")
+
+
+def _named_packing_list(text: str) -> str:
+    """The one packing list the task names, or "" — two named tables is a question, not a guess."""
+    from packing_assistant.office_job import files_named_in
+
+    tables = files_named_in(text, _TABLE_EXTS)
+    return str(tables[0]) if len(tables) == 1 else ""
+
+
+def _with_named_documents(text: str) -> str:
+    """The task plus the full text of the job documents it names (the steps path reads what you point at)."""
+    from packing_assistant.office_job import files_named_in, named_files_blob, read_material
+
+    named = files_named_in(text, _DOCUMENT_EXTS)
+    blob = named_files_blob(named, reader=read_material) if named else ""
+    return f"{text}\n\n{blob}" if blob else text
+
+
+def _tender_sources(text: str) -> Optional[List[Dict[str, Any]]]:
+    """Named job documents as workflow sources, roles read off the file names.
+
+    None unless exactly one file is recognisably the tender: which document is the tender is not
+    something to guess, and the workflow's own marker parsing still applies to pasted text.
+    """
+    from packing_assistant.office_job import files_named_in, read_material
+
+    sources: List[Dict[str, Any]] = []
+    for index, path in enumerate(files_named_in(text, _DOCUMENT_EXTS)):
+        name = path.name.lower()
+        role = ("tender" if any(mark in name for mark in _TENDER_FILE)
+                else "response" if any(mark in name for mark in _RESPONSE_FILE) else "reference")
+        try:
+            body = read_material(path, 40000)
+        except Exception:  # noqa: BLE001 - an unreadable file is left out, the run says what it used
+            continue
+        sources.append({"source_id": f"{role}-{index + 1}", "title": path.name, "text": body, "start": 0,
+                        "end": len(body), "role": role, "kind": "job_file"})
+    return sources if sum(1 for source in sources if source["role"] == "tender") == 1 else None
+
+
 def _draft_md(expert_id: str, tool: str, text: str) -> str:
     from packing_assistant.expert_roster import get_expert
     from packing_assistant.expert_turn import _draft_markdown
@@ -94,6 +139,7 @@ def _plan_calls(
     p0_confirmed: bool,
     packing_summary: Optional[Dict[str, Any]],
     project_name: str,
+    packing_list: str = "",
 ) -> Dict[str, Any]:
     from packing_assistant.expert_roster import get_expert
 
@@ -109,6 +155,11 @@ def _plan_calls(
     sid = _safe_sid(session_id)
     out_dir = _OUT / sid / (exp.id if exp else "ops")
     calls: List[Dict[str, Any]] = []
+
+    if exp and exp.id == "pack-ship" and packing_list:
+        # 任务点名了文件夹里的装箱单：真算。柜数与利用率出自装箱引擎，不再只抄快照。
+        calls.append({"name": "pack-ship__plan", "arguments": {"file_path": packing_list}, "tool_label": "pack-ship__plan"})
+        return {"hitl": False, "calls": calls, "connected": True, "snap": None, "packing_list": packing_list}
 
     if exp and exp.id == "pack-ship":
         from packing_assistant.runtime.session_packing import load_packing_snapshot
@@ -136,7 +187,7 @@ def _plan_calls(
             {
                 "name": "tender.parse",
                 "arguments": {
-                    "text": text,
+                    "text": _with_named_documents(text),
                     "source": "agent-loop",
                     "project_name": project_name,
                     "p0_confirmed": p0_confirmed,
@@ -274,6 +325,9 @@ def run_agent(
         }
     from packing_assistant.runtime.civil_config import CONFIRM, decide_gate, load_config
 
+    packing_list = _named_packing_list(text) if exp and exp.id == "pack-ship" else ""
+    if packing_list and intent == "chat" and force_intent not in {"chat", "run", "both"}:
+        intent = "run"      # 「packing.csv 要几个柜」点名了装箱单，是要算，不是要聊
     cfg = load_config()
     if cfg.auto_confirm():
         p0_confirmed = True
@@ -430,7 +484,7 @@ def run_agent(
                     sched.transition(run, "failed")
                     return _finish()
                 sched.transition(run, "acting")
-                result = run_tender_workflow(text, session_id=sid, output_root=_OUT,
+                result = run_tender_workflow(text, session_id=sid, output_root=_OUT, sources=_tender_sources(text),
                     confirmed=p0_confirmed, cancel_event=cancel_event)
                 out.update({key: value for key, value in result.items() if key not in {"run_id", "session_id", "schema", "state"}})
                 out["route"], out["collaboration"] = route, result
@@ -480,6 +534,7 @@ def run_agent(
                 p0_confirmed=p0_confirmed,
                 packing_summary=packing_summary,
                 project_name=project_name,
+                packing_list=packing_list,
             )
             if _cancel_requested():
                 return _finish_cancelled()
@@ -504,6 +559,7 @@ def run_agent(
             explain_prefix = _explain(text, eid, ctx_prefix) if intent == "both" else ""
             pack_ship: Dict[str, Any] = {}
             last_export_md = ""
+            export_name = "pack-ship__export"
             last_extract = ""
 
             for call in planned.get("calls") or []:
@@ -556,6 +612,12 @@ def run_agent(
                     run.error_code = str(result.get("error_code") or "tool_failed")
                     out["error_code"] = run.error_code
                     out["reply"] = f"工具 {label} 未完成（{run.error_code}），本轮已停止。已完成的文件保留供核对。"
+                    if name == "pack-ship__plan" and packing_list and result.get("error"):
+                        from packing_assistant.tools.pack_ship_solve import plan_reply
+
+                        run.error_code = out["error_code"] = str(result["error"])
+                        out["reply"] = plan_reply(result, Path(packing_list).name)
+                        out["pack_ship"] = {"source": result.get("source"), "needs_human": result.get("needs_human") or []}
                     sched.transition(run, "failed")
                     messages.append({"role": "assistant", "content": out["reply"]})
                     return _finish()
@@ -615,6 +677,10 @@ def run_agent(
                     pack_ship[name.split("__", 1)[-1]] = data
                     if name == "pack-ship__export":
                         last_export_md = str((data or {}).get("markdown") or data.get("markdown") or "")
+                    if name == "pack-ship__plan" and packing_list and data.get("source") == "solver":
+                        from packing_assistant.tools.pack_ship_solve import plan_report_md
+
+                        last_export_md, export_name = plan_report_md(data, Path(packing_list).name), "pack-plan"
                 if run.state == "waiting_tool":
                     sched.transition(run, "acting")
                 if _cancel_requested():
@@ -629,10 +695,10 @@ def run_agent(
                     {
                         "name": "write_deliverable",
                         "arguments": {
-                            "path": str(out_dir / "pack-ship__export.md"),
+                            "path": str(out_dir / f"{export_name}.md"),
                             "text": last_export_md,
                         },
-                        "tool_label": "pack-ship__export",
+                        "tool_label": "pack-ship__plan" if export_name == "pack-plan" else "pack-ship__export",
                     }
                 )
             elif last_extract:
@@ -762,6 +828,21 @@ def run_agent(
                     if connected
                     else "装柜证据只抄 solver；本轮未接通，utilization/can_fit/mid50/系固待办 为 UNSPECIFIED。"
                 )
+                if packing_list and plan.get("source") == "solver":
+                    from packing_assistant.tools.pack_ship_solve import plan_reply
+
+                    out["reply"] = plan_reply(plan, Path(packing_list).name)
+                    if plan.get("can_fit") is False:
+                        out["ok"] = False
+                        run.error_code = out["error_code"] = "cannot_fit"
+                elif not packing_list and not connected:
+                    from packing_assistant.office_job import files_named_in, job_tree_files
+
+                    tables = [row["name"] for row in job_tree_files() if row["suffix"] in _TABLE_EXTS]
+                    if len(files_named_in(text, _TABLE_EXTS)) > 1:
+                        out["reply"] += " 任务里点了不止一份表，没法替你选：一次点名一份装箱单。"
+                    elif tables:
+                        out["reply"] += " 文件夹里有 " + "、".join(tables[:5]) + "；在任务里点名其中一份，就由装箱引擎真算。"
             elif out.get("matrix"):
                 out["reply"] = "已按招标节选进矩阵。仍是 AI 草稿，submit_blocked=true，不可递交。"
             elif out["wrote"]:
@@ -778,9 +859,9 @@ def run_agent(
                 out["reply"] = explain_prefix + "\n\n" + str(out.get("reply") or "")
 
             if run.state == "acting":
-                sched.transition(run, "done")
+                sched.transition(run, "done" if out["ok"] else "failed")
             elif run.state not in {"done", "failed", "cancelled", "waiting_hitl"}:
-                sched.transition(run, "done")
+                sched.transition(run, "done" if out["ok"] else "failed")
             messages.append({"role": "assistant", "content": out["reply"]})
             return _finish()
     except Exception as exc:  # noqa: BLE001 — surface as failed run, do not invent numbers

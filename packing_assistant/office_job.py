@@ -9,7 +9,7 @@ Not a desktop shell. Not D:\\layout. Not COM into an open Excel window.
 from __future__ import annotations
 
 import html
-
+import json
 import os
 import re
 from pathlib import Path
@@ -177,6 +177,32 @@ def _resolve_job_file(path: Path) -> Path:
     return assert_open(resolved)
 
 
+def _exports_manifest() -> Path:
+    return job_root() / ".civil-buddy" / "exports.json"
+
+
+def own_exports() -> set:
+    """Names of the Excel copies Civil Buddy itself put in the job folder's top level.
+
+    They are deliverables, not source material. Read back as material they leak one draft into the
+    next: a daily report's attendance table turned up inside a deep-excavation scheme (2026-09-19).
+    """
+    try:
+        names = json.loads(_exports_manifest().read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return set()
+    return {str(name) for name in names} if isinstance(names, list) else set()
+
+
+def _remember_export(path: Path) -> None:
+    from packing_assistant.sandbox import guarded_write_text
+
+    try:
+        guarded_write_text(_exports_manifest(), json.dumps(sorted(own_exports() | {path.name}), ensure_ascii=False, indent=2))
+    except (OSError, RuntimeError):
+        pass    # the copy is still written; at worst it is listed as material until the next export
+
+
 def export_md_to_xlsx(md_path: Path, query: str = "") -> List[Path]:
     """Sibling xlsx always. If the user named a job-root workbook, patch it too."""
     p = Path(md_path)
@@ -198,8 +224,10 @@ def export_md_to_xlsx(md_path: Path, query: str = "") -> List[Path]:
             written.append(patch_xlsx(target, sheets))
         else:
             dest = job_root() / sibling.name
-            if dest.resolve() != sibling.resolve():
+            # 根目录里已有同名文件、又不是我们上次写的：那是用户自己的表，不覆盖。
+            if dest.resolve() != sibling.resolve() and (not dest.exists() or dest.name in own_exports()):
                 written.append(write_xlsx(dest, sheets))
+                _remember_export(dest)
     except (OSError, RuntimeError, *_OFFICE_CONTENT_ERRORS):
         pass
     return written
@@ -272,8 +300,9 @@ def list_job_files() -> List[Dict[str, Any]]:
         names = sorted(root.iterdir(), key=lambda p: p.name.lower())
     except OSError:
         return []
+    exported = own_exports()
     for p in names:
-        if p.suffix.lower() not in JOB_EXTS:
+        if p.suffix.lower() not in JOB_EXTS or p.name in exported:
             continue
         # CIVIL.md 是给 Civil Buddy 的工程说明，不是待处理的业务资料：当资料读进去，
         # 整份模板（含 "CN / SG / EU / DUAL" 的填写提示）会被抄进成稿并把辖区带偏。
@@ -297,6 +326,106 @@ def list_job_files() -> List[Dict[str, Any]]:
         if len(rows) >= JOB_MAX_FILES:
             break
     return rows
+
+
+JOB_TREE_EXTS = JOB_EXTS | {".pdf"}
+JOB_TREE_MAX = 40
+
+
+def job_tree_files() -> List[Dict[str, Any]]:
+    """The job folder plus one level of sub-folders, PDFs included.
+
+    ``name`` is the path relative to the job folder, with forward slashes. State folders
+    (.civil-buddy and anything else starting with . _ ~), CIVIL.md and Office lock files are
+    not material. Every row has passed the same root and secret guard as any other job read.
+    """
+    if not job_root_granted():
+        return []
+    root = job_root().resolve()
+    try:
+        folders = [root] + sorted((d for d in root.iterdir() if d.is_dir() and not d.name.startswith((".", "_", "~"))),
+                                  key=lambda d: d.name.lower())
+    except OSError:
+        return []
+    rows: List[Dict[str, Any]] = []
+    exported = own_exports()
+    for folder in folders:
+        try:
+            entries = sorted(folder.iterdir(), key=lambda entry: entry.name.lower())
+        except OSError:
+            continue
+        for entry in entries:
+            if len(rows) >= JOB_TREE_MAX:
+                return rows
+            if entry.suffix.lower() not in JOB_TREE_EXTS or entry.name == "CIVIL.md" or entry.name.startswith("~$"):
+                continue
+            if folder == root and entry.name in exported:
+                continue
+            try:
+                resolved = _resolve_job_file(entry)
+                if not resolved.is_file():
+                    continue
+                size = resolved.stat().st_size
+            except (OSError, RuntimeError):
+                continue
+            rows.append({"name": entry.relative_to(root).as_posix(), "path": str(resolved),
+                         "suffix": entry.suffix.lower(), "bytes": size})
+    return rows
+
+
+def job_file_by_name(name: Any, *, by_name: bool = True) -> Optional[Path]:
+    """One readable file inside the job folder, behind the same root and secret guard as every job read.
+
+    Models (and people) drop the sub-folder — "packing.csv" for "资料/packing.csv". A bare name that
+    matches exactly one listed file is that file; two matches stay unresolved, because choosing
+    between them is a guess.
+    """
+    raw = str(name or "").strip().strip('"').strip("'")
+    if not raw or not job_root_granted():
+        return None
+    candidate = Path(raw)
+    try:
+        target = _resolve_job_file(candidate if candidate.is_absolute() else job_root() / candidate)
+    except (OSError, RuntimeError, ValueError):
+        return None
+    if target.is_file():
+        return target
+    if by_name and not candidate.is_absolute():
+        matches = [row["path"] for row in job_tree_files() if Path(row["name"]).name.lower() == candidate.name.lower()]
+        if len(matches) == 1:
+            return Path(matches[0])
+    return None
+
+
+def files_named_in(text: str, exts: Optional[Sequence[str]] = None) -> List[Path]:
+    """Job files the text names — by relative path, file name, or stem — in listing order.
+
+    A stem made of ASCII letters has to stand alone: "packing" inside "packing-agent" names nothing.
+    """
+    blob = (text or "").replace("\\", "/").lower()
+    if not blob:
+        return []
+    wanted = {e.lower() for e in exts} if exts else None
+    found: List[Path] = []
+    for row in job_tree_files():
+        if wanted is not None and row["suffix"] not in wanted:
+            continue
+        name = Path(row["name"]).name.lower()
+        stem = Path(row["name"]).stem.lower()
+        bounded = r"(?<![a-z0-9_-])" + re.escape(stem) + r"(?![a-z0-9_-])"
+        if row["name"].lower() in blob or name in blob or (len(stem) >= 3 and re.search(bounded, blob)):
+            found.append(Path(row["path"]))
+    return found
+
+
+def read_material(path: Path, limit: int = JOB_FILE_CHARS) -> str:
+    """``read_job_file`` plus PDFs (text layer only; a scanned PDF yields nothing and says so by being empty)."""
+    target = _resolve_job_file(path)
+    if target.suffix.lower() == ".pdf":
+        from packing_assistant.tools.packing_list_parser import extract_pdf_text
+
+        return extract_pdf_text(target)[: max(0, int(limit))]
+    return read_job_file(target, limit)
 
 
 def _read_xlsx_text(path: Path, limit: int) -> str:
