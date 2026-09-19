@@ -318,7 +318,12 @@ def _pack_plan(turn: _Turn, args: Dict[str, Any]) -> Dict[str, Any]:
     target = agent_loop._OUT / agent_loop._safe_sid(turn.session_id) / "pack-ship" / "pack-plan.md"
     saved = get_engine().execute("write_deliverable", {"path": str(target), "text": report}, intent="run", cancelled=False)
     if saved.get("ok"):
-        out["files"] = turn.add_files([{"path": str(saved.get("path") or target), "tool": "pack-ship__plan"}])
+        from packing_assistant.tools.pack_ship_solve import plan_record_json
+
+        record = get_engine().execute("write_deliverable", {"path": str(target.with_suffix(".json")),
+                                                            "text": plan_record_json(result, path.name)}, intent="run", cancelled=False)
+        out["files"] = turn.add_files([{"path": str(saved.get("path") or target), "tool": "pack-ship__plan"}]
+                                      + ([{"path": str(record.get("path")), "tool": "pack-ship__plan"}] if record.get("ok") else []))
     else:
         out["saved"] = "未写盘：" + str(saved.get("reason") or saved.get("error_code") or "")
     return out

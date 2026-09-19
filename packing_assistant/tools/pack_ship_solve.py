@@ -269,6 +269,25 @@ def plan_report_md(result: Dict[str, Any], file_name: str) -> str:
     return "\n".join(lines) + "\n"
 
 
+_RECORD_KEYS = ("ok", "source", "error", "n_rows", "can_fit", "containers_used", "container_type", "n0", "utilization",
+                "weight_utilization", "floor_utilization_avg", "binding_constraint", "mid50", "n_materials", "n_boxes",
+                "cargo_feasibility", "container_mix_supported", "elapsed_s")
+
+
+def plan_record_json(result: Dict[str, Any], file_name: str) -> str:
+    """What the engine returned, as it returned it — saved beside pack-plan.md as pack-plan.json.
+
+    The report's numbers come from a computation, not from any file in the job folder, so a reviewer
+    (`civil review`) reading only the folder's material would call every one of them unsourced. The
+    record is that source: a tool result, kept.
+    """
+    import json
+
+    record = {"schema": "pack-ship.plan.record.v1", "packing_list": file_name,
+              **{key: result[key] for key in _RECORD_KEYS if key in result}}
+    return json.dumps(record, ensure_ascii=False, indent=2, default=str) + "\n"
+
+
 def plan_reply(result: Dict[str, Any], file_name: str) -> str:
     """一句话交代：算出了什么，或者为什么没算。数字同样只抄。"""
     if result.get("ok") and result.get("can_fit") is False:

@@ -87,6 +87,22 @@ class ReviewTests(unittest.TestCase):
         draft.write_text(draft.read_text(encoding="utf-8").replace("形象进度待填。", "形象进度完成 40%，浇筑 120 m³。"), encoding="utf-8")
         self.assertEqual([n["text"] for n in review_file("pm-daily__log.md")["numbers"]], ["40%", "120 m³"])
 
+    def test_numbers_the_engine_computed_trace_to_its_recorded_result(self):
+        # seen in the desktop app (2026-09-19): reviewing pack-plan.md listed every number in it — the utilisation,
+        # the rated payload — as unsourced, because a computation is not a file in the job folder
+        (self.job / "周报.md").unlink()
+        (self.job / "packing.csv").write_text("S/N,Description of Goods,Q'ty,L (mm),W (mm),H (mm),G.W. (kg)\n"
+                                             "1,Steel bracket,4,1200,400,300,12.5\n2,Base plate,2,800,800,50,40\n", encoding="utf-8", newline="")
+        out = run_agent("帮我算一下 packing.csv 要几个柜", session_id="civil-cli")
+        self.assertTrue(out["ok"], out.get("reply"))
+        self.assertIn("pack-plan.json", [f["name"] for f in out["files"]])
+        found = review_file("pack-plan.md")
+        self.assertTrue(found["clean"], found["reply"])
+        self.assertIn("pack-plan.json（工具结果记录）", found["sources"])
+        report = self.job / found["file"]
+        report.write_text(report.read_text(encoding="utf-8").replace("- 系固待办", "- 预计运费 3200 元\n- 系固待办"), encoding="utf-8")
+        self.assertEqual([n["text"] for n in review_file("pack-plan.md")["numbers"]], ["3200 元"])     # the record does not launder
+
     def test_two_drafts_with_one_name_are_not_guessed_between(self):
         (self.job / "周报.md").unlink()
         self.assertTrue(run_agent(DAILY, session_id="civil-cli")["ok"])
