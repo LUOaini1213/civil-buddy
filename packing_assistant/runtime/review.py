@@ -5,8 +5,8 @@ No model. Two questions, both answered from what is in the job folder:
     numbers     which quantities and clause numbers in the document have no source in the job's
                 material — CIVIL.md, every other readable file in the folder, what the user typed
                 in this folder's threads, and the user text a Civil Buddy draft quotes verbatim
-    assertions  does it state a verdict nobody here may state (可以开工, 报审通过, 可以投标 ...),
-                other than to disclaim it
+    assertions  does it state a verdict nobody here may state (可以开工, 报审通过, 符合招标文件的要求 ...)
+                — stated, not disclaimed, asked or made conditional (tools/verdict_guard)
 
 A finding is not an error. It means "this number is not in your material — check where it came
 from". The check is tools/number_provenance, scored on test/benchmarks/number_provenance; it
@@ -21,16 +21,8 @@ from pathlib import Path
 from typing import Any, Dict, List, Optional
 
 _QUOTED_SECTIONS = re.compile(r"^## (?:用户原文|作业根文件)[^\n]*\n(.*?)(?=^## |\Z)", re.S | re.M)
-_NEGATION = re.compile(r"不|非|未|禁止|不得|勿|别")
 _FILE_CHARS = 40_000
 _DRAFT_CHARS = 400_000
-
-
-def _assertive() -> List[str]:
-    from packing_assistant.runtime.agent_loop import FORBIDDEN
-    from packing_assistant.tools.tender_review import ASSERTIVE
-
-    return sorted(set(ASSERTIVE) | set(FORBIDDEN), key=len, reverse=True)
 
 
 def _line_of(text: str, position: int) -> Dict[str, Any]:
@@ -109,21 +101,16 @@ def review_file(name: str) -> Dict[str, Any]:
         except Exception:  # noqa: BLE001 - an unreadable neighbour is simply not evidence
             continue
     numbers = [{**item, **_line_of(draft, item["start"])} for item in untraced(draft, evidence)]
-    assertions = []
-    for phrase in _assertive():
-        for match in re.finditer(re.escape(phrase), draft):
-            if _NEGATION.search(draft[max(0, match.start() - 8): match.start()]):
-                continue    # 「不判定可以开工」是在否认，不是在下结论
-            if any(a["start"] <= match.start() < a["end"] for a in assertions):
-                continue
-            assertions.append({"text": phrase, "start": match.start(), "end": match.end(), **_line_of(draft, match.start())})
+    from packing_assistant.tools.verdict_guard import stated_verdicts
+
+    assertions = [{**item, **_line_of(draft, item["start"])} for item in stated_verdicts(draft)]
     try:
         shown = target.relative_to(job_root().resolve()).as_posix()
     except ValueError:
         shown = target.name
     clean = not numbers and not assertions
     return {"ok": True, "schema": "civil.review.v1", "file": shown, "clean": clean, "sources": sources,
-            "numbers": numbers, "assertions": sorted(assertions, key=lambda a: a["start"]), "reply": _render(shown, sources, numbers, assertions)}
+            "numbers": numbers, "assertions": assertions, "reply": _render(shown, sources, numbers, assertions)}
 
 
 def _render(shown: str, sources: List[str], numbers: List[Dict[str, Any]], assertions: List[Dict[str, Any]]) -> str:

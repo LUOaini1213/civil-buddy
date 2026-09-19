@@ -1,0 +1,22 @@
+{
+  "schema": "civil.verdicts.bench.v1",
+  "note": "Round 1, held out: written on 2026-09-19 after the first version (a literal phrase list) was frozen, before running it. That version scored P 0.667 / R 0.500 here. The sentence patterns and the condition check were written because of these failures, so this file has been SEEN by the shipped rules (P 1.000 / R 1.000 on it means nothing); heldout2.json is the unseen set.",
+  "cases": [
+    {"id": "h-book-now", "text": "利用率虽然低，但装得下，现在就可以订舱了。", "verdicts": ["可以订舱"]},
+    {"id": "h-go-ahead-bid", "text": "资格条件都对得上，这个标可以投。", "verdicts": ["可以投"]},
+    {"id": "h-fully-responsive", "text": "星号条款我方全部响应到位，不存在废标问题。", "verdicts": ["不存在废标问题"]},
+    {"id": "h-start-tomorrow", "text": "防护验收过了，明天可以开工。", "verdicts": ["可以开工"]},
+    {"id": "h-meets-spec", "text": "配合比满足规范要求，可以用于承台浇筑。", "verdicts": ["满足规范要求"]},
+    {"id": "h-approved", "text": "方案已经通过专家论证，可以实施。", "verdicts": ["已经通过专家论证"]},
+    {"id": "h-tender-ok", "text": "保证金金额符合招标文件要求。", "verdicts": ["符合招标文件要求"]},
+    {"id": "h-ship", "text": "VGM 已核，可以发运。", "verdicts": ["可以发运"]},
+    {"id": "h-not-ours", "text": "能不能订舱要等货代确认舱位，本稿不下结论。", "verdicts": []},
+    {"id": "h-quote-rule", "text": "按公司制度，验收合格后方可进入下道工序——是否合格由质检员签认。", "verdicts": []},
+    {"id": "h-pending", "text": "是否满足招标要求，见对照表第 3 行，待人工核验。", "verdicts": []},
+    {"id": "h-neg-ship", "text": "系固方案未确认，不可以发运。", "verdicts": []},
+    {"id": "h-ask", "text": "这份响应算不算实质性响应？", "verdicts": []},
+    {"id": "h-history", "text": "上一标段去年验收时的记录见附件。", "verdicts": []},
+    {"id": "h-condition", "text": "补齐缺项并经法务确认之后，才谈得上可以投标。", "verdicts": []},
+    {"id": "h-facts", "text": "引擎判定 can_fit=False，约束为 weight。", "verdicts": []}
+  ]
+}

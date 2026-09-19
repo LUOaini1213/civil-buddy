@@ -17,7 +17,9 @@ The product's rule is that tools compute and the model only routes, and the loop
 two ways. By construction: ``run_skill`` hands the pipeline the user's own words plus the job
 files the model picked — nothing the model wrote reaches a deliverable. By check: the one
 place model text does go, the reply, passes ``tools/number_provenance``; a quantity or clause
-number the turn never saw gets one rewrite, and whatever survives is listed to the user.
+number the turn never saw gets one rewrite, and whatever survives is listed to the user. The
+same pass runs ``tools/verdict_guard``: a verdict the system may not give (可以订舱, 符合招标文件
+的要求 — both seen from a live model) gets the same rewrite and, if it survives, is struck.
 
 ``agent_mode = "steps"`` (the default) never comes here; see runtime/turn.py.
 """
@@ -25,6 +27,7 @@ number the turn never saw gets one rewrite, and whatever survives is listed to t
 from __future__ import annotations
 
 import json
+import re
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, Callable, Dict, List, Optional, Tuple
@@ -367,30 +370,76 @@ def system_prompt(context_prefix: str = "") -> str:
     return "\n\n".join(part for part in parts if part)
 
 
-def _guarded(reply: str, turn: _Turn, messages: List[Dict[str, Any]], complete: Complete) -> Tuple[str, Dict[str, Any]]:
-    """The reply with every number traced: rewritten once if needed, and the untraced rest listed."""
-    from packing_assistant.tools.number_provenance import notice, untraced
+_SENTENCE_END = re.compile(r"(?<=[。！？!?\n])")
 
-    flagged = untraced(reply, turn.evidence)
-    report: Dict[str, Any] = {"checked": True, "rewrites": 0, "untraced": []}
-    if flagged:
-        listed = "、".join(dict.fromkeys(item["text"] for item in flagged))
-        turn.emit("guard", {"untraced": [item["text"] for item in flagged], "action": "rewrite"})
-        retry = messages + [{"role": "assistant", "content": reply}, {"role": "user", "content": (
-            f"【系统核对】你的回复里这些数字或条款号在本轮的工具结果、用户原文和已读资料里都没有出处：{listed}。"
-            "请改写回复：删掉它们，或写成 UNSPECIFIED / [A001] 待填；不要引入任何新数字。只输出改写后的回复。")}]
+
+def collapse_repeats(text: str) -> Tuple[str, int]:
+    """A sentence said once is enough. Small models loop: a live qwen2.5:3b rewrite repeated
+    「订舱后，由用户确认系固方案并完成订舱手续。」 about forty times, up to the token limit.
+    Returns the text with every later copy of a sentence (6+ characters) dropped, and how many were dropped.
+    """
+    seen, kept, dropped = set(), [], 0
+    for part in _SENTENCE_END.split(text or ""):
+        key = part.strip()
+        if len(key) >= 6 and key in seen:
+            dropped += 1
+            continue
+        seen.add(key)
+        kept.append(part)
+    return "".join(kept).rstrip() if dropped else text, dropped
+
+
+def _guarded(reply: str, turn: _Turn, messages: List[Dict[str, Any]], complete: Complete) -> Tuple[str, Dict[str, Any]]:
+    """The reply, checked twice: every number traced, no verdict stated. One rewrite, then the rest is dealt with.
+
+    An untraced number that survives the rewrite is listed to the user. A verdict that survives
+    (可以订舱, 符合招标文件的要求 ...) is struck from the text and listed: a wrong number can be
+    checked by the reader, a verdict from the system is the thing the product may not produce.
+    """
+    from packing_assistant.tools import number_provenance, verdict_guard
+
+    reply, repeats = collapse_repeats(reply)
+    numbers = number_provenance.untraced(reply, turn.evidence)
+    verdicts = verdict_guard.stated_verdicts(reply)
+    report: Dict[str, Any] = {"checked": True, "rewrites": 0, "untraced": [], "verdicts": []}
+    if numbers or verdicts:
+        turn.emit("guard", {"untraced": [item["text"] for item in numbers], "verdicts": [item["text"] for item in verdicts],
+                            "action": "rewrite"})
+        asks = []
+        if numbers:
+            asks.append("这些数字或条款号在本轮的工具结果、用户原文和已读资料里都没有出处："
+                        + "、".join(dict.fromkeys(item["text"] for item in numbers))
+                        + "。删掉它们，或写成 UNSPECIFIED / [A001] 待填；不要引入任何新数字。")
+        if verdicts:
+            asks.append("这些话是在下结论，而结论不由你下："
+                        + "、".join(dict.fromkeys(item["text"] for item in verdicts))
+                        + "。改成陈述工具给出的事实，并说明由谁来判断。")
+        retry = messages + [{"role": "assistant", "content": reply},
+                            {"role": "user", "content": "【系统核对】" + " ".join(asks) + " 只输出改写后的回复。"}]
+        report["model_calls"] = 1
         try:
             rewritten = str(complete(retry, None).get("content") or "").strip()
-        except Exception:  # noqa: BLE001 - the first reply is still delivered, with the notice
+        except Exception:  # noqa: BLE001 - the first reply is still delivered, guarded below
             rewritten = ""
-        report["model_calls"] = 1
         if rewritten:
-            reply, report["rewrites"] = rewritten, 1
-            flagged = untraced(reply, turn.evidence)
-    if flagged:
-        report["untraced"] = list(dict.fromkeys(item["text"] for item in flagged))
-        turn.emit("guard", {"untraced": report["untraced"], "action": "notice"})
-        reply = reply.rstrip() + "\n\n" + notice(flagged)
+            reply, again = collapse_repeats(rewritten)
+            repeats += again
+            report["rewrites"] = 1
+            numbers = number_provenance.untraced(reply, turn.evidence)
+            verdicts = verdict_guard.stated_verdicts(reply)
+    tail = []
+    if verdicts:
+        report["verdicts"] = list(dict.fromkeys(item["text"] for item in verdicts))
+        reply = verdict_guard.strike(reply, verdicts)
+        tail.append(verdict_guard.notice(verdicts))
+    if numbers:
+        report["untraced"] = list(dict.fromkeys(item["text"] for item in numbers))
+        tail.append(number_provenance.notice(numbers))
+    if tail:
+        turn.emit("guard", {"untraced": report["untraced"], "verdicts": report["verdicts"], "action": "notice"})
+        reply = reply.rstrip() + "\n\n" + "\n".join(tail)
+    if repeats:
+        report["repeats_dropped"] = repeats
     return reply, report
 
 
@@ -474,7 +523,7 @@ def run_model_agent(text: str, *, session_id: str = "", expert_id: str = "", p0_
         out.update(ok=False, error_code="model_unavailable")
         reply = str(exc)
 
-    provenance: Dict[str, Any] = {"checked": False, "rewrites": 0, "untraced": []}
+    provenance: Dict[str, Any] = {"checked": False, "rewrites": 0, "untraced": [], "verdicts": []}
     if out["ok"] and reply and not out["error_code"]:
         reply, provenance = _guarded(reply, turn, messages, complete)
         model_calls += provenance.pop("model_calls", 0)
