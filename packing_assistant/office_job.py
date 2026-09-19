@@ -13,7 +13,7 @@ import html
 import os
 import re
 from pathlib import Path
-from typing import Any, Dict, List, Tuple
+from typing import Any, Callable, Dict, List, Optional, Sequence, Tuple
 from zipfile import BadZipFile
 from packing_assistant.document_text import csv_text, docx_document_text, table_markdown
 
@@ -343,15 +343,40 @@ def read_job_file(path: Path, limit: int = JOB_FILE_CHARS) -> str:
     return csv_text(text.lstrip("\ufeff"), limit) if suf == ".csv" else text
 
 
+_BLOB_HEADER = "## 作业根文件（授权文件夹，未再上传）"
+
+
+def named_files_blob(paths: Sequence[Path], *, reader: Optional[Callable[[Path, int], str]] = None) -> str:
+    """The same block ``job_files_blob`` builds, for files picked by name (sub-folders and PDFs included)."""
+    chunks: List[str] = []
+    used = 0
+    for path in paths:
+        room = JOB_TOTAL_CHARS - used
+        if room < 80:
+            chunks.append(f"（还有 {path.name} 未贴全文）")
+            continue
+        try:
+            body = (reader or read_job_file)(path, min(JOB_FILE_CHARS, room))
+        except (OSError, RuntimeError, *_OFFICE_CONTENT_ERRORS):
+            chunks.append(f"### {path.name}\n（读失败）")
+            continue
+        block = f"### {path.name}\n{body}"
+        chunks.append(block)
+        used += len(block)
+    return "\n\n".join([_BLOB_HEADER, *chunks]) if chunks else ""
+
+
 def job_files_blob(query: str = "") -> str:
     """Text of job-root files to prepend on run. Prefer names mentioned in query."""
+    if _BLOB_HEADER in (query or ""):
+        return ""   # 资料已经由调用方点名贴进来了（named_files_blob），不再整夹重贴一遍
     files = list_job_files()
     if not files:
         return ""
     q = (query or "").lower()
     named = [f for f in files if f["name"].lower() in q or Path(f["name"]).stem.lower() in q]
     pick = named or files
-    chunks: List[str] = ["## 作业根文件（授权文件夹，未再上传）"]
+    chunks: List[str] = [_BLOB_HEADER]
     used = 0
     for f in pick:
         room = JOB_TOTAL_CHARS - used

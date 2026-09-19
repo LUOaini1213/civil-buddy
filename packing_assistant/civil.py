@@ -5,6 +5,7 @@
   civil "任务"                一次性 exec
   civil exec "任务" | -       非交互执行；- 从标准输入读任务
   civil exec --jsonl "任务"   逐行 JSON 事件流（thread.started → turn.started → item.* → turn.completed）
+  civil --mode model "任务"   模型驱动：模型自己选岗位、读资料、调工具（默认 steps：规则路由，不调模型）
   civil -C <文件夹> ...       把该文件夹当作业文件夹（同 cd 进去再运行）
   civil init                  在当前文件夹写一份 CIVIL.md（本工程说明，相当于 Codex 的 AGENTS.md）
   civil status                作业文件夹、工程说明、sandbox / approval、模型
@@ -46,14 +47,9 @@ def run_task(
             return spawn(text, skill=skill, confirm=confirm, title=text[:40])
         tid = thread_id or new_thread(text[:40], confirm=confirm).thread_id
         return run_on_thread(tid, text, skill=skill, confirm=confirm, background=background)
-    from packing_assistant.runtime.agent_loop import run_agent
+    from packing_assistant.runtime.turn import run_turn
 
-    return run_agent(
-        text,
-        session_id=session_id or "civil-cli",
-        expert_id=skill,
-        p0_confirmed=confirm,
-    )
+    return run_turn(text, session_id=session_id or "civil-cli", skill=skill, confirm=confirm)
 
 
 def list_skills():
@@ -111,9 +107,9 @@ def _print_out(out: dict, *, as_json: bool) -> int:
         how = {"given": "显式", "model": "模型选用"}.get(src, "选用")
         print(f"skill ${eid} · {out.get('expert_name') or eid} · {how}", file=sys.stderr)
     else:
-        print("skill （未选用，路由器）", file=sys.stderr)
+        print("skill （未选用）" if out.get("agent_mode") == "model" else "skill （未选用，路由器）", file=sys.stderr)
     print(
-        f"intent {out.get('intent')} · wrote {out.get('wrote')} · "
+        f"mode {out.get('agent_mode') or 'steps'} · intent {out.get('intent')} · wrote {out.get('wrote')} · "
         f"submit_blocked {out.get('submit_blocked')} · "
         f"sandbox {out.get('sandbox_mode')} · approval {out.get('approval')}",
         file=sys.stderr,
@@ -136,7 +132,10 @@ def codex_event(event: Any) -> Optional[Dict[str, Any]]:
     if kind == "run_started":
         return {"type": "turn.started", **base, "intent": payload.get("intent"), "skill": payload.get("expert_id") or ""}
     if kind == "tool_call":
-        return {"type": "item.started", **base, "item": {"type": "tool_call", "name": payload.get("name")}}
+        item = {"type": "tool_call", "name": payload.get("name")}
+        if payload.get("arguments"):
+            item["arguments"] = payload["arguments"]
+        return {"type": "item.started", **base, "item": item}
     if kind == "tool_result":
         return {"type": "item.completed", **base, "item": {"type": "tool_call", **payload}}
     if kind == "hitl":
@@ -154,6 +153,44 @@ def codex_event(event: Any) -> Optional[Dict[str, Any]]:
     return None
 
 
+def progress_line(event: Any) -> str:
+    """One bus event as one short human line (exec prints these to stderr, the TUI inline)."""
+    payload = dict(getattr(event, "payload", None) or {})
+    kind = getattr(event, "type", "")
+    if kind == "plan":
+        marks = {"done": "x", "in_progress": ">", "pending": " "}
+        return "\n".join(f"  [{marks.get(row.get('status'), ' ')}] {row.get('step')}" for row in payload.get("steps") or [])
+    if kind == "skill_loaded":
+        return f"  skill ${payload.get('id')} · {payload.get('name')}"
+    if kind == "tool_call":
+        arguments = payload.get("arguments") or {}
+        brief = " ".join(str(value) for value in arguments.values() if isinstance(value, (str, int, float)))[:60]
+        return f"  -> {payload.get('name')}" + (f" {brief}" if brief else "")
+    if kind == "tool_result" and not payload.get("ok", True):
+        return f"  !! {payload.get('name')}: {payload.get('error_code')}"
+    if kind == "hitl":
+        return f"  approval 高风险写盘须确认句：{CONFIRM}"
+    if kind == "guard":
+        return "  guard 无出处的数字：" + "、".join(payload.get("untraced") or [])
+    return ""
+
+
+def with_progress(run, write) -> Dict[str, Any]:
+    """Run a turn while ``write(line)`` receives each progress line as it happens."""
+    from packing_assistant.runtime.bus import get_bus
+
+    def forward(event: Any) -> None:
+        line = progress_line(event)
+        if line:
+            write(line)
+
+    unsubscribe = get_bus().subscribe(forward)
+    try:
+        return run()
+    finally:
+        unsubscribe()
+
+
 def _emit(line: Dict[str, Any]) -> None:
     print(json.dumps(line, ensure_ascii=False, default=str), flush=True)
 
@@ -165,10 +202,21 @@ def run_jsonl(run, *, thread_id: str = "", last_message_file: str = "") -> int:
 
     _emit({"type": "thread.started", "thread_id": thread_id, "job_root": str(active() or "")})
 
+    root: List[str] = []
+
     def forward(event: Any) -> None:
         line = codex_event(event)
-        if line:
-            _emit(line)
+        if not line:
+            return
+        # 模型驱动的一轮里，run_skill 会在内部再跑一遍确定性流程（它有自己的 run_id）。
+        # 对读事件流的人来说那是这一轮里的一步，不是又一轮：不再报 turn.started，其余标 nested。
+        if not root:
+            root.append(line["run_id"])
+        elif line["run_id"] != root[0]:
+            if line["type"] == "turn.started":
+                return
+            line["nested"] = True
+        _emit(line)
 
     unsubscribe = get_bus().subscribe(forward)
     try:
@@ -192,8 +240,9 @@ def run_jsonl(run, *, thread_id: str = "", last_message_file: str = "") -> int:
         "files": [display_path(p) for p in _file_paths(out)],
         "reply": out.get("reply") or "",
     }
-    if out.get("provenance"):
-        done["provenance"] = out["provenance"]
+    for key in ("provenance", "plan", "usage", "mode_notice"):
+        if out.get(key):
+            done[key] = out[key]
     if last_message_file:
         Path(last_message_file).write_text(done["reply"], encoding="utf-8")
     _emit(done)
@@ -236,7 +285,10 @@ def status_text() -> str:
     from packing_assistant.runtime.civil_config import load_config
     from packing_assistant.runtime.workspace import describe
 
+    from packing_assistant.runtime.turn import resolve_mode
+
     cfg, space, llm = load_config(), describe(), llm_config()
+    running, why = resolve_mode()
     lines = [
         f"job      {space['job_root'] or '（未进入作业文件夹；civil init 或 civil -C <文件夹>）'}",
         f"state    {space['state_root'] or '仓库 demo/out'}",
@@ -247,8 +299,12 @@ def status_text() -> str:
     lines += [
         f"sandbox  {cfg.sandbox}",
         f"approval {cfg.approval}",
-        f"model    {llm['model']} @ {llm['base_url']}" + ("" if llm.get("api_key") else "  （未配置 Key：走确定性 steps 路径）"),
+        f"mode     {cfg.agent_mode}" + (f" → {running}" if running != cfg.agent_mode else "")
+        + "  （steps 规则路由不调模型 · model 模型驱动 · auto 有模型就用；--mode / /mode / CIVIL_AGENT_MODE）",
+        f"model    {llm['model']} @ {llm['base_url']}" + ("" if llm.get("api_key") else "  （未配置 Key）"),
     ]
+    if why:
+        lines.append("         " + why)
     return "\n".join(lines)
 
 
@@ -263,6 +319,7 @@ def _common(p: argparse.ArgumentParser) -> None:
     p.add_argument("--json", action="store_true", help="结束后打印完整结果（一个 JSON）")
     p.add_argument("--jsonl", action="store_true", help="逐行 JSON 事件流")
     p.add_argument("--output-last-message", "-o", default="", metavar="FILE", help="把最终回复另存到文件")
+    p.add_argument("--mode", default="", help="steps | model | auto")
     p.add_argument("--sandbox", default="", help="read-only | workspace-write")
     p.add_argument("--approval", default="", help="untrusted | on-request | never")
     p.add_argument("--list-skills", action="store_true")
@@ -273,6 +330,10 @@ def _common(p: argparse.ArgumentParser) -> None:
     p.add_argument("rest", nargs="*", help="任务或 resume 的 thread id")
 
 
+def _stderr(line: str) -> None:
+    print(line, file=sys.stderr, flush=True)
+
+
 def _finish(out: Dict[str, Any], args: argparse.Namespace) -> int:
     if args.output_last_message:
         Path(args.output_last_message).write_text(str(out.get("reply") or ""), encoding="utf-8")
@@ -280,7 +341,7 @@ def _finish(out: Dict[str, Any], args: argparse.Namespace) -> int:
 
 
 _VALUE_OPTIONS = frozenset({"--cd", "-C", "--skill", "-s", "--session", "--thread", "--output-last-message", "-o",
-                            "--sandbox", "--approval", "--port", "--pack", "--expert"})
+                            "--sandbox", "--approval", "--port", "--pack", "--expert", "--mode"})
 
 
 def split_verb(argv: List[str]) -> tuple[str, List[str]]:
@@ -308,6 +369,8 @@ def main(argv: Optional[List[str]] = None) -> int:
         os.environ["CIVIL_SANDBOX"] = args.sandbox
     if args.approval:
         os.environ["CIVIL_APPROVAL"] = args.approval
+    if args.mode:
+        os.environ["CIVIL_AGENT_MODE"] = args.mode
     try:
         enter_workspace(args.cd)
     except (OSError, PermissionError) as exc:
@@ -361,10 +424,12 @@ def main(argv: Optional[List[str]] = None) -> int:
         else:
             print("civil resume <thread_id> [任务]  或  civil resume --last [任务]", file=sys.stderr)
             return 2
+        def resumed() -> Dict[str, Any]:
+            return run_on_thread(tid, task, skill=args.skill, confirm=args.confirm)
+
         if args.jsonl:
-            return run_jsonl(lambda: run_on_thread(tid, task, skill=args.skill, confirm=args.confirm), thread_id=tid,
-                             last_message_file=args.output_last_message)
-        return _finish(run_on_thread(tid, task, skill=args.skill, confirm=args.confirm), args)
+            return run_jsonl(resumed, thread_id=tid, last_message_file=args.output_last_message)
+        return _finish(resumed() if args.json else with_progress(resumed, _stderr), args)
 
     text = " ".join(rest).strip()
     if text == "-":
@@ -392,7 +457,7 @@ def main(argv: Optional[List[str]] = None) -> int:
 
     if args.jsonl:
         return run_jsonl(turn, thread_id=args.thread, last_message_file=args.output_last_message)
-    return _finish(turn(), args)
+    return _finish(turn() if args.json else with_progress(turn, _stderr), args)
 
 
 if __name__ == "__main__":
