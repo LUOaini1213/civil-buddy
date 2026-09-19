@@ -19,6 +19,9 @@ APPROVAL_MODES = ("untrusted", "on-request", "never")
 # steps: 规则路由 + 确定性流程，不调模型（默认）。model: 模型驱动的循环（runtime/model_loop.py）。
 # auto: 配了模型就用 model，没配或连不上就回到 steps。
 AGENT_MODES = ("steps", "model", "auto")
+# app: 应用层写根与密钥拒读（默认）。os: 工具在被内核限制的工作进程里跑（runtime/os_sandbox），启用不了就拒绝。
+# auto: 本机内核支持且在作业文件夹里就用 os，否则 app，并说明原因。
+SANDBOX_BACKENDS = ("app", "os", "auto")
 
 
 @dataclass
@@ -30,6 +33,7 @@ class CivilConfig:
     model: str = ""
     job_root: str = ""
     agent_mode: str = "steps"
+    sandbox_backend: str = "app"
 
     def allow_write(self) -> bool:
         return self.sandbox == "workspace-write"
@@ -104,6 +108,8 @@ def _apply_map(cfg: CivilConfig, kv: Dict[str, str]) -> None:
         cfg.model = kv["model"]
     if "agent_mode" in kv:
         cfg.agent_mode = _strip_mode(kv["agent_mode"], AGENT_MODES, cfg.agent_mode)
+    if "sandbox_backend" in kv:
+        cfg.sandbox_backend = _strip_mode(kv["sandbox_backend"], SANDBOX_BACKENDS, cfg.sandbox_backend)
     if kv.get("job_root"):
         cfg.job_root = kv["job_root"]
     if kv.get("workspace.job_root"):
@@ -140,6 +146,8 @@ def load_config() -> CivilConfig:
         cfg.job_root = os.environ["CIVIL_JOB_ROOT"]
     if os.environ.get("CIVIL_AGENT_MODE"):
         cfg.agent_mode = _strip_mode(os.environ["CIVIL_AGENT_MODE"], AGENT_MODES, cfg.agent_mode)
+    if os.environ.get("CIVIL_SANDBOX_BACKEND"):
+        cfg.sandbox_backend = _strip_mode(os.environ["CIVIL_SANDBOX_BACKEND"], SANDBOX_BACKENDS, cfg.sandbox_backend)
     return cfg
 
 

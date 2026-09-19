@@ -73,6 +73,9 @@ TOOLS: List[Dict[str, Any]] = [
           {"tender_file": _TEXT, "response_file": _TEXT}, ["tender_file", "response_file"]),
 ]
 TOOL_NAMES = {t["function"]["name"] for t in TOOLS}
+#: 解析用户文件或写盘的工具。系统级沙箱开着时，它们在被内核限制的工作进程里执行（runtime/os_sandbox）；
+#: 模型对话本身留在宿主进程——它需要网络，工作进程没有。
+CONFINED_TOOLS = frozenset({"read_job_file", "run_skill", "pack_plan", "tender_compare"})
 
 SYSTEM = """你是 Civil Buddy（土木版 Codex）：在用户的工地文件夹里，替土木工程师把事情办完的 agent。
 
@@ -362,6 +365,29 @@ _DISPATCH: Dict[str, Callable[[_Turn, Dict[str, Any]], Dict[str, Any]]] = {
 # the loop
 # ---------------------------------------------------------------------------
 
+def _dispatch(turn: _Turn, name: str, arguments: Dict[str, Any], worker: Any) -> Dict[str, Any]:
+    if worker is None or name not in CONFINED_TOOLS:
+        return _DISPATCH[name](turn, arguments)
+
+    def once() -> Dict[str, Any]:
+        reply = worker.call("model_tool", name=name, arguments=arguments, session_id=turn.session_id, run_id=turn.run_id,
+                            user_text=turn.user_text, confirmed=turn.confirmed)["out"]
+        return reply if isinstance(reply.get("result"), dict) else {"result": {"ok": False, "error_code": "worker_failed",
+                                                                                "reason": str(reply.get("reply") or reply)[:300]}}
+
+    reply = once()
+    if reply["result"].get("error_code") == "approval_required" and turn.approve is not None:
+        exp = _expert(arguments.get("skill_id")) if arguments.get("skill_id") else None
+        request = {"name": exp.name if exp else name, "risk": reply["result"].get("risk") or "high", "confirm_sentence": CONFIRM}
+        if turn.approve(request):       # the question is asked here, in the host; the worker has no terminal
+            turn.confirmed = True
+            reply = once()
+    turn.add_files(reply.get("files"))
+    turn.skill = str(reply.get("skill") or turn.skill)
+    turn.hitl_pending = bool(reply.get("hitl_pending")) and reply["result"].get("error_code") == "approval_required"
+    return reply["result"]
+
+
 def system_prompt(context_prefix: str = "") -> str:
     from packing_assistant.runtime.expert_skills import catalog_preamble
     from packing_assistant.runtime.project_instructions import load
@@ -446,7 +472,7 @@ def _guarded(reply: str, turn: _Turn, messages: List[Dict[str, Any]], complete: 
 def run_model_agent(text: str, *, session_id: str = "", expert_id: str = "", p0_confirmed: bool = False,
                     history: Optional[List[Dict[str, str]]] = None, complete: Optional[Complete] = None,
                     approve: Optional[Approve] = None, max_steps: int = MAX_STEPS,
-                    cancel_event: Any = None) -> Dict[str, Any]:
+                    cancel_event: Any = None, worker: Any = None) -> Dict[str, Any]:
     from packing_assistant.runtime.agent_loop import _scrub
     from packing_assistant.runtime.civil_config import load_config
     from packing_assistant.runtime.expert_skills import skill_body
@@ -506,7 +532,7 @@ def run_model_agent(text: str, *, session_id: str = "", expert_id: str = "", p0_
                     result = {"ok": False, "error_code": "repeated_call", "reason": "和上一步完全相同的调用。换一种做法，或者直接回答用户。"}
                 else:
                     try:
-                        result = _DISPATCH[name](turn, arguments)
+                        result = _dispatch(turn, name, arguments, worker)
                     except Exception as exc:  # noqa: BLE001 - a tool failure is a result the model can react to
                         result = {"ok": False, "error_code": "tool_failed", "reason": f"{type(exc).__name__}: {str(exc)[:200]}"}
                 last_call = signature

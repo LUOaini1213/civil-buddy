@@ -203,6 +203,26 @@ def _remember_export(path: Path) -> None:
         pass    # the copy is still written; at worst it is listed as material until the next export
 
 
+def publish_root_copy(workbook: Path) -> Optional[Path]:
+    """Host side of the OS sandbox: the confined worker cannot write in the job folder itself, so the
+    copy of a draft's workbook that normally lands next to the user's files is made here, by the same
+    rules — never over a file we did not write, and remembered so it is not read back as material."""
+    import shutil
+
+    source = Path(workbook)
+    if not job_root_granted() or source.suffix.lower() != ".xlsx" or not source.is_file():
+        return None
+    dest = job_root() / source.name
+    try:
+        if dest.resolve() == source.resolve() or (dest.exists() and dest.name not in own_exports()):
+            return None
+        shutil.copyfile(source, dest)
+    except OSError:
+        return None
+    _remember_export(dest)
+    return dest
+
+
 def export_md_to_xlsx(md_path: Path, query: str = "") -> List[Path]:
     """Sibling xlsx always. If the user named a job-root workbook, patch it too."""
     p = Path(md_path)

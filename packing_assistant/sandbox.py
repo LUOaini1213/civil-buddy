@@ -1,8 +1,11 @@
 """Application-level sandbox: path + spawn policy.
 
-Not a kernel jail (Windows has no Landlock/Seatbelt here). Writes and
-agent-initiated opens stay inside allowed roots; .env / secret / key paths
-are denied; generic spawn stays blocked.
+Not a kernel jail: it holds for code that asks it. Writes and agent-initiated
+opens stay inside allowed roots; .env / secret / key paths are denied; generic
+spawn stays blocked. The kernel-enforced counterpart — a worker process that
+confines itself with Landlock + seccomp (Linux) or Low integrity + a job object
+(Windows) — is packing_assistant/runtime/os_sandbox; this layer keeps running
+inside it, and is the only one that refuses to *read* secrets.
 """
 
 from __future__ import annotations

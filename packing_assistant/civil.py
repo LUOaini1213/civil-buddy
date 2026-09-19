@@ -10,6 +10,8 @@
   civil init                  在当前文件夹写一份 CIVIL.md（本工程说明，相当于 Codex 的 AGENTS.md）
   civil status                作业文件夹、工程说明、sandbox / approval、模型
   civil review <文稿>         不调模型：文稿里的数字在工地资料里有没有出处、有没有不该下的结论
+  civil sandbox               系统级沙箱：本机内核能限制什么，并起一个受限进程当场自检
+  civil --sandbox-backend os  工具在被内核限制的进程里跑（只能写 .civil-buddy/out，不能起进程；Linux 上也不能联网）
   civil app                   打开工作台应用
   civil mcp --pack bid        IDE stdio MCP
   civil serve                 JSON-RPC app-server（土木 harness，不是官方 Codex 二进制）
@@ -29,7 +31,7 @@ from pathlib import Path
 from typing import Any, Dict, List, Optional
 
 CONFIRM = "我明白，将由持证人员签认"
-VERBS = ("tui", "exec", "app", "mcp", "serve", "skills", "resume", "help", "init", "status", "review")
+VERBS = ("tui", "exec", "app", "mcp", "serve", "skills", "resume", "help", "init", "status", "review", "sandbox")
 
 
 def run_task(
@@ -109,10 +111,11 @@ def _print_out(out: dict, *, as_json: bool) -> int:
         print(f"skill ${eid} · {out.get('expert_name') or eid} · {how}", file=sys.stderr)
     else:
         print("skill （未选用）" if out.get("agent_mode") == "model" else "skill （未选用，路由器）", file=sys.stderr)
+    kernel = (out.get("sandbox_backend") or {}).get("backend") or "app"
     print(
         f"mode {out.get('agent_mode') or 'steps'} · intent {out.get('intent')} · wrote {out.get('wrote')} · "
         f"submit_blocked {out.get('submit_blocked')} · "
-        f"sandbox {out.get('sandbox_mode')} · approval {out.get('approval')}",
+        f"sandbox {out.get('sandbox_mode')}" + (f" + {kernel}" if kernel != "app" else "") + f" · approval {out.get('approval')}",
         file=sys.stderr,
     )
     if out.get("hitl_pending"):
@@ -301,6 +304,7 @@ def status_text() -> str:
         lines.append("slots    " + " · ".join(f"{k}={v}" for k, v in space["slots"].items()))
     lines += [
         f"sandbox  {cfg.sandbox}",
+        sandbox_text()[0],
         f"approval {cfg.approval}",
         f"mode     {cfg.agent_mode}" + (f" → {running}" if running != cfg.agent_mode else "")
         + "  （steps 规则路由不调模型 · model 模型驱动 · auto 有模型就用；--mode / /mode / CIVIL_AGENT_MODE）",
@@ -309,6 +313,44 @@ def status_text() -> str:
     if why:
         lines.append("         " + why)
     return "\n".join(lines)
+
+
+_MARK = {True: "由内核限制", False: "未由内核限制"}
+
+
+def sandbox_text(*, live: bool = False) -> tuple[str, int]:
+    """What `civil sandbox` prints, and its exit code: 0 only when a confined worker proved itself."""
+    from packing_assistant.runtime import os_sandbox
+    from packing_assistant.runtime.workspace import active
+
+    found = os_sandbox.describe()
+    kernel = found["kernel"]
+    lines = [f"backend  {found['asked']} → {found['running']}" + (f"  （{found['why']}）" if found["why"] else ""),
+             f"kernel   {kernel['backend']}" + ("" if kernel["available"] else "  （不可用）"),
+             "         " + " · ".join(f"{label} {_MARK[bool(kernel['enforces'][key])]}" for key, label in
+                                      (("write", "写入"), ("spawn", "起进程"), ("network", "网络")))]
+    if kernel.get("reason"):
+        lines.append("         " + kernel["reason"])
+    if not live:
+        return "\n".join(lines), 0
+    job = active()
+    if job is None or not (kernel["available"] and kernel["enforces"]["write"]):
+        lines.append("selftest 未运行：" + ("需要作业文件夹（civil init 或 -C）" if job is None else "本机内核无法限制写入"))
+        return "\n".join(lines), 1
+    try:
+        with os_sandbox.Worker(job) as worker:
+            checks = worker.call("selftest")["out"]
+    except (os_sandbox.WorkerError, OSError) as exc:
+        lines.append("selftest 工作进程没有进入受限状态：" + str(exc))
+        return "\n".join(lines), 1
+    wording = {"write_inside_state": "写 .civil-buddy/out", "write_job_folder": "写作业文件夹本身", "write_home": "写用户目录",
+               "write_system_temp": "写系统临时目录", "spawn_process": "起子进程", "inet_socket": "建 inet 套接字"}
+    lines.append("selftest（受限进程里当场试，答案来自操作系统）")
+    lines += [f"         {wording[key]:<18} {value}" for key, value in checks.items()]
+    if not kernel["enforces"]["network"]:
+        lines.append("         （本平台的网络拒绝只在应用层，不是内核）")
+    held = checks["write_inside_state"] == "allowed" and all(checks[k] == "denied" for k in ("write_job_folder", "write_home", "write_system_temp"))
+    return "\n".join(lines), 0 if held else 1
 
 
 def _common(p: argparse.ArgumentParser) -> None:
@@ -323,6 +365,7 @@ def _common(p: argparse.ArgumentParser) -> None:
     p.add_argument("--jsonl", action="store_true", help="逐行 JSON 事件流")
     p.add_argument("--output-last-message", "-o", default="", metavar="FILE", help="把最终回复另存到文件")
     p.add_argument("--mode", default="", help="steps | model | auto")
+    p.add_argument("--sandbox-backend", default="", help="app | os | auto")
     p.add_argument("--sandbox", default="", help="read-only | workspace-write")
     p.add_argument("--approval", default="", help="untrusted | on-request | never")
     p.add_argument("--list-skills", action="store_true")
@@ -344,7 +387,7 @@ def _finish(out: Dict[str, Any], args: argparse.Namespace) -> int:
 
 
 _VALUE_OPTIONS = frozenset({"--cd", "-C", "--skill", "-s", "--session", "--thread", "--output-last-message", "-o",
-                            "--sandbox", "--approval", "--port", "--pack", "--expert", "--mode"})
+                            "--sandbox", "--approval", "--port", "--pack", "--expert", "--mode", "--sandbox-backend"})
 
 
 def split_verb(argv: List[str]) -> tuple[str, List[str]]:
@@ -374,6 +417,8 @@ def main(argv: Optional[List[str]] = None) -> int:
         os.environ["CIVIL_APPROVAL"] = args.approval
     if args.mode:
         os.environ["CIVIL_AGENT_MODE"] = args.mode
+    if args.sandbox_backend:
+        os.environ["CIVIL_SANDBOX_BACKEND"] = args.sandbox_backend
     try:
         enter_workspace(args.cd)
     except (OSError, PermissionError) as exc:
@@ -400,6 +445,10 @@ def main(argv: Optional[List[str]] = None) -> int:
     if verb == "status":
         print(status_text())
         return 0
+    if verb == "sandbox":
+        text, code = sandbox_text(live=True)
+        print(text)
+        return code
     if verb == "review":
         from packing_assistant.runtime.review import review_file
 
