@@ -1,0 +1,8 @@
+{
+  "fields": [
+    {"key": "to", "label": "致", "aliases": ["发给", "收件单位"], "required": true},
+    {"key": "subject", "label": "事由", "aliases": ["主题"], "required": true},
+    {"key": "basis", "label": "依据"},
+    {"key": "request", "label": "请求事项", "aliases": ["请求"], "required": true}
+  ]
+}

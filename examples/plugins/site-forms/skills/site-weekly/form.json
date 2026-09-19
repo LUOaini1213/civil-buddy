@@ -1,0 +1,9 @@
+{
+  "fields": [
+    {"key": "week", "label": "周次", "aliases": ["周期"], "required": true},
+    {"key": "location", "label": "部位", "aliases": ["位置", "作业面"]},
+    {"key": "done", "label": "本周完成", "aliases": ["完成情况"], "required": true},
+    {"key": "plan", "label": "下周计划"},
+    {"key": "issues", "label": "需协调事项", "aliases": ["协调事项", "问题"]}
+  ]
+}

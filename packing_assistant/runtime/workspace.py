@@ -63,6 +63,12 @@ def active() -> Optional[Path]:
     return _ACTIVE
 
 
+def _forget_plugins() -> None:
+    from packing_assistant.runtime import plugins
+
+    plugins.reload()        # a job folder may carry its own plugins: the roster is rebuilt when the folder changes
+
+
 def activate(job: Path) -> Path:
     """Make ``job`` the working folder of this process. Idempotent; raises on a forbidden path."""
     from packing_assistant.office_job import is_forbidden_layout
@@ -86,6 +92,7 @@ def activate(job: Path) -> Path:
     _ORIGINAL_ENV["CIVIL_JOB_ROOT"] = os.environ.get("CIVIL_JOB_ROOT")
     os.environ["CIVIL_JOB_ROOT"] = str(job)
     _ACTIVE = job
+    _forget_plugins()
     return job
 
 
@@ -102,6 +109,7 @@ def deactivate() -> None:
             os.environ[key] = value
     _ORIGINAL_ENV.clear()
     _ACTIVE = None
+    _forget_plugins()
 
 
 def describe() -> Dict[str, Any]:

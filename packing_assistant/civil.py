@@ -11,6 +11,8 @@
   civil status                作业文件夹、工程说明、sandbox / approval、模型
   civil review <文稿>         不调模型：文稿里的数字在工地资料里有没有出处、有没有不该下的结论
   civil sandbox               系统级沙箱：本机内核能限制什么，并起一个受限进程当场自检
+  civil plugin list | validate <目录> | install <目录或.zip> [--job] | remove <名> | trust <名> | untrust <名>
+                              插件：自己公司的岗位（SOP + 表单模板 + 知识），纯声明、不含代码
   civil --sandbox-backend os  工具在被内核限制的进程里跑（只能写 .civil-buddy/out，不能起进程；Linux 上也不能联网）
   civil app                   打开工作台应用
   civil mcp --pack bid        IDE stdio MCP
@@ -31,7 +33,7 @@ from pathlib import Path
 from typing import Any, Dict, List, Optional
 
 CONFIRM = "我明白，将由持证人员签认"
-VERBS = ("tui", "exec", "app", "mcp", "serve", "skills", "resume", "help", "init", "status", "review", "sandbox")
+VERBS = ("tui", "exec", "app", "mcp", "serve", "skills", "resume", "help", "init", "status", "review", "sandbox", "plugin")
 
 
 def run_task(
@@ -312,6 +314,7 @@ def status_text() -> str:
     ]
     if why:
         lines.append("         " + why)
+    lines += ["plugin   " + line for line in plugin_lines()]
     return "\n".join(lines)
 
 
@@ -353,6 +356,54 @@ def sandbox_text(*, live: bool = False) -> tuple[str, int]:
     return "\n".join(lines), 0 if held else 1
 
 
+def plugin_lines() -> List[str]:
+    from packing_assistant.runtime import plugins
+
+    lines = []
+    for plugin in plugins.installed():
+        trust = "已信任" if plugin.trusted else "未信任：岗位一律按高风险，写盘要确认句"
+        lines.append(f"{plugin.name} {plugin.manifest.get('version') or ''} · {plugin.scope} · {trust} · "
+                     + "、".join(f"${s.id}" for s in plugin.skills))
+        lines += ["    ! " + warning for warning in plugin.warnings]
+    lines += ["  x " + problem for problem in plugins.problems()]
+    return lines
+
+
+def cmd_plugin(rest: List[str], *, job_scope: bool) -> int:
+    from packing_assistant.runtime import plugins
+
+    action, target = (rest[0] if rest else "list"), (" ".join(rest[1:]).strip() if len(rest) > 1 else "")
+    try:
+        if action == "list":
+            print("\n".join(plugin_lines()) or "还没有安装插件。civil plugin install <目录或 .zip>")
+            return 0
+        if not target:
+            print("civil plugin " + action + " <名称或路径>", file=sys.stderr)
+            return 2
+        if action == "validate":
+            plugin = plugins.read_plugin(Path(target))
+            print(f"{plugin.name}：{len(plugin.skills)} 个技能，格式有效。" + "".join("\n  ! " + w for w in plugin.warnings))
+            return 0
+        if action == "install":
+            plugin = plugins.install(Path(target), scope="job" if job_scope else "user")
+            print(f"已安装 {plugin.name}（{plugin.scope}）：" + "、".join(f"${s.id}" for s in plugin.skills)
+                  + "\n未信任：它的岗位一律按高风险处理。看过内容后可 civil plugin trust " + plugin.name
+                  + "".join("\n  ! " + w for w in plugin.warnings))
+            return 0
+        if action == "remove":
+            print("已移除 " + target if plugins.remove(target) else "没有安装 " + target)
+            return 0
+        if action in {"trust", "untrust"}:
+            plugin = plugins.set_trust(target, action == "trust")
+            print(f"{plugin.name}：" + ("已信任，按它自己标的风险级别执行（改动插件内容后信任自动失效）。" if plugin.trusted else "已取消信任。"))
+            return 0
+    except plugins.PluginError as exc:
+        print("插件无效：" + str(exc), file=sys.stderr)
+        return 1
+    print("civil plugin list | validate | install | remove | trust | untrust", file=sys.stderr)
+    return 2
+
+
 def _common(p: argparse.ArgumentParser) -> None:
     p.add_argument("--cd", "-C", default="", metavar="DIR", help="作业文件夹（默认：当前目录向上最近的 CIVIL.md）")
     p.add_argument("--skill", "-s", default="", help="强制 skill id")
@@ -361,6 +412,7 @@ def _common(p: argparse.ArgumentParser) -> None:
     p.add_argument("--thread", default="")
     p.add_argument("--last", action="store_true", help="resume：接着最近一个 thread")
     p.add_argument("--bg", action="store_true")
+    p.add_argument("--job", action="store_true", help="plugin install：装进当前作业文件夹，随文件夹走")
     p.add_argument("--json", action="store_true", help="结束后打印完整结果（一个 JSON）")
     p.add_argument("--jsonl", action="store_true", help="逐行 JSON 事件流")
     p.add_argument("--output-last-message", "-o", default="", metavar="FILE", help="把最终回复另存到文件")
@@ -410,7 +462,7 @@ def main(argv: Optional[List[str]] = None) -> int:
     verb, argv = split_verb(list(sys.argv[1:] if argv is None else argv))
     p = argparse.ArgumentParser(prog="civil", add_help=True)
     _common(p)
-    args = p.parse_args(argv)
+    args = p.parse_intermixed_args(argv)      # `civil plugin install --job <dir>`: options may sit between the words
     if args.sandbox:
         os.environ["CIVIL_SANDBOX"] = args.sandbox
     if args.approval:
@@ -449,6 +501,8 @@ def main(argv: Optional[List[str]] = None) -> int:
         text, code = sandbox_text(live=True)
         print(text)
         return code
+    if verb == "plugin":
+        return cmd_plugin(rest, job_scope=args.job)
     if verb == "review":
         from packing_assistant.runtime.review import review_file
 

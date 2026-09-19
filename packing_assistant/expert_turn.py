@@ -32,6 +32,11 @@ def _kb_snip(expert: ExpertRec, query: str, limit: int = 900) -> str:
         _ROOT / "demo" / "kb" / expert.category / expert.id / "web-knowledge.md",
         _ROOT / "demo" / "kb" / expert.category / "_shared" / "web-knowledge.md",
     ]
+    if expert.category == "plugin":
+        from packing_assistant.runtime import plugins
+
+        item = plugins.skill(expert.id)
+        paths = [item.knowledge] if item and item.knowledge else []
     chunks: List[str] = []
     q = (query or "").strip()
     for p in paths:
