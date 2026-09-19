@@ -172,7 +172,9 @@ def progress_line(event: Any) -> str:
     if kind == "hitl":
         return f"  approval 高风险写盘须确认句：{CONFIRM}"
     if kind == "guard":
-        return "  guard 无出处的数字：" + "、".join(payload.get("untraced") or [])
+        parts = [label + "、".join(payload.get(key) or []) for key, label in (("untraced", "无出处的数字："), ("verdicts", "不该下的结论："))
+                 if payload.get(key)]
+        return "  guard " + "；".join(parts) if parts else ""
     return ""
 
 

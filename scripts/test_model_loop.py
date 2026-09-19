@@ -110,7 +110,7 @@ class RoutingTests(JobFolderCase):
         self.assertEqual((out["agent_mode"], out["skill"], out["skill_source"]), ("model", "pm-daily", "model"))
         self.assertEqual(out["tools_run"], ["update_plan", "load_skill", "list_job_files", "read_job_file", "run_skill"])
         self.assertTrue(out["wrote"] and out["submit_blocked"])
-        self.assertEqual(out["provenance"], {"checked": True, "rewrites": 0, "untraced": []})
+        self.assertEqual(out["provenance"], {"checked": True, "rewrites": 0, "untraced": [], "verdicts": []})
         self.assertEqual([row["status"] for row in out["plan"]], ["in_progress", "pending"])
         self.assertEqual(out["usage"], {"model_calls": 6, "tool_calls": 5})
 
@@ -150,7 +150,7 @@ class ProvenanceTests(JobFolderCase):
     def test_an_invented_number_gets_one_rewrite(self):
         script = Script("日报信息已收到：钢筋工12人。预计明天需要 25 人，费用约 3200 元。", "日报信息已收到：钢筋工12人。明日人数与费用待填 [A001]。")
         out = model_loop.run_model_agent(TASK, session_id="civil-cli", complete=script)
-        self.assertEqual(out["provenance"], {"checked": True, "rewrites": 1, "untraced": []})
+        self.assertEqual(out["provenance"], {"checked": True, "rewrites": 1, "untraced": [], "verdicts": []})
         self.assertEqual(out["usage"]["model_calls"], 2)      # the rewrite is a model call too
         self.assertNotIn("3200", out["reply"])
         asked = script.seen[1]["messages"][-1]["content"]
@@ -166,6 +166,45 @@ class ProvenanceTests(JobFolderCase):
         self.assertEqual(out["provenance"]["untraced"], ["5 个柜"])
         self.assertIn("⚠", out["reply"])
         self.assertIn("5 个柜", out["reply"].split("⚠", 1)[1])
+
+    def test_a_verdict_gets_the_same_rewrite_and_is_struck_if_it_survives(self):
+        # both sentences are verbatim from a live qwen2.5:3b run (2026-09-19)
+        booked = "packing.csv 这份装箱单可以装在一个 40HQ 的柜子里。所有约束条件都满足，可以订舱。"
+        script = Script([("pack_plan", {"file": "资料/packing.csv"})], booked, "引擎按 packing.csv 算出 1 个 40HQ；是否订舱由你们和货代决定。")
+        out = model_loop.run_model_agent("packing.csv 要几个 40HQ", session_id="civil-cli", complete=script)
+        self.assertEqual(out["provenance"], {"checked": True, "rewrites": 1, "untraced": [], "verdicts": []})
+        self.assertIn("可以订舱", script.seen[2]["messages"][-1]["content"])
+        self.assertIn("结论不由你下", script.seen[2]["messages"][-1]["content"])
+        self.assertNotIn("可以订舱", out["reply"])
+
+        compliant = "响应文件中的投标保证金为人民币 20 万元，符合招标文件的要求。"
+        stubborn = Script([("tender_compare", {"tender_file": "tender.txt", "response_file": "response.txt"})], compliant, compliant)
+        out = model_loop.run_model_agent("对照招标和响应", session_id="civil-cli", complete=stubborn)
+        self.assertEqual(out["provenance"]["verdicts"], ["符合招标文件的要求"])
+        body, warning = out["reply"].split("⚠", 1)
+        self.assertNotIn("符合招标文件的要求", body)
+        self.assertIn("此处结论不由本系统判定", body)
+        self.assertIn("20 万元", body)                                   # the traced number stays
+        self.assertIn("符合招标文件的要求", warning)
+        guards = [e["payload"] for e in out["events"] if e["type"] == "guard"]
+        self.assertEqual([(g["action"], g["verdicts"]) for g in guards],
+                         [("rewrite", ["符合招标文件的要求"]), ("notice", ["符合招标文件的要求"])])
+
+    def test_a_reply_stuck_in_a_loop_is_collapsed(self):
+        # verbatim shape of a live qwen2.5:3b rewrite: one sentence repeated up to the token limit
+        looped = "引擎按 packing.csv 算出方案，明细见 pack-plan.md。" + "订舱后，由用户确认系固方案并完成订舱手续。" * 40 + "订舱后，由用户确认系固方案并完成订舱"
+        out = model_loop.run_model_agent("总结一下", session_id="civil-cli", complete=Script(looped))
+        self.assertEqual(out["reply"].count("订舱后，由用户确认系固方案并完成订舱手续。"), 1)
+        self.assertEqual(out["provenance"]["repeats_dropped"], 39)
+        self.assertLess(len(out["reply"]), 120)
+        text, dropped = model_loop.collapse_repeats("一、核对质保书。\n二、外观检查。\n三、见证取样。\n待填。\n待填。\n")
+        self.assertEqual((dropped, text.count("待填。")), (0, 2))          # short repeated cells are not a loop
+
+    def test_disclaiming_a_verdict_is_not_stating_it(self):
+        reply = "装柜明细见 pack-plan.md。内部草稿，不可直接订舱；是否满足招标要求也不由我判断。"
+        script = Script(reply)
+        out = model_loop.run_model_agent("总结一下", session_id="civil-cli", complete=script)
+        self.assertEqual((out["reply"], out["provenance"]["rewrites"], len(script.seen)), (reply, 0, 1))
 
     def test_engine_numbers_pass_and_a_changed_one_does_not(self):
         def honest(messages):

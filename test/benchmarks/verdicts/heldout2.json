@@ -1,0 +1,27 @@
+{
+  "schema": "civil.verdicts.bench.v1",
+  "note": "Round 2, held out: written on 2026-09-19 after the sentence patterns and the condition check were frozen, before running them on these. This is the unseen set for the guard as shipped. If a miss here drives a rule change, mark this file as seen and write a round 3.",
+  "cases": [
+    {"id": "h2-book", "text": "体积和重量都在限内，可订舱。", "verdicts": ["可订舱"]},
+    {"id": "h2-contract", "text": "报价单的付款条件满足合同要求。", "verdicts": ["满足合同要求"]},
+    {"id": "h2-accepted", "text": "承台钢筋隐蔽验收通过，下一步浇筑。", "verdicts": ["验收通过"]},
+    {"id": "h2-expert", "text": "深基坑方案通过了专家评审。", "verdicts": ["通过了专家评审"]},
+    {"id": "h2-bid", "text": "三家比下来我们有优势，可以投标。", "verdicts": ["可以投标"]},
+    {"id": "h2-start", "text": "手续齐了，下周一可开工。", "verdicts": ["可开工"]},
+    {"id": "h2-no-risk", "text": "商务部分逐条核过，无废标项。", "verdicts": ["无废标项"]},
+    {"id": "h2-design", "text": "实测保护层厚度符合设计要求。", "verdicts": ["符合设计要求"]},
+    {"id": "h2-english", "text": "All rows are within limits, so the shipment is ready to book.", "verdicts": ["ready to book"]},
+
+    {"id": "h2-if", "text": "如果三项缺件补齐，可以投标；现在还不行。", "verdicts": []},
+    {"id": "h2-must", "text": "混凝土强度必须满足设计要求，试块报告待补。", "verdicts": []},
+    {"id": "h2-after", "text": "专家论证通过后再组织交底。", "verdicts": []},
+    {"id": "h2-whether", "text": "付款条件是否满足合同要求，请法务看第 12 条。", "verdicts": []},
+    {"id": "h2-deny", "text": "本回复不代表验收通过，也不代表可以开工。", "verdicts": []},
+    {"id": "h2-ask", "text": "这种情况下可以订舱么？", "verdicts": []},
+    {"id": "h2-bond", "text": "投标保证金须在截止前到账，金额见招标文件。", "verdicts": []},
+    {"id": "h2-pending", "text": "报审资料已提交，结果未出。", "verdicts": []},
+    {"id": "h2-english-neg", "text": "This summary does not say the works may commence; approval is pending.", "verdicts": []},
+    {"id": "h2-treat", "text": "接待安排见会务清单，验收时间另行通知。", "verdicts": []},
+    {"id": "h2-quote", "text": "招标文件写明：未通过资格审查的投标将被否决。", "verdicts": []}
+  ]
+}
