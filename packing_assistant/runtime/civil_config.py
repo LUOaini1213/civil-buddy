@@ -16,6 +16,9 @@ CONFIRM = "我明白，将由持证人员签认"
 
 SANDBOX_MODES = ("read-only", "workspace-write")
 APPROVAL_MODES = ("untrusted", "on-request", "never")
+# steps: 规则路由 + 确定性流程，不调模型（默认）。model: 模型驱动的循环（runtime/model_loop.py）。
+# auto: 配了模型就用 model，没配或连不上就回到 steps。
+AGENT_MODES = ("steps", "model", "auto")
 
 
 @dataclass
@@ -26,6 +29,7 @@ class CivilConfig:
     max_parallel: int = 4
     model: str = ""
     job_root: str = ""
+    agent_mode: str = "steps"
 
     def allow_write(self) -> bool:
         return self.sandbox == "workspace-write"
@@ -38,6 +42,7 @@ class CivilConfig:
         d["confirm_sentence"] = CONFIRM
         d["sandbox_modes"] = list(SANDBOX_MODES)
         d["approval_modes"] = list(APPROVAL_MODES)
+        d["agent_modes"] = list(AGENT_MODES)
         return d
 
 
@@ -97,6 +102,8 @@ def _apply_map(cfg: CivilConfig, kv: Dict[str, str]) -> None:
             pass
     if "model" in kv:
         cfg.model = kv["model"]
+    if "agent_mode" in kv:
+        cfg.agent_mode = _strip_mode(kv["agent_mode"], AGENT_MODES, cfg.agent_mode)
     if kv.get("job_root"):
         cfg.job_root = kv["job_root"]
     if kv.get("workspace.job_root"):
@@ -131,6 +138,8 @@ def load_config() -> CivilConfig:
         cfg.approval = _strip_mode(env_a, APPROVAL_MODES, cfg.approval)
     if os.environ.get("CIVIL_JOB_ROOT"):
         cfg.job_root = os.environ["CIVIL_JOB_ROOT"]
+    if os.environ.get("CIVIL_AGENT_MODE"):
+        cfg.agent_mode = _strip_mode(os.environ["CIVIL_AGENT_MODE"], AGENT_MODES, cfg.agent_mode)
     return cfg
 
 

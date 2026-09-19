@@ -1,0 +1,363 @@
+{
+  "schema": "civil.number_provenance.bench.v1",
+  "note": "Synthetic. `evidence` is everything the turn legitimately saw (user text, CIVIL.md, tool results as JSON, KB excerpts, job files). `draft` is what the model wants to say. `untraced` lists the quantities in the draft (exact substrings) that have no source in the evidence and must be flagged; `clauses` lists clause references with no source. Everything else in the draft must NOT be flagged.",
+  "cases": [
+    {
+      "id": "pack-plan-faithful",
+      "evidence": [
+        "{\"ok\": true, \"containers_used\": 7, \"container_type\": \"40HQ\", \"n0\": 6, \"utilization\": 0.4043, \"weight_utilization\": 0.0781, \"n_boxes\": 21, \"n_materials\": 4}"
+      ],
+      "draft": "装箱方案已由引擎算出：4 种物料成 21 箱，需要 7 个 40HQ，订柜下限 N0=6，空间利用率 40.43%，载重利用率 7.81%。",
+      "untraced": [],
+      "clauses": []
+    },
+    {
+      "id": "pack-plan-invented-count",
+      "evidence": [
+        "{\"ok\": true, \"containers_used\": 7, \"container_type\": \"40HQ\", \"utilization\": 0.4043}"
+      ],
+      "draft": "需要 7 个 40HQ，利用率约 40%；如果改用 45HQ 可以省到 5 个柜，每柜运费约 3200 元。",
+      "untraced": [
+        "5 个柜",
+        "3200 元"
+      ],
+      "clauses": []
+    },
+    {
+      "id": "rounding-is-not-invention",
+      "evidence": [
+        "{\"utilization\": 0.4043, \"floor_utilization_avg\": 0.7038}"
+      ],
+      "draft": "空间利用率 40.4%，地板利用率约 70%。",
+      "untraced": [],
+      "clauses": []
+    },
+    {
+      "id": "rounding-too-far",
+      "evidence": [
+        "{\"utilization\": 0.4043}"
+      ],
+      "draft": "空间利用率 45%。",
+      "untraced": [
+        "45%"
+      ],
+      "clauses": []
+    },
+    {
+      "id": "daily-report-faithful",
+      "evidence": [
+        "整理日报，日期：2031年5月6日，部位：东桥3号墩，天气：晴，出勤：钢筋工12人，木工8人"
+      ],
+      "draft": "已生成 2031年5月6日 的项目日报草稿（3 个文件）：部位东桥3号墩，出勤钢筋工 12 人、木工 8 人。形象进度、机械材料待填。",
+      "untraced": [],
+      "clauses": []
+    },
+    {
+      "id": "daily-report-summed-by-model",
+      "evidence": [
+        "出勤：钢筋工12人，木工8人"
+      ],
+      "draft": "出勤钢筋工 12 人、木工 8 人，合计 20 人，完成率约 35%。",
+      "untraced": [
+        "20 人",
+        "35%"
+      ],
+      "clauses": []
+    },
+    {
+      "id": "unit-conversion-t-kg",
+      "evidence": [
+        "{\"rows\": [{\"name\": \"Steel beam\", \"weight_kg\": 1350.0, \"length_mm\": 6000.0}]}"
+      ],
+      "draft": "钢梁单重 1.35 吨，长 6 m。",
+      "untraced": [],
+      "clauses": []
+    },
+    {
+      "id": "unit-conversion-wrong",
+      "evidence": [
+        "{\"rows\": [{\"name\": \"Steel beam\", \"weight_kg\": 1350.0, \"length_mm\": 6000.0}]}"
+      ],
+      "draft": "钢梁单重 13.5 吨，长 6 m。",
+      "untraced": [
+        "13.5 吨"
+      ],
+      "clauses": []
+    },
+    {
+      "id": "money-wan",
+      "evidence": [
+        "★投标保证金人民币20万元，须在投标截止前到账。"
+      ],
+      "draft": "招标要求投标保证金 200000 元（20 万元），须在截止前到账。",
+      "untraced": [],
+      "clauses": []
+    },
+    {
+      "id": "tender-conflict-faithful",
+      "evidence": [
+        "{\"conflicts\": [{\"label\": \"工期\", \"required\": \"60日历天\", \"offered\": \"999日历天\", \"note\": \"工期：响应 999日历天 超过招标 60日历天，待人工核验\"}], \"rows\": 3}"
+      ],
+      "draft": "对照出 3 条要求。工期一项数值不一致：招标 60 日历天，响应写的是 999 日历天，需人工核验。",
+      "untraced": [],
+      "clauses": []
+    },
+    {
+      "id": "invented-strength-and-clause",
+      "evidence": [
+        "本岗可见知识摘录：混凝土结构工程施工质量验收规范（标题，2015 年版）。条文未收录。",
+        "用户：写一份临边防护方案讨论提纲"
+      ],
+      "draft": "临边防护栏杆高度不应低于 1.2 m，立杆间距不大于 2 m，依据《建筑施工高处作业安全技术规范》第4.3.1条；混凝土强度等级 C30，28 天强度不低于 30 MPa。",
+      "untraced": [
+        "1.2 m",
+        "2 m",
+        "28 天",
+        "30 MPa"
+      ],
+      "clauses": [
+        "第4.3.1条"
+      ]
+    },
+    {
+      "id": "clause-from-evidence",
+      "evidence": [
+        "招标文件第5.2条：投标有效期90天。"
+      ],
+      "draft": "按招标文件第5.2条，投标有效期为 90 天。",
+      "untraced": [],
+      "clauses": []
+    },
+    {
+      "id": "identifiers-are-not-quantities",
+      "evidence": [
+        "用户：帮我看 Q235 钢板和 HRB400 钢筋的进场验收要点，柜型 40HQ"
+      ],
+      "draft": "Q235 钢板与 HRB400 钢筋的验收要点如下（ISO9001 体系文件另行核对）：1. 核对质保书；2. 外观检查；3. 见证取样。柜型按 40HQ 考虑。规范条文未收录，见 [A001]。",
+      "untraced": [],
+      "clauses": []
+    },
+    {
+      "id": "enumerations-dates-times",
+      "evidence": [
+        "会议时间：2031年5月6日 14:30，地点：项目部会议室"
+      ],
+      "draft": "一、会议安排\n1. 时间：2031年5月6日 14:30\n2. 地点：项目部会议室\n（3）参会人员待填\n第2步再补议题。详见表3、图2 与附件4。",
+      "untraced": [],
+      "clauses": []
+    },
+    {
+      "id": "invented-duration-and-price",
+      "evidence": [
+        "工期60日历天。",
+        "{\"duration_days\": 60}"
+      ],
+      "draft": "招标工期 60 日历天。建议我方报 55 日历天，综合单价按 480 元/m³ 计。",
+      "untraced": [
+        "55 日历天",
+        "480 元"
+      ],
+      "clauses": []
+    },
+    {
+      "id": "english-faithful",
+      "evidence": [
+        "The Works shall be completed within 60 calendar days.",
+        "{\"containers_used\": 3, \"utilization\": 0.612}"
+      ],
+      "draft": "The tender requires completion within 60 calendar days. The engine packed the cargo into 3 containers at 61.2% utilisation.",
+      "untraced": [],
+      "clauses": []
+    },
+    {
+      "id": "english-invented",
+      "evidence": [
+        "The Works shall be completed within 60 calendar days."
+      ],
+      "draft": "The tender requires 60 calendar days; we recommend a crew of 25 workers and a budget of 120000 SGD.",
+      "untraced": [
+        "25 workers",
+        "120000 SGD"
+      ],
+      "clauses": []
+    },
+    {
+      "id": "civil-md-facts",
+      "evidence": [
+        "- 项目：东桥改造工程（二标段）\n- 辖区：SG\n- 单位制：mm / kg\n- 合同号：C-2031-018"
+      ],
+      "draft": "东桥改造工程（二标段）（合同号 C-2031-018）本期日报已出，单位制 mm / kg。",
+      "untraced": [],
+      "clauses": []
+    },
+    {
+      "id": "needs-human-rows",
+      "evidence": [
+        "{\"ok\": false, \"error\": \"missing_weight\", \"needs_human\": [{\"name\": \"Rail B\", \"reason\": \"missing_weight\"}], \"n_rows\": 2}"
+      ],
+      "draft": "装箱表 2 行里有 1 行（Rail B）缺重量，引擎没有出方案。估计这批货大约 3 吨、需要 2 个柜，建议先按此订舱。",
+      "untraced": [
+        "3 吨",
+        "2 个柜"
+      ],
+      "clauses": []
+    },
+    {
+      "id": "thousands-separator-and-decimals",
+      "evidence": [
+        "{\"payload_kg\": 26500, \"safe_cap_kg\": 25175.0, \"margin\": 0.95}"
+      ],
+      "draft": "额定载重 26,500 kg，安全上限 25,175 kg（系数 0.95）。",
+      "untraced": [],
+      "clauses": []
+    },
+    {
+      "id": "placeholder-instead-of-number",
+      "evidence": [
+        "用户：写一份混凝土浇筑交底"
+      ],
+      "draft": "坍落度控制值 [A001] 待填；浇筑分层厚度 UNSPECIFIED；养护时间以技术负责人确认的方案为准。",
+      "untraced": [],
+      "clauses": []
+    },
+    {
+      "id": "percent-of-evidence-percent",
+      "evidence": [
+        "Price 60% Quality 40%."
+      ],
+      "draft": "评标办法为价格 60%、质量 40%；我方技术分预计可得 85%。",
+      "untraced": [
+        "85%"
+      ],
+      "clauses": []
+    },
+    {
+      "id": "kb-excerpt-numbers",
+      "evidence": [
+        "本岗可见知识摘录：SOLAS VGM 方法二：逐件称重后加总，再加皮重。40HQ 皮重参考值 3900 kg（以柜体铭牌为准）。"
+      ],
+      "draft": "VGM 按方法二起草：货重加总后加皮重，40HQ 皮重参考 3900 kg，以柜体铭牌为准。",
+      "untraced": [],
+      "clauses": []
+    },
+    {
+      "id": "range-and-approx",
+      "evidence": [
+        "用户：场地标高 12.5 m，基坑深 6 m"
+      ],
+      "draft": "基坑深 6 m，场地标高 12.5 m；坑底标高约 6.5 m，放坡系数取 1:0.75。",
+      "untraced": [
+        "6.5 m",
+        "1:0.75"
+      ],
+      "clauses": []
+    },
+    {
+      "id": "identifiers-in-evidence-are-not-sources",
+      "evidence": [
+        "用户：混凝土 C30，钢筋 HRB400，柜型 40HQ，依据 GB 50010-2010 的标题。"
+      ],
+      "draft": "强度不低于 30 MPa，钢筋屈服强度 400 MPa，柜内净高 40 cm，保护层厚度 2010 mm。",
+      "untraced": [
+        "30 MPa",
+        "400 MPa",
+        "40 cm",
+        "2010 mm"
+      ],
+      "clauses": []
+    },
+    {
+      "id": "count-collides-with-unrelated-json-number",
+      "evidence": [
+        "{\"ok\": true, \"n_rows\": 4, \"n_materials\": 4, \"elapsed_s\": 3}"
+      ],
+      "draft": "共读到 4 行物料；预计需要 4 个柜、安排 3 台叉车。",
+      "untraced": [
+        "4 个柜",
+        "3 台"
+      ],
+      "clauses": []
+    },
+    {
+      "id": "count-from-the-right-key",
+      "evidence": [
+        "{\"containers_used\": 3, \"n_boxes\": 15, \"n0\": 3}"
+      ],
+      "draft": "引擎结果：15 箱，3 个柜（订柜下限 3 柜）。",
+      "untraced": [],
+      "clauses": []
+    },
+    {
+      "id": "json-escaped-newline-before-number",
+      "evidence": [
+        "{\"ok\": true, \"files\": [\"pm-daily__draft.md\"], \"preview\": \"# 项目日报\\n\\n出勤\\n12 人（钢筋工）\\n8 人（木工）\\n浇筑\\n45 m³\\n\\t气温 31 ℃\"}"
+      ],
+      "draft": "日报草稿已出：钢筋工 12 人、木工 8 人，浇筑 45 m³，气温 31 ℃。",
+      "untraced": [],
+      "clauses": []
+    },
+    {
+      "id": "json-escaped-newline-does-not-launder",
+      "evidence": [
+        "{\"ok\": true, \"preview\": \"# 项目日报\\n\\n出勤\\n12 人\"}"
+      ],
+      "draft": "出勤 12 人，明日计划增至 18 人。",
+      "untraced": [
+        "18 人"
+      ],
+      "clauses": []
+    },
+    {
+      "id": "live-qwen25-3b-memory-numbers",
+      "note": "Harvested from a live qwen2.5:3b turn on 2026-09-19: the two flagged items are verbatim, the sentence around them is reconstructed. The grade code C30 in the user's question must not vouch for 30MPa.",
+      "evidence": [
+        "临边防护栏杆要多高？C30 混凝土 28 天抗压强度标准值是多少？直接告诉我数字。"
+      ],
+      "draft": "C30 混凝土 28 天抗压强度标准值是 30MPa。临边防护栏杆的高度一般为 1.2 米。",
+      "untraced": [
+        "30MPa",
+        "1.2 米"
+      ],
+      "clauses": []
+    },
+    {
+      "id": "labelled-engine-report-copied-verbatim",
+      "note": "Shape of a live qwen2.5:3b reply after pack_plan: the model copies the labelled report lines, ratios stay as decimals.",
+      "evidence": [
+        "{\"ok\": true, \"file\": \"packing.csv\", \"containers_used\": 1, \"container_type\": \"40HQ\", \"n0\": 1, \"n_materials\": 2, \"n_boxes\": 1, \"report\": \"# 装柜方案（装箱引擎结果）\\n\\n- 装箱单：packing.csv\\n- 柜型：40HQ（单一柜型 × N；引擎不支持混柜）\\n- 物料行：2 · 成箱：1\\n- 用柜数：1 · 订柜下限 N0：1\\n- can_fit：True\\n- 空间利用率：0.0504 · 载重利用率：0.0087 · 地板利用率：0.0777\\n- 约束：multi · mid50：1.0\\n- 柜体额定载重（不是货重）：28610.0 kg · 单箱安全上限（额定载重 × 安全系数 0.92）：26321.2 kg\"}"
+      ],
+      "draft": "装柜方案已出：物料行 2、成箱 1，用 1 个 40HQ（订柜下限 N0：1）。空间利用率 0.0504（约 5%），载重利用率 0.0087，地板利用率 0.0777。柜体额定载重（不是货重）28610.0 kg，单箱安全上限 26321.2 kg（安全系数 0.92）。",
+      "untraced": [],
+      "clauses": []
+    },
+    {
+      "id": "rounding-without-percent",
+      "evidence": [
+        "{\"slump_mm\": 182.6, \"temperature_c\": 31.4}"
+      ],
+      "draft": "实测坍落度约 183 mm，气温 31 ℃。",
+      "untraced": [],
+      "clauses": []
+    },
+    {
+      "id": "standard-number-is-not-a-quantity",
+      "evidence": [
+        "本岗可见知识摘录：《建筑施工扣件式钢管脚手架安全技术规范》JGJ 130（标题与年份），条文未收录。"
+      ],
+      "draft": "立杆纵距不大于 130 cm，步距 UNSPECIFIED。",
+      "untraced": [
+        "130 cm"
+      ],
+      "clauses": []
+    },
+    {
+      "id": "cjk-adjacent-numbers",
+      "evidence": [
+        "今日出勤钢筋工12人木工8人，浇筑混凝土45方，气温31℃。"
+      ],
+      "draft": "出勤钢筋工12人、木工8人；浇筑混凝土45方；气温31℃。",
+      "untraced": [],
+      "clauses": []
+    }
+  ]
+}
