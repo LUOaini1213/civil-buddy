@@ -34,6 +34,8 @@ civil exec -o 回复.txt "……"                        # 最终回复另存
 - 一切产出都是内部讨论草稿：`submit_blocked=true`，不下「可以投标 / 可以开工」的结论。
 - `--sandbox read-only` 时只读不写：`steps` 下整轮不执行、只答复；模型模式下装箱照算，只是不落盘。
 
+要不靠代码自觉、靠内核拒绝：`civil --sandbox-backend os …` 让工具在自我禁闭的进程里跑（只能写 `.civil-buddy/out`、不能起进程，Linux 上也不能联网），`civil sandbox` 当场自检。细节和边界见 [os-sandbox.md](os-sandbox.md)。
+
 ## 3. 两种跑法
 
 | | `steps`（默认） | `--mode model` |
@@ -77,4 +79,4 @@ $construction 编制深基坑专项施工方案        # $id 或 @岗位名 = �
 
 ## 6. 它不是什么
 
-不是 OpenAI Codex 的二进制，也不调用它；沙箱是应用层的写根与密钥拒读，不是内核隔离；没有原生 App、商店扩展、Plugins、Cloud。是不是「可以投标 / 可以开工」，它不判，也禁止这么宣传。
+不是 OpenAI Codex 的二进制，也不调用它；系统级沙箱要显式打开（默认只有应用层的写根与密钥拒读），且不限制读取；没有商店扩展、Cloud。是不是「可以投标 / 可以开工」，它不判，也禁止这么宣传。
