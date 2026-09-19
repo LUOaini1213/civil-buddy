@@ -28,10 +28,50 @@ _AMBIGUOUS_REASONS = {
 }
 _PREFIX = r"(?:(?:请帮我|帮我|麻烦|请|这次|本次|暂时|现在|进一步|继续|接着|先|再|仅仅|只需|只要|仅|只)\s*)*"
 _NEGATED = re.compile(r"^" + _PREFIX + r"(?:不要|不用|无需|暂不|不需要|不想|不做|不写|不生成|别|禁止|我不(?:想|需要|打算|要求))")
-_QUESTION = re.compile(r"什么|如何|怎么|为什么|能做什么|需要哪些|有哪些|是否|能否|能不能|区别|含义")
-_READ_REQUEST = re.compile(r"^" + _PREFIX + r"(?:解释|说明一下|介绍|聊聊|讨论|说说|讲解|科普|概述|咨询)")
-_ACTION = re.compile(r"(?:帮我|请|需要|想要|先|再|只)?\s*(?:整理|编制|生成|制作|起草|准备|审查|核对|检查|评审|制定|写|做)")
-_FOLLOWUP_ACTION = re.compile(r"(?:然后|并且|之后|随后|接着|同时|再|并|后)\s*(?:请帮我|帮我|请|给我|为我)?\s*(?:整理|编制|生成|制作|起草|准备|审查|核对|检查|评审|制定|写|做)")
+# 意图判定用的三张词表，各分组；每一组带来多少请求、又放进来多少提问，
+# 见 scripts/eval_task_intent.py --variant all（基准 test/benchmarks/task_intent）。
+# "core" 三组合起来就是改动前的写法，保留它是为了随时能量出「之前是多少」。
+ACTION_VERBS = {
+    "core": ("整理", "编制", "生成", "制作", "起草", "准备", "审查", "核对", "检查", "评审", "制定", "写", "做"),
+    # 起草类口语动词。单字动词只在后面跟着量词/「一下」时才算：「编一份」算，「编制依据」里的编不靠这条。
+    # 「汇总的时候按班组还是按工种」里的汇总是名词用法：后面跟「的」不算动作（留出集第一轮量出来的误执行）。
+    "draft": ("草拟", r"汇总(?!的)", r"更新(?!的)", r"拟(?=一?[份个张版]|写|定一?[份个])", r"编(?=一?[份个张版下]|写)",
+              r"填(?=一?[份个张下]|写|报)", r"补(?=一?[份个张]|写|填)", r"(?:弄|记|搞|改)一下"),
+    # 「给我一份 / 来一份 / 出个 / 要一份」：要的是东西，不是解释。量词是关键——「给我讲讲」「来了多少人」不带。
+    "give": (r"(?:给我|帮我|替我|为我)\s*(?:出|来|弄|搞|开|列)?\s*一?[份个张版](?!人)", r"(?:出|来|搞|弄|开|列)(?=一?[份个张版](?!人))",
+             r"(?:要|需要)一[份个张版]", r"出(?=日报|周报|月报|方案|计划|台账|清单|纪要|交底|报表)"),
+}
+QUESTION_MARKS = {
+    "core": ("什么", "如何", "怎么", "为什么", "能做什么", "需要哪些", "有哪些", "是否", "能否", "能不能", "区别", "含义"),
+    # 动词表一放宽，这些问法就会被当成请求执行掉（「台账多久更新一次」「谁来拟纪要」），所以两张表必须一起加。
+    "more": ("谁", "多久", "多少", "几[个份天次时]", "要不要", "是不是", "有没有", "何时", "什么时候", "哪[些个里]", r"吗\s*[？?]?\s*$", r"[？?]\s*$",
+             "还是"),    # 「按班组还是按工种」是选择问句。「还是出一份吧」会因此漏成提问——便宜的方向，接受。
+}
+READ_VERBS = {
+    "core": ("解释", "说明一下", "介绍", "聊聊", "讨论", "说说", "讲解", "科普", "概述", "咨询"),
+    "more": ("讲讲", "讲一下", r"说明(?!书)"),
+}
+ACTION_VARIANTS = {
+    "core (before)": {"verbs": ("core",), "questions": ("core",), "reads": ("core",)},
+    "+draft verbs": {"verbs": ("core", "draft"), "questions": ("core",), "reads": ("core",)},
+    "+give verbs": {"verbs": ("core", "draft", "give"), "questions": ("core",), "reads": ("core",)},
+    "+question marks": {"verbs": ("core", "draft", "give"), "questions": ("core", "more"), "reads": ("core",)},
+    "+read verbs (shipped)": {"verbs": ("core", "draft", "give"), "questions": ("core", "more"), "reads": ("core", "more")},
+    "ablate: question marks": {"verbs": ("core", "draft", "give"), "questions": ("core",), "reads": ("core", "more")},
+}
+ACTION_VARIANTS["shipped"] = dict(ACTION_VARIANTS["+read verbs (shipped)"])
+
+
+def compile_intent(verbs=("core",), questions=("core",), reads=("core",)):
+    """(_QUESTION, _READ_REQUEST, _ACTION, _FOLLOWUP_ACTION) for the chosen word groups."""
+    verb = "|".join(part for group in verbs for part in ACTION_VERBS[group])
+    return (re.compile("|".join(part for group in questions for part in QUESTION_MARKS[group])),
+            re.compile(r"^" + _PREFIX + "(?:" + "|".join(part for group in reads for part in READ_VERBS[group]) + ")"),
+            re.compile(r"(?:帮我|请|需要|想要|先|再|只)?\s*(?:" + verb + ")"),
+            re.compile(r"(?:然后|并且|之后|随后|接着|同时|再|并|后)\s*(?:请帮我|帮我|请|给我|为我)?\s*(?:" + verb + ")"))
+
+
+_QUESTION, _READ_REQUEST, _ACTION, _FOLLOWUP_ACTION = compile_intent(**ACTION_VARIANTS["shipped"])
 _QUOTED = re.compile(r'```[\s\S]*?```|`[^`\n]*`|“[^”]*”|‘[^’]*’|「[^」]*」|『[^』]*』|"[^"\n]*"|(?<!\w)\'[^\'\n]*\'')
 _REFERENCE_END = re.compile(r"的(?:流程|注意事项|注意点|步骤|原因|含义|区别|意义|作用|风险|要求|方法|思路)[？?。！!\s]*$")
 _SEQUENCE = re.compile(r"先.+(?:再|然后)|之后|随后|接着", re.S)

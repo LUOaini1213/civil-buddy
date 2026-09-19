@@ -1,0 +1,32 @@
+{
+  "schema": "civil.task_intent.bench.v1",
+  "note": "Round 1, held out: written on 2026-09-19 AFTER the first word groups were frozen, without running them first. Frozen rules scored 0.885 accuracy / 0.846 request recall / 1 false run here (before the change: 0.500 / 0.077 / 1). Its three misses were then copied into cases.json as `heldout-round1-miss` and the rules were changed, so this file is no longer unseen: heldout2.json is the unseen set for the rules as shipped.",
+  "cases": [
+    {"text": "帮我编一版脚手架搭设交底", "intent": "run", "kind": "heldout"},
+    {"text": "麻烦出一份本周周报", "intent": "run", "kind": "heldout"},
+    {"text": "给我来个材料进场计划", "intent": "run", "kind": "heldout"},
+    {"text": "拟个联系单，发给监理", "intent": "run", "kind": "heldout"},
+    {"text": "把今天的日报弄一下", "intent": "run", "kind": "heldout"},
+    {"text": "施工日志记一下：今天浇筑 3 号墩", "intent": "run", "kind": "heldout"},
+    {"text": "需要一张混凝土浇筑申请表", "intent": "run", "kind": "heldout"},
+    {"text": "开个工程联系单", "intent": "run", "kind": "heldout"},
+    {"text": "汇总一下各班组出勤", "intent": "run", "kind": "heldout"},
+    {"text": "更新一下设备台账，新进一台 25 吨吊车", "intent": "run", "kind": "heldout"},
+    {"text": "出个钢筋采购比价表", "intent": "run", "kind": "heldout"},
+    {"text": "先说明应急预案包括哪几部分，然后编一份", "intent": "both", "kind": "heldout"},
+    {"text": "讲一下质量检查表的栏目，再出一份", "intent": "both", "kind": "heldout"},
+    {"text": "周报一般谁来出", "intent": "chat", "kind": "heldout"},
+    {"text": "联系单要监理签字吗", "intent": "chat", "kind": "heldout"},
+    {"text": "编交底要注意哪些点", "intent": "chat", "kind": "heldout"},
+    {"text": "出这份方案需要多少天", "intent": "chat", "kind": "heldout"},
+    {"text": "台账要更新到什么程度", "intent": "chat", "kind": "heldout"},
+    {"text": "给我解释一下旁站记录", "intent": "chat", "kind": "heldout"},
+    {"text": "先别编方案，等图纸到了再说", "intent": "chat", "kind": "heldout"},
+    {"text": "来料检验是不是每批都要做", "intent": "chat", "kind": "heldout"},
+    {"text": "开盘鉴定是干什么的", "intent": "chat", "kind": "heldout"},
+    {"text": "列入危大清单的条件有哪些", "intent": "chat", "kind": "heldout"},
+    {"text": "补充协议和变更单是一回事吗", "intent": "chat", "kind": "heldout"},
+    {"text": "汇总的时候按班组还是按工种", "intent": "chat", "kind": "heldout"},
+    {"text": "填报口径以谁为准", "intent": "chat", "kind": "heldout"}
+  ]
+}
