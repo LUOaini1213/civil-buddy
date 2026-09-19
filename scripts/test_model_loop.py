@@ -248,14 +248,14 @@ class FolderLimitTests(JobFolderCase):
         outside = self.job.parent / "outside-secret.txt"
         outside.write_text("合同价 123456 元", encoding="utf-8")
         self.addCleanup(outside.unlink)
-        (self.job / ".env").write_text("CIVIL_API_KEY=sk-should-never-be-read", encoding="utf-8")
+        (self.job / ".env").write_text("CIVIL_API_KEY=DOTENV-MARKER-7731", encoding="utf-8")
         script = Script([("read_job_file", {"name": "../outside-secret.txt"})], [("read_job_file", {"name": str(outside)})],
                         [("read_job_file", {"name": ".env"})], [("run_skill", {"skill_id": "pm-daily", "files": [str(outside)]})], "读不到。")
         out = model_loop.run_model_agent("读一下外面的文件", session_id="civil-cli", complete=script)
         for index in (1, 2, 3, 4):
             self.assertEqual(json.loads(script.seen[index]["messages"][-1]["content"])["error_code"], "not_found")
         self.assertNotIn("123456", json.dumps(script.seen[-1]["messages"], ensure_ascii=False))
-        self.assertNotIn("sk-should-never-be-read", json.dumps(script.seen[-1]["messages"], ensure_ascii=False))
+        self.assertNotIn("DOTENV-MARKER-7731", json.dumps(script.seen[-1]["messages"], ensure_ascii=False))
         self.assertFalse(out["wrote"])
 
     def test_a_bare_file_name_resolves_only_when_it_is_unique(self):
