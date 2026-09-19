@@ -47,6 +47,7 @@ CHECKS = (
     Check("civil-review", ("scripts/test_civil_review.py",)),
     Check("os-sandbox", ("scripts/test_os_sandbox.py",), timeout=300),
     Check("plugins", ("scripts/test_plugins.py",)),
+    Check("desktop-app", ("scripts/test_desktop.py",), timeout=300),
     Check("example-plugin", ("-m", "packing_assistant.civil", "plugin", "validate", "examples/plugins/site-forms")),
     Check("task-intent-bench", ("scripts/eval_task_intent.py", "--check")),
     Check("verdict-bench", ("scripts/eval_verdicts.py", "--check")),

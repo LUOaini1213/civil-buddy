@@ -14,7 +14,8 @@
   civil plugin list | validate <目录> | install <目录或.zip> [--job] | remove <名> | trust <名> | untrust <名>
                               插件：自己公司的岗位（SOP + 表单模板 + 知识），纯声明、不含代码
   civil --sandbox-backend os  工具在被内核限制的进程里跑（只能写 .civil-buddy/out，不能起进程；Linux 上也不能联网）
-  civil app                   打开工作台应用
+  civil app                   打开工作台应用（浏览器里的网页工作台）
+  civil desktop               原生桌面窗口：打开作业文件夹、交代任务、看步骤、当场审批、打开成稿、复核（Tk，无需安装任何东西）
   civil mcp --pack bid        IDE stdio MCP
   civil serve                 JSON-RPC app-server（土木 harness，不是官方 Codex 二进制）
   civil skills
@@ -33,7 +34,7 @@ from pathlib import Path
 from typing import Any, Dict, List, Optional
 
 CONFIRM = "我明白，将由持证人员签认"
-VERBS = ("tui", "exec", "app", "mcp", "serve", "skills", "resume", "help", "init", "status", "review", "sandbox", "plugin")
+VERBS = ("tui", "exec", "app", "mcp", "serve", "skills", "resume", "help", "init", "status", "review", "sandbox", "plugin", "desktop")
 
 
 def run_task(
@@ -413,6 +414,7 @@ def _common(p: argparse.ArgumentParser) -> None:
     p.add_argument("--last", action="store_true", help="resume：接着最近一个 thread")
     p.add_argument("--bg", action="store_true")
     p.add_argument("--job", action="store_true", help="plugin install：装进当前作业文件夹，随文件夹走")
+    p.add_argument("--launcher", default="", metavar="DIR", help="desktop：在 DIR 里写一个双击即开的 Civil Buddy.pyw，不打开窗口")
     p.add_argument("--json", action="store_true", help="结束后打印完整结果（一个 JSON）")
     p.add_argument("--jsonl", action="store_true", help="逐行 JSON 事件流")
     p.add_argument("--output-last-message", "-o", default="", metavar="FILE", help="把最终回复另存到文件")
@@ -439,7 +441,7 @@ def _finish(out: Dict[str, Any], args: argparse.Namespace) -> int:
 
 
 _VALUE_OPTIONS = frozenset({"--cd", "-C", "--skill", "-s", "--session", "--thread", "--output-last-message", "-o",
-                            "--sandbox", "--approval", "--port", "--pack", "--expert", "--mode", "--sandbox-backend"})
+                            "--sandbox", "--approval", "--port", "--pack", "--expert", "--mode", "--sandbox-backend", "--launcher"})
 
 
 def split_verb(argv: List[str]) -> tuple[str, List[str]]:
@@ -503,6 +505,14 @@ def main(argv: Optional[List[str]] = None) -> int:
         return code
     if verb == "plugin":
         return cmd_plugin(rest, job_scope=args.job)
+    if verb == "desktop":
+        from packing_assistant.desktop.app import main as desktop_main, write_launcher
+        from packing_assistant.runtime.workspace import active
+
+        if args.launcher:
+            print(f"已写入 {write_launcher(args.launcher, str(active() or ''))}：双击即开，不弹控制台。")
+            return 0
+        return desktop_main([str(active())] if active() else rest[:1])
     if verb == "review":
         from packing_assistant.runtime.review import review_file
 
