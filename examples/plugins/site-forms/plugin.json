@@ -1,0 +1,8 @@
+{
+  "schema": "civil.plugin.v1",
+  "name": "site-forms",
+  "version": "1.0.0",
+  "title": "现场表单（示例）",
+  "description": "示例插件：项目周报和工程联系单。拿它当模板，换成你们公司自己的格式。",
+  "publisher": "civil-buddy examples"
+}

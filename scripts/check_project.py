@@ -46,6 +46,8 @@ CHECKS = (
     Check("steps-job-files", ("scripts/test_steps_job_files.py",)),
     Check("civil-review", ("scripts/test_civil_review.py",)),
     Check("os-sandbox", ("scripts/test_os_sandbox.py",), timeout=300),
+    Check("plugins", ("scripts/test_plugins.py",)),
+    Check("example-plugin", ("-m", "packing_assistant.civil", "plugin", "validate", "examples/plugins/site-forms")),
     Check("task-intent-bench", ("scripts/eval_task_intent.py", "--check")),
     Check("verdict-bench", ("scripts/eval_verdicts.py", "--check")),
     Check("number-provenance-bench", ("scripts/eval_number_provenance.py", "--check")),

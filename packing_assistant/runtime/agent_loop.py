@@ -121,7 +121,17 @@ def _tender_sources(text: str) -> Optional[List[Dict[str, Any]]]:
 def _draft_md(expert_id: str, tool: str, text: str) -> str:
     from packing_assistant.expert_roster import get_expert
     from packing_assistant.expert_turn import _draft_markdown
+    from packing_assistant.runtime import plugins
 
+    item = plugins.skill(expert_id)
+    if item is not None:
+        from packing_assistant.runtime.project_instructions import load
+
+        slots = load().slots
+        drafted = plugins.render_draft(item, _with_named_documents(text), project=slots.get("project", ""),
+                                       jurisdiction=slots.get("jurisdiction", ""))
+        if drafted is not None:
+            return drafted
     exp = get_expert(expert_id)
     if not exp:
         return (
@@ -224,7 +234,7 @@ def _plan_calls(
     text = with_facts(text)
     eng = get_engine()
     primary = tools[0]
-    if primary in eng.tools:
+    if primary in eng.tools and exp.category != "plugin":
         calls.append(
             {
                 "name": primary,
@@ -238,6 +248,11 @@ def _plan_calls(
             }
         )
         return {"hitl": False, "calls": calls}
+    if exp.category == "plugin":
+        # 插件岗位的稿走「写盘 + Office 导出」那一段（和装柜、招标解析同一段），这样它也有 Word / Excel。
+        tool = tools[0]
+        return {"hitl": False, "calls": [], "follow": [{"name": "write_deliverable", "tool_label": tool,
+                "arguments": {"path": str(out_dir / f"{tool}.md"), "text": _draft_md(exp.id, tool, text)}}]}
     for tool in tools:
         path = out_dir / f"{tool}.md"
         calls.append(
@@ -687,7 +702,7 @@ def run_agent(
                     return _finish_cancelled()
 
             # Follow-on writes (still through the engine + sandbox).
-            follow: List[Dict[str, Any]] = []
+            follow: List[Dict[str, Any]] = list(planned.get("follow") or [])
             office_reply = ""
             out_dir = _OUT / _safe_sid(sid) / (exp.id if exp else "ops")
             if last_export_md:

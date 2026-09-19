@@ -363,6 +363,8 @@ def _register_exclusives(eng: ToolEngine) -> None:
 
     skip = set(eng.tools)
     for exp in list_experts():
+        if exp.category == "plugin":
+            continue        # a plugin's post has no handler here: it is drafted from its own template (agent_loop._draft_md)
         for name in exp.exclusive:
             if name in skip:
                 continue

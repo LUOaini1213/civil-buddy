@@ -65,18 +65,28 @@ civil review --json 周报.md
 
 它回答两个问题：文稿里哪些**数字、条款号**在工地资料里找不到出处（对照 CIVIL.md、文件夹里其他文件、你在这个文件夹的对话里说过的话）；有没有写**不该由文稿下的结论**（「已具备报审条件」算，「本稿不判定可以开工」这种否认不算）。退出码：0 干净 · 1 有待核对 · 2 审不了。找不到出处不等于错，但不能就这样交出去；反过来，干净也只说明数字都有出处，不说明数字是对的。
 
-## 5. 交互式（TUI）
+## 5. 自己公司的岗位：插件
+
+```bash
+civil plugin install examples/plugins/site-forms      # 目录或 .zip；--job 则装进当前作业文件夹
+civil "出一份项目周报，周次：第 12 周，部位：东桥3号墩，资料见 现场记录.txt"
+civil plugin trust site-forms                         # 看过内容之后
+```
+
+插件是纯声明的（SOP + 表单模板 + 知识），不含代码；未受信任时它的岗位一律按高风险、写盘要确认句。格式与安全边界见 [plugins.md](plugins.md)。
+
+## 6. 交互式（TUI）
 
 ```text
 civil
 /status  /init  /mode [steps|model|auto]  /model [名称]  /skills [词]
 /approvals [untrusted|on-request|never]   /sandbox [read-only|workspace-write]
-/new [标题]  /threads  /resume <id>  /bg <任务>  /files  /plan  /review <文稿>
+/new [标题]  /threads  /resume <id>  /bg <任务>  /files  /plan  /review <文稿>  /plugins
 $construction 编制深基坑专项施工方案        # $id 或 @岗位名 = 点名岗位
 ```
 
 每一轮都记在 thread 旁边的 rollout 里，`civil resume --last "接着上次的，把部位改成 4 号墩"` 会带着前面的对话继续（模型模式下有意义；`steps` 模式的上下文只有会话槽：项目、辖区、是否已确认）。
 
-## 6. 它不是什么
+## 7. 它不是什么
 
 不是 OpenAI Codex 的二进制，也不调用它；系统级沙箱要显式打开（默认只有应用层的写根与密钥拒读），且不限制读取；没有商店扩展、Cloud。是不是「可以投标 / 可以开工」，它不判，也禁止这么宣传。

@@ -11,4 +11,5 @@
 - **Tools compute; the model routes.** No hand-written xyz, N0, cabinet counts, clause numbers, or composite unit prices. Unconnected solver fields stay the literal `UNSPECIFIED`. `can_fit=false` is a failure.
 - **High-risk write gate:** user must type `我明白，将由持证人员签认`. Chat/questions do not write.
 - **Bids:** `submit_blocked=true`. Never assert 可以投标 / 可以开工.
+- **Plugins are declarative** (`runtime/plugins.py`, `docs/civil-buddy/plugins.md`): SOP + form template + knowledge, `.md`/`.json` only, never code, never an MCP server. A plugin skill may not reuse a built-in id; an untrusted plugin's skills are all high-risk; trust is per user and keyed by content hash; templates fill `label: value` slots from the user's words only and may not state a verdict. Keep it that way — a plugin format that can run something is a different product.
 - Regenerate skills: `python scripts/build_codex_expert_skills.py`

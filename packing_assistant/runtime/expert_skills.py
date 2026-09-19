@@ -32,7 +32,12 @@ def skill_path(expert_id: str) -> Optional[Path]:
     if not eid:
         return None
     path = SKILLS_DIR / eid / "SKILL.md"
-    return path if path.is_file() else None
+    if path.is_file():
+        return path                       # a built-in post is never shadowed
+    from packing_assistant.runtime import plugins
+
+    item = plugins.skill(eid)
+    return item.folder / "SKILL.md" if item else None
 
 
 def split_frontmatter(text: str) -> tuple[Dict[str, str], str]:
@@ -97,7 +102,9 @@ def list_expert_skill_ids() -> List[str]:
             continue
         if (child / "SKILL.md").is_file() and NAME_RE.match(child.name) and "--" not in child.name:
             out.append(child.name)
-    return out
+    from packing_assistant.runtime import plugins
+
+    return out + [item.id for plugin in plugins.installed() for item in plugin.skills]
 
 
 def prompt_suffix(expert_id: str) -> str:

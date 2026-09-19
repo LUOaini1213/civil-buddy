@@ -23,6 +23,7 @@ HELP = """/help              本页
 /files             本 thread 交付物
 /plan              上一轮模型列的步骤
 /review <文稿>     不调模型：文稿里的数字有没有出处、有没有不该下的结论
+/plugins           已装插件、是否受信任、带来哪些岗位（安装与信任用 civil plugin …）
 /confirm           本 thread 视同已打确认句
 /mcp               IDE/MCP 怎么挂
 /quit              退出
@@ -185,6 +186,10 @@ def handle_slash(line: str, st: TuiState) -> Optional[str]:
             return "上一轮没有列步骤（steps 模式不列；model 模式里多步任务才列）。"
         marks = {"done": "x", "in_progress": ">", "pending": " "}
         return "\n".join(f"[{marks.get(row.get('status'), ' ')}] {row.get('step')}" for row in st.last_plan)
+    if cmd == "plugins":
+        from packing_assistant.civil import plugin_lines
+
+        return "\n".join(plugin_lines()) or "还没有安装插件。civil plugin install <目录或 .zip>"
     if cmd == "review":
         from packing_assistant.runtime.review import review_file
 
