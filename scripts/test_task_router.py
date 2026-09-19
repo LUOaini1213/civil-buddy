@@ -39,6 +39,17 @@ class TaskRouterTests(unittest.TestCase):
                 self.assertEqual(route_task(text)["intent"], "both")
         self.assertEqual(route_task("继续整理项目日报")["intent"], "run")
 
+    def test_site_phrasings_ask_for_the_document_and_their_questions_do_not(self):
+        # the benchmark (test/benchmarks/task_intent) holds the full sets; these are the pairs that must never drift apart
+        for request, question in (("编一份临边防护安全交底", "安全交底怎么编"), ("给我一份施工方案", "给我讲讲施工方案"),
+                                  ("出个采购计划", "出一份方案要多久"), ("更新收发存台账：钢筋入库 12 吨", "台账多久更新一次"),
+                                  ("汇总本周质量检查记录", "汇总的时候按班组还是按工种"), ("拟一份会议纪要", "谁来拟会议纪要"),
+                                  ("把今天的日报弄一下", "日报要不要填天气")):
+            with self.subTest(request=request):
+                self.assertEqual(route_task(request)["intent"], "run")
+                self.assertEqual(route_task(question)["intent"], "chat")
+        self.assertEqual(route_task("先讲讲交底要点，再编一份安全交底")["intent"], "both")
+
     def test_all_hosts_import_the_same_rich_router(self):
         from packing_assistant.runtime.task_router import route_task as runtime_route
         self.assertIs(route_task, runtime_route)

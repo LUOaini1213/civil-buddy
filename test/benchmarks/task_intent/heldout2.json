@@ -1,0 +1,25 @@
+{
+  "schema": "civil.task_intent.bench.v1",
+  "note": "Round 2, held out: written on 2026-09-19 after the round-1 fixes were frozen, before running them on these. This is the unseen set for the rules as shipped; if you change the rules because of a miss here, move the miss into cases.json and write a round 3.",
+  "cases": [
+    {"text": "帮我拟个停工通知", "intent": "run", "kind": "heldout2"},
+    {"text": "出一张钢筋进场验收单", "intent": "run", "kind": "heldout2"},
+    {"text": "把昨天的安全巡查记录整理成表", "intent": "run", "kind": "heldout2"},
+    {"text": "给项目部编个月度资金计划", "intent": "run", "kind": "heldout2"},
+    {"text": "会议纪要改一下，把参会人加上张工", "intent": "run", "kind": "heldout2"},
+    {"text": "来个三周滚动计划", "intent": "run", "kind": "heldout2"},
+    {"text": "需要一份隐蔽工程验收记录，部位：承台", "intent": "run", "kind": "heldout2"},
+    {"text": "按这个清单出一版询价函", "intent": "run", "kind": "heldout2"},
+    {"text": "说明一下变更签证的栏目，之后草拟一份", "intent": "both", "kind": "heldout2"},
+
+    {"text": "停工通知由谁签发", "intent": "chat", "kind": "heldout2"},
+    {"text": "验收单一式几份", "intent": "chat", "kind": "heldout2"},
+    {"text": "巡查记录按天还是按周归档", "intent": "chat", "kind": "heldout2"},
+    {"text": "资金计划的编制口径有哪些", "intent": "chat", "kind": "heldout2"},
+    {"text": "纪要改过之后还要重新签字吗", "intent": "chat", "kind": "heldout2"},
+    {"text": "滚动计划和总进度计划什么关系", "intent": "chat", "kind": "heldout2"},
+    {"text": "隐蔽验收前要通知监理多久", "intent": "chat", "kind": "heldout2"},
+    {"text": "询价函发出后更新的报价怎么处理", "intent": "chat", "kind": "heldout2"},
+    {"text": "先别出询价函", "intent": "chat", "kind": "heldout2"}
+  ]
+}

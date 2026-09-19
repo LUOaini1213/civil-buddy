@@ -45,6 +45,7 @@ CHECKS = (
     Check("model-loop", ("scripts/test_model_loop.py",)),
     Check("steps-job-files", ("scripts/test_steps_job_files.py",)),
     Check("civil-review", ("scripts/test_civil_review.py",)),
+    Check("task-intent-bench", ("scripts/eval_task_intent.py", "--check")),
     Check("number-provenance-bench", ("scripts/eval_number_provenance.py", "--check")),
     Check("runtime-threads", ("scripts/test_runtime_threads.py",)),
     Check("app-launcher", ("scripts/test_app_launcher.py",)),
