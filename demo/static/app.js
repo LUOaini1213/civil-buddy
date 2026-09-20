@@ -189,6 +189,8 @@ async function cbWatchSession(sid, opts) {
         /* 没有取消能力的后端上，停止按钮什么也做不了：不要摆一个假的。 */
         if ($("stop") && cbCapability("cancel") !== true) $("stop").hidden = true;
       }
+      await cbPaintLive(sid, options);
+      if (superseded()) { if (cbWatchedRun && cbWatchedRun.session === sid) cbReleaseWatch(); return; }
       cbWatchTimer = setTimeout(tick, 1500);
       return;
     }
@@ -205,8 +207,45 @@ async function cbWatchSession(sid, opts) {
   tick();
 }
 
+/* 旁观时也要看得见它跑到哪：服务端把这一轮已产出的正文和最近一条状态留在内存里
+   （GET /api/sessions/{sid}/live），每一拍拉一次，有变化就画。没有气泡的（切回来的会话）先补一个。 */
+async function cbPaintLive(sid, options) {
+  if (cbCapability("live_progress") !== true) return;
+  let live = null;
+  try {
+    const r = await fetch("/api/sessions/" + encodeURIComponent(sid) + "/live");
+    if (r.ok) live = await r.json();
+  } catch (_) { /* 下一拍再试 */ }
+  if (!live || state.session !== sid || cbActiveRun) return;
+  if (options.liveSeq === live.seq) return;
+  options.liveSeq = live.seq;
+  if (!live.text && !live.status) return;
+  let bodyEl = options.bodyEl && options.bodyEl.isConnected ? options.bodyEl : null;
+  if (!bodyEl && live.text) {
+    bodyEl = addMsg("assistant", "岗位", "");
+    options.bodyEl = bodyEl;
+  }
+  if (bodyEl && live.text && bodyEl.textContent !== live.text) {
+    bodyEl.textContent = live.text;
+    $("log").scrollTop = $("log").scrollHeight;
+  }
+  if (live.status && !live.done) {
+    let line = options.liveStatusEl && options.liveStatusEl.isConnected ? options.liveStatusEl : null;
+    if (!line) {
+      line = document.createElement("p");
+      line.className = "status-line";
+      line.dataset.live = "1";
+      const host = bodyEl ? bodyEl.parentElement : $("log");
+      if (host) host.appendChild(line);
+      options.liveStatusEl = line;
+    }
+    line.textContent = "后台进行中 · " + live.status;
+  }
+}
+
 /* 把服务端留存的最后一条助手回复 + 交付物补画到当前视图（断流恢复 / 后台任务完成）。 */
 function cbPaintRecovered(d, options) {
+  if (options.liveStatusEl && options.liveStatusEl.isConnected) options.liveStatusEl.remove();
   const transcript = Array.isArray(d.transcript) ? d.transcript : [];
   const last = transcript.filter((t) => t && t.role === "assistant").slice(-1)[0];
   const text = last ? String(last.text || "") : "";

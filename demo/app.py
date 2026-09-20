@@ -125,7 +125,7 @@ def health() -> dict:
                          "session_backup": True, "cancel": True, "word_export": True,
                          "task_memory": True, "local_rag": True, "task_routing": True,
                          "expert_contracts": True, "tender_collaboration": True, "semantic_summary": True,
-                         "asr": _asr_installed(), "auth": bool(auth_token())},
+                         "asr": _asr_installed(), "auth": bool(auth_token()), "live_progress": True},
         "deepseek": has_key(),
         "model": llm_model(),
         "context": policy(),
@@ -488,6 +488,17 @@ def projects_patch(pid: str, body: ProjectPatchIn) -> dict:
 
 class MergeIn(BaseModel):
     into: str = ""
+
+
+@app.get("/api/sessions/{sid}/live")
+def session_live(sid: str) -> dict:
+    """Text and status a running (or just finished) turn has produced so far."""
+    from chat_service import live_state
+
+    try:
+        return live_state(sid)
+    except ValueError as exc:
+        raise HTTPException(400, str(exc)) from exc
 
 
 @app.post("/api/projects/{pid}/merge")

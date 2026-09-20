@@ -237,3 +237,36 @@ def test_zip_member_names_are_rebuilt_not_copied_from_a_run_record(client):
     # 目录名只留 run_id 里的安全字符；显示名只留 basename；扩展名对不上就用真实文件名；重名加来源前缀
     assert sorted(bundle.namelist()) == ["zz/a1b2-daily.md", "zz/evil-a1b2.md", "zz/evil.md"]
     assert all(b"not-for-download" not in bundle.read(n) for n in bundle.namelist())
+
+
+def test_live_progress_is_visible_while_detached(client, monkeypatch):
+    """断流后回来的页面不该盯着空气泡：GET /api/sessions/{sid}/live 给出已产出的正文和最近状态。"""
+    import app
+    import chat_service
+
+    monkeypatch.setattr("app.has_key", lambda: True)
+    monkeypatch.setattr("app.run_plain", _slow_plain(n=14, dt=0.05))
+    sid = "live-turn-01"
+    assert client.get("/api/health").json()["capabilities"]["live_progress"] is True
+    lease = chat_service.SessionLease(sid)
+    turn = chat_service.prepare_turn(app.OUT_ROOT, {"session_id": sid, "message": "聊聊天气", "expert_ids": []})
+    gen = chat_service.stream_turn(app.OUT_ROOT, turn, key_available=True, plain_runner=app.run_plain, lease=lease)
+    seen = 0
+    for ev in gen:
+        if ev["event"] == "token":
+            seen += 1
+        if seen >= 3:
+            break
+    gen.close()  # 锁屏：流断了，轮次还在跑
+    live = client.get(f"/api/sessions/{sid}/live").json()
+    assert live["active"] is True and live["done"] is False
+    assert "片段0" in live["text"] and live["seq"] >= 3, live
+    assert live["status"], "最近一条状态行也要带上"
+    first_seq = live["seq"]
+    time.sleep(0.2)
+    later = client.get(f"/api/sessions/{sid}/live").json()
+    assert later["seq"] > first_seq and len(later["text"]) > len(live["text"]), "旁观期间正文没有继续增长"
+    assert _wait_idle(sid), "轮次没有在后台跑完"
+    final = client.get(f"/api/sessions/{sid}/live").json()
+    assert final["done"] is True and final["active"] is False and "片段13" in final["text"]
+    assert client.get("/api/sessions/bad%20id/live").status_code == 400

@@ -583,17 +583,67 @@ def _bound_detached_turn(control, finished: threading.Event):
     threading.Thread(target=watch, name="civil-detached-" + control.session, daemon=True).start()
 
 
+_LIVE_MAX_SESSIONS = 256
+_LIVE: dict[str, dict] = {}
+_LIVE_LOCK = threading.Lock()
+
+
+def _live_begin(sid: str) -> None:
+    with _LIVE_LOCK:
+        _LIVE.pop(sid, None)
+        while len(_LIVE) >= _LIVE_MAX_SESSIONS:
+            _LIVE.pop(next(iter(_LIVE)))
+        _LIVE[sid] = {"seq": 0, "text": "", "status": "", "phase": "", "done": False}
+
+
+def _live_note(sid: str, event: dict) -> None:
+    """Mirror what the browser would have seen: the text so far and the last status line."""
+    kind, data = event["event"], event["data"]
+    with _LIVE_LOCK:
+        live = _LIVE.get(sid)
+        if live is None:
+            return
+        if kind == "token":
+            live["text"] += str(data.get("text") or "")
+        elif kind == "status":
+            live["status"] = str(data.get("text") or "")
+            live["phase"] = str(data.get("phase") or "")
+        elif kind in {"done", "error"}:
+            live["done"] = True
+            if kind == "done":
+                live["text"] = str(data.get("text") or live["text"])
+        else:
+            return
+        live["seq"] += 1
+
+
+def live_state(sid: str) -> dict:
+    """What a detached turn has produced so far (GET /api/sessions/{sid}/live).
+
+    The browser that lost its stream polls this instead of staring at an empty bubble until
+    the turn ends. Only the current or last turn of a session is kept, in memory.
+    """
+    valid_session(sid)
+    current = turn_control.status(sid)
+    with _LIVE_LOCK:
+        live = dict(_LIVE.get(sid) or {"seq": 0, "text": "", "status": "", "phase": "", "done": False})
+    live.update(session_id=sid, active=current["active"], state=current["state"])
+    return live
+
+
 def stream_turn(root: Path, turn: dict, *, key_available: bool, plain_runner, lease: SessionLease):
     """A turn owns its lease until persistence, even after the browser disconnects."""
     queue = Queue(maxsize=64)
     finished = threading.Event()
     detached = lease.detached
     lease.start()
+    _live_begin(turn["session_id"])
 
     def produce():
         try:
             with turn_control.using(lease.control):
                 for event in _stream_turn(root, turn, key_available=key_available, plain_runner=plain_runner, lease=lease):
+                    _live_note(turn["session_id"], event)
                     while not detached.is_set() and (not lease.control.event.is_set() or event["event"] in {"done", "error"}):
                         try:
                             queue.put(event, timeout=0.05)
