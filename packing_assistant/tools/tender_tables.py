@@ -234,16 +234,49 @@ def _covered(text: str, facts: Optional[Facts], rule: str = "") -> bool:
     """
     flat = re.sub(r"\s+", "", text)
     topics = _RULE_TOPICS.get(rule)
-    for m in (facts or {}).get("mentions") or []:
-        value = re.sub(r"\s+", "", str(m.get("value") or ""))
-        if m.get("side") != "tender" or not value or value not in flat:
-            continue
-        if topics is None:
-            if len(flat) <= len(value) + 24:
-                return True
-        elif m.get("topic") in topics:
-            return True
-    return False
+    inside = [re.sub(r"\s+", "", str(m.get("value") or "")) for m in (facts or {}).get("mentions") or []
+              if m.get("side") == "tender" and m.get("value")]
+    inside = [v for v in inside if v in flat]
+    if topics is not None:
+        return any(m.get("topic") in topics and re.sub(r"\s+", "", str(m.get("value") or "")) in flat
+                   for m in (facts or {}).get("mentions") or [] if m.get("side") == "tender" and m.get("value"))
+    if not inside:
+        return False
+    # no rule to go by (a row of the response comparison): the sentence is covered when the fields
+    # took every number out of it, or when it is hardly longer than the one value it holds
+    numbers = re.findall(r"\d+(?:\.\d+)?", re.sub(r"[A-Za-z]{2,}[-_/][A-Za-z0-9\-_/]+", " ", flat))
+    if numbers:
+        return all(any(n in v for v in inside) for n in numbers)
+    return any(len(flat) <= len(v) + 24 for v in inside)
+
+
+def _clauses(text: str) -> List[str]:
+    return [c.strip(" \t，,;；。、:：") for c in re.split(r"[，,；;。]", text) if c.strip(" \t，,;；。、:：")]
+
+
+def _quote(text: str, facts: Optional[Facts], rule: str = "") -> str:
+    """What to print for a requirement the parser quoted as a whole line.
+
+    A clause of a document is printed as it stands. A typed request is one long line, and the parser
+    quotes it whole under every rule it touches - the pasted blob. Of such a sentence only the
+    clauses are printed that the rule is about and that no field row already speaks for; "" when
+    none is left. Each is still a literal stretch of the source.
+    """
+    from packing_assistant.tools.tender_facts import is_task_talk
+    from packing_assistant.tools.tender_parse import _RULES, rule_patterns_for_line
+
+    flat = re.sub(r"\s+", " ", str(text or "")).strip()
+    parts = _clauses(flat)
+    if len(flat) <= 60 or len(parts) < 3:
+        return flat
+    patterns = next((list(pats) for rid, _cat, pats, _t, _o, _r in _RULES if rid == rule), None)
+    if patterns is None:
+        patterns = [r"[★☆＊]"] if rule == "star" else rule_patterns_for_line(flat)
+    spoken = {re.sub(r"\s+", "", str(m.get("note") or "")) for m in (facts or {}).get("mentions") or [] if m.get("value")}
+    spoken |= {re.sub(r"\s+", "", str(s.get("note") or "")) for s in ((facts or {}).get("scores") or []) + ((facts or {}).get("specials") or [])}
+    keep = [c for c in parts if any(re.search(p, c, re.I) for p in patterns) and not is_task_talk(c)
+            and re.sub(r"\s+", "", c) not in spoken]
+    return "；".join(dict.fromkeys(keep))
 
 
 def _requirement_rows(parsed: Mapping[str, Any], categories: set, facts: Optional[Facts], *, stars: bool = False) -> List[List[str]]:
@@ -259,15 +292,21 @@ def _requirement_rows(parsed: Mapping[str, Any], categories: set, facts: Optiona
             if text in seen or _covered(text, facts, str(r.get("id") or "")):
                 continue
             seen.add(text)
+            quote = _quote(text, facts, "star" if is_star else str(r.get("id") or ""))
+            if not quote:
+                continue
             ref = refs[index] if index < len(refs) else (refs[0] if refs else "—")
             label = "★/必须满足项" if is_star else str(r.get("title") or "要求")
-            rows.append([f"{label} {ref}", _clip(text, 120), ref, "已检出", "逐条响应，须人工确认" if is_star else "—"])
+            rows.append([f"{label} {ref}", _clip(quote, 120), ref, "已检出", "逐条响应，须人工确认" if is_star else "—"])
     return rows
 
 
 def _score_rows(parsed: Mapping[str, Any], facts: Optional[Facts]) -> List[List[str]]:
     rows: List[List[str]] = []
     noted: List[str] = []
+    method = str((parsed.get("handoff") or {}).get("eval_method") or "")
+    if method and not any(m.get("value") for m in _mentions(facts, "eval_method")):
+        rows.append(["评标办法（原文出现）", method, "—", "已检出", "对照评标办法章节确认"])
     for s in (facts or {}).get("scores") or []:
         name = str(s.get("name") or "")
         rows.append([_with_lot(f"评分点：{name}" if name else "评分点（未写名称）", str(s.get("lot") or "")),
@@ -277,7 +316,9 @@ def _score_rows(parsed: Mapping[str, Any], facts: Optional[Facts]) -> List[List[
         flat = re.sub(r"\s+", "", str(p.get("text") or ""))
         if flat and not any(n and (n in flat or flat in n) for n in noted):
             rows.append([f"评分点 {p.get('requirement_ref')}", _clip(p.get("text"), 120), str(p.get("requirement_ref") or "—"), "已检出", "—"])
-    return rows or [["评分点", MISSING, "—", "未检出", "查评标办法的评分表；没有评分点就不排技术标目录"]]
+    if not any(r[0].startswith("评分点") for r in rows):
+        rows.append(["评分点", MISSING, "—", "未检出", "查评标办法的评分表；没有评分点就不排技术标目录"])
+    return rows
 
 
 def _special_rows(parsed: Mapping[str, Any], facts: Optional[Facts]) -> List[List[str]]:
@@ -582,7 +623,8 @@ def compliance_gaps(handoff: Optional[Mapping[str, Any]], matrix: Optional[Mappi
     p0 = (ho.get("p0_reject_scan") or {}).get("items") or []
     if p0:
         md += ["", f"未解决 P0（资格/废标/★，须人工确认，系统不关闭）：{len(p0)} 项", ""]
-        md += [f"- {_clip(item.get('exact_text') or item.get('title'), 80)}" for item in p0[:12]]
+        quotes = [_quote(str(item.get("exact_text") or item.get("title") or ""), tender, str(item.get("req_id") or "")) for item in p0[:12]]
+        md += [f"- {_clip(q, 80)}" for q in dict.fromkeys(quotes) if q] or ["- （均已在上表逐项列出）"]
     summary = (matrix or {}).get("summary") or {}
     if summary:
         md += ["", f"- 解析矩阵：{summary.get('n', 0)} 条要求，其中须人工 {summary.get('human_required', 0)}、待核 {summary.get('review', 0)}。"]
@@ -611,7 +653,8 @@ def _gap_rows(topic: str, tender: Facts, ours: Facts, lots: List[str], open_item
         have_value = next((str(m["value"]) for m in haves if m.get("value")), "")
         have_cell = "；".join(dict.fromkeys(_clip(_value_cell(m)) for m in haves)) if haves else "未提供"
         if len(have_cell) > CELL and have_value:
-            have_cell = have_value
+            # too long with the clauses: keep every value, drop the clauses - never a value for room
+            have_cell = "；".join(dict.fromkeys(str(m["value"]) for m in haves if m.get("value")))
         pending = any(_PENDING.search(str(m.get("note") or "")) for m in haves)
         mismatch = _price_gap(str(need["value"]), have_value) if (topic == "price_cap" and need) else _numeric_gap(topic, str(need["value"]) if need else "", have_value)
         waiting = next((str(m.get("note")) for m in haves if _PENDING.search(str(m.get("note") or ""))), "")
@@ -638,6 +681,9 @@ def _comparison_rows(comparison: Optional[Sequence[Mapping[str, Any]]], tender: 
     for row in comparison or []:
         text = str(row.get("requirement") or "")
         if not text or _covered(text, tender):
+            continue
+        text = _quote(text, tender, "star" if "star" in (row.get("kinds") or []) else "")
+        if not text:
             continue
         quotes = "；".join(str(e.get("quote")) for e in row.get("response_evidence") or [])
         notes = "；".join(str(c.get("note")) for c in row.get("conflicts") or [])

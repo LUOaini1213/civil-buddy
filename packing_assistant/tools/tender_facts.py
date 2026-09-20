@@ -38,7 +38,8 @@ from packing_assistant import post_facts
 
 _NUM = r"\d+(?:,\d{3})*(?:\.\d+)?"
 _TIME = re.compile(r"(?<![\dA-Za-z#.])" + _NUM + r"\s*(?:个?日历天|日历日|个?工作日|calendar\s*days?|working\s*days?|days?|个月|天|日|周|月|年)", re.I)
-_MONEY = re.compile(r"(?<![\dA-Za-z#.])" + _NUM + r"\s*(?:万元|亿元|万|亿|元)(?!/)")
+_MONEY = re.compile(r"(?<![\dA-Za-z#.])" + _NUM + r"\s*(?:万元|亿元|万|亿|元)(?!/)"
+                    r"|(?:S\$|US\$|HK\$|SGD|USD|RMB|CNY|¥|￥)\s*" + _NUM + r"(?:\s*(?:万元|万|million|mil|k|K))?")
 _AREA = re.compile(r"(?<![\dA-Za-z#.])" + _NUM + r"\s*(?:万?平方米|万?平米|万?平方|万?平|㎡|m²|m2)(?![一-鿿])", re.I)
 _SCORE = re.compile(r"(?<![\dA-Za-z#.])" + _NUM + r"\s*分(?![钟公包部项期批别类析布配])")
 _DATE = re.compile(r"\d{4}\s*[-/.年]\s*\d{1,2}\s*[-/.月]\s*\d{1,2}\s*[日号]?|\d{1,2}\s*月\s*\d{1,2}\s*[日号]")
@@ -78,7 +79,8 @@ _OURS_STRONG = (
     r"|投标函(?:里|上|中)?(?:写|填|报|照着写|照抄)|施组(?:里|中|上)?|技术标里|商务标里|照着写|照抄"
 )
 _OURS_WEAK = (
-    r"(?<![须应需得])承诺|拟派|拟任|拟投入|报的|排的|写成|写的|填的|报了|(?<![确决指规约])定了"
+    r"(?<![须应需得])承诺|拟派|拟任|拟报|拟投入|打算报|准备报|打算派|准备派|报的|排的|写成|写的|填的|报了"
+    r"|(?<![确决指规约])定了|(?<![确决指规约])定的"
     r"|财务(?=[^，,。；;]{0,4}(?:转|付|交|缴|说))|实缴|只转|转了|交了|缴了"
     r"|已经|已开|已转|已交|已缴|已盖|已办|已附|已提交|已编|开好|盖好|办好|都在"
     r"|尚未|还没|还差|没拿到|没定|没盖|没开|没交|没办|没编|未盖|未开|未交|未办|待补|后补|明天补|谁跟"
@@ -115,16 +117,30 @@ def _is_document(text: str) -> bool:
     return sum(1 for line in (text or "").splitlines() if _NUMBERED_LINE.match(line)) >= 2
 
 
+#: who is speaking when the clause names the tender's side as its subject
+_TENDER_SUBJECT = re.compile(r"招标文件|招标公告|招标方|招标人|招标要求|前附表|须知|业主|甲方|建设单位|他们|对方")
+_STRONG_RE = re.compile(_OURS_STRONG)
+
+
 def _our_cue(clause: str, *, document: bool = False) -> "Optional[re.Match[str]]":
-    """Where in this clause our own side starts speaking, if it does."""
+    """Where in this clause our own side starts speaking, if it does.
+
+    A progress word after a tender subject is the tender's verb: in "招标文件写的是工期365日历天"
+    nobody of our side wrote anything. Only a first-person cue ("…，我们排了450天") takes over from it.
+    """
     if _TENDER_SPEAKS.search(clause):
         return None
     cues = _OURS_IN_DOCUMENT if document else _OURS
     absent = _NOT_GIVEN.search(clause)
+    subject = _TENDER_SUBJECT.search(clause)
     cue = cues.search(clause)
-    while cue and absent and absent.start() <= cue.start() < absent.end():
+    while cue:
+        inside_absent = bool(absent and absent.start() <= cue.start() < absent.end())
+        governed = bool(subject and subject.start() < cue.start() and not _STRONG_RE.match(clause, cue.start()))
+        if not (inside_absent or governed):
+            return cue
         cue = cues.search(clause, cue.end())
-    return cue
+    return None
 
 # ---------------------------------------------------------------------------
 # topics
@@ -143,7 +159,7 @@ class Topic:
 TOPICS: Tuple[Topic, ...] = (
     Topic("project", "项目名称", ("项目名称", "工程名称", "项目名", "工程名"), "text", "project"),
     Topic("owner", "招标人", ("招标人", "建设单位", "发包人", "业主单位", "业主", "甲方"), "text", "project"),
-    Topic("tender_no", "招标编号", ("招标项目编号", "招标文件编号", "招标编号", "项目编号", "标书编号"), "code", "project"),
+    Topic("tender_no", "招标编号", ("招标项目编号", "招标文件编号", "招标编号", "项目编号", "标书编号", "招标文件"), "code", "project"),
     Topic("scope", "招标范围", ("招标范围", "承包范围", "施工范围", "工程范围", "发包范围"), "text", "project"),
     Topic("area", "建筑面积", ("总建筑面积", "建筑面积", "面积"), "area", "project"),
     Topic("structure", "结构形式", ("结构形式", "结构类型", "结构体系", "结构"), "text", "project"),
@@ -188,6 +204,9 @@ _PERSON_LOOSE = re.compile(_SURNAME + r"[一-鿿]{1,2}")
 _DEPARTMENT = re.compile(r"[一-鿿]{2,5}(?:部|科|处|室|中心)(?=" + _SURNAME + ")")
 _FOLLOW = re.compile(r"(?:让|由|交给|交|归|找|请|先?挂在?)\s*(?:[一-鿿]{2,5}(?:部|科|处|室|中心))?\s*(" + _SURNAME + r"[一-鿿]{1,2}?)"
                      r"(?=跟进|跟|负责|盯|对接|牵头|落实|管|$|[\s，,;；。、])")
+
+
+_FOLLOW_AFTER = re.compile(r"(?:缺口|责任|补证|跟进|对接|这块|事项)[^，,。；;]{0,6}?(" + _SURNAME + r"[一-鿿]{1,2}?)(?=负责|跟进|跟|盯|牵头|对接|落实|管)")
 
 
 def _person(text: str) -> str:
@@ -327,6 +346,8 @@ def _topic_hits(clause: str) -> List[Tuple[int, int, str]]:
             after = clause[end:end + 3]
             if alias == "结构" and not re.match(r"\s*(?:[：:]|为|是|\s)", after):
                 continue  # "剪力墙结构" / "优质结构" is a value, not a label
+            if alias == "招标文件" and not _DOC_CODE.match(clause, end):
+                continue  # only "招标文件HD-2026-SG-018": the number standing right after it
             if alias == "报价" and re.match(r"\s*分", after):
                 continue  # 报价分 is a scoring point
             if alias == "面积" and re.search(r"(?:使用|占地|用地|绿化)$", clause[:start]):
@@ -372,7 +393,7 @@ def _before(kind: str, clause: str, start: int, floor: int) -> str:
 
 
 _REQUIRES = re.compile(r"^\s*(?:[一二三四五六七八九十\d]+\s*[、.．)）]\s*)?(?:[★☆＊*]\s*)?(?:投标人|供应商|申请人|承包人|投标单位)?\s*"
-                       r"(?:须|应当|应|必须|需)\s*(?:同时)?\s*(?:具备|具有|持有|取得|满足|提供)?\s*(?:有效的)?")
+                       r"(?:须|应当|应|必须|需|要求|得是|得有)\s*(?:同时)?\s*(?:具备|具有|持有|取得|满足|提供)?\s*(?:有效的)?")
 
 
 def _before_text(kind: str, clause: str, floor: int, end: int) -> str:
@@ -384,7 +405,7 @@ def _before_text(kind: str, clause: str, floor: int, end: int) -> str:
     if kind != "text":
         return ""
     lead = _REQUIRES.match(clause[floor:])
-    if not lead or not lead.group(0).strip() or not re.search(r"须|应|必须|需", lead.group(0)):
+    if not lead or not lead.group(0).strip() or not re.search(r"须|应|必须|需|要求|得是|得有", lead.group(0)):
         return ""
     text = clause[floor + lead.end():end].strip(_EDGE)
     return text if 4 <= len(text) <= SHORT else ""
@@ -392,7 +413,7 @@ def _before_text(kind: str, clause: str, floor: int, end: int) -> str:
 
 def _requirement_text(region: str) -> str:
     """For 项目经理 / 技术负责人 on the tender's side the value is a qualification, not a name."""
-    text = _CONNECT.sub("", region).strip(_EDGE + "、")
+    text = re.sub(r"(?:而|但|可|却|且|并|不过)$", "", _CONNECT.sub("", region).strip(_EDGE + "、"))
     ok = _GRADE.search(text) or re.search(r"建造师|注册|职称|工程师|证书|[ABC]证|资格", text)
     return text if ok and len(text) <= SHORT else ""
 
@@ -405,7 +426,7 @@ _NAME_LEAD = re.compile(
 def _project_name(sentence: str) -> str:
     """"滨江路雨污分流改造工程二标段" - a name that ends in 工程 / 项目, or stands before its 标段."""
     body = post_facts.strip_command(sentence)
-    match = re.search(r"([一-鿿A-Za-z0-9#（）()·]{4,40}?(?:工程|项目))(?=(?:第?[" + _CN_NUM + r"\d]{1,2}标段)|的?招标|[，,。；;\s]|$)", body)
+    match = re.search(r"([一-鿿A-Za-z0-9#（）()·]{4,40}?(?:工程|项目))(?=(?:第?[" + _CN_NUM + r"\d]{1,2}标段)|(?:施工|监理|设计|勘察|采购|总承包)?的?招标|[，,。；;\s]|$)", body)
     if not match:
         match = re.search(r"([一-鿿A-Za-z0-9#（）()·]{6,40}?)(?=第?[" + _CN_NUM + r"\d]{1,2}标段)", body)
     if not match:
@@ -455,8 +476,10 @@ def extract(text: str, *, sides: str = "auto") -> TenderFacts:
             clauses = [c.strip(_EDGE) for c in _CLAUSE.split(line_body) if c.strip(_EDGE)]
             if clauses and not _NOT_GIVEN.search(clauses[0]):
                 detail = _SPECIAL_DETAIL.search(line_body)
-                facts.specials.append(Special(clauses[0], detail.group(0).strip() if detail else "", lot,
-                                              raw_line.strip(_EDGE), line_no))
+                rest = "，".join(clauses[1:])
+                said = detail.group(0).strip() if detail else (rest if len(rest) <= SHORT else "")
+                facts.specials.append(Special(clauses[0], said, lot, raw_line.strip(_EDGE), line_no))
+                seen_clauses.extend(clauses)
             continue
         label_is_ours = bool(head and line_topic and _OURS.search(head.group(1)))
         first_of_line = line_topic is not None
@@ -558,7 +581,9 @@ def extract(text: str, *, sides: str = "auto") -> TenderFacts:
                         # "三标保证金68万保函已经开好了": our part is "保函已经开好了", not the requirement again
                         begin = start if end == split_at else split_at  # the keyword right before the cue is its subject
                         said = clause[begin:stop].strip(_EDGE)
-                        facts.mentions.append(Mention(key, "ours", lot, rest_value, said if len(said) >= 6 else shown, line_no))
+                        later = any(k == key for _s, _e, k in hits[index + 1:])
+                        if rest_value or not later:  # "保证金要80万我们保函开的是80万": 保函 speaks for our side
+                            facts.mentions.append(Mention(key, "ours", lot, rest_value, said if len(said) >= 6 else shown, line_no))
                         placed = True
                     carried = key
                 # ---- a clause with no keyword of its own continues the topic before it
@@ -596,7 +621,7 @@ def extract(text: str, *, sides: str = "auto") -> TenderFacts:
                 if re.search(r"谁(?:来)?(?:跟进|跟|负责|管|盯|牵头)|责任人[^，,。]{0,6}(?:没|未|待)", clause):
                     facts.mentions.append(Mention("owner_person", "none", lot, "", shown, line_no, not_given=True))
                     placed = True
-                follow = _FOLLOW.search(clause)
+                follow = _FOLLOW.search(clause) or _FOLLOW_AFTER.search(clause)
                 if follow and not any(key == "owner_person" for _s, _e, key in hits):
                     facts.mentions.append(Mention("owner_person", "none", lot, follow.group(1), shown, line_no))
                     placed = True
@@ -622,8 +647,8 @@ def extract(text: str, *, sides: str = "auto") -> TenderFacts:
                     if rest and len(rest) <= SHORT and not re.search(r"都投|一起投|别串|分开", rest) and len(keys) == 1:
                         facts.lot_scopes.setdefault(keys[0], rest)
                         placed = True
-                if not placed and re.search(r"\d", _NUMBERED_LINE.sub("", clause, count=1)):
-                    facts.unplaced.append(shown)  # a number nobody placed; "3. …" alone is only a numbering
+                if not placed and re.search(r"\d", _LOT.sub(" ", _NUMBERED_LINE.sub("", clause, count=1))):
+                    facts.unplaced.append(shown)  # a number nobody placed; "3. …" or "1标" alone is only a numbering
                 previous_clause = clause
             if origin:
                 # "补遗1号只把工期改成450天，保证金没提": what the rest of the sentence says is the addendum's
@@ -649,6 +674,18 @@ def extract(text: str, *, sides: str = "auto") -> TenderFacts:
     facts.lot_scopes = {forms.get(key, key): scope for key, scope in facts.lot_scopes.items()}
     used = [s.detail for s in facts.specials if s.detail] + [m.value for m in facts.of("project") if m.value]
     facts.unplaced = [c for c in dict.fromkeys(facts.unplaced) if not any(u in c for u in used)]
+    # The net under everything above. A clause may have one number filed and another not
+    # ("招标文件HD-018写的是工期365日历天": 365 filed, the document number not). Every number and
+    # every document code of the text is either inside something that was filed, or its clause
+    # is listed - so a writer that prints the fields and ``unplaced`` has lost nothing.
+    filed = [m.value for m in facts.mentions] + [s.score for s in facts.scores] + list(facts.lot_scopes.values())
+    filed += [x for s in facts.specials for x in (s.name, s.detail)] + list(facts.unplaced)
+    for clause in dict.fromkeys(seen_clauses):
+        body = _LOT.sub(" ", _NUMBERED_LINE.sub("", clause, count=1))
+        tokens = [m.group(0) for m in _DOC_CODE.finditer(body)]
+        tokens += [m.group(0) for m in re.finditer(r"(?<![\dA-Za-z#.\-])" + _NUM + r"(?![\d#])", _DOC_CODE.sub(" ", body))]
+        if any(not any(re.search(r"(?<![\d.])" + re.escape(tok) + r"(?![\d.])", kept) for kept in filed) for tok in tokens):
+            facts.unplaced.append(clause)
     return facts
 
 
