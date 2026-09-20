@@ -46,17 +46,25 @@
 | 技术应用：外部数据必须带得出出处（2026-09-20） | 四个只读数据源工具：不接受 URL、文件、SQL、命令或凭据入参，端点只由已注册的工具名决定，响应缺数据集版本、哈希或逐字证据一律拒收；系统级沙箱的能力按平台如实分级披露 | `python scripts/test_readonly_sources.py`（17 例，离线 fixture）· `npm run check` 中的 `os-sandbox` |
 | 完成度：每岗质量门禁可抽样复跑（R5） | 每岗记分卡四门禁（意图命中/KB 检索/交付物 schema/诚实度），试点 5 岗全 PASS、全离线零 Key | `python scripts/eval_post_scorecard.py --all-pilots`（产物 `output/posts/<岗>.json`） |
 
-## c) 视频脚本表（3 分钟，单屏录制成片）
+## c) 视频脚本表（115 秒重录版，2026-09-20）
+
+> 官方限 ≤2 分钟。**已提交的成片是 8/31 那版（116 秒），内容停在初审时的功能**；下表是按今天的
+> 产品重写的重录脚本。重录管线：`scripts/submission/record_v2.py`（1920×1080 真机录屏）→
+> `tts_v2.py`（edge-tts 神经语音）→ `assemble_v2.py`（ffmpeg 合成 + 烧字幕），本机 ffmpeg 9.0.1 可用。
 
 | 时间 | 画面 | 口播要点 | 操作 |
 |------|------|----------|------|
-| 0:00–0:15 | 工作台 66 岗目录/热力图一闪而过 | "土木版 Codex：16 大类 66 岗；数字只由工具算，模型只路由。" | 打开 :8765 工作台首页扫一圈 |
-| 0:15–1:35 | pack-ship 闭环 + 纠偏一拍 | "一句话装柜：表格进、真数字出；柜数坐标是引擎算的。" 插一拍纠偏：改错表让引擎拒绝并给原因 | 聊天框输入 `pack test/sim_materials/small_one_container/materials.xlsx` → 出装箱作业单；随后给一份故意超载的表，展示引擎拒绝/拆箱提示 |
-| 1:35–2:20 | 主线 C 投标应答 + 交付 | "招标文本进来，条款级响应矩阵出去；装柜 tools 就是交付证据；资质栏留给人。" | POST `/api/tender/delivery`（`http://127.0.0.1:8000`），展示矩阵 → handoff 三列 → 交付页 `submit_blocked=true` |
-| 2:20–2:45 | 纠偏专场 | "策略引擎+失败恢复两层中间件：越权拒、挂了恢复、超限熔断；成稿缺数标 [A001] 不编数。" | `python scripts/demo_agent_middleware.py` 四拍剧本；切 safety-brief 成稿放大 `[A001]` 待填栏 |
-| 2:45–3:00 | 红线收口 | "不出签认件、不自动判定可投标；人确认之前，submit_blocked=true。" | 定格 `/api/tender/delivery` 应答中 `submit_blocked: true` 字样，黑屏出仓库名 |
+| 0:00–0:10 | 工作台首屏，66 岗一闪而过 | "土木版 Codex：16 大类 66 个岗位。硬数字只由工具算，模型只负责路由。" | 打开 :8765 工作台 |
+| 0:10–0:35 | 一句话装箱 | "把真实出运表丢进去——柜数、坐标、重心都是引擎算出来的，不是模型说出来的。" | 回形针上传 Excel 或输入 `pack <表格路径>`，出装箱作业单 |
+| 0:35–0:50 | 确认闸 | "高风险的一步停在这里。人不点，它不往下走；关掉就是驳回。" | 停在 HITL 确认卡，展示非标预检 |
+| 0:50–1:10 | 招标响应逐行比对 | "一条招标要求出一行，数字对不上会被指出来：招标写 60 日历天，投标写 90 天，标成待人工核验，不替人下结论。" | 展示 `conflict_requires_review` 与 `conflicts[]` |
+| 1:10–1:30 | 模型想下判断，被守卫挡下 | "模型说得像，不等于模型算得对。它要替人下判定，守卫会挡；报告里每个数字都得指得回工具结果。" | 触发 verdict guard；展示数字指回 `pack-plan.json` |
+| 1:30–1:45 | 运行边界 | "工具工作跑在受内核约束的进程里；公司自己的岗位是一个文件夹或一个 zip，不是代码。" | 沙箱、插件、桌面应用各一闪 |
+| 1:45–1:55 | 红线收口 | "不出签认件，不判定可以投标。人确认之前，submit_blocked 一直是 true。" | 定格 `submit_blocked: true`，黑屏出仓库名 |
 
-录制注意：先跑通 `python scripts/demo_one_shot.py` 与 :8000 网关再开录；NL pack 与纠偏各留一条备选镜头；口播禁句见 [docs/competition-demo-script.md](../competition-demo-script.md)「不说的话」。
+录制注意：先跑通 `python scripts/demo_one_shot.py` 与 :8000 网关再开录；装箱与"守卫挡下判定"各留一条
+备选镜头；口播禁句见 [docs/competition-demo-script.md](../competition-demo-script.md)「不说的话」，以及
+`output/submission/00-提交表单填写.txt` 里的禁句清单（含"128/128 全部装得下"这类说法）。
 
 ## d) 人机协同履历表
 
