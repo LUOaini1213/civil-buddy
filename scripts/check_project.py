@@ -32,6 +32,7 @@ CHECKS = (
     Check("stack-parity", ("scripts/test_stack_parity.py",)),
     Check("expert-capabilities", ("scripts/test_expert_capabilities.py",)),
     Check("tool-contracts", ("scripts/test_tool_contracts.py",)),
+    Check("readonly-sources", ("scripts/test_readonly_sources.py",)),
     Check("task-routing", ("scripts/test_task_router.py",)),
     Check("readonly-routing", ("scripts/test_readonly_routing.py",)),
     Check("tender-workflow", ("scripts/test_tender_workflow.py",)),
