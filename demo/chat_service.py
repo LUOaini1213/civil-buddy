@@ -159,13 +159,15 @@ def prepare_turn(root: Path, body: dict) -> dict:
                "indexed_history": prepared["indexed_history"], "attachments_indexed": prepared["attachments_indexed"],
                "retrieved": len(prepared["sources"]), "memory_saved": True}
     workflow_sources = []
+    workflow_unreadable = []
     roles = body.get("attachment_roles") or {}
     if any(key not in attachment_ids or role not in {"tender", "response", "reference"} for key, role in roles.items()):
         raise ValueError("资料用途只允许指定当前选择的附件")
     if route["workflow"]:
-        from workflow_service import selected_sources, budget_settings
+        from workflow_service import selected_sources, budget_settings, unreadable_attachments
         budget_settings(body.get("workflow_budget"))
         workflow_sources = selected_sources(root, sid, message, attachment_ids, roles)
+        workflow_unreadable = unreadable_attachments(sid)
     return {"session_id": sid, "message": message, "material": material,
             "ids": ids, "skill_source": source, "history": history, "context": context,
             "requests": requests, "prepared_context": prepared,
@@ -173,7 +175,8 @@ def prepare_turn(root: Path, body: dict) -> dict:
             "intent": intent, "project_id": project_id, "project_name": project_name,
             "confirmed": body.get("confirm_ok") is True or CONFIRM in message,
             "attachments": attachment_ids, "route": route,
-            "workflow_sources": workflow_sources, "workflow_budget": body.get("workflow_budget"),
+            "workflow_sources": workflow_sources, "workflow_unreadable": workflow_unreadable,
+            "workflow_budget": body.get("workflow_budget"),
             "attachment_roles": roles}
 
 

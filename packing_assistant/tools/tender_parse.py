@@ -710,6 +710,13 @@ def parse_tender_text(text: str, *, source: str = "text", sides: str = "auto") -
         eval_method=eval_method,
         facts=facts.to_dict(),
     )
+    # A job file that was named and gave no text (office_job writes "（读失败）why" under its heading).
+    # The later posts only get the handoff: "未在原文检出" means something else when the 原文 was never read.
+    from packing_assistant.office_job import material_role, unread_files
+
+    unread = [{**item, "role": material_role(item["title"])} for item in unread_files(text or "")]
+    if unread:
+        handoff["unreadable"] = unread
 
     return {
         "schema": "tender.parse.v1",

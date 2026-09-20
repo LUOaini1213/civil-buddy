@@ -197,6 +197,59 @@ class UploadTests(unittest.TestCase):
         (directory / "abcdef123456.json").write_text(json.dumps({"id": "abcdef123456", "name": "missing.txt"}), encoding="utf-8")
         self.assertEqual(uploads.list_uploads("session-one"), [])
 
+    def test_a_refused_unreadable_attachment_is_remembered_and_nothing_else_changes(self) -> None:
+        from pypdf import PdfWriter
+
+        scan = BytesIO()
+        writer = PdfWriter()
+        writer.add_blank_page(width=300, height=300)
+        writer.write(scan)
+        with self.assertRaises(uploads.UploadUnreadable) as caught:
+            uploads.save_uploads("session-one", [("招标文件.txt", "工期60日历天，投标保证金20万元。".encode()), ("投标文件.pdf", scan.getvalue())])
+        self.assertIsInstance(caught.exception, uploads.UploadError, "still a 400 for the upload route")
+        self.assertIn("OCR", str(caught.exception))
+        self.assertEqual(uploads.list_uploads("session-one"), [], "nothing of a refused batch is saved")
+        self.assertEqual(uploads.strict_documents("session-one"), [], "the note is not an attachment record")
+        noted = uploads.unreadable_uploads("session-one")
+        self.assertEqual([(n["name"], n["kind"]) for n in noted], [("投标文件.pdf", "pdf")])
+        self.assertIn("OCR", noted[0]["reason"])
+        self.assertEqual(uploads.unreadable_uploads("session-two"), [], "one task's note is not another's")
+        self.assertEqual(sorted(path.name for path in (uploads.UPLOAD_ROOT / "session-one").iterdir()), [uploads.UNREADABLE_LOG])
+
+    def test_the_note_goes_when_the_same_name_is_attached_readable(self) -> None:
+        with self.assertRaises(uploads.UploadUnreadable):
+            uploads.save_upload("session-one", "投标文件.docx", b"not a zip archive at all")
+        self.assertEqual([n["name"] for n in uploads.unreadable_uploads("session-one")], ["投标文件.docx"])
+        uploads.save_upload("session-one", "投标文件.docx", _docx())
+        self.assertEqual(uploads.unreadable_uploads("session-one"), [])
+
+    def test_a_wrong_type_is_not_an_unreadable_file(self) -> None:
+        with self.assertRaises(uploads.UploadError) as caught:
+            uploads.save_upload("session-one", "bad.exe", b"invalid executable")
+        self.assertNotIsInstance(caught.exception, uploads.UploadUnreadable)
+        self.assertFalse(uploads.UPLOAD_ROOT.exists())
+        self.assertEqual(uploads.unreadable_uploads("session-one"), [])
+
+    def test_the_note_is_bounded_and_never_holds_parser_output(self) -> None:
+        for index in range(uploads.MAX_UNREADABLE + 6):
+            with self.assertRaises(uploads.UploadUnreadable):
+                uploads.save_upload("session-one", f"坏{index}.xlsx", b"SECRET-BYTES-OF-THE-DOCUMENT")
+        log = (uploads.UPLOAD_ROOT / "session-one" / uploads.UNREADABLE_LOG).read_text(encoding="utf-8")
+        self.assertEqual(len(log.splitlines()), uploads.MAX_UNREADABLE)
+        self.assertNotIn("SECRET", log)
+        self.assertEqual(len(uploads.unreadable_uploads("session-one")), uploads.MAX_UNREADABLE)
+
+    def test_the_workflow_is_told_with_a_role_read_off_the_name(self) -> None:
+        import workflow_service
+
+        with self.assertRaises(uploads.UploadUnreadable):
+            uploads.save_upload("session-one", "投标文件.docx", b"not a zip archive at all")
+        with self.assertRaises(uploads.UploadUnreadable):
+            uploads.save_upload("session-one", "项目经理证书.pdf", b"%PDF-1.4 broken")
+        told = workflow_service.unreadable_attachments("session-one")
+        self.assertEqual(sorted((t["title"], t["role"]) for t in told), [("投标文件.docx", "response"), ("项目经理证书.pdf", "reference")])
+        self.assertTrue(all(t["reason"] for t in told))
+
 
 if __name__ == "__main__":
     unittest.main()

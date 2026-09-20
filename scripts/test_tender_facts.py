@@ -293,6 +293,24 @@ class Staff(unittest.TestCase):
                          [("一标段", "安全员", "张伟"), ("一标段", "质检员", "李娜")])
 
 
+class UnreadMarker(unittest.TestCase):
+    """office_job writes "（读失败）why" under the heading of a job file that gave no text. Whatever the
+    reason says, it is neither the tender nor us speaking."""
+
+    BLOB = "解析招标 招标文件.txt 评标办法.pdf\n\n### 评标办法.pdf\n（读失败）须在8日内重新提供，不足 8 个字符\n\n### 招标文件.txt\n工期60日历天。"
+
+    def test_the_marker_line_is_no_piece_of_the_tender(self) -> None:
+        pieces = tf.tender_pieces(self.BLOB)
+        self.assertEqual([p for line in pieces for p in line if "读失败" in p or "8" in p], [])
+        self.assertEqual(len(pieces), 5, "it still counts as a line: L# keeps meaning the n-th non-empty line")
+
+    def test_the_marker_line_gives_no_fact_and_leaves_no_number_behind(self) -> None:
+        facts = tf.extract(self.BLOB)
+        self.assertEqual(found(facts, "duration", "tender"), ["60日历天"])
+        self.assertEqual(facts.unplaced, [])
+        self.assertEqual([m for m in facts.mentions if "8" in (m.value or "") and m.value != "60日历天"], [])
+
+
 class Blocks(unittest.TestCase):
     """"招标要求：… / 我方情况：…" - the person has said whose words follow."""
 

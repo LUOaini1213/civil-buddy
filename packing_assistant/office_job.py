@@ -461,6 +461,55 @@ def read_material(path: Path, limit: int = JOB_FILE_CHARS) -> str:
     return read_job_file(target, limit)
 
 
+#: In a blob of job files: the file named on the heading above gave no text. Why follows on the same line.
+UNREAD = "（读失败）"
+_MIN_TEXT = 8  # the floor demo/uploads.py uses too: fewer characters than this is not a document
+_UNREAD_BLOCK = re.compile(r"^###[ \t]+(?P<name>[^\n]+)\n（读失败）(?P<reason>[^\n]*)", re.M)
+
+
+_TENDER_NAME = ("招标", "tender", "itt", "rfp", "rfq")
+_RESPONSE_NAME = ("响应", "应答", "投标", "response", "bid", "proposal")
+
+
+def material_role(name: str) -> str:
+    """tender / response / reference, read off a file name - and never guessed past that."""
+    low = (name or "").lower()
+    return ("tender" if any(mark in low for mark in _TENDER_NAME)
+            else "response" if any(mark in low for mark in _RESPONSE_NAME) else "reference")
+
+
+def unread_reason(path: Path, body: Optional[str]) -> str:
+    """Why nothing usable came out of ``path`` - "" when something did. ``body`` is None when the reader
+    raised. The parser's own message is never passed on: it can echo bytes of the document."""
+    if body is None:
+        return "打不开，或内容与扩展名不符"
+    if len(body.strip()) >= _MIN_TEXT:
+        return ""
+    if path.suffix.lower() == ".pdf":
+        return "PDF 没有文字层（多半是扫描件）：先 OCR，或另存为 Word、文本"
+    return "里面几乎没有文字"
+
+
+def read_material_checked(path: Path, limit: int = JOB_FILE_CHARS, *,
+                          reader: Optional[Callable[[Path, int], str]] = None) -> Tuple[str, str]:
+    """``(text, "")`` for a file that could be read, ``("", why)`` for one that could not.
+
+    A file somebody pointed at and nothing came out of is not the same as no file: a check that was
+    given 投标响应.pdf and could not read it has not found the response missing."""
+    try:
+        body = (reader or read_material)(path, limit)
+    except Exception:  # noqa: BLE001 - whatever the parser raised, the file was not read
+        return "", unread_reason(path, None)
+    reason = unread_reason(path, body)
+    return ("", reason) if reason else (body, "")
+
+
+def unread_files(text: str) -> List[Dict[str, str]]:
+    """The files a blob of job files says it could not read: ``[{title, reason}]``."""
+    return [{"title": m.group("name").strip(), "reason": m.group("reason").strip()}
+            for m in _UNREAD_BLOCK.finditer((text or "").replace("\r\n", "\n"))]
+
+
 def _read_xlsx_text(path: Path, limit: int) -> str:
     import openpyxl
 
@@ -517,10 +566,9 @@ def named_files_blob(paths: Sequence[Path], *, reader: Optional[Callable[[Path, 
         if room < 80:
             chunks.append(f"（还有 {path.name} 未贴全文）")
             continue
-        try:
-            body = (reader or read_job_file)(path, min(JOB_FILE_CHARS, room))
-        except (OSError, RuntimeError, *_OFFICE_CONTENT_ERRORS):
-            chunks.append(f"### {path.name}\n（读失败）")
+        body, why = read_material_checked(path, min(JOB_FILE_CHARS, room), reader=reader or read_job_file)
+        if why:
+            chunks.append(f"### {path.name}\n{UNREAD}{why}")
             continue
         block = f"### {path.name}\n{body}"
         chunks.append(block)
@@ -545,10 +593,9 @@ def job_files_blob(query: str = "") -> str:
         if room < 80:
             chunks.append(f"（还有 {f['name']} 未贴全文）")
             continue
-        try:
-            body = read_job_file(Path(f["path"]), min(JOB_FILE_CHARS, room))
-        except (OSError, RuntimeError, *_OFFICE_CONTENT_ERRORS):
-            chunks.append(f"### {f['name']}\n（读失败）")
+        body, why = read_material_checked(Path(f["path"]), min(JOB_FILE_CHARS, room), reader=read_job_file)
+        if why:
+            chunks.append(f"### {f['name']}\n{UNREAD}{why}")
             continue
         block = f"### {f['name']}\n{body}"
         chunks.append(block)

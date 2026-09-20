@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import json
 import re
+import time
 from io import BytesIO
 from pathlib import Path
 from threading import RLock
@@ -28,6 +29,10 @@ INJECT_CHARS = 60_000
 MAX_ARCHIVE_BYTES = 60 * 1024 * 1024
 MAX_ARCHIVE_ENTRIES = 4096
 ALLOWED_EXT = frozenset({"pdf", "docx", "xlsx", "txt", "md", "csv", "json", "log"})
+#: Refused attachments that gave no text, one JSON object per line. Not .json/.txt/.bin: those three are
+#: the attachment records themselves (strict_documents, the Rust workbench's listing).
+UNREADABLE_LOG = "unreadable.jsonl"
+MAX_UNREADABLE = 24
 _SESSION_RE = re.compile(r"[A-Za-z0-9-][A-Za-z0-9_-]{3,31}\Z")
 _ID_RE = re.compile(r"[a-f0-9]{12}\Z")
 _LOCK = RLock()
@@ -39,6 +44,16 @@ class UploadError(ValueError):
 
 class UploadTooLarge(UploadError):
     """An attachment/request limit failure suitable for a 413 response."""
+
+
+class UploadUnreadable(UploadError):
+    """A file of an accepted type that gave no usable text: damaged, encrypted, a scan with no text
+    layer, empty. Refused like any other bad upload - and remembered, because a bid check run later
+    must be able to say "投标文件.pdf was given and could not be read" instead of "no response given"."""
+
+    def __init__(self, message: str, *, name: str = "", kind: str = "", size: int = 0) -> None:
+        super().__init__(message)
+        self.name, self.kind, self.size = name, kind, size
 
 
 def safe_session_id(session: str) -> str:
@@ -187,18 +202,24 @@ def extract_upload(filename: str, data: bytes) -> tuple[str, str, str]:
             if kind == "csv":
                 raw = csv_text(raw, MAX_TEXT_CHARS)
             engine = "builtin-text"
-    except UploadError:
+    except UploadTooLarge:
         raise
+    except UploadError as exc:
+        # encrypted, binary where text was promised, a parser that is not installed: our own wording
+        raise UploadUnreadable(str(exc), name=name, kind=kind, size=len(data)) from exc
     except Exception as exc:
         # Parser messages can echo document bytes; keep those out of responses.
-        raise UploadError(f"{kind} 文件无法解析，请检查文件是否损坏或格式与扩展名一致") from exc
+        raise UploadUnreadable(f"{kind} 文件无法解析，请检查文件是否损坏或格式与扩展名一致",
+                               name=name, kind=kind, size=len(data)) from exc
     text = _collapse(raw)
     if len(text.strip()) < 8:
         if kind == "pdf":
-            raise UploadError("PDF 里抽不出可用文字。扫描件需要先 OCR，或另存为 Word/文本")
-        if kind in {"docx", "xlsx"}:
-            raise UploadError(f"{kind} 文件里几乎没有文字内容（不足 8 个字符），请检查是否为空白文档")
-        raise UploadError("文件内容几乎为空（不足 8 个字符），请检查后重新上传")
+            message = "PDF 里抽不出可用文字。扫描件需要先 OCR，或另存为 Word/文本"
+        elif kind in {"docx", "xlsx"}:
+            message = f"{kind} 文件里几乎没有文字内容（不足 8 个字符），请检查是否为空白文档"
+        else:
+            message = "文件内容几乎为空（不足 8 个字符），请检查后重新上传"
+        raise UploadUnreadable(message, name=name, kind=kind, size=len(data))
     return kind, text, engine
 
 
@@ -237,6 +258,47 @@ def list_uploads(session: str) -> list[dict]:
     return sorted(result, key=lambda item: item["name"])
 
 
+def _unreadable_lines(path: Path) -> list[dict]:
+    try:
+        log = assert_open(path)
+        if not log.is_file() or log.stat().st_size > 64_000:
+            return []
+        rows = [json.loads(line) for line in log.read_text(encoding="utf-8").splitlines() if line.strip()]
+    except (OSError, ValueError, RuntimeError):
+        return []
+    return [row for row in rows if isinstance(row, dict) and isinstance(row.get("name"), str)
+            and isinstance(row.get("reason"), str)][-MAX_UNREADABLE:]
+
+
+def _remember_unreadable(session: str, failures: list[UploadUnreadable]) -> None:
+    """Best effort. The upload is refused either way; the note only lets a later check tell a file that
+    was given and not read from a file that was never given."""
+    try:
+        with _LOCK:
+            path = _path(_directory(session), UNREADABLE_LOG)
+            rows = _unreadable_lines(path) + [
+                {"name": exc.name, "kind": exc.kind, "bytes": exc.size, "reason": str(exc)[:200], "at": int(time.time())}
+                for exc in failures]
+            guarded_write_text(path, "".join(json.dumps(row, ensure_ascii=False) + "\n" for row in rows[-MAX_UNREADABLE:]))
+    except (OSError, ValueError, RuntimeError):
+        pass
+
+
+def unreadable_uploads(session: str) -> list[dict]:
+    """Files this task tried to attach that gave no text: the last attempt per name, without the names
+    that have been attached successfully since (the same file after OCR, say)."""
+    with _LOCK:
+        directory = assert_open(_directory(session))
+        if not directory.is_dir():
+            return []
+        attached = {item["name"] for item in list_uploads(session)}
+        latest: dict[str, dict] = {}
+        for row in _unreadable_lines(_path(directory, UNREADABLE_LOG)):
+            latest[row["name"]] = row
+    return [{"name": name, "kind": str(row.get("kind") or ""), "reason": row["reason"]}
+            for name, row in latest.items() if name not in attached]
+
+
 def save_uploads(session: str, files: Iterable[tuple[str, bytes]]) -> dict:
     directory = _directory(session)
     files = list(files)
@@ -246,7 +308,17 @@ def save_uploads(session: str, files: Iterable[tuple[str, bytes]]) -> dict:
         raise UploadError("同一会话最多 12 个附件")
     if sum(len(data) for _, data in files) > MAX_REQUEST_BYTES:
         raise UploadTooLarge("一次上传不能超过 25 MB")
-    prepared = [(safe_filename(name), data, extract_upload(name, data)) for name, data in files]
+    prepared = []
+    unreadable: list[UploadUnreadable] = []
+    for name, data in files:
+        try:
+            prepared.append((safe_filename(name), data, extract_upload(name, data)))
+        except UploadUnreadable as exc:
+            unreadable.append(exc)
+    if unreadable:
+        # still nothing of this batch is saved; what changes is that the refusal leaves a note
+        _remember_unreadable(session, unreadable)
+        raise unreadable[0]
     saved: list[dict] = []
     created: list[Path] = []
     with _LOCK:

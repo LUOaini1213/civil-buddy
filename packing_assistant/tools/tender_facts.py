@@ -122,6 +122,10 @@ _TASK_TALK = re.compile(
 _OBLIGES = re.compile(r"必须|须|应当|应具备|应具有|应提供|应满足|不得|否决|无效投标|不予受理|按[^，,。]{0,8}处理")
 
 
+#: office_job writes this under the heading of a job file it could not read. It is neither side speaking.
+UNREAD_MARK = "（读失败）"
+
+
 def is_task_talk(piece: str) -> bool:
     """A clause that only says what the user wants done: no number, no ★, no obligation in it."""
     return bool(_TASK_TALK.search(piece)) and not re.search(r"\d|[★☆＊]", piece) and not _OBLIGES.search(piece)
@@ -591,6 +595,8 @@ def extract(text: str, *, sides: str = "auto") -> TenderFacts:
     lot_forms: Dict[str, str] = {}
     seen_clauses: List[str] = []
     for line_no, raw_line, block_side in _segments(text, sides, tables=True):
+        if raw_line.lstrip().startswith(UNREAD_MARK):
+            continue
         # "标签：" at the start of a line governs the whole line: "已有证据：同类学校业绩一项，合同都在"
         line_topic: Optional[str] = None
         line_body = raw_line
@@ -867,7 +873,7 @@ def _line_sides(text: str, sides: str) -> List[Tuple[List[str], List[str]]]:
         ours: List[str] = []
         for stretch, side in grouped[line_no]:
             line = stretch.strip()
-            if not line:
+            if not line or line.startswith(UNREAD_MARK):
                 continue
             if sides == "none" or side == "theirs":
                 theirs.append(line)

@@ -9,7 +9,7 @@ from __future__ import annotations
 
 import json
 from pathlib import Path
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Optional, Tuple
 from uuid import uuid4
 
 from packing_assistant.runtime.bus import get_bus
@@ -96,26 +96,34 @@ def _with_named_documents(text: str) -> str:
     return f"{text}\n\n{blob}" if blob else text
 
 
-def _tender_sources(text: str) -> Optional[List[Dict[str, Any]]]:
-    """Named job documents as workflow sources, roles read off the file names.
+def _tender_materials(text: str) -> Tuple[Optional[List[Dict[str, Any]]], List[Dict[str, str]]]:
+    """Named job documents as workflow sources, roles read off the file names - and the named ones that
+    gave no text, each with why.
 
-    None unless exactly one file is recognisably the tender: which document is the tender is not
-    something to guess, and the workflow's own marker parsing still applies to pasted text.
+    The sources are None unless exactly one readable file is recognisably the tender: which document is
+    the tender is not something to guess, and the workflow's own marker parsing still applies to pasted
+    text. A file that could not be read used to be left out without a word, so a check that was handed
+    a scanned 投标响应.pdf reported the response as never given.
     """
-    from packing_assistant.office_job import files_named_in, read_material
+    from packing_assistant.office_job import files_named_in, read_material_checked
 
     sources: List[Dict[str, Any]] = []
+    unread: List[Dict[str, str]] = []
     for index, path in enumerate(files_named_in(text, _DOCUMENT_EXTS)):
         name = path.name.lower()
         role = ("tender" if any(mark in name for mark in _TENDER_FILE)
                 else "response" if any(mark in name for mark in _RESPONSE_FILE) else "reference")
-        try:
-            body = read_material(path, 40000)
-        except Exception:  # noqa: BLE001 - an unreadable file is left out, the run says what it used
+        body, why = read_material_checked(path, 40000)
+        if why:
+            unread.append({"title": path.name, "role": role, "reason": why})
             continue
         sources.append({"source_id": f"{role}-{index + 1}", "title": path.name, "text": body, "start": 0,
                         "end": len(body), "role": role, "kind": "job_file"})
-    return sources if sum(1 for source in sources if source["role"] == "tender") == 1 else None
+    return (sources if sum(1 for source in sources if source["role"] == "tender") == 1 else None), unread
+
+
+def _tender_sources(text: str) -> Optional[List[Dict[str, Any]]]:
+    return _tender_materials(text)[0]
 
 
 def _draft_md(expert_id: str, tool: str, text: str) -> str:
@@ -498,8 +506,19 @@ def run_agent(
                     out.update(ok=False, error_code="max_steps", reply="招标协作需要解析、两项检查与汇总，请提高步骤预算。")
                     sched.transition(run, "failed")
                     return _finish()
+                sources, unread = _tender_materials(text)
+                lost = [item for item in unread if item["role"] == "tender"]
+                if lost and sources is None:
+                    # the tender itself gave no text: there is nothing to compare against, and the sentence
+                    # that named the file is not a tender to parse instead
+                    names = "；".join(f"{item['title']}（{item['reason']}）" for item in lost)
+                    out.update(ok=False, error_code="tender_unreadable", wrote=False, unreadable=unread,
+                               reply=f"点名的招标文件没读出来：{names}。没有招标正文就无从对照，本轮未写盘。")
+                    sched.transition(run, "failed")
+                    messages.append({"role": "assistant", "content": out["reply"]})
+                    return _finish()
                 sched.transition(run, "acting")
-                result = run_tender_workflow(text, session_id=sid, output_root=_OUT, sources=_tender_sources(text),
+                result = run_tender_workflow(text, session_id=sid, output_root=_OUT, sources=sources, unreadable=unread,
                     confirmed=p0_confirmed, cancel_event=cancel_event)
                 out.update({key: value for key, value in result.items() if key not in {"run_id", "session_id", "schema", "state"}})
                 out["route"], out["collaboration"] = route, result

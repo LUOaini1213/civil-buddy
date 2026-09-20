@@ -3803,7 +3803,9 @@ _OPEN = frozenset({"gap", "pending", "missing", "uncovered", "open", "partial", 
 
 
 def _compliance_gaps_md(handoff: Optional[Dict[str, Any]], matrix: Optional[Dict[str, Any]], *,
-                        ours: Optional[Dict[str, Any]] = None, comparison: Optional[List[Dict[str, Any]]] = None) -> str:
+                        ours: Optional[Dict[str, Any]] = None, comparison: Optional[List[Dict[str, Any]]] = None,
+                        unreadable: Optional[List[Dict[str, Any]]] = None,
+                        evidence: Optional[List[Dict[str, Any]]] = None) -> str:
     """响应缺口对照：七节 + 「事项｜招标要求｜响应原文或证据｜三态｜缺口｜责任人」。
 
     招标要求来自交接里的字段层（handoff["facts"]）和解析器的要求行；我方说法来自 ``ours``（本轮
@@ -3811,7 +3813,8 @@ def _compliance_gaps_md(handoff: Optional[Dict[str, Any]], matrix: Optional[Dict
     「给没给、对不对得上」，不写合格 / 废标。成稿见 tools/tender_tables.compliance_gaps。"""
     from packing_assistant.tools.tender_tables import compliance_gaps
 
-    return compliance_gaps(handoff, matrix, ours=ours, comparison=comparison, disclaimer=DISCLAIMER)
+    return compliance_gaps(handoff, matrix, ours=ours, comparison=comparison, disclaimer=DISCLAIMER,
+                           unreadable=unreadable, evidence=evidence)
 
 
 def _draft_markdown(expert: ExpertRec, tool: str, text: str) -> str:
@@ -4053,7 +4056,12 @@ def _run_exclusive_body(
                 _theirs, mine = split_sides(text)
                 sources = [{"source_id": "user-ours", "role": "response", "text": mine, "start": 0}] if mine else []
                 comparison = compare_responses((pipe.get("parse") or {}).get("requirements") or [], sources)
-        md = _compliance_gaps_md(ho, matrix, ours=ours, comparison=comparison)
+        # a job file this turn named and could not read: said in the draft even when the requirements
+        # are the ones an earlier turn parsed
+        from packing_assistant.office_job import material_role, unread_files
+
+        unread = [{**item, "role": material_role(item["title"])} for item in unread_files(text or "")]
+        md = _compliance_gaps_md(ho, matrix, ours=ours, comparison=comparison, unreadable=unread)
         path = out_dir / "bid-compliance__gaps.md"
         guarded_write_text(path, md)
         files.append({"name": path.name, "path": str(path), "tool": "bid-compliance__gaps"})

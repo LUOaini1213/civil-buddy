@@ -31,6 +31,36 @@ Row = Dict[str, Any]
 
 
 # ---------------------------------------------------------------------------
+# files that were pointed at and gave no text
+# ---------------------------------------------------------------------------
+_ROLE_WORD = {"tender": "招标侧", "response": "响应侧", "reference": "用途未标"}
+
+
+def _unread(ho: Optional[Mapping[str, Any]], extra: Optional[Sequence[Mapping[str, Any]]] = None) -> List[Row]:
+    """The handoff's unreadable files plus this turn's, one entry per title."""
+    seen: Dict[str, Row] = {}
+    for item in list((ho or {}).get("unreadable") or []) + list(extra or []):
+        if isinstance(item, Mapping) and str(item.get("title") or "").strip():
+            seen.setdefault(str(item["title"]).strip(), dict(item))
+    return list(seen.values())
+
+
+def _unread_names(items: Sequence[Mapping[str, Any]], roles: Optional[Tuple[str, ...]] = None) -> str:
+    return "、".join(str(i["title"]).strip() for i in items if roles is None or str(i.get("role") or "reference") in roles)
+
+
+def _unread_cell(item: Mapping[str, Any]) -> str:
+    return f"{str(item['title']).strip()}（{_ROLE_WORD.get(str(item.get('role') or 'reference'), '用途未标')}）：{item.get('reason') or '未读出'}"
+
+
+def _unread_warning(items: Sequence[Mapping[str, Any]]) -> List[str]:
+    if not items:
+        return []
+    return [f"> 点名的文件有 {len(items)} 份没读出来：{'；'.join(_unread_cell(i) for i in items)}。"
+            f"本稿的「{MISSING}」只对读到的部分成立——没读到的文件里有没有，本稿不知道。", ""]
+
+
+# ---------------------------------------------------------------------------
 # reading the facts dict
 # ---------------------------------------------------------------------------
 
@@ -172,6 +202,8 @@ def extract_table(parsed: Optional[Mapping[str, Any]], *, project_name: str = "�
         "> AI 草稿 · 内部讨论。只抄原文：缺项写「未在原文检出」，用户说招标没写的记「招标未写」。不编造天数、分值、workhead。",
         "",
     ]
+    unread = _unread(ho)
+    lines += _unread_warning(unread)
     lots = _lots(facts)
     scopes = facts.get("lot_scopes") or {}
     day_line = ""
@@ -186,6 +218,8 @@ def extract_table(parsed: Optional[Mapping[str, Any]], *, project_name: str = "�
             if only:
                 rows.append(["标段", "、".join(only), "—", "已检出", "各标段的工期、限价、保证金分行列出，不互相借用" if lots else "—"])
             rows += [[_with_lot("标段内容", lot), _clip(scope), "—", "已检出", "—"] for lot, scope in scopes.items()]
+            rows += [["未读出的文件" + (f" {n}" if len(unread) > 1 else ""), str(u["title"]).strip(), "—", "未读出", str(u.get("reason") or "—")]
+                     for n, u in enumerate(unread, 1)]
         if title.startswith("3 "):
             rows += _requirement_rows(p, {"qualification"}, facts)
         if title.startswith("4 "):
@@ -420,6 +454,8 @@ def tech_outline(handoff: Optional[Mapping[str, Any]], *, project_name: str = "�
 
     md = [f"# {project} · 技术标目录草稿", "",
           "> AI 草稿 · 内部讨论。按评分点排目录，分数未核验则标未核实。不承诺得分或中标；专项只列目录，不是已论证方案。", ""]
+    unread = _unread(ho)
+    md += _unread_warning(unread)
     md += ["## 1 评分目录映射", ""]
     if from_scores:
         md += _table(TECH_HEADER, score_rows)
@@ -449,6 +485,7 @@ def tech_outline(handoff: Optional[Mapping[str, Any]], *, project_name: str = "�
         check_rows.append(["已有证据", f"{TBD}：未提供业绩/证书；不得编造项目名", "—"])
     track = [m for m in _mentions(facts, "track_record", "tender") if m.get("value")]
     check_rows += [["类似业绩（招标要求）", _clip(m.get("value")), _source(m)] for m in track]
+    check_rows += [["未读出的文件" + (f" {n}" if len(unread) > 1 else ""), _unread_cell(u), "—"] for n, u in enumerate(unread, 1)]
     md += _table(("事项", "内容", "来源"), check_rows)
     n_points = len(score_rows)
     md.append(f"- 自检：评分点 {n_points} 个，均已对应章节；点名专项 {len([r for r in special_rows if r[1] != NOT_WRITTEN])} 个，均已单列章节。"
@@ -527,6 +564,12 @@ def _people_rows(facts: Optional[Facts]) -> List[List[str]]:
 
 GAP_HEADER = ("事项", "招标要求", "响应原文或证据", "三态", "缺口", "责任人")
 RESPONDED, NOT_RESPONDED, NO_TENDER_TEXT = "已响应·待核验", "未响应", "招标未提供正文"
+#: a file that may hold the answer was given and could not be read: neither 已响应 nor 未响应 can be said
+UNKNOWN = "未能判断·文件未读出"
+EVIDENCE_HEADER = ("事项", "我方写的", "证据文件", "字样", "说明")
+#: rows an evidence file can say something about: who, which certificate, which guarantee. A promised
+#: number of days is the bid letter's own content - no certificate carries it.
+_EVIDENCE_TOPICS = ("poa", "qualification", "registration", "track_record", "pm", "tech_lead", "bond", "bond_validity")
 
 _GAP_SECTIONS: Tuple[Tuple[str, Tuple[str, ...]], ...] = (
     ("2 形式签章", ("poa", "seal")),
@@ -620,14 +663,25 @@ def _price_gap(need: str, have: str) -> str:
 
 def compliance_gaps(handoff: Optional[Mapping[str, Any]], matrix: Optional[Mapping[str, Any]], *,
                     ours: Optional[Facts] = None, comparison: Optional[Sequence[Mapping[str, Any]]] = None,
-                    disclaimer: str = "") -> str:
+                    disclaimer: str = "", unreadable: Optional[Sequence[Mapping[str, Any]]] = None,
+                    evidence: Optional[Sequence[Mapping[str, Any]]] = None) -> str:
     """``handoff`` carries what the tender asks (its ``facts``); ``ours`` is what this turn said of our side.
 
     When the same text held both, the two are the same dict. ``comparison`` is
     tender_response_match.compare_responses() over the parser's requirement rows, for clauses that are
     not one of the fields below (★ items, pasted document lines).
+
+    ``unreadable`` - ``[{title, role, reason}]``, files that were pointed at and gave no text (the
+    handoff's own list is merged in). A row nothing answers is then 未能判断, not 未响应.
+    ``evidence`` - ``[{title, text}]``, files given as evidence (certificates, the guarantee, contracts).
+    They are searched for our side's own wording, letter for letter; what is found is that the wording
+    occurs, never that the document is genuine or in force.
     """
     ho = handoff or {}
+    unread = _unread(ho, unreadable)
+    may_answer = _unread_names(unread, ("response", "reference"))
+    evidence = [e for e in evidence or [] if isinstance(e, Mapping) and str(e.get("text") or "").strip()]
+    checks: List[Row] = []
     tender = ho.get("facts") or {}
     ours = ours if ours is not None else tender
     lots = _lots(tender) or _lots(ours)
@@ -642,19 +696,33 @@ def compliance_gaps(handoff: Optional[Mapping[str, Any]], matrix: Optional[Mappi
     md += ["不代判废标。须持证人员按招标文件确认。submit_blocked=true。", "",
            f"三态：**{RESPONDED}** = 用户给了对应的响应原文（证据原件未核验）；**{NOT_RESPONDED}** = 没给，或明说还没办、数值与要求不符；"
            f"**{NO_TENDER_TEXT}** = 只有我方说法，没有招标要求原文。", ""]
+    if unread:
+        md += [f"另有 **{UNKNOWN}**：点名的文件没读出来（见 1 节）。答案可能就在那份文件里，所以既不能认定未响应，也不能认定已响应。", ""]
     md += ["## 1 来源与范围", ""]
     zone = _zone(tender) if _zone(tender) != "UNSPECIFIED" else _zone(ours)
     scope_rows = [["项目名称", project or MISSING, "—"], ["招标编号", number or MISSING, "—"], ["辖区", zone, "—"]]
     if tender.get("lots") or ours.get("lots"):
         scope_rows.append(["标段", "、".join(tender.get("lots") or ours.get("lots") or []), "—"])
-    scope_rows.append(["响应资料", "已提供（原件未核验；以下只是原文对照）" if has_response else "用户未提供投标响应资料，不能认定已响应", "—"])
+    if may_answer:
+        given = (f"已提供（原件未核验；以下只是原文对照）；另有未读出：{may_answer}" if has_response
+                 else f"给了但未读出（{may_answer}）：不能认定未响应，也不能认定已响应")
+    else:
+        given = "已提供（原件未核验；以下只是原文对照）" if has_response else "用户未提供投标响应资料，不能认定已响应"
+    scope_rows.append(["响应资料", given, "—"])
+    scope_rows += [["未读出的文件" + (f" {n}" if len(unread) > 1 else ""), _unread_cell(u), "—"] for n, u in enumerate(unread, 1)]
+    if evidence:
+        scope_rows.append(["证据文件", "、".join(str(e.get("title") or "未命名") for e in evidence) + "（只核对字样是否出现，见 8 节）", "—"])
     md += _table(("事项", "内容", "来源"), scope_rows)
 
     open_items: List[str] = []
+    lost_tender = _unread_names(unread, ("tender",))
+    if lost_tender:
+        open_items.append(f"招标侧文件未读出（{lost_tender}）：下表的招标要求可能不全，或已被它修改；读出后重新解析")
     for title, topics in _GAP_SECTIONS:
         rows: List[List[str]] = []
         for topic in topics:
-            rows += _gap_rows(topic, tender, ours, lots, open_items, comparison)
+            rows += _gap_rows(topic, tender, ours, lots, open_items, comparison, unread=may_answer,
+                              evidence=evidence, checks=checks, unread_evidence=_unread_names(unread, ("reference",)))
         if title.startswith("3 "):
             for m in _mentions(ours, "staff"):
                 if m.get("value"):
@@ -662,7 +730,7 @@ def compliance_gaps(handoff: Optional[Mapping[str, Any]], matrix: Optional[Mappi
                     rows.append([_with_lot(str(m.get("role") or "其他人员"), lot), NO_TENDER_TEXT, _clip(_value_cell(m)), NO_TENDER_TEXT,
                                  "补招标文件对该岗位的要求原文（证书、专职、在岗）后再对照", _owner_for(ours, lot)])
         if title.startswith("5 "):
-            rows += _comparison_rows(comparison, tender, open_items)
+            rows += _comparison_rows(comparison, tender, open_items, unread=may_answer)
         md += [f"## {title}", ""]
         md += _table(GAP_HEADER, rows) or ["本节无招标要求原文，也无我方说法。", ""]
 
@@ -681,6 +749,10 @@ def compliance_gaps(handoff: Optional[Mapping[str, Any]], matrix: Optional[Mappi
             flat = re.sub(r"\s+", "", str(p.get("text") or ""))
             if flat and not any(x and (x in flat or flat in x) for x in noted):
                 tech_rows.append([f"{label} {p.get('requirement_ref')}", _clip(p.get("text"), 120), "未提供技术标目录", NOT_RESPONDED, "交 bid-tech 排章节后回查", TBD])
+    if may_answer:
+        # the technical proposal may be the file that was not read
+        for row in tech_rows:
+            row[2], row[3], row[4] = f"未读出：{_clip(may_answer, 30)}", UNKNOWN, "技术标可能就在未读出的文件里；" + row[4]
     md += _table(GAP_HEADER, tech_rows) or ["招标要求里未检出评分点或点名专项。", ""]
 
     md += ["## 7 澄清与补证", ""]
@@ -694,12 +766,56 @@ def compliance_gaps(handoff: Optional[Mapping[str, Any]], matrix: Optional[Mappi
     if summary:
         md += ["", f"- 解析矩阵：{summary.get('n', 0)} 条要求，其中须人工 {summary.get('human_required', 0)}、待核 {summary.get('review', 0)}。"]
     md += _unplaced(ours)
+    if evidence:
+        md += ["", "## 8 证据文件字样核对", "",
+               "只查我方写的字样在所给证据文件里出现没有。出现不代表证件真实、在有效期内或属于本人；没出现也可能只是文件是扫描件。", ""]
+        md += _table(EVIDENCE_HEADER, [[c["label"], c["token"], c["files"], c["state"], c["note"]] for c in checks]) or [
+            "本轮没有可核对的字样：证据类事项（授权、资质、人员、业绩、保证金）我方都还没写。", ""]
     md += ["", "条款号 UNSPECIFIED。不判定可投标。", ""]
     return "\n".join(md)
 
 
+def _flat(text: Any) -> str:
+    """For a letter-for-letter search in extracted text: PDF text layers break a name with spaces, a
+    certificate prints "注册编号：京…" where a sentence says "注册编号京…"."""
+    return re.sub(r"[\s：:]+", "", str(text or ""))
+
+
+def _evidence_tokens(topic: str, haves: Sequence[Mapping[str, Any]], quotes: Sequence[str]) -> List[str]:
+    """What of our side's answer to a row can be looked for in an evidence file: the values we stated -
+    a name, a certificate class, a number of a document, an amount. Never a paraphrase."""
+    values = [str(m["value"]) for m in haves if m.get("value")]
+    if not values and quotes:
+        from packing_assistant.tools.tender_facts import extract
+
+        for quote in quotes:
+            values += [m.value for m in extract(quote, sides="none").mentions if m.topic == topic and m.value]
+    return [v for v in dict.fromkeys(values) if len(_flat(v)) >= 2][:3]
+
+
+def _check_evidence(label: str, tokens: Sequence[str], evidence: Sequence[Mapping[str, Any]], unread_evidence: str,
+                    checks: List[Row]) -> List[str]:
+    """One row of section 8 per token; returns the tokens no evidence file holds."""
+    absent: List[str] = []
+    for token in tokens:
+        holders = [str(e.get("title") or "未命名") for e in evidence if _flat(token) in _flat(e.get("text"))]
+        if holders:
+            checks.append({"label": label, "token": token, "files": "、".join(holders), "state": "检出",
+                           "note": "只说明字样出现；真伪、有效期、是否本人须核原件"})
+        elif unread_evidence:
+            checks.append({"label": label, "token": token, "files": f"读到的 {len(evidence)} 份均无；未读出：{_clip(unread_evidence, 30)}",
+                           "state": "未能判断", "note": "可能就在未读出的文件里：让它可读后重查"})
+        else:
+            absent.append(token)
+            checks.append({"label": label, "token": token, "files": f"所给 {len(evidence)} 份均无", "state": "未检出",
+                           "note": "补该项证据，或核对文件是否给对"})
+    return absent
+
+
 def _gap_rows(topic: str, tender: Facts, ours: Facts, lots: List[str], open_items: List[str],
-              comparison: Optional[Sequence[Mapping[str, Any]]] = None) -> List[List[str]]:
+              comparison: Optional[Sequence[Mapping[str, Any]]] = None, *, unread: str = "",
+              evidence: Sequence[Mapping[str, Any]] = (), checks: Optional[List[Row]] = None,
+              unread_evidence: str = "") -> List[List[str]]:
     need_all = [m for m in _mentions(tender, topic, "tender") if m.get("value") or m.get("not_given") or topic in ("poa", "seal")]
     have_all = _mentions(ours, topic, "ours")
     if topic == "price_cap":
@@ -734,6 +850,8 @@ def _gap_rows(topic: str, tender: Facts, ours: Facts, lots: List[str], open_item
         if not needs or (not need and not any(m.get("not_given") for m in needs) and topic not in ("poa", "seal")):
             state = NO_TENDER_TEXT
             gap = ("用户称未办结（见响应栏）；" if waiting else "") + "补招标文件对应条款原文后再对照"
+        elif not haves and not quotes and unread:
+            state, gap = UNKNOWN, f"响应可能就在未读出的文件里（{_clip(unread, 30)}）：让它可读后再对照"
         elif not haves and not quotes:
             state, gap = NOT_RESPONDED, "未见响应内容：补响应原文或证据"
         elif mismatch:
@@ -746,9 +864,14 @@ def _gap_rows(topic: str, tender: Facts, ours: Facts, lots: List[str], open_item
                 gap = "候选响应原文，出现相同词不代表已实质响应；" + gap
         if grade:
             gap = grade + "；" + gap
+        missing_words: List[str] = []
+        if evidence and checks is not None and topic in _EVIDENCE_TOPICS and (haves or quotes):
+            missing_words = _check_evidence(label, _evidence_tokens(topic, haves, quotes), evidence, unread_evidence, checks)
+            if missing_words:
+                gap = f"证据文件里未检出「{'」「'.join(missing_words)}」字样（见 8 节）；" + gap
         owner = _owner_for(ours, lot)
         rows.append([label, need_cell, have_cell, state, gap, owner])
-        if state != RESPONDED or grade:
+        if state != RESPONDED or grade or missing_words:
             open_items.append(f"{label}：{gap}（责任人 {owner}）")
     return rows
 
@@ -761,7 +884,8 @@ def _field_speaks_for(text: str, tender: Facts) -> bool:
                and re.sub(r"\s+", "", str(m["value"])) in flat for m in tender.get("mentions") or [])
 
 
-def _comparison_rows(comparison: Optional[Sequence[Mapping[str, Any]]], tender: Facts, open_items: List[str]) -> List[List[str]]:
+def _comparison_rows(comparison: Optional[Sequence[Mapping[str, Any]]], tender: Facts, open_items: List[str],
+                     *, unread: str = "") -> List[List[str]]:
     rows: List[List[str]] = []
     for row in comparison or []:
         text = str(row.get("requirement") or "")
@@ -776,6 +900,8 @@ def _comparison_rows(comparison: Optional[Sequence[Mapping[str, Any]]], tender: 
             state, gap = f"{NOT_RESPONDED}·数值不符", notes
         elif quotes:
             state, gap = RESPONDED, "候选响应原文，出现相同词不代表已实质响应"
+        elif unread:
+            state, gap = UNKNOWN, f"响应可能就在未读出的文件里（{_clip(unread, 30)}）：让它可读后再对照"
         else:
             state, gap = NOT_RESPONDED, "未检出对应响应原文"
         label = "★/必须满足项" if "star" in (row.get("kinds") or []) else "招标条款"
