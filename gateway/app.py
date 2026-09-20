@@ -603,12 +603,20 @@ def api_run_get(run_id: str, include_trace: bool = True):
 
 @app.post("/api/runs/{run_id}/cancel")
 def api_run_cancel(run_id: str):
+    """Cancel a Scheduler run, or cooperatively stop a packing pipeline by run_id / session_id.
+
+    The packing loop (teams/big_team.run_one) checks the registry at every agent boundary and
+    the placement / render / export loops call cancel.check(), so a blocking /api/pipeline or
+    /api/demo returns quickly with phase=cancelled instead of running to the end.
+    """
+    from packing_assistant.runtime import cancel as _cancel
     from packing_assistant.runtime.scheduler import get_scheduler
 
-    ok = get_scheduler().cancel(run_id)
-    if not ok:
+    sched_ok = get_scheduler().cancel(run_id)
+    coop_ok = _cancel.request(run_id)
+    if not (sched_ok or coop_ok):
         raise HTTPException(400, "cannot cancel")
-    return {"ok": True, "run_id": run_id, "state": "cancelled"}
+    return {"ok": True, "run_id": run_id, "state": "cancelled", "scheduler": sched_ok, "cooperative": coop_ok}
 
 
 def _tender_parse_via_engine(
@@ -1212,6 +1220,9 @@ def api_confirm(body: ConfirmRequest):
         )
 
     if body.action == "cancel":
+        from packing_assistant.runtime import cancel as _cancel
+
+        _cancel.request(body.session_id)  # also stops a pipeline still running for this session
         state = {**state, "phase": "cancelled", "user_action": "cancel",
                  "final_response": "已取消", "status": "success"}
         _store_session(body.session_id, state)
@@ -1717,17 +1728,40 @@ def api_business_presets():
     return {"ok": True, "presets": list_business_presets()}
 
 
+def _export_root() -> Path:
+    from packing_assistant.config import OUTPUT_DIR
+
+    return (Path(OUTPUT_DIR) / "exports").resolve()
+
+
 @app.post("/api/export/shipment")
 def api_export_shipment(body: dict):
-    """导出 POR+绑扎 xlsx。body: {session_id}"""
+    """导出 POR+绑扎 xlsx。body: {session_id} → {xlsx_path, download_url, ...}"""
+    from urllib.parse import quote
+
     from packing_assistant.export_pack import export_shipment_xlsx
 
     sid = str((body or {}).get("session_id") or "pipeline")
     st = _SESSIONS.get(sid) or _load_session(sid)
     if not st:
         raise HTTPException(404, "session 不存在")
-    meta = export_shipment_xlsx(st)
-    return {"ok": True, **meta}
+    meta = export_shipment_xlsx(st, output_dir=_export_root())
+    name = Path(str(meta.get("xlsx_path") or "")).name
+    return {"ok": True, **meta, "download_url": f"/api/export/file?name={quote(name)}"}
+
+
+@app.get("/api/export/file")
+def api_export_file(name: str):
+    """Download one exported workbook (name only; confined to <PACKING_OUTPUT_DIR>/exports)."""
+    root = _export_root()
+    target = (root / Path(name).name).resolve()
+    if target.parent != root or not target.is_file():
+        raise HTTPException(404, "export 不存在")
+    return FileResponse(
+        target,
+        media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        filename=target.name,  # starlette emits filename*=utf-8'' for non-ASCII names
+    )
 
 
 @app.post("/api/nonstandard/inspect")
