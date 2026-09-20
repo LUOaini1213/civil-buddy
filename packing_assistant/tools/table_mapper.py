@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import csv
 import json
+import math
 import re
 from pathlib import Path
 from typing import Any, Dict, Iterable, List, Optional, Sequence, Tuple, Union
@@ -355,6 +356,47 @@ def _to_float(v: Any) -> Optional[float]:
         return None
 
 
+#: 一个件数，可带尾随单位词："8" / "8件" / "10 pcs" / "3 EA" / "1,200"。逗号只认千分位；
+#: "1,5"、"10/12"、"2-3"、"约5" 这类读不出唯一件数的写法一律不匹配。
+_QTY_TEXT = re.compile(
+    r"([+-]?(?:\d{1,3}(?:,\d{3})+|\d+)(?:\.\d+)?(?:[eE]\+?\d+)?)\s*[A-Za-z一-鿿.]{0,12}"
+)
+
+
+def _quantity_cell(v: Any) -> Tuple[str, int]:
+    """数量格 → (状态, 件数)。只有 ok / missing 的件数可用。
+
+    missing  没写 → 1 件（逐箱列行的装箱单通行写法）
+    ok       正整数
+    zero     明写 0：这一行本次不发，调用方跳过并计数——照字面读，不是猜
+    invalid  负数 / 小数 / 非数值 / 布尔 / NaN / inf：没有哪种读法是表上写的意思，不猜
+
+    此前走 _to_float + max(1, int(x or 1))：2.7 装成 2 件，"abc" 装成 1 件，"3 EA" 因为
+    正则留下了字母 E 解析失败也装成 1 件，-3 的行整行消失，NaN / inf 直接抛异常。
+    """
+    if v is None:
+        return "missing", 1
+    if isinstance(v, bool):
+        return "invalid", 0
+    if isinstance(v, (int, float)):
+        number = float(v)
+    else:
+        s = str(v).strip().strip("　")
+        if not s:
+            return "missing", 1
+        m = _QTY_TEXT.fullmatch(s)
+        if not m:
+            return "invalid", 0
+        number = float(m.group(1).replace(",", ""))
+    if not math.isfinite(number):
+        return "invalid", 0
+    if number == 0:
+        return "zero", 0
+    if number < 0 or number != int(number):
+        return "invalid", 0
+    return "ok", int(number)
+
+
 def _header_has_length_unit(header: str) -> bool:
     """表头是否明写了长度单位。明写的听表头的，没写才看单元格和量级。"""
     h = _norm_header(header)
@@ -470,6 +512,7 @@ def rows_to_ir(
         "n_skip_zero_placeholder": 0,
         "n_skip_summary_row": 0,
         "n_missing_weight": 0,
+        "n_invalid_quantity": 0,
     }
     if not rows:
         _LAST_CLEAN_STATS = {**clean_stats, "n_skipped_total": 0}
@@ -593,12 +636,14 @@ def rows_to_ir(
                 clean_stats["n_skip_noise_name"] += 1
                 continue
 
-        qty_f = _to_float(got.get("quantity"))
+        qty_state, qty = _quantity_cell(got.get("quantity"))
         # 显式 0 数量：噪声，不升成 1
-        if qty_f is not None and qty_f <= 0:
+        if qty_state == "zero":
             clean_stats["n_skip_zero_qty"] += 1
             continue
-        qty = max(1, int(qty_f or 1))
+        # 写了但读不出件数：行留下、如实标记，由闸门转人工（同 weight_missing）。
+        # 既无尺寸又无重量的仍按下面的全零占位行丢弃——那是噪声，不是货。
+        quantity_invalid = qty_state == "invalid"
 
         def dim(std: str) -> float:
             if _parse_dim_triple(got.get(std)):
@@ -630,9 +675,10 @@ def rows_to_ir(
         total_w = _to_float(got.get("total_weight_kg"))
         if total_w is not None:
             total_w = total_w * tw_scale
-        if total_w is None and unit_w is not None:
+        # 件数不知道时不推另一格：单重 × ? 与 总重 ÷ ? 都是编出来的数，留 0（= 没写）
+        if total_w is None and unit_w is not None and not quantity_invalid:
             total_w = unit_w * qty
-        if unit_w is None and total_w is not None:
+        if unit_w is None and total_w is not None and not quantity_invalid:
             unit_w = total_w / qty
         unit_w = float(unit_w or 0.0)
         total_w = float(total_w or 0.0)
@@ -651,10 +697,15 @@ def rows_to_ir(
         if weight_missing:
             clean_stats["n_missing_weight"] += 1
 
+        if quantity_invalid:
+            clean_stats["n_invalid_quantity"] += 1
+
         conf = 0.95
         if dims_estimated:
             conf -= 0.35
         if weight_missing:
+            conf -= 0.2
+        if quantity_invalid:
             conf -= 0.2
         conf = max(0.1, min(1.0, conf))
 
@@ -686,6 +737,10 @@ def rows_to_ir(
                 "profile_hint": profile_hint,
             },
         }
+        if quantity_invalid:
+            # quantity 留 0 而不是 1：meta 被下游丢掉时，数值本身仍过不了 rows_invalid_quantity
+            item["meta"]["quantity_invalid"] = True
+            item["meta"]["quantity_raw"] = str(got.get("quantity"))
         out.append(item)
         clean_stats["n_kept"] += 1
     clean_stats["n_skipped_total"] = int(clean_stats["n_input_rows"]) - int(
@@ -853,12 +908,14 @@ def ir_to_materials(rows: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
     """IR → 现有 materials API（去掉 meta 也可保留）。"""
     mats = []
     for m in rows:
+        # 数量读不出来的行保持 0，不在这里又升回 1 件
+        unknown_qty = bool((m.get("meta") or {}).get("quantity_invalid"))
         mats.append(
             {
                 "id": m.get("id"),
                 "name": m.get("name"),
                 "spec": m.get("spec") or "",
-                "quantity": int(m.get("quantity") or 1),
+                "quantity": 0 if unknown_qty else int(m.get("quantity") or 1),
                 "weight_kg": float(m.get("weight_kg") or 0),
                 "total_weight_kg": float(m.get("total_weight_kg") or 0),
                 "length_mm": float(m.get("length_mm") or 0),
@@ -912,6 +969,7 @@ def parse_table_file(path: PathLike, **kwargs: Any) -> Dict[str, Any]:
             "n_skip_summary_row": clean.get("n_skip_summary_row"),
             "n_skip_zero_qty": clean.get("n_skip_zero_qty"),
             "n_skip_zero_placeholder": clean.get("n_skip_zero_placeholder"),
+            "n_invalid_quantity": clean.get("n_invalid_quantity"),
             "clean": clean,
         },
         "errors": [] if mats else [_no_rows_reason(path)],

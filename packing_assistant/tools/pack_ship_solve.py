@@ -168,10 +168,13 @@ UNKNOWN_CONTAINER_TYPE = "unknown_container_type"
 
 
 def rows_invalid_quantity(materials: Sequence[Dict[str, Any]]) -> List[Dict[str, Any]]:
+    """数量不可用的行。文件路径上的行到这里已经过解析器，原始格只剩 meta.quantity_invalid /
+    quantity_raw 这个标记（解析器此前把 2.7 写成 2、"abc" 写成 1，闸门无从得知）。"""
     out: List[Dict[str, Any]] = []
     for m in materials or []:
+        meta = m.get("meta") if isinstance(m.get("meta"), dict) else {}
         cells = [m.get(key) for key in ("quantity", "数量", "qty") if m.get(key) not in (None, "")]
-        bad = False
+        bad = bool(meta.get("quantity_invalid"))
         for value in cells:
             if isinstance(value, bool):
                 bad = True
@@ -184,14 +187,16 @@ def rows_invalid_quantity(materials: Sequence[Dict[str, Any]]) -> List[Dict[str,
             if not math.isfinite(number) or number < 1 or number != int(number):
                 bad = True
         if bad:
-            out.append(
-                {
-                    "id": m.get("id") or "",
-                    "name": m.get("name") or "",
-                    "reason": NEEDS_HUMAN_INVALID_QUANTITY,
-                    "ask": "这一行的数量不是正整数，请改成实际件数，或确认它不参与装箱。",
-                }
-            )
+            row = {
+                "id": m.get("id") or "",
+                "name": m.get("name") or "",
+                "reason": NEEDS_HUMAN_INVALID_QUANTITY,
+                "ask": "这一行的数量不是正整数，请改成实际件数，或确认它不参与装箱。",
+            }
+            if meta.get("quantity_invalid") and meta.get("quantity_raw") not in (None, ""):
+                row["raw"] = str(meta["quantity_raw"])
+                row["ask"] = f"这一行的数量写的是「{row['raw']}」，不是正整数，请改成实际件数，或确认它不参与装箱。"
+            out.append(row)
     return out
 
 
