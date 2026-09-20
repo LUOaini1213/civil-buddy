@@ -51,6 +51,36 @@ class HRBuilderTests(unittest.TestCase):
                 self.assertNotIn("7000元", second)
                 self.assertIn("| 劳动者姓名 | " + (worker or "[A001] 待填") + " |", second)
 
+    def test_compact_rows_keep_empty_cells_in_their_column(self):
+        # A row's own pipes are its column borders; an adjacent pipe is an empty cell.
+        head = "|劳动者|工资|合同期限|\n|---|---|---|\n|甲|7000元|一年|\n"
+        spaced = "| 劳动者 | 工资 | 合同期限 |\n| --- | --- | --- |\n| 甲 | 7000元 | 一年 |\n|  | 9000元 | 两年 |"
+        self.assertEqual(self.labor(head + "||9000元|两年|"), self.labor(spaced))
+        for row, (worker, wage, term) in (
+            ("||9000元|两年|", ("[A001] 待填", "9000元", "两年")),
+            ("|乙|9000元||", ("乙", "9000元", "[A001] 待填")),
+            ("|||", ("[A001] 待填", "[A001] 待填", "[A001] 待填")),
+            ("|乙|", ("乙", "[A001] 待填", "[A001] 待填")),
+            ("|", ("[A001] 待填", "[A001] 待填", "[A001] 待填")),
+        ):
+            with self.subTest(row=row):
+                second = self.labor(head + row).split("# 材料记录 2", 1)[1]
+                self.assertIn(f"| 劳动者姓名 | {worker} |", second)
+                self.assertIn(f"| 劳动报酬 | {wage} |", second)
+                self.assertIn(f"| 合同期限 | {term} |", second)
+
+    def test_compact_label_rows_keep_the_empty_first_cell(self):
+        # hr-train__plan returns before _labor_records, so the field table is the only splitter there.
+        for draft, compact, spaced, value in (
+            (self.train, "||工种|电工|", "| | 工种 | 电工 |", "电工"),
+            (self.train, "||企业名称|某公司|", "| | 企业名称 | 某公司 |", "某公司"),
+            (self.labor, "||工资|7000元|", "| | 工资 | 7000元 |", "7000元"),
+        ):
+            with self.subTest(compact=compact):
+                markdown = draft(compact)
+                self.assertEqual(markdown, draft(spaced))
+                self.assertNotIn(value, markdown)
+
     def labor(self, text: str = "写一份劳动合同检查表") -> str:
         return build_draft("hr-labor", "hr-labor__check", text)
 
@@ -158,7 +188,7 @@ class HRBuilderTests(unittest.TestCase):
         for level in ("公司级", "项目级", "班组级"):
             self.assertIn(f"| {level} | 建议课题：", plan)
             row = next(row for row in plan.splitlines() if row.startswith(f"| {level} |"))
-            cells = [cell.strip() for cell in row.strip("|").split("|")]
+            cells = [cell.strip() for cell in row.strip().removeprefix("|").removesuffix("|").split("|")]
             self.assertEqual(cells[2:8], ["[A001] 待填"] * 6)
         self.assertNotRegex(plan, r"\d+\s*(?:学时|小时)")
         self.assertIn("| 培训完成状态 | 计划待实施 | 不代填合格或有效 |", chapter(markdown, "7 考核与档案"))
