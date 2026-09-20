@@ -26,7 +26,7 @@
     if (read(KEY_L) === "1") d.classList.add("cb-large");
   })();
   </script>
-  <link rel="stylesheet" href="/static/styles.css?v=ui11" />
+  <link rel="stylesheet" href="/static/styles.css?v=voice1" />
 </head>
 <body>
   <header class="top">
@@ -153,11 +153,20 @@
                图标用文字「附件」——符号纪律禁 U+2600-27BF 等区段，回形针 emoji 会红。 -->
           <input type="file" id="filePick" hidden multiple
                  accept=".xlsx,.csv,.pdf,.docx,.txt,.md,.json,.log" />
+          <!-- 语音输入（voice.js）：说完只回填文字、不自动发送。优先本机识别（/api/asr），
+               不可用或出错时退回浏览器识别，首次使用前说明录音去向。图标用内联 SVG 画麦克风（符号纪律禁 emoji）。 -->
+          <button type="button" id="btnVoice" class="composer-attach composer-voice"
+                  aria-label="语音输入" aria-pressed="false"
+                  title="语音输入：说完先转成文字，核对后再发送（不会自动发送）。一段最长 20 秒"><svg class="cb-mic" viewBox="0 0 24 24" width="16" height="16" aria-hidden="true" focusable="false"><path fill="currentColor" d="M12 14a3 3 0 0 0 3-3V5a3 3 0 0 0-6 0v6a3 3 0 0 0 3 3zm5-3a5 5 0 0 1-10 0H5a7 7 0 0 0 6 6.92V21h2v-3.08A7 7 0 0 0 19 11h-2z"/></svg><span id="voiceLabel" class="cb-voice-label"></span></button>
           <button type="button" id="btnAttach" class="composer-attach"
                   aria-label="添加附件" title="添加材料附件（表格、PDF、Word 或文本）">附件</button>
           <button type="submit" id="send" aria-label="发送" title="发送（Enter）">↑</button>
           <button type="button" id="stop" class="composer-attach" hidden title="停止本轮后台任务，保留已经生成的文件">停止</button>
         </div>
+        <!-- 语音状态：一开始就在无障碍树里（读屏只播报已存在的 live region）；空时不占高度。
+             浏览器识别的实时文字放在下一行、不进播报区，免得读屏念出来又被麦克风收进去。 -->
+        <p id="voiceStatus" class="cb-voice-status" role="status" aria-live="polite"></p>
+        <p id="voiceInterim" class="cb-voice-interim" aria-hidden="true"></p>
         <!-- 已选附件：一行 chip，可 × 移除；空时整条隐藏 -->
         <div id="attaches" class="attaches" hidden></div>
         <div id="ctxBar" class="ctx-bar" data-zone="room">
@@ -318,6 +327,7 @@
   <script src="/static/tickets.js?v=ui9"></script>
   <script src="/static/chat-stream.js?v=1"></script>
   <script src="/static/app.js?v=context1"></script>
+  <script src="/static/voice.js?v=3"></script>
   <script src="/static/studio.js?v=ui4"></script>
 </body>
 </html>

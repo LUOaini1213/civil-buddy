@@ -56,6 +56,16 @@ def _load() -> List[ExpertRec]:
                 aligned=bool(e["aligned"]),
             )
         )
+    # 插件带来的岗位排在内置 66 岗之后；id 不可能与内置重名（runtime/plugins 在发现时就拒绝了）。
+    # 未受信任的插件，岗位一律按高风险处理，不看它自己怎么标。
+    from packing_assistant.runtime import plugins
+
+    for plugin in plugins.installed():
+        label = str(plugin.manifest.get("title") or plugin.name)
+        for item in plugin.skills:
+            out.append(ExpertRec(id=item.id, name=item.name, category="plugin", category_name=f"插件 · {label}",
+                                 title=item.title, delivers=item.delivers, risk=plugins.effective_risk(item),
+                                 aliases=item.aliases, exclusive=(f"{item.id}__draft",), aligned=False))
     return out
 
 

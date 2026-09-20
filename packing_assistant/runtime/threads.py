@@ -2,6 +2,10 @@
 
 Admission is serial per thread, including queued background turns. /new and /bg
 get a new session_id. Thread snapshots are replaced atomically on disk.
+
+Next to each snapshot is the thread's rollout, ``<thread_id>.rollout.jsonl``: one line per
+message, appended after every turn. ``civil resume`` hands the tail of it to a model-driven
+turn as conversation history, so "接着上次的说" means something.
 """
 
 from __future__ import annotations
@@ -119,6 +123,43 @@ def load_thread(thread_id: str) -> Optional[CivilThread]:
     )
 
 
+ROLLOUT_MESSAGES = 12
+ROLLOUT_CHARS = 1500
+
+
+def _rollout_path(thread_id: str) -> Path:
+    return _path(thread_id).with_suffix(".rollout.jsonl")
+
+
+def append_rollout(thread_id: str, role: str, content: str, **extra: Any) -> None:
+    """Best effort: a full disk must not turn a finished turn into a failed one."""
+    try:
+        path = _rollout_path(thread_id)
+        _DIR.mkdir(parents=True, exist_ok=True)
+        line = json.dumps({"ts": round(time.time(), 3), "role": role, "content": content, **extra}, ensure_ascii=False)
+        with path.open("a", encoding="utf-8") as stream:
+            stream.write(line + "\n")
+    except (OSError, ValueError):
+        pass
+
+
+def load_rollout(thread_id: str, *, limit: int = ROLLOUT_MESSAGES, chars: int = ROLLOUT_CHARS) -> List[Dict[str, str]]:
+    """The last ``limit`` user/assistant messages, each cut to ``chars`` — history, not an archive."""
+    try:
+        lines = _rollout_path(thread_id).read_text(encoding="utf-8").splitlines()
+    except (OSError, ValueError, UnicodeError):
+        return []
+    messages: List[Dict[str, str]] = []
+    for raw in lines[-4 * max(1, limit):]:
+        try:
+            row = json.loads(raw)
+        except ValueError:
+            continue
+        if isinstance(row, dict) and row.get("role") in {"user", "assistant"} and isinstance(row.get("content"), str):
+            messages.append({"role": row["role"], "content": row["content"][:chars]})
+    return messages[-max(1, limit):]
+
+
 def list_threads() -> List[CivilThread]:
     if not _DIR.is_dir():
         return []
@@ -155,15 +196,17 @@ def _failed(th: CivilThread, exc: Exception, *, code: str) -> Dict[str, Any]:
     return result
 
 
-def _run_on_thread(th: CivilThread, text: str, *, skill: str, confirm: bool) -> Dict[str, Any]:
+def _run_on_thread(th: CivilThread, text: str, *, skill: str, confirm: bool, approve: Any = None) -> Dict[str, Any]:
     try:
-        from packing_assistant.runtime.agent_loop import run_agent
+        from packing_assistant.runtime.turn import run_turn
 
-        out = run_agent(
+        out = run_turn(
             text,
             session_id=th.session_id,
-            expert_id=skill,
-            p0_confirmed=confirm is True or th.confirm is True,
+            skill=skill,
+            confirm=confirm is True or th.confirm is True,
+            history=load_rollout(th.thread_id),
+            approve=approve,
         )
         th.skill = str(out.get("skill") or out.get("expert_id") or th.skill)
         th.last_reply = str(out.get("reply") or "")
@@ -174,6 +217,9 @@ def _run_on_thread(th: CivilThread, text: str, *, skill: str, confirm: bool) -> 
         th.state = "waiting_hitl" if th.hitl_pending else ("done" if out.get("ok") else "failed")
         th.error = str(out.get("error") or out.get("error_code") or "")
         save_thread(th)
+        append_rollout(th.thread_id, "user", text)
+        append_rollout(th.thread_id, "assistant", th.last_reply, skill=th.skill, files=th.artifacts,
+                       agent_mode=str(out.get("agent_mode") or ""))
         return {**out, "thread_id": th.thread_id}
     except Exception as exc:  # noqa: BLE001
         return _failed(th, exc, code="thread_execution_failed")
@@ -189,7 +235,9 @@ def run_on_thread(
     skill: str = "",
     confirm: bool = False,
     background: bool = False,
+    approve: Any = None,
 ) -> Dict[str, Any]:
+    """``approve(request) -> bool`` answers a high-risk write prompt inline; foreground turns only."""
     with _LOCK:
         th = load_thread(thread_id)
         if th is None:
@@ -215,7 +263,7 @@ def run_on_thread(
             return _failed(th, exc, code="thread_start_failed")
         if background:
             return {"ok": True, "background": True, "thread_id": thread_id, "state": "running"}
-    return _run_on_thread(th, text, skill=skill, confirm=confirm)
+    return _run_on_thread(th, text, skill=skill, confirm=confirm, approve=approve)
 
 
 def spawn(text: str, *, skill: str = "", confirm: bool = False, title: str = "") -> Dict[str, Any]:

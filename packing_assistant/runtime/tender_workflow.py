@@ -177,25 +177,26 @@ def _source_roles(text, sources):
 
 
 def _response_comparison(requirements, sources):
-    responses = [s for s in sources if s.get("role") == "response"]
-    compared = []
-    for requirement in requirements:
-        quote = str(requirement.get("exact_text") or "")
-        anchors = {part[i:i + 4] for part in re.findall(r"[\u4e00-\u9fff]{4,}|[A-Za-z0-9_-]{4,}", quote)
-                   for i in range(len(part) - 3)}
-        matches = []
-        for source in responses:
-            offset = 0
-            for line in source["text"].splitlines(keepends=True):
-                if any(anchor in line for anchor in anchors):
-                    start = source.get("start", 0) + offset
-                    matches.append({"source_id": source["source_id"], "quote": line.rstrip("\r\n"),
-                                    "start": start, "end": start + len(line.rstrip("\r\n"))})
-                offset += len(line)
-        compared.append({"requirement_ref": requirement.get("requirement_ref", ""), "requirement": quote,
-            "status": "candidate_requires_review" if matches else "not_matched" if responses else "not_provided",
-            "response_evidence": matches, "verified": False})
-    return compared
+    """One row per distinct tender line, with candidate response lines and numeric mismatches.
+
+    The matching itself lives in tools/tender_response_match.py, where every mechanism is
+    switched by a flag and scored against test/benchmarks/tender_response/cases.json.
+    """
+    from packing_assistant.tools.tender_response_match import compare_responses
+
+    return compare_responses(requirements, sources)
+
+
+def _comparison_status_text(row):
+    """Status cell for the Markdown table: the status code, plus what the numbers say."""
+    notes = [c["note"] for c in row.get("conflicts") or []]
+    return row["status"] + ("：" + "；".join(notes) if notes else "")
+
+
+def _comparison_unresolved(row):
+    if row.get("conflicts"):
+        return [row["requirement_ref"] + "：" + c["note"] for c in row["conflicts"]]
+    return [row["requirement_ref"] + "：" + ("候选响应原文待人工核验" if row["response_evidence"] else "未检出对应响应证据")]
 
 
 def run_tender_workflow(text, *, session_id, output_root, sources=None, confirmed=False,
@@ -371,14 +372,12 @@ def run_tender_workflow(text, *, session_id, output_root, sources=None, confirme
                     from packing_assistant.document_text import table_markdown
                     rows = [["招标要求", "响应原文", "对照状态（非认定）"]]
                     for row in local["response_comparison"]:
-                        rows.append([row["requirement"], "；".join(e["quote"] for e in row["response_evidence"]) or "未提供对应响应证据", row["status"]])
+                        rows.append([row["requirement"], "；".join(e["quote"] for e in row["response_evidence"]) or "未提供对应响应证据", _comparison_status_text(row)])
                     table_limit = sum(sum(len(str(cell)) * 6 + 10 for cell in row) for row in rows) + 100
                     markdown += "\n\n## 用户响应资料对照\n\n仅作原文候选对照，出现相同词不代表已实质响应，需人工核验。\n\n" + table_markdown(rows, table_limit)
                     child["response_comparison"] = local["response_comparison"]
                     child["unresolved"] = [str(g.get("title") or g.get("req_id")) for g in gap_rows(local["matrix"])]
-                    child["unresolved"].extend(row["requirement_ref"] + "：" +
-                        ("候选响应原文待人工核验" if row["response_evidence"] else "未检出对应响应证据")
-                        for row in local["response_comparison"])
+                    child["unresolved"].extend(item for row in local["response_comparison"] for item in _comparison_unresolved(row))
                     if not any(s.get("role") == "response" for s in local["sources"]):
                         child["unresolved"].append("用户未明确提供投标响应资料，不能认定已响应")
                     child["conclusions"] = [{"text": "已逐项整理响应缺项，未代判投标资格", "origin": "tool",
@@ -424,6 +423,9 @@ def run_tender_workflow(text, *, session_id, output_root, sources=None, confirme
                 categories.setdefault("schedule", set()).add(nums)
         if len(categories.get("schedule", [])) > 1:
             conflicts.append({"field": "schedule", "status": "needs_review", "note": "原文存在多个工期/时间数值，请逐项核对适用对象，未自动选值"})
+        # 响应里写的数与招标写的数对不上：和「原文多个工期」一样进冲突清单，只陈述、不裁决。
+        conflicts.extend({"field": c["label"], "status": "needs_review", "note": row["requirement_ref"] + "：" + c["note"]}
+                         for row in comparison for c in row.get("conflicts") or [])
         response_gaps = [{"req_id": row["requirement_ref"], "title": row["requirement"], "status": row["status"],
                           "response_evidence": row["response_evidence"]} for row in comparison]
         unmapped = [{"requirement_ref": req.get("requirement_ref", ""), "status": "source_not_located"}

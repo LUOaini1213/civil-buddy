@@ -118,6 +118,66 @@ def main():
     assert abs(_ir[0]["weight_kg"] - 66.5) < 1e-6, ("毛重未优先", _ir[0])
     assert _ir[0]["meta"]["dims_estimated"] is False, _ir[0]["meta"]
 
+    # 单字母加单位的尺寸表头：修复前 8 种写法里只认得 3 种，
+    # 「L (mm)」这类整表会以 0×0×0 进引擎，得到一个 ok=True、0 个柜的空方案。
+    for _hs in (
+        ["L", "W", "H"], ["L (mm)", "W (mm)", "H (mm)"], ["L(cm)", "W(cm)", "H(cm)"],
+        ["L mm", "W mm", "H mm"], ["Len.", "Wid.", "Ht."], ["L/mm", "W/mm", "H/mm"],
+        ["Length (mm)", "Width (mm)", "Height (mm)"], ["长", "宽", "高"],
+    ):
+        _m = build_column_map(_hs)
+        assert [_m.get(h) for h in _hs] == ["length_mm", "width_mm", "height_mm"], (_hs, _m)
+    # 单字母规则不能抢别的列：Lot / Weight / Hs Code 都不是尺寸
+    _other = build_column_map(["Lot No", "Weight (kg)", "HS Code", "Line"])
+    assert not {"length_mm", "width_mm", "height_mm"} & set(_other.values()), _other
+
+    _short = rows_to_ir(
+        [{"Description of Goods": "Steel bracket", "Q'ty": 4, "L (cm)": 120, "W (cm)": 40, "H (cm)": 30, "G.W. (kg)": 12.5}],
+        headers=["Description of Goods", "Q'ty", "L (cm)", "W (cm)", "H (cm)", "G.W. (kg)"],
+    )
+    assert len(_short) == 1, _short
+    assert (_short[0]["length_mm"], _short[0]["width_mm"], _short[0]["height_mm"]) == (1200.0, 400.0, 300.0), _short[0]
+    assert _short[0]["meta"]["dims_estimated"] is False, _short[0]["meta"]
+
+    # 英制单位与合并尺寸格。修复前这 12 种写法全部读错，其中几种是悄悄读错：
+    # "Dimensions (in)" 的 48 被量级启发式当成 48 米；「长宽高(mm)」的 "1200*400*300"
+    # 被读成长度 1200400300 mm；磅被当成公斤（高估 2.2 倍）。
+    _IN, _FT, _LB = 25.4, 304.8, 0.45359237
+    _unit_cases = [
+        ({"Item": "Crate", "Qty": 1, "L (in)": 48, "W (in)": 40, "H (in)": 36, "G.W. (lbs)": 100}, (48 * _IN, 40 * _IN, 36 * _IN), 100 * _LB),
+        ({"Item": "Crate", "Qty": 1, "Length (inch)": 48, "Width (inch)": 40, "Height (inch)": 36, "Weight (lb)": 100}, (48 * _IN, 40 * _IN, 36 * _IN), 100 * _LB),
+        ({"Item": "Crate", "Qty": 1, "L_in": 48, "W_in": 40, "H_in": 36, "weight_lbs": 100}, (48 * _IN, 40 * _IN, 36 * _IN), 100 * _LB),
+        ({"Item": "Beam", "Qty": 1, "L (ft)": 4, "W (ft)": 3.5, "H (ft)": 3, "G.W. (kg)": 80}, (4 * _FT, 3.5 * _FT, 3 * _FT), 80.0),
+        ({"Item": "Crate", "Qty": 1, "Dimensions (in)": "48 x 40 x 36", "G.W. (kg)": 80}, (48 * _IN, 40 * _IN, 36 * _IN), 80.0),
+        ({"Item": "Crate", "Qty": 1, "Dimensions": "48\" x 40\" x 36\"", "G.W. (kg)": 80}, (48 * _IN, 40 * _IN, 36 * _IN), 80.0),
+        ({"品名": "支架", "数量": 1, "尺寸": "120cm x 40cm x 30cm", "毛重(kg)": 80}, (1200.0, 400.0, 300.0), 80.0),
+        ({"Item": "Bracket", "Qty": 1, "Size (cm)": "120/40/30", "G.W. (kg)": 80}, (1200.0, 400.0, 300.0), 80.0),
+        ({"Item": "Bracket", "Qty": 1, "L/W/H (mm)": "1200/400/300", "G.W. (kg)": 80}, (1200.0, 400.0, 300.0), 80.0),
+        ({"品名": "支架", "数量": 1, "长宽高(mm)": "1200*400*300", "毛重(kg)": 80}, (1200.0, 400.0, 300.0), 80.0),
+        ({"Item": "Bracket", "Qty": 1, "Measurement (cm)": "120 x 40 x 30", "G.W. (kg)": 80}, (1200.0, 400.0, 300.0), 80.0),
+        ({"Item": "Bracket", "Qty": 1, "Length (mm)": 1200, "Width (mm)": 400, "Height (mm)": 300, "Gross Weight (lbs)": 100}, (1200.0, 400.0, 300.0), 100 * _LB),
+        # 一格三数落在「长」列里：按合并格读，不许读成一个数
+        ({"Item": "Bracket", "Qty": 1, "Length (mm)": "1200*400*300", "G.W. (kg)": 80}, (1200.0, 400.0, 300.0), 80.0),
+        # 表头没写单位、单元格自己写了：听单元格的
+        ({"Item": "Bracket", "Qty": 1, "Length": "120 cm", "Width": "40 cm", "Height": "30 cm", "Weight (kg)": 80}, (1200.0, 400.0, 300.0), 80.0),
+        # 不许被新规则改坏的旧行为
+        ({"Item": "Beam", "Qty": 1, "Length (mm)": 6000, "Width (mm)": 200, "Height (mm)": 300, "Gross Weight (t)": 1.35}, (6000.0, 200.0, 300.0), 1350.0),
+        ({"Item": "Beam", "Qty": 1, "Length": 6, "Width": 0.2, "Height": 0.3, "Weight (kg)": 400}, (6000.0, 200.0, 300.0), 400.0),
+        # 体积列不是尺寸列：Meas. (CBM) 不得抢走真正的长宽高
+        ({"Item": "Bracket", "Qty": 1, "Meas. (CBM)": 0.144, "Length (mm)": 1200, "Width (mm)": 400, "Height (mm)": 300, "G.W. (kg)": 80}, (1200.0, 400.0, 300.0), 80.0),
+    ]
+    for _row_in, _dims, _kg in _unit_cases:
+        _got = rows_to_ir([_row_in], headers=list(_row_in.keys()))
+        assert len(_got) == 1, (_row_in, _got)
+        _g = _got[0]
+        for _have, _want in zip((_g["length_mm"], _g["width_mm"], _g["height_mm"]), _dims):
+            assert abs(_have - _want) <= max(0.5, _want * 0.002), (_row_in, _g)
+        assert abs(_g["weight_kg"] - _kg) <= max(0.01, _kg * 0.002), (_row_in, _g)
+
+    # 英制单位词必须带分隔符：Lin / Win / Origin / Min 不是尺寸列，计量单位列也不是
+    _words = build_column_map(["Lin", "Win", "Origin", "Min Order", "Unit of Measurement", "UOM", "计量单位", "Volume (m3)"])
+    assert not {"length_mm", "width_mm", "height_mm", "__dims__"} & set(_words.values()), _words
+
     print("ALL_PASS table_mapper_unit")
     return 0
 if __name__ == "__main__":

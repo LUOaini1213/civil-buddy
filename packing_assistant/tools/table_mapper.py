@@ -201,8 +201,19 @@ _FUZZY_RULES: Tuple[Tuple[str, str, int], ...] = (
     # 合并尺寸列要排在长/宽/高之前，否则「尺寸(长x宽x高)」会被当成长度列
     ("lxwxh", "__dims__", 95),
     ("l*w*h", "__dims__", 95),
+    ("l/w/h", "__dims__", 95),
+    ("l×w×h", "__dims__", 95),
+    # 「长宽高(mm)」此前命中下面的「长」规则，整格 "1200*400*300" 被 _to_float 抹掉
+    # 分隔符读成长度 1200400300 mm——不是缺数，是一个看起来像数的错数。
+    ("长宽高", "__dims__", 95),
+    ("长x宽x高", "__dims__", 95),
+    ("长*宽*高", "__dims__", 95),
+    ("长/宽/高", "__dims__", 95),
+    ("长×宽×高", "__dims__", 95),
     ("dimension", "__dims__", 90),
     ("尺寸", "__dims__", 90),
+    ("measurement", "__dims__", 88),
+    ("size", "__dims__", 84),
     ("g.w", "weight_kg", 88),
     ("gross", "weight_kg", 86),
     ("毛重", "weight_kg", 86),
@@ -225,6 +236,24 @@ _FUZZY_RULES: Tuple[Tuple[str, str, int], ...] = (
     ("宽", "width_mm", 75),
     ("高", "height_mm", 75),
 )
+
+
+# 出口装箱单最常见的尺寸表头其实是单字母加单位：「L (mm)」「W(cm)」「H/mm」「Len.」。
+# 同义词表只收了裸的 l / w / h 和 l_mm 这类下划线写法，模糊规则又按子串匹配
+# length / width / height，于是这几种写法一个都对不上——三列尺寸全丢，行以
+# 0×0×0 进引擎。单字母不能放进子串规则（任何表头都含字母 l），所以用整词正则。
+_SHORT_DIM_RE = re.compile(
+    r"^(l|w|h|len|wid|ht|hgt)\.?"
+    r"(?:[(\[/_\-]?(?:mm|cm|m|毫米|厘米|米)|[(\[/_\-](?:in|inch|inches|ft|feet|英寸|英尺)|[\"″”])?"
+    r"[)\]]?\.?$"
+)
+# 「Meas. (CBM)」「体积(m3)」是体积列，「Unit of Measurement」是计量单位列，都不是长宽高。
+_VOLUME_HEADER_RE = re.compile(r"cbm|m3|m³|volume|体积|立方|unitof|uom|单位")
+_SHORT_DIM_FIELDS = {
+    "l": "length_mm", "len": "length_mm",
+    "w": "width_mm", "wid": "width_mm",
+    "h": "height_mm", "ht": "height_mm", "hgt": "height_mm",
+}
 
 
 def _weight_pref(key: str) -> int:
@@ -252,8 +281,14 @@ def build_column_map(headers: Sequence[Any]) -> Dict[str, str]:
         std = inv.get(key)
         score = 100 if std else 0
         if not std:
+            short = _SHORT_DIM_RE.match(key)
+            if short:
+                std, score = _SHORT_DIM_FIELDS[short.group(1)], 92
+        if not std:
             for cand, field, sc in _FUZZY_RULES:
                 if cand in key:
+                    if field == "__dims__" and _VOLUME_HEADER_RE.search(key):
+                        continue
                     std, score = field, sc
                     break
         if not std:
@@ -267,10 +302,29 @@ def build_column_map(headers: Sequence[Any]) -> Dict[str, str]:
     return {raw: std for std, (_score, _order, raw) in ordered}
 
 
+_CELL_UNIT = r"(?:mm|cm|m|inches|inch|in|ft|毫米|厘米|米|英寸|英尺|[\"″”]|['′])"
 _DIM_TRIPLE_RE = re.compile(
-    r"(\d+(?:\.\d+)?)\s*[x×*✕]\s*(\d+(?:\.\d+)?)\s*[x×*✕]\s*(\d+(?:\.\d+)?)",
+    r"(\d+(?:\.\d+)?)\s*" + _CELL_UNIT + r"?\s*[x×*✕/]\s*"
+    r"(\d+(?:\.\d+)?)\s*" + _CELL_UNIT + r"?\s*[x×*✕/]\s*"
+    r"(\d+(?:\.\d+)?)",
     re.I,
 )
+_CELL_UNIT_RE = re.compile(r"\d\s*(" + _CELL_UNIT[3:-1] + r")", re.I)
+_UNIT_TO_MM = {
+    "mm": 1.0, "毫米": 1.0, "cm": 10.0, "厘米": 10.0, "m": 1000.0, "米": 1000.0,
+    "in": 25.4, "inch": 25.4, "inches": 25.4, "英寸": 25.4, '"': 25.4, "″": 25.4, "”": 25.4,
+    "ft": 304.8, "英尺": 304.8, "'": 304.8, "′": 304.8,
+}
+
+
+def _cells_length_scale(values: Sequence[Any]) -> Optional[float]:
+    """单元格自己写了单位（48" / 120cm）且全列一致时，返回乘到 mm 的系数；否则 None。"""
+    found = set()
+    for v in values:
+        m = _CELL_UNIT_RE.search(str(v)) if v is not None else None
+        if m:
+            found.add(_UNIT_TO_MM[m.group(1).lower()])
+    return found.pop() if len(found) == 1 else None
 
 
 def _parse_dim_triple(v: Any) -> Optional[Tuple[float, float, float]]:
@@ -301,6 +355,16 @@ def _to_float(v: Any) -> Optional[float]:
         return None
 
 
+def _header_has_length_unit(header: str) -> bool:
+    """表头是否明写了长度单位。明写的听表头的，没写才看单元格和量级。"""
+    h = _norm_header(header)
+    return bool(
+        "mm" in h or "cm" in h or h.endswith("_m") or "(m)" in h or "英寸" in h or "英尺" in h
+        or h.endswith(('"', "″", "”"))
+        or re.search(r"(?:^|[(\[_/).\-])(?:in|inch|inches|ft|feet|foot)(?:$|[)\].])", h)
+    )
+
+
 def _infer_length_scale(header: str, values: List[Optional[float]]) -> float:
     """返回乘到 mm 的系数。"""
     h = _norm_header(header)
@@ -308,6 +372,12 @@ def _infer_length_scale(header: str, values: List[Optional[float]]) -> float:
         return 1.0
     if h.endswith("_cm") or "cm" in h or "(cm)" in h:
         return 10.0
+    # 英制。此前 "Dimensions (in)" 的 48 会落到下面的量级启发式，被当成 48 米。
+    # 单位词必须有分隔符在前、结尾或括号在后，"min" / "origin" 这类词不算。
+    if re.search(r"(?:^|[(\[_/).\-])(?:in|inch|inches)(?:$|[)\].])", h) or "英寸" in h or h.endswith(('"', "″", "”")):
+        return 25.4
+    if re.search(r"(?:^|[(\[_/).\-])(?:ft|feet|foot)(?:$|[)\].])", h) or "英尺" in h:
+        return 304.8
     if h.endswith("_m") or "(m)" in h or h in ("length_m", "width_m", "height_m", "长m", "长(m)"):
         return 1000.0
     # 启发式：中位值 < 30 → 可能是 m；< 300 且字段叫 length → cm 少见，按 mm
@@ -327,6 +397,10 @@ def _infer_weight_scale(header: str, values: List[Optional[float]]) -> float:
     """返回乘到 kg 的系数。注意：不可用 `'t' in header`（weight 含字母 t）。"""
     h = _norm_header(header)
     raw = str(header or "")
+    # 磅。英制表里尺寸是英寸、重量是磅；只换算尺寸不换算重量，会得到一个尺寸对、
+    # 重量高估 2.2 倍的方案，和吨当公斤是同一类错。
+    if "kg" not in h and (re.search(r"(?:^|[(\[_/).\-])(?:lb|lbs|pound|pounds)(?:$|[)\].])", h) or "磅" in raw):
+        return 0.45359237
     # 明确吨：_t / (t) / 吨 / weight_t / 单重t
     # 只排除 kg。上面的正则已要求 t 是独立词元（^t / _t / 结尾 t / "(t)"），
     # "weight" 里的字母 t 不满足该条件，无需再排除；排除它会让 "Gross Weight (t)"
@@ -421,11 +495,18 @@ def rows_to_ir(
             return []
         return [_to_float(r.get(raw_h)) for r in rows]
 
-    len_scale = {
-        "length_mm": _infer_length_scale(std_to_raw.get("length_mm", "length_mm"), series("length_mm")),
-        "width_mm": _infer_length_scale(std_to_raw.get("width_mm", "width_mm"), series("width_mm")),
-        "height_mm": _infer_length_scale(std_to_raw.get("height_mm", "height_mm"), series("height_mm")),
-    }
+    def raw_cells(std: str) -> List[Any]:
+        raw_h = std_to_raw.get(std)
+        return [r.get(raw_h) for r in rows] if raw_h else []
+
+    def length_scale(std: str, numbers: List[Optional[float]], cells: Sequence[Any]) -> float:
+        header = std_to_raw.get(std, std)
+        if _header_has_length_unit(header):
+            return _infer_length_scale(header, numbers)
+        return _cells_length_scale(cells) or _infer_length_scale(header, numbers)
+
+    len_scale = {std: length_scale(std, series(std), raw_cells(std))
+                 for std in ("length_mm", "width_mm", "height_mm")}
     wt_scale = _infer_weight_scale(std_to_raw.get("weight_kg", "weight_kg"), series("weight_kg"))
     tw_scale = _infer_weight_scale(
         std_to_raw.get("total_weight_kg", "total_weight_kg"), series("total_weight_kg")
@@ -439,7 +520,7 @@ def rows_to_ir(
     dims_scale = 1.0
     if dims_raw_h:
         _flat = [x for tri in dims_triples if tri for x in tri]
-        dims_scale = _infer_length_scale(dims_raw_h, _flat)
+        dims_scale = length_scale("__dims__", _flat, [r.get(dims_raw_h) for r in rows])
 
     out: List[Dict[str, Any]] = []
     # 汇总/小计行（整行品名，不误杀「合计架」类真货子串尾）
@@ -520,12 +601,17 @@ def rows_to_ir(
         qty = max(1, int(qty_f or 1))
 
         def dim(std: str) -> float:
+            if _parse_dim_triple(got.get(std)):
+                return 0.0  # "1200*400*300" 不是一个数；见下方按合并格处理
             v = _to_float(got.get(std))
             if v is None:
                 return 0.0
             return round(v * len_scale[std], 3)
 
         L, W, H = dim("length_mm"), dim("width_mm"), dim("height_mm")
+        _stray = _parse_dim_triple(got.get("length_mm"))
+        if _stray and L <= 0 and W <= 0 and H <= 0:
+            L, W, H = (round(x * len_scale["length_mm"], 3) for x in _stray)
         if dims_raw_h and (L <= 0 or W <= 0 or H <= 0):
             tri = dims_triples[i - 1] if i - 1 < len(dims_triples) else None
             if tri:

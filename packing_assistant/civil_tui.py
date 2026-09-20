@@ -9,7 +9,10 @@ from typing import Any, Dict, List, Optional
 from packing_assistant.runtime.civil_config import CONFIRM, APPROVAL_MODES, SANDBOX_MODES, load_config
 
 HELP = """/help              本页
-/status            sandbox · approval · thread · 作业根 · 会话槽
+/status            作业文件夹 · CIVIL.md · sandbox · approval · 模型 · thread · 会话槽
+/init              在当前文件夹写一份 CIVIL.md（本工程说明）
+/model [名称]      查看 / 切换本进程用的模型（不写盘，不显示 Key）
+/mode [模式]       steps 规则路由、不调模型 | model 模型驱动 | auto 有模型就用
 /skills [词]       技能目录（name + description）
 /approvals [mode]  untrusted | on-request | never
 /sandbox [mode]    read-only | workspace-write
@@ -18,6 +21,9 @@ HELP = """/help              本页
 /resume <id>       切到该 thread
 /bg <任务>         在新 thread 后台跑
 /files             本 thread 交付物
+/plan              上一轮模型列的步骤
+/review <文稿>     不调模型：文稿里的数字有没有出处、有没有不该下的结论
+/plugins           已装插件、是否受信任、带来哪些岗位（安装与信任用 civil plugin …）
 /confirm           本 thread 视同已打确认句
 /mcp               IDE/MCP 怎么挂
 /quit              退出
@@ -56,6 +62,7 @@ class TuiState:
         self.confirm = self.cfg.auto_confirm()
         self.last_skill = ""
         self.last_skill_source = ""
+        self.last_plan: List[Dict[str, str]] = []
 
 
 def _banner(st: TuiState) -> None:
@@ -70,7 +77,7 @@ def _banner(st: TuiState) -> None:
         f"approval {st.cfg.approval}  skills {n}"
     )
     print(f"  job {root}")
-    print(_c("2", "  /help  /skills  /new  /bg  /approvals  /sandbox   空行退出"))
+    print(_c("2", "  /help  /status  /init  /skills  /new  /bg  /approvals  /sandbox   空行退出"))
     print()
 
 
@@ -78,11 +85,12 @@ def _print_out(out: Dict[str, Any]) -> None:
     eid = out.get("skill") or out.get("expert_id") or ""
     src = out.get("skill_source") or ""
     if eid:
-        how = "显式" if src == "given" else "选用"
+        how = {"given": "显式", "model": "模型选用"}.get(src, "选用")
         print(_c("36", f"skill ${eid} · {out.get('expert_name') or eid} · {how}"))
     else:
-        print(_c("36", "skill （路由器）"))
+        print(_c("36", "skill （未选用）" if out.get("agent_mode") == "model" else "skill （路由器）"))
     bits = [
+        f"mode {out.get('agent_mode') or 'steps'}",
         f"intent {out.get('intent')}",
         f"wrote {out.get('wrote')}",
         f"submit_blocked {out.get('submit_blocked')}",
@@ -95,9 +103,10 @@ def _print_out(out: Dict[str, Any]) -> None:
     if out.get("hitl_pending"):
         print(_c("33", f"approval 须确认句：{CONFIRM}"))
     print(out.get("reply") or "")
-    files = out.get("artifacts") or out.get("files") or []
-    if files:
-        print(_c("2", "files: " + ", ".join(str(f) for f in files)))
+    from packing_assistant.civil import _file_paths, display_path
+
+    for path in _file_paths(out):
+        print(_c("2", "  + " + display_path(path)))
     print()
 
 
@@ -130,18 +139,61 @@ def handle_slash(line: str, st: TuiState) -> Optional[str]:
     if cmd == "status":
         from packing_assistant.runtime.memory import assemble_context, prompt_prefix
 
+        from packing_assistant.civil import status_text
+
         ctx = assemble_context(st.thread.session_id)
         src = st.last_skill_source
-        how = "显式" if src == "given" else "规则选用" if src == "matched" else "未点名"
+        how = {"given": "显式", "matched": "规则选用", "model": "模型选用"}.get(src, "未点名")
         skill = f"${st.last_skill}" if st.last_skill else "（未点名）"
         return (
-            f"thread {st.thread.thread_id}\n"
-            f"skill {skill} · {how}\n"
-            f"sandbox {st.cfg.sandbox}\n"
-            f"approval {st.cfg.approval}\n"
-            f"confirm {st.confirm}\n"
+            f"thread   {st.thread.thread_id}\n"
+            f"skill    {skill} · {how}\n"
+            f"{status_text()}\n"
+            f"confirm  {st.confirm}\n"
             f"{prompt_prefix(ctx) or '会话槽空'}"
         )
+    if cmd == "init":
+        from packing_assistant.runtime.project_instructions import init
+        from packing_assistant.runtime.workspace import activate
+        from pathlib import Path
+
+        path, created = init(Path.cwd())
+        activate(Path.cwd())
+        return (f"已写入 {path.name}。填上你确认过的项目事实；留空的栏在成稿里保持 UNSPECIFIED。"
+                if created else f"{path.name} 已存在，未改动。")
+    if cmd == "model":
+        from packing_assistant.llm import llm_config, set_runtime_llm
+
+        current = llm_config()
+        if arg.strip():
+            set_runtime_llm({"api_key": current["api_key"], "base_url": current["base_url"], "model": arg.strip()})
+            current = llm_config()
+        key = "已配置" if current.get("api_key") else "未配置（走确定性 steps 路径）"
+        return f"model = {current['model']}\nbase  = {current['base_url']}\nkey   = {key}"
+    if cmd == "mode":
+        from packing_assistant.runtime.civil_config import AGENT_MODES, _strip_mode
+        from packing_assistant.runtime.turn import resolve_mode
+
+        if arg.strip():
+            picked = _strip_mode(arg, AGENT_MODES, "")
+            if not picked:
+                return "可选 " + " | ".join(AGENT_MODES)
+            os.environ["CIVIL_AGENT_MODE"] = st.cfg.agent_mode = picked
+        running, why = resolve_mode()
+        return f"mode = {st.cfg.agent_mode}" + (f" → {running}\n{why}" if why else "")
+    if cmd == "plan":
+        if not st.last_plan:
+            return "上一轮没有列步骤（steps 模式不列；model 模式里多步任务才列）。"
+        marks = {"done": "x", "in_progress": ">", "pending": " "}
+        return "\n".join(f"[{marks.get(row.get('status'), ' ')}] {row.get('step')}" for row in st.last_plan)
+    if cmd == "plugins":
+        from packing_assistant.civil import plugin_lines
+
+        return "\n".join(plugin_lines()) or "还没有安装插件。civil plugin install <目录或 .zip>"
+    if cmd == "review":
+        from packing_assistant.runtime.review import review_file
+
+        return review_file(arg)["reply"] if arg.strip() else "用法：/review pm-daily__log.md（文件名或相对作业文件夹的路径）"
     if cmd == "skills":
         return _slash_skills(arg)
     if cmd in {"approvals", "approval"}:
@@ -212,7 +264,19 @@ def handle_slash(line: str, st: TuiState) -> Optional[str]:
     return f"未知命令 /{cmd}。/help"
 
 
+def ask_approval(request: Dict[str, Any], *, read=input) -> bool:
+    """Codex asks before a risky command runs; civil asks before a high-risk post writes."""
+    print(_c("33", f"approval {request.get('name') or ''}（risk={request.get('risk')}）要写盘。"))
+    print(_c("33", f"  同意就原样输入确认句：{CONFIRM}"))
+    try:
+        answer = read(_c("33", "  approve> ")).strip()
+    except (EOFError, KeyboardInterrupt):
+        return False
+    return CONFIRM in answer
+
+
 def run_tui() -> int:
+    from packing_assistant.civil import with_progress
     from packing_assistant.runtime.threads import run_on_thread
 
     _enable_vt()
@@ -236,11 +300,20 @@ def run_tui() -> int:
                 print()
             continue
         confirm = st.confirm or CONFIRM in line
-        out = run_on_thread(
-            st.thread.thread_id,
-            line,
-            confirm=confirm,
-        )
+        granted: List[bool] = []
+
+        def approve(request: Dict[str, Any]) -> bool:
+            granted.append(ask_approval(request))
+            return granted[-1]
+
+        def turn(confirmed: bool = confirm) -> Dict[str, Any]:
+            return run_on_thread(st.thread.thread_id, line, confirm=confirmed, approve=approve)
+
+        out = with_progress(turn, lambda text: print(_c("2", text)))
+        if out.get("hitl_pending") and not granted and ask_approval(
+                {"name": out.get("expert_name") or "本次写盘", "risk": "high"}):
+            granted.append(True)      # steps 模式：先被拦下，用户当场同意后原话重跑
+            out = with_progress(lambda: turn(True), lambda text: print(_c("2", text)))
         from packing_assistant.runtime.threads import load_thread
 
         fresh = load_thread(st.thread.thread_id)
@@ -248,5 +321,11 @@ def run_tui() -> int:
             st.thread = fresh
         st.last_skill = str(out.get("skill") or out.get("expert_id") or "")
         st.last_skill_source = str(out.get("skill_source") or "")
+        st.last_plan = list(out.get("plan") or [])
+        if any(granted):      # 同意过一次，本 thread 后面的高风险写盘不再重复问
+            from packing_assistant.runtime.threads import save_thread
+
+            st.confirm = st.thread.confirm = True
+            save_thread(st.thread)
         _print_out(out)
     return 0
