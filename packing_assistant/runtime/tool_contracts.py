@@ -34,6 +34,9 @@ MATERIAL = {"type": ["string", "number", "array", "object"]}
 
 
 def contract_for(name: str, *, exclusive: bool = False) -> dict:
+    if name in {"jpj.catalog", "jpj.query", "literature.catalog", "literature.search"}:
+        from packing_assistant.tools.readonly_sources import contract_for_source
+        return contract_for_source(name)
     properties = deepcopy(COMMON)
     output = obj({"ok": BOOL}, extra=True)
     required = ()

@@ -9,8 +9,10 @@ import zipfile
 from pathlib import Path
 
 sys.stdout.reconfigure(encoding="utf-8", errors="replace")
-ROOT = Path(r"C:\Users\LW\civil-buddy")
-SHOTS = Path(r"C:\Users\LW\AppData\Local\Temp\claude\C--Users-LW-packing-agent\2906bf0f-3c95-442b-b787-8a0af842d1b9\scratchpad\shots")
+ROOT = Path(__file__).resolve().parents[2]
+# 截图放在仓库下（output/submission/_shots，gitignored）。原先指向某次会话的临时目录，
+# 那个目录早已不存在，glob 静默返回空，打出来的 zip 会少 5 张图而不报错。
+SHOTS = ROOT / "output/submission/_shots"
 STAGE = ROOT / "output/submission/_extra_stage"
 OUT = ROOT / "output/submission/04-补充资料-CivilBuddy.zip"
 
@@ -100,9 +102,15 @@ for src, dst in FILES:
 shots_dst = STAGE / "02-产品截图与引擎出图"
 shots_dst.mkdir(parents=True, exist_ok=True)
 n_shots = 0
+if not SHOTS.is_dir():
+    print(f"!! 截图目录不存在: {SHOTS}")
+    raise SystemExit(1)
 for p in sorted(SHOTS.glob("*.png")):
     shutil.copy2(p, shots_dst / p.name)
     n_shots += 1
+if n_shots == 0:
+    print(f"!! 截图目录里没有 png: {SHOTS}")
+    raise SystemExit(1)
 
 if missing:
     print("!! 缺文件:", missing)
