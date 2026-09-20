@@ -2500,6 +2500,10 @@ button.danger { background: var(--cb-red); box-shadow: none; }
           <div class="composer-row">
             <button class="soft" @click="runDemo" :class="{ busy: loading }" title="留空也可点：30×密实模块≈24t">满载</button>
             <button class="ghost" @click="runPdf" :class="{ busy: loading }">PDF</button>
+            <button class="ghost" @click="exportShipment" :disabled="!result || !result.session_id && !sessionId"
+                    title="POR + 绑扎作业单 → xlsx">导出 xlsx</button>
+            <a v-if="exportUrl" :href="exportUrl" download class="soft"
+               style="text-decoration:none;display:inline-flex;align-items:center">下载 {{ exportName }}</a>
           </div>
           <div class="status-line">{{ statusText }}</div>
         </div>
@@ -4314,6 +4318,9 @@ window.CB_POSTS = [{"id":"bid-parse","name":"招标解析","aliases":["招标","
           checkpointBanner: '',
           ws: null,
           wsStatus: 'off',
+          liveRunId: '',
+          exportUrl: '',
+          exportName: '',
           sseActive: false,
           seenEventKeys: {},
           viewContainerNo: 1,
@@ -5432,6 +5439,7 @@ window.CB_POSTS = [{"id":"bid-parse","name":"招标解析","aliases":["招标","
         },
         onStreamEvent(ev) {
           if (!ev || !ev.type) return;
+          if (ev.run_id) this.liveRunId = ev.run_id;
           // 幂等：seq+type+node 去重（SSE 与晚到 WS 重叠时）
           const key = [ev.run_id || '', ev.seq || '', ev.type, ev.node || ''].join('|');
           if (ev.seq != null && this.seenEventKeys[key]) return;
@@ -6214,7 +6222,11 @@ window.CB_POSTS = [{"id":"bid-parse","name":"招标解析","aliases":["招标","
           this.loadingStartedAt = 0;
           this.sseActive = false;
           this.liveNode = '';
-          this.statusText = '已强制解锁 · 可再点生成/演示（若后台仍在跑，结果稍后可能覆盖）';
+          const rid = this.liveRunId || (this.result && this.result.run_id) || this.sessionId || '';
+          if (rid) {
+            fetch(API + '/api/runs/' + encodeURIComponent(rid) + '/cancel', { method: 'POST' }).catch(() => {});
+          }
+          this.statusText = '已强制解锁并请求取消后台运行 · 可再点生成/演示';
         },
         async fetchJson(url, body, timeoutMs) {
           const ms = timeoutMs || 90000;
@@ -6805,8 +6817,17 @@ window.CB_POSTS = [{"id":"bid-parse","name":"招标解析","aliases":["招标","
             const ws = new WebSocket(this.wsUrl(sid));
             this.ws = ws;
             this.wsStatus = 'connecting';
-            ws.onopen = () => { this.wsStatus = 'live'; };
-            ws.onclose = () => { this.wsStatus = 'off'; };
+            ws.onopen = () => { this.wsStatus = 'live'; this._wsRetry = 0; };
+            ws.onclose = () => {
+              this.wsStatus = 'off';
+              // phone locked / wifi blip: come back on our own instead of staying dead
+              if (this.ws !== ws) return;
+              const n = (this._wsRetry = (this._wsRetry || 0) + 1);
+              if (n > 8) return;
+              const wait = Math.min(15000, 500 * Math.pow(2, n));
+              this.wsStatus = 'retry ' + n;
+              setTimeout(() => { if (this.ws === ws) this.connectSessionWs(sid); }, wait);
+            };
             ws.onerror = () => { this.wsStatus = 'err'; };
             ws.onmessage = (msg) => {
               try {
@@ -6883,6 +6904,19 @@ window.CB_POSTS = [{"id":"bid-parse","name":"招标解析","aliases":["招标","
             this.statusText = this.checkpointBanner;
           } finally {
             this.loading = false;
+          }
+        },
+        async exportShipment() {
+          const sid = (this.result && this.result.session_id) || this.sessionId;
+          if (!sid) { this.statusText = '先跑一次方案再导出'; return; }
+          this.statusText = '导出 xlsx…';
+          try {
+            const j = await this.fetchJson('/api/export/shipment', { session_id: sid }, 60000);
+            this.exportUrl = API + j.download_url;
+            this.exportName = (j.xlsx_path || '').split(/[\\/]/).pop();
+            this.statusText = '已导出 ' + this.exportName + ' · 点右侧「下载」';
+          } catch (e) {
+            this.statusText = '导出失败: ' + e;
           }
         },
         async runPdf() {
@@ -7077,6 +7111,13 @@ window.CB_POSTS = [{"id":"bid-parse","name":"招标解析","aliases":["招标","
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ session_id: this.sessionId, action: 'cancel' }),
           });
+          {
+            // cooperative cancel: the pipeline skips its remaining agents at the next checkpoint
+            const rid = this.liveRunId || (this.result && this.result.run_id) || this.sessionId || '';
+            if (rid) {
+              try { await fetch(API + '/api/runs/' + encodeURIComponent(rid) + '/cancel', { method: 'POST' }); } catch (e) { /* best effort */ }
+            }
+          }
           /* ux(round3)：Esc/取消=驳回 ≠ 放行——时间线标安全橙警示，不静默完成 */
           if (this.cbTl.hitlWait) {
             this.cbTlSetStage('hitl', 'warn', '已驳回（未放行）');
