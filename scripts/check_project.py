@@ -40,6 +40,7 @@ CHECKS = (
     Check("tender-response-bench", ("scripts/eval_tender_response_match.py", "--check")),
     Check("tender-facts", ("scripts/test_tender_facts.py",)),
     Check("bid-posts", ("scripts/test_bid_posts.py",)),
+    Check("bid-files", ("scripts/test_bid_files.py",)),
     # Offline, model-free, a second or two each - and until 2026-09-20 run by nothing: not by ci.yml,
     # not by this registry, not by the acceptance glob. They pin the parser the three bid posts stand on.
     Check("tender-parse", ("scripts/test_tender_parse.py",)),

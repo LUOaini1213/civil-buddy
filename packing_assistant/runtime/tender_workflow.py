@@ -216,6 +216,15 @@ def _unreadable(value):
     return result
 
 
+def _checked_entry(source):
+    """One source as the check record keeps it: the hash of the text as read, and the path of a job file so
+    that it can be read again."""
+    from packing_assistant.tools.bid_check_record import entry
+
+    return entry(str(source.get("title") or source["source_id"]), str(source.get("role") or "reference"), source["text"],
+                 kind=source.get("kind"), path=source.get("path"), source_id=source["source_id"])
+
+
 def _evidence_files(sources):
     """Reference files count as evidence only beside a declared tender: without one, _source_roles reads
     them as the tender text itself. What the user typed this turn is never an evidence file."""
@@ -411,7 +420,8 @@ def run_tender_workflow(text, *, session_id, output_root, sources=None, confirme
                     # below a first one that knew nothing of them - "未响应" above, the candidate quote and
                     # the numeric conflict below. The comparison now answers the rows themselves.
                     markdown = _compliance_gaps_md(local["handoff"], local["matrix"], comparison=local["response_comparison"],
-                                                   evidence=_evidence_files(local["sources"]))
+                                                   evidence=_evidence_files(local["sources"]),
+                                                   checked=[_checked_entry(s) for s in local["sources"]])
                     child["response_comparison"] = local["response_comparison"]
                     child["unresolved"] = [str(g.get("title") or g.get("req_id")) for g in gap_rows(local["matrix"])]
                     child["unresolved"].extend(item for row in local["response_comparison"] for item in _comparison_unresolved(row))
@@ -499,8 +509,32 @@ def run_tender_workflow(text, *, session_id, output_root, sources=None, confirme
         if unread:
             md += "\n\n## 未读出的文件\n\n" + "\n".join(f"- {u['title']}（{u['role']}）：{u['reason']}" for u in unread)
             md += "\n\n这些文件未参与解析和对照；相关行是「未能判断」，不是「未响应」。"
+        # Which texts this run read, and what moved since the last run of this task (tools/bid_check_record.py).
+        from packing_assistant.tools import bid_check_record as check_record
+
+        checked = [_checked_entry(s) for s in supplied]
+        gaps_md = next((Path(item["path"]).read_text(encoding="utf-8") for child in state["children"] if child["skill"] == "bid-compliance"
+                        for item in child["files"] if item["name"] == "bid-compliance.md"), "")
+        record = check_record.build(kind="workflow", session_id=session_id, inputs=checked, drafts=[], rows=check_record.rows_of(gaps_md),
+                                    unreadable=unread, run_id=rid, handoff_sha256=state["handoff_hash"])
+        earlier = [assert_open(p) for p in directory.parent.glob("wf-*/" + check_record.WORKFLOW_RECORD) if p.parent != directory]
+        previous = check_record.latest(earlier)
+        md += "\n\n## 核对对象\n\n" + "\n".join(check_record.inputs_table(checked))
+        md += "文字一改，sha256 就变：本次各表只对上面这些文字成立。\n"
+        if previous is not None:
+            md += "\n" + "\n".join(check_record.comparison_section(previous, record))
+            moved = check_record.compare(previous, record)
+            state["check"] = {"compared_with": previous.get("run_id"), "inputs_changed": [i["title"] for i in moved["inputs"]],
+                              "rows_changed": [r["label"] for r in moved["rows"]]}
         ledger.reserve("controller-output", 0, tokens(md))
         document(directory, "collaboration-review", md)
+        record["drafts"] = [{"name": Path(item["path"]).name, "path": Path(item["path"]).relative_to(directory).as_posix(),
+                             "sha256": check_record.sha(Path(item["path"]).read_text(encoding="utf-8"))}
+                            for item in state["files"] if item["path"].endswith(".md")]
+        record_path = directory / check_record.WORKFLOW_RECORD
+        _atomic(record_path, record)
+        file_saved(record_path, "bid.check")
+        state.setdefault("check", {})["record"] = str(record_path)
         state["state"] = "done" if state["ok"] else "failed"
     except Exception as exc:
         state.update(ok=False, state="timed_out" if isinstance(exc, TimeoutError) else "cancelled" if isinstance(exc, InterruptedError) else "failed",

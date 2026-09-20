@@ -664,7 +664,8 @@ def _price_gap(need: str, have: str) -> str:
 def compliance_gaps(handoff: Optional[Mapping[str, Any]], matrix: Optional[Mapping[str, Any]], *,
                     ours: Optional[Facts] = None, comparison: Optional[Sequence[Mapping[str, Any]]] = None,
                     disclaimer: str = "", unreadable: Optional[Sequence[Mapping[str, Any]]] = None,
-                    evidence: Optional[Sequence[Mapping[str, Any]]] = None) -> str:
+                    evidence: Optional[Sequence[Mapping[str, Any]]] = None,
+                    checked: Optional[Sequence[Mapping[str, Any]]] = None) -> str:
     """``handoff`` carries what the tender asks (its ``facts``); ``ours`` is what this turn said of our side.
 
     When the same text held both, the two are the same dict. ``comparison`` is
@@ -676,6 +677,8 @@ def compliance_gaps(handoff: Optional[Mapping[str, Any]], matrix: Optional[Mappi
     ``evidence`` - ``[{title, text}]``, files given as evidence (certificates, the guarantee, contracts).
     They are searched for our side's own wording, letter for letter; what is found is that the wording
     occurs, never that the document is genuine or in force.
+    ``checked`` - ``[{title, sha256}]``, the texts this check read (tools/bid_check_record.py). The draft
+    names them, so that whoever reads it later can tell which version it is about.
     """
     ho = handoff or {}
     unread = _unread(ho, unreadable)
@@ -712,6 +715,10 @@ def compliance_gaps(handoff: Optional[Mapping[str, Any]], matrix: Optional[Mappi
     scope_rows += [["未读出的文件" + (f" {n}" if len(unread) > 1 else ""), _unread_cell(u), "—"] for n, u in enumerate(unread, 1)]
     if evidence:
         scope_rows.append(["证据文件", "、".join(str(e.get("title") or "未命名") for e in evidence) + "（只核对字样是否出现，见 8 节）", "—"])
+    if checked:
+        # the hashes go under 来源: a content cell holds nothing the user did not write
+        scope_rows.append(["核对对象", "；".join(str(c.get("title")) for c in checked) + "（文字一改，本表即过期）",
+                           "sha256 " + "；".join(str(c.get("sha256") or "")[:12] for c in checked)])
     md += _table(("事项", "内容", "来源"), scope_rows)
 
     open_items: List[str] = []
@@ -759,7 +766,8 @@ def compliance_gaps(handoff: Optional[Mapping[str, Any]], matrix: Optional[Mappi
     md += [f"- {item}" for item in open_items] or ["- （本轮没有可列的缺口：要么资料不足，要么要求与响应逐项对上，仍须人工核验原件）"]
     p0 = (ho.get("p0_reject_scan") or {}).get("items") or []
     if p0:
-        md += ["", f"未解决 P0（资格/废标/★，须人工确认，系统不关闭）：{len(p0)} 项", ""]
+        # no count here: every number in this draft is one the user wrote, and `civil review` holds it to that
+        md += ["", "未解决 P0（资格/废标/★，须人工确认，系统不关闭），逐项如下：", ""]
         quotes = [_quote(str(item.get("exact_text") or item.get("title") or ""), tender, str(item.get("req_id") or "")) for item in p0[:12]]
         md += [f"- {_clip(q, 80)}" for q in dict.fromkeys(quotes) if q] or ["- （均已在上表逐项列出）"]
     summary = (matrix or {}).get("summary") or {}

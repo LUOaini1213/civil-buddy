@@ -105,10 +105,11 @@ def _tender_materials(text: str) -> Tuple[Optional[List[Dict[str, Any]]], List[D
     text. A file that could not be read used to be left out without a word, so a check that was handed
     a scanned 投标响应.pdf reported the response as never given.
     """
-    from packing_assistant.office_job import files_named_in, read_material_checked
+    from packing_assistant.office_job import files_named_in, job_root, read_material_checked
 
     sources: List[Dict[str, Any]] = []
     unread: List[Dict[str, str]] = []
+    root = job_root().resolve()
     for index, path in enumerate(files_named_in(text, _DOCUMENT_EXTS)):
         name = path.name.lower()
         role = ("tender" if any(mark in name for mark in _TENDER_FILE)
@@ -117,8 +118,13 @@ def _tender_materials(text: str) -> Tuple[Optional[List[Dict[str, Any]]], List[D
         if why:
             unread.append({"title": path.name, "role": role, "reason": why})
             continue
-        sources.append({"source_id": f"{role}-{index + 1}", "title": path.name, "text": body, "start": 0,
-                        "end": len(body), "role": role, "kind": "job_file"})
+        source = {"source_id": f"{role}-{index + 1}", "title": path.name, "text": body, "start": 0,
+                  "end": len(body), "role": role, "kind": "job_file"}
+        try:
+            source["path"] = path.resolve().relative_to(root).as_posix()   # so a later `civil review` can read it again
+        except ValueError:
+            pass
+        sources.append(source)
     return (sources if sum(1 for source in sources if source["role"] == "tender") == 1 else None), unread
 
 

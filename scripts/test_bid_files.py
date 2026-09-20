@@ -237,5 +237,192 @@ class EvidenceFiles(JobFolder):
         self.assertEqual(_evidence_files([typed, paper]), [], "with no declared tender a reference file is the tender text")
 
 
+class CheckedVersion(JobFolder):
+    """A check says which texts it read; the next one says what moved; `civil review` says whether the
+    draft and the job files are still the ones that were checked."""
+
+    REQUEST = "全面检查投标响应：招标文件.txt 投标响应.txt"
+    LATE = RESPONSE.replace("工期60", "工期999")
+
+    def record(self, out: Dict) -> Dict:
+        hit = [f["path"] for f in out["files"] if Path(f["path"]).name == "check.json"]
+        self.assertEqual(len(hit), 1, [f["path"] for f in out["files"]])
+        return json.loads(Path(hit[0]).read_text(encoding="utf-8"))
+
+    def test_a_check_names_the_texts_it_read(self) -> None:
+        from packing_assistant.tools.bid_check_record import sha
+
+        (self.job / "投标响应.txt").write_text(self.LATE, encoding="utf-8")
+        out = run_agent(self.REQUEST, session_id="civil-cli")
+        self.assertTrue(out["ok"], out.get("reply"))
+        record = self.record(out)
+        self.assertEqual((record["schema"], record["kind"], record["handoff_sha256"]), ("civil.bid.check.v1", "workflow", out["handoff_hash"]))
+        inputs = {i["title"]: i for i in record["inputs"]}
+        self.assertEqual({t: (i["role"], i["sha256"], i["path"]) for t, i in inputs.items()},
+                         {"招标文件.txt": ("tender", sha(TENDER), "招标文件.txt"), "投标响应.txt": ("response", sha(self.LATE), "投标响应.txt")})
+        on_disk = {Path(f["path"]).name: sha(Path(f["path"]).read_text(encoding="utf-8")) for f in out["files"] if f["path"].endswith(".md")}
+        self.assertEqual({d["name"]: d["sha256"] for d in record["drafts"]}, on_disk)
+        self.assertIn("collaboration-review.md", on_disk)
+        self.assertEqual([r["state"] for r in record["rows"] if r["label"] == "工期"], ["未响应·数值不符"])
+        review = self.draft(out, "collaboration-review.md")
+        named = {r["核对时读到的"]: r for t in tables(review) for r in t if "核对时读到的" in r}
+        self.assertEqual(named["投标响应.txt"]["sha256（前 12 位）"], sha(self.LATE)[:12])
+        self.assertNotIn("与上次核对相比", review, "there was no earlier check of this task")
+        scope = rows(self.draft(out, "bid-compliance.md"), "核对对象")[0]
+        self.assertIn("投标响应.txt", scope["内容"])
+        self.assertIn(sha(self.LATE)[:12], scope["来源"], "the hash is provenance: a content cell holds nothing the user did not write")
+
+    def test_the_next_check_says_what_moved_and_only_that(self) -> None:
+        from packing_assistant.tools.bid_check_record import sha
+
+        (self.job / "投标响应.txt").write_text(self.LATE, encoding="utf-8")
+        run_agent(self.REQUEST, session_id="civil-cli")
+        (self.job / "投标响应.txt").write_text(RESPONSE, encoding="utf-8")
+        second = run_agent(self.REQUEST, session_id="civil-cli")
+        review = self.draft(second, "collaboration-review.md")
+        self.assertIn("## 与上次核对相比", review)
+        moved = {r["输入"]: r for t in tables(review) for r in t if "输入" in r}
+        self.assertEqual(list(moved), ["投标响应.txt"], "the tender reads the same: it is not listed")
+        self.assertEqual((moved["投标响应.txt"]["变化"], moved["投标响应.txt"]["上次 sha256"], moved["投标响应.txt"]["这次 sha256"]),
+                         ("内容已改动", sha(self.LATE)[:12], sha(RESPONSE)[:12]))
+        states = {r["事项"]: (r["上次三态"], r["这次三态"]) for t in tables(review) for r in t if "上次三态" in r}
+        self.assertEqual(states["工期"], ("未响应·数值不符", "已响应·待核验"))
+        self.assertNotIn("投标保证金", states, "a row that kept its state is not listed")
+        self.assertEqual(second["check"]["inputs_changed"], ["投标响应.txt"])
+        self.assertIn("工期", second["check"]["rows_changed"])
+        self.assertIn("不说哪一版该递交", review)
+        third = run_agent(self.REQUEST, session_id="civil-cli")
+        self.assertIn("输入与上次相同（sha256 一致），各行三态未变。", self.draft(third, "collaboration-review.md"))
+        other = run_agent(self.REQUEST, session_id="another-task")
+        self.assertNotIn("与上次核对相比", self.draft(other, "collaboration-review.md"), "another task's check is not this one's past")
+
+    def test_civil_review_says_when_the_check_is_about_another_version(self) -> None:
+        from packing_assistant.runtime.review import review_file
+
+        (self.job / "投标响应.txt").write_text(self.LATE, encoding="utf-8")
+        out = run_agent(self.REQUEST, session_id="civil-cli")
+        draft = Path([f["path"] for f in out["files"] if Path(f["path"]).name == "bid-compliance.md"][0])
+        fresh = review_file("bid-compliance.md")
+        self.assertTrue(fresh["ok"], fresh.get("reply"))
+        self.assertFalse(fresh["check"]["stale"])
+        self.assertEqual(fresh["numbers"], [], "the draft holds no number of its own making - not even a count of its rows")
+        self.assertEqual({i["title"]: i["state"] for i in fresh["check"]["inputs"]}, {"招标文件.txt": "same", "投标响应.txt": "same"})
+        self.assertIn("能重读的都和核对时一致", fresh["reply"])
+
+        (self.job / "投标响应.txt").write_text(RESPONSE, encoding="utf-8")          # the bid letter was corrected afterwards
+        later = review_file("bid-compliance.md")
+        self.assertTrue(later["check"]["stale"])
+        self.assertEqual({i["title"]: i["state"] for i in later["check"]["inputs"]}, {"招标文件.txt": "same", "投标响应.txt": "changed"})
+        self.assertIn("请重新核对", later["reply"])
+
+        (self.job / "投标响应.txt").write_text(self.LATE, encoding="utf-8")
+        body = draft.read_text(encoding="utf-8")
+        self.assertIn("未响应·数值不符", body)
+        draft.write_text(body.replace("未响应·数值不符", "已响应·待核验"), encoding="utf-8")   # somebody improved the table by hand
+        edited = review_file("bid-compliance.md")
+        self.assertEqual([d["state"] for d in edited["check"]["drafts"] if d["name"] == "bid-compliance.md"], ["changed"])
+        self.assertTrue(edited["check"]["stale"])
+
+        (self.job / "投标响应.txt").unlink()
+        gone = review_file("bid-compliance.md")
+        self.assertEqual({i["title"]: i["state"] for i in gone["check"]["inputs"]}["投标响应.txt"], "missing")
+
+    def test_a_stale_check_alone_makes_a_review_unclean(self) -> None:
+        # the compliance draft above already has a finding of its own (its P0 counter), so `clean` is
+        # isolated here on a document with nothing else to find
+        from packing_assistant.runtime.review import review_file
+        from packing_assistant.tools import bid_check_record as cr
+
+        note = self.job / "核对说明.md"
+        note.write_text("# 核对说明\n\n各项见上表。\n", encoding="utf-8")
+        record = cr.build(kind="post", session_id="s", inputs=[], rows=[],
+                          drafts=[{"name": note.name, "sha256": cr.sha(note.read_text(encoding="utf-8"))}])
+        (self.job / "核对说明.check.json").write_text(cr.dumps(record), encoding="utf-8")
+        same = review_file("核对说明.md")
+        self.assertEqual((same["numbers"], same["assertions"], same["check"]["stale"], same["clean"]), ([], [], False, True))
+        note.write_text("# 核对说明\n\n各项见上表，已改。\n", encoding="utf-8")
+        edited = review_file("核对说明.md")
+        self.assertEqual((edited["numbers"], edited["assertions"], edited["check"]["stale"], edited["clean"]), ([], [], True, False))
+
+    def test_a_document_with_no_record_is_reviewed_as_before(self) -> None:
+        from packing_assistant.runtime.review import review_file
+
+        (self.job / "说明.md").write_text("# 说明\n\n本工程工期60日历天。\n", encoding="utf-8")
+        found = review_file("说明.md")
+        self.assertTrue(found["ok"], found.get("reply"))
+        self.assertIsNone(found["check"])
+        self.assertNotIn("核对记录", found["reply"])
+
+
+class CheckedVersionOfOnePost(unittest.TestCase):
+    """bid-compliance on its own: the texts are what was typed, hashed apart by whose words they are."""
+
+    THEIRS = "招标文件要求工期365日历天、投标保证金85万，"
+
+    def setUp(self) -> None:
+        import shutil
+
+        (ROOT / "output").mkdir(exist_ok=True)
+        self.tmp = Path(tempfile.mkdtemp(prefix="bid-files-", dir=ROOT / "output"))
+        self.addCleanup(shutil.rmtree, self.tmp, ignore_errors=True)
+
+    def check(self, text: str, session: str = "one-post") -> Dict:
+        from packing_assistant import expert_turn
+
+        with patch.object(expert_turn, "_OUT", self.tmp), patch.object(agent_loop, "_OUT", self.tmp):
+            result = expert_turn.run_named_exclusive("bid-compliance__gaps", {"text": text, "confirm_ok": True, "session_id": session})
+        self.assertTrue(result.get("wrote"), result)
+        return result
+
+    def test_the_record_sits_beside_the_draft_and_the_second_check_compares(self) -> None:
+        from packing_assistant.tools.bid_check_record import load, sha
+
+        first = self.check(self.THEIRS + "我们投标函草稿工期写成了380日历天，保函已经开好了。")
+        folder = self.tmp / "one-post" / "bid-compliance"
+        record = load(folder / "bid-compliance__gaps.check.json")
+        draft = (folder / "bid-compliance__gaps.md").read_text(encoding="utf-8")
+        self.assertEqual(record["drafts"], [{"name": "bid-compliance__gaps.md", "sha256": sha(draft)}])
+        self.assertEqual([(i["title"], i["role"]) for i in record["inputs"]], [("招标方的话（本轮）", "tender"), ("我方的话（本轮）", "response")])
+        self.assertNotIn("与上次核对相比", draft)
+        self.assertIn("bid-compliance__gaps.check.json", [f["name"] for f in first["files"]])
+
+        self.check(self.THEIRS + "我们投标函草稿工期改成了365日历天，保函已经开好了。")
+        again = (folder / "bid-compliance__gaps.md").read_text(encoding="utf-8")
+        moved = {r["输入"]: r["变化"] for t in tables(again) for r in t if "输入" in r}
+        self.assertEqual(moved, {"我方的话（本轮）": "内容已改动"}, "the tender's words are the same words")
+        states = {r["事项"]: (r["上次三态"], r["这次三态"]) for t in tables(again) for r in t if "上次三态" in r}
+        self.assertEqual(states, {"工期": ("未响应·数值不符", "已响应·待核验")})
+        self.assertEqual(load(folder / "bid-compliance__gaps.check.json")["drafts"][0]["sha256"], sha(again))
+
+
+class RecordUnit(unittest.TestCase):
+    def test_hash_rows_compare_load_verify(self) -> None:
+        from packing_assistant.tools import bid_check_record as cr
+
+        self.assertEqual(cr.sha("a\r\nb"), cr.sha("a\nb"), "written on Windows and read back, it is the same draft")
+        md = "| 事项 | 招标要求 | 响应原文或证据 | 三态 | 缺口 | 责任人 |\n| --- | --- | --- | --- | --- | --- |\n" \
+             "| 工期 | 60日历天 | 999日历天 | 未响应·数值不符 | x | y |\n| 工期 | 90日历天 | 未提供 | 未响应 | x | y |\n\n| 事项 | 内容 |\n| --- | --- |\n| 项目名称 | 甲 |\n"
+        self.assertEqual([(r["label"], r["state"]) for r in cr.rows_of(md)], [("工期", "未响应·数值不符"), ("工期#2", "未响应")])
+        old = cr.build(kind="post", session_id="s", inputs=[cr.entry("a.txt", "tender", "甲"), cr.entry("b.txt", "response", "乙")], drafts=[],
+                       rows=[{"label": "工期", "state": "未响应"}], unreadable=[{"title": "c.pdf", "role": "reference", "reason": "r"}])
+        new = cr.build(kind="post", session_id="s", inputs=[cr.entry("a.txt", "tender", "甲"), cr.entry("c.pdf", "reference", "丙")], drafts=[],
+                       rows=[{"label": "工期", "state": "未响应"}, {"label": "质保期", "state": "已响应·待核验"}])
+        diff = cr.compare(old, new)
+        self.assertEqual({(i["title"], i["change"]) for i in diff["inputs"]}, {("b.txt", "removed"), ("c.pdf", "added")})
+        self.assertEqual(diff["rows"], [{"label": "质保期", "before": "（上次无此行）", "after": "已响应·待核验"}])
+        self.assertTrue(cr.compare(old, old)["same"])
+        with tempfile.TemporaryDirectory() as folder:
+            path = Path(folder) / "x.check.json"
+            for bad in ("not json", "[]", json.dumps({"schema": "something.else", "inputs": [], "drafts": [], "rows": []}),
+                        json.dumps({"schema": cr.SCHEMA, "inputs": "x", "drafts": [], "rows": []})):
+                path.write_text(bad, encoding="utf-8")
+                self.assertIsNone(cr.load(path), bad)
+            path.write_text(cr.dumps(old), encoding="utf-8")
+            self.assertEqual(cr.load(path)["inputs"][0]["title"], "a.txt")
+        typed = cr.verify(old, draft_text="x", draft_name="none.md", read_input=lambda path: "甲")
+        self.assertEqual({i["state"] for i in typed["inputs"]}, {"not_checkable"}, "what was typed cannot be read again: never reported as unchanged")
+        self.assertFalse(typed["stale"])
+
+
 if __name__ == "__main__":
     unittest.main(verbosity=2)

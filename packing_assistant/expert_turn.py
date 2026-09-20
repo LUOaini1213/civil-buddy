@@ -3805,7 +3805,8 @@ _OPEN = frozenset({"gap", "pending", "missing", "uncovered", "open", "partial", 
 def _compliance_gaps_md(handoff: Optional[Dict[str, Any]], matrix: Optional[Dict[str, Any]], *,
                         ours: Optional[Dict[str, Any]] = None, comparison: Optional[List[Dict[str, Any]]] = None,
                         unreadable: Optional[List[Dict[str, Any]]] = None,
-                        evidence: Optional[List[Dict[str, Any]]] = None) -> str:
+                        evidence: Optional[List[Dict[str, Any]]] = None,
+                        checked: Optional[List[Dict[str, Any]]] = None) -> str:
     """响应缺口对照：七节 + 「事项｜招标要求｜响应原文或证据｜三态｜缺口｜责任人」。
 
     招标要求来自交接里的字段层（handoff["facts"]）和解析器的要求行；我方说法来自 ``ours``（本轮
@@ -3814,7 +3815,7 @@ def _compliance_gaps_md(handoff: Optional[Dict[str, Any]], matrix: Optional[Dict
     from packing_assistant.tools.tender_tables import compliance_gaps
 
     return compliance_gaps(handoff, matrix, ours=ours, comparison=comparison, disclaimer=DISCLAIMER,
-                           unreadable=unreadable, evidence=evidence)
+                           unreadable=unreadable, evidence=evidence, checked=checked)
 
 
 def _draft_markdown(expert: ExpertRec, tool: str, text: str) -> str:
@@ -4041,6 +4042,7 @@ def _run_exclusive_body(
         matrix = None
         ours = extract_facts(text or "").to_dict()
         comparison: List[Dict[str, Any]] = []
+        turn_asks = False
         if text and len(text.strip()) > 40:
             pipe = run_tender_pipeline(text, source="expert-compliance", project_name=expert.name)
             said = (pipe.get("handoff") or {}).get("facts") or {}
@@ -4049,6 +4051,7 @@ def _run_exclusive_body(
             # 本轮说了招标要求就以本轮为准；只说了我方情况（"保函开好了，工期改成360天"）则沿用本会话
             # 已解析的招标要求，把这一轮当作响应去对照——否则一句补充就把上一轮的解析冲掉了。
             if asks or not ho:
+                turn_asks = True
                 matrix = pipe.get("matrix") if isinstance(pipe.get("matrix"), dict) else None
                 if isinstance(pipe.get("handoff"), dict) and pipe.get("handoff"):
                     ho = pipe["handoff"]
@@ -4061,10 +4064,30 @@ def _run_exclusive_body(
         from packing_assistant.office_job import material_role, unread_files
 
         unread = [{**item, "role": material_role(item["title"])} for item in unread_files(text or "")]
-        md = _compliance_gaps_md(ho, matrix, ours=ours, comparison=comparison, unreadable=unread)
+        # Which texts this check is about (tools/bid_check_record.py). When the turn held the tender's
+        # words and ours, the two are hashed apart: "工期改成365天" then shows as our side changing.
+        from packing_assistant.runtime.worker_context import canonical
+        from packing_assistant.tools import bid_check_record as check_record
+
+        if turn_asks:
+            theirs, mine = split_sides(text or "")
+            checked = [check_record.entry("招标方的话（本轮）", "tender", theirs), check_record.entry("我方的话（本轮）", "response", mine)]
+        else:
+            checked = [check_record.entry("招标要求（本会话此前解析）", "tender", canonical(ho or {})),
+                       check_record.entry("本轮文本", "response", text or "")]
+        md = _compliance_gaps_md(ho, matrix, ours=ours, comparison=comparison, unreadable=unread, checked=checked)
         path = out_dir / "bid-compliance__gaps.md"
+        record_path = out_dir / ("bid-compliance__gaps" + check_record.RECORD_SUFFIX)
+        record = check_record.build(kind="post", session_id=session_id, inputs=checked, drafts=[],
+                                    rows=check_record.rows_of(md), unreadable=unread)
+        previous = check_record.load(record_path)
+        if previous is not None:
+            md += "\n" + "\n".join(check_record.comparison_section(previous, record))
         guarded_write_text(path, md)
+        record["drafts"] = [{"name": path.name, "sha256": check_record.sha(md)}]
+        guarded_write_text(record_path, check_record.dumps(record))
         files.append({"name": path.name, "path": str(path), "tool": "bid-compliance__gaps"})
+        files.append({"name": record_path.name, "path": str(record_path), "tool": "bid-compliance__check"})
         ran.append("bid-compliance__gaps")
         return {
             "wrote": True,
