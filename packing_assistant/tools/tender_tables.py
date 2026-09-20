@@ -105,6 +105,7 @@ _PARSE_SECTIONS: Tuple[Tuple[str, Tuple[Tuple[str, str, bool, str], ...]], ...] 
         ("track_record", "类似业绩", True, "查业绩的年限、金额、数量口径"),
         ("pm", "项目经理", True, "查注册专业、等级、B证及在建限制"),
         ("tech_lead", "技术负责人", False, ""),
+        ("registration", "注册/工作类别", False, ""),
     )),
     ("4 实质性响应", (
         ("duration", "工期", True, "查前附表工期及是否含节点工期"),
@@ -514,6 +515,9 @@ def _people_rows(facts: Optional[Facts]) -> List[List[str]]:
                 rows.append([_with_lot(f"{label}·拟派", str(m.get("lot") or "")), f"{TBD}（用户称未提供：{_clip(m.get('note'), 20)}）", _source(m)])
         if topic == "pm" and not named and not absent:
             rows += [[_with_lot("项目经理·拟派", lot), TBD, "—"] for lot in (lots or [""])]
+    # anybody else the user named with a post: the row is called by the post as it was written
+    rows += [[_with_lot(f"{m.get('role') or '其他人员'}·拟派", str(m.get("lot") or "")), str(m.get("value")), _source(m)]
+             for m in _mentions(facts, "staff") if m.get("value")]
     return rows
 
 
@@ -526,11 +530,11 @@ RESPONDED, NOT_RESPONDED, NO_TENDER_TEXT = "已响应·待核验", "未响应", 
 
 _GAP_SECTIONS: Tuple[Tuple[str, Tuple[str, ...]], ...] = (
     ("2 形式签章", ("poa", "seal")),
-    ("3 资格证据", ("qualification", "track_record", "pm", "tech_lead")),
+    ("3 资格证据", ("qualification", "registration", "track_record", "pm", "tech_lead")),
     ("4 保证金", ("bond", "bond_validity")),
     ("5 实质性与价格响应", ("duration", "delivery", "quality", "validity", "warranty", "price_cap")),
 )
-_LABELS = {"poa": "授权委托书", "seal": "签章", "qualification": "资质", "track_record": "类似业绩", "pm": "项目经理",
+_LABELS = {"poa": "授权委托书", "seal": "签章", "qualification": "资质", "registration": "注册/工作类别", "track_record": "类似业绩", "pm": "项目经理",
            "tech_lead": "技术负责人", "bond": "投标保证金", "bond_validity": "保函有效期", "duration": "工期", "delivery": "交货期",
            "quality": "质量标准", "validity": "投标有效期", "warranty": "缺陷责任期/质保期", "price_cap": "最高限价 / 我方报价"}
 #: what to say the numbers mean when both sides gave one, in the words the response matcher compares on
@@ -651,6 +655,12 @@ def compliance_gaps(handoff: Optional[Mapping[str, Any]], matrix: Optional[Mappi
         rows: List[List[str]] = []
         for topic in topics:
             rows += _gap_rows(topic, tender, ours, lots, open_items, comparison)
+        if title.startswith("3 "):
+            for m in _mentions(ours, "staff"):
+                if m.get("value"):
+                    lot = str(m.get("lot") or "")
+                    rows.append([_with_lot(str(m.get("role") or "其他人员"), lot), NO_TENDER_TEXT, _clip(_value_cell(m)), NO_TENDER_TEXT,
+                                 "补招标文件对该岗位的要求原文（证书、专职、在岗）后再对照", _owner_for(ours, lot)])
         if title.startswith("5 "):
             rows += _comparison_rows(comparison, tender, open_items)
         md += [f"## {title}", ""]

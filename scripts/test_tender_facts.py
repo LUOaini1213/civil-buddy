@@ -201,6 +201,98 @@ class PastedDocument(unittest.TestCase):
         self.assertEqual([m.side for m in tf.extract(text, sides="none").mentions], ["tender"])
 
 
+class English(unittest.TestCase):
+    """A Singapore tender is written in English; the rows keep their Chinese names, the values stay as written."""
+
+    TENDER = ("Tender for Jurong East MRT Station Upgrading. Employer: Land Transport Authority. Tender No. LTA/2026/C123.\n"
+              "Contract Period: 24 months. The tender validity period shall be 120 days. Tender Deposit: S$500,000.\n"
+              "Defects Liability Period: 12 months. Tender closing date: 30 October 2026, 4.00 pm.\n"
+              "Tenderer must be registered with BCA under workhead CW01 grade A1. Evaluation: Price Quality Method.")
+
+    def test_fields_of_an_english_tender(self) -> None:
+        facts = tf.extract(self.TENDER)
+        self.assertEqual(facts.jurisdiction, "SG")
+        self.assertEqual(found(facts, "project", "tender"), ["Jurong East MRT Station Upgrading"])
+        self.assertEqual(found(facts, "owner", "tender"), ["Land Transport Authority"])
+        self.assertEqual(found(facts, "tender_no", "tender"), ["LTA/2026/C123"])
+        self.assertEqual(found(facts, "duration", "tender"), ["24 months"])
+        self.assertEqual(found(facts, "validity", "tender"), ["120 days"])
+        self.assertEqual(found(facts, "bond", "tender"), ["S$500,000"])
+        self.assertEqual(found(facts, "warranty", "tender"), ["12 months"])
+        self.assertEqual(found(facts, "deadline_bid", "tender"), ["30 October 2026, 4.00 pm"])
+        self.assertEqual(found(facts, "registration", "tender"), ["CW01 grade A1"])
+        self.assertEqual(found(facts, "eval_method", "tender"), ["Price Quality Method"])
+        self.assertEqual([m for m in facts.mentions if m.side == "ours"], [])
+
+    def test_we_and_our_are_our_side_even_with_shall(self) -> None:
+        facts = tf.extract("The Works shall be completed within 24 months. We shall complete the Works in 26 months and our tender "
+                           "remains valid for 90 days. Tender validity period: 120 days.")
+        self.assertEqual(found(facts, "duration", "tender"), ["24 months"])
+        self.assertEqual(found(facts, "duration", "ours"), ["26 months"])
+        self.assertEqual(found(facts, "validity", "ours"), ["90 days"])
+        self.assertEqual(found(facts, "validity", "tender"), ["120 days"])
+
+    def test_a_first_person_cue_beats_a_modal_in_chinese_too(self) -> None:
+        facts = tf.extract("招标文件要求投标保证金80万元，我们必须在周五前把保函开出来。")
+        self.assertEqual(found(facts, "bond", "tender"), ["80万元"])
+        self.assertEqual([m.side for m in facts.of("bond") if not m.value], ["ours"])
+        document = tf.extract("1. 投标人拟派项目经理须具备一级注册建造师资格。\n2. 投标人须提供营业执照。")
+        self.assertEqual([m for m in document.mentions if m.side == "ours"], [], "拟派 is not a first-person cue")
+
+    def test_mixed_chinese_and_english(self) -> None:
+        facts = tf.extract("业主是LTA，合同工期要求24个月，tender validity 120 days，投标保证金S$500,000要用banker's guarantee，"
+                           "registered with BCA under workhead CW01 grade A1，投标截止是2026-10-30 下午4点。")
+        self.assertEqual(found(facts, "owner", "tender"), ["LTA"])
+        self.assertEqual(found(facts, "validity", "tender"), ["120 days"])
+        self.assertEqual(found(facts, "bond", "tender"), ["S$500,000"])
+        self.assertEqual(found(facts, "registration", "tender"), ["CW01 grade A1"])
+        self.assertEqual(facts.unplaced, [])
+
+
+class ProjectNames(unittest.TestCase):
+    def test_shapes_a_person_actually_uses(self) -> None:
+        cases = [
+            ("帮我按评分点出技术标目录，城东安置房二期总建筑面积38600平，招标工期540日历天。", "城东安置房二期"),
+            ("技术标帮我搭个目录，项目是云栖小学新建工程，地下一层地上五层框架结构。", "云栖小学新建工程"),
+            ("帮我排一下技术标的章节，项目是翠湖花园三期住宅，地上二十六层地下两层。", "翠湖花园三期住宅"),
+            ("领导让我把青龙湖大道提升改造工程施工招标文件过一遍，建设单位是青龙湖新区管委会。", "青龙湖大道提升改造工程"),
+            ("麻烦把新港大道跨河桥的招标文件整理一下，发包人是新港交通建设集团。", "新港大道跨河桥"),
+            ("技术标目录麻烦排一下：锦绣家园B地块，三栋高层住宅加两层地下室，剪力墙结构。", "锦绣家园B地块"),
+        ]
+        for text, want in cases:
+            with self.subTest(text=text):
+                self.assertEqual(found(tf.extract(text), "project", "tender"), [want])
+
+    def test_what_is_not_a_project_name_is_left_out(self) -> None:
+        for text in ("招标文件要求投标保证金85万、工期365日历天，我们投标函草稿工期写成了380日历天。",
+                     "一标保证金要45万，财务只转了38.5万说明天补，工期要求300天投标函照着写的。",
+                     "帮我解析下招标文件，目前只知道工期240日历天，其他还没看到，先出个表我好去查。",
+                     "这次招标分第1标段和第2标段。第1标段是主厂房，甲方要求工期240天。"):
+            with self.subTest(text=text):
+                self.assertEqual(found(tf.extract(text), "project", "tender"), [], "unrecognised means absent, never a guess")
+
+
+class Staff(unittest.TestCase):
+    """Anybody named with a post beside the name is kept, under that post as it was written."""
+
+    def test_named_people_beyond_the_project_manager(self) -> None:
+        facts = tf.extract("项目经理拟派周建国，专职安全员张伟，质量负责人：李娜，资料员由王芳担任，法定代表人是陈立新，授权代表孙浩。")
+        self.assertEqual(found(facts, "pm", "ours"), ["周建国"])
+        staff = [(m.role, m.value) for m in facts.of("staff")]
+        self.assertEqual(staff, [("专职安全员", "张伟"), ("质量负责人", "李娜"), ("资料员", "王芳"), ("法定代表人", "陈立新"), ("授权代表", "孙浩")])
+        for m in facts.of("staff"):
+            self.assertEqual(m.side, "ours")
+
+    def test_a_post_without_a_name_names_nobody(self) -> None:
+        facts = tf.extract("安全员今天请假，资料员还没到位，专职安全员须持C证。")
+        self.assertEqual([m.value for m in facts.of("staff") if m.value], [])
+
+    def test_staff_keep_their_lot(self) -> None:
+        facts = tf.extract("一标段安全员张伟，质检员李娜；二标段安全员还没定。")
+        self.assertEqual([(m.lot, m.role, m.value) for m in facts.of("staff") if m.value],
+                         [("一标段", "安全员", "张伟"), ("一标段", "质检员", "李娜")])
+
+
 class Blocks(unittest.TestCase):
     """"招标要求：… / 我方情况：…" - the person has said whose words follow."""
 

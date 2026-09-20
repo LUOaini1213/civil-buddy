@@ -244,6 +244,42 @@ class BidCompliance(Posts):
         self.assertNotIn("- 帮我对下", md)
 
 
+class EnglishAndStaff(Posts):
+    def test_an_english_tender_lands_in_the_same_rows(self) -> None:
+        md = self.run_post("bid-parse", "Tender for Jurong East MRT Station Upgrading. Employer: Land Transport Authority. Tender No. LTA/2026/C123.\n"
+                                         "Contract Period: 24 months. The tender validity period shall be 120 days. Tender Deposit: S$500,000.\n"
+                                         "Tender closing date: 30 October 2026, 4.00 pm. Tenderer must be registered with BCA under workhead CW01 grade A1.")
+        self.assertEqual(cell(md, "项目名称", "要求原文"), "Jurong East MRT Station Upgrading")
+        self.assertEqual(cell(md, "招标人", "要求原文"), "Land Transport Authority")
+        self.assertEqual(cell(md, "招标编号", "要求原文"), "LTA/2026/C123")
+        self.assertEqual(cell(md, "辖区", "要求原文"), "SG")
+        self.assertEqual(cell(md, "工期", "要求原文"), "24 months")
+        self.assertEqual(cell(md, "投标有效期", "要求原文"), "120 days")
+        self.assertEqual(cell(md, "投标保证金", "要求原文"), "S$500,000")
+        self.assertEqual(cell(md, "投标截止", "要求原文"), "30 October 2026, 4.00 pm")
+        self.assertEqual(cell(md, "注册/工作类别", "要求原文"), "CW01 grade A1")
+
+    def test_our_english_offer_against_their_english_requirement(self) -> None:
+        md = self.run_post("bid-compliance", "The Works shall be completed within 24 months. Tender validity period: 120 days. "
+                                              "We shall complete the Works in 26 months and our tender remains valid for 90 days.")
+        duration, validity = rows(md, "工期")[0], rows(md, "投标有效期")[0]
+        self.assertEqual((duration["招标要求"], duration["三态"]), ("24 months", "未响应·数值不符"))
+        self.assertIn("26 months", duration["响应原文或证据"])
+        self.assertEqual((validity["招标要求"], validity["三态"]), ("120 days", "未响应·数值不符"))
+        self.assertIn("待人工核验", validity["缺口"])
+
+    def test_everybody_named_with_a_post_has_a_row(self) -> None:
+        request = ("技术标目录排一下，评分表里施工组织设计占35分，项目经理拟派周建国，专职安全员张伟，质量负责人：李娜，资料员由王芳担任。")
+        md = self.run_post("bid-tech", request)
+        self.assertEqual(cell(md, "项目经理·拟派", "姓名或要求"), "周建国")
+        self.assertEqual(cell(md, "专职安全员·拟派", "姓名或要求"), "张伟")
+        self.assertEqual(cell(md, "质量负责人·拟派", "姓名或要求"), "李娜")
+        self.assertEqual(cell(md, "资料员·拟派", "姓名或要求"), "王芳")
+        gaps = self.run_post("bid-compliance", "招标文件要求工期365日历天，我们拟派项目经理周建国，专职安全员张伟，法定代表人是陈立新。", session="staff")
+        self.assertEqual(rows(gaps, "专职安全员")[0]["响应原文或证据"].split("（")[0], "张伟")
+        self.assertEqual(rows(gaps, "法定代表人")[0]["三态"], "招标未提供正文")
+
+
 class ResponseDocuments(unittest.TestCase):
     """The workflow's case: tender and response came as documents with a role, nobody typed our side."""
 
