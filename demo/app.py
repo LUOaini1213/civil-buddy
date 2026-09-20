@@ -842,21 +842,32 @@ def deliverables_zip(session_id: str, run_id: str = "") -> Response:
     runs = [r for r in read_runs(OUT_ROOT, sid) if not rid or r.get("run_id") == rid]
     buf = io.BytesIO()
     count = 0
+    from packing_assistant.sandbox import assert_open
+    from uploads import safe_filename
     with zipfile.ZipFile(buf, "w", zipfile.ZIP_DEFLATED) as bundle:
         for r in runs:
-            folder = r.get("run_id", "")[:8]
+            # Run records are data (a backup import writes them too), so nothing in one is
+            # trusted as a path: the folder and the member names are rebuilt, never copied, and a
+            # file has to pass the same checks GET /api/file applies to it.
+            folder = re.sub(r"[^A-Za-z0-9_-]", "", str(r.get("run_id") or ""))[:8]
             used: set[str] = set()
             for f in r.get("deliverables", []):
                 src = Path(str(f.get("path") or "")).resolve()
                 try:
                     src.relative_to(OUT_ROOT.resolve())
-                except ValueError:
+                    assert_open(src)
+                except (ValueError, PermissionError):
                     continue
                 if not src.is_file():
                     continue
-                name = str(f.get("name") or src.name)
-                if name in used:
-                    name = f"{Path(name).stem}-{src.name.split('-', 1)[0]}{Path(name).suffix}"
+                shown = safe_filename(str(f.get("name") or ""))
+                name = shown if f.get("name") and Path(shown).suffix.lower() == src.suffix.lower() else src.name
+                stem, suffix, serial = Path(name).stem, Path(name).suffix, 1
+                if name in used:  # same display name twice in a run: tell them apart by their source
+                    name = safe_filename(f"{stem}-{src.name.split('-', 1)[0]}{suffix}")
+                while name in used:
+                    serial += 1
+                    name = f"{stem}-{serial}{suffix}"
                 used.add(name)
                 arc = f"{folder}/{name}" if not rid and folder else name
                 bundle.write(src, arc)

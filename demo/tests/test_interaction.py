@@ -205,3 +205,35 @@ def test_deliverables_grouped_by_run_and_zip(client, monkeypatch):
     assert client.get("/api/deliverables.zip", params={"session_id": sid, "run_id": "nope"}).status_code == 404
     assert client.get("/api/deliverables.zip", params={"session_id": "../x"}).status_code == 400
     assert client.get("/api/deliverables.zip", params={"session_id": sid, "run_id": "../../x"}).status_code == 400
+
+
+def test_zip_member_names_are_rebuilt_not_copied_from_a_run_record(client):
+    """运行记录是数据（备份导入也会写它）：伪造的记录不能左右压缩包里的路径，也拿不到 /api/file 不给的文件。"""
+    import io
+    import json
+    import zipfile
+
+    import app
+
+    sid = "zip-crafted-01"
+    real = app.OUT_ROOT / sid / "drafts" / "a1b2-daily.md"
+    real.parent.mkdir(parents=True)
+    real.write_text("# 日报\n今天完成了基坑支护第三层锚索张拉。", encoding="utf-8")
+    secret = app.OUT_ROOT / sid / ".env"
+    secret.write_text("MARKER=not-for-download", encoding="utf-8")
+    record = {"schema": "civil.workbench.run.v1", "run_id": "../../zz", "mtime": "2026-09-20T00:00:00+00:00",
+              "deliverables": [{"name": "../../evil.md", "path": str(real)},
+                               {"name": "evil.md", "path": str(real)},
+                               {"name": "C:\\Windows\\x.exe", "path": str(real)},
+                               {"name": "env.md", "path": str(secret)}]}
+    run_dir = app.OUT_ROOT / sid / "runs" / "crafted"
+    run_dir.mkdir(parents=True)
+    (run_dir / "workbench.json").write_text(json.dumps(record, ensure_ascii=False), encoding="utf-8")
+
+    assert client.get("/api/file", params={"path": str(secret)}).status_code == 403
+    z = client.get("/api/deliverables.zip", params={"session_id": sid})
+    assert z.status_code == 200
+    bundle = zipfile.ZipFile(io.BytesIO(z.content))
+    # 目录名只留 run_id 里的安全字符；显示名只留 basename；扩展名对不上就用真实文件名；重名加来源前缀
+    assert sorted(bundle.namelist()) == ["zz/a1b2-daily.md", "zz/evil-a1b2.md", "zz/evil.md"]
+    assert all(b"not-for-download" not in bundle.read(n) for n in bundle.namelist())
