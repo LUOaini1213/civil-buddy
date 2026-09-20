@@ -38,6 +38,8 @@ CHECKS = (
     Check("tender-response-match", ("scripts/test_tender_response_match.py",)),
     Check("tender-response-bench", ("scripts/eval_tender_response_match.py", "--check")),
     Check("acceptance-cases", ("scripts/test_acceptance_cases.py",), timeout=600),
+    Check("post-facts", ("scripts/test_post_facts.py",)),
+    Check("post-content", ("scripts/test_post_content.py",), timeout=1800),
     Check("workbench-collaboration", ("scripts/test_workbench_collaboration.py",)),
     Check("middleware", ("scripts/test_agent_middleware.py",)),
     Check("sandbox", ("scripts/test_sandbox.py",)),

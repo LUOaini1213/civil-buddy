@@ -1,0 +1,12 @@
+{
+  "_note": "改造前基线 165/886 = 0.186（2026-09-20）。门禁只拦回退：下调任何一个数都要在提交信息里写清楚新测得的数。",
+  "sets": {
+    "cases": {
+      "micro": 0.186,
+      "forbidden": 0,
+      "misplaced": 18,
+      "per_post_default": 0.0,
+      "per_post": {"warehouse": 1.0}
+    }
+  }
+}
