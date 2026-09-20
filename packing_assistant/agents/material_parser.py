@@ -6,8 +6,14 @@ import json
 import re
 from typing import Any, Dict, List
 
-from packing_assistant.adapters import classify_material, material_internal_to_api
+from packing_assistant.adapters import classify_material, material_internal_to_api, material_quantity
 from packing_assistant.state import PackingState
+from packing_assistant.tools.pack_ship_solve import (
+    NEEDS_HUMAN_MISSING_DIMENSIONS,
+    needs_human_sentences,
+    rows_blocking_plan,
+    rows_invalid_quantity,
+)
 
 
 def agent_material_parser(state: PackingState) -> Dict[str, Any]:
@@ -121,6 +127,11 @@ def agent_material_parser(state: PackingState) -> Dict[str, Any]:
             packing_options.setdefault("profile_id", "generic_table")
             profile_applied = "generic_table_fallback"
 
+    # 缺重量 / 缺尺寸 / 读不出件数：与 pack-ship 工具面同一套规则，一次问完。此前这条路径上没有
+    # 任何一条：上传回执 ok=True，读不出件数的行按 1 件成箱拼柜，ship_ok=True。
+    blocking = rows_blocking_plan(mats)
+    beyond_dims = [r for r in blocking if r["reason"] != NEEDS_HUMAN_MISSING_DIMENSIONS]
+
     summary = _summary(mats)
     perception = _build_perception(mats, summary, source=source, note=note)
     summary = {**summary, **{k: perception[k] for k in (
@@ -136,6 +147,8 @@ def agent_material_parser(state: PackingState) -> Dict[str, Any]:
         warn_bits.append("缺尺寸(L/W/H=0)不可默成出运")
     if source == "inject_partial":
         warn_bits.append("注入材料字段不完整")
+    if beyond_dims:
+        warn_bits.append(f"{len(beyond_dims)} 行缺重量或数量读不出件数，需人工处理")
     if profile_applied:
         warn_bits.append(f"已套 profile={profile_applied}")
     msg = (
@@ -154,7 +167,8 @@ def agent_material_parser(state: PackingState) -> Dict[str, Any]:
         "materials_summary": summary,
         "perception": perception,
         "phase": "team_a_running",
-        "materials_incomplete": bool(incomplete_dims),
+        "materials_incomplete": bool(incomplete_dims or blocking),
+        "needs_human": blocking,
         "agent_meta": {
             "node": "material_parser",
             "capability": ["感知环境"],
@@ -180,6 +194,15 @@ def agent_material_parser(state: PackingState) -> Dict[str, Any]:
         ]
         # 硬信号：不可 ship
         out["ship_ok"] = False
+    if beyond_dims:
+        # errors 是累加字段，只回新增的那一条
+        out["errors"] = list(out.get("errors") or []) + [
+            "materials_need_human: " + "；".join(needs_human_sentences(beyond_dims, 6))
+        ]
+        out["warnings"] = list(out.get("warnings") or state.get("warnings") or []) + [  # type: ignore[arg-type]
+            "有行缺重量或数量读不出件数：需人工补齐或剔除后再成箱"
+        ]
+        out["ship_ok"] = False
     return out
 
 
@@ -188,7 +211,11 @@ def _normalize_llm_materials(items: List[Dict[str, Any]]) -> List[Dict[str, Any]
     for i, m in enumerate(items, 1):
         if not isinstance(m, dict):
             continue
-        qty = int(float(m.get("quantity") or m.get("数量") or 1))
+        # 读不出件数的格不在这里改写成 1 件：此前 int(float(x or 1)) 把 0 和已标记的行读成 1，
+        # 2.7 读成 2，-3 经 max(…, 1) 读成 1，"abc" / NaN 直接抛异常；`qty` 键根本不读。
+        # 判定只有一处（pack_ship_solve.rows_invalid_quantity），读法与引擎同一个（material_quantity）。
+        qty_unreadable = bool(rows_invalid_quantity([m]))
+        qty = 0 if qty_unreadable else material_quantity(m)
         unit = float(m.get("weight_kg") or m.get("单重_kg") or 0)
         total = float(m.get("total_weight_kg") or unit * qty)
         L = float(m.get("length_mm") or (m.get("外尺寸_mm") or {}).get("长") or 0)
@@ -217,7 +244,7 @@ def _normalize_llm_materials(items: List[Dict[str, Any]]) -> List[Dict[str, Any]
             "width_mm": W,
             "height_mm": H,
             "weight_kg": unit,
-            "quantity": max(qty, 1),
+            "quantity": qty,
             "total_weight_kg": round(total, 3),
             "category": cat,
         }
@@ -242,6 +269,13 @@ def _normalize_llm_materials(items: List[Dict[str, Any]]) -> List[Dict[str, Any]
         ):
             if m.get(k) is not None:
                 row[k] = m.get(k)
+        if qty_unreadable:
+            # 与 table_mapper 同一个标记：quantity 留 0，原始格留给人看
+            meta = dict(row["meta"]) if isinstance(row.get("meta"), dict) else {}
+            written = next((m.get(k) for k in ("quantity", "数量", "qty") if m.get(k) not in (None, "")), None)
+            meta.setdefault("quantity_raw", str(written))
+            meta["quantity_invalid"] = True
+            row["meta"] = meta
         out.append(row)
     return out
 
@@ -303,7 +337,8 @@ def _summary(materials: List[Dict[str, Any]]) -> Dict[str, Any]:
     pieces = 0
     weight = 0.0
     for m in materials:
-        q = int(m.get("quantity") or m.get("数量") or 1)
+        unknown = isinstance(m.get("meta"), dict) and m["meta"].get("quantity_invalid")
+        q = 0 if unknown else int(m.get("quantity") or m.get("数量") or 1)  # 读不出件数的行不计 1 件
         pieces += q
         weight += float(m.get("total_weight_kg") or m.get("总重_kg") or float(m.get("weight_kg") or 0) * q)
     return {

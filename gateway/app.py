@@ -1434,6 +1434,25 @@ class TableParseJsonBody(BaseModel):
     store_session: bool = False
 
 
+def _table_needs_human(result: Dict[str, Any]) -> Dict[str, Any]:
+    """上传回执上的闸门：与 pack-ship 工具面同一套规则（rows_blocking_plan），不另写一套。
+
+    有行缺重量、缺尺寸或数量读不出件数时 ok=False：表读出来了，但还不能拿去装。行照样回给页面
+    （连同 needs_human 逐行的问题），只是不写进 session——此前回执 ok=True，页面提示「可点表材料跑」，
+    读不出件数的行随后按 1 件成箱。口径与 pack-ship__ingest 一致。
+    """
+    from packing_assistant.tools.pack_ship_solve import needs_human_sentences, rows_blocking_plan
+
+    needs = rows_blocking_plan(result.get("materials") or [])
+    result["needs_human"] = needs
+    if needs:
+        result["ok"] = False
+        result["errors"] = list(result.get("errors") or []) + [
+            f"{len(needs)} 处需要人工处理后才能装箱：" + "；".join(needs_human_sentences(needs, 8))
+        ]
+    return result
+
+
 @app.post("/api/table/parse")
 async def api_table_parse(
     file: Optional[UploadFile] = File(None),
@@ -1475,6 +1494,7 @@ async def api_table_parse(
     except Exception as e:
         raise HTTPException(400, f"parse failed: {type(e).__name__}: {e}") from e
 
+    result = _table_needs_human(result)
     sid = (session_id or "").strip()
     store = str(store_session or "0").strip() in ("1", "true", "True", "yes")
     if store and sid and result.get("ok") and result.get("materials"):
@@ -1515,6 +1535,7 @@ async def api_table_parse(
         "stats": result.get("stats") or {},
         "path": result.get("path"),
         "errors": result.get("errors") or [],
+        "needs_human": result.get("needs_human") or [],
         "session_id": result.get("session_id"),
         "stored": result.get("stored"),
         "note": "tools map columns/units only; no xyz or container count",
@@ -1538,6 +1559,7 @@ def api_table_parse_json(body: TableParseJsonBody):
     else:
         raise HTTPException(400, "need path or rows")
 
+    result = _table_needs_human(result)
     if body.store_session and body.session_id and result.get("ok"):
         st = _get_session(body.session_id) or {
             "session_id": body.session_id,
@@ -1564,6 +1586,7 @@ def api_table_parse_json(body: TableParseJsonBody):
         "stats": result.get("stats") or {},
         "path": result.get("path"),
         "errors": result.get("errors") or [],
+        "needs_human": result.get("needs_human") or [],
         "session_id": result.get("session_id"),
         "stored": result.get("stored", False),
         "note": "tools map columns/units only; no xyz or container count",

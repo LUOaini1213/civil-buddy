@@ -6312,7 +6312,8 @@ window.CB_POSTS = [{"id":"bid-parse","name":"招标解析","aliases":["招标","
             if (!res.ok || !j.ok) {
               const err = (j.errors && j.errors.join('; ')) || j.detail || ('HTTP ' + res.status);
               this.tableMaterials = [];
-              this.tableParseNote = '表解析失败: ' + err;
+              /* needs_human：表读出来了，只是有行缺重量/尺寸或数量读不出件数，不算解析失败 */
+              this.tableParseNote = ((j.needs_human || []).length ? '表已读出，还不能装箱 · ' : '表解析失败: ') + err;
               this.statusText = this.tableParseNote;
               return;
             }

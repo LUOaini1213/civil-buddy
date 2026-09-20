@@ -40,6 +40,16 @@ def _weight_cell(value: Any) -> Optional[float]:
     return number if math.isfinite(number) else math.nan
 
 
+def _first_written(row: Dict[str, Any], *keys: str) -> Any:
+    """适配器的 `a or b` 链：第一个写了且不是 0 的格。工作台的注入行可以是中文键（单重_kg / 总重_kg），
+    只读英文键会把引擎读得到重量的行判成缺重量。布尔、'abc' 这类写坏的格原样返回，留给 _weight_cell 判。"""
+    for key in keys:
+        value = row.get(key)
+        if isinstance(value, bool) or value not in (None, "", 0):
+            return value
+    return row.get(keys[0])
+
+
 def rows_needing_human(materials: Sequence[Dict[str, Any]]) -> List[Dict[str, Any]]:
     """没有可用重量的行。与 adapters.material_api_to_internal 同口径：单重或总重任一为正即可
     （总重写 0 等于没写，引擎会退回 单重 × 数量）；但写了却不能用的那一格不因为另一格正常就放过——
@@ -48,7 +58,8 @@ def rows_needing_human(materials: Sequence[Dict[str, Any]]) -> List[Dict[str, An
     out: List[Dict[str, Any]] = []
     for m in materials or []:
         meta = m.get("meta") or {}
-        cells = [c for c in (_weight_cell(m.get("weight_kg")), _weight_cell(m.get("total_weight_kg"))) if c is not None]
+        cells = [c for c in (_weight_cell(_first_written(m, "weight_kg", "单重_kg")),
+                             _weight_cell(_first_written(m, "total_weight_kg", "总重_kg"))) if c is not None]
         unusable = any(math.isnan(c) or c < 0 for c in cells)
         has_weight = any(c > 0 for c in cells if not math.isnan(c))
         if meta.get("weight_missing") or unusable or not has_weight:
@@ -255,6 +266,12 @@ def rows_blocking_plan(
     return rows
 
 
+def needs_human_sentences(rows: Sequence[Dict[str, Any]], limit: int = 20) -> List[str]:
+    """needs_human 的每一行写成一句给人看的话。报告、工作台上传回执、成箱阻断说的是同一句。"""
+    return [f"{row.get('name') or row.get('id') or '（未命名行）'}：{row.get('ask') or row.get('reason')}"
+            for row in list(rows or [])[:limit]]
+
+
 def _unknown_container(container_type: str) -> Optional[Dict[str, Any]]:
     known = known_container_types()
     if str(container_type or "").upper() in known:
@@ -416,8 +433,7 @@ def plan_report_md(result: Dict[str, Any], file_name: str) -> str:
              f"- 装箱单：{file_name}"]
     if not result.get("ok"):
         lines += [f"- 结果：未出方案（{value('error')}）"]
-        for row in (result.get("needs_human") or [])[:20]:
-            lines.append(f"  - {row.get('name') or row.get('id') or '（未命名行）'}：{row.get('ask') or row.get('reason')}")
+        lines += [f"  - {sentence}" for sentence in needs_human_sentences(result.get("needs_human") or [])]
         if not result.get("needs_human"):
             detail = result.get("detail")
             for sentence in (detail if isinstance(detail, list) else [detail] if detail else [])[:20]:
@@ -479,7 +495,7 @@ def plan_reply(result: Dict[str, Any], file_name: str) -> str:
                 f"载重利用率 {result.get('weight_utilization', UNSPECIFIED)}。明细见 pack-plan.md。内部草稿，不可直接订舱。")
     rows = result.get("needs_human") or []
     if rows:
-        asks = "\n".join(f"- {row.get('name') or row.get('id') or '（未命名行）'}：{row.get('ask') or row.get('reason')}" for row in rows[:20])
+        asks = "\n".join(f"- {sentence}" for sentence in needs_human_sentences(rows))
         return f"{file_name} 里有 {len(rows)} 行缺重量或尺寸，引擎没有出方案，也就没有柜数可报。请补齐后再算：\n{asks}"
     detail = result.get("detail")
     detail = "；".join(str(item) for item in detail) if isinstance(detail, list) else str(detail or "")
