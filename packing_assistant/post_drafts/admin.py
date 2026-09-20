@@ -154,7 +154,7 @@ class _Facts:
             else:
                 for row in rows[1:]:
                     key = _ALIASES.get(row[0]) if row else None
-                    if key and len(row) == 2 and _clean(row[1]):
+                    if key and len(row) >= 2 and not any(row[2:]) and _clean(row[1]):
                         self._add_record({key: _clean(row[1])})
 
     def decision_records(self) -> list[dict[str, str]]:

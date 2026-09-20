@@ -10,25 +10,33 @@ from xml.etree import ElementTree
 
 
 def table_markdown(rows: Iterable[Iterable[object]], limit: int) -> str:
-    """Keep column positions and literal content; the first nonempty row is the header."""
+    """Keep column positions and literal content; the first nonempty row is the header and rows share the widest width that fits."""
     lines: list[str] = []
-    used = 0
-    width = 0
+    counts: list[int] = []
+    used = width = gaps = 0
+    frozen = False
     for row in islice(rows, 20_000):
         values = ["" if value is None else str(value) for value in islice(row, 256)]
         if not any(value.strip() for value in values):
             continue
-        if not width:
-            width = len(values)
-        values += [""] * max(0, width - len(values))
         cells = [html.escape(value.replace("\r", " ").replace("\n", "；"), quote=False).replace("|", "&#124;") for value in values]
         line = "| " + " | ".join(cells) + " |"
-        if not lines:
-            line += "\n| " + " | ".join("---" for _ in values) + " |"
-        if used + len(line) + 1 > limit:
+        count = len(cells)
+        if count > width and not frozen:
+            # Widening pads every kept row ("  |" per cell). Once that no longer fits, later wide rows stay as written.
+            grown = gaps + (count - width) * len(lines)
+            if used + len(line) + 1 + 3 * grown + 6 * count + 2 <= limit:
+                width, gaps = count, grown
+            frozen = width < count
+        missing = max(0, width - count)
+        if not width or used + len(line) + 1 + 3 * (gaps + missing) + 6 * width + 2 > limit:
             break
         lines.append(line)
-        used += len(line) + 1
+        counts.append(count)
+        used, gaps = used + len(line) + 1, gaps + missing
+    lines = [line + "  |" * (width - count) for line, count in zip(lines, counts)]
+    if lines:
+        lines.insert(1, "| " + " | ".join(["---"] * width) + " |")
     return "\n".join(lines)
 
 

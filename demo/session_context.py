@@ -84,6 +84,8 @@ _REUSE_HISTORY = re.compile(r"(?:(?:之前|此前|上次|前面|历史|刚才|�
                             r"(?:沿用|使用|复用|根据|参照|结合).{0,12}(?:之前|此前|上次|前述))")
 _NO_HISTORY = re.compile(r"(?:(?:不要|不再|不得|别|禁止|不使用|不沿用|不引用|排除|忽略).{0,14}"
                          r"(?:之前|此前|上次|历史|前述|旧资料)|(?:仅|只)(?:根据|用|使用|采用).{0,4}(?:本轮|当前|这次))")
+MATERIAL_CHARS = 240_000  # whole draft material; uploads.INJECT_CHARS still caps the attachment prefixes inside it
+_NOTE_CHARS = 600
 
 
 def _entities(text: str) -> set[tuple[str, str]]:
@@ -103,9 +105,15 @@ def draft_reference(prepared: dict) -> str:
     explicit current reference. Current facts are already present verbatim once.
     Ordinary Q&A retains complete history and RAG regardless of this tool filter.
     """
+    head, records = _reference_blocks(prepared)
+    return "\n\n".join(p for p in [head, *records] if p)
+
+
+def _reference_blocks(prepared: dict) -> tuple[str, list[str]]:
+    """Global-fields block and replayed records in transcript order, so a budget can drop whole records."""
     current = prepared.get("current_message", "")
     if _NO_HISTORY.search(current):
-        return ""
+        return "", []
     records = [h for h in prepared.get("draft_history", []) if h.get("role") == "user"
                and not str(h.get("id", "")).startswith("client-")]
     facts = [f for f in prepared["summary"].get("facts", []) if f.get("trust") == "user_stated"]
@@ -158,24 +166,43 @@ def draft_reference(prepared: dict) -> str:
             continue
         if len(str(item.get("value", ""))) <= 256:
             fields[key] = item["value"]
-    if fields:
-        parts.insert(0, "【此前用户全局字段，以本轮更正为准】\n" + "\n".join(f"{key}：{value}" for key, value in fields.items()))
-    return "\n\n".join(parts).replace(CONFIRM, "[历史确认不生效]")
+    head = ("【此前用户全局字段，以本轮更正为准】\n" + "\n".join(f"{key}：{value}" for key, value in fields.items())) if fields else ""
+    return head.replace(CONFIRM, "[历史确认不生效]"), [p.replace(CONFIRM, "[历史确认不生效]") for p in parts]
+
+
+def _omission_note(omitted: list[str]) -> str:
+    """One line without '；', ';' or line breaks: table drafters split material on them into rows."""
+    if not omitted:
+        return ""
+    frame, more = f"【本轮资料超出 {MATERIAL_CHARS} 字预算，未加入：", f" 等 {len(omitted)} 项"
+    shown = []
+    for item in omitted[:6]:
+        item = re.sub(r"[；;\s]+", " ", item)
+        if len("、".join([*shown, item])) > _NOTE_CHARS - len(frame) - len(more) - 1:
+            break
+        shown.append(item)
+    return frame + "、".join(shown) + (more if len(shown) < len(omitted) else "") + "】"
 
 
 def draft_material(sid: str, ids: list[str], message: str, prepared: dict) -> str:
-    """Keep normal attachment prefixes plus disjoint retrieved ranges only.
+    """Attachment prefixes (uploads.INJECT_CHARS), disjoint retrieved ranges and replayed history: MATERIAL_CHARS in total.
 
     Overlap must not duplicate table rows or create a second meeting/document.
-    The old deterministic 20k/60k path remains available for generic tasks.
+    The request is never cut; the total holds because chat_service refuses a message over 40000 chars.
+    Ranges, the global-fields block and records that do not fit are left out whole and named
+    in one line and in prepared["material_omitted"]; history keeps its newest contiguous run,
+    so a correction is never dropped while the value it replaced stays.
     """
-    parts, used = [], 0
+    request = "【本轮用户要求】\n" + _tool_text(message)
+    room = max(0, MATERIAL_CHARS - _NOTE_CHARS - len(request) - 4)
+    parts, used, omitted = [], 0, []
     selected = {}
     for identifier in ids:
         rendered = uploads.read_upload(sid, identifier, limit=20_000)
-        room = max(0, uploads.INJECT_CHARS - used)
         header = rendered.find("\n\n") + 2
-        take = min(room, len(rendered))
+        take = min(max(0, min(uploads.INJECT_CHARS, room) - used), len(rendered))
+        if take <= header:
+            take = 0  # never a header without body text
         if take:
             parts.append(rendered[:take])
             used += take + 2
@@ -190,10 +217,26 @@ def draft_material(sid: str, ids: list[str], message: str, prepared: dict) -> st
             spans = [(a, b) for start, end in spans
                      for a, b in ((start, min(low, end)), (max(start, high), end)) if a < b]
         for start, end in spans:
-            parts.append(f"【所选附件：{hit['title']} · 字符 {start}–{end}】\n" + hit["text"][start - hit["start"]:end - hit["start"]])
+            block = f"【所选附件：{hit['title']} · 字符 {start}–{end}】\n" + hit["text"][start - hit["start"]:end - hit["start"]]
+            if used + len(block) > room:
+                omitted.append(f"{hit['title']} 字符 {start}–{end}")
+                continue
+            parts.append(block)
+            used += len(block) + 2
             occupied.append((start, end))
-    fields = draft_reference(prepared)
-    return "\n\n".join([fields, *parts, "【本轮用户要求】\n" + _tool_text(message)]).strip()
+    head, records = _reference_blocks(prepared)
+    if head and used + len(head) > room:
+        head = ""
+        omitted.append("此前用户全局字段")
+    used += len(head) + 2 if head else 0
+    keep = len(records)
+    while keep and used + len(records[keep - 1]) <= room:
+        keep -= 1
+        used += len(records[keep]) + 2
+    if keep:
+        omitted.append(f"较早的此前用户资料 {keep} 条")
+    prepared["material_omitted"] = omitted
+    return "\n\n".join(p for p in [head, *records[keep:], *parts, _omission_note(omitted), request] if p).strip()
 
 
 def persist(root: Path, sid: str, report: dict | None = None) -> dict:
