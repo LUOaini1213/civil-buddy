@@ -13,10 +13,13 @@ can_fit=True、柜数合理、没有告警。实测过的三种丢法：
 
 1. 件数：Σ 行数量 == Σ 箱内条目数量 / split_of（质量拆分的一份算 1/split_of 件）；
 2. 净重：Σ 行总重 == Σ 箱净重（容差只覆盖逐箱 0.1 kg 的取整）；
-3. 几何：箱内任何一件的最长边不超过箱外廓的最长边——无论怎么摆，比箱还长的货
-   进不了箱。另外两边（截面）超出箱外廓的只记为 warnings、不判失败：引擎对
-   「1107 mm 宽的模块放进 1100 mm 宽的标准箱」一类情况本来就只标「尺寸紧张」，
-   那是成箱策略的问题，不是丢货；数量记下来，留给单独的修复。
+3. 几何：箱内任何一件的三边从大到小逐一不超过箱外廓的三边——无论怎么摆，比箱
+   还大的货进不了箱。最长边超出记 content_exceeds_box，另外两边（截面）超出记
+   content_section_exceeds_box，两种都判失败。截面那一种原先只记 warnings：标准箱
+   外宽一律 1100 mm，引擎把 1200 mm 见方的电缆盘照样放进去、只标「尺寸紧张」
+   （59 个夹具里 7 个、共 97 条）。成箱器现在对这种件按货定制外廓，剩下还会报的
+   只有定制之后仍装不下的——货比柜还大。只比外廓、不算壁厚和间隙：这是必要条件，
+   不会误报；货进得了外廓却进不了内腔的那一类不在这本账里。
 
 件数和净重互相独立：引擎把 split_of 标错，净重账会不平；把重量算错，件数账仍然成立。
 """
@@ -62,7 +65,6 @@ def check_conservation(
 ) -> Dict[str, Any]:
     """物料行 vs 成箱结果。返回 ok 与逐条违例；不抛异常，读不了的行本身就是一条违例。"""
     violations: List[Dict[str, Any]] = []
-    warnings: List[Dict[str, Any]] = []
 
     pieces_in = 0
     kg_in = 0.0
@@ -121,7 +123,7 @@ def check_conservation(
             dims = _sorted_dims(c.get("outer_size_mm") or {})
             if any(dims) and any(outer) and any(cd > od + _MM_TOL for cd, od in zip(dims, outer)):
                 too_long = dims[0] > outer[0] + _MM_TOL
-                (violations if too_long else warnings).append({
+                violations.append({
                     "kind": "content_exceeds_box" if too_long else "content_section_exceeds_box",
                     "box_id": str(b.get("box_id") or ""),
                     "id": src or str(c.get("material_id") or ""),
@@ -163,7 +165,6 @@ def check_conservation(
         "per_row_checked": per_row,
         "mass_split_rows": sorted(split_units.values(), key=lambda r: r["id"]),
         "violations": violations,
-        "warnings": warnings,
     }
 
 
@@ -181,10 +182,11 @@ def violation_sentences(result: Dict[str, Any], limit: int = 8) -> List[str]:
             out.append(f"{label}：装箱单 {v['pieces_in']} 件，箱里 {v['pieces_out']:g} 件。")
         elif kind == "row_kg":
             out.append(f"{label}：装箱单 {v['kg_in']:g} kg，箱里 {v['kg_out']:g} kg。")
-        elif kind == "content_exceeds_box":
+        elif kind in ("content_exceeds_box", "content_section_exceeds_box"):
             c = "×".join(f"{x:g}" for x in v["content_mm"])
             o = "×".join(f"{x:g}" for x in v["box_outer_mm"])
-            out.append(f"{label}：货 {c} mm 大于所在箱 {v.get('box_id') or ''} 的外廓 {o} mm，箱进得了柜、货进不了箱。")
+            where = "货" if kind == "content_exceeds_box" else "货的截面"
+            out.append(f"{label}：{where} {c} mm 大于所在箱 {v.get('box_id') or ''} 的外廓 {o} mm，箱进得了柜、货进不了箱。")
         elif kind == "unreadable_row":
             out.append(f"{label}：数量或重量读不出来（{v.get('detail')}）。")
     more = len(result.get("violations") or []) - len(out)

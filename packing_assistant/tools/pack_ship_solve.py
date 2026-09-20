@@ -283,6 +283,20 @@ def _not_conserved(solved: Dict[str, Any], n_rows: int) -> Optional[Dict[str, An
     }
 
 
+def _custom_section_boxes(boxes: Sequence[Dict[str, Any]]) -> List[Dict[str, Any]]:
+    from packing_assistant.tools.packing import CUSTOM_SECTION_TAG
+
+    out: List[Dict[str, Any]] = []
+    for b in boxes or []:
+        if CUSTOM_SECTION_TAG not in (b.get("special_attributes") or []):
+            continue
+        size = b.get("outer_size_mm") or {}
+        out.append({"box_id": b.get("box_id") or "",
+                    "names": [str(c.get("name") or c.get("material_id") or "") for c in b.get("contents") or []],
+                    "outer_mm": [size.get("length"), size.get("width"), size.get("height")]})
+    return out
+
+
 def _no_boxes(n_rows: int) -> Dict[str, Any]:
     return {
         "ok": False,
@@ -379,10 +393,10 @@ def run_plan(
         "n_materials": len(mats),
         "n_boxes": len(boxes),
         # 每次求解后独立核对过的账：装箱单上的件数与净重，全部在箱里
-        "conservation": {**{k: conservation[k] for k in
-                            ("ok", "pieces_in", "pieces_out", "kg_in", "kg_out", "per_row_checked", "mass_split_rows")},
-                         # 货的截面大于所在箱外廓的条数：成箱策略的既有问题，只记数、不判失败
-                         "section_warnings": len(conservation["warnings"])},
+        "conservation": {k: conservation[k] for k in
+                         ("ok", "pieces_in", "pieces_out", "kg_in", "kg_out", "per_row_checked", "mass_split_rows")},
+        # 单件截面大于任何标准箱外廓、改按货定制的箱：不是标准箱，做箱要另行下料，得让人看见
+        "custom_section_boxes": _custom_section_boxes(boxes),
         "cargo_feasibility": {
             "failure_class": feasibility.get("failure_class", UNSPECIFIED),
             "payload_kg": feasibility.get("payload_kg", UNSPECIFIED),
@@ -433,6 +447,15 @@ def plan_report_md(result: Dict[str, Any], file_name: str) -> str:
             lines.append(f"  - {row.get('name') or row.get('id')}：{row.get('units')} 件单件重超过所选箱型的净重上限，"
                          f"每件按质量切成 {row.get('parts_per_unit')} 份分箱（共 {row.get('parts')} 份）。"
                          "这是计算上的拆分，实物不可切时箱型需人工确认。")
+    custom = result.get("custom_section_boxes") or []
+    if custom:
+        lines.append(f"- 定制箱 {len(custom)} 个：箱内单件的截面大于任何标准箱的外廓（标准箱外宽 1100 mm），"
+                     "外廓改按货定制，不是标准箱库里的箱，需按下列尺寸另行做箱：")
+        for row in custom[:10]:
+            lines.append(f"  - {row.get('box_id')}：{'、'.join(row.get('names') or [])}，外廓 "
+                         f"{'×'.join(f'{float(x):g}' for x in row.get('outer_mm') or [] if x is not None)} mm")
+        if len(custom) > 10:
+            lines.append(f"  - 另有 {len(custom) - 10} 个。")
     limits = result.get("cargo_feasibility") or {}
     if limits:
         lines.append(f"- 柜体额定载重（不是货重）：{limits.get('payload_kg', UNSPECIFIED)} kg · "
@@ -443,7 +466,7 @@ def plan_report_md(result: Dict[str, Any], file_name: str) -> str:
 
 _RECORD_KEYS = ("ok", "source", "error", "n_rows", "can_fit", "containers_used", "container_type", "n0", "utilization",
                 "weight_utilization", "floor_utilization_avg", "binding_constraint", "mid50", "n_materials", "n_boxes",
-                "conservation", "detail", "cargo_feasibility", "container_mix_supported", "elapsed_s")
+                "conservation", "custom_section_boxes", "detail", "cargo_feasibility", "container_mix_supported", "elapsed_s")
 
 
 def plan_record_json(result: Dict[str, Any], file_name: str) -> str:

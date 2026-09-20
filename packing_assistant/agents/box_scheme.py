@@ -533,6 +533,9 @@ def agent_box_scheme(state: PackingState) -> Dict[str, Any]:
             f"货件{summary.get('cargo_item_volume_m3', '?')}m³ "
             f"箱内填充均{float(summary.get('avg_crate_fill') or 0):.0%}"
         )
+    if summary.get("custom_section_boxes"):
+        # 标准箱外宽一律 1100 mm：比它大的单件没有标准箱可用，外廓按货定制，做箱要另行下料
+        note_parts.append(f"截面超标准箱→按货定制 {summary['custom_section_boxes']} 箱")
     if revision_mode or summary.get("revision_mode"):
         note_parts.append(
             f"改箱 max_net={max_net:.0f}kg 拆分后料行={summary.get('item_chunks_after_split', '?')}"
@@ -619,6 +622,7 @@ def agent_box_scheme(state: PackingState) -> Dict[str, Any]:
             "standard_box_type_counts": summary.get("standard_box_type_counts")
             or std_audit.get("by_type"),
             "standard_box_hit_rate": std_audit.get("hit_rate"),
+            "custom_section_boxes": int(summary.get("custom_section_boxes") or 0),
         },
         "messages": [
             {
