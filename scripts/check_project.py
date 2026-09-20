@@ -62,6 +62,7 @@ CHECKS = (
     Check("task-memory", ("scripts/test_task_memory.py",)),
     Check("local-retrieval", ("scripts/test_local_retrieval.py",)),
     Check("context-flow", ("scripts/test_context_flow.py",)),
+    Check("draft-material-budget", ("scripts/test_draft_material_budget.py",)),
     Check("context-rebuild", ("scripts/test_context_rebuild.py",)),
     Check("semantic-memory", ("scripts/test_semantic_memory.py",)),
     Check("semantic-integration", ("scripts/test_semantic_integration.py",)),
