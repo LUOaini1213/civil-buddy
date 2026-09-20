@@ -57,6 +57,7 @@ CHECKS = (
     Check("app-launcher", ("scripts/test_app_launcher.py",)),
     Check("workbench-settings", ("scripts/test_workbench_settings.py",)),
     Check("workbench-uploads", ("scripts/test_workbench_uploads.py",)),
+    Check("document-text", ("scripts/test_document_text.py",)),
     Check("workbench-flow", ("scripts/test_workbench_flow.py",)),
     Check("context-budget", ("scripts/test_context_budget.py",)),
     Check("task-memory", ("scripts/test_task_memory.py",)),
