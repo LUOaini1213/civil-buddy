@@ -27,7 +27,7 @@ def chapter(markdown: str, heading: str) -> str:
 
 
 def table_rows(markdown: str) -> list[list[str]]:
-    return [[cell.strip() for cell in line.strip().strip("|").split("|")]
+    return [[cell.strip() for cell in line.strip().removeprefix("|").removesuffix("|").split("|")]
             for line in markdown.splitlines() if line.startswith("| ") and not re.fullmatch(r"[| \-:]+", line)]
 
 
@@ -50,6 +50,24 @@ class BIMBuilderTests(unittest.TestCase):
         self.assertNotIn("## 5 用户问题清单", docs["bim-qto"])
         self.assertIn("## 4 用户数量登记表", docs["bim-qto"])
         self.assertIn("## 4 LOD 与信息需求矩阵", docs["bim-deliver"])
+
+    def test_compact_model_rows_keep_empty_cells_in_their_column(self):
+        # A row's own pipes are its column borders; an adjacent pipe is an empty cell.
+        head = "|模型名称|专业|模型版本|\n|---|---|---|\n|A1|结构|V1|\n"
+        spaced = "| 模型名称 | 专业 | 模型版本 |\n| --- | --- | --- |\n| A1 | 结构 | V1 |\n|  | 暖通 | M2 |"
+        self.assertEqual(draft("bim-coord", head + "||暖通|M2|"), draft("bim-coord", spaced))
+        for row, expected in (
+            ("||暖通|M2|", ["UNSPECIFIED", "暖通", "M2"]),
+            ("|B1|暖通||", ["B1", "暖通", "UNSPECIFIED"]),
+            ("|B1|", ["B1", "UNSPECIFIED", "UNSPECIFIED"]),
+            ("|||", ["UNSPECIFIED", "UNSPECIFIED", "UNSPECIFIED"]),
+            ("|", ["UNSPECIFIED", "UNSPECIFIED", "UNSPECIFIED"]),
+        ):
+            with self.subTest(row=row):
+                models = [cells for cells in table_rows(chapter(draft("bim-coord", head + row), "1 项目与合成模型登记"))
+                          if len(cells) == 9]
+                self.assertEqual(models[1][:3], ["A1", "结构", "V1"])
+                self.assertEqual(models[2][:3], expected)
 
     def test_empty_coordination_has_unknown_issues_and_no_invented_check(self):
         markdown = draft("bim-coord", "生成协调纪要，没有模型，帮我估计碰撞数量")
