@@ -54,6 +54,9 @@ TWO_ROW_PACK_GAP_MM = 50.0  # 两排之间预留
 SNAP_W_STANDARD = 1100.0  # 知识库标准箱宽
 SNAP_W_MODULE = 1150.0  # 半柜模块宽
 
+#: 标准模式下单件截面大于任何标准箱外廓、改按货定制的箱（特殊属性里的标记）
+CUSTOM_SECTION_TAG = "截面超标准箱"
+
 
 def _container_cab_mm(container_type: str = "40HQ") -> Tuple[float, float, float]:
     """柜内净空 mm (L, W, H)，作为外廓进柜硬卡上限。"""
@@ -221,6 +224,35 @@ def _item_fits_box(
 def _weight_fits(items: List[Dict[str, Any]], box_name: str) -> bool:
     net = sum(float(i.get("总重_kg") or 0) for i in items)
     return net <= float(STANDARD_BOX_TYPES[box_name]["最大载荷_kg"]) + 1e-6
+
+
+#: 与 cargo_conservation._MM_TOL 同一个数：成箱器认为「装得下」的，核对器不得判「货比箱大」。
+_PIECE_VS_OUTER_TOL_MM = 1.0
+
+
+def _piece_outgrows_outer(items: List[Dict[str, Any]], outer: Dict[str, float]) -> bool:
+    """有单件比箱外廓还大：三边从大到小逐一比，任何摆法都一样。
+
+    不算壁厚、不算间隙——货比箱的外皮还大，箱做得再薄也装不进。标准箱外宽一律
+    1100 mm，1200 mm 见方的电缆盘、1107 mm 高的整包模块都属于这种。
+    """
+    box = sorted((float(outer.get(k) or 0) for k in ("长", "宽", "高")), reverse=True)
+    for it in items:
+        d = it.get("外尺寸_mm") or {}
+        piece = sorted((float(d.get(k) or 0) for k in ("长", "宽", "高")), reverse=True)
+        if any(p > b + _PIECE_VS_OUTER_TOL_MM for p, b in zip(piece, box)):
+            return True
+    return False
+
+
+def _custom_base_box_type(items: List[Dict[str, Any]]) -> str:
+    """按货定制外廓时，壁厚 / 自重 / 截面库取哪种标准箱作底：最长件所在长度档里第一个载得动的。"""
+    longest = max((float(i["外尺寸_mm"]["长"]) for i in items), default=0.0)
+    cands = _standard_tier_candidates(longest) or _BOX_ORDER[-1:] or ["6米铁架"]
+    for name in cands:
+        if _weight_fits(items, name):
+            return name
+    return cands[0]
 
 
 def _standard_tier_candidates(content_long_mm: float) -> List[str]:
@@ -676,8 +708,12 @@ def _build_box(
     design_facts: Optional[Dict[str, Any]] = None,
     _upgrade_depth: int = 0,
     _tried_types: Optional[set] = None,
+    _custom_section: bool = False,
 ) -> Dict[str, Any]:
     tried = set(_tried_types or set())
+    # _custom_section：标准箱库试完仍有单件比箱外廓大，这一箱改按货定制外廓（见函数末尾）。
+    # 此时 box_name 只提供壁厚 / 自重 / 截面库，外廓不再锁标准尺寸。
+    lock_standard = standard and not _custom_section
     # 选最近标准型作为结构截面/自重基准；standard 时按货长档选型（可加长）
     if box_name not in STANDARD_BOX_TYPES:
         box_name = (
@@ -685,7 +721,7 @@ def _build_box(
             if items
             else "4米铁架"
         )
-    if standard and items:
+    if lock_standard and items:
         # 每次（含升级重试）按货长档重选型；升级深度>0 时仅允许不短于当前
         picked = _pick_box_type_for_items(items, standard=True)
         if _upgrade_depth == 0:
@@ -711,16 +747,17 @@ def _build_box(
         items,
         aggressive=True,
         container_type=container_type,
-        dense=dense and not standard,
-        standard=standard,
+        # 单件定制箱贴货做：不套 3 m / 4 m 模块长，1.2 m 的电缆盘不该占 3 m 柜长
+        dense=(dense and not standard) or _custom_section,
+        standard=lock_standard,
         prefer_single_row=prefer_single_row and not standard,
     )
     # 标准模式展示名用库名，仅加长时标注
-    if standard and not customized:
+    if lock_standard and not customized:
         display_type = box_name
     else:
         display_type = _display_box_type(box_name, outer, customized)
-        if standard and customized:
+        if lock_standard and customized:
             display_type = f"{box_name}(标准加长)"
 
     tare = float(spec["自重_kg"])
@@ -782,12 +819,14 @@ def _build_box(
         special.append("结构需加强")
     if struct.get("fidelity") == "detailed_design":
         special.append("详设截面")
-    if customized and not standard:
+    if customized and not lock_standard:
         special.append("定制外廓")
-    if customized and standard:
+    if customized and lock_standard:
         special.append("标准加长")
-    if standard:
+    if lock_standard:
         special.append("标准箱库")
+    if _custom_section:
+        special.append(CUSTOM_SECTION_TAG)
     if dense and not standard:
         special.append("密装外廓")
     if not struct["几何"]["尺寸适配"]:
@@ -812,7 +851,7 @@ def _build_box(
     if _section_too_large(outer["宽"], outer["高"], cab_W, cab_H):
         special.append("截面过大")
     # 两排对齐标记（软规 snappoint 结果可观测）
-    if not standard:
+    if not lock_standard:
         if _can_two_row(outer["宽"], cab_W):
             special.append("两排对齐")
         else:
@@ -871,7 +910,7 @@ def _build_box(
     deflect_fail = "挠度" in risk_txt
     geo_fail = not bool(struct.get("几何", {}).get("尺寸适配"))
     hard_fail = struct["结论"] == "不通过" or geo_fail
-    if _upgrade_depth < 4 and hard_fail:
+    if _upgrade_depth < 4 and hard_fail and not _custom_section:
         upgraded = None
         cur_L = float((STANDARD_BOX_TYPES[box_name]["外尺寸_mm"]).get("长") or 0)
         # 几何不过 → 只试更长/更高的标准箱；挠度不过 → 禁止更长，只试同档替换
@@ -908,6 +947,22 @@ def _build_box(
                 _upgrade_depth=_upgrade_depth + 1,
                 _tried_types=tried,
             )
+
+    # 标准箱库试完了，仍有单件比箱外廓还大：标准箱外宽一律 1100 mm，没有哪一种装得下。
+    # 原先照出这只箱、只挂一个「尺寸紧张」，方案 ok=True——箱进得了柜，货进不了箱。
+    # 改走非 standard 同一条「按货定制」的路；定制后仍装不下的（货比柜还大）留给守恒核对判失败。
+    if lock_standard and items and _piece_outgrows_outer(items, outer):
+        return _build_box(
+            box_no,
+            _custom_base_box_type(items),
+            items,
+            container_type=container_type,
+            dense=dense,
+            standard=standard,
+            prefer_single_row=prefer_single_row,
+            design_facts=design_facts,
+            _custom_section=True,
+        )
 
     content = [
         {
@@ -996,7 +1051,8 @@ def _build_box(
         "booking_volume_m3": round(booking_vol / 1e9, 6),
         "customized_outer": customized,
         "dense_outer": bool(dense and not standard),
-        "standard_outer": bool(standard),
+        "standard_outer": bool(lock_standard),
+        "custom_section": bool(_custom_section),
         "section_too_large": bool(
             _section_too_large(outer["宽"], outer["高"], cab_W, cab_H)
         ),
@@ -1425,6 +1481,7 @@ def run_packing(
         bt = str(bx.get("base_box_type") or bx.get("箱型") or "?")
         by_type[bt] = by_type.get(bt, 0) + 1
     summary["standard_box_type_counts"] = by_type
+    summary["custom_section_boxes"] = sum(1 for bx in boxes if bx.get("custom_section"))
     return {"箱子列表": boxes, "结构汇总": summary}
 
 
