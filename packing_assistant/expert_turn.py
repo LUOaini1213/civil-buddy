@@ -3902,10 +3902,22 @@ def _attach_office(out: Dict[str, Any]) -> Dict[str, Any]:
     return out
 
 
+def _printable(markdown: str) -> str:
+    """A draft carries no control characters, whatever the user pasted in.
+
+    They arrive with text copied out of a PDF, a terminal or another workbook, they are invisible,
+    and no deliverable format takes them: the Word exporter refuses the draft outright and openpyxl
+    used to raise from inside the Excel export and take the whole turn down with it. Dropping them
+    changes nothing a person can read.
+    """
+    return "".join(ch for ch in (markdown or "") if ch in "\t\n" or ord(ch) >= 32)
+
+
 def _save_drafts(out_dir: Path, drafts: List[tuple[str, str]], reply: str) -> Dict[str, Any]:
     """Validate all drafts before writing; report only artifacts actually saved."""
     from packing_assistant.tools.tender_review import forbidden_hits
 
+    drafts = [(tool, _printable(markdown)) for tool, markdown in drafts]
     result: Dict[str, Any] = {
         "wrote": False, "hitl_pending": False, "files": [], "tools_run": [],
         "submit_blocked": True,

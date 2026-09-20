@@ -40,6 +40,7 @@ CHECKS = (
     Check("acceptance-cases", ("scripts/test_acceptance_cases.py",), timeout=600),
     Check("post-facts", ("scripts/test_post_facts.py",)),
     Check("post-content", ("scripts/test_post_content.py",), timeout=1800),
+    Check("post-robustness", ("scripts/test_post_robustness.py",), timeout=900),
     Check("workbench-collaboration", ("scripts/test_workbench_collaboration.py",)),
     Check("middleware", ("scripts/test_agent_middleware.py",)),
     Check("sandbox", ("scripts/test_sandbox.py",)),

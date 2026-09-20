@@ -87,11 +87,24 @@ def tables_from_md(md: str) -> List[Tuple[str, List[List[str]]]]:
     return out
 
 
+def _sheet_text(value: Any) -> Any:
+    """Text a worksheet will accept.
+
+    A cell's text reaches us from the user - pasted out of a terminal, a PDF or another workbook -
+    and may carry control characters that the file format does not allow. openpyxl raises on them,
+    which used to fail the whole export and with it the turn. They are not information: they are
+    dropped, and the visible text is written.
+    """
+    if not isinstance(value, str):
+        return value
+    return "".join(ch for ch in value if ch in "\t\n\r" or ord(ch) >= 32)
+
+
 def _write_rows(worksheet: Any, rows: List[List[str]]) -> None:
     """Draft tables contain text, including strings that look like formulas."""
     for r_i, row in enumerate(rows, 1):
         for c_i, value in enumerate(row, 1):
-            cell = worksheet.cell(r_i, c_i, value)
+            cell = worksheet.cell(r_i, c_i, _sheet_text(value))
             if isinstance(value, str):
                 cell.data_type = "s"
 
