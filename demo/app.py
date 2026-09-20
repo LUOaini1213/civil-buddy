@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import os
 from uuid import uuid4
 from pathlib import Path
 
@@ -28,6 +29,33 @@ from store import (
 app = FastAPI(title="Civil Buddy Workbench")
 STATIC = DEMO_ROOT / "static"
 app.mount("/static", StaticFiles(directory=STATIC), name="static")
+
+
+def auth_token() -> str:
+    """Shared secret for /api/* when the workbench is bound to a LAN address (CIVIL_TOKEN). Empty = open."""
+    return (os.environ.get("CIVIL_TOKEN") or "").strip()
+
+
+def _token_presented(request: Request) -> str:
+    auth = request.headers.get("authorization") or ""
+    if auth.startswith("Bearer "):
+        return auth[7:].strip()
+    q = request.query_params.get("token")
+    if q:
+        return q
+    return (request.cookies.get("cb_token") or "").strip()
+
+
+@app.middleware("http")
+async def require_token(request: Request, call_next):
+    expected = auth_token()
+    path = request.url.path
+    # "/" and /static stay open so the page can load and ask for the token; /api/health says auth is on
+    if expected and path.startswith("/api/") and path != "/api/health" and _token_presented(request) != expected:
+        from fastapi.responses import JSONResponse
+
+        return JSONResponse({"detail": "需要访问口令（CIVIL_TOKEN）"}, status_code=401)
+    return await call_next(request)
 
 
 class ChatIn(BaseModel):
@@ -97,7 +125,7 @@ def health() -> dict:
                          "session_backup": True, "cancel": True, "word_export": True,
                          "task_memory": True, "local_rag": True, "task_routing": True,
                          "expert_contracts": True, "tender_collaboration": True, "semantic_summary": True,
-                         "asr": _asr_installed()},
+                         "asr": _asr_installed(), "auth": bool(auth_token())},
         "deepseek": has_key(),
         "model": llm_model(),
         "context": policy(),

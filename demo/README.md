@@ -11,10 +11,17 @@ cd C:\Users\LW\civil-buddy\demo
 copy .env.example .env
 # 编辑 .env，填入 CIVIL_API_KEY / OPENAI_API_KEY / DEEPSEEK_API_KEY（自选模型，不必 DeepSeek）
 python -m pip install -r requirements.txt
-python -m uvicorn app:app --reload --host 127.0.0.1 --port 8765
+python serve.py            # 读 .env 里的 CIVIL_HOST / CIVIL_PORT；等价于 uvicorn app:app --host 127.0.0.1 --port 8765
 ```
 
 浏览器打开 http://127.0.0.1:8765
+
+### 手机 / 局域网
+
+1. `.env` 里加 `CIVIL_HOST=0.0.0.0`，再加 `CIVIL_TOKEN=随便一串`（工作室能读写这台电脑的知识库，开给局域网就得有口令）。手机第一次打开会弹一次口令输入，之后存在 cookie 里，下载链接和上传都自动带；脚本用 `Authorization: Bearer <口令>`。没设口令就开到 0.0.0.0，`serve.py` 会在启动时警告。
+2. 手机同一 Wi-Fi 打开 `http://<电脑IP>:8765`。窄屏时侧栏变成顶栏「栏目」按钮拉出的抽屉；弹出键盘时输入框保持在键盘之上。
+3. 成稿期间锁屏 / 切后台 / 断网回来：服务端继续跑完（`CIVIL_DETACHED_TURN_SECONDS`，默认 600 s 内），页面回来后从 `GET /api/sessions/{sid}` 拉回结果。只有点「停止」才真的取消。
+4. 模型慢：`CIVIL_LLM_READ_TIMEOUT`（两段输出之间最长等多久，默认 180 s）、`CIVIL_LLM_CONNECT_TIMEOUT`（默认 15 s）。
 
 高风险专家（施工方案、危大、交底、结构）写盘前勾选确认句。
 

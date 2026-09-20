@@ -294,6 +294,47 @@ function cbApplyHealth(health) {
   cbSyncSend();
 }
 
+/* Optional shared secret (CIVIL_TOKEN on the server, for CIVIL_HOST=0.0.0.0). Kept in a
+   cookie so plain download links and uploads carry it too; asked for once — on boot when
+   /api/health says auth is on, or on the first 401 — then every /api/ fetch retries once. */
+const TOKEN_COOKIE = "cb_token";
+let tokenPromptOpen = false;
+
+function hasToken() {
+  return document.cookie.split(";").some((c) => c.trim().startsWith(`${TOKEN_COOKIE}=`));
+}
+
+function setToken(tok) {
+  const v = encodeURIComponent((tok || "").trim());
+  document.cookie = `${TOKEN_COOKIE}=${v}; path=/; max-age=${60 * 60 * 24 * 30}; SameSite=Lax`;
+}
+
+async function askToken(reason) {
+  if (tokenPromptOpen) return false;
+  tokenPromptOpen = true;
+  try {
+    const tok = window.prompt(`${reason || "这个工作台需要访问口令"}（CIVIL_TOKEN）`);
+    if (!tok) return false;
+    setToken(tok);
+    return true;
+  } finally {
+    tokenPromptOpen = false;
+  }
+}
+
+(function guardApiFetch() {
+  if (typeof window.fetch !== "function") return;
+  const rawFetch = window.fetch.bind(window);
+  window.fetch = async function cbFetch(input, init) {
+    const res = await rawFetch(input, init);
+    const url = typeof input === "string" ? input : (input && input.url) || "";
+    if (res.status === 401 && url.startsWith("/api/") && !(init && init.cbRetried)) {
+      if (await askToken("口令缺失或不对")) return cbFetch(input, { ...(init || {}), cbRetried: true });
+    }
+    return res;
+  };
+})();
+
 async function boot() {
   const request = cbSessionRequest;
   const remembered = cbRememberedSession();
@@ -303,6 +344,9 @@ async function boot() {
       if (!r.ok) throw new Error(await apiError(r) || "HTTP " + r.status);
       return r.json();
     });
+    if (health && health.capabilities && health.capabilities.auth && !hasToken()) {
+      await askToken("这个工作台开了访问口令");
+    }
     cbApplyHealth(health);
     if (health.context) state.context = { ...state.context, ...health.context };
     CB_PACK_TRIAL = cbPackTrialFrom(health);
@@ -4274,4 +4318,23 @@ if ($("railToggle")) {
     const open = rail.classList.toggle("mobile-open");
     $("railToggle").setAttribute("aria-expanded", open ? "true" : "false");
   });
+}
+
+/* 手机键盘：iOS Safari 弹出键盘时 layout viewport 不变、visualViewport 变矮，输入框会被键盘盖住。
+   窄屏且 visualViewport 明显低于窗口高度时把 body 压到 visualViewport 的高度并把对话滚到底；
+   键盘收起后恢复 100dvh。Android Chrome 走 interactive-widget=resizes-content，这里等于不动。 */
+if (window.visualViewport) {
+  const vv = window.visualViewport;
+  let raf = 0;
+  const fit = () => {
+    cancelAnimationFrame(raf);
+    raf = requestAnimationFrame(() => {
+      const narrow = window.matchMedia("(max-width: 768px)").matches;
+      const keyboard = narrow && window.innerHeight - vv.height > 120;
+      document.body.style.height = keyboard ? `${Math.round(vv.height)}px` : "";
+      if (keyboard && $("log")) $("log").scrollTop = $("log").scrollHeight;
+    });
+  };
+  vv.addEventListener("resize", fit);
+  vv.addEventListener("scroll", fit);
 }
