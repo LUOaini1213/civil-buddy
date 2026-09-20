@@ -59,6 +59,7 @@ jobs:
           python scripts/test_packing_list_pdf.py
           python scripts/test_table_mapper_unit.py
           python scripts/test_pack_ship_dimension_gate.py
+          python scripts/test_pack_ship_conservation.py
       - name: Frontend static checks
         run: |
           # UX R12: 零外链红线（内网断网可用）+ JS 语法门禁（node --check 固化 U-R10 esprima 检查）

@@ -919,6 +919,9 @@ def _build_box(
             "外尺寸_mm": it["外尺寸_mm"],
             "备注": it.get("备注") or "",
             "加工件编号": it.get("加工件编号") or "",
+            # 守恒核对用：这一条来自装箱单哪一行；质量拆分时一件被切成几份
+            "源编号": it.get("源编号") or it.get("加工件编号") or "",
+            "质量拆分份数": int(it.get("质量拆分份数") or 1),
         }
         for it in items
     ]
@@ -1107,34 +1110,49 @@ def _explode_items_by_net_cap(
         qty = max(int(it.get("数量") or 1), 1)
         unit = float(it.get("单重_kg") or 0)
         total = float(it.get("总重_kg") or unit * qty)
-        if unit <= 0 and qty > 0:
+        # 行的总重是引擎认的那个数（适配层、选型、合箱都按它算）。单重与它对不上时
+        # 以总重为准摊到每件，否则「不拆」的路径按总重、「拆」的路径按单重 × 件数，
+        # 同一行拆与不拆会装出两个质量。
+        if total > 0 and qty > 0:
             unit = total / qty
-        # 单件净重已超 cap（qty=1 的怪兽件）：按质量切成多虚拟件，避免无法按件数拆
+        source_id = str(it.get("源编号") or it.get("加工件编号") or it.get("id") or "")
+        # 单件净重已超 cap：按质量切成多虚拟件，避免无法按件数拆。
+        # 行里有几件就切几件。原先只切第一件、把「数量」丢掉：2 根 850 kg 的梁出来
+        # 只剩 1 根，柜数、N0、载重利用率和 VGM 全算在少掉的质量上，且没有任何告警。
         if unit > cap + 1e-6:
-            import math
-
             n_parts = max(2, int(math.ceil(unit / cap - 1e-9)))
-            piece = unit / n_parts
+            piece = round(unit / n_parts, 3)
+            # 末份收尾差，保证每件拆完仍是原来的质量（不靠容差）
+            last_piece = round(unit - piece * (n_parts - 1), 3)
             base_name = str(it.get("名称") or "材料")
             base_id = str(it.get("加工件编号") or it.get("id") or "M")
-            for part in range(1, n_parts + 1):
-                chunk = dict(it)
-                chunk["数量"] = 1
-                chunk["单重_kg"] = round(piece, 3)
-                chunk["总重_kg"] = round(piece, 3)
-                chunk["名称"] = f"{base_name}(重拆{part}/{n_parts})"
-                chunk["加工件编号"] = f"{base_id}-W{part}"
-                chunk["id"] = chunk["加工件编号"]
-                chunk["备注"] = (
-                    str(it.get("备注") or "")
-                    + f";mass_split unit={unit:.0f}>{cap:.0f}kg n={n_parts}"
-                ).strip(";")
-                out.append(chunk)
+            for unit_no in range(1, qty + 1):
+                for part in range(1, n_parts + 1):
+                    kg = last_piece if part == n_parts else piece
+                    chunk = dict(it)
+                    chunk["数量"] = 1
+                    chunk["单重_kg"] = kg
+                    chunk["总重_kg"] = kg
+                    if qty == 1:
+                        chunk["名称"] = f"{base_name}(重拆{part}/{n_parts})"
+                        chunk["加工件编号"] = f"{base_id}-W{part}"
+                    else:
+                        chunk["名称"] = f"{base_name}(件{unit_no}/{qty}·重拆{part}/{n_parts})"
+                        chunk["加工件编号"] = f"{base_id}-U{unit_no}W{part}"
+                    chunk["id"] = chunk["加工件编号"]
+                    chunk["源编号"] = source_id
+                    chunk["质量拆分份数"] = n_parts
+                    chunk["备注"] = (
+                        str(it.get("备注") or "")
+                        + f";mass_split unit={unit:.0f}>{cap:.0f}kg n={n_parts}"
+                    ).strip(";")
+                    out.append(chunk)
             continue
         max_qty = _max_qty_for_crate(it, cap)
         if max_qty >= qty and total <= cap + 1e-6:
             row = dict(it)
             row["总重_kg"] = round(total, 3)
+            row["源编号"] = source_id
             out.append(row)
             continue
         if max_qty >= qty:
@@ -1153,6 +1171,7 @@ def _explode_items_by_net_cap(
             chunk["名称"] = base_name if part == 1 and q == qty else f"{base_name}(拆{part})"
             chunk["加工件编号"] = f"{base_id}-S{part}"
             chunk["id"] = chunk["加工件编号"]
+            chunk["源编号"] = source_id
             chunk["备注"] = (
                 str(it.get("备注") or "") + f";split_net<={cap:.0f}kg,q<={max_qty}"
             ).strip(";")

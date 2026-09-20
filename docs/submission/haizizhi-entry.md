@@ -14,6 +14,21 @@
 >
 > **UX 证据链（23 轮迭代，R1 立规矩 → R23 门禁自检）**：R17 界面填 Key（评委自带，不必改 .env）· R19 co-work 壳（左项目树 · 单一聊天框）· R20-21 `pack <本机路径>` 与回形针上传 · R22-23 物料来源诚实性（表读不到必须明说，网关/exe/CI 三层门禁）。设计公理/逐轮总结/附录 N-R 见 [docs/ux/ux-design-spec.md](docs/ux/ux-design-spec.md)；断网专项 `python scripts/test_offline_ui.py`（外域请求 0、pageerror 0）；端到端金线 `python scripts/r13_golden_path_e2e.py`（8/8 PASS，需 playwright）；体验记分卡 `python scripts/eval_competition_scorecard.py --skip-phase0`（本地校准综合 8.85，赢线 PASS）。
 
+## 初审之后的进展（2026-09-12 ~ 2026-09-20）
+
+> 上面的四件套与表格是 2026-08-31 初审定稿，原文保留以便对照。下表是初审提交之后仓库里真实发生的事，答辩以此为准；逐段人机协同见 [haizizhi-resume.md](haizizhi-resume.md) ⑪–⑮。
+
+| 方向 | 做了什么 | 可复跑命令 |
+|------|----------|------------|
+| 工具真正接上引擎 | MCP 的 `ingest/plan/vgm/booking_draft` 由"投影已有快照"改为真实调用装箱引擎；PDF 装箱单可解析 | `python scripts/test_mcp_stdio.py` · `python scripts/test_packing_list_pdf.py` |
+| 表格读取的静默错误 | `L (mm)` 类表头 8 种写法补齐识别缺口；英寸/英尺/磅与合并尺寸格 16 种写法修正 12 种；空计划不再报成功 | `python scripts/test_table_mapper_unit.py` · `python scripts/test_pack_ship_dimension_gate.py` |
+| 招标响应逐行比对 | 一条招标要求只出一行，数字对不上会被指出来：精确率 0.857→1.000、召回 0.615→0.974、9 处数字冲突全检出 | `python scripts/eval_tender_response_match.py` |
+| 模型只路由，工具算数 | 模型驱动回合加确定性守卫：模型回复不得给出判定、复读收敛、数字必须指得回工具结果 | `npm run check` 中的 `model-loop` · `verdict-bench` · `number-provenance-bench` |
+| 运行边界 | 系统级沙箱（工具工作跑在受内核约束的 worker 里，能力按平台如实分级）、声明式插件（一个文件夹或 zip 就是一批岗位）、原生桌面应用 | `npm run check` 中的 `os-sandbox` · `plugins` · `desktop-app` |
+| 来源可追溯 | 四个只读数据源工具：响应缺数据集版本、哈希或逐字证据一律拒收 | `python scripts/test_readonly_sources.py`（17 例，离线 fixture） |
+
+**2026-09-20 全量复跑（退出码全 0）**：`npm run check` 69/69 · `test_kb_k4_depth` 66 岗全绿 · `demo_one_shot` ALL_PASS · `eval_competition_scorecard --skip-phase0` 综合 **8.85**（赢线 PASS，冲刺 FAIL：phase0 仍是 quick n=12）· `eval_post_scorecard --all-pilots` 5 岗 × 4 门禁全 PASS。自评分是仓内校准口径，不是评审结论。
+
 ### Agent Middleware（赛道 1 · 完全合格）
 
 对照表：[docs/civil-buddy/track1-qualified.md](docs/civil-buddy/track1-qualified.md)。  

@@ -399,6 +399,8 @@ def default_engine() -> ToolEngine:
     )
     eng.register("spawn_helper", _spawn_helper, writes=True)
     _register_exclusives(eng)
+    from packing_assistant.tools.readonly_sources import register_tools
+    register_tools(eng)
     from packing_assistant.runtime.tool_contracts import contract_for
     for spec in eng.tools.values():
         contract = contract_for(spec.name, exclusive=bool(spec.expert_id))
