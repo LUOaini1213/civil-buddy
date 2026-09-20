@@ -480,8 +480,12 @@ def build_handoff(
     envelope: Optional[str] = None,
     deadlines: Optional[List[Dict[str, str]]] = None,
     eval_method: Optional[str] = None,
+    facts: Optional[Dict[str, Any]] = None,
 ) -> Dict[str, Any]:
-    """经营岗交接：评分点 → bid-tech；★/废标 → bid-compliance。不判定可投标。"""
+    """经营岗交接：评分点 → bid-tech；★/废标 → bid-compliance。不判定可投标。
+
+    ``facts``（tools/tender_facts.py 的字段层）随交接落盘：后岗在另一轮里只拿得到
+    tender.handoff.json，工程概况、各标段工期、拟派人员都得从这里读。"""
     scoring = [r for r in requirements if r.get("item_kind") == "scoring_point"]
     stars = [r for r in requirements if r.get("item_kind") == "star"]
     specials = [
@@ -555,6 +559,7 @@ def build_handoff(
         "eval_method": eval_method,
         "deadlines": list(deadlines or []),
         "bid_bond": _bond_from_requirements(requirements),
+        "facts": facts or None,
         "bid_decision": "human_required",
         "next_experts": next_experts,
         "p0_reject_scan": {
@@ -572,60 +577,13 @@ def build_tech_outline_from_handoff(
     *,
     project_name: str = "未命名项目",
 ) -> Dict[str, Any]:
-    """按抽出的评分点出技术标目录骨架。无评分点则只给待对照前附表，不套模板冒充本标。"""
-    ho = handoff or {}
-    points = list(ho.get("scoring_points") or [])
-    specials = list(ho.get("specials") or [])
-    chapters: List[Dict[str, Any]] = []
-    if not points:
-        chapters.append(
-            {
-                "n": 1,
-                "title": "通用骨架 + 待对照前附表",
-                "source_ref": None,
-                "note": "原文未检出评分点。禁止套上个中标项目目录。",
-            }
-        )
-    else:
-        for i, p in enumerate(points, 1):
-            chapters.append(
-                {
-                    "n": i,
-                    "title": str(p.get("text") or "评分点").strip()[:160],
-                    "source_ref": p.get("requirement_ref"),
-                    "note": "要点：待按招标原文扩写 · 条款 [UNSPECIFIED]",
-                }
-            )
-    extra_n = len(chapters)
-    for j, s in enumerate(specials, 1):
-        chapters.append(
-            {
-                "n": extra_n + j,
-                "title": f"专项：{str(s.get('text') or '').strip()[:140]}",
-                "source_ref": s.get("requirement_ref"),
-                "note": "招标点名专项：目录须有章；数值待填。禁止写已论证/可开工。",
-            }
-        )
-    md_lines = [
-        f"# {project_name} · 技术标目录草稿",
-        "",
-        "> AI 草稿 · 内部讨论。按评分点排目录，分数未核验则标未核实。",
-        "",
-    ]
-    for ch in chapters:
-        md_lines.append(f"## {ch['n']}. {ch['title']}")
-        if ch.get("source_ref"):
-            md_lines.append(f"- 原文：{ch['source_ref']}")
-        md_lines.append(f"- {ch['note']}")
-        md_lines.append("")
-    return {
-        "schema": "tender.tech_outline.v1",
-        "project_name": project_name,
-        "n_chapters": len(chapters),
-        "from_extracted_scores": bool(points),
-        "chapters": chapters,
-        "markdown": "\n".join(md_lines),
-    }
+    """按抽出的评分点出技术标目录草稿。无评分点则只给待对照前附表，不套模板冒充本标。
+
+    成稿九节（评分目录映射 / 依据概况 / … / 缺项与自检）见 tools/tender_tables.tech_outline。
+    返回结构不变：chapters、from_extracted_scores、markdown。"""
+    from packing_assistant.tools.tender_tables import tech_outline
+
+    return tech_outline(handoff, project_name=project_name)
 
 
 def build_workbench_extract_table(
@@ -633,66 +591,12 @@ def build_workbench_extract_table(
     *,
     project_name: str = "未命名招标",
 ) -> str:
-    """同一张招标解析表：主线 C 与 workbench sidecar 共用，禁止编造空栏。"""
-    p = parsed or {}
-    ho = p.get("handoff") or {}
-    days = p.get("duration_days")
-    days_s = f"{days} 日历天" if days is not None else "未在原文检出"
-    scores = ho.get("scoring_points") or []
-    stars = ho.get("star_items") or []
-    specials = ho.get("specials") or []
-    quals = [
-        r
-        for r in (p.get("requirements") or [])
-        if r.get("category") == "qualification" and r.get("item_kind") == "theme"
-    ]
-    score_md = "\n".join(f"- {s.get('requirement_ref')}: {s.get('text')}" for s in scores) or "未在原文检出评分点"
-    star_md = "\n".join(f"- {s.get('requirement_ref')}: {s.get('text')}" for s in stars) or "未在原文检出★项"
-    spec_md = "\n".join(f"- {s.get('requirement_ref')}: {s.get('text')}" for s in specials) or "未在原文检出专项要求"
-    qual_md = "\n".join(f"- {q.get('requirement_ref')}: {q.get('exact_text')}" for q in quals) or "未在原文检出资质要求"
-    wh = ", ".join(ho.get("workheads") or []) or "未在原文检出"
-    env = ho.get("envelope") or "未在原文检出"
-    dls = ho.get("deadlines") or []
-    dl_md = "\n".join(f"- {d.get('label')}: {d.get('when')}" for d in dls) or "未在原文检出（口头传闻不算）"
-    return "\n".join(
-        [
-            f"# {project_name} · 招标解析表",
-            "",
-            "> AI 草稿 · 内部讨论。缺项写「未在原文检出」。不编造天数、分值、workhead。",
-            "",
-            "## 工程",
-            project_name,
-            "",
-            "## 评标 / 评分点摘录",
-            score_md,
-            "",
-            "## ★ / 必须满足项",
-            star_md,
-            "",
-            f"## Workhead / 信封",
-            f"- workhead: {wh}",
-            f"- envelope: {env}",
-            f"- eval_method: {ho.get('eval_method') or '未在原文检出'}",
-            "",
-            "## 资质/证书",
-            qual_md,
-            "",
-            "## 工期",
-            days_s,
-            "",
-            "## 时间轴（仅原文日期）",
-            dl_md,
-            "",
-            "## 必须编制的专项",
-            spec_md,
-            "",
-            f"## 下一岗",
-            ", ".join(ho.get("next_experts") or []) or "—",
-            "",
-            "P0 资格/废标/★须人工确认。系统不判定可投标。",
-            "",
-        ]
-    )
+    """同一张招标解析表：主线 C 与 workbench sidecar 共用，禁止编造空栏。
+
+    九节 + 「事项｜要求原文｜来源页段｜是否检出｜澄清建议」，见 tools/tender_tables.extract_table。"""
+    from packing_assistant.tools.tender_tables import extract_table
+
+    return extract_table(parsed, project_name=project_name)
 
 
 def workbench_bid_extract(text: str, *, project_name: str = "未命名招标") -> Dict[str, Any]:
@@ -804,6 +708,7 @@ def parse_tender_text(text: str, *, source: str = "text", sides: str = "auto") -
         envelope=envelope,
         deadlines=deadlines,
         eval_method=eval_method,
+        facts=facts.to_dict(),
     )
 
     return {

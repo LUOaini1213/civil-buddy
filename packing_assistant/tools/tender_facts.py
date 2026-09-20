@@ -75,7 +75,7 @@ _ALL_LOTS = re.compile(r"(?:两个?|[二三四五六几]个|\d个|各个?|每个
 #: count in text that is somebody talking, never in a pasted excerpt (see _is_document).
 _OURS_STRONG = (
     r"我们|我方|我司|我公司|本公司|咱们|自述|草稿"
-    r"|投标函(?:里|上|中)?(?:写|填|报)|施组(?:里|中|上)?|技术标里|商务标里|照着写|照抄"
+    r"|投标函(?:里|上|中)?(?:写|填|报|照着写|照抄)|施组(?:里|中|上)?|技术标里|商务标里|照着写|照抄"
 )
 _OURS_WEAK = (
     r"(?<![须应需得])承诺|拟派|拟任|拟投入|报的|排的|写成|写的|填的|报了|(?<![确决指规约])定了"
@@ -92,6 +92,22 @@ _NOT_GIVEN = re.compile(r"(?:还没|尚未|没有|没|未)(?:公布|发布|提|�
 #: "拟派项目经理须具备一级建造师", "未盖章的按否决投标处理".
 _TENDER_SPEAKS = re.compile(r"否决|废标|无效投标|无效标|不予受理|拒收|视为|按[^，,。]{0,8}处理|不得|必须|须|应当|应具备|应具有|应提供|应满足")
 _NUMBERED_LINE = re.compile(r"^\s*(?:[一二三四五六七八九十]+\s*[、.．]|\d+(?:\.\d+)*\s*[.、)）]|\d+(?:\.\d+)+\s|[（(]\s*\d+\s*[)）]|第[一二三四五六七八九十\d]+[条章节款]|[★☆＊])")
+
+
+#: "帮我对下有没有废标点" / "废标检查，出个响应缺口清单": the person talking about the job. It holds the
+#: word 废标, and the parser's reject rule used to file it as a P0 requirement of the tender.
+_TASK_TALK = re.compile(
+    r"^\s*(?:请|麻烦|烦请)?\s*(?:帮我|帮忙|给我|替我|我要|我想|老板让|经理让|领导让|出个|出一份|出一版|做个|做一份|整理成)"
+    r"|废标(?:检查|点|清单|对照|风险)|有没有废标|会不会废标|响应缺口|解析表|技术标目录|资料如下|如下[：:]?\s*$")
+
+
+#: "有没有废标点" holds 废标 and obliges nobody; these do
+_OBLIGES = re.compile(r"必须|须|应当|应具备|应具有|应提供|应满足|不得|否决|无效投标|不予受理|按[^，,。]{0,8}处理")
+
+
+def is_task_talk(piece: str) -> bool:
+    """A clause that only says what the user wants done: no number, no ★, no obligation in it."""
+    return bool(_TASK_TALK.search(piece)) and not re.search(r"\d|[★☆＊]", piece) and not _OBLIGES.search(piece)
 
 
 def _is_document(text: str) -> bool:
@@ -414,9 +430,11 @@ def extract(text: str, *, sides: str = "auto") -> TenderFacts:
     lot = ""
     lot_forms: Dict[str, str] = {}
     seen_clauses: List[str] = []
-    for line_no, raw_line in enumerate((text or "").splitlines() or [""], 1):
+    line_no = 0  # counts non-empty lines, like the parser's L# references
+    for raw_line in (text or "").splitlines() or [""]:
         if not raw_line.strip():
             continue
+        line_no += 1
         # "标签：" at the start of a line governs the whole line: "已有证据：同类学校业绩一项，合同都在"
         line_topic: Optional[str] = None
         line_body = raw_line
@@ -537,7 +555,10 @@ def extract(text: str, *, sides: str = "auto") -> TenderFacts:
                         rest = clause[split_at:stop]
                         kind = "person" if key in ("pm", "tech_lead") else topic.kind
                         rest_value = "" if kind in ("text", "method") else _value(kind, rest)
-                        facts.mentions.append(Mention(key, "ours", lot, rest_value, shown, line_no))
+                        # "三标保证金68万保函已经开好了": our part is "保函已经开好了", not the requirement again
+                        begin = start if end == split_at else split_at  # the keyword right before the cue is its subject
+                        said = clause[begin:stop].strip(_EDGE)
+                        facts.mentions.append(Mention(key, "ours", lot, rest_value, said if len(said) >= 6 else shown, line_no))
                         placed = True
                     carried = key
                 # ---- a clause with no keyword of its own continues the topic before it
@@ -693,6 +714,9 @@ def tender_pieces(text: str, *, sides: str = "auto") -> List[List[str]]:
         touched = False
         for piece in re.split(r"(?<=[，,。；;！!？?])", line):
             if not piece.strip():
+                continue
+            if not document and is_task_talk(piece):
+                touched = True
                 continue
             cue = _our_cue(piece, document=document)
             if cue is None:

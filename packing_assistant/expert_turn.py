@@ -3802,51 +3802,16 @@ _COVERED = frozenset({"covered", "ok", "done"})
 _OPEN = frozenset({"gap", "pending", "missing", "uncovered", "open", "partial", "human_required", "review"})
 
 
-def _compliance_gaps_md(handoff: Optional[Dict[str, Any]], matrix: Optional[Dict[str, Any]]) -> str:
-    rows = (matrix or {}).get("rows") or []
-    responded: List[str] = []
-    unresponded: List[str] = []
-    absent: List[str] = []
-    if not rows and not handoff:
-        absent.append("本会话无 tender.handoff.json，招标未提供可对照正文。")
-    for r in rows:
-        if not isinstance(r, dict):
-            continue
-        title = str(r.get("title") or r.get("exact_text") or r.get("req_id") or "").strip()
-        if not title:
-            continue
-        st = str(r.get("status") or "")
-        line = title[:180]
-        if st in _COVERED:
-            responded.append(line)
-        else:
-            unresponded.append(line)
-    if handoff and not rows:
-        for key, label in (("star_items", "★项"), ("scoring_points", "评分点"), ("specials", "专项")):
-            items = handoff.get(key) or []
-            for it in items:
-                text = str((it or {}).get("text") or "")[:180]
-                if text:
-                    unresponded.append(f"{label}：{text}")
-        if not (handoff.get("scoring_points") or handoff.get("star_items") or handoff.get("specials")):
-            absent.append("交接在，但未抽出评分点/★/专项；招标未提供这些栏位的正文。")
-    lines = [
-        "# 废标检查岗 · 三列对照",
-        "",
-        DISCLAIMER,
-        "",
-        "不代判废标。须持证人员按招标文件确认。submit_blocked=true。",
-        "",
-        "## 已响应",
-        "",
-    ]
-    lines.extend([f"- {x}" for x in responded] or ["- （空）"])
-    lines.extend(["", "## 未响应", ""])
-    lines.extend([f"- {x}" for x in unresponded] or ["- （空）"])
-    lines.extend(["", "## 招标未提供", ""])
-    lines.extend([f"- {x}" for x in absent] or ["- （本轮无「招标未提供」栏）"])
-    lines.extend(["", "条款号 UNSPECIFIED。不判定可投标。", ""])
-    return "\n".join(lines)
+def _compliance_gaps_md(handoff: Optional[Dict[str, Any]], matrix: Optional[Dict[str, Any]], *,
+                        ours: Optional[Dict[str, Any]] = None, comparison: Optional[List[Dict[str, Any]]] = None) -> str:
+    """响应缺口对照：七节 + 「事项｜招标要求｜响应原文或证据｜三态｜缺口｜责任人」。
+
+    招标要求来自交接里的字段层（handoff["facts"]）和解析器的要求行；我方说法来自 ``ours``（本轮
+    文本的字段层）与 ``comparison``（tender_response_match.compare_responses）。三态只描述
+    「给没给、对不对得上」，不写合格 / 废标。成稿见 tools/tender_tables.compliance_gaps。"""
+    from packing_assistant.tools.tender_tables import compliance_gaps
+
+    return compliance_gaps(handoff, matrix, ours=ours, comparison=comparison, disclaimer=DISCLAIMER)
 
 
 def _draft_markdown(expert: ExpertRec, tool: str, text: str) -> str:
@@ -4066,15 +4031,29 @@ def _run_exclusive_body(
         from packing_assistant.runtime.session_handoff import load_handoff, save_handoff
         from packing_assistant.tools.tender_parse import run_tender_pipeline
 
+        from packing_assistant.tools.tender_facts import extract as extract_facts, split_sides
+        from packing_assistant.tools.tender_response_match import compare_responses
+
         ho = load_handoff(session_id)
         matrix = None
+        ours = extract_facts(text or "").to_dict()
+        comparison: List[Dict[str, Any]] = []
         if text and len(text.strip()) > 40:
             pipe = run_tender_pipeline(text, source="expert-compliance", project_name=expert.name)
-            matrix = pipe.get("matrix") if isinstance(pipe.get("matrix"), dict) else None
-            if isinstance(pipe.get("handoff"), dict) and pipe.get("handoff"):
-                ho = pipe["handoff"]
-                save_handoff(session_id, ho)
-        md = _compliance_gaps_md(ho, matrix)
+            said = (pipe.get("handoff") or {}).get("facts") or {}
+            asks = bool((pipe.get("parse") or {}).get("requirements")) or any(
+                m.get("side") == "tender" for m in said.get("mentions") or []) or bool(said.get("scores") or said.get("specials"))
+            # 本轮说了招标要求就以本轮为准；只说了我方情况（"保函开好了，工期改成360天"）则沿用本会话
+            # 已解析的招标要求，把这一轮当作响应去对照——否则一句补充就把上一轮的解析冲掉了。
+            if asks or not ho:
+                matrix = pipe.get("matrix") if isinstance(pipe.get("matrix"), dict) else None
+                if isinstance(pipe.get("handoff"), dict) and pipe.get("handoff"):
+                    ho = pipe["handoff"]
+                    save_handoff(session_id, ho)
+                _theirs, mine = split_sides(text)
+                sources = [{"source_id": "user-ours", "role": "response", "text": mine, "start": 0}] if mine else []
+                comparison = compare_responses((pipe.get("parse") or {}).get("requirements") or [], sources)
+        md = _compliance_gaps_md(ho, matrix, ours=ours, comparison=comparison)
         path = out_dir / "bid-compliance__gaps.md"
         guarded_write_text(path, md)
         files.append({"name": path.name, "path": str(path), "tool": "bid-compliance__gaps"})
@@ -4095,10 +4074,17 @@ def _run_exclusive_body(
         from packing_assistant.tools.tender_parse import build_tech_outline_from_handoff, run_tender_pipeline
 
         ho = load_handoff(session_id)
-        if (not ho) and text and len(text.strip()) > 40:
+        if text and len(text.strip()) > 40:
             pipe = run_tender_pipeline(text, source="expert-tech", project_name=expert.name)
-            if isinstance(pipe.get("handoff"), dict) and pipe.get("handoff"):
-                ho = pipe["handoff"]
+            fresh = pipe.get("handoff") if isinstance(pipe.get("handoff"), dict) else {}
+            said = fresh.get("facts") or {}
+            # 这一轮自己带了评分点 / 专项 / 工程情况，就按这一轮排目录。此前只要会话里有旧交接就不看
+            # 本轮文字：换了一份招标文件再问，出来的还是上一份的目录。只有「出一份技术标目录」这种
+            # 不带内容的话才沿用本会话 bid-parse 落下的交接。
+            carries = bool(fresh.get("scoring_points") or fresh.get("specials") or said.get("scores")
+                           or said.get("specials") or said.get("mentions"))
+            if fresh and (carries or not ho):
+                ho = fresh
                 save_handoff(session_id, ho)
         outline = build_tech_outline_from_handoff(ho or {}, project_name=expert.name)
         md = str(outline.get("markdown") or "")
