@@ -5,7 +5,8 @@
 第一件，行上的数量被丢掉。下面这张 4 行装箱单 58 件 / 6040 kg，成箱后剩 3330 kg
 （= 850 一根梁 + 620 一根柱 + 720 + 1140），run_plan 仍给 ok=True、can_fit=True、3 个柜。
 同类的另外两处：当量直通把数量 N 的行出成 1 个箱；13.5 m 的梁被钳进 12.032 m 的箱后
-报 can_fit=True。
+报 can_fit=True。还有一处在截面上：标准箱外宽一律 1100 mm，1200 mm 见方的电缆盘照样
+放进去、只挂「尺寸紧张」，方案 ok=True（59 个夹具里 6 个、共 69 条）。
 
 用法：python scripts/test_pack_ship_conservation.py            （CI，约 25 s）
       python scripts/test_pack_ship_conservation.py --numbers  （另外打印每个夹具的进/出账）
@@ -182,9 +183,14 @@ def test_checker_catches_each_kind_of_loss() -> None:
     found = check_conservation(mats, long_box)
     assert {v["kind"] for v in found["violations"]} == {"content_exceeds_box"}
     assert "进不了箱" in violation_sentences(found)[0]
-    # 截面超出箱外廓：记数、不判失败（成箱策略的既有问题，不是丢货）
-    tight = check_conservation(mats, [_box("1", 200, [_line("A", 4, 200, dims=(1200, 1150, 1120))]), good[1], good[2]])
-    assert tight["ok"] is True and [w["kind"] for w in tight["warnings"]] == ["content_section_exceeds_box"], tight
+    # 货的截面比箱外廓大：同样进不了箱。原先只记 warnings、ok=True
+    wide = check_conservation(mats, [_box("1", 200, [_line("A", 4, 200, dims=(1200, 1150, 1120))]), good[1], good[2]])
+    assert wide["ok"] is False and [v["kind"] for v in wide["violations"]] == ["content_section_exceeds_box"], wide
+    assert "截面" in violation_sentences(wide)[0] and "进不了箱" in violation_sentences(wide)[0]
+    assert "warnings" not in wide  # 没有「只记数」的几何问题了
+    # 贴着外廓（1 mm 以内）不算超
+    snug = check_conservation(mats, [_box("1", 200, [_line("A", 4, 200, dims=(1200, 1100.5, 300))]), good[1], good[2]])
+    assert snug["ok"] is True, snug
     # 多出来的货同样是错账
     assert "pieces_gained" in kinds(good + [_box("4", 50, [_line("A", 1, 50)])])
 
@@ -232,10 +238,70 @@ def test_oversize_is_refused_not_clamped() -> None:
     refused = run_plan(materials=wide["materials"])  # 3000×2800×900：2800 大于柜内任何一边可用的 2698
     assert refused["error"] == "oversize_for_container" and [r["id"] for r in refused["needs_human"]] == ["W1"], refused
     assert "框架柜" in refused["needs_human"][0]["ask"]  # 没有哪种柜装得下时不乱推荐
+    # 绕过闸门：定制外廓也被柜内净空钳住，货仍比箱大——核对器判失败，不再只是 3 条 warnings
+    solved = _solve_boxes(wide["materials"], container_type="40HQ")
+    assert {v["kind"] for v in solved["conservation"]["violations"]} == {"content_section_exceeds_box"}, solved["conservation"]
+    scheme = agent_box_scheme({"materials": wide["materials"], "container_type": "40HQ", "packing_options": {}})
+    assert scheme["ship_ok"] is False and "cargo_not_conserved" in scheme["errors"][0], scheme.get("errors")
 
     # 20GP 遇长件引擎自动改 40HQ；闸门按引擎实际用的柜型判，不误拒 6 m 的货
     six = [dict(GIRDER[0], length_mm=6000)]
     assert run_plan(materials=six, container_type="20GP")["ok"] is True
+
+
+# ---- 同类：截面比任何标准箱都大的件，按货定制外廓 ----------------------------------------------
+
+def _outer_sorted(box):
+    size = box["outer_size_mm"]
+    return sorted((size["length"], size["width"], size["height"]), reverse=True)
+
+
+def test_piece_wider_than_any_standard_crate_gets_a_custom_outer() -> None:
+    """修复前：6 个 1200 mm 见方的电缆盘各进一只 6000×1100×1550 的「6米框」，结构不通过、
+    只挂「尺寸紧张」，run_plan 照样 ok=True。"""
+    from packing_assistant.tools.packing import CUSTOM_SECTION_TAG
+
+    mats = load_materials(None, str(ROOT / "test/generic_tables/G6_messy_headers/materials.csv"))["materials"]
+    result = run_plan(materials=mats)
+    assert result["ok"] is True and result["conservation"]["ok"] is True, result
+    custom = result["custom_section_boxes"]
+    assert len(custom) == 6 and all(row["names"] == [f"Cable drum(拆{i})"] for i, row in enumerate(custom, 1)), custom
+    assert all(row["outer_mm"] == [1350.0, 1450.0, 1390.0] for row in custom), custom
+    report = plan_report_md(result, "G6.csv")
+    assert "定制箱 6 个" in report and "1350×1450×1390 mm" in report, report  # 不是标准箱，得让人看见
+
+    boxes = _solve_boxes(mats, container_type="40HQ")["boxes"]
+    drums = [b for b in boxes if CUSTOM_SECTION_TAG in b["special_attributes"]]
+    assert len(drums) == 6 and len(boxes) == 9, (len(drums), len(boxes))  # 箱数不变，修复前也是 9
+    for box in drums:
+        assert all(o >= 1200 for o in _outer_sorted(box)), box["outer_size_mm"]  # 修复前外廓有一边 1100
+        assert "尺寸紧张" not in box["special_attributes"] and "标准箱库" not in box["special_attributes"], box
+        assert "定制外廓" in box["special_attributes"] and box["structure_conclusion"] != "不通过", box
+        assert box["outer_size_mm"]["length"] == 1350.0, box  # 贴货做，不套 3 m 模块长
+    # 其余的件照旧进标准箱
+    others = [b for b in boxes if b not in drums]
+    assert all("标准箱库" in b["special_attributes"] and b["outer_size_mm"]["width"] == 1100.0 for b in others), others
+
+    # 装得进标准箱的件不受影响：1000×450 的截面（加间隙 1050×500）侧放进得了 2 米铁架 1000×1650 的内腔
+    fits = [_row(id="F", quantity=1, length_mm=1500, width_mm=1000, height_mm=450, weight_kg=100)]
+    box = _solve_boxes(fits, container_type="40HQ")["boxes"][0]
+    assert CUSTOM_SECTION_TAG not in box["special_attributes"] and "标准箱库" in box["special_attributes"], box
+
+    # 引擎再放一件进比它小的箱里，三个工具都不给 ok=True
+    real = agent_box_scheme
+
+    def squeezed(state):
+        out = dict(real(state))
+        out["boxes"] = [dict(b, outer_size_mm=dict(b["outer_size_mm"], width=1100.0, height=1100.0))
+                        if CUSTOM_SECTION_TAG in b["special_attributes"] else b for b in out["boxes"]]
+        return out
+
+    with patch("packing_assistant.agents.box_scheme.agent_box_scheme", squeezed):
+        outs = (run_plan(materials=mats), draft_vgm(materials=mats), draft_booking(materials=mats))
+    for out in outs:
+        assert out["ok"] is False and out["error"] == NOT_CONSERVED, out
+        assert "can_fit" not in out and "containers_used" not in out, out
+    assert "截面" in " ".join(outs[0]["detail"]), outs[0]["detail"]
 
 
 def test_unknown_container_type_is_refused() -> None:
@@ -294,8 +360,11 @@ def _fixture_sets():
 
 
 def test_every_tracked_fixture_conserves(show: bool = False, everything: bool = False) -> None:
-    """只跑成箱（不拼柜）就能对账。修复前 59 个夹具里 9 个丢重量、另 1 个只丢件数。"""
-    checked = split = 0
+    """只跑成箱（不拼柜）就能对账。修复前 59 个夹具里 9 个丢重量、另 1 个只丢件数；
+    另有 6 个夹具共 69 条「货的截面比箱外廓大」，现在只剩比柜还大的那 3 条。"""
+    from packing_assistant.tools.packing import CUSTOM_SECTION_TAG
+
+    checked = split = custom = 0
     for name, mats, opts in _fixture_sets():
         if name.startswith("sim/t80_") and not everything:
             continue  # 300–570 行，成箱各 4–16 s；修复前后都守恒，另有 test_anchor_t80_long_mix.py 盯着
@@ -305,17 +374,24 @@ def test_every_tracked_fixture_conserves(show: bool = False, everything: bool = 
             continue
         found = check_conservation(mats, scheme["boxes"])
         oversize = pack_ship_solve.rows_oversize_for_container(mats, "40HQ")
-        real = [v for v in found["violations"] if not (v["kind"] == "content_exceeds_box" and oversize)]
+        # 比柜还大的件（run_plan 的闸门会先拦下）定制外廓也装不下，两种「货比箱大」都在预期之内
+        bigger_than_box = ("content_exceeds_box", "content_section_exceeds_box")
+        real = [v for v in found["violations"] if not (v["kind"] in bigger_than_box and oversize)]
         assert not real, (name, violation_sentences(found))
         checked += 1
         split += bool(found["mass_split_rows"])
+        n_custom = sum(CUSTOM_SECTION_TAG in (b.get("special_attributes") or []) for b in scheme["boxes"])
+        custom += bool(n_custom)
         if show:
+            refused = sum(v["kind"] in bigger_than_box for v in found["violations"])
             print(f"  {name:40s} pieces {found['pieces_in']:>5} → {found['pieces_out']:>5}  "
                   f"kg {found['kg_in']:>10} → {found['kg_out']:>10}  boxes {found['n_boxes']:>4}"
                   f"{'  mass-split ' + str(len(found['mass_split_rows'])) + ' rows' if found['mass_split_rows'] else ''}"
-                  f"{'  section-warnings ' + str(len(found['warnings'])) if found['warnings'] else ''}")
+                  f"{'  custom-section ' + str(n_custom) if n_custom else ''}"
+                  f"{'  bigger-than-box ' + str(refused) + ' (oversize row, refused by the gate)' if refused else ''}")
     assert checked >= (59 if everything else 50), checked
     assert split >= 5, split  # 夹具里确实有走质量拆分的，这个测试不是空转
+    assert custom >= (6 if everything else 5), custom  # 同上：确实有夹具走按货定制
 
 
 def main() -> int:
@@ -329,6 +405,7 @@ def main() -> int:
         test_checker_catches_each_kind_of_loss,
         test_plan_fails_when_engine_loses_cargo,
         test_oversize_is_refused_not_clamped,
+        test_piece_wider_than_any_standard_crate_gets_a_custom_outer,
         test_unknown_container_type_is_refused,
         test_quantity_gate,
         test_max_containers_reaches_the_loader,
