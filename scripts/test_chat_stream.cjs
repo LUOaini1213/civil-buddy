@@ -295,6 +295,98 @@ test("the stop button still cancels the session it was pressed in, and only that
   await pending;
 });
 
+// A turn the page is only watching: no stream here, but the server is still running it.
+function watchedUi(capabilities) {
+  const server = { active: true, state: "running", cancels: [], chats: 0 };
+  const h = ui(async (url, init) => {
+    if (url.endsWith("/cancel")) {
+      server.cancels.push(url);
+      return { ok: true, json: async () => ({ cancel_requested: true }) };
+    }
+    if (init && init.method === "POST") { server.chats++; return { ok: false, statusText: "409" }; }
+    return { ok: true, json: async () => ({ session_id: h.evaluate("state.session"), transcript: [],
+      turn_state: { active: server.active, state: server.state } }) };
+  });
+  h.evaluate(`cbApplyHealth(${JSON.stringify({ capabilities })})`);
+  // Polls are scheduled 1.5 s apart; keep them in hand instead of waiting for them.
+  h.evaluate("var cbTestPolls = []; setTimeout = (fn, ms) => { if (ms === 1500) cbTestPolls.push(fn); return 0; }");
+  const settle = () => new Promise((resolve) => setImmediate(resolve));
+  return { h, server, settle,
+    async watch(options) { h.evaluate(`cbWatchSession(state.session, ${JSON.stringify(options || {})})`); await settle(); },
+    async nextPoll() { await h.evaluate("cbTestPolls.shift()()"); await settle(); } };
+}
+
+test("a task found running in the background is shown as running, refuses a new message, and can be stopped", async () => {
+  const { h, server, watch, nextPoll } = watchedUi({ chat: true, cancel: true });
+  const session = h.evaluate("state.session");
+  await watch({ reason: "回到前台；" });
+  assert.equal(h.elements.stop.hidden, false);
+  assert.equal(h.elements.form["aria-busy"], "true");
+  assert.equal(h.elements.send.disabled, true);
+
+  await h.submit("新消息");
+  assert.equal(server.chats, 0, "the session is busy on the server: sending would only earn a 409");
+  assert.match(h.errors.at(-1), /还在后台运行/);
+  assert.equal(h.elements.input.value, "新消息");
+
+  await h.elements.stop.listeners.click();
+  assert.deepEqual(server.cancels, [`/api/sessions/${session}/cancel`]);
+  assert.match(h.announcements.at(-1), /已请求停止/);
+
+  server.active = false;
+  server.state = "cancelled";
+  await nextPoll();
+  assert.equal(h.elements.stop.hidden, true);
+  assert.equal(h.elements.form["aria-busy"], "false");
+  assert.equal(h.evaluate("cbWatchedRun"), null);
+  assert.match(h.errors.at(-1), /回到前台；该任务已被停止/);
+});
+
+test("a watched task that finishes is reported as finished, one that failed is not", async () => {
+  for (const [state, expected] of [["done", /已在后台完成/], ["failed", /没有跑完/]]) {
+    const { h, server, watch, nextPoll } = watchedUi({ chat: true, cancel: true });
+    await watch();
+    server.active = false;
+    server.state = state;
+    await nextPoll();
+    assert.match(h.errors.at(-1), expected);
+    assert.equal(h.elements.stop.hidden, true);
+  }
+});
+
+test("leaving a watched task takes the stop button away without cancelling anything", async () => {
+  const { h, server, watch } = watchedUi({ chat: true, cancel: true });
+  await watch();
+  assert.equal(h.elements.stop.hidden, false);
+  h.evaluate("cbNewLocalSession()");
+  assert.equal(h.elements.stop.hidden, true);
+  assert.equal(h.elements.form["aria-busy"], "false");
+  assert.equal(h.evaluate("cbWatchedRun"), null);
+  assert.deepEqual(server.cancels, []);
+  assert.equal(h.evaluate("cbTestPolls.length"), 1, "the poll that was pending");
+  await h.evaluate("cbTestPolls.shift()()");
+  assert.equal(h.evaluate("cbTestPolls.length"), 0, "and it does not reschedule itself for a task we left");
+});
+
+test("a backend that cannot cancel gets no dead stop button on a watched task", async () => {
+  const { h, watch } = watchedUi({ chat: true, cancel: false });
+  await watch();
+  assert.equal(h.elements.form["aria-busy"], "true");
+  assert.equal(h.elements.stop.hidden, true);
+});
+
+test("a task still running when the page stops waiting is not called finished", async () => {
+  const { h, watch, nextPoll } = watchedUi({ chat: true, cancel: true });
+  await watch();
+  assert.equal(h.elements.stop.hidden, false);
+  h.evaluate("{ const real = Date.now; Date.now = () => real() + 11 * 60 * 1000; }");
+  await nextPoll();
+  assert.match(h.errors.at(-1), /仍在后台运行/);
+  assert.doesNotMatch(h.errors.join("\n"), /已在后台完成|已被停止/);
+  assert.equal(h.elements.stop.hidden, true);
+  assert.equal(h.evaluate("cbTestPolls.length"), 0);
+});
+
 test("oversize backup import and busy-task export do not send requests", async () => {
   let requests = 0;
   const h = ui(async () => { requests++; return {ok:true,body:new ReadableStream({})}; });

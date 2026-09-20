@@ -124,6 +124,7 @@ function cbCancelActiveRun() {
    服务端的 turn 持有 lease 直到落盘，回到该任务时由 cbWatchSession 把结果拉回来。
    显式「停止」按钮仍走 cbCancelActiveRun。 */
 function cbDetachActiveRun() {
+  cbReleaseWatch();
   if (!cbActiveRun) return;
   const run = cbActiveRun;
   run.detached = true;
@@ -137,6 +138,17 @@ function cbDetachActiveRun() {
 
 const cbBackgroundSessions = new Set();
 let cbWatchTimer = null;
+
+/* 旁观中的后台轮次：页面上没有流，但服务端这一轮还在跑，会话因此是忙的（再发消息只会 409）。
+   所以它要按「运行中」来画，也要能被停止——否则回到任务的人只能干等到完成或服务端超时。
+   形状和 cbActiveRun 一样（session / cancelRequested），停止按钮因此不用区分两者。 */
+let cbWatchedRun = null;
+function cbReleaseWatch() {
+  if (cbWatchTimer) { clearTimeout(cbWatchTimer); cbWatchTimer = null; }
+  if (!cbWatchedRun) return;
+  cbWatchedRun = null;
+  if (!cbActiveRun) cbRunPaint(false);
+}
 
 /* 手机回到前台（iOS 后台会掐掉 fetch 流）：没有活动流时，检查当前任务是否还在服务端跑。 */
 document.addEventListener("visibilitychange", () => {
@@ -158,17 +170,31 @@ async function cbWatchSession(sid, opts) {
   const started = Date.now();
   const maxMs = Number(options.maxMs) || 10 * 60 * 1000;
   if (cbWatchTimer) { clearTimeout(cbWatchTimer); cbWatchTimer = null; }
+  if (cbWatchedRun && cbWatchedRun.session !== sid) cbReleaseWatch();
+  const superseded = () => state.session !== sid || request !== cbSessionRequest || !!cbActiveRun;
   const tick = async () => {
-    if (state.session !== sid || request !== cbSessionRequest || cbActiveRun) return;
+    if (superseded()) { if (cbWatchedRun && cbWatchedRun.session === sid) cbReleaseWatch(); return; }
     let d = null;
     try {
       const r = await fetch("/api/sessions/" + encodeURIComponent(sid));
       if (r.ok) d = await r.json();
     } catch (_) { /* 网络抖动：下一拍再试 */ }
-    if (state.session !== sid || request !== cbSessionRequest || cbActiveRun) return;
+    if (superseded()) { if (cbWatchedRun && cbWatchedRun.session === sid) cbReleaseWatch(); return; }
     const active = !!(d && d.turn_state && d.turn_state.active);
     if (active && Date.now() - started < maxMs) {
+      if (!cbWatchedRun || cbWatchedRun.session !== sid) {
+        cbWatchedRun = { session: sid, cancelRequested: false };
+        cbRunPaint(true);
+        /* 没有取消能力的后端上，停止按钮什么也做不了：不要摆一个假的。 */
+        if ($("stop") && cbCapability("cancel") !== true) $("stop").hidden = true;
+      }
       cbWatchTimer = setTimeout(tick, 1500);
+      return;
+    }
+    cbReleaseWatch();
+    if (active) {
+      /* 超过了本页愿意等的时长，但它确实还在跑：别把它说成「已完成」。 */
+      addStatus("这个任务仍在后台运行，稍后回到该任务查看结果。");
       return;
     }
     cbBackgroundSessions.delete(sid);
@@ -201,9 +227,11 @@ function cbPaintRecovered(d, options) {
     appendDocCards(files, target, { runs });
   }
   const st = d.turn_state && d.turn_state.state;
-  addStatus(options.reason
-    ? options.reason + (st === "cancelled" ? "该任务已被停止。" : "任务已在后台完成，结果已恢复。")
-    : "后台任务已完成，结果已恢复。");
+  /* 怎么结束的就怎么说：被停止（人点的，或无人值守超时由服务端停的）和没跑成，都不是「已完成」。 */
+  const outcome = st === "cancelled" ? "该任务已被停止，已有内容已保留。"
+    : st === "failed" ? "该任务没有跑完，已有内容已保留，可重试。"
+    : "任务已在后台完成，结果已恢复。";
+  addStatus((options.reason || "") + outcome);
   refreshAuditSoon();
 }
 
@@ -1256,6 +1284,11 @@ function cbFixMount(anchor, desc) {
 $("form").addEventListener("submit", async (ev) => {
   ev.preventDefault();
   if (cbActiveRun) return;
+  if (cbWatchedRun) {
+    /* 服务端这一轮还占着会话，现在发只会得到 409，还会把正在轮询的结果顶掉。 */
+    addStatus("这个任务还在后台运行：等它完成，或先点「停止」。输入内容已保留。");
+    return;
+  }
   if (cbContextRebuilding()) {
     const note = "正在重新整理记忆，请完成后发送；输入内容已保留。";
     if ($("ctxMemoryStatus")) $("ctxMemoryStatus").textContent = note;
@@ -1354,16 +1387,18 @@ $("form").addEventListener("submit", async (ev) => {
 });
 
 if ($("stop")) $("stop").addEventListener("click", async () => {
-  const run = cbActiveRun;
+  /* 有流的轮次，或只是在旁观的后台轮次：停止的都是服务端那一轮。 */
+  const run = cbActiveRun || cbWatchedRun;
   if (!run) return;
-  if (cbCapability("cancel") !== true) { run.controller.abort(); return; }
+  const current = () => cbActiveRun === run || cbWatchedRun === run;
+  if (cbCapability("cancel") !== true) { if (run.controller) run.controller.abort(); return; }
   $("stop").disabled = true;
   $("stop").textContent = "停止中…";
   try {
     const result = await cbRequestCancellation(run);
-    if (cbActiveRun === run && result && result.cancel_requested) cbAnnounce("已请求停止，正在保存已有结果");
+    if (current() && result && result.cancel_requested) cbAnnounce("已请求停止，正在保存已有结果");
   } catch (error) {
-    if (cbActiveRun === run) {
+    if (current()) {
       $("stop").disabled = false;
       $("stop").textContent = "停止";
       addStatus("停止请求未完成，请重试。" + String(error.message || error));
