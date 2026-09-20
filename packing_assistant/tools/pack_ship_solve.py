@@ -297,6 +297,32 @@ def _custom_section_boxes(boxes: Sequence[Dict[str, Any]]) -> List[Dict[str, Any
     return out
 
 
+_STRUCTURE_KEYS = {"通过": "pass", "需加强": "needs_reinforcement", "不通过": "fail", "待详设": "pending_design"}
+
+
+def structure_summary(boxes: Sequence[Dict[str, Any]]) -> Dict[str, Any]:
+    """逐箱结构验算的结论汇总。成箱引擎每个箱都算过，方案里原先一个字不提：
+    48 个箱全部「不通过」的票照样 ok=True、can_fit=True。can_fit 只说几何与载重装得下，
+    箱本身扛不扛得住是另一件事，得说出来。
+    """
+    counts = {key: 0 for key in _STRUCTURE_KEYS.values()}
+    reasons: Dict[tuple, int] = {}
+    for b in boxes or []:
+        verdict = str(b.get("structure_conclusion") or "")
+        key = next((v for k, v in _STRUCTURE_KEYS.items() if verdict.startswith(k)), None)
+        if key is None:
+            continue
+        counts[key] += 1
+        if key == "fail":
+            calc = b.get("structure_calc") or {}
+            risk = next((str(x) for x in (calc.get("风险点") or []) if x), "") or "结构验算不通过"
+            pair = (str(b.get("base_box_type") or b.get("box_type") or ""), risk)
+            reasons[pair] = reasons.get(pair, 0) + 1
+    failing = [{"box_type": k[0], "reason": k[1], "boxes": n}
+               for k, n in sorted(reasons.items(), key=lambda kv: (-kv[1], kv[0]))[:5]]
+    return {**counts, "n_boxes": len(boxes or []), "failing": failing}
+
+
 def _no_boxes(n_rows: int) -> Dict[str, Any]:
     return {
         "ok": False,
@@ -392,6 +418,8 @@ def run_plan(
         "floor_utilization_avg": plan.get("floor_utilization_avg", UNSPECIFIED),
         "n_materials": len(mats),
         "n_boxes": len(boxes),
+        # 逐箱结构验算结论；can_fit 不含这一项
+        "structure": structure_summary(boxes),
         # 每次求解后独立核对过的账：装箱单上的件数与净重，全部在箱里
         "conservation": {k: conservation[k] for k in
                          ("ok", "pieces_in", "pieces_out", "kg_in", "kg_out", "per_row_checked", "mass_split_rows")},
@@ -447,6 +475,12 @@ def plan_report_md(result: Dict[str, Any], file_name: str) -> str:
             lines.append(f"  - {row.get('name') or row.get('id')}：{row.get('units')} 件单件重超过所选箱型的净重上限，"
                          f"每件按质量切成 {row.get('parts_per_unit')} 份分箱（共 {row.get('parts')} 份）。"
                          "这是计算上的拆分，实物不可切时箱型需人工确认。")
+    structure = result.get("structure") or {}
+    if structure:
+        lines.append(f"- 逐箱结构验算（can_fit 不含此项）：通过 {structure.get('pass')} · 需加强 {structure.get('needs_reinforcement')} · "
+                     f"不通过 {structure.get('fail')} · 待详设 {structure.get('pending_design')}")
+        for row in structure.get("failing") or []:
+            lines.append(f"  - {row.get('box_type')} × {row.get('boxes')}：{row.get('reason')}")
     custom = result.get("custom_section_boxes") or []
     if custom:
         lines.append(f"- 定制箱 {len(custom)} 个：箱内单件的截面大于任何标准箱的外廓（标准箱外宽 1100 mm），"
@@ -466,7 +500,8 @@ def plan_report_md(result: Dict[str, Any], file_name: str) -> str:
 
 _RECORD_KEYS = ("ok", "source", "error", "n_rows", "can_fit", "containers_used", "container_type", "n0", "utilization",
                 "weight_utilization", "floor_utilization_avg", "binding_constraint", "mid50", "n_materials", "n_boxes",
-                "conservation", "custom_section_boxes", "detail", "cargo_feasibility", "container_mix_supported", "elapsed_s")
+                "conservation", "structure", "custom_section_boxes", "detail", "cargo_feasibility",
+                "container_mix_supported", "elapsed_s")
 
 
 def plan_record_json(result: Dict[str, Any], file_name: str) -> str:
@@ -491,10 +526,12 @@ def plan_reply(result: Dict[str, Any], file_name: str) -> str:
                 f"这不是可用方案；引擎停手时用了 {result.get('containers_used', UNSPECIFIED)} 个 "
                 f"{result.get('container_type', UNSPECIFIED)}。明细见 pack-plan.md，请核对超限件或换柜型后再算。")
     if result.get("ok"):
+        failed = (result.get("structure") or {}).get("fail") or 0
+        caveat = (f"其中 {failed} 个箱按预置截面结构验算不通过，须加固或提供详设结构后再核。" if failed else "")
         return (f"装箱引擎已按 {file_name} 算出方案：{result.get('containers_used', UNSPECIFIED)} 个 "
                 f"{result.get('container_type', UNSPECIFIED)}，订柜下限 N0={result.get('n0', UNSPECIFIED)}，"
                 f"can_fit={result.get('can_fit', UNSPECIFIED)}，空间利用率 {result.get('utilization', UNSPECIFIED)}、"
-                f"载重利用率 {result.get('weight_utilization', UNSPECIFIED)}。明细见 pack-plan.md。内部草稿，不可直接订舱。")
+                f"载重利用率 {result.get('weight_utilization', UNSPECIFIED)}。{caveat}明细见 pack-plan.md。内部草稿，不可直接订舱。")
     rows = result.get("needs_human") or []
     if rows:
         asks = "\n".join(f"- {row.get('name') or row.get('id') or '（未命名行）'}：{row.get('ask') or row.get('reason')}" for row in rows[:20])

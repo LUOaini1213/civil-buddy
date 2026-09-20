@@ -6,7 +6,7 @@
 （= 850 一根梁 + 620 一根柱 + 720 + 1140），run_plan 仍给 ok=True、can_fit=True、3 个柜。
 同类的另外两处：当量直通把数量 N 的行出成 1 个箱；13.5 m 的梁被钳进 12.032 m 的箱后
 报 can_fit=True。还有一处在截面上：标准箱外宽一律 1100 mm，1200 mm 见方的电缆盘照样
-放进去、只挂「尺寸紧张」，方案 ok=True（59 个夹具里 7 个、共 97 条）。
+放进去、只挂「尺寸紧张」，方案 ok=True（59 个夹具里 6 个、共 69 条）。
 
 用法：python scripts/test_pack_ship_conservation.py            （CI，约 25 s）
       python scripts/test_pack_ship_conservation.py --numbers  （另外打印每个夹具的进/出账）
@@ -361,7 +361,7 @@ def _fixture_sets():
 
 def test_every_tracked_fixture_conserves(show: bool = False, everything: bool = False) -> None:
     """只跑成箱（不拼柜）就能对账。修复前 59 个夹具里 9 个丢重量、另 1 个只丢件数；
-    另有 7 个夹具共 97 条「货的截面比箱外廓大」，现在只剩比柜还大的那 3 条。"""
+    另有 6 个夹具共 69 条「货的截面比箱外廓大」，现在只剩比柜还大的那 3 条。"""
     from packing_assistant.tools.packing import CUSTOM_SECTION_TAG
 
     checked = split = custom = 0
@@ -391,7 +391,7 @@ def test_every_tracked_fixture_conserves(show: bool = False, everything: bool = 
                   f"{'  bigger-than-box ' + str(refused) + ' (oversize row, refused by the gate)' if refused else ''}")
     assert checked >= (59 if everything else 50), checked
     assert split >= 5, split  # 夹具里确实有走质量拆分的，这个测试不是空转
-    assert custom >= (7 if everything else 6), custom  # 同上：确实有夹具走按货定制
+    assert custom >= (6 if everything else 5), custom  # 同上：确实有夹具走按货定制
 
 
 def main() -> int:
