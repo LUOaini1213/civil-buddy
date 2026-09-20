@@ -90,6 +90,11 @@ def _module_like_majority(materials: List[Dict[str, Any]]) -> bool:
     """
     模块/整包级外廓：一件≈一箱（半柜宽 + 有高度 + 单件重），
     走当量直通/贴货，避免标准库拆成数十只 6m 架导致假多柜。
+
+    按行的外廓与单件重判，不看数量。原先要求「单行单件」（数量为 1），是因为当量直通
+    一行只出一箱、数量会丢；直通改成一件一箱之后这条限制只剩副作用：2100×1100×1200、
+    单件 1.8 t 的成品框架写成「数量 2」就不算模块，被送进标准箱库按跨距上限切成虚拟件——
+    9 个框架 23.8 t 出 48 个箱、判 9 个柜装不下；按模块直通是 9 个箱、3 个柜。
     """
     if not materials:
         return False
@@ -99,7 +104,7 @@ def _module_like_majority(materials: List[Dict[str, Any]]) -> bool:
             L = float(m.get("length_mm") or m.get("L") or 0)
             W = float(m.get("width_mm") or m.get("W") or 0)
             H = float(m.get("height_mm") or m.get("H") or 0)
-            q = max(int(m.get("quantity") or 1), 1)
+            q = max(material_quantity(m), 1)
             total = float(m.get("total_weight_kg") or 0)
             unit = float(m.get("weight_kg") or 0)
             if total <= 0 and unit > 0:
@@ -107,10 +112,9 @@ def _module_like_majority(materials: List[Dict[str, Any]]) -> bool:
             unit = total / q if q else total
         except Exception:
             continue
-        # 半柜宽附近 + 中高 + 单行单件 + 有分量
+        # 半柜宽附近 + 中高 + 有分量（单件重，不是行总重）
         if (
-            q == 1
-            and L >= 1200
+            L >= 1200
             and W >= 900
             and H >= 500
             and (unit >= 200 or H >= 800)

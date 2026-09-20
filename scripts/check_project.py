@@ -93,6 +93,7 @@ CHECKS = (
     Check("business-files", ("scripts/test_business_reliability.py",)),
     Check("trace-artifacts", ("scripts/test_trace_artifacts.py",)),
     Check("pack-ship-conservation", ("scripts/test_pack_ship_conservation.py",), timeout=300),
+    Check("pack-ship-crates-structure", ("scripts/test_pack_ship_crates_structure.py",)),
     Check("storage-parent", ("scripts/test_storage_ensure_run.py",)),
     Check("offline-eval", ("-c", "from packing_assistant.runtime.eval_live import live_eval; "
           "v=live_eval(); assert v.get('verdict')=='offline_gate_pass', v; print(v['verdict'])")),
