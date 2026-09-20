@@ -22,7 +22,7 @@
     python scripts/eval_post_content.py                  # cases.json，按岗位一行
     python scripts/eval_post_content.py --post cost -v   # 每个未落位事实一行
     python scripts/eval_post_content.py --show cost-02   # 打印该用例的交付物
-    python scripts/eval_post_content.py --set heldout    # 规则冻结后另写的留出集
+    python scripts/eval_post_content.py --set heldout_bid    # 留出集：文件名去掉 .json
 
 ## 基线（2026-09-20，改造前）
 
@@ -36,3 +36,17 @@
 值进了短栏位，却挂在**另一个对象**名下——一句话里两种材料，甲的数被写进了乙的行。
 
 门禁底线记在 `floor.json`；每完成一批岗位就上调，并在提交信息里写清新测得的数。
+
+## 留出集
+
+开发集满分不是成绩：规则是对着它调的。一个岗位改完、规则冻结之后，另写一份留出集，**写完才跑、只跑一次**，
+对外引用那个首跑数。字段正则沿用 `cases.json` 里同类事实的模式，不迎合改造后的列头；写完做同样的机械校验
+（value 恰好出现一次）。一份留出集的漏项一旦驱动了改动，它就算「见过」，只留在 `floor.json` 里当回归，
+要新的成绩就再写一轮。
+
+| 文件 | 岗位 | 首跑 | 现在 |
+| --- | --- | --- | --- |
+| `heldout_bid.json` | bid-parse / bid-tech / bid-compliance | 72/78 = 0.923 | 78/78，已见过 |
+| `heldout_bid2.json` | 同上，换了一批轴 | 67/70 = 0.957 | 69/70，已见过 |
+
+全岗位的留出集还没有写（此前这里写的 `--set heldout` 指向一个不存在的文件）。

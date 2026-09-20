@@ -303,6 +303,7 @@ class TenderFacts:
     lots: List[str] = field(default_factory=list)  # as written, in order of first mention
     lot_scopes: Dict[str, str] = field(default_factory=dict)  # "一标段" -> "顶管加检查井"
     unplaced: List[str] = field(default_factory=list)
+    jurisdiction: str = "UNSPECIFIED"  # CN | SG | EU | DUAL, only when the text says so; never a default country
 
     def of(self, topic: str, *, side: Optional[str] = None, lot: Optional[str] = None) -> List[Mention]:
         return [m for m in self.mentions if m.topic == topic and (side is None or m.side == side)
@@ -315,6 +316,7 @@ class TenderFacts:
     def to_dict(self) -> Dict[str, object]:
         return {
             "schema": "tender.facts.v1",
+            "jurisdiction": self.jurisdiction,
             "lots": list(self.lots),
             "lot_scopes": dict(self.lot_scopes),
             "mentions": [{"topic": m.topic, "label": m.label, "side": m.side, "lot": m.lot, "value": m.value,
@@ -484,7 +486,10 @@ def extract(text: str, *, sides: str = "auto") -> TenderFacts:
     """``sides="none"`` when the caller already knows every word is the tender's (a file given the
     tender role): then no cue is looked for at all. ``"auto"`` reads the text as somebody talking,
     unless it looks like a pasted excerpt, where only first-person cues count."""
+    from packing_assistant.jurisdiction import infer_jurisdiction
+
     facts = TenderFacts()
+    facts.jurisdiction = infer_jurisdiction(text or "")
     document = _is_document(text)
     lot = ""
     lot_forms: Dict[str, str] = {}

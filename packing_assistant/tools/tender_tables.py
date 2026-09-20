@@ -179,6 +179,8 @@ def extract_table(parsed: Optional[Mapping[str, Any]], *, project_name: str = "�
         for topic, label, always, advice in topics:
             rows += _parse_rows(facts, topic, label, always, advice)
         if title.startswith("1 "):
+            zone = _zone(facts)
+            rows.append(["辖区", zone, "—", "已检出" if zone != "UNSPECIFIED" else "未检出", _ZONE_ADVICE])
             only = list(facts.get("lots") or [])
             if only:
                 rows.append(["标段", "、".join(only), "—", "已检出", "各标段的工期、限价、保证金分行列出，不互相借用" if lots else "—"])
@@ -340,6 +342,13 @@ def _special_rows(parsed: Mapping[str, Any], facts: Optional[Facts]) -> List[Lis
     return rows or [["点名专项", MISSING, "—", "未检出", "查技术要求与评分表是否点名专项方案"]]
 
 
+_ZONE_ADVICE = "未写明则不默认国家；CN / SG / EU 的依据不得混用"
+
+
+def _zone(facts: Optional[Facts]) -> str:
+    return str((facts or {}).get("jurisdiction") or "UNSPECIFIED")
+
+
 def _unplaced(facts: Optional[Facts]) -> List[str]:
     left = [str(c) for c in (facts or {}).get("unplaced") or [] if str(c).strip()]
     if not left:
@@ -419,7 +428,8 @@ def tech_outline(handoff: Optional[Mapping[str, Any]], *, project_name: str = "�
     md += _table(("项目", "内容", "来源"), _kv_rows(facts, (
         ("project", "工程名称", None, True), ("scope", "招标范围", None, True), ("area", "建筑面积", None, True),
         ("structure", "结构形式", None, True), ("owner", "招标人", None, False), ("tender_no", "招标编号", None, False)),
-        extra=[[_with_lot("标段内容", lot), _clip(scope), "—"] for lot, scope in (facts.get("lot_scopes") or {}).items()]))
+        extra=[["辖区", _zone(facts), "—"]] + [[_with_lot("标段内容", lot), _clip(scope), "—"]
+                                              for lot, scope in (facts.get("lot_scopes") or {}).items()]))
     md += ["## 3 部署工艺", "", f"{TBD}：待按评分点、图纸和现场条件扩写；本稿不写未给的工艺参数。", ""]
     md += ["## 4 工期资源", ""]
     md += _table(("项目", "内容", "来源"), _kv_rows(facts, (
@@ -629,7 +639,8 @@ def compliance_gaps(handoff: Optional[Mapping[str, Any]], matrix: Optional[Mappi
            f"三态：**{RESPONDED}** = 用户给了对应的响应原文（证据原件未核验）；**{NOT_RESPONDED}** = 没给，或明说还没办、数值与要求不符；"
            f"**{NO_TENDER_TEXT}** = 只有我方说法，没有招标要求原文。", ""]
     md += ["## 1 来源与范围", ""]
-    scope_rows = [["项目名称", project or MISSING, "—"], ["招标编号", number or MISSING, "—"]]
+    zone = _zone(tender) if _zone(tender) != "UNSPECIFIED" else _zone(ours)
+    scope_rows = [["项目名称", project or MISSING, "—"], ["招标编号", number or MISSING, "—"], ["辖区", zone, "—"]]
     if tender.get("lots") or ours.get("lots"):
         scope_rows.append(["标段", "、".join(tender.get("lots") or ours.get("lots") or []), "—"])
     scope_rows.append(["响应资料", "已提供（原件未核验；以下只是原文对照）" if has_response else "用户未提供投标响应资料，不能认定已响应", "—"])

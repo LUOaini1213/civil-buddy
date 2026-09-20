@@ -1,5 +1,5 @@
 {
-  "_note": "Held-out round 2 for bid-parse / bid-tech / bid-compliance. Written 2026-09-20 after round 1's misses had driven changes and the rules were frozen again; no case was run before the file was complete. Axes round 1 did not have: months and percentages, a pasted Markdown table, 招标要求/我方情况 blocks, nested scores, mixed Chinese/English, lots named 第一标段. Once a miss here drives a rule change this file counts as seen too.",
+  "_note": "Held-out round 2 for bid-parse / bid-tech / bid-compliance. Written 2026-09-20 after round 1's misses had driven changes and the rules were frozen again; no case was run before the file was complete. Axes round 1 did not have: months and percentages, a pasted Markdown table, 招标要求/我方情况 blocks, nested scores, mixed Chinese/English, lots named 第一标段. Once a miss here drives a rule change this file counts as seen too. Mechanical check afterwards (the README's rule: a value occurs exactly once in its request) removed 3 fact(s) whose number stood on both sides of the same sentence and so could not tell a requirement cell from a response cell; all of them had counted as placed, so the first-run score is restated without them: 首跑 67/70 = 0.957（0 missing，3 dumped）.",
   "cases": [
     {
       "id": "bid-parse-g1",
@@ -297,14 +297,6 @@
           "field": "工期|招标要求|招标文件要求|实质性"
         },
         {
-          "value": "24个月",
-          "field": "质保期|缺陷责任期|保修期|质保|招标要求|招标文件要求|实质性"
-        },
-        {
-          "value": "150",
-          "field": "保证金|投标担保|保函|招标要求|招标文件要求"
-        },
-        {
           "value": "3.2",
           "field": "最高限价|限价|控制价|拦标价|招标要求|价格"
         },
@@ -391,10 +383,6 @@
         {
           "value": "300",
           "field": "工期|招标要求|招标文件要求|实质性"
-        },
-        {
-          "value": "40",
-          "field": "保证金|投标担保|保函|招标要求|招标文件要求"
         },
         {
           "value": "310",

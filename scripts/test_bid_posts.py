@@ -276,6 +276,52 @@ class ResponseDocuments(unittest.TestCase):
         self.assertEqual({rows(md, "工期")[0]["三态"], rows(md, "投标保证金")[0]["三态"]}, {"未响应"})
 
 
+class Exports(Posts):
+    """The Word and Excel files a user actually opens say what the Markdown says, cell for cell."""
+
+    REQUEST = ("招标文件要求工期365日历天、投标保证金85万，评分表里施工组织设计占35分，我们投标函草稿工期写成了380日历天，"
+               "保函还没开，项目经理拟派周建国，缺口责任人李敏。")
+
+    def deliver(self, post: str) -> Dict[str, Path]:
+        with patch.object(expert_turn, "_OUT", self.tmp), patch.object(agent_loop, "_OUT", self.tmp):
+            result = expert_turn.run_named_exclusive(TOOLS[post], {"text": self.REQUEST, "confirm_ok": True, "session_id": "exp-" + post})
+        return {Path(f["name"]).suffix: Path(f["path"]) for f in result["files"]}
+
+    def test_every_table_row_is_in_the_workbook_cell_for_cell(self) -> None:
+        import openpyxl
+
+        for post in TOOLS:
+            with self.subTest(post=post):
+                files = self.deliver(post)
+                self.assertIn(".xlsx", files, "a draft with tables comes with a workbook")
+                md = files[".md"].read_text(encoding="utf-8")
+                self.drafts.append(md)
+                sheets = [[[("" if c is None else str(c)) for c in row] for row in ws.iter_rows(values_only=True)]
+                          for ws in openpyxl.load_workbook(files[".xlsx"]).worksheets]
+                exported = {tuple(c.strip() for c in row) for sheet in sheets for row in sheet}
+                wanted = [tuple(row.values()) for table in tables(md) for row in table]
+                self.assertTrue(wanted)
+                for row in wanted:
+                    self.assertIn(tuple(c.replace("&#124;", "|") for c in row), exported)
+
+    def test_the_word_file_opens_and_holds_the_same_cells(self) -> None:
+        import zipfile
+        from xml.etree import ElementTree
+
+        ns = {"w": "http://schemas.openxmlformats.org/wordprocessingml/2006/main"}
+        for post in TOOLS:
+            with self.subTest(post=post):
+                files = self.deliver(post)
+                with zipfile.ZipFile(files[".docx"]) as archive:
+                    root = ElementTree.fromstring(archive.read("word/document.xml"))
+                cells = {"".join(t.text or "" for t in tc.iterfind(".//w:t", ns)).strip() for tc in root.iterfind(".//w:tc", ns)}
+                md = files[".md"].read_text(encoding="utf-8")
+                for table in tables(md):
+                    for row in table:
+                        for value in row.values():
+                            self.assertIn(value.replace("&#124;", "|"), cells)
+
+
 class FakeDraft(unittest.TestCase):
     """The draft the older acceptance scripts let through: the frame, the disclaimer, the request pasted."""
 

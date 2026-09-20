@@ -1,5 +1,5 @@
 {
-  "_note": "Held-out round 1 for bid-parse / bid-tech / bid-compliance. Written 2026-09-20 after the extraction rules were frozen at commit ad3d079 and before any case was run; field patterns are the dev set's own, by kind of fact. Once a miss here drives a rule change this file counts as seen - write a new round.",
+  "_note": "Held-out round 1 for bid-parse / bid-tech / bid-compliance. Written 2026-09-20 after the extraction rules were frozen at commit ad3d079 and before any case was run; field patterns are the dev set's own, by kind of fact. Once a miss here drives a rule change this file counts as seen - write a new round. Mechanical check afterwards (the README's rule: a value occurs exactly once in its request) removed 2 fact(s) whose number stood on both sides of the same sentence and so could not tell a requirement cell from a response cell; all of them had counted as placed, so the first-run score is restated without them: 首跑 72/78 = 0.923（6 个 missing）.",
   "cases": [
     {
       "id": "bid-parse-h1",
@@ -367,10 +367,6 @@
           "field": "工期|响应|投标函|施组|技术标|进度|草稿|我方|证据|现状|实质性"
         },
         {
-          "value": "30",
-          "field": "保证金|投标担保|保函|招标要求|招标文件要求"
-        },
-        {
           "value": "24",
           "field": "质保期|缺陷责任期|保修期|质保|招标要求|招标文件要求|实质性"
         },
@@ -400,10 +396,6 @@
       "style": "messy",
       "request": "三个标段我们投二标和三标。二标保证金要80万我们保函开的是80万没问题，工期他们要420天我们排了450天得改；三标保证金50万还没办，工期要求360天施组是按355天排的。二标项目经理定的是马建军，三标打算报韩雪但她的B证过期了。二标缺口罗琳负责，三标让冯涛盯。",
       "facts": [
-        {
-          "value": "80",
-          "field": "保证金|投标担保|保函|招标要求|招标文件要求"
-        },
         {
           "value": "420",
           "field": "工期|招标要求|招标文件要求|实质性"
