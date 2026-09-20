@@ -104,7 +104,7 @@ def _fields(text: str) -> dict[str, str]:
     for line in text.splitlines():
         if not line.lstrip().startswith("|"):
             continue
-        cells = [part.strip() for part in line.strip().strip("|").split("|")]
+        cells = [part.strip() for part in line.strip().removeprefix("|").removesuffix("|").split("|")]
         if len(cells) >= 2 and cells[0] in _ALIASES:
             add(cells[0], cells[1])
     return result
@@ -348,7 +348,7 @@ def _labor_records(text: str) -> list[str]:
     row_break = "\x1e"
     for line in text.splitlines():
         if line.lstrip().startswith("|"):
-            cells = [part.strip() for part in line.strip().strip("|").split("|")]
+            cells = [part.strip() for part in line.strip().removeprefix("|").removesuffix("|").split("|")]
             if cells and all(re.fullmatch(r":?-{3,}:?", cell) for cell in cells):
                 continue
             if len(cells) >= 2 and sum(cell in _ALIASES for cell in cells) >= 2:

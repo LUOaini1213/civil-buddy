@@ -141,7 +141,7 @@ def parse_field_table(post: str, cfg: dict) -> list[str]:
         if in_tbl:
             s = line.strip()
             if s.startswith("|") and s.endswith("|") and "---" not in s:
-                name = s.strip("|").split("|")[0].strip()
+                name = s.removeprefix("|").removesuffix("|").split("|")[0].strip()
                 if name and name != "栏":
                     bars.append(name)
             elif not s:

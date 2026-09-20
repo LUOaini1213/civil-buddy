@@ -64,12 +64,16 @@ path dropped the quantity of any row whose unit weight exceeds the crate span ca
 above (21 boxes, 7 x 40HQ, `can_fit: true`, weight utilization 0.0781, `n0: 6`) was computed on
 10 300 kg of the 23 800 kg - 43 % of the mass - with no warning.
 
-With every unit carried (`scripts/test_pack_ship_conservation.py`), the same file and container
-type give:
+With every unit carried (`scripts/test_pack_ship_conservation.py`) and the nine rows recognised for
+what they are - finished frames and cages, 2.1-6.0 m long, 1.1 m wide, 0.8-4.5 t each, so one crate per frame
+rather than cargo to be re-crated (`scripts/test_pack_ship_crates_structure.py`) - the same file and
+container type give:
 
-- boxes: `48`, net weight in boxes `23 800 kg` (pieces 9 -> 9)
-- `can_fit: false` at the engine's 9-container search limit, `n0: 13`
-- utilization: `0.4779`, weight utilization: `0.0958`
+- boxes: `9`, net weight in boxes `23 800 kg` (pieces 9 -> 9), no virtual mass-split
+- containers used: `3`, `can_fit: true`, `n0: 2`
+- utilization: `0.1934`, weight utilization: `0.2815`, floor utilization average: `0.3706`
+- per-crate structure verdict: pass `9`, fail `0` (crate passthrough takes the factory frame as built)
 
-The crate count is conservative rather than physical: each unit heavier than the span cap is cut
-into virtual parts, one crate per part, and the plan report now says so for each such row.
+For the record, between those two fixes (quantity restored, frames still sent through the standard
+crate library) the engine answered 48 boxes, `can_fit: false` at its 9-container search limit,
+`n0: 13`, every crate failing its own structure check.

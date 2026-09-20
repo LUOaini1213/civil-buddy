@@ -268,6 +268,12 @@ user_input
 > `-U2W1` 后缀，`source_material_id` 不变）；`split_of` > 1 表示这一条是某一件按质量切出的
 > 1/`split_of`（单件重超过箱型净重上限时的计算拆分）；`weight_kg` 是这一条的净重。三者供
 > `cargo_conservation.check_conservation` 逐行对账：Σ `quantity`/`split_of` 必须等于该行数量。
+>
+> 同一次核对还比几何：`content[].outer_size_mm` 的三边从大到小逐一不得超过箱 `outer_size_mm` 的三边
+> （容差 1 mm）。最长边超出记 `content_exceeds_box`，另外两边超出记 `content_section_exceeds_box`，
+> 两种都让 `ship_ok=False`。标准箱外宽一律 1100 mm；单件比任何标准箱的外廓还大时，成箱器把这一箱
+> 的外廓改为按货定制，`special_attributes` 带 `截面超标准箱` + `定制外廓`（不再带 `标准箱库`），
+> `team_a_summary.custom_section_boxes` 是这种箱的个数——它们不是标准箱库里的箱，需另行做箱。
 
 > **一→二阶段交接物**：`boxes`
 

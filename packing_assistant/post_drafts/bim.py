@@ -156,7 +156,7 @@ def _parse(text: str, post: str) -> _Input:
         if line.lstrip().startswith("|"):
             block = []
             while index < len(lines) and lines[index].lstrip().startswith("|"):
-                block.append([value.strip() for value in lines[index].strip().strip("|").split("|")])
+                block.append([value.strip() for value in lines[index].strip().removeprefix("|").removesuffix("|").split("|")])
                 index += 1
             headers = [_ALIASES.get(value.casefold()) for value in block[0]]
             is_table = len(block) > 1 and all(re.fullmatch(r":?-{3,}:?", value) for value in block[1])
