@@ -158,8 +158,11 @@ class UploadTests(unittest.TestCase):
         empty_buffer = BytesIO()
         empty.save(empty_buffer)
         empty.close()
-        with self.assertRaisesRegex(uploads.UploadError, "抽不出可用文字"):
+        # The message names the kind: an empty workbook is not a scan, so it must not be told to OCR.
+        with self.assertRaises(uploads.UploadError) as refused:
             uploads.extract_upload("empty.xlsx", empty_buffer.getvalue())
+        self.assertIn("xlsx 文件里几乎没有文字内容", str(refused.exception))
+        self.assertNotIn("OCR", str(refused.exception))
         for filename in ("bad.docx", "bad.xlsx"):
             with self.subTest(filename=filename), self.assertRaises(uploads.UploadError):
                 uploads.extract_upload(filename, b"corrupted fixture")

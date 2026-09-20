@@ -252,7 +252,7 @@ test("a rejected cancel can be retried without discarding the active response", 
   await pending;
 });
 
-test("leaving an active task cancels its original session without targeting the new one", async () => {
+test("leaving an active task detaches it: nothing is cancelled and the task is remembered as running", async () => {
   const requested = [];
   const h = ui(async (url) => {
     if (url.endsWith("/cancel")) {
@@ -267,7 +267,32 @@ test("leaving an active task cancels its original session without targeting the 
   h.evaluate("cbNewLocalSession()");
   await pending;
   assert.notEqual(h.evaluate("state.session"), old);
-  assert.deepEqual(requested, [`/api/sessions/${old}/cancel`]);
+  assert.deepEqual(requested, [], "switching tasks is not the stop button");
+  assert.equal(h.evaluate(`cbBackgroundSessions.has(${JSON.stringify(old)})`), true);
+  assert.equal(h.evaluate(`cbBackgroundSessions.has(state.session)`), false);
+  assert.equal(h.evaluate("cbActiveRun"), null);
+  assert.match(h.announcements.at(-1), /后台/);
+});
+
+test("the stop button still cancels the session it was pressed in, and only that one", async () => {
+  const requested = [];
+  let stream;
+  const h = ui(async (url) => {
+    if (url.endsWith("/cancel")) {
+      requested.push(url);
+      return { ok:true, json:async () => ({cancel_requested:true}) };
+    }
+    return { ok:true, body:new ReadableStream({ start(controller) { stream = controller; } }) };
+  });
+  h.evaluate('cbApplyHealth({capabilities:{chat:true,cancel:true}})');
+  const session = h.evaluate("state.session");
+  const pending = h.submit("要停的任务");
+  await h.elements.stop.listeners.click();
+  assert.deepEqual(requested, [`/api/sessions/${session}/cancel`]);
+  assert.equal(h.evaluate(`cbBackgroundSessions.has(${JSON.stringify(session)})`), false);
+  stream.enqueue(encoder.encode(frame("done", {text:"已停止",cancelled:true,ok:false})));
+  stream.close();
+  await pending;
 });
 
 test("oversize backup import and busy-task export do not send requests", async () => {

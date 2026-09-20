@@ -2019,6 +2019,16 @@ def api_pipeline_stream(body: PipelineRequest):
         still iterating, so the pipeline owns its own thread and the HTTP
         generator only relays events while someone is listening.
         """
+        def offer(item: Optional[str]) -> None:
+            # Never a bare q.put: with the queue full and the consumer gone it would block for
+            # good, and the pipeline would never reach the point where it persists its state.
+            while not detached.is_set():
+                try:
+                    q.put(item, timeout=0.25)
+                    return
+                except queue_mod.Full:
+                    continue
+
         final_state = None
         try:
             for ev in iter_agent_pipeline(
@@ -2048,16 +2058,14 @@ def api_pipeline_stream(body: PipelineRequest):
                         disk = _get_session(rid) or _get_session(body.session_id)
                         if disk is not None:
                             _store_session(body.session_id, disk)
-                if not detached.is_set():
-                    q.put(f"data: {json.dumps(out, ensure_ascii=False, default=str)}\n\n")
-            if final_state is None and not detached.is_set():
-                q.put(f"data: {json.dumps({'type': 'error', 'message': 'empty pipeline'}, ensure_ascii=False)}\n\n")
+                offer(f"data: {json.dumps(out, ensure_ascii=False, default=str)}\n\n")
+            if final_state is None:
+                offer(f"data: {json.dumps({'type': 'error', 'message': 'empty pipeline'}, ensure_ascii=False)}\n\n")
         except Exception as exc:  # noqa: BLE001 — surface to the client, never invent numbers
             logger.exception("pipeline stream failed for session %s", body.session_id)
-            if not detached.is_set():
-                q.put(f"data: {json.dumps({'type': 'error', 'message': str(exc)[:200]}, ensure_ascii=False)}\n\n")
+            offer(f"data: {json.dumps({'type': 'error', 'message': str(exc)[:200]}, ensure_ascii=False)}\n\n")
         finally:
-            q.put(None)
+            offer(None)
 
     def gen():
         import threading
