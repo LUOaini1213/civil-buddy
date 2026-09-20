@@ -151,6 +151,10 @@ def prepare_turn(root: Path, body: dict) -> dict:
         context = max((r["context"] for r in requests.values()), key=lambda r: r["used"])
     else:
         material = session_context.draft_material(sid, attachment_ids, message, prepared)
+        omitted = prepared.get("material_omitted")
+        if omitted:
+            context["note"] += (" 本轮资料超出预算，未加入：" + "、".join(omitted[:6])
+                                + (f" 等 {len(omitted)} 项" if len(omitted) > 6 else "") + "。")
     context = {**context, "history_count": prepared["history_count"],
                "indexed_history": prepared["indexed_history"], "attachments_indexed": prepared["attachments_indexed"],
                "retrieved": len(prepared["sources"]), "memory_saved": True}

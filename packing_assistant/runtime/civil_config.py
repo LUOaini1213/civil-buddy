@@ -7,6 +7,7 @@ generic spawn stay denied in packing_assistant.sandbox.
 from __future__ import annotations
 
 import os
+import re
 from dataclasses import asdict, dataclass
 from pathlib import Path
 from typing import Any, Dict, Optional
@@ -68,14 +69,20 @@ def _strip_mode(value: str, allowed: tuple[str, ...], default: str) -> str:
     return v if v in allowed else default
 
 
+# 值整个包在一对引号里时，引号内的 # 属于值（job_root = "C:/工地#2026"）。不认转义：Windows 反斜杠路径照原样读。
+_QUOTED = re.compile(r"""\s*(?:"([^"]*)"|'([^']*)')\s*(?:#.*)?""")
+
+
 def _parse_toml_lite(text: str) -> Dict[str, str]:
     out: Dict[str, str] = {}
     section = ""
     for raw in (text or "").splitlines():
-        line = raw.split("#", 1)[0].strip()
+        head, _, tail = raw.partition("=")
+        quoted = _QUOTED.fullmatch(tail) if "#" not in head else None
+        line = (raw if quoted else raw.split("#", 1)[0]).strip()
         if not line:
             continue
-        if line.startswith("[") and line.endswith("]"):
+        if not quoted and line.startswith("[") and line.endswith("]"):
             section = line[1:-1].strip()
             continue
         if "=" not in line:
@@ -84,8 +91,7 @@ def _parse_toml_lite(text: str) -> Dict[str, str]:
         key = k.strip()
         if section and section not in {"civil", "workspace", ""}:
             key = f"{section}.{key}"
-        val = v.strip().strip('"').strip("'")
-        out[key] = val
+        out[key] = (quoted.group(1) or quoted.group(2) or "") if quoted else v.strip().strip('"').strip("'")
     return out
 
 
@@ -133,7 +139,7 @@ def load_config() -> CivilConfig:
         if not path.is_file():
             continue
         try:
-            _apply_map(cfg, _parse_toml_lite(path.read_text(encoding="utf-8")))
+            _apply_map(cfg, _parse_toml_lite(path.read_text(encoding="utf-8-sig")))
         except OSError:
             continue
     env_s = os.environ.get("CIVIL_SANDBOX") or ""

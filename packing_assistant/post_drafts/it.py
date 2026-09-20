@@ -156,7 +156,7 @@ class _Facts:
             else:
                 for row in rows[1:]:
                     key = _ALIASES.get(row[0].casefold()) if row else None
-                    if key and len(row) == 2:
+                    if key and len(row) >= 2 and row[1] and not any(row[2:]):
                         self.entries.append((key, _value(_redact(row[1]))))
 
     def get(self, key: str, default: str = _MISSING) -> str:

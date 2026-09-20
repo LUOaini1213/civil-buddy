@@ -191,7 +191,7 @@ class _Facts:
                                 add([(key, _clean(value)) for key, value in zip(headers, cells) if key], row=True)
                     else:
                         for cells in rows[1:]:
-                            if len(cells) == 2 and cells[0].casefold() in self.aliases:
+                            if len(cells) >= 2 and cells[1] and not any(cells[2:]) and cells[0].casefold() in self.aliases:
                                 add([(self.aliases[cells[0].casefold()], _clean(cells[1]))])
                 index = end
                 continue
