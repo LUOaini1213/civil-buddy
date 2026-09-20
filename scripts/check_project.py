@@ -37,6 +37,7 @@ CHECKS = (
     Check("tender-workflow", ("scripts/test_tender_workflow.py",)),
     Check("tender-response-match", ("scripts/test_tender_response_match.py",)),
     Check("tender-response-bench", ("scripts/eval_tender_response_match.py", "--check")),
+    Check("tender-facts", ("scripts/test_tender_facts.py",)),
     Check("acceptance-cases", ("scripts/test_acceptance_cases.py",), timeout=600),
     Check("post-facts", ("scripts/test_post_facts.py",)),
     Check("post-content", ("scripts/test_post_content.py",), timeout=1800),

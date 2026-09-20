@@ -439,6 +439,158 @@
         ]
       ],
       "conflicts": []
+    },
+    {
+      "id": "cn-civil-personnel-validity",
+      "tender": [
+        "项目经理须具备一级注册建造师资格（市政公用工程专业）及有效的安全生产考核合格证（B证）。",
+        "投标有效期90天。",
+        "工期365日历天。"
+      ],
+      "response": [
+        "拟派项目经理周建国，二级注册建造师，B证在有效期内。",
+        "投标有效期60天。",
+        "承诺工期380日历天。",
+        "我司近三年无拖欠农民工工资记录。"
+      ],
+      "links": [
+        [
+          0,
+          0
+        ],
+        [
+          1,
+          1
+        ],
+        [
+          2,
+          2
+        ]
+      ],
+      "conflicts": [
+        [
+          1,
+          1
+        ],
+        [
+          2,
+          2
+        ]
+      ]
+    },
+    {
+      "id": "cn-civil-pricecap-quality",
+      "tender": [
+        "最高投标限价3865.42万元。",
+        "质量标准：合格。",
+        "缺陷责任期24个月。"
+      ],
+      "response": [
+        "投标总报价3912.6万元。",
+        "质量目标：合格，争创市级优质结构。",
+        "缺陷责任期12个月。",
+        "我司拥有塔吊8台。"
+      ],
+      "links": [
+        [
+          0,
+          0
+        ],
+        [
+          1,
+          1
+        ],
+        [
+          2,
+          2
+        ]
+      ],
+      "conflicts": [
+        [
+          0,
+          0
+        ],
+        [
+          2,
+          2
+        ]
+      ]
+    },
+    {
+      "id": "cn-civil-payment",
+      "tender": [
+        "预付款为签约合同价的10%。",
+        "进度款按月计量，支付比例80%。"
+      ],
+      "response": [
+        "我司接受预付款10%的支付条件。",
+        "进度款支付比例按招标文件约定执行。",
+        "我司财务状况良好，无不良信用记录。",
+        "农民工工资专户已开设。"
+      ],
+      "links": [
+        [
+          0,
+          0
+        ],
+        [
+          1,
+          1
+        ]
+      ],
+      "conflicts": []
+    },
+    {
+      "id": "en-sg-registration",
+      "tender": [
+        "Tenderer must be registered with BCA under workhead CW01 with a minimum financial grade of A2.",
+        "The tender validity period shall be 120 days."
+      ],
+      "response": [
+        "We are registered with BCA under CW01, grade A1.",
+        "Our tender remains valid for 90 days.",
+        "We are a bizSAFE Star company."
+      ],
+      "links": [
+        [
+          0,
+          0
+        ],
+        [
+          1,
+          1
+        ]
+      ],
+      "conflicts": [
+        [
+          1,
+          1
+        ]
+      ]
+    },
+    {
+      "id": "cn-civil-hard-negatives",
+      "tender": [
+        "项目经理须具备一级注册建造师资格。",
+        "投标有效期90天。"
+      ],
+      "response": [
+        "项目经理部设在现场，实行项目经理负责制。",
+        "保函有效期至2026-12-15。",
+        "拟派项目经理李明，一级注册建造师（市政），注册编号见附件。",
+        "投标有效期为90天。"
+      ],
+      "links": [
+        [
+          0,
+          2
+        ],
+        [
+          1,
+          3
+        ]
+      ],
+      "conflicts": []
     }
   ]
 }

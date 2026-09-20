@@ -97,6 +97,67 @@ _RULES: List[tuple] = [
         "proposal",
         "medium",
     ),
+    # ---- 土建施工招标的条款。此前这些句子不带 ★ 就抽不出要求，也就永远没法和响应对照：
+    # 「项目经理须具备一级注册建造师资格」「投标有效期90天」（test/benchmarks/tender_response/README.md）。
+    # 触发词同时是响应对照的候选词，所以只收「条款里才这么写」的说法：裸的「项目经理」
+    # 会把「项目经理部设在现场」连上资格要求，裸的「有效期」会把「保函有效期」连上投标有效期。
+    (
+        "bid_validity",
+        "validity",
+        [r"投标有效期", r"报价有效期", r"tender validity", r"bid validity", r"validity period"],
+        "投标有效期",
+        "commercial",
+        "critical",
+    ),
+    (
+        "personnel",
+        "qualification",
+        [r"建造师", r"注册证", r"安全生产考核", r"[ABC]\s*证", r"职称", r"项目经理须", r"项目经理应",
+         r"项目负责人须", r"项目负责人应", r"技术负责人须", r"技术负责人应"],
+        "人员资格",
+        "commercial",
+        "critical",
+    ),
+    (
+        "registration",
+        "qualification",
+        [r"\bBCA\b", r"workhead", r"registered with", r"financial grade"],
+        "注册/工作类别 (BCA workhead)",
+        "commercial",
+        "critical",
+    ),
+    (
+        "price_cap",
+        "price",
+        [r"最高投标限价", r"最高限价", r"招标控制价", r"拦标价", r"控制价"],
+        "最高限价",
+        "commercial",
+        "critical",
+    ),
+    (
+        "quality_standard",
+        "quality",
+        [r"质量标准", r"质量要求", r"质量目标", r"质量等级"],
+        "质量标准",
+        "pm",
+        "medium",
+    ),
+    (
+        "warranty",
+        "warranty",
+        [r"质保期", r"保修期", r"缺陷责任期", r"质量保证期", r"defects liability", r"warranty"],
+        "质保期/缺陷责任期",
+        "commercial",
+        "medium",
+    ),
+    (
+        "payment",
+        "payment",
+        [r"预付款", r"进度款", r"结算款", r"付款方式", r"支付比例", r"质保金", r"advance payment", r"payment terms?"],
+        "付款条件",
+        "commercial",
+        "medium",
+    ),
 ]
 
 
@@ -183,6 +244,28 @@ def _duration_days_from_lines(lines: List[str]) -> Optional[int]:
     return None
 
 
+def _tender_duration(facts: Any, lines: List[str]) -> Optional[int]:
+    """The tender's own duration in calendar days, or None - never the bidder's, never a blend.
+
+    A value a 补遗 gave wins over the one it replaced. Lots with different durations have no single
+    answer, so the answer is None and each lot keeps its own in ``facts``. Only a count written as
+    日历天 / calendar days / 工作日 is copied, as before: "工期300天" stays "300天" in the table.
+    """
+    found = [m for m in facts.mentions if m.topic in ("duration", "delivery") and m.side == "tender" and m.value]
+    found = [m for m in found if m.origin] or found
+    days: List[tuple] = []
+    for m in found:
+        hit = _DAYS_RE.search(m.value)
+        if hit and 1 <= int(hit.group(1)) <= 3650:
+            days.append((m.lot, int(hit.group(1))))
+    common = [n for lot, n in days if not lot]
+    if common:
+        return common[0]
+    if days:
+        return days[0][1] if len({n for _lot, n in days}) == 1 else None
+    return _duration_days_from_lines(lines)
+
+
 def _line_item(
     *,
     rid: str,
@@ -223,6 +306,17 @@ def _extract_line_items(lines: List[str]) -> List[Dict[str, Any]]:
             continue
         for p in pieces:
             units.append((i, p))
+    # An id names one clause, not one line. "施工组织设计评分35分。进度计划评分12.5分。" on a single
+    # line used to give both points the id score_L1; parse_tender_text drops a repeated id, so the
+    # second point vanished - and with it its chapter in the technical outline. The first clause of
+    # a kind on a line keeps the old id (score_L1), later ones get score_L1_2, score_L1_3.
+    issued: Dict[str, int] = {}
+
+    def _rid(prefix: str, idx: int) -> str:
+        base = f"{prefix}_{_line_ref(idx)}"
+        issued[base] = issued.get(base, 0) + 1
+        return base if issued[base] == 1 else f"{base}_{issued[base]}"
+
     for i, ln in units:
         kinds: List[str] = []
         if _is_star_line(ln):
@@ -248,7 +342,7 @@ def _extract_line_items(lines: List[str]) -> List[Dict[str, Any]]:
             if kind == "star":
                 items.append(
                     _line_item(
-                        rid=f"star_{_line_ref(i)}",
+                        rid=_rid("star", i),
                         kind="star",
                         cat="reject",
                         title="★/必须满足项",
@@ -263,7 +357,7 @@ def _extract_line_items(lines: List[str]) -> List[Dict[str, Any]]:
             elif kind == "scoring_point":
                 items.append(
                     _line_item(
-                        rid=f"score_{_line_ref(i)}",
+                        rid=_rid("score", i),
                         kind="scoring_point",
                         cat="scoring",
                         title="评分点",
@@ -278,7 +372,7 @@ def _extract_line_items(lines: List[str]) -> List[Dict[str, Any]]:
             elif kind == "bond":
                 items.append(
                     _line_item(
-                        rid=f"bond_{_line_ref(i)}",
+                        rid=_rid("bond", i),
                         kind="bond",
                         cat="qualification",
                         title="保证金/保函",
@@ -293,7 +387,7 @@ def _extract_line_items(lines: List[str]) -> List[Dict[str, Any]]:
             elif kind == "ebid":
                 items.append(
                     _line_item(
-                        rid=f"ebid_{_line_ref(i)}",
+                        rid=_rid("ebid", i),
                         kind="ebid",
                         cat="reject",
                         title="电子标/加密/CA锁",
@@ -308,7 +402,7 @@ def _extract_line_items(lines: List[str]) -> List[Dict[str, Any]]:
             else:
                 items.append(
                     _line_item(
-                        rid=f"special_{_line_ref(i)}",
+                        rid=_rid("special", i),
                         kind="special",
                         cat="scoring",
                         title="必须专项/危大",
@@ -413,7 +507,7 @@ def build_handoff(
     p0_src = [
         r
         for r in requirements
-        if r.get("item_kind") == "star" or r.get("category") in ("reject", "qualification")
+        if r.get("item_kind") == "star" or r.get("category") in ("reject", "qualification", "validity", "price")
     ]
     p0_items = []
     if envelope == "blind_tech":
@@ -620,10 +714,19 @@ def workbench_bid_extract(text: str, *, project_name: str = "未命名招标") -
     }
 
 
-def parse_tender_text(text: str, *, source: str = "text") -> Dict[str, Any]:
-    """从纯文本招标节选抽取 requirements 列表（含 ref/owner/risk）。"""
+def parse_tender_text(text: str, *, source: str = "text", sides: str = "auto") -> Dict[str, Any]:
+    """从纯文本招标节选抽取 requirements 列表（含 ref/owner/risk）。
+
+    ``sides``：调用方已经知道整段都是招标方原文（上传时标了角色的文件）就传 "none"。默认 "auto"
+    把文本当成人说的话来读——「招标要求工期60日历天，我们投标函写了999日历天」里，999 那半句
+    是我方的，不进 requirements，也不会被当成工期。分句规则见 tools/tender_facts.py。
+    """
+    from packing_assistant.tools.tender_facts import extract as extract_facts, tender_pieces
+
     raw = (text or "").strip()
-    lines = [ln.strip() for ln in raw.splitlines() if ln.strip()]
+    facts = extract_facts(raw, sides=sides)
+    pieces = tender_pieces(raw, sides=sides)  # 与原文非空行一一对应，行号引用不变
+    lines = ["；".join(parts) for parts in pieces]
     blob = "\n".join(lines)
     requirements: List[Dict[str, Any]] = []
     seen = set()
@@ -631,9 +734,9 @@ def parse_tender_text(text: str, *, source: str = "text") -> Dict[str, Any]:
     for rid, cat, patterns, title, owner, risk in _RULES:
         hits: List[str] = []
         refs: List[str] = []
-        for i, ln in enumerate(lines):
-            for pat in patterns:
-                if re.search(pat, ln, flags=re.I):
+        for i, parts in enumerate(pieces):
+            for ln in parts:  # 一行被拆过就逐片引用，exact_text 仍是原文的字面片段
+                if any(re.search(pat, ln, flags=re.I) for pat in patterns):
                     hits.append(ln)
                     refs.append(_line_ref(i))
                     break
@@ -648,9 +751,13 @@ def parse_tender_text(text: str, *, source: str = "text") -> Dict[str, Any]:
             "transport",
             "packaging",
             "schedule",
+            "validity",
+            "price",
+            "quality",
+            "warranty",
         )
         # Inventive/AutoRFP: requirement type = mandatory | evaluated | administrative | informational
-        if cat in ("reject", "qualification"):
+        if cat in ("reject", "qualification", "validity", "price", "quality", "warranty"):
             req_type = "mandatory"
         elif cat in ("transport", "packaging", "schedule", "compliance"):
             req_type = "mandatory" if must else "evaluated"
@@ -687,7 +794,7 @@ def parse_tender_text(text: str, *, source: str = "text") -> Dict[str, Any]:
         requirements.append(item)
         theme_ids.add(item["id"])
 
-    duration_days = _duration_days_from_lines(lines)
+    duration_days = _tender_duration(facts, lines)
     envelope = _detect_envelope(blob)
     eval_method = _detect_eval_method(blob)
     deadlines = _extract_deadlines(blob)
@@ -708,6 +815,7 @@ def parse_tender_text(text: str, *, source: str = "text") -> Dict[str, Any]:
         "requirements": requirements,
         "duration_days": duration_days,
         "handoff": handoff,
+        "facts": facts.to_dict(),
         "summary": {
             "n_requirements": len(requirements),
             "n_line_items": sum(1 for r in requirements if r.get("item_kind") != "theme"),
@@ -807,6 +915,21 @@ def build_response_matrix(
         elif cat == "compliance":
             status = "human_required"
             evidence = {"type": "manual", "note": "VGM/保险/单证须商务确认"}
+        elif cat == "validity":
+            status = "review"
+            evidence = {"type": "manual", "note": "投标有效期须与投标函、保函有效期逐一核对"}
+        elif cat == "price":
+            status = "review"
+            evidence = {"type": "manual", "note": "报价须人工对照最高限价；系统不读报价、不判定是否超限"}
+        elif cat == "quality":
+            status = "human_required"
+            evidence = {"type": "manual", "note": "质量承诺须项目经理确认"}
+        elif cat == "warranty":
+            status = "human_required"
+            evidence = {"type": "manual", "note": "质保期/缺陷责任期承诺须商务确认"}
+        elif cat == "payment":
+            status = "human_required"
+            evidence = {"type": "manual", "note": "付款条件是否接受由商务确认"}
         rows.append(
             {
                 "req_id": rid,
@@ -902,6 +1025,11 @@ def _proposal_location(
         "schedule": "技术标 · 工期与交付计划",
         "compliance": "商务标 · 单证与合规附件",
         "scoring": "标书编制说明 / 评分对照表",
+        "validity": "投标函 · 投标有效期",
+        "price": "商务标 · 投标报价（对照最高限价）",
+        "quality": "投标函 · 质量承诺",
+        "warranty": "投标函 / 合同条款响应 · 质保期",
+        "payment": "商务标 · 合同条款响应（付款）",
     }
     if req_id == "cog_lashing":
         return "技术标 · 装柜重心与系固说明（CTU）"
@@ -1063,6 +1191,10 @@ def _action_hint(status: str, category: Optional[str], risk: Optional[str]) -> s
             return "商务准备 VGM/保险/单证"
         if category == "scoring":
             return "标书编制对照评分点"
+        if category in ("quality", "warranty"):
+            return "项目经理/商务确认承诺值并写入投标函"
+        if category == "payment":
+            return "商务确认是否接受付款条件，不接受则写偏离"
         return "人工补充证据后改状态"
     return "待处理"
 

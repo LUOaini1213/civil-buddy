@@ -240,6 +240,10 @@ def run_tender_workflow(text, *, session_id, output_root, sources=None, confirme
         if type(source.get("start", 0)) is not int or source.get("start", 0) < 0:
             raise ValueError("来源位置无效")
     tender_text, supplied = _source_roles(text, supplied)
+    # Sources that came with a role are documents: every word of the tender text is the tender's, and
+    # a document says "已经取得许可证的须提供复印件" without anybody of our side speaking. Only a request
+    # typed into one box is read clause by clause for whose words they are (tools/tender_facts.py).
+    declared = any(s.get("role") in {"tender", "response"} for s in supplied)
     lock, ledger = RLock(), SharedBudget(limits)
     started = time.monotonic()
     stop = _Stop(cancel_event, started + limits.timeout_s)
@@ -297,7 +301,7 @@ def run_tender_workflow(text, *, session_id, output_root, sources=None, confirme
         ledger.reserve("parse", tokens({"task": "本地解析当前选定招标资料", "sources": source_pointers}))
         state["state"] = "parsing"
         publish({"kind": "workflow", "state": "parsing"})
-        parsed = parse_tender_text(tender_text, source="workflow:" + rid)
+        parsed = parse_tender_text(tender_text, source="workflow:" + rid, sides="none" if declared else "auto")
         stop.check()
         requirements = parsed.get("requirements", [])
         if not requirements:

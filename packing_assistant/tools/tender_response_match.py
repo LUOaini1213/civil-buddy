@@ -6,17 +6,23 @@
 
 设计取舍全部由基准决定：test/benchmarks/tender_response/cases.json，
 `python scripts/eval_tender_response_match.py --variant all` 复现下表
-（14 例，39 个应匹配对，9 个数值冲突；含两组标书套话干扰项）。
+（19 例，51 个应匹配对，14 个数值冲突；含三组干扰项）。
 
     variant                 link P  link R  link F1  confl R  rows/line
-    baseline_4gram           0.857   0.615    0.716    0.000      1.316   ← 改动前的算法
-    +dedupe                  0.857   0.615    0.716    0.000      1.000
-    +snippets                0.871   0.692    0.771    0.000      1.000
-    +words>=3                0.960   0.615    0.750    0.000      1.000
-    +triggers                0.971   0.846    0.904    0.000      1.000
-    +quantities              0.973   0.923    0.947    1.000      1.000
-    +bigram>=4               0.974   0.974    0.974    1.000      1.000
-    +phrase>=5 (shipped)     1.000   0.974    0.987    1.000      1.000
+    baseline_4gram           0.816   0.608    0.697    0.000      1.327   ← 改动前的算法
+    +dedupe                  0.816   0.608    0.697    0.000      1.000
+    +snippets                0.833   0.686    0.753    0.000      1.000
+    +words>=3                0.938   0.588    0.723    0.000      1.000
+    +triggers                0.957   0.863    0.907    0.000      1.000
+    +quantities              0.960   0.941    0.950    1.000      1.000
+    +bigram>=4               0.962   0.980    0.971    1.000      1.000
+    +phrase>=5 (shipped)     1.000   0.980    0.990    1.000      1.000
+
+2026-09-20 加了 5 个土建施工招标的用例（人员资格、投标有效期、最高限价对报价、质量标准、
+质保期、付款条件、BCA workhead，外加一组硬负例）。加进去的当时、解析规则还没动：
+link R 0.765、confl R 0.714，51 对里有 11 对落在「解析器根本没抽出这一行」上——匹配算法
+没有错，是没有东西可比。补的是 tender_parse._RULES 的七条主题和这里的 price / quality
+两个主题，匹配机制一个没改；上表是补完之后的数。
 
 唯一仍漏掉的一对是「须编制施工专项方案 ↔ 施工方案资料待补」：只共享「施工」「方案」
 两个常见词，能救它的规则都会带来更多误连。被基准否决、保留为消融开关的机制
@@ -129,13 +135,17 @@ def _trigger_patterns(line: str) -> List[str]:
 
 # (topic, 中文标签, 关键词, 单位类, 招标未写比较词时的默认方向)
 _TOPICS: Tuple[Tuple[str, str, str, str, str], ...] = (
-    ("validity", "投标有效期", r"投标有效期|报价有效期|bid validity|tender validity|validity period", "time", "min"),
+    ("validity", "投标有效期", r"投标有效期|报价有效期|bid validity|tender validity|validity period|tender remains? valid|remains? valid for", "time", "min"),
     ("warranty", "质保期", r"质保期|保修期|质量保证期|缺陷责任期|defects liability|warranty", "time", "min"),
     ("delivery", "交货期", r"交货期|交货时间|供货期|到货|交货|delivery|deliver", "time", "max"),
     ("duration", "工期", r"总工期|工期|竣工|完工|封顶|按期|如期|completion|completed|complete the works", "time", "max"),
     ("bond", "保证金", r"保证金|保函|bid bond|security deposit", "money", "equal"),
     ("payload", "货载/限重", r"货载|限重|最大重量|单件重|payload|weight limit", "mass", "max"),
     ("track_record", "业绩", r"业绩|类似项目|similar projects?|track record", "count", "min"),
+    # 招标写「最高限价」，响应写「投标报价」：关键词不同，只有主题能把两句连上。报价超过限价才算数值不符。
+    ("price", "报价/最高限价", r"最高投标限价|最高限价|招标控制价|控制价|拦标价|投标总报价|投标报价|投标总价|总报价", "money", "max"),
+    # 质量标准没有可比的数；列为主题只为了让「质量标准：合格」能带到「质量目标：合格」那一句。
+    ("quality", "质量标准", r"质量标准|质量目标|质量要求|质量等级|质量承诺", "grade", "equal"),
 )
 _TOPIC_RE = {tid: re.compile(pattern, re.I) for tid, _label, pattern, _cls, _default in _TOPICS}
 _TOPIC_META = {tid: (label, cls, default) for tid, label, _pattern, cls, default in _TOPICS}

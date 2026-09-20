@@ -1,0 +1,712 @@
+"""What someone typed about a tender, taken apart: which lot, whose number, which field.
+
+The three bid posts used to read a request with the document parser only. That parser looks for
+whole lines ("★…", "…评分 25 分") and takes the first "N 日历天" in the text as *the* duration. A person
+at a desk does not type lines, they type
+
+    招标文件要求工期365日历天，我们投标函草稿工期写成了380日历天，保函还没开
+
+and the draft came back with 380 days lost, or - when the response was mentioned first - with the
+bidder's own number printed as the tender's requirement.
+
+Three decisions, each from a failure that was reproduced:
+
+* **Whose number it is, is decided by where it stands.** A value is the tender's unless a cue for our
+  own side (我们 / 拟派 / 已转 / 照着写 …) stands before it in the same clause. So
+  "工期要求300天投标函照着写的" is a requirement of 300 天 *and* a statement about our 投标函, and
+  "我们先写了999天，招标要求60天" never turns 999 into a requirement. The cues are words a tender
+  document does not use about itself: "财务报表" and "投标函须盖章" stay requirements.
+* **Which lot it belongs to, is carried.** "一标段 … ；二标段 …" - a lot holds until another lot is
+  named or the text says it speaks for all of them (两个标段 / 各标段).
+* **Nothing is computed, converted or inferred.** Every value is a literal stretch of the text, as in
+  packing_assistant.post_facts. A clause that carries a number or a name and fits no field is
+  returned in ``unplaced`` so a writer can list it; it is never dropped.
+
+Pure functions: no model, no disk, no verdicts.
+"""
+from __future__ import annotations
+
+import re
+from dataclasses import dataclass, field
+from typing import Dict, List, Optional, Tuple
+
+from packing_assistant import post_facts
+
+# ---------------------------------------------------------------------------
+# values
+# ---------------------------------------------------------------------------
+
+_NUM = r"\d+(?:,\d{3})*(?:\.\d+)?"
+_TIME = re.compile(r"(?<![\dA-Za-z#.])" + _NUM + r"\s*(?:个?日历天|日历日|个?工作日|calendar\s*days?|working\s*days?|days?|个月|天|日|周|月|年)", re.I)
+_MONEY = re.compile(r"(?<![\dA-Za-z#.])" + _NUM + r"\s*(?:万元|亿元|万|亿|元)(?!/)")
+_AREA = re.compile(r"(?<![\dA-Za-z#.])" + _NUM + r"\s*(?:万?平方米|万?平米|万?平方|万?平|㎡|m²|m2)(?![一-鿿])", re.I)
+_SCORE = re.compile(r"(?<![\dA-Za-z#.])" + _NUM + r"\s*分(?![钟公包部项期批别类析布配])")
+_DATE = re.compile(r"\d{4}\s*[-/.年]\s*\d{1,2}\s*[-/.月]\s*\d{1,2}\s*[日号]?|\d{1,2}\s*月\s*\d{1,2}\s*[日号]")
+_CLOCK = re.compile(r"(?:上午|下午|晚上|中午)?\s*(?:[01]?\d|2[0-3])\s*[:：]\s*[0-5]\d|(?:上午|下午|晚上|中午)\s*\d{1,2}\s*点(?:\s*半|\s*\d{1,2}\s*分)?|\d{1,2}\s*点(?:\s*半|\s*\d{1,2}\s*分)")
+_DOC_CODE = re.compile(r"(?<![A-Za-z0-9])[A-Za-z]{2,10}(?:[-_/][A-Za-z0-9]{1,8}){1,4}(?![A-Za-z0-9])")
+_GRADE = re.compile(r"(?:特|[一二三四五]|[甲乙丙])级")
+_EVAL_METHOD = re.compile(r"综合评估法|综合评分法|经评审的最低投标价法|最低评标价法|合理低价法?|最低价法|性价比法|Price Quality Method|PQM|QFM|Quality Fee Method", re.I)
+_STRUCTURE = re.compile(r"(?:框架[-—－]?剪力墙|框剪|剪力墙|框架|框筒|筒中筒|框支|砖混|钢筋混凝土|型钢混凝土|钢|装配式[一-鿿]{0,6}?|木)结构")
+_FLOORS = re.compile(r"地[上下][一二三四五六七八九十百两\d]{1,4}层")
+
+#: An addendum changes what it names and nothing else, so a value keeps where it came from.
+_ADDENDUM = re.compile(r"补遗(?:文件|通知)?\s*(?:第?\s*[一二三四五六七八九十\d]+\s*号?)?|澄清(?:文件|通知|公告)|答疑纪要|修改通知|补充(?:文件|通知|公告)|变更公告")
+_SENTENCE = re.compile(r"[\n。；;！!？?]")
+_CLAUSE = re.compile(r"[，]|,(?!\d{3}(?!\d))")
+_EDGE = " \t，,;；。、:：-—（）()"
+_CONNECT = re.compile(r"^(?:[\s：:＝=]|为|是|约|共计|共|计|达|有|了|的|要求|要|须|应|具备|具有|持有|不少于|不超过|不低于|不高于|至少|最高|最多|大概|大约|到|至|人民币)*")
+SHORT = 36  # a text value longer than this is a sentence, not a field
+
+# ---------------------------------------------------------------------------
+# lots
+# ---------------------------------------------------------------------------
+
+_CN_NUM = "一二三四五六七八九十"
+_LOT = re.compile(r"(?<![A-Za-z0-9个统唯])(?:第)?([" + _CN_NUM + r"]{1,2}|\d{1,2}|[A-Z])\s*标段?(?![书的准高志识题价杆注])")
+_ALL_LOTS = re.compile(r"(?:两个?|[二三四五六几]个|\d个|各个?|每个?|所有|全部)标段?|标段(?:都|均)")
+
+# ---------------------------------------------------------------------------
+# whose side
+# ---------------------------------------------------------------------------
+
+#: After one of these a value is ours, not the tender's. The first group is how a person speaks of
+#: their own side and nothing else. The second group is how they report progress ("已开", "还没盖",
+#: "定了") - a tender document uses those words too ("已经取得许可证的，须提供复印件"), so they only
+#: count in text that is somebody talking, never in a pasted excerpt (see _is_document).
+_OURS_STRONG = (
+    r"我们|我方|我司|我公司|本公司|咱们|自述|草稿"
+    r"|投标函(?:里|上|中)?(?:写|填|报)|施组(?:里|中|上)?|技术标里|商务标里|照着写|照抄"
+)
+_OURS_WEAK = (
+    r"(?<![须应需得])承诺|拟派|拟任|拟投入|报的|排的|写成|写的|填的|报了|(?<![确决指规约])定了"
+    r"|财务(?=[^，,。；;]{0,4}(?:转|付|交|缴|说))|实缴|只转|转了|交了|缴了"
+    r"|已经|已开|已转|已交|已缴|已盖|已办|已附|已提交|已编|开好|盖好|办好|都在"
+    r"|尚未|还没|还差|没拿到|没定|没盖|没开|没交|没办|没编|未盖|未开|未交|未办|待补|后补|明天补|谁跟"
+    r"|^\s*(?:他|她|此人|该同志)"  # "我们拟派周建国，他是二级的": still about our man
+)
+_OURS = re.compile(_OURS_STRONG + "|" + _OURS_WEAK)
+_OURS_IN_DOCUMENT = re.compile(_OURS_STRONG)
+#: "还没公布 / 没提 / 没给" say the *tender side* gave nothing - not that we have not acted.
+_NOT_GIVEN = re.compile(r"(?:还没|尚未|没有|没|未)(?:公布|发布|提|给|写|明确|说|载明|约定|提供|出)|待定|未知|不详")
+#: A clause that obliges or threatens is the tender speaking, whatever else it holds:
+#: "拟派项目经理须具备一级建造师", "未盖章的按否决投标处理".
+_TENDER_SPEAKS = re.compile(r"否决|废标|无效投标|无效标|不予受理|拒收|视为|按[^，,。]{0,8}处理|不得|必须|须|应当|应具备|应具有|应提供|应满足")
+_NUMBERED_LINE = re.compile(r"^\s*(?:[一二三四五六七八九十]+\s*[、.．]|\d+(?:\.\d+)*\s*[.、)）]|\d+(?:\.\d+)+\s|[（(]\s*\d+\s*[)）]|第[一二三四五六七八九十\d]+[条章节款]|[★☆＊])")
+
+
+def _is_document(text: str) -> bool:
+    """Numbered or starred clauses on several lines: an excerpt somebody pasted, not somebody talking."""
+    return sum(1 for line in (text or "").splitlines() if _NUMBERED_LINE.match(line)) >= 2
+
+
+def _our_cue(clause: str, *, document: bool = False) -> "Optional[re.Match[str]]":
+    """Where in this clause our own side starts speaking, if it does."""
+    if _TENDER_SPEAKS.search(clause):
+        return None
+    cues = _OURS_IN_DOCUMENT if document else _OURS
+    absent = _NOT_GIVEN.search(clause)
+    cue = cues.search(clause)
+    while cue and absent and absent.start() <= cue.start() < absent.end():
+        cue = cues.search(clause, cue.end())
+    return cue
+
+# ---------------------------------------------------------------------------
+# topics
+# ---------------------------------------------------------------------------
+
+
+@dataclass(frozen=True)
+class Topic:
+    key: str
+    label: str  # how a draft names the row
+    aliases: Tuple[str, ...]
+    kind: str  # time | money | date | area | code | text | person | method
+    section: str  # which part of a tender summary it belongs to
+
+
+TOPICS: Tuple[Topic, ...] = (
+    Topic("project", "项目名称", ("项目名称", "工程名称", "项目名", "工程名"), "text", "project"),
+    Topic("owner", "招标人", ("招标人", "建设单位", "发包人", "业主单位", "业主", "甲方"), "text", "project"),
+    Topic("tender_no", "招标编号", ("招标项目编号", "招标文件编号", "招标编号", "项目编号", "标书编号"), "code", "project"),
+    Topic("scope", "招标范围", ("招标范围", "承包范围", "施工范围", "工程范围", "发包范围"), "text", "project"),
+    Topic("area", "建筑面积", ("总建筑面积", "建筑面积", "面积"), "area", "project"),
+    Topic("structure", "结构形式", ("结构形式", "结构类型", "结构体系", "结构"), "text", "project"),
+    Topic("deadline_bid", "投标截止", ("投标文件递交截止", "投标截止时间", "投标截止", "递交截止", "截标时间", "截标"), "date", "timeline"),
+    Topic("deadline_open", "开标", ("开标时间", "开标日期", "开标"), "date", "timeline"),
+    Topic("deadline_query", "答疑/澄清截止", ("答疑截止", "澄清截止", "提问截止", "质疑截止", "异议截止"), "date", "timeline"),
+    Topic("deadline_visit", "踏勘", ("现场踏勘", "踏勘现场", "踏勘"), "date", "timeline"),
+    Topic("qualification", "资质", ("资质要求", "资质条件", "企业资质", "资质等级", "资质"), "text", "qualification"),
+    Topic("track_record", "类似业绩", ("类似工程业绩", "类似项目业绩", "类似业绩", "业绩要求", "同类业绩", "业绩"), "text", "qualification"),
+    Topic("pm", "项目经理", ("项目经理", "项目负责人"), "person", "qualification"),
+    Topic("tech_lead", "技术负责人", ("技术负责人", "项目总工", "总工"), "person", "qualification"),
+    Topic("duration", "工期", ("计划工期", "招标工期", "要求工期", "总工期", "工期要求", "工期承诺", "承诺工期", "工期"), "time", "substantive"),
+    Topic("delivery", "交货期", ("交货期", "交货时间", "供货期"), "time", "substantive"),
+    Topic("quality", "质量标准", ("质量标准", "质量要求", "质量目标", "质量等级", "质量承诺"), "text", "substantive"),
+    Topic("validity", "投标有效期", ("投标有效期", "报价有效期"), "time", "substantive"),
+    Topic("warranty", "缺陷责任期/质保期", ("缺陷责任期", "质量保证期", "质保期", "保修期"), "time", "substantive"),
+    Topic("eval_method", "评标办法", ("评标办法", "评标方法", "评审办法", "评分办法"), "method", "scoring"),
+    Topic("price_cap", "最高限价", ("最高投标限价", "最高限价", "招标控制价", "控制价", "拦标价", "限价"), "money", "price"),
+    Topic("our_price", "我方报价", ("我方报价", "投标总报价", "投标报价", "投标总价", "总报价", "报价"), "money", "price"),
+    Topic("bond_validity", "保函有效期", ("保函有效期", "保证金有效期"), "date", "bond"),
+    Topic("bond", "投标保证金", ("投标保证金", "投标担保", "保证金", "保函"), "money", "bond"),
+    Topic("poa", "授权委托书", ("法定代表人授权委托书", "授权委托书", "法人授权书", "授权书"), "text", "form"),
+    Topic("seal", "签章", ("签字盖章", "电子签章", "盖章", "公章", "签章"), "text", "form"),
+    Topic("evidence", "已有证据", ("已有证据", "现有证据", "企业证据", "证明材料", "支撑材料"), "text", "evidence"),
+    Topic("owner_person", "责任人", ("缺口责任人", "责任人", "跟进人", "对接人"), "person", "owner"),
+)
+_TOPIC = {t.key: t for t in TOPICS}
+_ALWAYS_OURS = frozenset({"our_price", "evidence"})  # ours by nature
+_NO_SIDE = frozenset({"owner_person"})  # neither the tender's nor a response
+_STATEMENT_ONLY = frozenset({"poa", "seal"})  # what matters is what is said about them, not a value
+_KIND_RE = {"time": _TIME, "money": _MONEY, "area": _AREA, "date": _DATE}
+_LINE_LABELS = {"工程": "project", "项目": "project", "点名专项": "special", "专项": "special", "危大工程": "special",
+                "专项方案": "special", "必须编制的专项": "special"}
+
+_ALIAS_TABLE: List[Tuple[str, str]] = sorted(
+    ((alias, topic.key) for topic in TOPICS for alias in topic.aliases), key=lambda pair: -len(pair[0]))
+
+_SURNAME = "[" + post_facts._SURNAMES + "]"
+_AFTER_NAME = r"(?=$|[\s，,;；。、（(）)]|但|的|跟|负责|担任|任|为|是|和|及|与|已|还|尚|等|牵头|对接|盯|管|来|去|在|做|同志|持|具)"
+_PERSON_BOUNDED = re.compile(_SURNAME + r"[一-鿿]{1,2}?" + _AFTER_NAME)
+_PERSON_LOOSE = re.compile(_SURNAME + r"[一-鿿]{1,2}")
+_DEPARTMENT = re.compile(r"[一-鿿]{2,5}(?:部|科|处|室|中心)(?=" + _SURNAME + ")")
+_FOLLOW = re.compile(r"(?:让|由|交给|交|归|找|请|先?挂在?)\s*(?:[一-鿿]{2,5}(?:部|科|处|室|中心))?\s*(" + _SURNAME + r"[一-鿿]{1,2}?)"
+                     r"(?=跟进|跟|负责|盯|对接|牵头|落实|管|$|[\s，,;；。、])")
+
+
+def _person(text: str) -> str:
+    """A name, literal. A department before it ("商务部王丽娟") is not the name."""
+    body = _DEPARTMENT.sub(lambda m: " " * len(m.group(0)), text)
+    match = _PERSON_BOUNDED.search(body) or _PERSON_LOOSE.search(body)
+    return match.group(0) if match else ""
+
+
+@dataclass(frozen=True)
+class Mention:
+    """One thing the text says about one topic."""
+
+    topic: str
+    side: str  # "tender" | "ours" | "none"
+    lot: str  # "" = every lot / not said
+    value: str  # literal; "" when the clause only makes a statement ("保函还没开")
+    note: str  # the literal clause the value or statement came from
+    line: int  # 1-based line of the text
+    not_given: bool = False  # "限价还没公布": the text says the tender has not given this
+    origin: str = ""  # "补遗1号" when the sentence speaks of an addendum, as written
+
+    @property
+    def label(self) -> str:
+        return _TOPIC[self.topic].label
+
+    @property
+    def section(self) -> str:
+        return _TOPIC[self.topic].section
+
+
+@dataclass(frozen=True)
+class ScorePoint:
+    name: str  # literal; "" when the text gave a score with nothing to call it
+    score: str  # "35分", literal
+    lot: str
+    note: str
+    line: int
+
+
+@dataclass(frozen=True)
+class Special:
+    name: str  # "深基坑专项方案", literal
+    detail: str  # "挖深11.8米", literal; "" when none
+    lot: str
+    note: str
+    line: int
+    not_given: bool = False  # "专项没提"
+
+
+@dataclass
+class TenderFacts:
+    mentions: List[Mention] = field(default_factory=list)
+    scores: List[ScorePoint] = field(default_factory=list)
+    specials: List[Special] = field(default_factory=list)
+    lots: List[str] = field(default_factory=list)  # as written, in order of first mention
+    lot_scopes: Dict[str, str] = field(default_factory=dict)  # "一标段" -> "顶管加检查井"
+    unplaced: List[str] = field(default_factory=list)
+
+    def of(self, topic: str, *, side: Optional[str] = None, lot: Optional[str] = None) -> List[Mention]:
+        return [m for m in self.mentions if m.topic == topic and (side is None or m.side == side)
+                and (lot is None or m.lot == lot)]
+
+    def first(self, topic: str, *, side: Optional[str] = None, lot: Optional[str] = None) -> Optional[Mention]:
+        found = [m for m in self.of(topic, side=side, lot=lot) if m.value]
+        return found[0] if found else None
+
+    def to_dict(self) -> Dict[str, object]:
+        return {
+            "schema": "tender.facts.v1",
+            "lots": list(self.lots),
+            "lot_scopes": dict(self.lot_scopes),
+            "mentions": [{"topic": m.topic, "label": m.label, "side": m.side, "lot": m.lot, "value": m.value,
+                          "note": m.note, "line": m.line, "not_given": m.not_given, "origin": m.origin}
+                         for m in self.mentions],
+            "scores": [vars(s) for s in self.scores],
+            "specials": [vars(s) for s in self.specials],
+            "unplaced": list(self.unplaced),
+        }
+
+
+# ---------------------------------------------------------------------------
+# scoring points and named specials
+# ---------------------------------------------------------------------------
+
+_SCORE_LEAD = re.compile(
+    r"^(?:.*?(?:评标办法|评分办法|评分表|评分标准|评审表|技术标评分|商务标评分|技术标|商务标|评分点|评分项|评分)(?:里面?|中|内|上)?[：:，,\s]*"
+    r"|其中|另外|还有|以及|和|及|与|、|\s)+")
+# "计" and "共" are not connectors here: they end 施工组织设计 and 公共
+_SCORE_TAIL = re.compile(r"(?:那块|这块|那部分|这部分|部分|这项|那项|一项|方面)?(?:最重|最高|最多|较重)?的?(?:评分|分值|权重|满分|得分|分数)?(?:为|是|占|合计|最高)?\s*$")
+_HAZARD = r"(?:深基坑|基坑|高支模|高大模板|模板支撑|支模|脚手架|起重吊装|吊装|爆破|拆除|顶管|盾构|暗挖|降水|边坡|幕墙|钢结构安装|大体积混凝土|沟槽支护|支护)"
+_SPECIAL = re.compile(r"[一-鿿A-Za-z0-9#]{0,12}?" + _HAZARD + r"[一-鿿]{0,6}?(?:专项施工方案|专项方案|专项)")
+_SPECIAL_LEAD = re.compile(r"^.*?(?:点名|要求|必须|须|还要|需要|要|需)\s*(?:要|须)?\s*(?:编制|编写|编|做|出|提交|报)\s*(?:一份|一个)?")
+_SPECIAL_DETAIL = re.compile(
+    r"(?:挖深|开挖深度|基坑深度|坑深|支模高度|搭设高度|搭设跨度|跨度|板厚|梁高|净高|高度|埋深|覆土|顶进长度|单件重量?|起重量|吊重)\s*(?:约|为|是|达|最大|最深|最高)?\s*"
+    + _NUM + r"\s*(?:mm|cm|km|m|毫米|厘米|米|吨|t|kN)?", re.I)
+
+
+def _clean_name(text: str) -> str:
+    return text.strip(_EDGE + "、和及与")
+
+
+def _score_points(clause: str, previous: str, lot: str, line: int) -> List[ScorePoint]:
+    """"施工组织设计占35分" / "施工组织设计 25 分、项目管理机构 10 分" / "施工方案那块最重，占18.5分"."""
+    points: List[ScorePoint] = []
+    cursor = 0
+    for match in _SCORE.finditer(clause):
+        head = clause[cursor:match.start()]
+        cursor = match.end()
+        name = _clean_name(_SCORE_TAIL.sub("", _SCORE_LEAD.sub("", head)))
+        if not name and not points and previous:
+            # "施工方案那块最重，占18.5分": the name is what the clause before was about
+            name = _clean_name(_SCORE_TAIL.sub("", _SCORE_LEAD.sub("", previous)))
+        if len(name) > 24 or re.search(r"\d", name) or _OURS.search(name) or _LOT.search(name):
+            name = ""
+        points.append(ScorePoint(name, re.sub(r"\s+", "", match.group(0)), lot, clause.strip(_EDGE), line))
+    return points
+
+
+def _special_name(text: str) -> str:
+    return _clean_name(_SPECIAL_LEAD.sub("", text))
+
+
+# ---------------------------------------------------------------------------
+# the walk
+# ---------------------------------------------------------------------------
+
+
+def _topic_hits(clause: str) -> List[Tuple[int, int, str]]:
+    taken = [False] * len(clause)
+    hits: List[Tuple[int, int, str]] = []
+    for alias, key in _ALIAS_TABLE:
+        for match in re.finditer(re.escape(alias), clause):
+            start, end = match.span()
+            if any(taken[start:end]):
+                continue
+            after = clause[end:end + 3]
+            if alias == "结构" and not re.match(r"\s*(?:[：:]|为|是|\s)", after):
+                continue  # "剪力墙结构" / "优质结构" is a value, not a label
+            if alias == "报价" and re.match(r"\s*分", after):
+                continue  # 报价分 is a scoring point
+            if alias == "面积" and re.search(r"(?:使用|占地|用地|绿化)$", clause[:start]):
+                continue
+            if alias in ("业绩", "资质") and re.search(r"(?:评分|分值)$", clause[:start]):
+                continue
+            for index in range(start, end):
+                taken[index] = True
+            hits.append((start, end, key))
+    return sorted(hits)
+
+
+def _value(kind: str, region: str) -> str:
+    """The literal value of a topic's kind inside the stretch of text that follows its keyword."""
+    if kind in _KIND_RE:
+        match = _KIND_RE[kind].search(region)
+        if not match:
+            return ""
+        text = match.group(0).strip()
+        if kind == "date":
+            clock = _CLOCK.search(region, match.end())
+            if clock and clock.start() - match.end() <= 3:
+                text = region[match.start():clock.end()].strip()
+        return text
+    if kind == "code":
+        match = _DOC_CODE.search(region)
+        return match.group(0) if match else ""
+    if kind == "person":
+        return _person(region)
+    if kind == "method":
+        match = _EVAL_METHOD.search(region)
+        return match.group(0) if match else ""
+    text = _CONNECT.sub("", region).strip(_EDGE + "、")
+    return text if len(text) <= SHORT else ""
+
+
+def _before(kind: str, clause: str, start: int, floor: int) -> str:
+    """"75万银行保函": a number right before its keyword, when nothing follows the keyword."""
+    if kind not in _KIND_RE:
+        return ""
+    found = [m for m in _KIND_RE[kind].finditer(clause[floor:start])]
+    return found[-1].group(0).strip() if found and start - (floor + found[-1].end()) <= 6 else ""
+
+
+_REQUIRES = re.compile(r"^\s*(?:[一二三四五六七八九十\d]+\s*[、.．)）]\s*)?(?:[★☆＊*]\s*)?(?:投标人|供应商|申请人|承包人|投标单位)?\s*"
+                       r"(?:须|应当|应|必须|需)\s*(?:同时)?\s*(?:具备|具有|持有|取得|满足|提供)?\s*(?:有效的)?")
+
+
+def _before_text(kind: str, clause: str, floor: int, end: int) -> str:
+    """"投标人须具备建筑工程施工总承包二级及以上资质": a document puts the keyword last.
+
+    Only for a requirement sentence (须 / 应 / 必须 …); the value is the literal run up to and
+    including the keyword, without the "投标人须具备" that introduces it.
+    """
+    if kind != "text":
+        return ""
+    lead = _REQUIRES.match(clause[floor:])
+    if not lead or not lead.group(0).strip() or not re.search(r"须|应|必须|需", lead.group(0)):
+        return ""
+    text = clause[floor + lead.end():end].strip(_EDGE)
+    return text if 4 <= len(text) <= SHORT else ""
+
+
+def _requirement_text(region: str) -> str:
+    """For 项目经理 / 技术负责人 on the tender's side the value is a qualification, not a name."""
+    text = _CONNECT.sub("", region).strip(_EDGE + "、")
+    ok = _GRADE.search(text) or re.search(r"建造师|注册|职称|工程师|证书|[ABC]证|资格", text)
+    return text if ok and len(text) <= SHORT else ""
+
+
+_NAME_LEAD = re.compile(
+    r"^(?:.*?(?:帮我|帮忙|麻烦|请|让我|要我|叫我)\s*(?:把|将|对|给|查下|查一下|看下|看一下|对下|对一下|理一下|出一份|出个|出|做|写|整理|解析)?"
+    r"|把|将|对|给|关于|针对|就)\s*")
+
+
+def _project_name(sentence: str) -> str:
+    """"滨江路雨污分流改造工程二标段" - a name that ends in 工程 / 项目, or stands before its 标段."""
+    body = post_facts.strip_command(sentence)
+    match = re.search(r"([一-鿿A-Za-z0-9#（）()·]{4,40}?(?:工程|项目))(?=(?:第?[" + _CN_NUM + r"\d]{1,2}标段)|的?招标|[，,。；;\s]|$)", body)
+    if not match:
+        match = re.search(r"([一-鿿A-Za-z0-9#（）()·]{6,40}?)(?=第?[" + _CN_NUM + r"\d]{1,2}标段)", body)
+    if not match:
+        return ""
+    name = _NAME_LEAD.sub("", match.group(1))
+    name = re.sub(r"^(?:出|做|写|整理|解析)?(?:一份|一个|一张)?(?:招标解析表|解析表|技术标目录|响应缺口)?[，,：:\s]*", "", name)
+    if not 4 <= len(name) <= SHORT or re.search(r"专项|技术标|解析|目录|缺口|我们|咱们", name) or _topic_hits(name):
+        return ""
+    return name
+
+
+def _lot_key(match: "re.Match[str]") -> str:
+    return match.group(1)
+
+
+def extract(text: str, *, sides: str = "auto") -> TenderFacts:
+    """``sides="none"`` when the caller already knows every word is the tender's (a file given the
+    tender role): then no cue is looked for at all. ``"auto"`` reads the text as somebody talking,
+    unless it looks like a pasted excerpt, where only first-person cues count."""
+    facts = TenderFacts()
+    document = _is_document(text)
+    lot = ""
+    lot_forms: Dict[str, str] = {}
+    seen_clauses: List[str] = []
+    for line_no, raw_line in enumerate((text or "").splitlines() or [""], 1):
+        if not raw_line.strip():
+            continue
+        # "标签：" at the start of a line governs the whole line: "已有证据：同类学校业绩一项，合同都在"
+        line_topic: Optional[str] = None
+        line_body = raw_line
+        head = re.match(r"\s*(?:[-*+·•]\s*|\d+[.、)）]\s*|[（(]\d+[)）]\s*)?([^：:，,。；;\s]{1,14})\s*[：:]\s*", raw_line)
+        if head:
+            label = head.group(1)
+            hits = _topic_hits(label)
+            if label in _LINE_LABELS:
+                line_topic, line_body = _LINE_LABELS[label], raw_line[head.end():]
+            elif hits and hits[0][0] == 0 and hits[0][1] == len(label):
+                line_topic, line_body = hits[0][2], raw_line[head.end():]
+        if line_topic == "project":
+            value = _CONNECT.sub("", line_body).strip(_EDGE)
+            if value and len(value) <= SHORT:
+                facts.mentions.append(Mention("project", "tender", "", value, raw_line.strip(_EDGE), line_no))
+            continue
+        if line_topic == "special":
+            clauses = [c.strip(_EDGE) for c in _CLAUSE.split(line_body) if c.strip(_EDGE)]
+            if clauses and not _NOT_GIVEN.search(clauses[0]):
+                detail = _SPECIAL_DETAIL.search(line_body)
+                facts.specials.append(Special(clauses[0], detail.group(0).strip() if detail else "", lot,
+                                              raw_line.strip(_EDGE), line_no))
+            continue
+        label_is_ours = bool(head and line_topic and _OURS.search(head.group(1)))
+        first_of_line = line_topic is not None
+        for sentence in _SENTENCE.split(line_body):
+            if not sentence.strip():
+                continue
+            carried: Optional[str] = line_topic
+            previous_clause = ""
+            origin, origin_from = "", 0
+            for clause in _CLAUSE.split(sentence):
+                if not clause or not clause.strip(_EDGE):
+                    continue
+                shown = raw_line.strip(_EDGE) if (first_of_line and len(raw_line.strip()) <= 60) else clause.strip(_EDGE)
+                seen_clauses.append(shown)
+                addendum = _ADDENDUM.search(clause)
+                if addendum and not origin:
+                    origin, origin_from = re.sub(r"\s+", "", addendum.group(0)), len(facts.mentions)
+                # ---- which lot
+                lot_hits = list(_LOT.finditer(clause))
+                keys = list(dict.fromkeys(_lot_key(m) for m in lot_hits))
+                for match in lot_hits:
+                    if len(match.group(0).strip()) > len(lot_forms.get(_lot_key(match), "")):
+                        lot_forms[_lot_key(match)] = match.group(0).strip()
+                if _ALL_LOTS.search(clause) or len(keys) > 1:
+                    lot = ""
+                elif keys:
+                    lot = keys[0]
+                # ---- whose side, by position
+                absent = _NOT_GIVEN.search(clause)
+                cue = None if sides == "none" else _our_cue(clause, document=document)
+                if label_is_ours and cue is None and sides != "none":
+                    cue = re.match(r"", clause)  # the label said whose: everything on this line is ours
+                hits = [] if line_topic in _ALWAYS_OURS | _STATEMENT_ONLY else _topic_hits(clause)
+                if line_topic and hits and not all(key == line_topic for _s, _e, key in hits):
+                    # inside a labelled line only a second "标签：" starts a new field
+                    hits = [h for h in hits if re.match(r"\s*[：:]", clause[h[1]:h[1] + 2]) or h[2] == line_topic]
+                placed = False
+                claimed = False
+                labelled_field = first_of_line and line_topic in _TOPIC and line_topic not in _STATEMENT_ONLY
+                if labelled_field and all(key == line_topic for _s, _e, key in hits):
+                    # "招标人：石桥镇人民政府" / "保证金：要求75万银行保函": the label names the field
+                    topic = _TOPIC[line_topic]
+                    ours = bool(cue and not clause[:cue.start()].strip(_EDGE)) or line_topic in _ALWAYS_OURS
+                    side = "none" if line_topic in _NO_SIDE else "ours" if ours else "tender"
+                    if line_topic in ("pm", "tech_lead"):
+                        value = _person(clause) if side == "ours" else _requirement_text(clause)
+                        if not value and side == "tender" and _person(clause):
+                            side, value = "ours", _person(clause)
+                    else:
+                        value = _value(topic.kind, clause)
+                    gone = bool(not value and absent and side == "tender")
+                    if value or gone or side == "ours":
+                        facts.mentions.append(Mention(line_topic, side, lot, value, shown, line_no, not_given=gone))
+                        placed = True
+                    hits = []
+                    carried = line_topic
+                    first_of_line = False
+                    previous_clause = clause
+                    if placed:
+                        continue
+                first_of_line = False
+                for index, (start, end, key) in enumerate(hits):
+                    topic = _TOPIC[key]
+                    stop = hits[index + 1][0] if index + 1 < len(hits) else len(clause)
+                    if key in _STATEMENT_ONLY:
+                        if cue or absent or re.search(r"须|应|必须|需", clause):
+                            side = "ours" if cue else "tender"
+                            facts.mentions.append(Mention(key, side, lot, "", shown, line_no))
+                            placed = True
+                        carried = key
+                        break
+                    ours_first = bool(cue and cue.start() <= start)
+                    split_at = cue.start() if (cue and start < cue.start() < stop) else None
+                    side = "none" if key in _NO_SIDE else "ours" if (ours_first or key in _ALWAYS_OURS) else "tender"
+                    region = clause[end:split_at if split_at is not None else stop]
+                    if key in ("pm", "tech_lead") and side != "ours":
+                        value = _requirement_text(region)
+                        if not value and _person(_CONNECT.sub("", region)[:4] or ""):
+                            side, value = "ours", _person(region)  # "技术负责人 周海燕": a named person is ours
+                    else:
+                        value = _value(topic.kind, region)
+                        if value and topic.kind == "text" and _NOT_GIVEN.search(value):
+                            value = ""  # "资质没提" says nothing was given; "没提" is not a qualification
+                        if not value and not claimed:
+                            floor = hits[index - 1][1] if index else 0
+                            value = _before(topic.kind, clause, start, floor) or _before_text(topic.kind, clause, floor, end)
+                    claimed = bool(value)
+                    gone = bool(not value and absent and side == "tender" and (split_at is None))
+                    if value or gone:
+                        facts.mentions.append(Mention(key, side, lot, value, shown, line_no, not_given=gone))
+                        placed = True
+                    elif side == "ours" and split_at is None:
+                        facts.mentions.append(Mention(key, "ours", lot, "", shown, line_no))
+                        placed = True
+                    if split_at is not None:
+                        rest = clause[split_at:stop]
+                        kind = "person" if key in ("pm", "tech_lead") else topic.kind
+                        rest_value = "" if kind in ("text", "method") else _value(kind, rest)
+                        facts.mentions.append(Mention(key, "ours", lot, rest_value, shown, line_no))
+                        placed = True
+                    carried = key
+                # ---- a clause with no keyword of its own continues the topic before it
+                if not hits and carried and carried not in ("project", "special"):
+                    topic = _TOPIC[carried]
+                    stripped = _LOT.sub("", clause).strip(_EDGE)
+                    lead = _OURS.search(stripped)
+                    starts_with_cue = bool(cue and lead and not stripped[:lead.start()].strip(_EDGE + "但却就也都的"))
+                    if carried in _ALWAYS_OURS | _STATEMENT_ONLY:
+                        more = _value(topic.kind, clause) if carried in _ALWAYS_OURS else ""
+                        if more:
+                            facts.mentions.append(Mention(carried, "ours", lot, more, shown, line_no))
+                            placed = True
+                        elif carried in _STATEMENT_ONLY and (cue or absent):
+                            facts.mentions.append(Mention(carried, "ours" if cue else "tender", lot, "", shown, line_no))
+                            placed = True
+                    else:
+                        kind = "person" if (carried in ("pm", "tech_lead") and cue) else topic.kind
+                        if carried in ("pm", "tech_lead") and not cue:
+                            value = _requirement_text(clause)
+                        else:
+                            value = "" if kind in ("text", "method") else _value(kind, clause)
+                        if value:
+                            side = "none" if carried in _NO_SIDE else "ours" if cue else "tender"
+                            facts.mentions.append(Mention(carried, side, lot, value, shown, line_no))
+                            placed = True
+                        elif cue and (starts_with_cue or line_topic):
+                            facts.mentions.append(Mention(carried, "ours", lot, "", shown, line_no))
+                            placed = True
+                # ---- things said without a label
+                structure = _STRUCTURE.search(clause)
+                if structure and not any(key == "structure" for _s, _e, key in hits):
+                    facts.mentions.append(Mention("structure", "tender", lot, structure.group(0), shown, line_no))
+                    placed = True
+                if re.search(r"谁(?:来)?(?:跟进|跟|负责|管|盯|牵头)|责任人[^，,。]{0,6}(?:没|未|待)", clause):
+                    facts.mentions.append(Mention("owner_person", "none", lot, "", shown, line_no, not_given=True))
+                    placed = True
+                follow = _FOLLOW.search(clause)
+                if follow and not any(key == "owner_person" for _s, _e, key in hits):
+                    facts.mentions.append(Mention("owner_person", "none", lot, follow.group(1), shown, line_no))
+                    placed = True
+                if _SCORE.search(clause):
+                    points = _score_points(clause, previous_clause, lot, line_no)
+                    facts.scores.extend(points)
+                    placed = placed or bool(points)
+                special = _SPECIAL.search(clause)
+                if special:
+                    name = _special_name(special.group(0))
+                    if name and name not in ("专项方案", "专项施工方案", "专项") and not _NOT_GIVEN.search(clause[special.end():]):
+                        if not any(s.name == name and s.lot == lot for s in facts.specials):
+                            detail = _SPECIAL_DETAIL.search(sentence, sentence.find(clause) + special.end())
+                            facts.specials.append(Special(name, detail.group(0).strip() if detail else "", lot,
+                                                          shown, line_no))
+                        placed = True
+                elif re.search(r"专项", clause) and absent and not hits:
+                    facts.specials.append(Special("", "", lot, shown, line_no, not_given=True))
+                    placed = True
+                if not placed and lot_hits and not hits:
+                    # "二标段是泵站土建": what a lot consists of
+                    rest = _CONNECT.sub("", clause[lot_hits[0].end():]).strip(_EDGE)
+                    if rest and len(rest) <= SHORT and not re.search(r"都投|一起投|别串|分开", rest) and len(keys) == 1:
+                        facts.lot_scopes.setdefault(keys[0], rest)
+                        placed = True
+                if not placed and re.search(r"\d", _NUMBERED_LINE.sub("", clause, count=1)):
+                    facts.unplaced.append(shown)  # a number nobody placed; "3. …" alone is only a numbering
+                previous_clause = clause
+            if origin:
+                # "补遗1号只把工期改成450天，保证金没提": what the rest of the sentence says is the addendum's
+                facts.mentions[origin_from:] = [
+                    Mention(m.topic, m.side, m.lot, m.value, m.note, m.line, m.not_given, origin)
+                    for m in facts.mentions[origin_from:]]
+    # ---- a project named without a label
+    if not facts.first("project"):
+        for sentence in _SENTENCE.split(text or ""):
+            name = _project_name(sentence)
+            if name:
+                facts.mentions.insert(0, Mention("project", "tender", "", name, name, 1))
+                break
+    # ---- lots as the text wrote them; one lot alone is the project's lot, not a split
+    forms = {key: (form if form.endswith("段") else form + "段") for key, form in lot_forms.items()}
+    facts.lots = list(forms.values())
+    single = len(forms) == 1
+    relot = (lambda key: "") if single else (lambda key: forms.get(key, key))
+    facts.mentions = [Mention(m.topic, m.side, relot(m.lot), m.value, m.note, m.line, m.not_given, m.origin)
+                      for m in facts.mentions]
+    facts.scores = [ScorePoint(s.name, s.score, relot(s.lot), s.note, s.line) for s in facts.scores]
+    facts.specials = [Special(s.name, s.detail, relot(s.lot), s.note, s.line, s.not_given) for s in facts.specials]
+    facts.lot_scopes = {forms.get(key, key): scope for key, scope in facts.lot_scopes.items()}
+    used = [s.detail for s in facts.specials if s.detail] + [m.value for m in facts.of("project") if m.value]
+    facts.unplaced = [c for c in dict.fromkeys(facts.unplaced) if not any(u in c for u in used)]
+    return facts
+
+
+# ---------------------------------------------------------------------------
+# splitting a typed request into the tender's words and ours
+# ---------------------------------------------------------------------------
+
+
+def split_sides(text: str, *, sides: str = "auto") -> Tuple[str, str]:
+    """(what the tender asks, what we say about ourselves) - line structure kept.
+
+    For the document parser: it must never read "我们投标函写了999日历天" as a tender requirement.
+    Within a clause everything from the first of-our-side cue onward is ours. Explicit
+    "招标正文：… 投标响应：…" blocks win over cues.
+    """
+    explicit = re.search(r"招标正文[：:]([\s\S]+?)投标响应[：:]([\s\S]+)", text or "")
+    if explicit:
+        return explicit.group(1).strip(), explicit.group(2).strip()
+    if sides == "none":
+        return (text or "").strip(), ""
+    document = _is_document(text)
+    theirs: List[str] = []
+    ours: List[str] = []
+    for raw_line in (text or "").splitlines():
+        kept: List[str] = []
+        mine: List[str] = []
+        for piece in re.split(r"(?<=[，,。；;！!？?])", raw_line):
+            if not piece.strip():
+                continue
+            cue = _our_cue(piece, document=document)
+            if cue is None:
+                kept.append(piece)
+                continue
+            if piece[:cue.start()].strip(_EDGE):
+                kept.append(piece[:cue.start()] + "，")
+            mine.append(piece[cue.start():])
+        theirs.append("".join(kept))
+        if mine:
+            ours.append("".join(mine))
+    return "\n".join(line for line in theirs).strip(), "\n".join(ours).strip()
+
+
+def tender_pieces(text: str, *, sides: str = "auto") -> List[List[str]]:
+    """Per non-empty line of the text: the literal pieces of it that are the tender speaking.
+
+    A line nobody of our side speaks in comes back whole, as the one piece it is, so a pasted
+    document parses exactly as before. Where our side does speak, only the clauses before the cue
+    remain - each still a literal stretch of the line, so a requirement quoted from a piece can be
+    found again in the source.
+    """
+    out: List[List[str]] = []
+    explicit = re.search(r"招标正文[：:]([\s\S]+?)投标响应[：:]([\s\S]+)", text or "")
+    body = explicit.group(1) if explicit else (text or "")
+    document = _is_document(body)
+    for raw_line in body.splitlines():
+        line = raw_line.strip()
+        if not line:
+            continue
+        if sides == "none" or explicit:
+            out.append([line])
+            continue
+        pieces: List[str] = []
+        touched = False
+        for piece in re.split(r"(?<=[，,。；;！!？?])", line):
+            if not piece.strip():
+                continue
+            cue = _our_cue(piece, document=document)
+            if cue is None:
+                pieces.append(piece)
+                continue
+            touched = True
+            if piece[:cue.start()].strip(_EDGE):
+                pieces.append(piece[:cue.start()])
+        if not touched:
+            out.append([line])
+        else:
+            out.append([x.strip().strip("，,") for x in pieces if x.strip().strip("，,")])
+    return out
+
+
+def has_our_side(text: str) -> bool:
+    return bool(_OURS.search(text or ""))
