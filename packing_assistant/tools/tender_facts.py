@@ -647,6 +647,12 @@ def extract(text: str, *, sides: str = "auto") -> TenderFacts:
                         kind = "person" if (carried in ("pm", "tech_lead") and cue) else topic.kind
                         if carried in ("pm", "tech_lead") and not cue:
                             value = _requirement_text(clause)
+                            whole = _PERSON_LOOSE.fullmatch(clause.strip(_EDGE))
+                            if not value and whole:
+                                # "项目经理用老贾，贾国庆": a clause that is nothing but a name, right after
+                                # the post was named, is who holds it - a person, so ours
+                                facts.mentions.append(Mention(carried, "ours", lot, whole.group(0), shown, line_no))
+                                placed = True
                         else:
                             value = "" if kind in ("text", "method") else _value(kind, clause)
                         if value:

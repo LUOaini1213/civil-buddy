@@ -78,8 +78,11 @@ class RuntimeOfficeExportsTests(unittest.TestCase):
                 self.assertTrue(done["ok"], done)
                 self.assertEqual(done["state"], "done")
                 self.assertEqual(attach.call_count, 1)
-                self.assertEqual(len(attach.call_args.args[0]["files"]), 2)
-                self.assert_files_restored(done, {".md", ".docx"})
+                # bid-parse writes its extract as a table since 2026-09-20 (事项｜要求原文｜来源页段｜…), so it
+                # comes with a workbook as well; the pack-ship sheet is still lists and has none.
+                tabular = eid == "bid-parse"
+                self.assertEqual(len(attach.call_args.args[0]["files"]), 3 if tabular else 2)
+                self.assert_files_restored(done, {".md", ".docx", ".xlsx"} if tabular else {".md", ".docx"})
                 contents = {}
                 for item in done["deliverables"]:
                     path = Path(item["path"])
@@ -92,12 +95,15 @@ class RuntimeOfficeExportsTests(unittest.TestCase):
                         book.close()
                     elif path.suffix == ".md":
                         contents["md"] = path.read_text(encoding="utf-8")
-                for content in contents.values():
-                    self.assertIn("UNSPECIFIED" if eid == "pack-ship" else "60 日历天", content)
+                for kind, content in contents.items():
+                    # the workbook holds the table cells - the duration as written, "60日历天"; the line that
+                    # repeats it as a count of calendar days ("60 日历天") is a paragraph, in the md and the Word file
+                    want = "UNSPECIFIED" if eid == "pack-ship" else "60日历天" if kind == "excel" else "60 日历天"
+                    self.assertIn(want, content)
                     self.assertNotIn("can_fit=true", content)
                 self.assertIn("Word", done["text"])
-                self.assertNotIn("excel", contents)  # Lists have no tabular XLSX candidate.
-                self.assertNotIn("Excel", done["text"])
+                self.assertEqual("excel" in contents, tabular)  # Lists have no tabular XLSX candidate.
+                self.assertEqual("Excel" in done["text"], tabular)
 
     def test_connected_packing_snapshot_values_are_only_projected(self):
         snapshot = {"can_fit": False, "utilization": 0.317, "mid50": 0.499,

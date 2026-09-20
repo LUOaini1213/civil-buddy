@@ -55,6 +55,12 @@ class WhoseNumber(unittest.TestCase):
         self.assertEqual(found(facts, "tech_lead", "ours"), ["周海燕"])
         self.assertEqual(found(facts, "owner_person", "none"), ["王丽娟"], "商务部 is a department, not the name")
 
+    def test_a_clause_that_is_nothing_but_a_name(self) -> None:
+        facts = tf.extract("第2标段项目经理用老贾，贾国庆；第3标段项目经理待定。")
+        self.assertEqual(found(facts, "pm", "ours", "第2标段"), ["贾国庆"])
+        self.assertEqual(found(facts, "pm", "ours", "第3标段"), [])
+        self.assertEqual(found(tf.extract("项目经理须具备一级注册建造师资格，持证上岗。"), "pm", "ours"), [], "持证上岗 is not a name")
+
     def test_a_pronoun_keeps_speaking_of_our_man(self) -> None:
         facts = tf.extract("项目经理须具备一级注册建造师资格，我们拟派周建国，他是二级的。")
         self.assertEqual(found(facts, "pm", "tender"), ["一级注册建造师资格"])
