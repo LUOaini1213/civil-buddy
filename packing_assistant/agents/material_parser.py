@@ -6,7 +6,7 @@ import json
 import re
 from typing import Any, Dict, List
 
-from packing_assistant.adapters import classify_material, material_internal_to_api, material_quantity
+from packing_assistant.adapters import classify_material, material_internal_to_api
 from packing_assistant.state import PackingState
 from packing_assistant.tools.pack_ship_solve import (
     NEEDS_HUMAN_MISSING_DIMENSIONS,
@@ -212,10 +212,13 @@ def _normalize_llm_materials(items: List[Dict[str, Any]]) -> List[Dict[str, Any]
         if not isinstance(m, dict):
             continue
         # 读不出件数的格不在这里改写成 1 件：此前 int(float(x or 1)) 把 0 和已标记的行读成 1，
-        # 2.7 读成 2，-3 经 max(…, 1) 读成 1，"abc" / NaN 直接抛异常；`qty` 键根本不读。
-        # 判定只有一处（pack_ship_solve.rows_invalid_quantity），读法与引擎同一个（material_quantity）。
+        # 2.7 读成 2，-3 经 max(…, 1) 读成 1，"abc" / NaN 直接抛异常。
+        # 判定只有一处（pack_ship_solve.rows_invalid_quantity）；读得出的格读法不变。
+        # `qty` 键仍然不读（只写 qty: 5 的行照旧按 1 件）：引擎适配器自 #49 起认它，这里一旦也认，
+        # fan-out 喂的就是真实件数——CI 抽样实测 2+7 箱 / 10 s → 24+37 箱 / 96 s，整份 fan-out
+        # 重跑的口径随之改变。那是另一个需要单独拍板的改动，不夹带在这里。
         qty_unreadable = bool(rows_invalid_quantity([m]))
-        qty = 0 if qty_unreadable else material_quantity(m)
+        qty = 0 if qty_unreadable else int(float(m.get("quantity") or m.get("数量") or 1))
         unit = float(m.get("weight_kg") or m.get("单重_kg") or 0)
         total = float(m.get("total_weight_kg") or unit * qty)
         L = float(m.get("length_mm") or (m.get("外尺寸_mm") or {}).get("长") or 0)
