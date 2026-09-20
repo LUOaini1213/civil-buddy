@@ -46,8 +46,10 @@ def main() -> int:
             print(f"[{case_set}] facts {total['facts']} placed {total['placed']} ({micro:.3f} micro, "
                   f"{result['macro']:.3f} macro) misplaced {total['misplaced']} dumped {total['dumped']} "
                   f"echo_only {total['echo_only']} missing {total['missing']} forbidden {total['forbidden']}")
-            if micro < expected["micro"] - 1e-9:
-                failures.append(f"{case_set}: placed rate {micro:.3f} below the floor {expected['micro']:.3f}")
+            # The floor is a count. A rounded rate cannot be one: 287/1529 is 0.1877, and a floor
+            # written down as 0.188 failed the very measurement it was taken from.
+            if total["placed"] < expected["placed"]:
+                failures.append(f"{case_set}: {total['placed']} facts placed, the floor is {expected['placed']}")
             if total["forbidden"] > expected.get("forbidden", 0):
                 failures.append(f"{case_set}: {total['forbidden']} forbidden conclusion(s) in the drafts")
             if total["misplaced"] > expected.get("misplaced", 0):
