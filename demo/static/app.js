@@ -106,7 +106,8 @@ function cbRunPaint(running) {
     }
   }
   const stop = $("stop");
-  if (stop) { stop.hidden = !running; stop.disabled = false; stop.textContent = "停止"; }
+  /* 没有取消能力的后端上，停止只会断开浏览器这一端，服务端那轮照跑：不要摆一个假按钮。 */
+  if (stop) { stop.hidden = !running || cbCapability("cancel") === false; stop.disabled = false; stop.textContent = "停止"; }
   const form = $("form");
   if (form) form.setAttribute("aria-busy", String(running));
 }
