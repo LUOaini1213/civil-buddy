@@ -25,6 +25,7 @@ class TurnControl:
         self.session = session
         self.event = Event()
         self.state = "running"
+        self.reason = ""  # who stopped it, when it was not the user: "detached_timeout"
         self._lock = RLock()
         self._closers: list = []
 
@@ -32,10 +33,12 @@ class TurnControl:
         if self.event.is_set():
             raise TurnCancelled("本轮已取消")
 
-    def request_cancel(self) -> bool:
+    def request_cancel(self, reason: str = "") -> bool:
         with self._lock:
             if self.state in _TERMINAL:
                 return False
+            if not self.event.is_set():
+                self.reason = reason  # the first request is the one that stopped the turn
             self.event.set()
             self.state = "cancelling"
             closers = list(reversed(self._closers))

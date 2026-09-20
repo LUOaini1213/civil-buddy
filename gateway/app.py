@@ -2011,41 +2011,94 @@ def api_pipeline_stream(body: PipelineRequest):
         packing_options=body.packing_options,
     )
 
+    def produce(q: "queue_mod.Queue[Optional[str]]", detached: "threading.Event") -> None:
+        """Run the pipeline to completion on a worker thread.
+
+        The browser may go away mid-run (mobile lock screen, tab closed, task
+        switch). Persisting hitl/done state must not depend on the SSE consumer
+        still iterating, so the pipeline owns its own thread and the HTTP
+        generator only relays events while someone is listening.
+        """
+        def offer(item: Optional[str]) -> None:
+            # Never a bare q.put: with the queue full and the consumer gone it would block for
+            # good, and the pipeline would never reach the point where it persists its state.
+            while not detached.is_set():
+                try:
+                    q.put(item, timeout=0.25)
+                    return
+                except queue_mod.Full:
+                    continue
+
+        final_state = None
+        try:
+            for ev in iter_agent_pipeline(
+                text,
+                materials=mats,
+                container_type=body.container_type,
+                max_containers=int(body.max_containers or 0),
+                enable_auto_confirm=body.enable_auto_confirm,
+                goal=body.goal,
+                session_id=body.session_id,
+                save_artifacts=body.save_artifacts,
+                packing_options=opts,
+                agent_mode=_pipeline_agent_mode(body),
+                max_llm_rounds=int(body.max_llm_rounds or 12),
+            ):
+                # SSE 不传完整 state（体积大）；hitl/done 落盘以便 resume
+                out = {k: v for k, v in ev.items() if k != "state"}
+                if ev.get("type") == "done":
+                    final_state = ev.get("state")
+                    if final_state is not None:
+                        _store_session(body.session_id, final_state)
+                elif ev.get("type") == "hitl":
+                    # harness 已 save_session；再刷 RAM（state 在后续 done 才完整 yield）
+                    # 若事件带 run_id，保证 session 索引可查
+                    rid = str(ev.get("run_id") or "")
+                    if rid:
+                        disk = _get_session(rid) or _get_session(body.session_id)
+                        if disk is not None:
+                            _store_session(body.session_id, disk)
+                offer(f"data: {json.dumps(out, ensure_ascii=False, default=str)}\n\n")
+            if final_state is None:
+                offer(f"data: {json.dumps({'type': 'error', 'message': 'empty pipeline'}, ensure_ascii=False)}\n\n")
+        except Exception as exc:  # noqa: BLE001 — surface to the client, never invent numbers
+            logger.exception("pipeline stream failed for session %s", body.session_id)
+            offer(f"data: {json.dumps({'type': 'error', 'message': str(exc)[:200]}, ensure_ascii=False)}\n\n")
+        finally:
+            offer(None)
+
     def gen():
+        import threading
+        import time as _time
+
         if _notice:
             # 流式也要说 —— 首帧就给，别等收口
             yield f"data: {json.dumps({'type': 'notice', 'scope': 'materials', 'message': _notice}, ensure_ascii=False)}\n\n"
-        final_state = None
-        for ev in iter_agent_pipeline(
-            text,
-            materials=mats,
-            container_type=body.container_type,
-            max_containers=int(body.max_containers or 0),
-            enable_auto_confirm=body.enable_auto_confirm,
-            goal=body.goal,
-            session_id=body.session_id,
-            save_artifacts=body.save_artifacts,
-            packing_options=opts,
-            agent_mode=_pipeline_agent_mode(body),
-            max_llm_rounds=int(body.max_llm_rounds or 12),
-        ):
-            # SSE 不传完整 state（体积大）；hitl/done 落盘以便 resume
-            out = {k: v for k, v in ev.items() if k != "state"}
-            if ev.get("type") == "done":
-                final_state = ev.get("state")
-                if final_state is not None:
-                    _store_session(body.session_id, final_state)
-            elif ev.get("type") == "hitl":
-                # harness 已 save_session；再刷 RAM（state 在后续 done 才完整 yield）
-                # 若事件带 run_id，保证 session 索引可查
-                rid = str(ev.get("run_id") or "")
-                if rid:
-                    disk = _get_session(rid) or _get_session(body.session_id)
-                    if disk is not None:
-                        _store_session(body.session_id, disk)
-            yield f"data: {json.dumps(out, ensure_ascii=False, default=str)}\n\n"
-        if final_state is None:
-            yield f"data: {json.dumps({'type': 'error', 'message': 'empty pipeline'}, ensure_ascii=False)}\n\n"
+        q: "queue_mod.Queue[Optional[str]]" = queue_mod.Queue(maxsize=256)
+        detached = threading.Event()
+        threading.Thread(
+            target=produce, args=(q, detached),
+            name=f"packing-pipeline-{body.session_id}", daemon=True,
+        ).start()
+        last_beat = _time.monotonic()
+        try:
+            while True:
+                try:
+                    item = q.get(timeout=0.25)
+                except queue_mod.Empty:
+                    # Team B can compute for tens of seconds without an event; a
+                    # keepalive comment stops mobile browsers / proxies from
+                    # dropping the idle connection and lets a gone client be seen.
+                    if _time.monotonic() - last_beat >= 5.0:
+                        last_beat = _time.monotonic()
+                        yield ": keepalive\n\n"
+                    continue
+                if item is None:
+                    break
+                yield item
+        finally:
+            # Client gone: stop relaying, let the pipeline finish and persist.
+            detached.set()
 
     return StreamingResponse(
         gen(),

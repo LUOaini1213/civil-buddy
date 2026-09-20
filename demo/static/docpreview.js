@@ -89,7 +89,7 @@
     return overlay;
   }
 
-  var current = { text: "", filename: "文书.md" };
+  var current = { text: "", filename: "文书.md", url: "" };
 
   function copyMd() {
     var t = current.text || "";
@@ -120,8 +120,17 @@
 
   function downloadMd() {
     if (typeof global.cbObStep === "function") global.cbObStep(3); /* ux(round10)：下载 .md → 引导第 3 步打勾 */
-    var blob = new Blob([current.text || ""], { type: "text/markdown;charset=utf-8" });
     var a = document.createElement("a");
+    if (current.url) {
+      /* 服务端文件本体（带 Content-Disposition），手机端不靠 download 属性也能存 */
+      a.href = current.url;
+      a.download = current.filename || "文书.md";
+      document.body.appendChild(a);
+      a.click();
+      setTimeout(function () { a.remove(); }, 400);
+      return;
+    }
+    var blob = new Blob([current.text || ""], { type: "text/markdown;charset=utf-8" });
     a.href = URL.createObjectURL(blob);
     a.download = current.filename || "文书.md";
     document.body.appendChild(a);
@@ -258,6 +267,7 @@
     var ov = ensureOverlay();
     var md = opts.text || "";
     current.text = md;
+    current.url = opts.url || "";
     var guess = guessMeta(md);
     var title = opts.title || guess.title || "交付物文书";
     current.filename = String(title).replace(/[\\/:*?"<>|]/g, "_") + ".md";

@@ -4936,6 +4936,7 @@ window.CB_POSTS = [{"id":"bid-parse","name":"招标解析","aliases":["招标","
             this.loadSessionById(sid);
           }
         } catch (e) { /* */ }
+        this.cbResumeRemembered();
         this.connectSessionWs(this.sessionId);
         // ux(round5)：Esc=驳回永不放行（审批卡等待中，全局兜底；对话框内 @keydown.esc 已先行）
         this._cbAprEscHandler = (ev) => {
@@ -5381,6 +5382,8 @@ window.CB_POSTS = [{"id":"bid-parse","name":"招标解析","aliases":["招标","
         },
         async consumeSse(url, body) {
           this.sseActive = true;
+          /* 断流恢复：记住正在跑的 session；刷新 / 锁屏回来后 mounted() 会去 /api/resume 拉回结果 */
+          try { if (body && body.session_id) localStorage.setItem('cb_pack_active_session_v1', String(body.session_id)); } catch (e) { /* */ }
           try {
             const res = await fetch(API + url, {
               method: 'POST',
@@ -6731,6 +6734,36 @@ window.CB_POSTS = [{"id":"bid-parse","name":"招标解析","aliases":["招标","
           } catch (e) {
             this.pendingCheckpoints = [];
           }
+        },
+        /* 断流恢复：页面重开时，上一轮若已在服务端算完（gateway 现在断流不杀轮次），把结果拉回来；
+           若还在算，最多等 2 分钟（每 2 秒问一次 /api/resume）。URL 带 ?session= 时以 URL 为准。 */
+        async cbResumeRemembered() {
+          let sid = '';
+          try { sid = localStorage.getItem('cb_pack_active_session_v1') || ''; } catch (e) { return; }
+          if (!sid || !/^[A-Za-z0-9][A-Za-z0-9_-]{2,63}$/.test(sid)) return;
+          if (new URLSearchParams(window.location.search || '').get('session')) return;
+          const started = Date.now();
+          const tick = async () => {
+            if (this.sseActive) return; /* 用户已发起新一轮，不再追旧的 */
+            let j = null;
+            try {
+              const r = await fetch(API + '/api/resume/' + encodeURIComponent(sid));
+              if (r.ok) j = await r.json();
+            } catch (e) { /* 网络抖动，下一拍再试 */ }
+            if (j && j.found) {
+              try { localStorage.removeItem('cb_pack_active_session_v1'); } catch (e) { /* */ }
+              await this.loadSessionById(sid);
+              this.statusText = (j.phase === 'await_user_confirm' ? '上一轮停在待确认，已恢复 ' : '上一轮已在后台算完，已恢复 ') + sid;
+              return;
+            }
+            if (Date.now() - started < 120000) {
+              this.statusText = '上一轮 ' + sid + ' 可能仍在服务端计算，等待中…';
+              setTimeout(tick, 2000);
+            } else {
+              try { localStorage.removeItem('cb_pack_active_session_v1'); } catch (e) { /* */ }
+            }
+          };
+          tick();
         },
         async loadSessionById(sid) {
           this.statusText = '加载会话 ' + sid + '…';

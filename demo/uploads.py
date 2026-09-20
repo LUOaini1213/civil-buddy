@@ -194,7 +194,11 @@ def extract_upload(filename: str, data: bytes) -> tuple[str, str, str]:
         raise UploadError(f"{kind} 文件无法解析，请检查文件是否损坏或格式与扩展名一致") from exc
     text = _collapse(raw)
     if len(text.strip()) < 8:
-        raise UploadError("抽不出可用文字。扫描件 PDF 需要先 OCR 或另存为 Word/文本")
+        if kind == "pdf":
+            raise UploadError("PDF 里抽不出可用文字。扫描件需要先 OCR，或另存为 Word/文本")
+        if kind in {"docx", "xlsx"}:
+            raise UploadError(f"{kind} 文件里几乎没有文字内容（不足 8 个字符），请检查是否为空白文档")
+        raise UploadError("文件内容几乎为空（不足 8 个字符），请检查后重新上传")
     return kind, text, engine
 
 
