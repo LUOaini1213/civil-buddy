@@ -250,8 +250,11 @@ user_input
       "content": [
         {
           "material_id": "M001",
+          "source_material_id": "M001",
+          "split_of": 1,
           "name": "镀锌钢通",
-          "quantity": 4
+          "quantity": 4,
+          "weight_kg": 180
         }
       ],
       "special_attributes": ["超长", "需加固"],
@@ -260,6 +263,11 @@ user_input
   ]
 }
 ```
+
+> `content[].source_material_id` 是这一条来自装箱单的哪一行（拆行后 `material_id` 会带 `-S1` / `-W1` /
+> `-U2W1` 后缀，`source_material_id` 不变）；`split_of` > 1 表示这一条是某一件按质量切出的
+> 1/`split_of`（单件重超过箱型净重上限时的计算拆分）；`weight_kg` 是这一条的净重。三者供
+> `cargo_conservation.check_conservation` 逐行对账：Σ `quantity`/`split_of` 必须等于该行数量。
 
 > **一→二阶段交接物**：`boxes`
 
