@@ -54,3 +54,19 @@ print("directory:", result["directory"])
 print("\nGenerated files:")
 for item in result["files"]:
     print("-", item["path"])
+
+# The acceptance record (docs/dongyufei_tender_acceptance.md) as assertions, so it cannot go stale quietly.
+review = result["review"]
+rows = {row["requirement"]: row for row in review["response_comparison"]}
+status = {text[:6]: row["status"] for text, row in rows.items()}
+assert result["ok"] is True and result["submit_blocked"] is True
+assert len(result["files"]) == 11, len(result["files"])
+assert len(rows) == 3, list(rows)                                   # one row per tender line (#32)
+assert status["工期60日历"] == "conflict_requires_review", status   # 999 日历天 against 60 日历天 is pointed out, not judged
+assert status["技术方案评分"] == "not_matched", status
+assert status["★投标人须提"] == "candidate_requires_review", status
+assert any("999" in c["note"] and "60" in c["note"] for c in review["conflicts"]), review["conflicts"]
+assert "999" not in str(result.get("matrix") or "") and "999" not in TENDER   # the bid's number never becomes the tender's
+assert result["quality"]["unresolved"] == 3 and result["quality"]["responses_verified"] == 0, result["quality"]
+print("\nPASS tender_case rows=3 conflict=duration unresolved=3")
+
