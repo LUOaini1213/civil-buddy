@@ -30,7 +30,9 @@ def main() -> int:
     assert "extract_tender" not in tech_names
 
     text = "交货期 90 个日历天。★深基坑专项须编制，不满足即废标。施工组织设计 25 分。"
-    with tempfile.TemporaryDirectory() as td:
+    (ROOT / "output").mkdir(exist_ok=True)
+    # under the repo: the sandbox refuses a write outside its roots, and the system temp dir is outside
+    with tempfile.TemporaryDirectory(prefix="demo-bid-", dir=ROOT / "output") as td:
         out = Path(td)
         refuse = execute_tool(
             "extract_tender",

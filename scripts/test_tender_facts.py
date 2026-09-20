@@ -195,6 +195,28 @@ class PastedDocument(unittest.TestCase):
         self.assertEqual([m.side for m in tf.extract(text, sides="none").mentions], ["tender"])
 
 
+class Blocks(unittest.TestCase):
+    """"招标要求：… / 我方情况：…" - the person has said whose words follow."""
+
+    def test_a_marker_in_front_of_a_line_or_inside_it(self) -> None:
+        facts = tf.extract("招标正文：工期60日历天，投标有效期90天。投标响应：供应商自述工期999日历天，项目经理须持B证我们有。")
+        self.assertEqual(found(facts, "duration", "tender"), ["60日历天"])
+        self.assertEqual(found(facts, "duration", "ours"), ["999日历天"])
+        self.assertEqual([m.side for m in facts.of("pm")], ["ours"], "under 投标响应 every word is ours, a 须 included")
+
+    def test_a_heading_holds_until_the_next_one_or_a_blank_line(self) -> None:
+        text = "招标要求：\n工期365日历天，投标保证金80万元\n我方情况：\n工期380日历天\n\n招标编号：SZ-1-2"
+        facts = tf.extract(text)
+        self.assertEqual([(m.topic, m.side, m.value, m.line) for m in facts.mentions],
+                         [("duration", "tender", "365日历天", 2), ("bond", "tender", "80万元", 2),
+                          ("duration", "ours", "380日历天", 4), ("tender_no", "tender", "SZ-1-2", 5)])
+        self.assertEqual(tf.tender_pieces(text), [[], ["工期365日历天，投标保证金80万元"], [], [], ["招标编号：SZ-1-2"]],
+                         "a line that is all ours or only a heading still counts, so L# means the same to everybody")
+        parsed = parse_tender_text(text)
+        self.assertEqual({r["requirement_ref"] for r in parsed["requirements"]}, {"L2"})
+        self.assertEqual(parsed["duration_days"], 365)
+
+
 class Parser(unittest.TestCase):
     def test_two_clauses_of_a_kind_on_one_line_are_two_requirements(self) -> None:
         parsed = parse_tender_text("施工组织设计评分35分。进度计划与保障措施评分12.5分。")

@@ -542,6 +542,50 @@ def _owner_for(facts: Optional[Facts], lot: str) -> str:
     return TBD
 
 
+_GRADE = re.compile(r"(?:特|[一二三四五]|[甲乙丙])级(?:及以上|以上)?")
+
+
+def _grade_note(need: str, have: str) -> str:
+    """"一级" asked, "二级" offered. Said as what it is - the words differ - and left to a person:
+    "二级及以上" against "一级" differs too and is fine."""
+    asked, offered = _GRADE.findall(need or ""), _GRADE.findall(have or "")
+    if asked and offered and not set(asked) & set(offered):
+        return f"等级字样不同（招标：{'、'.join(dict.fromkeys(asked))}；响应：{'、'.join(dict.fromkeys(offered))}），待人工核验"
+    return ""
+
+
+#: which conflict topics of the response matcher belong to which field row
+_MATCHER_TOPICS = {"duration": ("duration", "delivery"), "delivery": ("delivery", "duration"), "validity": ("validity",),
+                   "warranty": ("warranty",), "bond": ("bond",), "price_cap": ("price",), "quality": ("quality",),
+                   "track_record": ("track_record",)}
+
+
+def _answer_from_documents(topic: str, need_value: str, comparison: Optional[Sequence[Mapping[str, Any]]],
+                           tender: Optional[Facts] = None) -> Dict[str, Any]:
+    """What the response documents say to this requirement: the quotes and the numeric conflicts that are
+    about this field. The comparison row may be a whole sentence holding several requirements - a conflict
+    about 工期 found in it says nothing about 投标有效期."""
+    from packing_assistant.tools.tender_facts import _TOPIC
+
+    flat = re.sub(r"\s+", "", need_value or "")
+    aliases = _TOPIC[topic].aliases if topic in _TOPIC else ()
+    mine = _MATCHER_TOPICS.get(topic, ())
+    for row in comparison or []:
+        text = re.sub(r"\s+", "", str(row.get("requirement") or ""))
+        if not flat or flat not in text:
+            continue
+        others = [re.sub(r"\s+", "", str(m.get("value") or "")) for m in (tender or {}).get("mentions") or []
+                  if m.get("side") == "tender" and m.get("topic") != topic and m.get("value")]
+        alone = not any(v and v in text for v in others)  # the sentence is this one requirement and nothing else
+        conflicts = [c for c in row.get("conflicts") or [] if c.get("topic") in mine]
+        quotes = [str(e.get("quote")) for e in row.get("response_evidence") or []
+                  if alone or any(a in str(e.get("quote")) for a in aliases)]
+        quotes += [str(c.get("response_quote")) for c in conflicts if c.get("response_quote") and str(c.get("response_quote")) not in quotes]
+        if quotes or conflicts:
+            return {"quotes": list(dict.fromkeys(quotes)), "conflicts": conflicts}
+    return {"quotes": [], "conflicts": []}
+
+
 def _numeric_gap(topic: str, need: str, have: str) -> str:
     from packing_assistant.tools.tender_response_match import _compare_quantities
 
@@ -588,14 +632,14 @@ def compliance_gaps(handoff: Optional[Mapping[str, Any]], matrix: Optional[Mappi
     scope_rows = [["项目名称", project or MISSING, "—"], ["招标编号", number or MISSING, "—"]]
     if tender.get("lots") or ours.get("lots"):
         scope_rows.append(["标段", "、".join(tender.get("lots") or ours.get("lots") or []), "—"])
-    scope_rows.append(["响应资料", "用户口述/摘录（未见投标文件原件）" if has_response else "用户未提供投标响应资料，不能认定已响应", "—"])
+    scope_rows.append(["响应资料", "已提供（原件未核验；以下只是原文对照）" if has_response else "用户未提供投标响应资料，不能认定已响应", "—"])
     md += _table(("事项", "内容", "来源"), scope_rows)
 
     open_items: List[str] = []
     for title, topics in _GAP_SECTIONS:
         rows: List[List[str]] = []
         for topic in topics:
-            rows += _gap_rows(topic, tender, ours, lots, open_items)
+            rows += _gap_rows(topic, tender, ours, lots, open_items, comparison)
         if title.startswith("5 "):
             rows += _comparison_rows(comparison, tender, open_items)
         md += [f"## {title}", ""]
@@ -633,7 +677,8 @@ def compliance_gaps(handoff: Optional[Mapping[str, Any]], matrix: Optional[Mappi
     return "\n".join(md)
 
 
-def _gap_rows(topic: str, tender: Facts, ours: Facts, lots: List[str], open_items: List[str]) -> List[List[str]]:
+def _gap_rows(topic: str, tender: Facts, ours: Facts, lots: List[str], open_items: List[str],
+              comparison: Optional[Sequence[Mapping[str, Any]]] = None) -> List[List[str]]:
     need_all = [m for m in _mentions(tender, topic, "tender") if m.get("value") or m.get("not_given") or topic in ("poa", "seal")]
     have_all = _mentions(ours, topic, "ours")
     if topic == "price_cap":
@@ -657,11 +702,18 @@ def _gap_rows(topic: str, tender: Facts, ours: Facts, lots: List[str], open_item
             have_cell = "；".join(dict.fromkeys(str(m["value"]) for m in haves if m.get("value")))
         pending = any(_PENDING.search(str(m.get("note") or "")) for m in haves)
         mismatch = _price_gap(str(need["value"]), have_value) if (topic == "price_cap" and need) else _numeric_gap(topic, str(need["value"]) if need else "", have_value)
+        # response documents (the workflow's role-tagged sources) answer a field row as well
+        answered = _answer_from_documents(topic, str(need["value"]), comparison, tender) if (need and not haves) else {"quotes": [], "conflicts": []}
+        quotes = answered["quotes"]
+        if quotes:
+            have_cell = _clip("；".join(quotes), 120)
+            mismatch = "；".join(str(c.get("note")) for c in answered["conflicts"])
+        grade = _grade_note(str(need["value"]) if need else "", have_cell if (haves or quotes) else "")
         waiting = next((str(m.get("note")) for m in haves if _PENDING.search(str(m.get("note") or ""))), "")
         if not needs or (not need and not any(m.get("not_given") for m in needs) and topic not in ("poa", "seal")):
             state = NO_TENDER_TEXT
             gap = ("用户称未办结（见响应栏）；" if waiting else "") + "补招标文件对应条款原文后再对照"
-        elif not haves:
+        elif not haves and not quotes:
             state, gap = NOT_RESPONDED, "未见响应内容：补响应原文或证据"
         elif mismatch:
             state, gap = f"{NOT_RESPONDED}·数值不符", mismatch
@@ -669,18 +721,30 @@ def _gap_rows(topic: str, tender: Facts, ours: Facts, lots: List[str], open_item
             state, gap = NOT_RESPONDED, "用户称未办结（见响应栏）：办结并取得证据后回填"
         else:
             state, gap = RESPONDED, "核对原件：" + ("证书/社保/注册专业" if topic in ("pm", "tech_lead") else "金额、形式、有效期" if topic.startswith("bond") else "与投标函、附件逐字一致")
+            if quotes:
+                gap = "候选响应原文，出现相同词不代表已实质响应；" + gap
+        if grade:
+            gap = grade + "；" + gap
         owner = _owner_for(ours, lot)
         rows.append([label, need_cell, have_cell, state, gap, owner])
-        if state != RESPONDED:
+        if state != RESPONDED or grade:
             open_items.append(f"{label}：{gap}（责任人 {owner}）")
     return rows
+
+
+def _field_speaks_for(text: str, tender: Facts) -> bool:
+    """A requirement line one of the field rows above is about (it holds that field's value)."""
+    flat = re.sub(r"\s+", "", text)
+    topics = {t for _title, ts in _GAP_SECTIONS for t in ts}
+    return any(m.get("side") == "tender" and m.get("topic") in topics and m.get("value")
+               and re.sub(r"\s+", "", str(m["value"])) in flat for m in tender.get("mentions") or [])
 
 
 def _comparison_rows(comparison: Optional[Sequence[Mapping[str, Any]]], tender: Facts, open_items: List[str]) -> List[List[str]]:
     rows: List[List[str]] = []
     for row in comparison or []:
         text = str(row.get("requirement") or "")
-        if not text or _covered(text, tender):
+        if not text or _covered(text, tender) or _field_speaks_for(text, tender):
             continue
         text = _quote(text, tender, "star" if "star" in (row.get("kinds") or []) else "")
         if not text:

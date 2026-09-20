@@ -372,13 +372,10 @@ def run_tender_workflow(text, *, session_id, output_root, sources=None, confirme
                     if not outline.get("from_extracted_scores"):
                         child["unresolved"].append("未提供明确评分点；技术响应范围待核")
                 else:
-                    markdown = _compliance_gaps_md(local["handoff"], local["matrix"])
-                    from packing_assistant.document_text import table_markdown
-                    rows = [["招标要求", "响应原文", "对照状态（非认定）"]]
-                    for row in local["response_comparison"]:
-                        rows.append([row["requirement"], "；".join(e["quote"] for e in row["response_evidence"]) or "未提供对应响应证据", _comparison_status_text(row)])
-                    table_limit = sum(sum(len(str(cell)) * 6 + 10 for cell in row) for row in rows) + 100
-                    markdown += "\n\n## 用户响应资料对照\n\n仅作原文候选对照，出现相同词不代表已实质响应，需人工核验。\n\n" + table_markdown(rows, table_limit)
+                    # One table. The response documents used to be compared in a second table appended
+                    # below a first one that knew nothing of them - "未响应" above, the candidate quote and
+                    # the numeric conflict below. The comparison now answers the rows themselves.
+                    markdown = _compliance_gaps_md(local["handoff"], local["matrix"], comparison=local["response_comparison"])
                     child["response_comparison"] = local["response_comparison"]
                     child["unresolved"] = [str(g.get("title") or g.get("req_id")) for g in gap_rows(local["matrix"])]
                     child["unresolved"].extend(item for row in local["response_comparison"] for item in _comparison_unresolved(row))

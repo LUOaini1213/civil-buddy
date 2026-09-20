@@ -63,7 +63,7 @@ SHORT = 36  # a text value longer than this is a sentence, not a field
 # ---------------------------------------------------------------------------
 
 _CN_NUM = "一二三四五六七八九十"
-_LOT = re.compile(r"(?<![A-Za-z0-9个统唯])(?:第)?([" + _CN_NUM + r"]{1,2}|\d{1,2}|[A-Z])\s*标段?(?![书的准高志识题价杆注])")
+_LOT = re.compile(r"(?<![A-Za-z0-9个统唯])(?:第)?([" + _CN_NUM + r"]{1,2}|\d{1,2}|[A-Z])\s*标段?(?![书准高志识题价杆注])")
 _ALL_LOTS = re.compile(r"(?:两个?|[二三四五六几]个|\d个|各个?|每个?|所有|全部)标段?|标段(?:都|均)")
 
 # ---------------------------------------------------------------------------
@@ -80,6 +80,7 @@ _OURS_STRONG = (
 )
 _OURS_WEAK = (
     r"(?<![须应需得])承诺|拟派|拟任|拟报|拟投入|打算报|准备报|打算派|准备派|报的|排的|写成|写的|填的|报了"
+    r"|写了|填了|排了|编了"
     r"|(?<![确决指规约])定了|(?<![确决指规约])定的"
     r"|财务(?=[^，,。；;]{0,4}(?:转|付|交|缴|说))|实缴|只转|转了|交了|缴了"
     r"|已经|已开|已转|已交|已缴|已盖|已办|已附|已提交|已编|开好|盖好|办好|都在"
@@ -100,7 +101,8 @@ _NUMBERED_LINE = re.compile(r"^\s*(?:[一二三四五六七八九十]+\s*[、.�
 #: word 废标, and the parser's reject rule used to file it as a P0 requirement of the tender.
 _TASK_TALK = re.compile(
     r"^\s*(?:请|麻烦|烦请)?\s*(?:帮我|帮忙|给我|替我|我要|我想|老板让|经理让|领导让|出个|出一份|出一版|做个|做一份|整理成)"
-    r"|废标(?:检查|点|清单|对照|风险)|有没有废标|会不会废标|响应缺口|解析表|技术标目录|资料如下|如下[：:]?\s*$")
+    r"|^\s*(?:请|麻烦|烦请)\s*(?:解析|整理|核对|对照|检查|看|出|做)"
+    r"|废标(?:检查|点|清单|对照|风险)|有没有废标|会不会废标|响应缺口|解析表|技术标目录|资料如下|如下[：:，,。]?\s*$")
 
 
 #: "有没有废标点" holds 废标 and obliges nobody; these do
@@ -110,6 +112,42 @@ _OBLIGES = re.compile(r"必须|须|应当|应具备|应具有|应提供|应满�
 def is_task_talk(piece: str) -> bool:
     """A clause that only says what the user wants done: no number, no ★, no obligation in it."""
     return bool(_TASK_TALK.search(piece)) and not re.search(r"\d|[★☆＊]", piece) and not _OBLIGES.search(piece)
+
+
+#: A person who writes "招标要求：… / 我方情况：…" has said whose words follow. With text after the colon
+#: the block is the rest of that line (up to the next marker); alone on its line it is a heading and
+#: holds until the next one.
+_BLOCK = re.compile(r"(?:^|(?<=[。；;！!？?\s]))\s*(?P<theirs>招标正文|招标要求|招标文件要求|招标方要求|业主要求|甲方要求)\s*[：:]\s*"
+                    r"|(?:^|(?<=[。；;！!？?\s]))\s*(?P<ours>投标响应|我方响应|我方情况|我们的情况|我司情况|响应情况|投标文件响应)\s*[：:]\s*")
+
+
+def _segments(text: str, sides: str) -> List[Tuple[int, str, str]]:
+    """(line number, stretch of that line, whose block it stands in: "" | "theirs" | "ours")."""
+    out: List[Tuple[int, str, str]] = []
+    line_no = 0  # counts non-empty lines, like the parser's L# references
+    heading = ""
+    for raw_line in (text or "").splitlines() or [""]:
+        if not raw_line.strip():
+            heading = ""  # a blank line ends a block that a heading opened
+            continue
+        line_no += 1
+        marks = [] if sides == "none" else list(_BLOCK.finditer(raw_line))
+        if not marks:
+            out.append((line_no, raw_line, heading))
+            continue
+        if raw_line[:marks[0].start()].strip():
+            out.append((line_no, raw_line[:marks[0].start()], heading))
+        for index, mark in enumerate(marks):
+            side = "theirs" if mark.group("theirs") else "ours"
+            stop = marks[index + 1].start() if index + 1 < len(marks) else len(raw_line)
+            body = raw_line[mark.end():stop]
+            if body.strip():
+                out.append((line_no, body, side))
+                heading = ""
+            else:
+                out.append((line_no, "", side))  # a heading alone: no words, but the line still counts
+                heading = side
+    return out
 
 
 def _is_document(text: str) -> bool:
@@ -293,7 +331,7 @@ class TenderFacts:
 # ---------------------------------------------------------------------------
 
 _SCORE_LEAD = re.compile(
-    r"^(?:.*?(?:评标办法|评分办法|评分表|评分标准|评审表|技术标评分|商务标评分|技术标|商务标|评分点|评分项|评分)(?:里面?|中|内|上)?[：:，,\s]*"
+    r"^(?:.*?(?:评标办法|评分办法|评分表|评分标准|评审表|技术标评分|商务标评分|技术标|商务标|评分点|评分项|评分)(?:(?:里面?|中|内|上)[：:，,\s]*|[：:，,]\s*)"
     r"|其中|另外|还有|以及|和|及|与|、|\s)+")
 # "计" and "共" are not connectors here: they end 施工组织设计 and 公共
 _SCORE_TAIL = re.compile(r"(?:那块|这块|那部分|这部分|部分|这项|那项|一项|方面)?(?:最重|最高|最多|较重)?的?(?:评分|分值|权重|满分|得分|分数)?(?:为|是|占|合计|最高)?\s*$")
@@ -451,11 +489,7 @@ def extract(text: str, *, sides: str = "auto") -> TenderFacts:
     lot = ""
     lot_forms: Dict[str, str] = {}
     seen_clauses: List[str] = []
-    line_no = 0  # counts non-empty lines, like the parser's L# references
-    for raw_line in (text or "").splitlines() or [""]:
-        if not raw_line.strip():
-            continue
-        line_no += 1
+    for line_no, raw_line, block_side in _segments(text, sides):
         # "标签：" at the start of a line governs the whole line: "已有证据：同类学校业绩一项，合同都在"
         line_topic: Optional[str] = None
         line_body = raw_line
@@ -510,6 +544,10 @@ def extract(text: str, *, sides: str = "auto") -> TenderFacts:
                 # ---- whose side, by position
                 absent = _NOT_GIVEN.search(clause)
                 cue = None if sides == "none" else _our_cue(clause, document=document)
+                if block_side == "ours":
+                    cue = re.match(r"", clause)  # under "投标响应：" every word is ours, a 须 included
+                elif block_side == "theirs":
+                    cue = None
                 if label_is_ours and cue is None and sides != "none":
                     cue = re.match(r"", clause)  # the label said whose: everything on this line is ours
                 hits = [] if line_topic in _ALWAYS_OURS | _STATEMENT_ONLY else _topic_hits(clause)
@@ -694,79 +732,71 @@ def extract(text: str, *, sides: str = "auto") -> TenderFacts:
 # ---------------------------------------------------------------------------
 
 
+def _line_sides(text: str, sides: str) -> List[Tuple[List[str], List[str]]]:
+    """Per non-empty line: (the literal pieces that are the tender speaking, the pieces that are ours).
+
+    One rule for the parser and the fact walk: block markers first ("招标要求：" / "我方情况：", as a
+    heading or in front of a line), cues inside what no block claims. A line nobody of our side
+    speaks in, and that holds no task talk, comes back whole as the one piece it is - a pasted
+    document parses exactly as before.
+    """
+    document = _is_document(text)
+    grouped: Dict[int, List[Tuple[str, str]]] = {}
+    for line_no, stretch, side in _segments(text, sides):
+        grouped.setdefault(line_no, []).append((stretch, side))
+    out: List[Tuple[List[str], List[str]]] = []
+    for line_no in sorted(grouped):
+        theirs: List[str] = []
+        ours: List[str] = []
+        for stretch, side in grouped[line_no]:
+            line = stretch.strip()
+            if not line:
+                continue
+            if sides == "none" or side == "theirs":
+                theirs.append(line)
+                continue
+            if side == "ours":
+                ours.append(line)
+                continue
+            kept: List[str] = []
+            touched = False
+            for piece in re.split(r"(?<=[，,。；;！!？?])", line):
+                if not piece.strip():
+                    continue
+                if not document and is_task_talk(piece):
+                    touched = True
+                    continue
+                cue = _our_cue(piece, document=document)
+                if cue is None:
+                    kept.append(piece)
+                    continue
+                touched = True
+                if piece[:cue.start()].strip(_EDGE):
+                    kept.append(piece[:cue.start()])
+                ours.append(piece[cue.start():].strip())
+            theirs += [line] if not touched else [x.strip().strip("，,") for x in kept if x.strip().strip("，,")]
+        out.append((theirs, ours))
+    return out
+
+
 def split_sides(text: str, *, sides: str = "auto") -> Tuple[str, str]:
-    """(what the tender asks, what we say about ourselves) - line structure kept.
+    """(what the tender asks, what we say about ourselves), line by line.
 
     For the document parser: it must never read "我们投标函写了999日历天" as a tender requirement.
-    Within a clause everything from the first of-our-side cue onward is ours. Explicit
-    "招标正文：… 投标响应：…" blocks win over cues.
     """
-    explicit = re.search(r"招标正文[：:]([\s\S]+?)投标响应[：:]([\s\S]+)", text or "")
-    if explicit:
-        return explicit.group(1).strip(), explicit.group(2).strip()
-    if sides == "none":
-        return (text or "").strip(), ""
-    document = _is_document(text)
-    theirs: List[str] = []
-    ours: List[str] = []
-    for raw_line in (text or "").splitlines():
-        kept: List[str] = []
-        mine: List[str] = []
-        for piece in re.split(r"(?<=[，,。；;！!？?])", raw_line):
-            if not piece.strip():
-                continue
-            cue = _our_cue(piece, document=document)
-            if cue is None:
-                kept.append(piece)
-                continue
-            if piece[:cue.start()].strip(_EDGE):
-                kept.append(piece[:cue.start()] + "，")
-            mine.append(piece[cue.start():])
-        theirs.append("".join(kept))
-        if mine:
-            ours.append("".join(mine))
-    return "\n".join(line for line in theirs).strip(), "\n".join(ours).strip()
+    pairs = _line_sides(text, sides)
+    return ("\n".join("，".join(theirs) for theirs, _ours in pairs if theirs).strip(),
+            "\n".join("".join(ours) for _theirs, ours in pairs if ours).strip())
 
 
 def tender_pieces(text: str, *, sides: str = "auto") -> List[List[str]]:
     """Per non-empty line of the text: the literal pieces of it that are the tender speaking.
 
-    A line nobody of our side speaks in comes back whole, as the one piece it is, so a pasted
-    document parses exactly as before. Where our side does speak, only the clauses before the cue
-    remain - each still a literal stretch of the line, so a requirement quoted from a piece can be
-    found again in the source.
+    Each piece is a literal stretch of its line, so a requirement quoted from one can be found again
+    in the source. A line that is all ours is an empty list - it still counts, so L# keeps meaning
+    "the n-th non-empty line of what was typed".
     """
-    out: List[List[str]] = []
-    explicit = re.search(r"招标正文[：:]([\s\S]+?)投标响应[：:]([\s\S]+)", text or "")
-    body = explicit.group(1) if explicit else (text or "")
-    document = _is_document(body)
-    for raw_line in body.splitlines():
-        line = raw_line.strip()
-        if not line:
-            continue
-        if sides == "none" or explicit:
-            out.append([line])
-            continue
-        pieces: List[str] = []
-        touched = False
-        for piece in re.split(r"(?<=[，,。；;！!？?])", line):
-            if not piece.strip():
-                continue
-            if not document and is_task_talk(piece):
-                touched = True
-                continue
-            cue = _our_cue(piece, document=document)
-            if cue is None:
-                pieces.append(piece)
-                continue
-            touched = True
-            if piece[:cue.start()].strip(_EDGE):
-                pieces.append(piece[:cue.start()])
-        if not touched:
-            out.append([line])
-        else:
-            out.append([x.strip().strip("，,") for x in pieces if x.strip().strip("，,")])
-    return out
+    return [theirs for theirs, _ours in _line_sides(text, sides)]
 
 
 def has_our_side(text: str) -> bool:
