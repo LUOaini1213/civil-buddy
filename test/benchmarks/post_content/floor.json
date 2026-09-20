@@ -1,10 +1,10 @@
 {
-  "_note": "改造前基线 165/886 = 0.186（2026-09-20）。门禁只拦回退：下调任何一个数都要在提交信息里写清楚新测得的数。",
+  "_note": "改造前基线：65 岗 193 例 1529 个事实，placed 287（0.188 micro / 0.197 macro），misplaced 114（2026-09-20）。门禁只拦回退；下调任何一个数都要在提交信息里写清楚新测得的数。",
   "sets": {
     "cases": {
-      "micro": 0.186,
+      "micro": 0.188,
       "forbidden": 0,
-      "misplaced": 18,
+      "misplaced": 114,
       "per_post_default": 0.0,
       "per_post": {"warehouse": 1.0}
     }

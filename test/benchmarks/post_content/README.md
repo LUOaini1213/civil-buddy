@@ -24,10 +24,15 @@
     python scripts/eval_post_content.py --show cost-02   # 打印该用例的交付物
     python scripts/eval_post_content.py --set heldout    # 规则冻结后另写的留出集
 
-## 基线（2026-09-20，38 岗 112 例 886 个事实）
+## 基线（2026-09-20，改造前）
 
-| | placed | micro | misplaced | dumped | echo_only | missing |
+65 岗 193 例 1529 个事实：
+
+| placed | micro | macro | misplaced | dumped | echo_only | missing |
 | --- | --- | --- | --- | --- | --- | --- |
-| 改造前 | 165 | 0.186 | 18 | 140 | 37 | 526 |
+| 287 | 0.188 | 0.197 | 114 | 334 | 175 | 619 |
 
-其中 `warehouse` 是参考改法（5/5）；未改的岗位最高 0.33，有 3 个岗位为 0。
+`warehouse` 是参考改法（5/5）。未改的岗位最高 0.42，最低 0。`misplaced` 114 是最刺眼的一项：
+值进了短栏位，却挂在**另一个对象**名下——一句话里两种材料，甲的数被写进了乙的行。
+
+门禁底线记在 `floor.json`；每完成一批岗位就上调，并在提交信息里写清新测得的数。
