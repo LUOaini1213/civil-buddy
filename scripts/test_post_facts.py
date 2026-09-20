@@ -90,6 +90,11 @@ class Labelled(unittest.TestCase):
     def test_a_word_that_merely_contains_an_alias_is_not_a_label(self):
         self.assertEqual(pf.labelled("本次不在施工范围内的内容另行商定", self.ALIASES), {})
 
+    def test_a_long_label_introduces_the_words_right_after_it_a_short_one_does_not(self):
+        aliases = {"owner": ("责任人",), "trade": ("责任专业",), "issue": ("问题编号",), "scope": ("范围",), "place": ("位置",)}
+        text = "问题编号CL-017，责任专业暖通，责任人刘洋，范围内的管线另议，位置关系见附图"
+        self.assertEqual(pf.labelled(text, aliases), {"issue": "CL-017", "trade": "暖通", "owner": "刘洋"})
+
     def test_first_mention_wins_and_the_longest_alias_claims_the_text(self):
         self.assertEqual(pf.labelled("设计范围：A 区\n范围：B 区", self.ALIASES), {"scope": "A 区"})
 
@@ -105,6 +110,18 @@ class PeopleDatesSpecs(unittest.TestCase):
         self.assertEqual(pf.dates("2026-09-18 浇筑，9月20日拆模，2026年10月交付"), ["2026-09-18", "9月20日", "2026年10月"])
         self.assertEqual(pf.periods("本周入库，下周盘点"), ["本周", "下周"])
         self.assertEqual(pf.specs("螺纹钢 HRB400 Φ20，混凝土 C35，钢管 48.3×3.6"), ["HRB400", "Φ20", "C35", "48.3×3.6"])
+
+    def test_deadline_places_versions_codes_clock(self):
+        text = "3#楼地下室机电模型V2.3，B1层5-7轴交C轴送风管跟KL12梁硬碰，问题编号CL-017，要求2026-09-26前改完，周五14:30开会"
+        self.assertEqual(pf.deadline(text), "2026-09-26")
+        self.assertEqual(pf.deadline("截止日期：9月30日"), "9月30日")
+        self.assertEqual(pf.deadline("2026-09-26 开了协调会"), "")
+        self.assertEqual(pf.places(text), ["3#楼", "地下室", "B1层", "5-7轴交C轴"])
+        self.assertEqual(pf.places("K3+200~K3+450 段路基，A区二标段"), ["K3+200~K3+450", "A区", "二标段"])
+        self.assertEqual(pf.versions(text), ["V2.3"])
+        self.assertEqual(pf.doc_codes(text + "，入库单 RK-0918，钢筋 HRB400，C35"), ["CL-017", "RK-0918"])
+        self.assertEqual(pf.clock_times(text), ["14:30"])
+        self.assertEqual(pf.clock_times("下午3点半浇筑，2026-09-18 完成"), ["下午3点半"])
 
     def test_strip_command(self):
         self.assertEqual(pf.strip_command("帮我写一份仓库收发存台账口径：螺纹钢入库 35 吨"), "螺纹钢入库 35 吨")

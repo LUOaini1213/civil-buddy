@@ -193,7 +193,11 @@ def labelled(text: str, aliases: Mapping[str, Sequence[str]]) -> Dict[str, str]:
                 rest = line[end:]
                 colon = bool(re.match(r"\s*[：:＝=]", rest))
                 edge = start == 0 or line[start - 1] in " \t，,;；。、（(的"
-                introduces = bool(re.match(r"\s*(?:[为是约共计]\s*)?[\dA-Za-zΦφ]", rest)) or (edge and bool(re.match(r"\s+\S", rest)))
+                introduces = (
+                    bool(re.match(r"\s*(?:[为是约共计]\s*)?[\dA-Za-zΦφ]", rest))
+                    or (edge and bool(re.match(r"\s+\S", rest)))
+                    or (edge and len(alias) >= 3 and bool(re.match(r"[为是]?[\u4e00-\u9fff]", rest)))
+                )
                 if not (colon or introduces):
                     continue
                 for i in range(start, end):
@@ -212,6 +216,45 @@ def labelled(text: str, aliases: Mapping[str, Sequence[str]]) -> Dict[str, str]:
             if value and key not in values:
                 values[key] = value
     return values
+
+
+_DEADLINE = re.compile(
+    r"(?:截止(?:日期|时间)?|期限|限期?|最晚|最迟|务必于|须于|应于|要求于?|于)\s*[：:]?\s*(?P<a>" + _DATE.pattern + r")"
+    r"|(?P<b>" + _DATE.pattern + r")\s*(?:之前|以前|前|内)"
+)
+_PLACE = re.compile(
+    r"\d+\s*[#＃]\s*[楼栋塔墩台井]|[A-Za-z]?\d+\s*号[楼栋塔墩台井]|[A-Z]\d*区|[一二三四五六七八九十]+[期区标]段?"
+    r"|(?:地下[一二三四五六]层|B\d层|\d+\s*层|[一二三四五六七八九十]+层|屋面层?|顶层|首层|裙楼|塔楼|地下室)"
+    r"|[A-Z]?\d+(?:\s*[-~～]\s*[A-Z]?\d+)?\s*轴(?:\s*[交/×]\s*[A-Z](?:\s*[-~～]\s*[A-Z])?\s*轴)?|[A-Z](?:\s*[-~～]\s*[A-Z])?\s*轴"
+    r"|[A-Z]{0,3}K\d+\s*\+\s*\d+(?:\.\d+)?(?:\s*[-~～]\s*[A-Z]{0,3}K\d+\s*\+\s*\d+(?:\.\d+)?)?"
+)
+_VERSION = re.compile(r"(?<![A-Za-z])[Vv]\d+(?:\.\d+)*|第\s*[一二三四五六七八九十\d]+\s*版|[A-Z]\s*版|修订\s*\d+")
+_DOC_CODE = re.compile(r"(?<![A-Za-z0-9])[A-Z]{1,8}(?:[-_/][A-Z]{1,6})?[-_/]\d{2,}(?:[-_/]\d+)*(?![\d])")
+_CLOCK = re.compile(r"(?:[01]?\d|2[0-3])\s*[:：]\s*[0-5]\d|(?:上午|下午|晚上|凌晨|中午)?\s*\d{1,2}\s*点(?:\s*半|\s*\d{1,2}\s*分)?")
+
+
+def deadline(text: str) -> str:
+    """The date the user set as a limit ("要求 2026-09-26 前改完", "截止 9月30日"), as written; "" if none."""
+    match = _DEADLINE.search(text or "")
+    return re.sub(r"\s+", "", match.group("a") or match.group("b")) if match else ""
+
+
+def places(text: str) -> List[str]:
+    """Where, as written: 3#楼, B1层, 5-7轴交C轴, A区, K3+200. Adjacent pieces stay separate."""
+    return [re.sub(r"\s+", "", m.group(0)) for m in _PLACE.finditer(text or "")]
+
+
+def versions(text: str) -> List[str]:
+    return [re.sub(r"\s+", "", m.group(0)) for m in _VERSION.finditer(text or "")]
+
+
+def doc_codes(text: str) -> List[str]:
+    """Document / issue numbers with a separator: CL-017, RK-0918, SG/2026/015. Not HRB400 or C35."""
+    return [m.group(0) for m in _DOC_CODE.finditer(text or "")]
+
+
+def clock_times(text: str) -> List[str]:
+    return [re.sub(r"\s+", "", m.group(0)) for m in _CLOCK.finditer(_masked(text or ""))]
 
 
 def person_for(text: str, roles: Sequence[str]) -> str:
