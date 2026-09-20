@@ -7,6 +7,8 @@ from __future__ import annotations
 
 import json
 import logging
+import math
+import os
 import shutil
 import threading
 import time
@@ -46,6 +48,9 @@ class SessionLease:
         self.session = session
         self.released = False
         self.running = False
+        self.detached = threading.Event()  # the browser is gone; the turn is not
+        self.finished = threading.Event()
+        self._bounded = False
         with _LOCK:
             if session in _ACTIVE:
                 raise SessionBusy("这个会话正在处理上一条消息，请完成或停止后重试")
@@ -75,10 +80,22 @@ class SessionLease:
                 self.control.state = "cancelled" if self.control.event.is_set() else "failed"
             self.running = False
         self.release()
+        self.finished.set()
 
     def disconnect(self):
-        if self.running and not self.released:
-            self.control.request_cancel()
+        """HTTP teardown: the browser is gone, the turn is left alone and produce() finishes it.
+
+        This is the one hook a real disconnect reliably reaches (the response's BackgroundTask);
+        stream_turn's own `finally` waits for the generator to be collected. So it is here that
+        the producer is told to stop queueing for a reader that will not come, and here that the
+        unattended turn gets its limit.
+        """
+        self.detached.set()
+        with _LOCK:
+            unattended = self.running and not self.released and not self._bounded
+            self._bounded = self._bounded or unattended
+        if unattended:
+            _bound_detached_turn(self.control, self.finished)
         self.release()
 
 
@@ -271,6 +288,10 @@ def _record(root: Path, turn: dict, result: dict, deliverables: list[dict], node
                "deliverables": deliverables, "attachments": turn["attachments"],
                "error_code": result.get("error_code", "")}
     payload["context"] = turn.get("context", {})
+    # Office export outcome per run, so the card can say "Word 导出失败 / 待生成"
+    # instead of silently showing fewer files.
+    payload["export_errors"] = [str(e) for e in (result.get("export_errors") or [])]
+    payload["docx_pending"] = result.get("docx_pending")
     payload["state"] = result.get("state", "cancelled" if result.get("cancelled") else "done" if result.get("ok", True) else "failed")
     payload["cancelled"] = result.get("cancelled", False)
     payload["engine_run_id"] = result.get("engine_run_id", "")
@@ -298,6 +319,22 @@ def read_runs(root: Path, sid: str) -> list[dict]:
     return sorted(rows, key=lambda r: r.get("mtime", ""))
 
 
+def deliverable_runs(runs: list[dict]) -> list[dict]:
+    """One entry per run that produced files, newest first: the card groups by run."""
+    out = []
+    for r in reversed(runs):
+        files = [f for f in r.get("deliverables", []) if Path(f["path"]).is_file()]
+        notes = {"export_errors": r.get("export_errors") or [], "docx_pending": r.get("docx_pending")}
+        if not files and not notes["export_errors"] and not notes["docx_pending"]:
+            continue
+        expert = get_expert(r.get("expert_id", ""))
+        out.append({"run_id": r.get("run_id", ""), "expert_id": r.get("expert_id", ""),
+                    "expert": expert.name if expert else r.get("expert_id", ""),
+                    "mtime": r.get("mtime", ""), "state": r.get("state", "done"),
+                    "deliverables": files, **notes})
+    return out
+
+
 def session_detail(root: Path, sid: str) -> dict:
     valid_session(sid)
     detail = projects.session_detail(root, sid)
@@ -306,6 +343,7 @@ def session_detail(root: Path, sid: str) -> dict:
     detail["collaboration"] = runs[-1].get("collaboration") if runs else None
     detail["attachment_roles"] = runs[-1].get("attachment_roles", {}) if runs else {}
     detail["deliverables"] = [f for r in runs for f in r.get("deliverables", []) if Path(f["path"]).is_file()]
+    detail["deliverable_runs"] = deliverable_runs(runs)
     # Restore only the last turn's selected attachments, not every uploaded file.
     from uploads import list_uploads
     selected = set(runs[-1].get("attachments", [])) if runs else set()
@@ -456,15 +494,20 @@ def _stream_turn(root: Path, turn: dict, *, key_available: bool, plain_runner, l
                      skill_source=turn["skill_source"], deliverables=files, citations=citations,
                      wrote=bool(files), hitl_pending=pending, submit_blocked=True, run_ids=run_ids, ok=ok,
                      state=control.state, cancelled=False, context=turn["context"],
-                     route=turn["route"], collaboration=collaboration_result)
+                     route=turn["route"], collaboration=collaboration_result,
+                     deliverable_runs=deliverable_runs([r for r in read_runs(root, sid) if r.get("run_id") in run_ids]))
     except TurnCancelled:
         control.seal("cancelled")
         text = "\n\n".join(texts) or "".join(partial)
-        text += "\n\n[本轮已取消，已完成的文件保留下载。]" if files else "\n\n[本轮已取消，回答可能不完整。]"
+        # Say who stopped it: a turn nobody was connected to any more is stopped by the server.
+        unattended = control.reason == "detached_timeout"
+        stopped = "页面断开后一直没有回来，本轮已取消" if unattended else "本轮已取消"
+        text += f"\n\n[{stopped}，已完成的文件保留下载。]" if files else f"\n\n[{stopped}，回答可能不完整。]"
         rid = uuid4().hex
         _record(root, turn, {"run_id": rid, "ok": False, "state": "cancelled", "cancelled": True,
                             "error_code": "cancelled", "collaboration": collaboration_result}, [],
-                [{"kind": "info", "title": "本轮已取消", "detail": "停止后续步骤；已完成文件保留"}])
+                [{"kind": "info", "title": "本轮已取消",
+                  "detail": ("页面断开超过时限，服务端自动停止；" if unattended else "") + "停止后续步骤；已完成文件保留"}])
         run_ids.append(rid)
         failure_recorded = True
         projects.append_turn(root, sid, "assistant", text)
@@ -502,11 +545,45 @@ def _stream_turn(root: Path, turn: dict, *, key_available: bool, plain_runner, l
                 lease.finish()
 
 
+DETACHED_TURN_SECONDS = 600.0
+
+
+def detached_turn_seconds() -> float:
+    """How long a turn may keep running with nobody connected to it.
+
+    The page polls a detached turn for ten minutes (cbWatchSession in app.js), so that is how long
+    a result can still reach anyone. CIVIL_DETACHED_TURN_SECONDS=0 is the earlier contract:
+    a disconnect cancels at once.
+    """
+    raw = os.environ.get("CIVIL_DETACHED_TURN_SECONDS", "").strip()
+    try:
+        value = float(raw) if raw else DETACHED_TURN_SECONDS
+    except ValueError:
+        return DETACHED_TURN_SECONDS
+    return value if math.isfinite(value) and value >= 0 else DETACHED_TURN_SECONDS
+
+
+def _bound_detached_turn(control, finished: threading.Event):
+    """Nobody is connected, so nobody can press 停止 either: the server has to.
+
+    While a disconnect cancelled the turn, closing the page was what stopped a stuck one and gave
+    the session back. Detaching keeps the turn, so it needs an end of its own: past the limit it is
+    cancelled exactly as the stop button would, which also interrupts a blocked model connection.
+    """
+    limit = detached_turn_seconds()
+
+    def watch():
+        if not finished.wait(limit):
+            control.request_cancel("detached_timeout")
+
+    threading.Thread(target=watch, name="civil-detached-" + control.session, daemon=True).start()
+
+
 def stream_turn(root: Path, turn: dict, *, key_available: bool, plain_runner, lease: SessionLease):
     """A turn owns its lease until persistence, even after the browser disconnects."""
     queue = Queue(maxsize=64)
     finished = threading.Event()
-    detached = threading.Event()
+    detached = lease.detached
     lease.start()
 
     def produce():
@@ -541,6 +618,9 @@ def stream_turn(root: Path, turn: dict, *, key_available: bool, plain_runner, le
                 continue
             yield event
     finally:
-        detached.set()
-        if not finished.is_set():
-            lease.control.request_cancel()
+        # A dropped connection (mobile lock screen, app switch, Wi-Fi to 4G,
+        # task switch in the UI) only detaches the browser. The turn keeps its
+        # lease, finishes, and persists; the client recovers the result from
+        # GET /api/sessions/{sid}. Only POST /api/sessions/{sid}/cancel cancels,
+        # or the server itself once the turn has gone unattended for too long.
+        lease.disconnect()

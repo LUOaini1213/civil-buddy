@@ -154,6 +154,8 @@ def llm_settings_update(body: LLMConfigIn) -> dict:
 
 @app.post("/api/upload")
 async def upload(request: Request) -> dict:
+    from starlette.exceptions import HTTPException as StarletteHTTPException
+    from starlette.formparsers import MultiPartException
     from uploads import MAX_BYTES, MAX_REQUEST_BYTES, UploadError, UploadTooLarge, save_uploads
     # Bound the body before multipart parsing, including chunked uploads without Content-Length.
     data = bytearray()
@@ -180,6 +182,18 @@ async def upload(request: Request) -> dict:
         raise HTTPException(413, str(exc)) from exc
     except UploadError as exc:
         raise HTTPException(400, str(exc)) from exc
+    except (MultiPartException, StarletteHTTPException) as exc:
+        # Starlette's own limits (max_files / max_fields / malformed body) come
+        # back as English text (re-raised as HTTPException inside request.form);
+        # the UI shows the detail verbatim, so translate the known ones.
+        detail = str(getattr(exc, "detail", None) or getattr(exc, "message", None) or exc)
+        if "Too many files" in detail:
+            raise HTTPException(400, "一次最多上传 12 个附件") from exc
+        if "Too many fields" in detail:
+            raise HTTPException(400, "上传表单字段过多") from exc
+        if isinstance(exc, StarletteHTTPException) and exc.status_code != 400:
+            raise
+        raise HTTPException(400, "上传内容格式无效，请重新选择文件后再试") from exc
     except (OSError, PermissionError) as exc:
         raise HTTPException(500, "无法保存附件，请检查工作台目录权限") from exc
 
@@ -412,8 +426,11 @@ class ProjectIn(BaseModel):
 def projects_create(body: ProjectIn) -> dict:
     import projects as pj
 
+    name = " ".join(str(body.name or "").split())
+    if len(name) > PROJECT_NAME_MAX:
+        raise HTTPException(400, f"项目名称最多 {PROJECT_NAME_MAX} 个字符")
     try:
-        item, merged = pj.create_project(OUT_ROOT, body.name)
+        item, merged = pj.create_project(OUT_ROOT, name)
     except ValueError as e:
         raise HTTPException(400, str(e))
     return {"ok": True, "project": item, "merged": merged}
@@ -424,9 +441,15 @@ class ProjectPatchIn(BaseModel):
     archived: bool | None = None
 
 
+PROJECT_NAME_MAX = 60  # 手机侧栏一行能放下的上限；超过就换行溢出
+
+
 @app.patch("/api/projects/{pid}")
 def projects_patch(pid: str, body: ProjectPatchIn) -> dict:
     import projects as pj
+
+    if body.name is not None and len(" ".join(body.name.split())) > PROJECT_NAME_MAX:
+        raise HTTPException(400, f"项目名称最多 {PROJECT_NAME_MAX} 个字符")
 
     try:
         item = pj.patch_project(OUT_ROOT, pid, body.name, body.archived)
@@ -453,8 +476,13 @@ def projects_merge(pid: str, body: MergeIn) -> dict:
 @app.get("/api/sessions")
 def sessions_list(project_id: str = "", q: str = "", limit: int = 0, offset: int = 0) -> dict:
     import projects as pj
+    import turn_control
 
-    return pj.list_sessions(OUT_ROOT, project_id, q, limit or pj.DEFAULT_LIMIT, offset, recorded_only=True)
+    listing = pj.list_sessions(OUT_ROOT, project_id, q, limit or pj.DEFAULT_LIMIT, offset, recorded_only=True)
+    for row in listing.get("sessions", []):
+        # A turn detached from its browser keeps running; the list must say so.
+        row["running"] = turn_control.status(row["session_id"])["active"]
+    return listing
 
 
 @app.get("/api/sessions/{sid}")
@@ -795,8 +823,65 @@ def _sse(ev: dict) -> str:
     return f"event: {ev['event']}\ndata: {json.dumps(ev['data'], ensure_ascii=False)}\n\n"
 
 
+@app.get("/api/deliverables.zip")
+def deliverables_zip(session_id: str, run_id: str = "") -> Response:
+    """One download for a whole run's files (md + docx + xlsx) — three save
+    dialogs on a phone is how files get lost. run_id empty = every run."""
+    import io
+    import re
+    import zipfile
+    from chat_service import read_runs, valid_session
+
+    try:
+        sid = valid_session(session_id)
+    except ValueError as exc:
+        raise HTTPException(400, str(exc)) from exc
+    rid = str(run_id or "")
+    if rid and not re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9_-]{0,63}", rid):
+        raise HTTPException(400, "run_id 无效")
+    runs = [r for r in read_runs(OUT_ROOT, sid) if not rid or r.get("run_id") == rid]
+    buf = io.BytesIO()
+    count = 0
+    from packing_assistant.sandbox import assert_open
+    from uploads import safe_filename
+    with zipfile.ZipFile(buf, "w", zipfile.ZIP_DEFLATED) as bundle:
+        for r in runs:
+            # Run records are data (a backup import writes them too), so nothing in one is
+            # trusted as a path: the folder and the member names are rebuilt, never copied, and a
+            # file has to pass the same checks GET /api/file applies to it.
+            folder = re.sub(r"[^A-Za-z0-9_-]", "", str(r.get("run_id") or ""))[:8]
+            used: set[str] = set()
+            for f in r.get("deliverables", []):
+                src = Path(str(f.get("path") or "")).resolve()
+                try:
+                    src.relative_to(OUT_ROOT.resolve())
+                    assert_open(src)
+                except (ValueError, PermissionError):
+                    continue
+                if not src.is_file():
+                    continue
+                shown = safe_filename(str(f.get("name") or ""))
+                name = shown if f.get("name") and Path(shown).suffix.lower() == src.suffix.lower() else src.name
+                stem, suffix, serial = Path(name).stem, Path(name).suffix, 1
+                if name in used:  # same display name twice in a run: tell them apart by their source
+                    name = safe_filename(f"{stem}-{src.name.split('-', 1)[0]}{suffix}")
+                while name in used:
+                    serial += 1
+                    name = f"{stem}-{serial}{suffix}"
+                used.add(name)
+                arc = f"{folder}/{name}" if not rid and folder else name
+                bundle.write(src, arc)
+                count += 1
+    if not count:
+        raise HTTPException(404, "这轮没有可下载的文书")
+    label = f"civil-docs-{sid}" + (f"-{rid[:8]}" if rid else "")
+    return Response(buf.getvalue(), media_type="application/zip", headers={
+        "Content-Disposition": f'attachment; filename="{label}.zip"',
+    })
+
+
 @app.get("/api/file")
-def file(path: str) -> FileResponse:
+def file(path: str, name: str = "") -> FileResponse:
     target = Path(path).resolve()
     try:
         target.relative_to(OUT_ROOT.resolve())
@@ -809,4 +894,11 @@ def file(path: str) -> FileResponse:
         assert_open(target)
     except PermissionError as exc:
         raise HTTPException(403, "not a deliverable") from exc
-    return FileResponse(target)
+    # Name the download server-side: iOS Safari / PWA ignore <a download> and
+    # would otherwise save "file" or open .md inline. Starlette emits
+    # filename*=UTF-8'' for non-ASCII names. The card's display name may be
+    # used only when it is a plain basename with the same extension.
+    from uploads import safe_filename
+    shown = safe_filename(name) if name else ""
+    download_name = shown if shown and Path(shown).suffix.lower() == target.suffix.lower() else target.name
+    return FileResponse(target, filename=download_name, content_disposition_type="attachment")

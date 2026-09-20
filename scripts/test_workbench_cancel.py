@@ -261,35 +261,113 @@ class WorkbenchCancelTests(unittest.TestCase):
         self.assertFalse(result["files"])
         self.assert_released()
 
-    def test_disconnected_consumer_still_persists_cancelled_result_and_releases(self):
-        entered, proceed = Event(), Event()
+    # A disconnect detaches; it does not cancel. The turn keeps its lease, finishes and persists,
+    # and the page picks the result up from GET /api/sessions/{sid}. What ends a turn is the stop
+    # button (POST /cancel) or, with nobody connected for too long, the server itself.
 
-        def blocked(_):
-            entered.set()
-            proceed.wait(4)
-            yield {"event": "token", "data": {"text": "应被丢弃"}}
-
+    def _detached_stream(self, runner):
         lease = chat_service.SessionLease(self.sid)
         turn = chat_service.prepare_turn(self.root, {"message": "你好", "session_id": self.sid})
-        stream = chat_service.stream_turn(self.root, turn, key_available=True, plain_runner=blocked, lease=lease)
+        stream = chat_service.stream_turn(self.root, turn, key_available=True, plain_runner=runner, lease=lease)
+        next(stream)
+        return lease, stream
+
+    def test_disconnected_consumer_lets_the_turn_finish_and_keeps_the_session_busy_meanwhile(self):
+        entered, proceed = Event(), Event()
+
+        def slow(_):
+            entered.set()
+            proceed.wait(4)
+            yield {"event": "done", "data": {"text": "后台写完的回复"}}
+
+        lease, stream = self._detached_stream(slow)
         try:
-            next(stream)
             self.assertTrue(entered.wait(2))
             stream.close()
             # Mirrors the transport background/finally callback; it must not free
             # a still-running producer early, which owns result persistence.
-            lease.release()
+            lease.disconnect()
+            time.sleep(0.3)
+            self.assertTrue(turn_control.status(self.sid)["active"], "a disconnect must not end the turn")
+            self.assertFalse(turn_control.status(self.sid)["cancel_requested"])
+            with self.assertRaises(chat_service.SessionBusy):
+                chat_service.SessionLease(self.sid)
+            proceed.set()
             eventually(lambda: not turn_control.status(self.sid)["active"])
         finally:
             proceed.set()
             stream.close()
         detail = self.client.get(f"/api/sessions/{self.sid}").json()
-        self.assertIn("已取消", detail["transcript"][-1]["text"])
-        self.assertNotIn("应被丢弃", detail["transcript"][-1]["text"])
-        self.assertEqual(detail["turn_state"]["state"], "cancelled")
+        self.assertEqual(detail["turn_state"]["state"], "done")
+        self.assertIn("后台写完的回复", detail["transcript"][-1]["text"])
+        self.assertNotIn("已取消", detail["transcript"][-1]["text"])
         self.assert_released()
 
-    def test_real_http_disconnect_persists_result_without_stranding_a_lease(self):
+    def test_a_turn_nobody_returns_to_is_stopped_by_the_server_and_says_so(self):
+        entered, proceed = Event(), Event()
+
+        def stuck(_):
+            entered.set()
+            proceed.wait(6)
+            yield {"event": "token", "data": {"text": "应被丢弃"}}
+
+        with patch.dict(os.environ, {"CIVIL_DETACHED_TURN_SECONDS": "0.4"}):
+            lease, stream = self._detached_stream(stuck)
+            try:
+                self.assertTrue(entered.wait(2))
+                started = time.monotonic()
+                stream.close()
+                lease.disconnect()
+                eventually(lambda: not turn_control.status(self.sid)["active"])
+                waited = time.monotonic() - started
+            finally:
+                proceed.set()
+                stream.close()
+        self.assertGreaterEqual(waited, 0.4, "stopped before the limit: that is the old contract")
+        detail = self.client.get(f"/api/sessions/{self.sid}").json()
+        self.assertEqual(detail["turn_state"]["state"], "cancelled")
+        self.assertIn("页面断开后一直没有回来", detail["transcript"][-1]["text"])
+        self.assertNotIn("应被丢弃", detail["transcript"][-1]["text"])
+        self.assert_released()
+
+    def test_the_limit_is_bounded_and_zero_is_the_old_contract(self):
+        for raw, expected in (("", 600.0), ("90", 90.0), ("0", 0.0), ("-1", 600.0), ("inf", 600.0),
+                              ("nan", 600.0), ("soon", 600.0)):
+            with patch.dict(os.environ, {"CIVIL_DETACHED_TURN_SECONDS": raw}):
+                self.assertEqual(chat_service.detached_turn_seconds(), expected, raw)
+        entered, proceed = Event(), Event()
+
+        def stuck(_):
+            entered.set()
+            proceed.wait(4)
+            yield {"event": "token", "data": {"text": "应被丢弃"}}
+
+        with patch.dict(os.environ, {"CIVIL_DETACHED_TURN_SECONDS": "0"}):
+            lease, stream = self._detached_stream(stuck)
+            try:
+                self.assertTrue(entered.wait(2))
+                stream.close()
+                lease.disconnect()
+                eventually(lambda: not turn_control.status(self.sid)["active"], seconds=1.5)
+            finally:
+                proceed.set()
+                stream.close()
+        self.assertEqual(self.client.get(f"/api/sessions/{self.sid}").json()["turn_state"]["state"], "cancelled")
+        self.assert_released()
+
+    def test_a_finished_turn_leaves_no_watchdog_behind(self):
+        def quick(_):
+            yield {"event": "done", "data": {"text": "很快就好"}}
+
+        with patch.dict(os.environ, {"CIVIL_DETACHED_TURN_SECONDS": "30"}):
+            lease, stream = self._detached_stream(quick)
+            list(stream)
+            lease.disconnect()
+        eventually(lambda: not turn_control.status(self.sid)["active"])
+        eventually(lambda: not any(t.name == "civil-detached-" + self.sid for t in threads()))
+        self.assert_released()
+
+    def _real_http_disconnect(self, after_disconnect, tail_tokens=0):
         import httpx
         import uvicorn
 
@@ -298,6 +376,8 @@ class WorkbenchCancelTests(unittest.TestCase):
         def paused(_):
             yield {"event": "token", "data": {"text": "部分回复"}}
             proceed.wait(8)
+            for index in range(tail_tokens):
+                yield {"event": "token", "data": {"text": f"第{index}段"}}
             yield {"event": "done", "data": {"text": "完成回复"}}
 
         with socket.socket() as bound:
@@ -317,18 +397,47 @@ class WorkbenchCancelTests(unittest.TestCase):
                         for line in response.iter_lines():
                             if "部分回复" in line:
                                 break
+                    # The socket is gone. Long enough for the server to have noticed (it writes a
+                    # heartbeat every 0.5 s), and the turn must still be there.
+                    time.sleep(1.2)
+                    running = client.get(f"http://127.0.0.1:{port}/api/sessions/{self.sid}").json()
+                    self.assertTrue(running["turn_state"]["active"], "a dropped connection must not end the turn")
+                    self.assertFalse(running["turn_state"]["cancel_requested"])
+                    after_disconnect(client, port, proceed)
                     eventually(lambda: not turn_control.status(self.sid)["active"])
                     restored = client.get(f"http://127.0.0.1:{port}/api/sessions/{self.sid}").json()
-                self.assertEqual(restored["turn_state"]["state"], "cancelled")
-                self.assertIn("部分回复", restored["transcript"][-1]["text"])
-                self.assertIn("已取消", restored["transcript"][-1]["text"])
                 self.assert_released()
+                return restored
             finally:
                 proceed.set()
                 server.should_exit = True
                 worker.join(timeout=4)
-        self.assertFalse(worker.is_alive())
+                self.assertFalse(worker.is_alive())
 
+    def test_real_http_disconnect_lets_the_turn_finish_without_stranding_a_lease(self):
+        restored = self._real_http_disconnect(lambda client, port, proceed: proceed.set())
+        self.assertEqual(restored["turn_state"]["state"], "done")
+        self.assertIn("完成回复", restored["transcript"][-1]["text"])
+        self.assertNotIn("已取消", restored["transcript"][-1]["text"])
+
+    def test_a_long_reply_after_a_real_disconnect_is_not_stuck_behind_a_full_queue(self):
+        # Every token is an event and the relay queue holds 64. A real disconnect does not close
+        # the stream generator, so unless the lease says "detached" the producer waits for a
+        # reader that never comes: the turn never ends and the session stays busy for good.
+        restored = self._real_http_disconnect(lambda client, port, proceed: proceed.set(), tail_tokens=300)
+        self.assertEqual(restored["turn_state"]["state"], "done")
+        self.assertIn("完成回复", restored["transcript"][-1]["text"])
+
+    def test_a_detached_turn_is_still_stopped_by_an_explicit_cancel(self):
+        def stop(client, port, proceed):
+            answer = client.post(f"http://127.0.0.1:{port}/api/sessions/{self.sid}/cancel").json()
+            self.assertTrue(answer["cancel_requested"])
+
+        restored = self._real_http_disconnect(stop)
+        self.assertEqual(restored["turn_state"]["state"], "cancelled")
+        self.assertIn("部分回复", restored["transcript"][-1]["text"])
+        self.assertIn("本轮已取消", restored["transcript"][-1]["text"])
+        self.assertNotIn("页面断开后", restored["transcript"][-1]["text"])
 
 if __name__ == "__main__":
     unittest.main()
