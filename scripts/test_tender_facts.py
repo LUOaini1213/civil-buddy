@@ -293,6 +293,50 @@ class Staff(unittest.TestCase):
                          [("一标段", "安全员", "张伟"), ("一标段", "质检员", "李娜")])
 
 
+class RoundFour(unittest.TestCase):
+    """What held-out round 4 found (first run 68/86), by family."""
+
+    def test_a_surname_may_have_two_characters(self) -> None:
+        facts = tf.extract("项目经理拟派欧阳文博，技术负责人是司马青，安全员上官婉，质检员用的是柏松。")
+        self.assertEqual(found(facts, "pm", "ours"), ["欧阳文博"])
+        self.assertEqual(found(facts, "tech_lead", "ours"), ["司马青"])
+        self.assertEqual([(m.role, m.value) for m in facts.of("staff")], [("安全员", "上官婉"), ("质检员", "柏松")])
+
+    def test_a_workhead_right_after_a_chinese_character(self) -> None:
+        facts = tf.extract("BCA那边要求CW03 B2以上，别的没提。")
+        self.assertEqual(found(facts, "registration", "tender"), ["CW03 B2"])
+        self.assertEqual(facts.unplaced, [])
+
+    def test_bare_validity_needs_a_number_and_no_certificate_before_it(self) -> None:
+        self.assertEqual(found(tf.extract("投标截止11月3日，有效期90天。"), "validity", "tender"), ["90天"])
+        for text in ("安全生产许可证有效期3年，须在有效期内。", "营业执照的有效期要覆盖整个工期。"):
+            with self.subTest(text=text):
+                self.assertEqual(tf.extract(text).of("validity"), [])
+        guarantee = tf.extract("保函有效期120天。")
+        self.assertEqual(guarantee.of("validity"), [], "the guarantee's validity is not the bid's")
+        self.assertEqual(guarantee.unplaced, ["保函有效期120天"], "and its number is still kept")
+
+    def test_a_project_named_before_de_and_after_a_verb_of_receiving(self) -> None:
+        for text, want in (("刚收到西郊净水厂二期工程的招标文件，工期300日历天。", "西郊净水厂二期工程"),
+                           ("看一下南岸雅苑三期的缺口，保证金50万还没交。", "南岸雅苑三期"),
+                           ("Project: Marina View Tower\nContract Period: 20 months", "Marina View Tower")):
+            with self.subTest(text=text):
+                self.assertEqual(found(tf.extract(text), "project", "tender"), [want])
+
+    def test_an_english_scoring_point_keeps_its_name(self) -> None:
+        facts = tf.extract("评分：Site Safety Plan 20分\n评分：施工组织设计 35分")
+        self.assertEqual([(s.name, s.score) for s in facts.scores], [("Site Safety Plan", "20分"), ("施工组织设计", "35分")])
+
+    def test_more_posts_and_the_inline_row(self) -> None:
+        facts = tf.extract("安全主管：拟派王敏\n质检员｜我方：拟派吴倩\n安全员今天请假")
+        self.assertEqual([(m.role, m.value) for m in facts.of("staff") if m.value], [("安全主管", "王敏"), ("质检员", "吴倩")])
+
+    def test_an_english_name_where_a_person_is_expected_and_only_there(self) -> None:
+        self.assertEqual([m.value for m in tf.extract("Gap owner: Daniel Koh").of("owner_person")], ["Daniel Koh"])
+        document = tf.extract("The Project Manager shall be a Professional Engineer registered with PEB.")
+        self.assertEqual([m.value for m in document.of("pm") if m.side == "ours"], [], "a title is not a name")
+
+
 class UnreadMarker(unittest.TestCase):
     """office_job writes "（读失败）why" under the heading of a job file that gave no text. Whatever the
     reason says, it is neither the tender nor us speaking."""

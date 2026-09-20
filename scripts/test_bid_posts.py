@@ -257,7 +257,7 @@ class EnglishAndStaff(Posts):
         self.assertEqual(cell(md, "投标有效期", "要求原文"), "120 days")
         self.assertEqual(cell(md, "投标保证金", "要求原文"), "S$500,000")
         self.assertEqual(cell(md, "投标截止", "要求原文"), "30 October 2026, 4.00 pm")
-        self.assertEqual(cell(md, "注册/工作类别", "要求原文"), "CW01 grade A1")
+        self.assertEqual(cell(md, "注册资格/工作类别", "要求原文"), "CW01 grade A1")
 
     def test_our_english_offer_against_their_english_requirement(self) -> None:
         md = self.run_post("bid-compliance", "The Works shall be completed within 24 months. Tender validity period: 120 days. "

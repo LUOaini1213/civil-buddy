@@ -47,7 +47,11 @@
 | 文件 | 岗位 | 首跑 | 现在 |
 | --- | --- | --- | --- |
 | `heldout_bid.json` | bid-parse / bid-tech / bid-compliance | 72/78 = 0.923 | 78/78，已见过 |
-| `heldout_bid2.json` | 同上，换了一批轴 | 67/70 = 0.957 | 69/70，已见过 |
+| `heldout_bid2.json` | 同上，换了一批轴 | 67/70 = 0.957 | 70/70，已见过 |
 | `heldout_bid3.json` | 同上；「恰好出现一次」的校验写进了生成脚本 | 83/84 = 0.988 | 84/84，已见过 |
+| `heldout_bid4.json` | 同上；量 2026-09-21 补的英文条款、不带标签的项目名、workhead、项目经理之外点了名的人 | 68/86 = 0.791 | 85/86，已见过 |
+
+计分器读单元格时会 `html.unescape`：`post_facts.table_cell()` 把用户写的 `&` 转成 `&amp;`，Excel 导出和
+Markdown 阅读器都会还原，事实是 `Housing & Development Board`，不是它的转义形式。
 
 全岗位的留出集还没有写（此前这里写的 `--set heldout` 指向一个不存在的文件）。

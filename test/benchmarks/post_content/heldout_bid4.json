@@ -1,0 +1,475 @@
+{
+  "_note": "Held-out round 4 for bid-parse / bid-tech / bid-compliance. Written 2026-09-21 with the rules frozen at commit 79d54d5 and before any case was run; the exactly-once check is part of the generator. It measures what that day's first batch added and no round had: a tender written in English (Singapore), Chinese chat with English terms, a project named without a label, BCA workhead registration, anybody named with a post beside the project manager, compound surnames, English personal names, lots written A标段 / B标段. Field patterns for the two new kinds of fact follow the dev set's pattern for the nearest kind.",
+  "cases": [
+    {
+      "id": "bid-parse-e1",
+      "post": "bid-parse",
+      "tool": "bid-parse__extract",
+      "style": "sentence",
+      "request": "老板转来一份新加坡的招标，帮我解析：Tender for Tuas South Link Industrial Building. Employer: JTC Corporation. Tender Ref: JTC/T/2026/088. Contract Period: 18 months. Tender validity period: 150 days. Tender Deposit: S$250,000. Tender closing date: 12 November 2026. Tenderers shall be registered with BCA under workhead CW01 grade B1.",
+      "facts": [
+        {
+          "value": "Tuas South Link Industrial Building",
+          "field": "项目名称|工程名称|项目与公告|项目概况|工程概况|封面|公告|标段名称|^项目$|^工程$"
+        },
+        {
+          "value": "JTC Corporation",
+          "field": "招标人|建设单位|业主|发包人|甲方|项目与公告|封面|公告"
+        },
+        {
+          "value": "JTC/T/2026/088",
+          "field": "招标编号|项目编号|文件编号|招标文件|编号|来源|版本"
+        },
+        {
+          "value": "18 months",
+          "field": "工期|日历天|实质性响应|响应项"
+        },
+        {
+          "value": "150 days",
+          "field": "投标有效期|有效期|实质性响应|响应项"
+        },
+        {
+          "value": "S$250,000",
+          "field": "保证金|投标担保|保函"
+        },
+        {
+          "value": "12 November 2026",
+          "field": "投标截止|截止|递交|时间轴|时间节点|关键日期|开标"
+        },
+        {
+          "value": "CW01",
+          "field": "注册|workhead|工作类别|资质|资格|BCA|证书"
+        }
+      ],
+      "forbidden": [
+        "符合投标资格",
+        "资格审查通过",
+        "建议投标"
+      ]
+    },
+    {
+      "id": "bid-parse-e2",
+      "post": "bid-parse",
+      "tool": "bid-parse__extract",
+      "style": "lines",
+      "request": "Tender particulars (copied from the ITT)\nProject: Punggol Digital District Link Bridge\nEmployer: Housing & Development Board\nTender No: HDB/C/2026/0456\nCompletion Period: 14 months\nDefects Liability Period: 12 months\nTender Validity: 90 days\nBid Bond: S$180,000\nClosing Date: 5 December 2026, 3.00 pm\nEvaluation: Price Quality Method",
+      "facts": [
+        {
+          "value": "Punggol Digital District Link Bridge",
+          "field": "项目名称|工程名称|项目与公告|项目概况|工程概况|封面|公告|标段名称|^项目$|^工程$"
+        },
+        {
+          "value": "Housing & Development Board",
+          "field": "招标人|建设单位|业主|发包人|甲方|项目与公告|封面|公告"
+        },
+        {
+          "value": "HDB/C/2026/0456",
+          "field": "招标编号|项目编号|文件编号|招标文件|编号|来源|版本"
+        },
+        {
+          "value": "14 months",
+          "field": "工期|日历天|实质性响应|响应项"
+        },
+        {
+          "value": "12 months",
+          "field": "质保期|缺陷责任期|保修期|质保|实质性响应|响应项"
+        },
+        {
+          "value": "90 days",
+          "field": "投标有效期|有效期|实质性响应|响应项"
+        },
+        {
+          "value": "S$180,000",
+          "field": "保证金|投标担保|保函"
+        },
+        {
+          "value": "5 December 2026",
+          "field": "投标截止|截止|递交|时间轴|时间节点|关键日期|开标"
+        },
+        {
+          "value": "Price Quality Method",
+          "field": "评标办法|评标方法|评审办法|评分办法|评标|eval"
+        }
+      ],
+      "forbidden": [
+        "符合投标资格",
+        "资格审查通过",
+        "建议投标"
+      ]
+    },
+    {
+      "id": "bid-parse-e3",
+      "post": "bid-parse",
+      "tool": "bid-parse__extract",
+      "style": "messy",
+      "request": "刚拿到樟宜东货运站扩建工程的tender文件，业主是樟宜机场集团，tender ref是CAG/2026/T-19，contract period写的是20个月，tender deposit要S$300,000，BCA那边要求CW02 A2以上，投标截止2026年11月28日下午4点，有效期120天。",
+      "facts": [
+        {
+          "value": "樟宜东货运站扩建工程",
+          "field": "项目名称|工程名称|项目与公告|项目概况|工程概况|封面|公告|标段名称|^项目$|^工程$"
+        },
+        {
+          "value": "樟宜机场集团",
+          "field": "招标人|建设单位|业主|发包人|甲方|项目与公告|封面|公告"
+        },
+        {
+          "value": "CAG/2026/T-19",
+          "field": "招标编号|项目编号|文件编号|招标文件|编号|来源|版本"
+        },
+        {
+          "value": "20个月",
+          "field": "工期|日历天|实质性响应|响应项"
+        },
+        {
+          "value": "S$300,000",
+          "field": "保证金|投标担保|保函"
+        },
+        {
+          "value": "CW02",
+          "field": "注册|workhead|工作类别|资质|资格|BCA|证书"
+        },
+        {
+          "value": "2026年11月28日",
+          "field": "投标截止|截止|递交|时间轴|时间节点|关键日期|开标"
+        },
+        {
+          "value": "120",
+          "field": "投标有效期|有效期|实质性响应|响应项"
+        }
+      ],
+      "forbidden": [
+        "符合投标资格",
+        "资格审查通过",
+        "建议投标"
+      ]
+    },
+    {
+      "id": "bid-tech-e1",
+      "post": "bid-tech",
+      "tool": "bid-tech__expand",
+      "style": "sentence",
+      "request": "技术标目录帮我排一下，项目是滨海湾南地铁上盖综合体，地下三层地上四十二层，框架核心筒结构，建筑面积21.5万平方米，招标工期980日历天，评分表里施工组织设计45分、BIM应用8分，项目经理拟派欧阳振华，技术负责人是司徒明，专职安全员张海峰，质量负责人：莫丽萍。",
+      "facts": [
+        {
+          "value": "滨海湾南地铁上盖综合体",
+          "field": "项目名称|工程名称|项目与公告|项目概况|工程概况|封面|公告|标段名称|^项目$|^工程$"
+        },
+        {
+          "value": "框架核心筒",
+          "field": "结构形式|结构类型|结构体系|结构|工程概况|概况"
+        },
+        {
+          "value": "21.5",
+          "field": "建筑面积|面积|规模|工程概况|概况"
+        },
+        {
+          "value": "980",
+          "field": "工期|日历天|进度|承诺"
+        },
+        {
+          "value": "45",
+          "field": "评分点|评分项|分值|评分|权重|原文"
+        },
+        {
+          "value": "BIM应用",
+          "field": "评分点|评分项|评分|原文|章节|目录|映射"
+        },
+        {
+          "value": "8",
+          "field": "评分点|评分项|分值|评分|权重|原文"
+        },
+        {
+          "value": "欧阳振华",
+          "field": "项目经理|项目负责人|组织机构|管理机构|拟派|人员"
+        },
+        {
+          "value": "司徒明",
+          "field": "技术负责人|项目总工|总工|组织机构|管理机构|拟派|人员"
+        },
+        {
+          "value": "张海峰",
+          "field": "安全员|安全主管|安全负责人|组织机构|管理机构|拟派|人员"
+        },
+        {
+          "value": "莫丽萍",
+          "field": "质量负责人|质检员|质检|组织机构|管理机构|拟派|人员"
+        }
+      ],
+      "forbidden": [
+        "确保中标",
+        "可得满分",
+        "可以开工"
+      ]
+    },
+    {
+      "id": "bid-tech-e2",
+      "post": "bid-tech",
+      "tool": "bid-tech__expand",
+      "style": "lines",
+      "request": "技术标资料\n工程：Jurong Lake District Office Tower\n结构：steel-concrete composite，地上38层\n面积：96,000平方米\nContract Period：30 months\n评分：Construction Method Statement 40分\n评分：Safety Management 15分\n专项：深基坑，开挖深度16.8米\n项目经理：拟派林国栋\n安全主管：拟派王美玲\n资料员：陈小燕",
+      "facts": [
+        {
+          "value": "Jurong Lake District Office Tower",
+          "field": "项目名称|工程名称|项目与公告|项目概况|工程概况|封面|公告|标段名称|^项目$|^工程$"
+        },
+        {
+          "value": "96,000",
+          "field": "建筑面积|面积|规模|工程概况|概况"
+        },
+        {
+          "value": "30 months",
+          "field": "工期|日历天|进度|承诺"
+        },
+        {
+          "value": "Construction Method Statement",
+          "field": "评分点|评分项|评分|原文|章节|目录|映射"
+        },
+        {
+          "value": "40",
+          "field": "评分点|评分项|分值|评分|权重|原文"
+        },
+        {
+          "value": "15",
+          "field": "评分点|评分项|分值|评分|权重|原文"
+        },
+        {
+          "value": "16.8",
+          "field": "基坑|挖深|开挖深度|高支模|支模|模板支撑|吊装|专项|点名|危大"
+        },
+        {
+          "value": "林国栋",
+          "field": "项目经理|项目负责人|组织机构|管理机构|拟派|人员"
+        },
+        {
+          "value": "王美玲",
+          "field": "安全员|安全主管|安全负责人|组织机构|管理机构|拟派|人员"
+        },
+        {
+          "value": "陈小燕",
+          "field": "资料员|组织机构|管理机构|拟派|人员"
+        }
+      ],
+      "forbidden": [
+        "确保中标",
+        "可得满分",
+        "可以开工"
+      ]
+    },
+    {
+      "id": "bid-tech-e3",
+      "post": "bid-tech",
+      "tool": "bid-tech__expand",
+      "style": "messy",
+      "request": "两个标段技术标分开做：A标段是1#~3#住宅楼，剪力墙结构，面积5.2万平，工期540天，项目经理用诸葛文斌，安全员是夏雨；B标段是商业裙楼，钢框架，面积2.4万平，工期要求400天，项目经理还没定，质检员上官静。评分两个标段一样：施工组织设计30分，绿色施工6分。",
+      "facts": [
+        {
+          "value": "5.2",
+          "field": "建筑面积|面积|规模|工程概况|概况"
+        },
+        {
+          "value": "540",
+          "field": "工期|日历天|进度|承诺"
+        },
+        {
+          "value": "诸葛文斌",
+          "field": "项目经理|项目负责人|组织机构|管理机构|拟派|人员"
+        },
+        {
+          "value": "夏雨",
+          "field": "安全员|安全主管|安全负责人|组织机构|管理机构|拟派|人员"
+        },
+        {
+          "value": "2.4",
+          "field": "建筑面积|面积|规模|工程概况|概况"
+        },
+        {
+          "value": "400",
+          "field": "工期|日历天|进度|承诺"
+        },
+        {
+          "value": "上官静",
+          "field": "质量负责人|质检员|质检|组织机构|管理机构|拟派|人员"
+        },
+        {
+          "value": "30",
+          "field": "评分点|评分项|分值|评分|权重|原文"
+        },
+        {
+          "value": "6",
+          "field": "评分点|评分项|分值|评分|权重|原文"
+        }
+      ],
+      "forbidden": [
+        "确保中标",
+        "可得满分",
+        "可以开工"
+      ]
+    },
+    {
+      "id": "bid-compliance-e1",
+      "post": "bid-compliance",
+      "tool": "bid-compliance__gaps",
+      "style": "sentence",
+      "request": "Help me check the gaps. The tender requires completion within 16 months, tender validity of 120 days and a tender deposit of S$400,000. We have stated 17 months in our Form of Tender, our tender remains valid for 90 days, and the banker's guarantee is not issued yet. Our project manager is Tan Wei Ming. Gap owner: Rachel Lim.",
+      "facts": [
+        {
+          "value": "16 months",
+          "field": "工期|招标要求|招标文件要求|实质性"
+        },
+        {
+          "value": "120 days",
+          "field": "投标有效期|有效期|招标要求|招标文件要求|实质性"
+        },
+        {
+          "value": "S$400,000",
+          "field": "保证金|投标担保|保函|招标要求|招标文件要求"
+        },
+        {
+          "value": "17 months",
+          "field": "工期|响应|投标函|施组|技术标|进度|草稿|我方|证据|现状|实质性"
+        },
+        {
+          "value": "90 days",
+          "field": "投标有效期|有效期|响应|投标函|草稿|我方|证据|现状|实质性"
+        },
+        {
+          "value": "Tan Wei Ming",
+          "field": "项目经理|项目负责人|拟派|人员|资格"
+        },
+        {
+          "value": "Rachel Lim",
+          "field": "责任人|负责人|补证|跟进|责任"
+        }
+      ],
+      "forbidden": [
+        "可以投标",
+        "不会废标",
+        "资格审查通过"
+      ]
+    },
+    {
+      "id": "bid-compliance-e2",
+      "post": "bid-compliance",
+      "tool": "bid-compliance__gaps",
+      "style": "lines",
+      "request": "响应核对\n项目：Woodlands Health Campus Phase 2\n招标编号：MOHH/2026/T/031\n工期｜招标：24 months｜我方：23 months\n投标有效期｜招标：150 days｜我方：120 days\n保证金｜招标：S$500,000｜我方：保函已开\nBCA注册｜招标：CW01 A1｜我方：CW01 A2\n项目经理｜招标：须有10年经验｜我方：拟派黄志强\n专职安全员｜我方：拟派吴秀兰\n责任人｜郑家豪",
+      "facts": [
+        {
+          "value": "Woodlands Health Campus Phase 2",
+          "field": "项目名称|工程名称|项目与公告|项目概况|工程概况|封面|公告|标段名称|^项目$|^工程$"
+        },
+        {
+          "value": "MOHH/2026/T/031",
+          "field": "招标编号|项目编号|文件编号|招标文件|编号|来源|版本"
+        },
+        {
+          "value": "24 months",
+          "field": "工期|招标要求|招标文件要求|实质性"
+        },
+        {
+          "value": "23 months",
+          "field": "工期|响应|投标函|施组|技术标|进度|草稿|我方|证据|现状|实质性"
+        },
+        {
+          "value": "150 days",
+          "field": "投标有效期|有效期|招标要求|招标文件要求|实质性"
+        },
+        {
+          "value": "120 days",
+          "field": "投标有效期|有效期|响应|投标函|草稿|我方|证据|现状|实质性"
+        },
+        {
+          "value": "S$500,000",
+          "field": "保证金|投标担保|保函|招标要求|招标文件要求"
+        },
+        {
+          "value": "CW01 A1",
+          "field": "注册|workhead|工作类别|资质|资格|BCA|招标要求|招标文件要求"
+        },
+        {
+          "value": "CW01 A2",
+          "field": "注册|workhead|工作类别|资质|资格|BCA|响应|我方|证据|现状"
+        },
+        {
+          "value": "黄志强",
+          "field": "项目经理|项目负责人|拟派|人员|资格"
+        },
+        {
+          "value": "吴秀兰",
+          "field": "安全员|安全负责人|拟派|人员|资格"
+        },
+        {
+          "value": "郑家豪",
+          "field": "责任人|负责人|补证|跟进|责任"
+        }
+      ],
+      "forbidden": [
+        "可以投标",
+        "不会废标",
+        "资格审查通过"
+      ]
+    },
+    {
+      "id": "bid-compliance-e3",
+      "post": "bid-compliance",
+      "tool": "bid-compliance__gaps",
+      "style": "messy",
+      "request": "对一下东岸花园二期的响应缺口：A标段招标要求工期420天，我们施组排了410天，保证金60万已经转了；B标段工期要求300天，我们投标函写的315天，保证金45万的保函还没开。A标段项目经理是皇甫志远，安全员用的是柏文；B标段项目经理拟派令狐燕，质量负责人还没定。A标段的缺口找戚国平，B标段归祁慧。",
+      "facts": [
+        {
+          "value": "东岸花园二期",
+          "field": "项目名称|工程名称|项目与公告|项目概况|工程概况|封面|公告|标段名称|^项目$|^工程$"
+        },
+        {
+          "value": "420",
+          "field": "工期|招标要求|招标文件要求|实质性"
+        },
+        {
+          "value": "410",
+          "field": "工期|响应|投标函|施组|技术标|进度|草稿|我方|证据|现状|实质性"
+        },
+        {
+          "value": "60",
+          "field": "保证金|投标担保|保函|招标要求|招标文件要求"
+        },
+        {
+          "value": "300",
+          "field": "工期|招标要求|招标文件要求|实质性"
+        },
+        {
+          "value": "315",
+          "field": "工期|响应|投标函|施组|技术标|进度|草稿|我方|证据|现状|实质性"
+        },
+        {
+          "value": "45",
+          "field": "保证金|投标担保|保函|招标要求|招标文件要求"
+        },
+        {
+          "value": "皇甫志远",
+          "field": "项目经理|项目负责人|拟派|人员|资格"
+        },
+        {
+          "value": "柏文",
+          "field": "安全员|安全负责人|拟派|人员|资格"
+        },
+        {
+          "value": "令狐燕",
+          "field": "项目经理|项目负责人|拟派|人员|资格"
+        },
+        {
+          "value": "戚国平",
+          "field": "责任人|负责人|补证|跟进|责任"
+        },
+        {
+          "value": "祁慧",
+          "field": "责任人|负责人|补证|跟进|责任"
+        }
+      ],
+      "forbidden": [
+        "可以投标",
+        "不会废标",
+        "资格审查通过"
+      ]
+    }
+  ]
+}

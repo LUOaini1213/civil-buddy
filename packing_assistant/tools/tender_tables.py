@@ -135,7 +135,7 @@ _PARSE_SECTIONS: Tuple[Tuple[str, Tuple[Tuple[str, str, bool, str], ...]], ...] 
         ("track_record", "类似业绩", True, "查业绩的年限、金额、数量口径"),
         ("pm", "项目经理", True, "查注册专业、等级、B证及在建限制"),
         ("tech_lead", "技术负责人", False, ""),
-        ("registration", "注册/工作类别", False, ""),
+        ("registration", "注册资格/工作类别", False, ""),
     )),
     ("4 实质性响应", (
         ("duration", "工期", True, "查前附表工期及是否含节点工期"),
@@ -577,7 +577,7 @@ _GAP_SECTIONS: Tuple[Tuple[str, Tuple[str, ...]], ...] = (
     ("4 保证金", ("bond", "bond_validity")),
     ("5 实质性与价格响应", ("duration", "delivery", "quality", "validity", "warranty", "price_cap")),
 )
-_LABELS = {"poa": "授权委托书", "seal": "签章", "qualification": "资质", "registration": "注册/工作类别", "track_record": "类似业绩", "pm": "项目经理",
+_LABELS = {"poa": "授权委托书", "seal": "签章", "qualification": "资质", "registration": "注册资格/工作类别", "track_record": "类似业绩", "pm": "项目经理",
            "tech_lead": "技术负责人", "bond": "投标保证金", "bond_validity": "保函有效期", "duration": "工期", "delivery": "交货期",
            "quality": "质量标准", "validity": "投标有效期", "warranty": "缺陷责任期/质保期", "price_cap": "最高限价 / 我方报价"}
 #: what to say the numbers mean when both sides gave one, in the words the response matcher compares on

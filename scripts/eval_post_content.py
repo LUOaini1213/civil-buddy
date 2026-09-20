@@ -56,7 +56,11 @@ def split_echo(md: str) -> tuple[str, str]:
 
 
 def _cells(line: str) -> list[str]:
-    return [c.strip() for c in line.strip().strip("|").split("|")]
+    # post_facts.table_cell() escapes a user's "&" and "|" for Markdown; the Excel export and every Markdown
+    # viewer undo that, and so does the reading here - the fact is "Housing & Development Board"
+    import html
+
+    return [html.unescape(c.strip()) for c in line.strip().strip("|").split("|")]
 
 
 def spots(body: str) -> list[tuple[str, str]]:

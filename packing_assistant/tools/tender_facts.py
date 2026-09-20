@@ -50,11 +50,13 @@ _DATE = re.compile(r"\d{4}\s*[-/.年]\s*\d{1,2}\s*[-/.月]\s*\d{1,2}\s*[日号]?
 _CLOCK = re.compile(r"\d{1,2}[.:]\d{2}\s*(?:a\.?m\.?|p\.?m\.?)|\d{1,2}\s*(?:am|pm)\b|\d{4}\s*hrs?\b"
                     r"|(?:上午|下午|晚上|中午)?\s*(?:[01]?\d|2[0-3])\s*[:：]\s*[0-5]\d|(?:上午|下午|晚上|中午)\s*\d{1,2}\s*点(?:\s*半|\s*\d{1,2}\s*分)?"
                     r"|\d{1,2}\s*点(?:\s*半|\s*\d{1,2}\s*分)", re.I)
-_WORKHEAD = re.compile(r"\b(?:CW|CR|ME|SY|TR|MW|RW)\d{2}\b(?:\s*(?:grade\s*)?(?:[ABC]\d|L[1-6]|single\s+grade)\b)?", re.I)
+_WORKHEAD = re.compile(r"(?<![A-Za-z0-9])(?:CW|CR|ME|SY|TR|MW|RW)\d{2}(?![A-Za-z0-9])"
+                       r"(?:\s*(?:grade\s*)?(?:[ABC]\d|L[1-6]|single\s+grade)(?![A-Za-z0-9]))?", re.I)
 _DOC_CODE = re.compile(r"(?<![A-Za-z0-9])[A-Za-z]{2,10}(?:[-_/][A-Za-z0-9]{1,8}){1,4}(?![A-Za-z0-9])")
 _GRADE = re.compile(r"(?:特|[一二三四五]|[甲乙丙])级")
 _EVAL_METHOD = re.compile(r"综合评估法|综合评分法|经评审的最低投标价法|最低评标价法|合理低价法?|最低价法|性价比法|Price Quality Method|PQM|QFM|Quality Fee Method", re.I)
-_STRUCTURE = re.compile(r"(?:框架[-—－]?剪力墙|框剪|剪力墙|框架|框筒|筒中筒|框支|砖混|钢筋混凝土|型钢混凝土|钢|装配式[一-鿿]{0,6}?|木)结构")
+_STRUCTURE = re.compile(r"(?:框架[-—－]?核心筒|框架[-—－]?剪力墙|核心筒|框剪|剪力墙|钢框架|框架|框筒|筒中筒|框支|砖混|钢[-—－]?混凝土组合|钢筋混凝土"
+                        r"|型钢混凝土|钢|装配式[一-鿿]{0,6}?|木)结构")
 _FLOORS = re.compile(r"地[上下][一二三四五六七八九十百两\d]{1,4}层")
 
 #: An addendum changes what it names and nothing else, so a value keeps where it came from.
@@ -255,17 +257,17 @@ TOPICS: Tuple[Topic, ...] = (
     Topic("deadline_open", "开标", ("开标时间", "开标日期", "开标"), "date", "timeline"),
     Topic("deadline_query", "答疑/澄清截止", ("答疑截止", "澄清截止", "提问截止", "质疑截止", "异议截止"), "date", "timeline"),
     Topic("deadline_visit", "踏勘", ("现场踏勘", "踏勘现场", "踏勘", "Site show-round", "Site briefing", "Site visit"), "date", "timeline"),
-    Topic("registration", "注册/工作类别", ("workhead", "BCA"), "workhead", "qualification"),
+    Topic("registration", "注册资格/工作类别", ("workhead", "BCA"), "workhead", "qualification"),
     Topic("qualification", "资质", ("资质要求", "资质条件", "企业资质", "资质等级", "资质"), "text", "qualification"),
     Topic("track_record", "类似业绩", ("类似工程业绩", "类似项目业绩", "类似业绩", "业绩要求", "同类业绩", "业绩"), "text", "qualification"),
     Topic("pm", "项目经理", ("项目经理", "项目负责人", "Project Manager", "Project Director"), "person", "qualification"),
     Topic("tech_lead", "技术负责人", ("技术负责人", "项目总工", "总工"), "person", "qualification"),
     Topic("duration", "工期", ("计划工期", "招标工期", "要求工期", "总工期", "工期要求", "工期承诺", "承诺工期", "工期", "Contract Period", "Contract Duration",
                                 "Time for Completion", "Completion Period", "Construction Period", "completed within", "complete the Works in",
-                                "complete the Works within"), "time", "substantive"),
+                                "complete the Works within", "completion within", "completion in"), "time", "substantive"),
     Topic("delivery", "交货期", ("交货期", "交货时间", "供货期"), "time", "substantive"),
     Topic("quality", "质量标准", ("质量标准", "质量要求", "质量目标", "质量等级", "质量承诺"), "text", "substantive"),
-    Topic("validity", "投标有效期", ("投标有效期", "报价有效期", "Tender validity period", "Tender validity", "Bid validity", "Validity period",
+    Topic("validity", "投标有效期", ("投标有效期", "报价有效期", "有效期", "Tender validity period", "Tender validity", "Bid validity", "Validity period",
                                   "remains valid for", "remain valid for", "valid for"), "time", "substantive"),
     Topic("warranty", "缺陷责任期/质保期", ("缺陷责任期", "质量保证期", "质保期", "保修期", "Defects Liability Period", "Warranty period", "DLP"), "time", "substantive"),
     Topic("eval_method", "评标办法", ("评标办法", "评标方法", "评审办法", "评分办法", "Evaluation method", "Evaluation criteria", "Evaluation"), "method", "scoring"),
@@ -276,9 +278,10 @@ TOPICS: Tuple[Topic, ...] = (
     Topic("poa", "授权委托书", ("法定代表人授权委托书", "授权委托书", "法人授权书", "授权书"), "text", "form"),
     Topic("seal", "签章", ("签字盖章", "电子签章", "盖章", "公章", "签章"), "text", "form"),
     Topic("evidence", "已有证据", ("已有证据", "现有证据", "企业证据", "证明材料", "支撑材料"), "text", "evidence"),
-    Topic("owner_person", "责任人", ("缺口责任人", "责任人", "跟进人", "对接人"), "person", "owner"),
+    Topic("owner_person", "责任人", ("缺口责任人", "责任人", "跟进人", "对接人", "Gap owner", "Action owner", "Person in charge"), "person", "owner"),
     # anybody else named with a post beside the name; the row is called by the post as it was written
-    Topic("staff", "其他人员", ("专职安全员", "安全负责人", "安全总监", "安全员", "质量负责人", "质量员", "质检员", "资料员", "施工员", "材料员", "造价员",
+    Topic("staff", "其他人员", ("专职安全员", "安全负责人", "安全总监", "安全主管", "安全经理", "安全主任", "安全工程师", "安全员", "质量负责人", "质量经理",
+                              "质量主管", "质量工程师", "质量员", "质检员", "资料员", "施工员", "技术员", "材料员", "造价员", "施工负责人", "生产负责人", "商务负责人",
                               "预算员", "测量员", "试验员", "商务经理", "生产经理", "项目副经理", "执行经理", "法定代表人", "法人代表", "授权代表",
                               "委托代理人", "授权委托人", "联系人", "经办人", "BIM负责人", "机电负责人", "总监理工程师"), "person", "qualification"),
 )
@@ -287,13 +290,16 @@ _ALWAYS_OURS = frozenset({"our_price", "evidence", "staff"})  # ours by nature (
 _NO_SIDE = frozenset({"owner_person"})  # neither the tender's nor a response
 _STATEMENT_ONLY = frozenset({"poa", "seal"})  # what matters is what is said about them, not a value
 _KIND_RE = {"time": _TIME, "money": _MONEY, "area": _AREA, "date": _DATE, "workhead": _WORKHEAD}
-_LINE_LABELS = {"工程": "project", "项目": "project", "点名专项": "special", "专项": "special", "危大工程": "special",
+_LINE_LABELS = {"工程": "project", "项目": "project", "Project": "project", "project": "project", "PROJECT": "project",
+                "点名专项": "special", "专项": "special", "危大工程": "special",
                 "专项方案": "special", "必须编制的专项": "special"}
 
 _ALIAS_TABLE: List[Tuple[str, str]] = sorted(
     ((alias, topic.key) for topic in TOPICS for alias in topic.aliases), key=lambda pair: -len(pair[0]))
 
-_SURNAME = "[" + post_facts._SURNAMES + "]"
+_COMPOUND_SURNAMES = ("欧阳|司马|上官|诸葛|皇甫|令狐|司徒|东方|慕容|尉迟|长孙|夏侯|公孙|端木|轩辕|宇文|独孤|南宫|呼延|闻人|澹台|万俟|"
+                      "濮阳|淳于|单于|太叔|申屠|公羊|赫连|钟离|宗政|司空|司寇|子车|颛孙|第五")
+_SURNAME = "(?:" + _COMPOUND_SURNAMES + "|[" + post_facts._SURNAMES + "])"
 _AFTER_NAME = r"(?=$|[\s，,;；。、（(）)]|但|的|跟|负责|担任|任|为|是|和|及|与|已|还|尚|等|牵头|对接|盯|管|来|去|在|做|同志|持|具)"
 _PERSON_BOUNDED = re.compile(_SURNAME + r"[一-鿿]{1,2}?" + _AFTER_NAME)
 _PERSON_LOOSE = re.compile(_SURNAME + r"[一-鿿]{1,2}")
@@ -305,11 +311,24 @@ _FOLLOW = re.compile(r"(?:让|由|交给|交|归|找|请|先?挂在?)\s*(?:[一-
 _FOLLOW_AFTER = re.compile(r"(?:缺口|责任|补证|跟进|对接|这块|事项)[^，,。；;]{0,6}?(" + _SURNAME + r"[一-鿿]{1,2}?)(?=负责|跟进|跟|盯|牵头|对接|落实|管)")
 
 
+#: "Rachel Lim", "Tan Wei Ming": two to four capitalised words, none of them a word of the trade
+_EN_NAME = re.compile(r"(?<![A-Za-z])[A-Z][a-z]+(?:\s+[A-Z][a-z]+){1,3}(?![A-Za-z])")
+_EN_NOT_A_NAME = frozenset("project manager director engineer professional registered form tender works contract period our we the gap "
+                           "owner action person charge safety officer site senior resident technical quality construction authority "
+                           "board corporation pte ltd method statement price management health campus phase".split())
+
+
 def _person(text: str) -> str:
     """A name, literal. A department before it ("商务部王丽娟") is not the name."""
     body = _DEPARTMENT.sub(lambda m: " " * len(m.group(0)), text)
     match = _PERSON_BOUNDED.search(body) or _PERSON_LOOSE.search(body)
-    return match.group(0) if match else ""
+    if match:
+        return match.group(0)
+    if not re.search(r"[一-鿿]", body):
+        for found in _EN_NAME.finditer(body):
+            if not any(word.lower() in _EN_NOT_A_NAME for word in found.group(0).split()):
+                return found.group(0)
+    return ""
 
 
 @dataclass(frozen=True)
@@ -419,7 +438,7 @@ def _score_points(clause: str, previous: str, lot: str, line: int) -> List[Score
         if not name and not points and previous:
             # "施工方案那块最重，占18.5分": the name is what the clause before was about
             name = _clean_name(_SCORE_TAIL.sub("", _SCORE_LEAD.sub("", previous)))
-        if len(name) > 24 or re.search(r"\d", name) or _OURS.search(name) or _LOT.search(name):
+        if _width(name) > 24 or re.search(r"\d", name) or _OURS.search(name) or _LOT.search(name):
             name = ""
         points.append(ScorePoint(name, re.sub(r"\s+", "", match.group(0)), lot, clause.strip(_EDGE), line))
     return points
@@ -451,6 +470,9 @@ def _topic_hits(clause: str) -> List[Tuple[int, int, str]]:
                 continue  # only "招标文件HD-2026-SG-018": the number standing right after it
             if alias == "报价" and re.match(r"\s*分", after):
                 continue  # 报价分 is a scoring point
+            if alias == "有效期" and (not re.match(r"\s*(?:为|是|要|[：:])?\s*\d", clause[end:end + 6])
+                                   or re.search(r"(?:证|证书|执照|许可|保函|保证金|担保|资质|注册|合同|业绩)的?$", clause[:start])):
+                continue  # bare 有效期 is the bid's only with a number right after it and no certificate or guarantee before it
             if alias == "面积" and re.search(r"(?:使用|占地|用地|绿化)$", clause[:start]):
                 continue
             if alias in ("业绩", "资质") and re.search(r"(?:评分|分值)$", clause[:start]):
@@ -496,7 +518,7 @@ def _width(text: str) -> float:
 def _person_adjacent(region: str) -> str:
     """The name standing right after a post: "专职安全员张伟", "质量负责人：李娜", "资料员由王芳担任". Not a name
     somewhere later in the clause - "安全员今天请假" names nobody."""
-    body = re.sub(r"^(?:[\s：:＝=]|由|是|为|拟派|拟任|定的是|定了|报的是|报的)*", "", region)
+    body = re.sub(r"^(?:[\s：:＝=｜|]|我方|我们|由|是|为|拟派|拟任|暂定为?|定的是|定了|报的是|报的|用的是)*", "", region)
     body = _DEPARTMENT.sub("", body, count=1) if _DEPARTMENT.match(body) else body
     match = _PERSON_BOUNDED.match(body) or _PERSON_LOOSE.fullmatch(body.strip(_EDGE))
     return match.group(0) if match else ""
@@ -538,12 +560,12 @@ def _requirement_text(region: str) -> str:
 
 _NAME_LEAD = re.compile(
     r"^(?:.*?(?:帮我|帮忙|麻烦|请|让我|要我|叫我)\s*(?:把|将|对|给|查下|查一下|看下|看一下|对下|对一下|理一下|出一份|出个|出|做|写|整理|解析)?"
-    r"|把|将|对|给|关于|针对|就)\s*")
+    r"|(?:刚|才|已经?)?(?:拿到|收到|接到|看了|翻了|看过)|(?:查|看|对|理|过)一?下|把|将|对|给|关于|针对|就)\s*")
 _NAME = r"[一-鿿A-Za-z0-9#（）()·\-]"
 #: what a project's name ends in, when nobody wrote "项目名称："
 _NAME_END = (r"(?:工程|项目|大厦|广场|厂房|车间|仓库|住宅|公寓|花园|家园|小区|地块|[" + _CN_NUM + r"\d]+期"
              r"|管廊|跨河桥|大桥|立交|桥|隧道|泵站|水厂|道路|公路|大道|基地|园区|场馆|体育馆|车站|航站楼)")
-_NAME_TAIL = r"(?:第?[" + _CN_NUM + r"\d]{1,2}标段)?(?:(?:施工|监理|设计|勘察|采购|总承包)?的?招标.*)?$"
+_NAME_TAIL = r"(?:第?[" + _CN_NUM + r"\d]{1,2}标段)?(?:(?:施工|监理|设计|勘察|采购|总承包)?的?招标.*|的.*)?$"
 _NAMED = re.compile(r"(?:项目|工程)(?:名称)?(?:是|为|叫|名为)\s*(" + _NAME + r"{4,36})$")
 _NAME_SHAPE = re.compile(r"^(" + _NAME + r"{2,34}?" + _NAME_END + r")" + _NAME_TAIL)
 _NAME_BEFORE_LOT = re.compile(r"^(" + _NAME + r"{6,36}?)第?[" + _CN_NUM + r"\d]{1,2}标段")
@@ -610,7 +632,7 @@ def extract(text: str, *, sides: str = "auto") -> TenderFacts:
                 line_topic, line_body = hits[0][2], raw_line[head.end():]
         if line_topic == "project":
             value = _value("text", line_body)
-            if value and len(value) <= SHORT:
+            if value and _width(value) <= SHORT:
                 facts.mentions.append(Mention("project", "tender", "", value, raw_line.strip(_EDGE), line_no))
             continue
         if line_topic == "special":
