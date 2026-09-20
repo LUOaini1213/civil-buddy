@@ -95,10 +95,12 @@ The supplier's stated `999` calendar days did not replace or modify the original
 
 The generated compliance workbook reported:
 
-- project duration requirement: `not_matched`
+- project duration requirement: `conflict_requires_review` — the response's 999 calendar days is pointed out against the tender's 60 ("工期：响应 999日历天 超过招标 60日历天，待人工核验"); it is stated, not judged
 - construction-specific plan requirement: `not_matched`
 - business-license evidence: `candidate_requires_review`
-- unresolved compliance items: `5`
+- unresolved compliance items: `3` — one per tender line
+
+_Updated 2026-09-20. When this record was first written the duration row read `not_matched` and there were `5` unresolved items: the same requirement was listed three times and numeric mismatches were not compared. Both changed in #32. The values above are now asserted at the end of `scripts/run_dongyufei_tender_case.py`, which CI runs through `scripts/test_acceptance_cases.py` — if the workflow changes again, this record fails instead of going stale._
 
 The workflow therefore preserves the distinction between tender requirements and supplier response evidence and keeps uncertain matches subject to human review.
 

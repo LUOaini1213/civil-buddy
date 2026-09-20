@@ -1,4 +1,14 @@
-from packing_assistant.tools.tender_review import review_draft
+#!/usr/bin/env python3
+"""Representative tender review case. Runs under pytest and directly."""
+import copy
+import json
+import sys
+from pathlib import Path
+
+ROOT = Path(__file__).resolve().parents[1]
+sys.path.insert(0, str(ROOT))
+
+from packing_assistant.tools.tender_review import review_draft  # noqa: E402
 
 
 def test_representative_tender_review_case():
@@ -35,7 +45,8 @@ def test_representative_tender_review_case():
         ]
     }
 
-    packing_summary = {"can_fit": True}
+    packing_summary = {"can_fit": False, "utilization": "UNSPECIFIED"}
+    before = copy.deepcopy(packing_summary)
 
     result = review_draft(
         draft=draft,
@@ -53,10 +64,20 @@ def test_representative_tender_review_case():
     gap_ids = {row["req_id"] for row in result["gaps"]}
     assert gap_ids == {"REQ-002", "REQ-003"}
 
-    # Packing result must be preserved.
-    assert result["can_fit"] is True
-    assert result["mutated_can_fit"] is False
+    # The packing result is passed through as given — a failed fit stays failed — and the caller's object is not touched.
+    # (`mutated_can_fit` and `achievements_filled` are constants in review_draft, so asserting them proves nothing.)
+    assert result["can_fit"] is False
+    assert packing_summary == before
 
-    # The system must never invent project achievements.
-    assert result["achievements_filled"] == []
+    # The system must never invent project achievements: once the caller's own words and the (empty) 业绩 field
+    # are taken out of the result, the word does not occur anywhere else.
+    blob = json.dumps(result, ensure_ascii=False)
+    for given in ("提供类似项目业绩证明", "项目业绩证明", '"业绩"'):
+        blob = blob.replace(given, "")
+    assert "业绩" not in blob
     assert result["业绩"] == []
+
+
+if __name__ == "__main__":
+    test_representative_tender_review_case()
+    print("PASS tender_review_acceptance")

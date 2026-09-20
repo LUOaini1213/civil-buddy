@@ -27,27 +27,31 @@ UNSPECIFIED = "UNSPECIFIED"
 NEEDS_HUMAN_MISSING_WEIGHT = "missing_weight"
 
 
+def _weight_cell(value: Any) -> Optional[float]:
+    """一格重量 → float。没填（None / ""）返回 None；填了但不能用（非数值、布尔、NaN、inf）返回 NaN。"""
+    if value in (None, ""):
+        return None
+    if isinstance(value, bool):
+        return math.nan
+    try:
+        number = float(value)
+    except (TypeError, ValueError):
+        return math.nan
+    return number if math.isfinite(number) else math.nan
+
+
 def rows_needing_human(materials: Sequence[Dict[str, Any]]) -> List[Dict[str, Any]]:
+    """没有可用重量的行。与 adapters.material_api_to_internal 同口径：单重或总重任一为正即可
+    （总重写 0 等于没写，引擎会退回 单重 × 数量）；但写了却不能用的那一格不因为另一格正常就放过——
+    `单重 12.5 + 总重 'abc'` 引擎会崩，`单重 12.5 + 总重 -3` 引擎会拿 -3 当总重。
+    """
     out: List[Dict[str, Any]] = []
     for m in materials or []:
         meta = m.get("meta") or {}
-
-        import math
-
-        def valid_weight(value):
-            try:
-                number = float(value)
-                return math.isfinite(number) and number > 0
-            except (TypeError, ValueError):
-                return False
-
-        total_weight = m.get("total_weight_kg")
-        unit_weight = m.get("weight_kg")
-        weight_invalid = not (
-            valid_weight(total_weight) or valid_weight(unit_weight)
-        )
-
-        if meta.get("weight_missing") or weight_invalid:
+        cells = [c for c in (_weight_cell(m.get("weight_kg")), _weight_cell(m.get("total_weight_kg"))) if c is not None]
+        unusable = any(math.isnan(c) or c < 0 for c in cells)
+        has_weight = any(c > 0 for c in cells if not math.isnan(c))
+        if meta.get("weight_missing") or unusable or not has_weight:
             out.append(
                 {
                     "id": m.get("id") or "",
