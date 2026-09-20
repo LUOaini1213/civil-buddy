@@ -1187,6 +1187,12 @@ html.cb-large {
 }
 .cb-att-x:hover { background: var(--cb-panel); color: var(--cb-text); }
 .cb-att-x:focus-visible { outline: 2px solid var(--cb-focus); outline-offset: 1px; }
+/* 上传中的 chip：进度条 + 百分比 + ×；失败的变红并给「重试」 */
+.cb-att-chip.pending { border-style: dashed; }
+.cb-att-chip.err { border-color: var(--cb-red); color: var(--cb-red); }
+.cb-att-bar { flex: none; width: 64px; height: 6px; border-radius: 999px; background: var(--cb-line); overflow: hidden; }
+.cb-att-bar > i { display: block; height: 100%; width: 0; background: var(--cb-green); transition: width .15s linear; }
+.cb-att-pct { flex: none; min-width: 3ch; color: var(--cb-text-muted); font-variant-numeric: tabular-nums; }
 /* 拖拽反馈：round19 删拖拽是因为它当时看不见；现在有 chip 与这个高亮，不再是隐藏通道 */
 .composer.drop { outline: 2px dashed var(--cb-blue); outline-offset: -4px; }
 

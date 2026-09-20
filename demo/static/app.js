@@ -390,11 +390,61 @@ function cbAttachRender() {
   const box = $("attaches");
   if (!box) return;
   box.innerHTML = "";
-  if (!state.attachments.length) {
+  const pending = cbUploadsPending.filter((u) => u.session === state.session);
+  if (!state.attachments.length && !pending.length) {
     box.hidden = true;
     return;
   }
   box.hidden = false;
+  for (const u of pending) {
+    const chip = document.createElement("span");
+    chip.className = "cb-att-chip pending" + (u.error ? " err" : "");
+    chip.dataset.upload = u.key;
+    const nm = document.createElement("span");
+    nm.className = "cb-att-name";
+    nm.textContent = u.name;
+    nm.title = u.name;
+    chip.appendChild(nm);
+    if (u.error) {
+      const er = document.createElement("span");
+      er.className = "cb-att-size";
+      er.textContent = "失败：" + u.error;
+      er.title = u.error;
+      chip.appendChild(er);
+      const retry = document.createElement("button");
+      retry.type = "button";
+      retry.className = "cb-att-x";
+      retry.textContent = "重试";
+      retry.addEventListener("click", () => { u.error = ""; cbUploadPump(); });
+      chip.appendChild(retry);
+    } else {
+      const bar = document.createElement("span");
+      bar.className = "cb-att-bar";
+      bar.setAttribute("role", "progressbar");
+      bar.setAttribute("aria-label", "上传 " + u.name);
+      bar.appendChild(document.createElement("i"));
+      chip.appendChild(bar);
+      const pct = document.createElement("span");
+      pct.className = "cb-att-pct";
+      pct.textContent = u.xhr ? "0%" : "排队";
+      chip.appendChild(pct);
+    }
+    const x = document.createElement("button");
+    x.type = "button";
+    x.className = "cb-att-x";
+    x.textContent = "\u00d7";
+    x.setAttribute("aria-label", "取消上传 " + u.name);
+    x.addEventListener("click", () => {
+      if (u.xhr) u.xhr.abort();
+      const i = cbUploadsPending.indexOf(u);
+      if (i >= 0) cbUploadsPending.splice(i, 1);
+      cbAttachRender();
+      cbUploadPump();
+    });
+    chip.appendChild(x);
+    box.appendChild(chip);
+    cbAttachPaintProgress(u);
+  }
   for (const f of state.attachments) {
     const chip = document.createElement("span");
     chip.className = "cb-att-chip";
@@ -439,6 +489,94 @@ function cbAttachRender() {
   }
 }
 
+/* 服务端的门槛（demo/uploads.py）在这里先问一遍：类型、单文件 20 MB、一个会话 12 个。
+   手机 4G 上传完 20 MB 才被告知"不支持 .pptx"是最伤人的一种失败。 */
+const CB_UPLOAD_LIMITS = { maxBytes: 20 * 1024 * 1024, maxFiles: 12,
+  ext: ["pdf", "docx", "xlsx", "txt", "md", "csv", "json", "log"] };
+const CB_UPLOAD_CONCURRENCY = 2;
+/* 进行中的上传：{ key, session, name, bytes, loaded, xhr, file, error } —— 和 state.attachments 一起画成 chip。 */
+const cbUploadsPending = [];
+let cbUploadKey = 0;
+
+function cbUploadPrecheck(file) {
+  const name = String(file.name || "");
+  const ext = (name.match(/\.([A-Za-z0-9]+)$/) || [, ""])[1].toLowerCase();
+  if (!CB_UPLOAD_LIMITS.ext.includes(ext)) return `不支持 .${ext || "?"}，只收 ${CB_UPLOAD_LIMITS.ext.map((e) => "." + e).join(" ")}`;
+  if (file.size > CB_UPLOAD_LIMITS.maxBytes) return `单文件不能超过 ${fmtBytes(CB_UPLOAD_LIMITS.maxBytes)}（这个 ${fmtBytes(file.size)}）`;
+  return "";
+}
+
+function cbUploadSlotsLeft(session) {
+  const have = state.attachments.filter((a) => !String(a.id || "").startsWith("job:")).length
+    + cbUploadsPending.filter((u) => u.session === session && !u.error).length;
+  return CB_UPLOAD_LIMITS.maxFiles - have;
+}
+
+function cbUploadAbortAll(exceptSession) {
+  for (const u of cbUploadsPending.slice()) {
+    if (exceptSession && u.session === exceptSession) continue;
+    if (u.xhr) { u.xhr.abort(); u.xhr = null; }
+    cbUploadsPending.splice(cbUploadsPending.indexOf(u), 1);
+  }
+}
+
+function cbUploadPump() {
+  const running = cbUploadsPending.filter((u) => u.xhr).length;
+  for (const u of cbUploadsPending) {
+    if (cbUploadsPending.filter((v) => v.xhr).length >= CB_UPLOAD_CONCURRENCY) break;
+    if (u.xhr || u.error || u.done) continue;
+    cbUploadStart(u);
+  }
+  if (running === 0) cbAttachRender();
+}
+
+function cbUploadStart(u, retried) {
+  const xhr = new XMLHttpRequest();
+  u.xhr = xhr; u.loaded = 0; u.error = "";
+  const fd = new FormData();
+  fd.append("session_id", u.session);
+  fd.append("file", u.file);
+  xhr.upload.onprogress = (ev) => {
+    if (ev.lengthComputable) u.loaded = ev.loaded;
+    cbAttachPaintProgress(u);
+  };
+  const finish = (err) => {
+    u.xhr = null;
+    if (err) { u.error = err; }
+    else {
+      u.done = true;
+      cbUploadsPending.splice(cbUploadsPending.indexOf(u), 1);
+    }
+    cbAttachRender();
+    cbUploadPump();
+  };
+  xhr.onload = async () => {
+    if (state.session !== u.session) { cbUploadsPending.splice(cbUploadsPending.indexOf(u), 1); cbAttachRender(); cbUploadPump(); return; }
+    if (xhr.status === 401 && !retried) {
+      if (await askToken("上传需要口令，填好后再传一次")) { cbUploadStart(u, true); return; }
+    }
+    if (xhr.status < 200 || xhr.status >= 300) {
+      let msg = "HTTP " + xhr.status;
+      try { const j = JSON.parse(xhr.responseText); if (typeof j.detail === "string") msg = j.detail; } catch (e) { /* 非 JSON */ }
+      finish(msg); return;
+    }
+    let meta = null;
+    try { meta = JSON.parse(xhr.responseText); } catch (e) { finish("工作台未返回附件信息，请重试上传。"); return; }
+    /* /api/upload 回的是 {ok, files:[{id,name,bytes,...}]}，不是裸 meta。 */
+    const items = Array.isArray(meta && meta.files) ? meta.files : (meta && meta.id ? [meta] : []);
+    if (!items.length) { finish("工作台未返回附件信息，请重试上传。"); return; }
+    for (const item of items) {
+      if (item && item.id && !state.attachments.some((a) => a.id === item.id)) state.attachments.push(item);
+    }
+    finish("");
+  };
+  xhr.onerror = () => finish("网络错误，可点「重试」");
+  xhr.onabort = () => { u.xhr = null; cbAttachRender(); cbUploadPump(); };
+  xhr.open("POST", "/api/upload");
+  xhr.send(fd);
+  cbAttachRender();
+}
+
 async function cbAttachUpload(fileList) {
   if (cbCapability("attachments") === false) {
     addStatus("当前工作台未提供附件上传，可以将材料要点粘贴到输入框。");
@@ -447,37 +585,26 @@ async function cbAttachUpload(fileList) {
   const files = Array.from(fileList || []);
   if (!files.length) return;
   const session = state.session;
+  let slots = cbUploadSlotsLeft(session);
+  const refused = [];
   for (const file of files) {
-    if (state.session !== session) return;
-    try {
-      const fd = new FormData();
-      fd.append("session_id", session);
-      fd.append("file", file);
-      const r = await fetch("/api/upload", { method: "POST", body: fd });
-      if (!r.ok) throw new Error(await apiError(r) || "HTTP " + r.status);
-      const meta = await r.json();
-      if (state.session !== session) return;
-      /* /api/upload 回的是 {ok, files:[{id,name,bytes,...}]}，不是裸 meta。
-         首版按 meta.id 取，chip 永远是空的 —— 实测发现（返回体包了一层）。 */
-      const items = Array.isArray(meta && meta.files) ? meta.files : (meta && meta.id ? [meta] : []);
-      if (!items.length) throw new Error("工作台未返回附件信息，请重试上传。");
-      for (const item of items) {
-        if (item && item.id && !state.attachments.some((a) => a.id === item.id)) {
-          state.attachments.push(item);
-        }
-      }
-    } catch (e) {
-      if (state.session !== session) return;
-      addStatus("附件上传失败（" + file.name + "）：" + ((e && e.message) || e));
-    }
+    const why = cbUploadPrecheck(file);
+    if (why) { refused.push(`${file.name}：${why}`); continue; }
+    if (slots <= 0) { refused.push(`${file.name}：同一会话最多 ${CB_UPLOAD_LIMITS.maxFiles} 个附件`); continue; }
+    slots -= 1;
+    cbUploadKey += 1;
+    cbUploadsPending.push({ key: "up" + cbUploadKey, session, name: file.name, bytes: file.size, loaded: 0, xhr: null, file, error: "" });
   }
-  cbAttachRender();
-  const tbl = state.attachments.some((a) =>
-    /\.(xlsx|xlsm|csv|tsv)$/i.test(String(a.name || ""))
-  );
-  if (tbl) addStatus(cbCapability("packing") === false
-    ? "表格已上传：可让岗位根据表格内容整理清单或草稿。"
-    : "表格已上传：说「装箱」即可按这张表算，柜数与坐标仍由 tools 计算。");
+  if (refused.length) addStatus("未上传：" + refused.join("；"));
+  cbUploadPump();
+}
+
+function cbAttachPaintProgress(u) {
+  const bar = document.querySelector(`[data-upload="${u.key}"] .cb-att-bar > i`);
+  const pct = document.querySelector(`[data-upload="${u.key}"] .cb-att-pct`);
+  const ratio = u.bytes ? Math.min(1, u.loaded / u.bytes) : 0;
+  if (bar) bar.style.width = Math.round(ratio * 100) + "%";
+  if (pct) pct.textContent = Math.round(ratio * 100) + "%";
 }
 
 function cbAttachInit() {
@@ -497,6 +624,10 @@ function cbAttachInit() {
       composer.classList.add("drop");
     });
     composer.addEventListener("dragleave", () => composer.classList.remove("drop"));
+    composer.addEventListener("paste", (ev) => {
+      const items = ev.clipboardData && ev.clipboardData.files;
+      if (items && items.length) { ev.preventDefault(); cbAttachUpload(items); }
+    });
     composer.addEventListener("drop", async (ev) => {
       ev.preventDefault();
       composer.classList.remove("drop");
@@ -624,8 +755,9 @@ function cbNewLocalSession() {
   state.threadId = "";
   state.attachments = [];
   state.attachmentRoles = {};
-  cbAttachRender();
   state.session = cbSessionId();
+  cbUploadAbortAll(state.session);
+  cbAttachRender();
   state.history = [];
   cbContextReset();
   state.summoned.clear();
@@ -899,6 +1031,7 @@ async function cbProjOpenSession(s) {
     state.attachmentRoles = Object.fromEntries(state.attachments.filter(file =>
       d.attachment_roles && ["tender", "response", "reference"].includes(d.attachment_roles[file.id]))
       .map(file => [file.id, d.attachment_roles[file.id]]));
+    cbUploadAbortAll(d.session_id);
     cbAttachRender();
     cbProj.cur = d.project_id || s.project_id || "";
     state.summoned.clear();
