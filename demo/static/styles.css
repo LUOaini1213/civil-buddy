@@ -1216,3 +1216,18 @@ html.cb-large {
 .cb-att-role { max-width: 100px; padding: 2px; font: inherit; color: var(--cb-text); background: var(--cb-panel); border: 1px solid var(--cb-line); border-radius: 4px; }
 .cb-att-chip:has(.cb-att-role) { max-width: min(420px, 100%); }
 .cb-att-role:focus-visible { outline: 2px solid var(--cb-focus); outline-offset: 1px; }
+
+/* 后台任务完成提示：底部一条，可点「查看」切过去 */
+.cb-toast {
+  position: fixed; left: 50%; bottom: calc(16px + env(safe-area-inset-bottom, 0px)); transform: translateX(-50%);
+  z-index: 60; max-width: min(92vw, 520px);
+  display: inline-flex; align-items: center; gap: 10px;
+  padding: 10px 14px; border-radius: 10px;
+  background: var(--cb-text); color: var(--cb-bg);
+  font-size: var(--cb-fs-sm); box-shadow: 0 6px 24px rgba(0, 0, 0, .25);
+}
+.cb-toast[hidden] { display: none; }
+.cb-toast button {
+  border: 0; border-radius: 6px; padding: 4px 10px; cursor: pointer; font: inherit;
+  background: var(--cb-green); color: var(--cb-on-accent);
+}

@@ -135,10 +135,86 @@ function cbDetachActiveRun() {
   cbBackgroundSessions.add(run.session);
   cbAnnounce("任务继续在后台运行，回到该任务可查看结果");
   loadThreads().catch(() => {});
+  cbBgSchedule();
 }
 
 const cbBackgroundSessions = new Set();
 let cbWatchTimer = null;
+
+/* 切走的任务跑完了要有人说一声：只要列表里还有「运行中」的会话，就每 5 s 拉一次
+   /api/sessions，从运行中变成不运行的那一个弹一条可点的提示，点了就切过去。
+   当前会话由 cbWatchSession 自己盯着，这里只管别的。 */
+let cbBgTimer = null;
+let cbBgKnownRunning = new Set();
+let cbBgRows = new Map();
+
+function cbBgObserve(rows) {
+  const nowRunning = new Set();
+  for (const s of rows || []) {
+    if (!s || !s.session_id) continue;
+    cbBgRows.set(s.session_id, s);
+    if (s.running === true) nowRunning.add(s.session_id);
+  }
+  for (const sid of new Set([...cbBgKnownRunning, ...cbBackgroundSessions])) {
+    if (nowRunning.has(sid) || sid === state.session) continue;
+    cbBackgroundSessions.delete(sid);
+    const row = cbBgRows.get(sid);
+    if (!row) continue; /* 列表里已经没有它了：不猜结果 */
+    cbToast(`「${row.title || sid}」已在后台完成`, { action: "查看", onAction: () => cbProjOpenSession(row) });
+  }
+  cbBgKnownRunning = nowRunning;
+  cbBgSchedule();
+}
+
+function cbBgSchedule() {
+  if (cbBgTimer) { clearTimeout(cbBgTimer); cbBgTimer = null; }
+  const others = [...new Set([...cbBgKnownRunning, ...cbBackgroundSessions])].filter((sid) => sid !== state.session);
+  if (!others.length) return;
+  cbBgTimer = setTimeout(cbBgTick, 5000);
+}
+
+async function cbBgTick() {
+  cbBgTimer = null;
+  let rows = null;
+  try {
+    const r = await fetch("/api/sessions?limit=100");
+    if (r.ok) rows = (await r.json()).sessions;
+  } catch (_) { /* 网络抖动：下一拍再试 */ }
+  if (!Array.isArray(rows)) { cbBgSchedule(); return; }
+  const before = new Set(cbBgKnownRunning);
+  cbBgObserve(rows);
+  const changed = before.size !== cbBgKnownRunning.size || [...before].some((sid) => !cbBgKnownRunning.has(sid));
+  if (changed) loadThreads().catch(() => {});
+}
+
+/* 页面上唯一的可见提示条：一次一条，6 s 自己消失，可带一个动作按钮。 */
+let cbToastTimer = null;
+function cbToast(text, opts) {
+  const options = opts || {};
+  let box = $("cbToast");
+  if (!box) {
+    box = document.createElement("div");
+    box.id = "cbToast";
+    box.className = "cb-toast";
+    box.setAttribute("role", "status");
+    document.body.appendChild(box);
+  }
+  box.innerHTML = "";
+  const msg = document.createElement("span");
+  msg.textContent = String(text || "");
+  box.appendChild(msg);
+  if (options.action && typeof options.onAction === "function") {
+    const btn = document.createElement("button");
+    btn.type = "button";
+    btn.textContent = options.action;
+    btn.addEventListener("click", () => { box.hidden = true; options.onAction(); });
+    box.appendChild(btn);
+  }
+  box.hidden = false;
+  cbAnnounce(text);
+  if (cbToastTimer) clearTimeout(cbToastTimer);
+  cbToastTimer = setTimeout(() => { box.hidden = true; }, 6000);
+}
 
 /* 旁观中的后台轮次：页面上没有流，但服务端这一轮还在跑，会话因此是忙的（再发消息只会 409）。
    所以它要按「运行中」来画，也要能被停止——否则回到任务的人只能干等到完成或服务端超时。
@@ -785,6 +861,30 @@ if ($("btnNewProject")) {
 
 
 /* ux(round19)：本地新会话 —— 不依赖任何后端接口，任何后端上都生效。 */
+/* 输入到一半切去别的会话，回来时话还在：草稿按会话存 localStorage，发送后清掉。 */
+const CB_DRAFT_PREFIX = "cb_draft:";
+function cbDraftSave() {
+  const ta = $("input");
+  if (!ta || !state.session) return;
+  try {
+    if (ta.value.trim()) localStorage.setItem(CB_DRAFT_PREFIX + state.session, ta.value);
+    else localStorage.removeItem(CB_DRAFT_PREFIX + state.session);
+  } catch (e) { /* 存储不可用：不存 */ }
+}
+function cbDraftClear(sid) {
+  try { localStorage.removeItem(CB_DRAFT_PREFIX + (sid || state.session)); } catch (e) { /* 忽略 */ }
+}
+function cbDraftRestore() {
+  const ta = $("input");
+  if (!ta) return;
+  let v = "";
+  try { v = localStorage.getItem(CB_DRAFT_PREFIX + state.session) || ""; } catch (e) { /* 忽略 */ }
+  ta.value = v;
+  cbAutosize(ta);
+  cbSyncSend();
+}
+if ($("input")) $("input").addEventListener("input", cbDraftSave);
+
 function cbNewLocalSession() {
   cbClearServerHitl();
   cbSessionRequest += 1;
@@ -797,6 +897,7 @@ function cbNewLocalSession() {
   state.session = cbSessionId();
   cbUploadAbortAll(state.session);
   cbAttachRender();
+  cbDraftRestore();
   state.history = [];
   cbContextReset();
   state.summoned.clear();
@@ -905,6 +1006,7 @@ async function loadThreads() {
       fetch("/api/sessions?limit=100").then((r) => (r.ok ? r.json() : null)),
     ]);
     if (!pj || !ss) throw new Error("no-projects-api");
+    cbBgObserve(ss.sessions);
     cbProj.projects = pj.projects || [];
     cbProj.inbox = pj.inbox || null;
     cbProj.sessions = ss.sessions || [];
@@ -1072,6 +1174,7 @@ async function cbProjOpenSession(s) {
       .map(file => [file.id, d.attachment_roles[file.id]]));
     cbUploadAbortAll(d.session_id);
     cbAttachRender();
+    cbDraftRestore();
     cbProj.cur = d.project_id || s.project_id || "";
     state.summoned.clear();
     const enabledExperts = new Set(state.experts.filter((expert) => expert && expert.enabled !== false).map((expert) => expert.id));
@@ -1540,6 +1643,7 @@ $("form").addEventListener("submit", async (ev) => {
   }
   state.lastSend = message; /* ux(round7)：重试=重放同 payload */
   $("input").value = "";
+  cbDraftClear();
   cbAutosize($("input"));
   cbSyncSend();
   cbAtClose();
