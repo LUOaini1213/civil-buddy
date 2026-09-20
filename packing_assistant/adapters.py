@@ -5,16 +5,24 @@ from __future__ import annotations
 from typing import Any, Dict, List
 
 
+def material_quantity(m: Dict[str, Any]) -> int:
+    """这一行引擎按几件算。`qty` 与 `quantity` 同义：cargo_feasibility 和
+    nonstandard_inspect 一直认 `qty`，只有这里不认时，可行性按 N 件判、装箱却只装 1 件。
+    """
+    raw = m.get("quantity") or m.get("数量") or m.get("qty") or 1
+    return int(float(raw)) if isinstance(raw, str) else int(raw)
+
+
 def material_api_to_internal(m: Dict[str, Any]) -> Dict[str, Any]:
     return {
         "名称": m.get("name") or m.get("名称") or "",
         "规格": m.get("spec") or m.get("规格") or "",
-        "数量": int(m.get("quantity") or m.get("数量") or 1),
+        "数量": material_quantity(m),
         "单重_kg": float(m.get("weight_kg") or m.get("单重_kg") or 0),
         "总重_kg": float(
             m.get("total_weight_kg")
             or m.get("总重_kg")
-            or float(m.get("weight_kg") or 0) * int(m.get("quantity") or 1)
+            or float(m.get("weight_kg") or m.get("单重_kg") or 0) * material_quantity(m)
         ),
         "外尺寸_mm": {
             "长": float(m.get("length_mm") or (m.get("sizeMm") or {}).get("l") or (m.get("外尺寸_mm") or {}).get("长") or 0),
@@ -97,7 +105,14 @@ def box_internal_to_api(b: Dict[str, Any]) -> Dict[str, Any]:
             "material_id": c.get("material_id") or c.get("加工件编号") or "",
             "name": c.get("name") or c.get("名称") or "",
             "quantity": int(c.get("quantity") or c.get("数量") or 1),
+            # 守恒核对：来自装箱单哪一行；split_of > 1 表示这一条是某一件按质量切出的 1/split_of
+            "source_material_id": c.get("source_material_id") or c.get("源编号")
+            or c.get("material_id") or c.get("加工件编号") or "",
+            "split_of": int(c.get("split_of") or c.get("质量拆分份数") or 1),
         }
+        line_kg = c.get("weight_kg") if c.get("weight_kg") is not None else c.get("总重_kg")
+        if line_kg is not None:
+            item["weight_kg"] = float(line_kg)
         if cdims:
             item["outer_size_mm"] = {
                 "length": float(cdims.get("length") or cdims.get("长") or 0),

@@ -108,7 +108,7 @@ def list_pack_ship_tools() -> List[Dict[str, Any]]:
                 "properties": {
                     "file_path": {"type": "string", "description": "装箱表路径（xlsx/csv）"},
                     "materials": {"type": ["string", "array", "null"], "description": "已解析的行数组"},
-                    "container_type": {"type": "string", "description": "默认 40HQ"},
+                    "container_type": {"type": "string", "description": "默认 40HQ；支持 20GP / 40GP / 40HQ / 45HQ，其他柜型不出方案（unknown_container_type）"},
                     "max_containers": {"type": ["integer", "null"]},
                     "solver": {"type": "object", "description": "本仓 solver 回传快照（旧投影路径）"},
                     "connected": {"type": "boolean"},
