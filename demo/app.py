@@ -6,7 +6,7 @@ from uuid import uuid4
 from pathlib import Path
 
 from fastapi import FastAPI, HTTPException, Request
-from fastapi.responses import FileResponse, Response, StreamingResponse
+from fastapi.responses import FileResponse, HTMLResponse, Response, StreamingResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field, StrictBool
 from starlette.background import BackgroundTask
@@ -103,9 +103,35 @@ class LLMConfigIn(BaseModel):
     semantic_summary: StrictBool = False
 
 
+def _version_static_links(html: str) -> str:
+    """Stamp /static/*.js|css links with the file's mtime so a deploy never serves a stale app.js
+    to a phone that cached the old one; the hand-written ?v= tags stay as a fallback elsewhere."""
+    import re
+
+    def stamp(m: "re.Match[str]") -> str:
+        rel = m.group(1)
+        target = STATIC / rel[len("/static/"):]
+        if not target.is_file():
+            return m.group(0)
+        return f"{rel}?v={target.stat().st_mtime_ns // 1_000_000:x}"
+
+    return re.sub(r'(/static/[^"\'?\s]+\.(?:js|css))(\?v=[^"\'\s]*)?', stamp, html)
+
+
 @app.get("/")
-def index() -> FileResponse:
-    return FileResponse(STATIC / "index.html")
+def index() -> HTMLResponse:
+    html = (STATIC / "index.html").read_text(encoding="utf-8")
+    return HTMLResponse(_version_static_links(html), headers={"Cache-Control": "no-cache"})
+
+
+@app.middleware("http")
+async def static_revalidates(request: Request, call_next):
+    """/static is served with ETag/Last-Modified; no-cache makes the browser ask every time
+    (a 304 when unchanged) instead of trusting a copy from before the last deploy."""
+    response = await call_next(request)
+    if request.url.path.startswith("/static/") and "cache-control" not in response.headers:
+        response.headers["Cache-Control"] = "no-cache"
+    return response
 
 
 @app.get("/api/health")
@@ -125,7 +151,8 @@ def health() -> dict:
                          "session_backup": True, "cancel": True, "word_export": True,
                          "task_memory": True, "local_rag": True, "task_routing": True,
                          "expert_contracts": True, "tender_collaboration": True, "semantic_summary": True,
-                         "asr": _asr_installed(), "auth": bool(auth_token()), "live_progress": True},
+                         "asr": _asr_installed(), "auth": bool(auth_token()), "live_progress": True,
+                         "file_ref": True},
         "deepseek": has_key(),
         "model": llm_model(),
         "context": policy(),
@@ -920,8 +947,27 @@ def deliverables_zip(session_id: str, run_id: str = "") -> Response:
 
 
 @app.get("/api/file")
-def file(path: str, name: str = "") -> FileResponse:
-    target = Path(path).resolve()
+def file(path: str = "", name: str = "", session: str = "", run: str = "", file: str = "") -> FileResponse:
+    """One deliverable. Preferred form: ?session=&run=&file=<stored basename>&name=<shown name> —
+    no server path in the link, and the link survives a backup imported on another machine.
+    ?path=<absolute> is kept for the Rust workbench and old cards."""
+    import re
+
+    if session or run or file:
+        from chat_service import valid_session
+        try:
+            sid = valid_session(session)
+        except ValueError as exc:
+            raise HTTPException(400, str(exc)) from exc
+        if not re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9_-]{0,63}", run or ""):
+            raise HTTPException(400, "run 无效")
+        if not file or file != Path(file).name or file in {".", ".."}:
+            raise HTTPException(400, "file 无效")
+        target = (OUT_ROOT / sid / "deliverables" / run / file).resolve()
+    elif path:
+        target = Path(path).resolve()
+    else:
+        raise HTTPException(400, "缺少 path 或 session/run/file")
     try:
         target.relative_to(OUT_ROOT.resolve())
     except ValueError as exc:

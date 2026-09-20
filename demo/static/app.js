@@ -2385,11 +2385,22 @@ if ($("ctxQuery")) $("ctxQuery").addEventListener("keydown", event => {
   if (event.key === "Enter" && !event.isComposing) { event.preventDefault(); cbContextSearch(); }
 });
 
-function fileUrl(p, name) {
-  /* Rust canonicalize 返回 \\?\ verbatim 前缀；/api/file 对该形态 404——
+function fileUrl(f, nameOverride) {
+  /* 优先 session/run/file 形式：链接里不带服务器绝对路径，备份导入到另一台机器也还能点。
+     Rust 工作台（没有 file_ref 能力）和老卡片仍用 path=。
+     Rust canonicalize 返回 \\?\ verbatim 前缀；/api/file 对该形态 404——
      剥掉后端点自会 canonicalize（自测发现：此前侧栏下载链接全部 404）。
      name：卡片显示名，服务端据此写 Content-Disposition（手机端不认 download 属性）。 */
-  const q = `/api/file?path=${encodeURIComponent(String(p || "").replace(/^\\\\\?\\/, ""))}`;
+  const rec = f && typeof f === "object" ? f : { path: f };
+  const p = String(rec.path || "").replace(/^\\\\\?\\/, "");
+  const name = nameOverride || rec.name || "";
+  let q;
+  if (cbCapability("file_ref") === true && rec.run_id && state.session && p) {
+    const stored = p.split(/[\\/]/).pop();
+    q = `/api/file?session=${encodeURIComponent(state.session)}&run=${encodeURIComponent(rec.run_id)}&file=${encodeURIComponent(stored)}`;
+  } else {
+    q = `/api/file?path=${encodeURIComponent(p)}`;
+  }
   return name ? q + `&name=${encodeURIComponent(String(name))}` : q;
 }
 
@@ -2401,7 +2412,7 @@ async function openDeliverable(f) {
   cbObStep(3); /* ux(round10)：文书预览打开 → 引导第 3 步打勾 */
   try {
     await window.cbDocOpenUrl({
-      url: fileUrl(f.path),
+      url: fileUrl(f),
       title: f.name || f.title || "交付物文书",
       role: `岗位 · ${f.expert || "未指定"}`,
     });
@@ -2497,7 +2508,7 @@ function appendDocCards(files, bodyEl, opts) {
       for (const f of g.formats) {
         const a = document.createElement("a");
         a.className = "dl";
-        a.href = fileUrl(f.path, f.name);
+        a.href = fileUrl(f);
         a.setAttribute("download", f.name || "文书.md");
         a.textContent = "." + (cbDocExt(f.name) || "文件");
         a.title = "下载 " + (f.name || "");
