@@ -551,8 +551,7 @@ function cbAttachRender() {
     x.setAttribute("aria-label", "取消上传 " + u.name);
     x.addEventListener("click", () => {
       if (u.xhr) u.xhr.abort();
-      const i = cbUploadsPending.indexOf(u);
-      if (i >= 0) cbUploadsPending.splice(i, 1);
+      cbUploadDrop(u);
       cbAttachRender();
       cbUploadPump();
     });
@@ -604,12 +603,39 @@ function cbAttachRender() {
   }
 }
 
+async function cbAttachUpload(fileList) {
+  if (cbCapability("attachments") === false) {
+    addStatus("当前工作台未提供附件上传，可以将材料要点粘贴到输入框。");
+    return;
+  }
+  const files = Array.from(fileList || []);
+  if (!files.length) return;
+  const session = state.session;
+  let slots = cbUploadSlotsLeft(session);
+  const refused = [];
+  const queued = [];
+  for (const file of files) {
+    const why = cbUploadPrecheck(file);
+    if (why) { refused.push(`${file.name}：${why}`); continue; }
+    if (slots <= 0) { refused.push(`${file.name}：同一会话最多 ${CB_UPLOAD_LIMITS.maxFiles} 个附件`); continue; }
+    slots -= 1;
+    cbUploadKey += 1;
+    const u = { key: "up" + cbUploadKey, session, name: file.name, bytes: file.size || 0, loaded: 0, xhr: null, file, error: "", done: false };
+    cbUploadsPending.push(u);
+    queued.push(u);
+  }
+  if (refused.length) addStatus("未上传：" + refused.join("；"));
+  cbUploadPump();
+  /* 等这一批都有结果（成功、失败或被取消）再返回：调用方（拖拽 / 粘贴 / 选择器）不关心进度 */
+  await Promise.all(queued.map((u) => u.settled || Promise.resolve()));
+}
+
 /* 服务端的门槛（demo/uploads.py）在这里先问一遍：类型、单文件 20 MB、一个会话 12 个。
    手机 4G 上传完 20 MB 才被告知"不支持 .pptx"是最伤人的一种失败。 */
 const CB_UPLOAD_LIMITS = { maxBytes: 20 * 1024 * 1024, maxFiles: 12,
   ext: ["pdf", "docx", "xlsx", "txt", "md", "csv", "json", "log"] };
 const CB_UPLOAD_CONCURRENCY = 2;
-/* 进行中的上传：{ key, session, name, bytes, loaded, xhr, file, error } —— 和 state.attachments 一起画成 chip。 */
+/* 进行中的上传：{ key, session, name, bytes, loaded, xhr, file, error, done } —— 和 state.attachments 一起画成 chip。 */
 const cbUploadsPending = [];
 let cbUploadKey = 0;
 
@@ -627,25 +653,56 @@ function cbUploadSlotsLeft(session) {
   return CB_UPLOAD_LIMITS.maxFiles - have;
 }
 
+function cbUploadDrop(u) {
+  const i = cbUploadsPending.indexOf(u);
+  if (i >= 0) cbUploadsPending.splice(i, 1);
+  if (u.resolve) u.resolve();
+}
+
 function cbUploadAbortAll(exceptSession) {
   for (const u of cbUploadsPending.slice()) {
     if (exceptSession && u.session === exceptSession) continue;
     if (u.xhr) { u.xhr.abort(); u.xhr = null; }
-    cbUploadsPending.splice(cbUploadsPending.indexOf(u), 1);
+    cbUploadDrop(u);
   }
 }
 
 function cbUploadPump() {
-  const running = cbUploadsPending.filter((u) => u.xhr).length;
   for (const u of cbUploadsPending) {
     if (cbUploadsPending.filter((v) => v.xhr).length >= CB_UPLOAD_CONCURRENCY) break;
     if (u.xhr || u.error || u.done) continue;
     cbUploadStart(u);
   }
-  if (running === 0) cbAttachRender();
+  cbAttachRender();
+}
+
+function cbUploadAccept(u, meta) {
+  /* /api/upload 回的是 {ok, files:[{id,name,bytes,...}]}，不是裸 meta。 */
+  const items = Array.isArray(meta && meta.files) ? meta.files : (meta && meta.id ? [meta] : []);
+  if (!items.length) return "工作台未返回附件信息，请重试上传。";
+  for (const item of items) {
+    if (item && item.id && !state.attachments.some((a) => a.id === item.id)) state.attachments.push(item);
+  }
+  return "";
+}
+
+function cbUploadFinish(u, err) {
+  u.xhr = null;
+  if (err) {
+    u.error = err;
+    addStatus("附件上传失败（" + u.name + "）：" + err);
+    if (u.resolve) u.resolve(); /* 调用方不等「重试」 */
+  } else {
+    u.done = true;
+    cbUploadDrop(u);
+  }
+  cbAttachRender();
+  cbUploadPump();
 }
 
 function cbUploadStart(u, retried) {
+  if (!u.settled) u.settled = new Promise((resolve) => { u.resolve = resolve; });
+  if (typeof XMLHttpRequest !== "function") { cbUploadStartFetch(u); return; }
   const xhr = new XMLHttpRequest();
   u.xhr = xhr; u.loaded = 0; u.error = "";
   const fd = new FormData();
@@ -655,66 +712,46 @@ function cbUploadStart(u, retried) {
     if (ev.lengthComputable) u.loaded = ev.loaded;
     cbAttachPaintProgress(u);
   };
-  const finish = (err) => {
-    u.xhr = null;
-    if (err) { u.error = err; }
-    else {
-      u.done = true;
-      cbUploadsPending.splice(cbUploadsPending.indexOf(u), 1);
-    }
-    cbAttachRender();
-    cbUploadPump();
-  };
   xhr.onload = async () => {
-    if (state.session !== u.session) { cbUploadsPending.splice(cbUploadsPending.indexOf(u), 1); cbAttachRender(); cbUploadPump(); return; }
+    if (state.session !== u.session) { cbUploadDrop(u); cbAttachRender(); cbUploadPump(); return; }
     if (xhr.status === 401 && !retried) {
       if (await askToken("上传需要口令，填好后再传一次")) { cbUploadStart(u, true); return; }
     }
     if (xhr.status < 200 || xhr.status >= 300) {
       let msg = "HTTP " + xhr.status;
       try { const j = JSON.parse(xhr.responseText); if (typeof j.detail === "string") msg = j.detail; } catch (e) { /* 非 JSON */ }
-      finish(msg); return;
+      cbUploadFinish(u, msg); return;
     }
     let meta = null;
-    try { meta = JSON.parse(xhr.responseText); } catch (e) { finish("工作台未返回附件信息，请重试上传。"); return; }
-    /* /api/upload 回的是 {ok, files:[{id,name,bytes,...}]}，不是裸 meta。 */
-    const items = Array.isArray(meta && meta.files) ? meta.files : (meta && meta.id ? [meta] : []);
-    if (!items.length) { finish("工作台未返回附件信息，请重试上传。"); return; }
-    for (const item of items) {
-      if (item && item.id && !state.attachments.some((a) => a.id === item.id)) state.attachments.push(item);
-    }
-    finish("");
+    try { meta = JSON.parse(xhr.responseText); } catch (e) { cbUploadFinish(u, "工作台未返回附件信息，请重试上传。"); return; }
+    cbUploadFinish(u, cbUploadAccept(u, meta));
   };
-  xhr.onerror = () => finish("网络错误，可点「重试」");
+  xhr.onerror = () => cbUploadFinish(u, "网络错误，可点「重试」");
   xhr.onabort = () => { u.xhr = null; cbAttachRender(); cbUploadPump(); };
   xhr.open("POST", "/api/upload");
   xhr.send(fd);
   cbAttachRender();
 }
 
-async function cbAttachUpload(fileList) {
-  if (cbCapability("attachments") === false) {
-    addStatus("当前工作台未提供附件上传，可以将材料要点粘贴到输入框。");
-    return;
+/* 没有 XMLHttpRequest 的环境（自动化测试）：老的 fetch 通道，语义相同，只是没有进度。 */
+async function cbUploadStartFetch(u) {
+  u.xhr = { abort() {} };
+  const fd = new FormData();
+  fd.append("session_id", u.session);
+  fd.append("file", u.file);
+  try {
+    const r = await fetch("/api/upload", { method: "POST", body: fd });
+    if (state.session !== u.session) { cbUploadDrop(u); cbAttachRender(); cbUploadPump(); return; }
+    if (!r.ok) throw new Error(await apiError(r) || "HTTP " + r.status);
+    cbUploadFinish(u, cbUploadAccept(u, await r.json()));
+  } catch (e) {
+    if (state.session !== u.session) { cbUploadDrop(u); cbAttachRender(); cbUploadPump(); return; }
+    cbUploadFinish(u, (e && e.message) || String(e));
   }
-  const files = Array.from(fileList || []);
-  if (!files.length) return;
-  const session = state.session;
-  let slots = cbUploadSlotsLeft(session);
-  const refused = [];
-  for (const file of files) {
-    const why = cbUploadPrecheck(file);
-    if (why) { refused.push(`${file.name}：${why}`); continue; }
-    if (slots <= 0) { refused.push(`${file.name}：同一会话最多 ${CB_UPLOAD_LIMITS.maxFiles} 个附件`); continue; }
-    slots -= 1;
-    cbUploadKey += 1;
-    cbUploadsPending.push({ key: "up" + cbUploadKey, session, name: file.name, bytes: file.size, loaded: 0, xhr: null, file, error: "" });
-  }
-  if (refused.length) addStatus("未上传：" + refused.join("；"));
-  cbUploadPump();
 }
 
 function cbAttachPaintProgress(u) {
+  if (!document.querySelector) return;
   const bar = document.querySelector(`[data-upload="${u.key}"] .cb-att-bar > i`);
   const pct = document.querySelector(`[data-upload="${u.key}"] .cb-att-pct`);
   const ratio = u.bytes ? Math.min(1, u.loaded / u.bytes) : 0;
@@ -861,30 +898,6 @@ if ($("btnNewProject")) {
 
 
 /* ux(round19)：本地新会话 —— 不依赖任何后端接口，任何后端上都生效。 */
-/* 输入到一半切去别的会话，回来时话还在：草稿按会话存 localStorage，发送后清掉。 */
-const CB_DRAFT_PREFIX = "cb_draft:";
-function cbDraftSave() {
-  const ta = $("input");
-  if (!ta || !state.session) return;
-  try {
-    if (ta.value.trim()) localStorage.setItem(CB_DRAFT_PREFIX + state.session, ta.value);
-    else localStorage.removeItem(CB_DRAFT_PREFIX + state.session);
-  } catch (e) { /* 存储不可用：不存 */ }
-}
-function cbDraftClear(sid) {
-  try { localStorage.removeItem(CB_DRAFT_PREFIX + (sid || state.session)); } catch (e) { /* 忽略 */ }
-}
-function cbDraftRestore() {
-  const ta = $("input");
-  if (!ta) return;
-  let v = "";
-  try { v = localStorage.getItem(CB_DRAFT_PREFIX + state.session) || ""; } catch (e) { /* 忽略 */ }
-  ta.value = v;
-  cbAutosize(ta);
-  cbSyncSend();
-}
-if ($("input")) $("input").addEventListener("input", cbDraftSave);
-
 function cbNewLocalSession() {
   cbClearServerHitl();
   cbSessionRequest += 1;
@@ -928,6 +941,30 @@ function cbContextReset() {
   if ($("ctxMemoryStatus")) $("ctxMemoryStatus").textContent = "";
   cbContextRebuildControls(false);
 }
+
+/* 输入到一半切去别的会话，回来时话还在：草稿按会话存 localStorage，发送后清掉。 */
+const CB_DRAFT_PREFIX = "cb_draft:";
+function cbDraftSave() {
+  const ta = $("input");
+  if (!ta || !state.session) return;
+  try {
+    if (ta.value.trim()) localStorage.setItem(CB_DRAFT_PREFIX + state.session, ta.value);
+    else localStorage.removeItem(CB_DRAFT_PREFIX + state.session);
+  } catch (e) { /* 存储不可用：不存 */ }
+}
+function cbDraftClear(sid) {
+  try { localStorage.removeItem(CB_DRAFT_PREFIX + (sid || state.session)); } catch (e) { /* 忽略 */ }
+}
+function cbDraftRestore() {
+  const ta = $("input");
+  if (!ta) return;
+  let v = "";
+  try { v = localStorage.getItem(CB_DRAFT_PREFIX + state.session) || ""; } catch (e) { /* 忽略 */ }
+  ta.value = v;
+  cbAutosize(ta);
+  cbSyncSend();
+}
+if ($("input")) $("input").addEventListener("input", cbDraftSave);
 
 /* ux(round14)：相对时间（参考图会话列表「名称 + 相对时间」；只抄线程 updated_at 字段） */
 function cbRelTime(ts) {
