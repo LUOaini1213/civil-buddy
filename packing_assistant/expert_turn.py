@@ -2356,44 +2356,48 @@ def _equip_md(text: str) -> str:
     return "\n".join(lines)
 
 
-def _parse_wh_rows(blob: str) -> List[tuple]:
-    rows: List[tuple] = []
-    for piece in (blob or "").replace("；", "\n").replace(";", "\n").splitlines():
-        t = piece.strip()
-        t = re.sub(r"^写一份\S*\s*", "", t).strip()
-        if not t or t in _WH_SKIP:
-            continue
-        if t.startswith("#") or t.startswith("内部"):
-            continue
-        if t in {"JGJ", "SAC", "CN", "SG", "DUAL"}:
-            continue
-        inbound = "TBD"
-        outbound = "TBD"
-        m = _RES_QTY.search(t)
-        qty = f"{m.group('qty')}{m.group('unit')}" if m else ""
-        name = t
-        if m:
-            name = (t[: m.start()] + t[m.end() :]).strip(" ，,;；") or t
-        for key in ("入库", "进场", "出库", "领料", "盘点", "实存"):
-            name = name.replace(key, "")
-        name = re.sub(r"\s+", " ", name).strip() or t[:80]
-        if len(name) > 80:
-            name = name[:80]
-        if "出库" in t or "领料" in t:
-            outbound = qty or "TBD"
-        elif "入库" in t or "进场" in t:
-            inbound = qty or "TBD"
-        elif qty:
-            inbound = qty
-        rows.append((name, inbound, outbound))
+_WH_COLUMNS = {
+    "inbound": ("入库", "进场", "到货", "进货", "收料"),
+    "outbound": ("出库", "领用", "领料", "发料", "领走", "发出"),
+    "returned": ("退库", "退料", "退回"),
+    "opening": ("期初结存", "上期结存", "期初"),
+    "balance": ("账面结存", "结存", "库存"),
+    "variance": ("盘点差异", "盘点差", "盘亏", "盘盈", "差异"),
+    "counted": ("盘点实存", "实盘", "实存", "盘点"),
+    "price": ("单价",),
+}
+_WH_LABELS = {
+    "doc": ("来源单据号", "入库单号", "送货单号", "领料单号", "出库单号", "单据号", "单号"),
+    "batch": ("炉批号", "批次号", "批号", "批次"),
+    "supplier": ("供应商", "供货单位", "供货商", "厂家"),
+    "location": ("库位", "库区", "堆放位置", "存放位置"),
+}
+_WH_KEEPERS = ("仓库管理员", "仓管员", "保管员", "库管员", "材料员", "库管", "仓管", "经办人", "验收人", "盘点人", "经办")
+
+
+def _parse_wh_rows(blob: str) -> List[Dict[str, str]]:
+    """One row per material the user named, each figure from its own clause; see post_facts.object_rows."""
+    from packing_assistant import post_facts
+
+    rows = post_facts.object_rows(blob, _WH_COLUMNS, drop=("台账", "收发存"))
+    for row in rows:
+        found = post_facts.labelled(row["source"], _WH_LABELS)
+        row.update({key: value for key, value in found.items() if key not in row})
+        units = [q.unit for q in post_facts.quantities(row["source"]) if q.unit]
+        if units:
+            row["unit"] = units[0]
     return rows
 
 
 def _warehouse_md(text: str) -> str:
+    from packing_assistant import post_facts
+
     blob = text or ""
     zone = _mix_zone(blob)
     rows = _parse_wh_rows(blob)
-    has_count = any(k in blob for k in ("盘点", "实存"))
+    keeper = post_facts.person_for(blob, _WH_KEEPERS)
+    period = next((row["period"] for row in rows if row.get("period")), "")
+    has_count = any(k in blob for k in ("盘点", "实存", "实盘"))
     if not rows:
         short = (
             "| 物资 | 入库 | 出库 | 结存 | 备注 |\n"
@@ -2406,17 +2410,28 @@ def _warehouse_md(text: str) -> str:
             "| 待填物资 | 待填 | 待填 | TBD | TBD | TBD | TBD | TBD | TBD | 待填 | TBD |\n"
         )
     else:
+        def cell(row: Dict[str, str], key: str, missing: str = "TBD") -> str:
+            return post_facts.table_cell(row.get(key) or missing)
+
         short = (
             "| 物资 | 入库 | 出库 | 结存 | 备注 |\n"
             "| --- | --- | --- | --- | --- |\n"
-            + "".join(f"| {n} | {inn} | {out} | TBD | 待填 |\n" for n, inn, out in rows)
+            + "".join(
+                f"| {post_facts.table_cell(' '.join(filter(None, (row['name'], row.get('spec')))))} | {cell(row, 'inbound')} | "
+                f"{cell(row, 'outbound')} | {cell(row, 'balance')} | "
+                f"{post_facts.table_cell('；'.join(filter(None, (row.get('location'), row.get('supplier')))) or '待填')} |\n"
+                for row in rows
+            )
         )
         full = (
             "| 物资 | 规格批次 | 单位 | 期初 | 入库 | 出库 | 账面结存 | 盘点实存 | 差异 | 来源单据号 | 单价 |\n"
             "| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |\n"
             + "".join(
-                f"| {n} | 待填 | 待填 | TBD | {inn} | {out} | TBD | TBD | TBD | 待填 | TBD |\n"
-                for n, inn, out in rows
+                f"| {cell(row, 'name')} | {post_facts.table_cell(' '.join(filter(None, (row.get('spec'), row.get('batch')))) or '待填')} | "
+                f"{cell(row, 'unit', '待填')} | {cell(row, 'opening')} | {cell(row, 'inbound')} | {cell(row, 'outbound')} | "
+                f"{cell(row, 'balance')} | {cell(row, 'counted')} | {cell(row, 'variance')} | {cell(row, 'doc', '待填')} | "
+                f"{cell(row, 'price')} |\n"
+                for row in rows
             )
         )
     count_note = (
@@ -2432,6 +2447,8 @@ def _warehouse_md(text: str) -> str:
         "内部讨论，不替代正式入库单签认，不替代财务记账，不给材料合格结论。",
         "",
         f"- 辖区：{zone}",
+        f"- 台账期间：{period or '待填'}",
+        f"- 仓管 / 经办：{keeper or '待填'}",
         "",
         "## 用户原文",
         "",

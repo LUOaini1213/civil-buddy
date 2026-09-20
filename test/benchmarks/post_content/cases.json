@@ -1,0 +1,7 @@
+{"cases": [
+  {"id": "warehouse-01", "post": "warehouse", "tool": "warehouse__log", "style": "sentence",
+   "request": "帮我写一份仓库收发存台账口径：螺纹钢 HRB400 Φ20 本周入库 35 吨，领用 12 吨，盘点差 0.3 吨，仓管员张伟",
+   "facts": [{"value": "HRB400", "field": "物资|规格|品名"}, {"value": "35", "field": "入库"}, {"value": "12", "field": "出库|领"},
+             {"value": "0.3", "field": "差异|盘"}, {"value": "张伟", "field": "仓管|经办|保管|责任"}],
+   "forbidden": []}
+]}
