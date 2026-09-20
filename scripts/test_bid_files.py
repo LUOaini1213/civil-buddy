@@ -220,6 +220,21 @@ class EvidenceFiles(JobFolder):
         self.assertIn("项目经理证书.pdf", found["李明"]["证据文件"])
         self.assertNotIn("未检出「李明」", rows(md, "项目经理")[0]["缺口"])
 
+    def test_the_file_named_for_the_row_was_read_and_lacks_the_word(self) -> None:
+        # seen in a real draft: 项目经理证书.txt named 王强, and an unrelated scan turned the answer into 未能判断
+        blank_pdf(self.job / "营业执照.pdf")
+        (self.job / "投标响应.txt").write_text(RESPONSE, encoding="utf-8")
+        (self.job / "项目经理证书.txt").write_text("一级注册建造师注册证书\n姓名：王强\n注册类别：一级注册建造师\n", encoding="utf-8")
+        out = run_agent("全面检查投标响应：招标文件.txt 投标响应.txt 项目经理证书.txt 营业执照.pdf", session_id="civil-cli")
+        self.assertTrue(out["ok"], out.get("reply"))
+        md = self.draft(out, "bid-compliance.md")
+        found = {r["我方写的"]: r for r in rows(md, "项目经理") if "字样" in r}
+        self.assertEqual(found["李明"]["字样"], "未检出")
+        self.assertIn("项目经理证书.txt 读到了，里面没有", found["李明"]["证据文件"])
+        self.assertIn("证据文件里未检出「李明」字样", rows(md, "项目经理")[0]["缺口"])
+        bond = [r for r in rows(md, "投标保证金") if "字样" in r][0]
+        self.assertEqual(bond["字样"], "未能判断", "no file is named for the guarantee, and one file was not read")
+
     def test_no_evidence_files_no_section(self) -> None:
         (self.job / "投标响应.txt").write_text(RESPONSE, encoding="utf-8")
         out = run_agent("全面检查投标响应：招标文件.txt 投标响应.txt", session_id="civil-cli")

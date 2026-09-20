@@ -129,3 +129,5 @@ _Updated 2026-09-20 (second time). 11 files became 13: the parse table and the t
 PASS
 
 The end-to-end workflow successfully generated review documents and compliance workbooks, preserved the original 60-day tender requirement, did not treat the supplier's 999-day statement as a tender requirement, identified unresolved compliance items, and retained human review before submission.
+
+_Updated 2026-09-21. 13 files became 14: the run also writes `check.json` - the sha256 of every text it read, of every draft it wrote, and the state of every compliance row - and `collaboration-review.md` lists those texts under 核对对象. A second run of the same task appends 与上次核对相比 (which input changed, which row moved). The compliance draft names what it read in section 1. The status codes above are unchanged and still asserted on the JSON._

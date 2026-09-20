@@ -802,14 +802,23 @@ def _evidence_tokens(topic: str, haves: Sequence[Mapping[str, Any]], quotes: Seq
 
 
 def _check_evidence(label: str, tokens: Sequence[str], evidence: Sequence[Mapping[str, Any]], unread_evidence: str,
-                    checks: List[Row]) -> List[str]:
-    """One row of section 8 per token; returns the tokens no evidence file holds."""
+                    checks: List[Row], *, about: str = "") -> List[str]:
+    """One row of section 8 per token; returns the tokens no evidence file holds.
+
+    ``about`` is the row's own name (项目经理). A file called 项目经理证书.pdf that was read and does not
+    hold the name we wrote is the most telling thing this check can find - it is said as 未检出 even
+    when some other file could not be read and might, in principle, hold the word."""
     absent: List[str] = []
+    named = [str(e.get("title")) for e in evidence if about and about in str(e.get("title") or "")]
     for token in tokens:
         holders = [str(e.get("title") or "未命名") for e in evidence if _flat(token) in _flat(e.get("text"))]
         if holders:
             checks.append({"label": label, "token": token, "files": "、".join(holders), "state": "检出",
                            "note": "只说明字样出现；真伪、有效期、是否本人须核原件"})
+        elif named:
+            absent.append(token)
+            checks.append({"label": label, "token": token, "files": "、".join(named) + " 读到了，里面没有", "state": "未检出",
+                           "note": "文件名说的就是这一项，却没有这个字样：核对是不是拿错了人，或拿错了文件"})
         elif unread_evidence:
             checks.append({"label": label, "token": token, "files": f"读到的 {len(evidence)} 份均无；未读出：{_clip(unread_evidence, 30)}",
                            "state": "未能判断", "note": "可能就在未读出的文件里：让它可读后重查"})
@@ -874,7 +883,8 @@ def _gap_rows(topic: str, tender: Facts, ours: Facts, lots: List[str], open_item
             gap = grade + "；" + gap
         missing_words: List[str] = []
         if evidence and checks is not None and topic in _EVIDENCE_TOPICS and (haves or quotes):
-            missing_words = _check_evidence(label, _evidence_tokens(topic, haves, quotes), evidence, unread_evidence, checks)
+            missing_words = _check_evidence(label, _evidence_tokens(topic, haves, quotes), evidence, unread_evidence, checks,
+                                            about=_LABELS[topic])
             if missing_words:
                 gap = f"证据文件里未检出「{'」「'.join(missing_words)}」字样（见 8 节）；" + gap
         owner = _owner_for(ours, lot)

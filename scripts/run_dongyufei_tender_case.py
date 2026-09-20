@@ -62,7 +62,10 @@ status = {text[:6]: row["status"] for text, row in rows.items()}
 assert result["ok"] is True and result["submit_blocked"] is True
 # 13 since 2026-09-20: the parse table and the technical outline are tables now, so each comes with a
 # workbook as well (tender-extract.xlsx, worker-bid-tech/bid-tech.xlsx) - "正文有表格时可导出 Excel".
-assert len(result["files"]) == 13, [Path(f["path"]).name for f in result["files"]]
+# 14 since 2026-09-21: check.json - which texts this run read (sha256 each), which drafts it wrote, the state
+# of every row - so that the next run of the task can say what moved (tools/bid_check_record.py).
+assert len(result["files"]) == 14, [Path(f["path"]).name for f in result["files"]]
+assert [Path(f["path"]).name for f in result["files"]].count("check.json") == 1
 assert len(rows) == 3, list(rows)                                   # one row per tender line (#32)
 assert status["工期60日历"] == "conflict_requires_review", status   # 999 日历天 against 60 日历天 is pointed out, not judged
 assert status["技术方案评分"] == "not_matched", status
