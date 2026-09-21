@@ -22,9 +22,17 @@
       <details><summary>最近计划与版本历史</summary><div class="toolbar history-toolbar"><label class="grow">最近计划<select id="recentPlans"><option value="">选择计划</option></select></label><button id="openPlan">打开</button><button id="refreshPlans">刷新列表</button><label class="grow">历史版本<select id="revisions"><option value="">先打开已保存计划</option></select></label><button id="restoreRevision">载入为草稿</button><button id="undoSaved">撤销上次保存</button></div><p class="muted small">载入历史后可检查并保存为新修订；旧版本保留。未保存编辑不会被静默覆盖。</p></details>
     </section>
 
+    <section class="panel" aria-labelledby="conversationTitle">
+      <div class="section-heading"><h2 id="conversationTitle">对话排程</h2><a id="unifiedChat" href="/" hidden>到统一 Agent 对话继续</a></div>
+      <p class="muted small">引用表内已有编号，例如“把 B 的工期改为 5 工作日”“资源 crew 容量改为 2”“检查计划”“按资源容量优化”。先展示变化，确认后计算；保存需另点保存计划。</p>
+      <form id="planningChatForm" class="toolbar"><label class="grow">排程指令<input id="planningMessage" maxlength="4000" placeholder="检查计划，或输入明确的参数修改" required></label><button id="sendPlanningMessage" type="submit">发送</button></form>
+      <pre id="planningReply" class="conversation-reply" aria-live="polite"></pre>
+      <div id="planningProposal" hidden><h3>核对本次变化</h3><div id="planningChanges" class="table-scroll"></div><p id="proposalHint" class="muted small"></p><div class="button-group"><button id="applyPlanningProposal" class="primary">确认应用并计算</button><button id="discardPlanningProposal">放弃建议</button></div></div>
+    </section>
+
     <section class="panel" aria-labelledby="calendarTitle">
       <div class="section-heading"><h2 id="calendarTitle">工作日历</h2><span class="muted small">工期按工作日计算 · 工期 0 为里程碑</span></div>
-      <div class="calendar-grid"><label>计划开始日期<input id="startDate" type="date" min="1900-01-01" max="2200-12-31"></label><fieldset class="weekdays"><legend>工作周</legend><div id="weekdays"></div></fieldset><label>停工日 / 节假日（每行一个日期）<textarea id="holidays" rows="2" placeholder="YYYY-MM-DD"></textarea></label></div>
+      <div class="calendar-grid"><label>计划开始日期<input id="startDate" type="date" min="1900-01-01" max="2100-12-31"></label><fieldset class="weekdays"><legend>工作周</legend><div id="weekdays"></div></fieldset><label>停工日 / 节假日（每行一个日期）<textarea id="holidays" rows="2" placeholder="YYYY-MM-DD"></textarea></label></div>
     </section>
 
     <section class="panel task-panel" aria-labelledby="tasksTitle">
@@ -58,8 +66,9 @@
       <div class="section-heading"><h2 id="exchangeTitle">导入与交接</h2><span class="muted small">保留原文件；导入产生本地草稿</span></div>
       <div class="exchange-grid">
         <div><label>计划文件<input id="importFile" type="file" accept=".json,.csv,.xlsx,.xml,.mpp,.xer,.pmxml"></label><button id="importPlan">检查导入文件</button><p id="importHint" class="muted small">JSON、CSV、XLSX、MS Project XML；MPP / P6（XER、PMXML）取决于服务器可用的转换组件。导入后先核对日历与依赖。</p></div>
-        <div><label>导出格式<select id="exportFormat"><option value="json">JSON 计划数据</option><option value="csv">CSV 任务表</option><option value="xlsx">Excel 工作簿</option><option value="xml">MS Project XML</option></select></label><label>签认提示：完整输入“我明白，将由持证人员签认”<input id="confirmation" autocomplete="off" placeholder="我明白，将由持证人员签认"></label><button id="exportPlan">导出当前计划</button><p class="muted small">交换文件包含计划输入与计算日期；基线、周承诺和原始文件请单独交接。</p></div>
+        <div><label>导出格式<select id="exportFormat"><option value="json">JSON 计划数据</option><option value="csv">CSV 任务表</option><option value="xlsx">Excel 工作簿</option><option value="xml">MS Project XML</option></select></label><label>签认提示：完整输入“我明白，将由持证人员签认”<input id="confirmation" autocomplete="off" placeholder="我明白，将由持证人员签认"></label><button id="exportPlan">导出当前计划</button><p class="muted small">交换文件包含计划输入与计算日期；完整交接请选择下方项目包。</p></div>
       </div>
+      <div class="import-review"><h3>完整项目包</h3><p id="bundleStatus" class="muted small">保存计划后可导出项目包，包含基线、周承诺、保留的历史与已上传原文件。</p><div class="toolbar"><button id="exportBundle">导出已保存项目包</button><label class="grow">导入同事的项目包<input id="bundleFile" type="file" accept=".zip"></label><button id="importBundle">导入为新副本</button></div><p class="muted small">导入使用新编号，不覆盖现有项目；签认确认需重新输入。资源方案保留原计算记录，核对约束，但不重新证明最优性。</p><div id="missingSourcePanel" hidden><label>补齐缺失的原文件<input id="missingSourceFile" type="file"></label><button id="attachSource">核对摘要并补齐原件</button></div></div>
       <div id="importPreview" class="import-review" hidden>
         <div class="section-heading"><h3>导入检查 · 等待确认</h3><span class="status stale">尚未应用到当前计划</span></div>
         <div id="importSummary"></div>
@@ -70,7 +79,7 @@
       <div id="sourcePanel" class="import-review" hidden>
         <div class="section-heading"><h3>当前计划的导入来源</h3><span id="sourceState" class="status">来源记录</span></div>
         <div id="sourceSummary"></div>
-        <p class="muted small">这里只记录来源与导入差异，原文件请自行保管。原文件日期不自动变成约束，计算日期按确认后的日历与依赖生成。</p>
+        <p class="muted small">新上传原文件随项目保存，旧记录的缺失原件见项目包提示。原文件日期不自动变成约束，计算日期按确认后的日历与依赖生成。</p>
         <details><summary>查看完整来源 JSON 与原文件摘要</summary><pre id="sourceMetadata"></pre></details>
         <details><summary>逐任务核对原文件日期与当前计算日期</summary><div id="sourceDateComparison" class="table-scroll"></div></details>
       </div>

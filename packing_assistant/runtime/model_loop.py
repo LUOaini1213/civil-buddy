@@ -90,6 +90,14 @@ CAD_TOOLS = [
 ]
 CAD_TOOL_NAMES = frozenset(t["function"]["name"] for t in CAD_TOOLS)
 CONFINED_TOOLS = CONFINED_TOOLS | CAD_TOOL_NAMES
+PLANNING_TOOLS = [
+    _tool("planning_inspect", "检查用户已选中的施工计划、已有任务编号、输入及实际 CPM 结果。", {}, []),
+    _tool("planning_explain", "用工具实际结果解释关键任务、时差和资源超配；不估工期。", {}, []),
+    _tool("planning_propose", "只从本轮用户原话解析已有任务/资源/日历的明确值，提出原值→新值建议；不应用、不保存。", {}, []),
+    _tool("planning_undo", "仅当本轮用户要求撤销时提出待确认请求；不执行撤销或保存。", {}, []),
+]
+PLANNING_TOOL_NAMES = frozenset(t["function"]["name"] for t in PLANNING_TOOLS)
+CONFINED_TOOLS = CONFINED_TOOLS | PLANNING_TOOL_NAMES
 
 SYSTEM = """你是 Civil Buddy（土木版 Codex）：在用户的工地文件夹里，替土木工程师把事情办完的 agent。
 
@@ -122,6 +130,8 @@ class _Turn:
     cad_changed: bool = False
     cad_mutation_done: bool = False
     cad_results: List[Dict[str, Any]] = field(default_factory=list)
+    planning_context: Optional[Dict[str, Any]] = None
+    planning_results: List[Dict[str, Any]] = field(default_factory=list)
     evidence: List[str] = field(default_factory=list)
     files: List[Dict[str, str]] = field(default_factory=list)
     tools_run: List[str] = field(default_factory=list)
@@ -414,7 +424,7 @@ def _dispatch(turn: _Turn, name: str, arguments: Dict[str, Any], worker: Any) ->
                             user_text=turn.user_text, material=turn.material, intent=turn.intent,
                             confirmed=turn.confirmed, cancel_event=turn.cancel_event,
                             cad_context=turn.cad_context, cad_confirmed=turn.cad_confirmed,
-                            cad_mutation_done=turn.cad_mutation_done)["out"]
+                            cad_mutation_done=turn.cad_mutation_done, planning_context=turn.planning_context)["out"]
         return reply if isinstance(reply.get("result"), dict) else {"result": {"ok": False, "error_code": "worker_failed",
                                                                                 "reason": str(reply.get("reply") or reply)[:300]}}
 
@@ -431,6 +441,8 @@ def _dispatch(turn: _Turn, name: str, arguments: Dict[str, Any], worker: Any) ->
         turn.cad_changed = turn.cad_changed or bool(reply.get("cad_changed"))
         turn.cad_mutation_done = turn.cad_mutation_done or bool(reply.get("cad_mutation_done"))
         turn.cad_results.append(reply["result"])
+    if name in PLANNING_TOOL_NAMES:
+        turn.planning_results.append(reply["result"])
     turn.skill = str(reply.get("skill") or turn.skill)
     turn.hitl_pending = turn.hitl_pending or (bool(reply.get("hitl_pending")) and reply["result"].get("error_code") == "approval_required")
     return reply["result"]
@@ -457,6 +469,18 @@ def _cad_tool(turn: _Turn, args: Dict[str, Any], *, name: str) -> Dict[str, Any]
 
 
 _DISPATCH.update({name: partial(_cad_tool, name=name) for name in CAD_TOOL_NAMES})
+
+
+def _planning_tool(turn: _Turn, args: Dict[str, Any], *, name: str) -> Dict[str, Any]:
+    from packing_assistant.engineering.planning_agent import execute
+    if not turn.planning_context:
+        return {"ok": False, "error_code": "no_planning_project", "reason": "请先在施工计划页选择一份计划。"}
+    result = execute(turn.planning_context, name, args, user_text=turn.user_text)
+    turn.planning_results.append(result)
+    return result
+
+
+_DISPATCH.update({name: partial(_planning_tool, name=name) for name in PLANNING_TOOL_NAMES})
 
 
 def system_prompt(context_prefix: str = "") -> str:
@@ -551,7 +575,8 @@ def run_model_agent(text: str, *, session_id: str = "", expert_id: str = "", p0_
                     history: Optional[List[Dict[str, str]]] = None, complete: Optional[Complete] = None,
                     approve: Optional[Approve] = None, max_steps: int = MAX_STEPS,
                     cancel_event: Any = None, worker: Any = None, material: str = "", intent: str = "",
-                    cad_context: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
+                    cad_context: Optional[Dict[str, Any]] = None,
+                    planning_context: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
     from packing_assistant.runtime.agent_loop import _scrub
     from packing_assistant.runtime.civil_config import load_config
     from packing_assistant.runtime.expert_skills import skill_body
@@ -566,13 +591,16 @@ def run_model_agent(text: str, *, session_id: str = "", expert_id: str = "", p0_
     ctx = assemble_context(sid, text=text, p0_confirmed=p0_confirmed)
     turn = _Turn(session_id=sid, run_id="run-" + uuid4().hex[:8], user_text=text, approve=approve,
                  cancel_event=cancel_event, confirmed=ctx.get("p0_confirmed") is True, material=material, intent=intent,
-                 cad_context=cad_context, cad_confirmed=p0_confirmed is True)
+                 cad_context=cad_context, cad_confirmed=p0_confirmed is True, planning_context=planning_context)
     system = system_prompt(prompt_prefix(ctx))
     past = [{"role": m["role"], "content": str(m.get("content") or "")} for m in history or []
             if m.get("role") in {"user", "assistant"} and str(m.get("content") or "").strip()]
     turn.evidence += [system, text] + [m["content"] for m in past]
     messages: List[Dict[str, Any]] = [{"role": "system", "content": system}, *past]
     tools = [tool for tool in TOOLS if tool["function"]["name"] not in WRITE_TOOLS] if intent == "chat" else TOOLS
+    if cad_context and planning_context:
+        return {"ok": False, "schema": "civil.agent.v1", "error_code": "ambiguous_context", "wrote": False,
+                "files": [], "artifacts": [], "submit_blocked": True, "reply": "一次对话只能绑定一个 CAD 或施工计划项目。"}
     if cad_context:
         from packing_assistant.cad3d.agent import READ_TOOLS, operation
         allowed = operation(text, cad_context)
@@ -580,6 +608,15 @@ def run_model_agent(text: str, *, session_id: str = "", expert_id: str = "", p0_
         messages.append({"role": "system", "content": "本轮绑定用户在 CAD 页选择的项目，只能用 CAD 工具处理它。"
                          "参数只来自保存的项目与本轮用户原话；先检查再操作，不得自行填写尺寸、顶点或签认。"
                          "图层建议必须由用户在 CAD 页确认。最终成功状态由工具结果决定。"})
+    if planning_context:
+        from packing_assistant.engineering.planning_agent import operation
+        allowed = operation(text, planning_context)
+        tools = [tool for tool in PLANNING_TOOLS if tool["function"]["name"] in {"planning_inspect", "planning_explain", allowed}]
+        messages.append({"role": "system", "content": "本轮只绑定用户选择的施工计划，只能调用排程受限工具。"
+                         "先检查已有任务、资源、日历；修改只来自本轮用户原话中的明确值。"
+                         "不得生成工期、资源数或参数，不执行代码、文件路径、保存、导出或代确认。"
+                         "planning_propose 只提出建议，planning_undo 只请求用户确认，均不改变计划。"
+                         "应用和撤销由用户页面按钮完成；最终回复必须依据工具事实，不得声称已修改或已保存。"})
     if intent == "chat":
         messages.append({"role": "system", "content": "本轮用户只要求问答；仅可读取资料与解释，不得执行产稿、装箱方案保存或其他写入。"})
     if material:
@@ -627,6 +664,10 @@ def run_model_agent(text: str, *, session_id: str = "", expert_id: str = "", p0_
                 turn.emit("tool_call", {"name": name, "arguments": arguments})
                 if cad_context and name not in {tool["function"]["name"] for tool in tools}:
                     result = {"ok": False, "error_code": "read_only_intent", "reason": "本轮未授权此操作；仅可处理已选中的 CAD 项目。"}
+                elif planning_context and name not in {tool["function"]["name"] for tool in tools}:
+                    result = {"ok": False, "error_code": "read_only_intent", "reason": "排程对话仅能检查或提出待确认建议，不能执行其他工具或保存导出。"}
+                elif planning_context and not isinstance(call.get("arguments"), dict):
+                    result = {"ok": False, "error_code": "invalid_args", "reason": "排程工具只接受空参数对象。"}
                 elif name not in _DISPATCH:
                     result: Dict[str, Any] = {"ok": False, "error_code": "unknown_tool",
                                               "reason": f"没有工具 {name}。可用：" + "、".join(sorted(TOOL_NAMES))}
@@ -640,6 +681,8 @@ def run_model_agent(text: str, *, session_id: str = "", expert_id: str = "", p0_
                 last_call = signature
                 if cad_context and (not turn.cad_results or turn.cad_results[-1] is not result):
                     turn.cad_results.append(result)
+                if planning_context and (not turn.planning_results or turn.planning_results[-1] is not result):
+                    turn.planning_results.append(result)
                 turn.tools_run.append(name)
                 content = json.dumps(result, ensure_ascii=False, default=str)[:_RESULT_CHARS]
                 turn.evidence.append(content)
@@ -662,6 +705,13 @@ def run_model_agent(text: str, *, session_id: str = "", expert_id: str = "", p0_
         reply = reply_for(turn.cad_results, turn.cad_context)
         if turn.cad_results and not all(result.get("ok") for result in turn.cad_results):
             out.update(ok=False, error_code=next((r.get("error_code") for r in turn.cad_results if not r.get("ok")), "cad_failed"))
+    elif planning_context and out["ok"]:
+        from packing_assistant.engineering.planning_agent import reply_for
+        reply = reply_for(turn.planning_results, turn.planning_context)
+        if not turn.planning_results:
+            out.update(ok=False, error_code="planning_not_run")
+        elif not all(result.get("ok") for result in turn.planning_results):
+            out.update(ok=False, error_code=next((r.get("error_code") for r in turn.planning_results if not r.get("ok")), "planning_failed"))
     elif out["ok"] and reply and not out["error_code"]:
         try:
             reply, provenance = _guarded(reply, turn, messages, complete)
@@ -681,6 +731,12 @@ def run_model_agent(text: str, *, session_id: str = "", expert_id: str = "", p0_
                usage={"model_calls": model_calls, "tool_calls": len(turn.tools_run)})
     if cad_context:
         out.update(cad_context=turn.cad_context, cad_changed=turn.cad_changed)
+    if planning_context:
+        out.update(planning_results=turn.planning_results, planning_changed=False,
+                   planning_proposal=next((row["planning_proposal"] for row in reversed(turn.planning_results)
+                                           if row.get("planning_proposal")), None) if out["ok"] else None,
+                   planning_action=next((row["planning_action"] for row in reversed(turn.planning_results)
+                                         if row.get("planning_action")), None) if out["ok"] else None)
     turn.emit("run_ended", {"state": "done" if out["ok"] else "failed", "wrote": turn.wrote})
     out["events"] = [e.to_dict() for e in get_bus().for_run(turn.run_id)]
     return out

@@ -37,7 +37,8 @@ def resolve_mode(requested: str = "") -> Tuple[str, str]:
 def run_turn(text: str, *, session_id: str = "", skill: str = "", confirm: bool = False,
              history: Optional[List[Dict[str, str]]] = None, approve: Optional[Callable[[Dict[str, Any]], bool]] = None,
              cancel_event: Any = None, mode: str = "", material: str = "", intent: str = "",
-             cad_context: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
+             cad_context: Optional[Dict[str, Any]] = None,
+             planning_context: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
     from packing_assistant.runtime.agent_loop import run_agent
     from packing_assistant.runtime.civil_config import load_config
 
@@ -45,10 +46,14 @@ def run_turn(text: str, *, session_id: str = "", skill: str = "", confirm: bool 
     from packing_assistant.runtime.workspace import active
 
     chosen, notice = resolve_mode(mode)
+    if cad_context and planning_context:
+        return {"ok": False, "schema": "civil.agent.v1", "error_code": "ambiguous_context", "wrote": False,
+                "files": [], "artifacts": [], "submit_blocked": True, "reply": "一次对话只能绑定一个 CAD 或施工计划项目。"}
     def cancelled_result(out=None):
         return {"schema": "civil.agent.v1", "wrote": False, "files": [], "artifacts": [],
                 "submit_blocked": True, "intent": "chat", "agent_mode": chosen, "session_id": session_id,
                 **(out or {}), "ok": False, "cancelled": True, "state": "cancelled", "error_code": "cancelled",
+                "planning_proposal": None, "planning_action": None,
                 "reply": "本轮已取消；已完成的文件保留，未执行后续操作。"}
 
     def is_cancelled():
@@ -82,7 +87,7 @@ def run_turn(text: str, *, session_id: str = "", skill: str = "", confirm: bool 
 
             out = run_model_agent(text, session_id=session_id, expert_id=skill, p0_confirmed=confirm,
                                   history=history, approve=approve, cancel_event=cancel_event, worker=worker,
-                                  material=material, intent=intent, cad_context=cad_context)
+                                  material=material, intent=intent, cad_context=cad_context, planning_context=planning_context)
             asked = mode or load_config().agent_mode
             if is_cancelled():
                 out = cancelled_result(out)
@@ -92,7 +97,10 @@ def run_turn(text: str, *, session_id: str = "", skill: str = "", confirm: bool 
         if chosen != "model":
             if is_cancelled():
                 raise os_sandbox.WorkerCancelled("本轮已取消。")
-            if cad_context:
+            if planning_context:
+                out = _planning_steps(text, planning_context, session_id=session_id,
+                                      cancel_event=cancel_event, worker=worker)
+            elif cad_context:
                 out = _cad_steps(text, cad_context, session_id=session_id, confirmed=confirm,
                                  cancel_event=cancel_event, worker=worker)
             elif worker is not None:
@@ -131,6 +139,32 @@ def run_turn(text: str, *, session_id: str = "", skill: str = "", confirm: bool 
         out["mode_notice"] = " ".join(notices)
         out["reply"] = out["mode_notice"] + "\n\n" + str(out.get("reply") or "")
     return out
+
+
+def _planning_steps(text: str, context: dict, *, session_id: str,
+                    cancel_event: Any = None, worker: Any = None) -> Dict[str, Any]:
+    from uuid import uuid4
+    from packing_assistant.engineering.planning_agent import operation, reply_for
+    from packing_assistant.runtime import model_loop, os_sandbox, cancel
+    turn = model_loop._Turn(session_id=session_id, run_id="run-" + uuid4().hex[:8], user_text=text,
+                           confirmed=False, approve=None, cancel_event=cancel_event, planning_context=context)
+    name = "planning_propose"
+    try:
+        name = operation(text, context)
+        result = model_loop._dispatch(turn, name, {}, worker)
+    except (os_sandbox.WorkerCancelled, cancel.RunCancelled):
+        raise
+    except (ValueError, OSError, RuntimeError, KeyError, TypeError) as exc:
+        result = {"ok": False, "error_code": "planning_failed", "reason": str(exc)}
+    if not turn.planning_results or turn.planning_results[-1] is not result:
+        turn.planning_results.append(result)
+    return {"ok": bool(result.get("ok")), "schema": "civil.agent.v1", "agent_mode": "steps",
+            "run_id": turn.run_id, "session_id": session_id, "intent": "chat", "wrote": False,
+            "files": [], "artifacts": [], "submit_blocked": True, "tools_run": [name],
+            "reply": reply_for(turn.planning_results, context), "error_code": result.get("error_code", ""),
+            "planning_results": turn.planning_results, "planning_changed": False,
+            "planning_proposal": result.get("planning_proposal") if result.get("ok") else None,
+            "planning_action": result.get("planning_action") if result.get("ok") else None}
 
 
 def _cad_steps(text: str, context: dict, *, session_id: str, confirmed: bool,

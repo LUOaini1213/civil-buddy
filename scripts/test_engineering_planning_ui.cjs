@@ -126,3 +126,33 @@ test('reopening a saved imported plan shows its source summary without a second 
   const {instance,doc}=await app(async()=>response({project:project(3,{import_source:source,source_id:'f'.repeat(32),synthetic:false}),run_id:'a'.repeat(32)}));await instance.open('b'.repeat(32));
   assert.equal(doc.ids.sourcePanel.hidden,false);assert.match(text(doc.ids.sourceSummary),/saved-original.mpp/);assert.match(text(doc.ids.sourceSummary),/核对源计划日期/);assert.equal(JSON.parse(doc.ids.sourceMetadata.textContent).source.sha256,'kept-original-hash');assert.match(text(doc.ids.sourceDateComparison),/2026-09-23/);assert.equal(doc.ids.importPreview.hidden,true);assert.equal(instance.state.importDraft,null);assert.equal(doc.ids.applyImport.disabled,true);
 });
+
+test('conversation proposes without editing, explicit apply computes and undo restores success',async()=>{
+  const suggestion={ok:true,reply:'等待核对',proposal_id:'e'.repeat(32),changes:[{parameter:'A.duration',before:2,after:3}],action:null};const changed=run();changed.plan.tasks[0].duration=3;changed.result.duration_workdays=3;
+  const {instance,doc}=await app(async url=>response(url.endsWith('/conversation')?suggestion:url.endsWith('/apply')?changed:run()));
+  await instance.calculate();doc.ids.planningMessage.value='把 A 的工期改为 3 工作日';await instance.conversation();assert.equal(instance.state.plan.tasks[0].duration,2);assert.equal(doc.ids.planningProposal.hidden,false);
+  await instance.applyProposal();assert.equal(instance.state.plan.tasks[0].duration,3);assert.equal(instance.state.result.duration_workdays,3);assert.equal(instance.state.proposal,null);instance.undo();assert.equal(instance.state.plan.tasks[0].duration,2);assert.equal(instance.state.result.duration_workdays,2);
+});
+test('cancelled conversation cannot publish its old proposal over new input',async()=>{
+  const old=deferred();const {instance,doc}=await app(url=>url.endsWith('/conversation')?old.promise:Promise.resolve(response({ok:true})));doc.ids.planningMessage.value='把 A 的工期改为 3 工作日';const pending=instance.conversation();await instance.cancel();instance.newLocal({...copy(plan),start_date:'2026-10-05'},'新计划');old.resolve(response({ok:true,reply:'old',proposal_id:'e'.repeat(32)}));await pending;assert.equal(instance.state.proposal,null);assert.equal(instance.state.plan.start_date,'2026-10-05');
+});
+test('stale application preserves edited input, previous results and proposal for review',async()=>{
+  const {instance,doc}=await app(async()=>response({detail:'建议已过期'},409));instance.state.proposal={proposal_id:'e'.repeat(32),changes:[],action:null};instance.state.result=copy(result);instance.state.plan.tasks[0].duration=4;await instance.applyProposal();assert.equal(instance.state.plan.tasks[0].duration,4);assert.equal(instance.state.result.duration_workdays,2);assert.match(doc.ids.notice.textContent,/版本冲突/);
+});
+test('bundle import opens new copy, restores baseline and weekly, resets confirmation',async()=>{
+  const restored=project(7,{baseline:{result:copy(result)},weekly:[{id:'W1',task_id:'A',week_start:'2026-09-21',status:'done',reason:'',constraints:''}],bundle_status:{complete:true,source_file_count:1,missing_sources:[]}});
+  const {instance,doc}=await app(async url=>response(url.endsWith('/projects/import')?{project:restored,run_id:'a'.repeat(32),confirmation_reset:true}:{projects:[]}));doc.ids.bundleFile.files=[new Blob(['zip'])];doc.ids.confirmation.value='old';await instance.importBundle();assert.equal(instance.state.project.revision,7);assert.equal(instance.state.weekly.length,1);assert.deepEqual(instance.state.baseline,restored.baseline);assert.equal(doc.ids.confirmation.value,'');assert.equal(instance.dirty(),false);assert.match(doc.ids.bundleStatus.textContent,/原件 1/);
+});
+test('bundle export requires clean saved version and explicit confirmation',async()=>{
+  let calls=0;const {instance,doc}=await app(async()=>{calls++;return response({});});instance.state.project=project();await instance.exportBundle();assert.equal(calls,0);assert.match(doc.ids.notice.textContent,/先保存/);instance.state.saved=JSON.stringify({plan:copy(plan),name:instance.state.name,weekly:[],synthetic:true,result:null,resultPlan:'',method:'cpm',sourceId:null,importSource:null});await instance.exportBundle();assert.equal(calls,0);assert.match(doc.ids.notice.textContent,/签认/);
+});
+
+test('confirmed saved undo is a non-cancellable commit and applies its final revision',async()=>{
+  const commit=deferred();let request;const {instance,doc}=await app(async(url,init)=>{if(url.includes('/apply')){request=init;return commit.promise;}return response(url.endsWith('/projects')?{projects:[]}:{project:project(2,{can_undo:true}),run_id:'a'.repeat(32)});});
+  await instance.open('b'.repeat(32));instance.state.proposal={proposal_id:'e'.repeat(32),action:'undo',changes:[]};const pending=instance.applyProposal();assert.equal(instance.state.busy,'save');assert.equal(doc.ids.cancelRequest.hidden,true);assert.equal(request.headers['X-CAD-Operation-ID'],undefined);commit.resolve(response({project:project(3),run_id:'a'.repeat(32)}));await pending;assert.equal(instance.state.project.revision,3);
+});
+
+test('imported optimality remains explicitly attributed to the stored solver record',async()=>{
+ const imported=project(4,{method:'resource',result:{...copy(result),proven_optimal:true,solver_status:'OPTIMAL',engine:{name:'OR-Tools'}},bundle_origin:{optimality_reverified:false}});
+ const {instance,doc}=await app(async()=>response({project:imported,run_id:'a'.repeat(32)}));await instance.open(imported.id);assert.match(doc.ids.engineStatus.textContent,/记录标注最优/);assert.match(doc.ids.engineStatus.textContent,/导入未重新证明/);assert.doesNotMatch(doc.ids.engineStatus.textContent,/已证明最优/);
+});

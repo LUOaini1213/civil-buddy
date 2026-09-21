@@ -142,6 +142,9 @@ CAD → 3D 建模可从首页进入；先用本包 Python 安装可选依赖：
 工程计算与计划从首页进入。截面性质、梁/杆系和 IFC 检查另需安装：
 `python -m pip install -r requirements-engineering.txt`；甘特图资源已随包提供。
 施工排程在 `/engineering/planning`，场内最短路线在 `/engineering/routes`。
+排程页支持对话提出明确改参建议，核对原值与新值后确认计算；保存后可从统一 Agent 对话继续。
+与同事交接请使用排程页的完整 ZIP 项目包，包含已保存结果、基线、周承诺、保留历史和已上传原件。
+缺失原件会列出，可按文件摘要补齐；导入创建新副本并重置签认确认，不会覆盖原项目。
 CPM 工作日排程使用标准库；资源容量排程、路线与计划文件交换另需安装：
 `python -m pip install -r requirements-planning.txt`。这些可选工程依赖建议使用 Python 3.11 或更高版本，
 并用启动本包的同一解释器安装。MPP 导入还需要可用的 Java/JVM；本包不含 Java，

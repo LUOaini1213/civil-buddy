@@ -1,6 +1,6 @@
 # 施工排程与场内路线工作台
 
-本轮已接入工作日 CPM、资源约束排程、基线、周承诺、计划文件交换和场内最短路线。计算使用明确输入和确定性工具，无需配置大模型。真实施工计划尚未提供；下方验收来自合成算例和公开测试文件，不能替代真实工程验收。
+已接入工作日 CPM、资源约束排程、基线、周承诺、计划文件交换和场内最短路线；本轮新增受限排程对话与完整施工项目包。确定性命令和计算无需配置大模型，统一 Agent 也可通过现有模型循环调用同一受限工具。真实计划检查状态：本地 PDF 候选完成日期检查，缺工期、日历、依赖、资源，不能作为真实 CPM 验收。下方合成算例和公开测试文件不替代真实工程验收。
 
 ## 入口与操作
 
@@ -33,7 +33,7 @@ PPC = 本周已完成承诺数 / 本周全部承诺数 × 100%。尚未结算的
 
 网页计划记录位于**运行该服务的仓库** `.civil-buddy/out/engineering/plans/`；这是网页适配器采用的 `demo.config.REPO_ROOT`，不等同于任意 CLI 工地目录。客户端不能指定保存路径。记录包含输入、成功结果、计算方式、基线、周承诺、合成标记、导入来源与最多 20 个历史快照，最多保存 100 个计划。
 
-保存使用预期修订号、摘要校验和原子替换；并发冲突要求重新打开或另存副本。取消在写入替换前检查，失败不覆盖原记录。重开读取保存结果，不自动重算，并为当前服务登记新的结果引用。备份或恢复时保留上述完整目录及原始输入文件；本轮尚未提供一键跨机完整项目包。
+保存使用预期修订号、摘要校验和原子替换；并发冲突要求重新打开或另存副本，本地编辑保留。取消在写入替换前检查，失败不覆盖原记录。重开读取保存结果，不自动重算，并为当前服务登记新的结果引用。网页另提供完整 ZIP 项目包，用于交接当前计划、结果、基线、周承诺、保留历史与已保存原件；跨电脑实机迁移验收仍待完成。
 
 | 格式 | 导入 / 导出范围 | 交接注意事项 |
 | --- | --- | --- |
@@ -41,10 +41,23 @@ PPC = 本周已完成承诺数 / 本周全部承诺数 × 100%。尚未结算的
 | CSV / XLSX | 本工作台明确列名与元数据结构，保留任务 ID、层级、依赖、资源、日历、实际日期及原计划日期 | 不是任意进度表智能识别。CSV 对公式前缀作文字转义；XLSX 导出文字单元格，导入拒绝公式、宏和外部工作簿链接 |
 | Microsoft Project XML（MSPDI） | 导入受支持子集；导出明确的 8 小时/工作日日粒度 XML | 保留 ID 映射、WBS、四类依赖与整数工作日时距。源文件必须明确工期、项目开始和日历；不靠日期差补工期 |
 | MPP / P6 XER / P6 PMXML | 可选 MPXJ + JVM 只读转换，再通过同一 MSPDI 校验 | 本工作台不提供原生 MPP/P6 写回。多项目文件拒绝，要求先从源软件导出单项目；转换不调用 Project/P6 原版排程引擎 |
+| 完整施工项目 ZIP | 当前计划、保存结果与方法、基线、周承诺、最多 20 个历史快照、导入来源和已保存原文件字节 | 导入创建新项目编号并保留历史修订，不覆盖原项目；清除签认/授权状态。缺原件会显示缺项，不能把不完整包称为完整原件交接 |
 
 文件导入上限 8 MiB；XLSX 解压总量上限 32 MiB，XML 禁用 DTD/外部实体并限制节点、深度和文本。MPXJ 在固定命令的临时子进程内执行，45 秒超时，JVM 堆上限 384 MiB；上传内容不能成为命令或客户端文件路径。系统级沙箱不允许该子进程时明确拒绝，不绕过沙箱。
 
-导入先展示报告和原日期，用户确认后应用；导入本身不重新排程。不足整工作日的工期/时距、不同任务日历、循环节假日或额外工作日等不能表达的内容会拒绝或报告；手工排程、约束、成本、基线等未映射语义不能据此称为无损迁移。当前保存的是源文件名、格式、SHA256、原日期和报告，**不保存上传原文件的字节**，交接应另附授权原文件。Project 或本工作台重新计算都可能改变已导出的资源方案日期。
+交换文件导入先展示报告和原日期，用户确认后应用；导入本身不重新排程。不足整工作日的工期/时距、不同任务日历、循环节假日或额外工作日等不能表达的内容会拒绝或报告；手工排程、约束、成本、基线等未映射语义不能据此称为无损迁移。新导入计划保存时同时保留原文件字节及文件名、格式、SHA256、原日期和报告。旧记录没有原件时，页面显示缺项，可上传与已记录 SHA256 一致的原件补齐；补齐校验版本并创建新修订，不改排程日期。Project 或本工作台重新计算都可能改变已导出的资源方案日期。
+
+项目包使用固定成员白名单、逐文件 SHA256、记录摘要和展开尺寸限制，不把 ZIP 成员解压为任意客户端路径。导入核对计划、历史、基线和保存结果的一致性；资源方案核对日期、依赖与容量约束，保留原求解记录，不重新运行优化器、不重新证明最优性。包内缺项说明随导入保留；签认重置不代表已由持证人员签认。普通 JSON/CSV/XLSX/XML 仍是计划交换文件，交接基线、周承诺、历史及原件应使用项目包。
+
+## 受限排程对话
+
+排程页的本地对话使用确定性命令；已保存计划还可进入统一 Agent 对话，宿主用 `planning_project_id` 绑定计划快照，向 `run_turn(planning_context=...)` 注入已有任务、资源、方法和版本。模型模式沿用现有模型循环；无模型模式共用同一解析器和计算服务。模型只可调用 `planning_inspect`、`planning_explain`、`planning_propose`、`planning_undo` 四个空参数工具，不能自行传入数值、路径、代码或确认。
+
+可用命令包括 `任务 B 工期改为 5 工作日`、`任务 B 进度改为 40%`、`任务 B 前置依赖改为 A FS+0`、`工作日改为周一至周五`、`资源 crew 容量改为 2`。这些仅是语法示例，须引用当前计划已有编号与用户明确值；不会创建未知任务、猜工期或猜资源。多项修改以分号分隔，整体校验，任一项失败就不形成可应用建议。`按资源容量优化`、`改用关键路径排程` 明确提出方法变化；普通改参和 `重新计算计划` 保留当前方法。
+
+对话只形成带原值→新值的建议，不直接修改、保存或导出。用户点击确认应用后，服务器核对建议原始输入摘要、计算方法、项目和修订号，复用 CPM 或资源计算器更新本地草稿；随后可撤销编辑，或另行保存新版本。旧建议、变动参数、不同项目、版本冲突或过期缓存均拒绝应用。`撤销上次保存` 只提出请求，确认后才恢复保存版本并创建新修订；有未保存编辑须先处理。
+
+检查中的关键任务和资源超配来自实际 CPM 计算，资源方案的保存日期单独说明；关键任务列表不冒充唯一串行线路。失败回复由工具结果生成，不能用模型文案宣称已保存。聊天和草稿计算可取消，晚到响应不覆盖新状态；已确认的持久保存/撤销和项目包导入在页面不提供提交后的取消按钮。保存、导出继续使用现有权限及签认检查，聊天工具没有绕过入口。
 
 ## 安装与启动
 
@@ -62,7 +75,7 @@ python -m packing_assistant.civil app --port 8767
 
 ### 可选的 MPP / P6 运行时
 
-本机使用从 [Eclipse Adoptium 官方 API](https://api.adoptium.net/v3/assets/latest/21/hotspot?architecture=x64&image_type=jre&os=windows) 获取、校验官方 SHA256 后解压的 Windows x64 Temurin JRE 21。目录为主 checkout 的 `C:\Users\LW\civil-buddy\.tools\java\temurin21\jdk-21.0.12.1+1-jre`；来源记录在 `.tools/java/SOURCE.json`，不是系统安装，也没有修改系统 `PATH` 或 `JAVA_HOME`。
+本机使用从 [Eclipse Adoptium 官方 API](https://api.adoptium.net/v3/assets/latest/21/hotspot?architecture=x64&image_type=jre&os=windows) 获取、校验官方 SHA256 后解压的 Windows x64 Temurin JRE 21。目录位于主 checkout 的 `.tools/java/temurin21/` 下；来源记录在 `.tools/java/SOURCE.json`，不是系统安装，也没有修改系统 `PATH` 或 `JAVA_HOME`。
 
 本轮固定包为 [OpenJDK21U-jre_x64_windows_hotspot_21.0.12.1_1.zip](https://github.com/adoptium/temurin21-binaries/releases/download/jdk-21.0.12.1%2B1/OpenJDK21U-jre_x64_windows_hotspot_21.0.12.1_1.zip)，SHA256 为：
 
@@ -89,14 +102,20 @@ python -m packing_assistant.civil app --port 8767
 | `GET /api/engineering/planning/projects/{id}?version={n}` | 打开当前或历史修订，保留保存时的结果 |
 | `POST /api/engineering/planning/projects/{id}/baseline`、`/undo` | 设置基线 / 撤销上次保存，均校验修订号 |
 | `POST /api/engineering/planning/import`、`/export` | 单文件上传及受限导出；导出必需 `run_id` 和确认句 |
+| `POST /api/engineering/planning/conversation` | 本地确定性排程对话；传 `plan`、`method`、`message`，已保存项目另传 `project_id`、`expected_revision`；可携带匹配的 `run_id` |
+| `GET /api/engineering/planning/proposals/{id}` | 读取待确认变化；建议在服务端临时缓存，过期后须重新提出 |
+| `POST /api/engineering/planning/proposals/{id}/apply` | 用户确认后传当前上下文与 `confirmed: true`；改参返回成功计算草稿，撤销返回新保存修订 |
+| `POST /api/engineering/planning/projects/{id}/export` | 导出完整 ZIP；须 `expected_revision`、签认确认句与现有导出权限 |
+| `POST /api/engineering/planning/projects/import` | 上传 ZIP，核验后创建新副本、保留历史并重置签认 |
+| `POST /api/engineering/planning/projects/{id}/source?expected_revision={n}` | 上传摘要匹配的缺失原件，补齐后保存新修订 |
 | `POST /api/engineering/operations/{id}/cancel` | 用本次 `X-CAD-Operation-ID` 取消排程操作 |
 | `POST /api/engineering/routes/calculate`、`/operations/{id}/cancel` | 场内道路计算 / 取消 |
 
-内核在 `packing_assistant/engineering/planning.py`，资源适配在 `planning_optimize.py`，存储在 `planning_records.py`，格式转换在 `planning_exchange.py`，路线在 `routing.py`。网页接入为 `demo/planning_api.py`、`demo/routing_api.py` 和 `demo/static/engineering-planning.*`、`engineering-routing.*`。本轮通过参数面板和确定性按钮操作，尚未将全部新功能接入统一 Agent 对话。
+内核在 `packing_assistant/engineering/planning.py`，资源适配在 `planning_optimize.py`，存储在 `planning_records.py`，格式转换在 `planning_exchange.py`，完整项目包在 `planning_bundle.py`，受限对话在 `planning_agent.py`，路线在 `routing.py`。网页接入为 `demo/planning_api.py`、`planning_chat_api.py`、`demo/routing_api.py` 和 `demo/static/engineering-planning.*`、`engineering-routing.*`。统一 Agent 接入沿用 `demo/chat_service.py` 与 `runtime/turn.py`、`runtime/model_loop.py`；模型仅路由受限工具，参数面板仍可独立使用。
 
-## 本轮验收记录
+## 上一轮排程验收记录
 
-下表区分自动化、浏览器和待补证据。最终 `npm run check` 为 108/108；提交边界修复另经 3/3 专项检查验证。检查任务数与单个测试条数使用不同口径，不相加。
+下表是上一轮排程交付证据，不能当作本轮新增对话和项目包的全项目门禁结果。上一轮 `npm run check` 为 108/108；提交边界修复另经 3/3 专项检查验证。检查任务数与单个测试条数使用不同口径，不相加。
 
 | 项目 | 已观察到的结果 | 证据范围 |
 | --- | --- | --- |
@@ -114,6 +133,16 @@ python -m packing_assistant.civil app --port 8767
 
 MPP 文件来源为 [MPXJ 固定提交的 task-links-project2000-mpp9.mpp](https://github.com/joniles/mpxj/blob/c5e1320cde0acd404031495aa66c17639a57239b/junit/data/generated/task-links/task-links-project2000-mpp9.mpp)，SHA256 为 `15673f1358c4f869244e62226322f730dba9f6b097f2e50108f2afae9991b758`。该文件与来源清单仅保存在本机 `.tools/planning-fixtures/`；测试缺该文件或 MPXJ/JVM 时会跳过相关项，不自动下载，不能把跳过记作通过。
 
+## 本轮新增功能检查记录
+
+全项目 `npm run check` 为 113/113；最后的建议错误提示、旧项目包兼容与持久撤销界面修复后，`planning-chat-api,planning-bundle,planning-ui` 再验 3/3；主聊天晚取消与导入最优性说明补验后，聊天宿主、排程 UI 和既有聊天回归再验 4/4。模型测试均使用离线脚本，没有调用真实模型端点。
+
+当前已验证：受限排程 Agent 19/19、对话 HTTP 6/6、排程 UI 离线测试 25/25。Agent 检查包含脚本模型、真实资源求解、仅建议不写入、伪值/未知编号/越权拒绝、过期或篡改建议和取消隔离；HTTP 检查包含确认应用、版本冲突、撤销、缓存过期与取消；UI 补验了已确认的持久撤销不再提供取消按钮。主聊天宿主 13/13、主聊天 UI 6/6、项目包 11/11 通过。完整项目包另验原件摘要、保留历史、跨工作目录恢复、旧资源结果字段兼容、损坏包、提交前取消与提交后成功。HTTP 回归 72 passed / 9 skipped，运行时 API 通过；跳过不计为通过。
+
+本轮浏览器已验合成资源计划：保存结果为 11 个工作日，提出 B 工期 4→5 的建议时不修改计划；确认后资源结果为 12 天，撤销编辑恢复 11 天。检查回复明确区分无资源约束 CPM 8 天与当前保存资源方案 11 天。同一旧项目经 ZIP 导出和网页文件选择器导入为新编号，保留 11 天资源结果、8 天基线、PPC 50% 及三个历史版本；刷新后恢复修订 4。另经独立临时工作目录导入、重新实例化存储验证当前结果与基线逐结构一致。这是本机合成输入的浏览器及跨目录验证，不是用户真实施工计划或跨电脑实机验收。
+
+真实计划检查状态：本地 PDF 候选完成日期检查，缺工期、日历、依赖、资源，不能作为真实 CPM 验收。文档不记录私人路径、项目名称、计划日期或源文件内容。
+
 复跑使用准备好的项目环境，不调用真实大模型接口：
 
 ```powershell
@@ -123,13 +152,15 @@ python scripts/test_planning_optimizer.py
 python scripts/test_planning_exchange.py
 python scripts/test_engineering_routing.py
 python scripts/test_planning_workbench.py
+python scripts/test_planning_agent.py
+python scripts/test_planning_chat_api.py
 node scripts/test_engineering_planning_ui.cjs
 npm run check
 ```
 
 推荐合成演示：A=2，B=4/C=3 均依赖 A，D=2 依赖 B/C；CPM 为 8 个工作日。B/C 共用一个班组为 11 天，两个班组恢复 8 天。演示时先保存 CPM 并建立基线，再预览/应用资源调整、保存重开，记录两条周承诺完成一条以展示 PPC 50%，最后导出并重新导入核对原日期。
 
-尚未验收：用户真实施工计划；源 Project/P6 软件打开导出 XML 后的逐项日期与语义核对；另一台电脑迁移后的整套结果；完整跨机项目包。工程输入到位后，必须核对项目日历、明确工期、资源、约束、关键任务及原文件日期差异，不能用合成通过替代。
+尚未验收：用户真实施工计划；源 Project/P6 软件打开导出 XML 后的逐项日期与语义核对；另一台电脑通过完整项目包迁移后的整套结果。项目包功能已实现不等于跨电脑实机验收完成。工程输入到位后，必须核对项目日历、明确工期、资源、约束、关键任务及原文件日期差异，不能用合成通过替代。
 
 ## 开源来源与贡献范围
 

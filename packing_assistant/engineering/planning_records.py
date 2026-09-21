@@ -3,18 +3,86 @@ from __future__ import annotations
 
 from copy import deepcopy
 from datetime import datetime, timezone
+import base64
 import hashlib
 import json
+import re
 
 from .schedule import ScheduleStore, ScheduleConflict, ScheduleNotFound, _name, _date, MAX_HISTORY
 from packing_assistant.runtime.cancel import check
 
 SCHEMA = "civil-buddy.planning.v1"
+MAX_RECORD = 64 * 1024 * 1024
+MAX_SOURCE = 8 * 1024 * 1024
+MAX_SOURCE_FILES = 32
+SHA256 = re.compile(r"[0-9a-f]{64}\Z")
+SOURCE_FORMATS = frozenset({"json", "csv", "xlsx", "xml", "mpp", "xer", "pmxml"})
 
 
 def digest(value):
     return hashlib.sha256(json.dumps(value, ensure_ascii=False, sort_keys=True, allow_nan=False,
                                      separators=(",", ":")).encode()).hexdigest()
+
+
+def validate_source(source):
+    if source is None:
+        return
+    if not isinstance(source, dict) or set(source) != {"source", "original_dates", "report"}:
+        raise ValueError("原文件来源结构无效。")
+    meta = source["source"]
+    if (not isinstance(meta, dict) or set(meta) != {"filename", "format", "sha256"}
+            or not isinstance(meta["filename"], str) or not meta["filename"].strip()
+            or len(meta["filename"]) > 200 or any(c in meta["filename"] for c in "/\\\x00")
+            or meta["filename"] in {".", ".."} or not isinstance(meta["format"], str)
+            or meta["format"] not in SOURCE_FORMATS or not isinstance(meta["sha256"], str)
+            or not SHA256.fullmatch(meta["sha256"])):
+        raise ValueError("原文件名称、格式或 SHA-256 无效。")
+    dates = source["original_dates"]
+    if not isinstance(dates, dict) or len(dates) > 250:
+        raise ValueError("原文件日期记录无效。")
+    from .planning import TASK_ID
+    for ident, values in dates.items():
+        if not isinstance(ident, str) or not TASK_ID.fullmatch(ident) or not isinstance(values, dict) or set(values) - {"start", "end"}:
+            raise ValueError("原文件任务日期结构无效。")
+        for value in values.values():
+            _date(value)
+        if values.get("start") and values.get("end") and values["end"] < values["start"]:
+            raise ValueError("原文件结束早于开始。")
+    if not isinstance(source["report"], list) or len(source["report"]) > 500:
+        raise ValueError("原文件处理报告无效。")
+    for item in source["report"]:
+        if (not isinstance(item, dict) or {"code", "message", "severity"} - set(item)
+                or set(item) - {"code", "message", "severity", "entity_id"}
+                or not isinstance(item["code"], str) or not 1 <= len(item["code"]) <= 100
+                or not isinstance(item["message"], str) or len(item["message"]) > 4000
+                or item["severity"] not in ("warning", "error", "info")
+                or "entity_id" in item and (not isinstance(item["entity_id"], str) or len(item["entity_id"]) > 200)):
+            raise ValueError("原文件处理报告字段无效。")
+
+
+def decode_source_file(sha, item):
+    if (not isinstance(sha, str) or not SHA256.fullmatch(sha) or not isinstance(item, dict)
+            or set(item) != {"data", "size"} or type(item["size"]) is not int
+            or not 0 < item["size"] <= MAX_SOURCE or not isinstance(item["data"], str)
+            or len(item["data"]) > 4 * ((MAX_SOURCE + 2) // 3)):
+        raise ValueError("原始文件记录无效或超过 8 MiB。")
+    try:
+        data = base64.b64decode(item["data"], validate=True)
+    except (ValueError, UnicodeError) as exc:
+        raise ValueError("原始文件编码无效。") from exc
+    if len(data) != item["size"] or hashlib.sha256(data).hexdigest() != sha:
+        raise ValueError("原始文件大小或 SHA-256 不匹配。")
+    return data
+
+
+def bundle_status(record):
+    files, missing = record.get("source_files", {}), {}
+    for item in [*record.get("history", []), record]:
+        source = item.get("import_source")
+        if source and source["source"]["sha256"] not in files:
+            meta = source["source"]
+            missing[(meta["sha256"], meta["filename"])] = {"sha256": meta["sha256"], "filename": meta["filename"]}
+    return {"complete": not missing, "source_file_count": len(files), "missing_sources": list(missing.values())}
 
 
 def validate_weekly(rows, plan):
@@ -109,13 +177,23 @@ class PlanningStore(ScheduleStore):
         path = assert_open(self._path(ident), profile=self.profile)
         if not path.is_file():
             raise ScheduleNotFound("施工排程项目不存在。")
-        if path.stat().st_size > 16 * 1024 * 1024:
+        if path.stat().st_size > MAX_RECORD:
             raise ValueError("施工排程项目文件过大。")
         try:
             record = json.loads(path.read_text(encoding="utf-8"))
             checksum = record.pop("checksum")
             if checksum != digest(record) or record["schema"] != SCHEMA or record["id"] != ident:
                 raise ValueError("摘要或编号错误")
+            required = {"schema", "id", "name", "plan", "result", "method", "weekly", "baseline", "revision",
+                        "created_at", "updated_at", "history", "synthetic", "import_source"}
+            if required - set(record) or set(record) - required - {"source_files", "bundle_origin"}:
+                raise ValueError("未知项目字段")
+            files = record.get("source_files", {})
+            if not isinstance(files, dict) or len(files) > MAX_SOURCE_FILES:
+                raise ValueError("原文件数量无效")
+            for sha, item in files.items():
+                check()
+                decode_source_file(sha, item)
             if type(record["revision"]) is not int or record["revision"] < 1:
                 raise ValueError("修订号错误")
             if len(record["history"]) > MAX_HISTORY:
@@ -127,6 +205,7 @@ class PlanningStore(ScheduleStore):
                 validate_weekly(item["weekly"], item["plan"])
                 if type(item["synthetic"]) is not bool or item["import_source"] is not None and not isinstance(item["import_source"], dict):
                     raise ValueError("来源记录无效")
+                validate_source(item["import_source"])
                 if type(item["revision"]) is not int or not previous < item["revision"]:
                     raise ValueError("历史顺序错误")
                 previous = item["revision"]
@@ -148,18 +227,25 @@ class PlanningStore(ScheduleStore):
             raise ValueError("施工排程记录损坏，未覆盖原文件。") from exc
 
     def _write(self, record):
+        from demo.projects import _write_atomic
+        from packing_assistant.sandbox import assert_write
         signed = deepcopy(record)
         signed["checksum"] = digest(record)
-        super()._write(signed)
+        payload = json.dumps(signed, ensure_ascii=False, allow_nan=False, separators=(",", ":"))
+        if len(payload.encode("utf-8")) > MAX_RECORD:
+            raise ValueError("项目、历史与原文件超过 64 MiB 存储上限；旧记录未覆盖。")
+        path = assert_write(self._path(record["id"]), profile=self.profile)
+        _write_atomic(path, payload, before_replace=check)
 
     @staticmethod
     def _public(record):
-        result = {k: deepcopy(v) for k, v in record.items() if k != "history"}
+        result = {k: deepcopy(v) for k, v in record.items() if k not in {"history", "source_files"}}
         result["versions"] = [{"revision": r["revision"], "updated_at": r["updated_at"],
                                "task_count": len(r["plan"]["tasks"])} for r in record["history"]]
         result["can_undo"] = bool(record["history"])
         result["weekly_report"] = weekly_report(record["weekly"])
         result["baseline_comparison"] = baseline_comparison(record["baseline"], record["result"])
+        result["bundle_status"] = bundle_status(record)
         return result
 
     def list_projects(self):
@@ -222,7 +308,7 @@ class PlanningStore(ScheduleStore):
                 if len(list(self.root.glob("*.json"))) >= 100:
                     raise ValueError("排程项目达到 100 个上限。")
                 record = {"schema": SCHEMA, "id": uuid4().hex, "created_at": now, "revision": 1,
-                          "history": [], "baseline": None, "synthetic": False, "import_source": None}
+                          "history": [], "baseline": None, "synthetic": False, "import_source": None, "source_files": {}}
                 rows = weekly or []
             rows = validate_weekly(rows, plan)
             if synthetic is not None:
@@ -230,8 +316,43 @@ class PlanningStore(ScheduleStore):
                     raise ValueError("合成来源标记须为布尔值。")
                 record["synthetic"] = synthetic
             if import_source is not None:
-                record["import_source"] = deepcopy(import_source)
+                source = deepcopy(import_source)
+                blob = source.pop("source_file", None)
+                validate_source(source)
+                if blob is not None:
+                    sha = source["source"]["sha256"]
+                    decode_source_file(sha, blob)
+                    files = record.setdefault("source_files", {})
+                    if sha not in files and len(files) >= MAX_SOURCE_FILES:
+                        raise ValueError("项目原始文件最多 32 份，请另存新项目。")
+                    files[sha] = blob
+                record["import_source"] = source
             record.update(name=name, plan=plan, result=deepcopy(result), method=method, weekly=rows, updated_at=now)
+            self._write(record)
+            return self._public(record)
+
+    def source_file(self, ident, sha):
+        if not isinstance(sha, str) or not SHA256.fullmatch(sha):
+            raise ValueError("原文件 SHA-256 无效。")
+        return deepcopy(self._read(ident).get("source_files", {}).get(sha))
+
+    def attach_source(self, ident, data, expected_revision):
+        from demo.projects import _mutation
+        if not isinstance(data, bytes) or not data or len(data) > MAX_SOURCE:
+            raise ValueError("补齐原文件须非空且不超过 8 MiB。")
+        self._writable()
+        sha = hashlib.sha256(data).hexdigest()
+        with _mutation(self._path()):
+            record = self._read(ident)
+            self._expected(record, expected_revision)
+            if sha not in {item["sha256"] for item in bundle_status(record)["missing_sources"]}:
+                raise ValueError("上传文件 SHA-256 不匹配任何缺失原文件；项目未修改。")
+            files = record.setdefault("source_files", {})
+            if len(files) >= MAX_SOURCE_FILES:
+                raise ValueError("项目原始文件最多 32 份。")
+            record["history"] = (record["history"] + [self._snapshot(record)])[-20:]
+            files[sha] = {"data": base64.b64encode(data).decode("ascii"), "size": len(data)}
+            record.update(revision=record["revision"] + 1, updated_at=datetime.now(timezone.utc).isoformat(timespec="milliseconds"))
             self._write(record)
             return self._public(record)
 

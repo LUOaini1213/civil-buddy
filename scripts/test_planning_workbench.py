@@ -333,7 +333,8 @@ class PlanningWorkbench(unittest.TestCase):
             elif action == "undo":
                 self.assertIsNone(project["baseline"])
             source = api.IMPORTS.get(project["source_id"])
-            self.assertEqual(source, project["import_source"])
+            self.assertEqual({key: value for key, value in source.items() if key != "source_file"}, project["import_source"])
+            self.assertEqual(source["source_file"]["size"], len(json.dumps(self.plan).encode()))
             self.assertEqual(source["source"]["filename"], "synthetic-commit-source.json")
             run_id = response.json()["run_id"]
             self.assertEqual(api.RUNS.get(run_id)["plan"], project["plan"])

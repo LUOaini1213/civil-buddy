@@ -9,6 +9,7 @@ import json
 import logging
 import math
 import os
+import re
 import shutil
 import threading
 import time
@@ -117,7 +118,14 @@ def prepare_turn(root: Path, body: dict) -> dict:
     from task_router import route_task
     route = route_task(message, ids)
     cad_project_id = body.get("cad_project_id") or ""
+    planning_project_id = body.get("planning_project_id") or ""
+    if planning_project_id and (not isinstance(planning_project_id, str)
+                                or not re.fullmatch(r"[0-9a-f]{32}", planning_project_id)):
+        raise ValueError("施工计划项目 id 无效")
+    if cad_project_id and planning_project_id:
+        raise ValueError("一次对话只能绑定一个 CAD 或施工计划项目")
     cad_context = None
+    planning_context = None
     if cad_project_id:
         from packing_assistant.cad3d.projects import CadProjectStore
         from packing_assistant.cad3d.agent import MUTATE_TOOLS, operation
@@ -133,6 +141,23 @@ def prepare_turn(root: Path, body: dict) -> dict:
         route = {"intent": "run" if operation(message, cad_context) in MUTATE_TOOLS else "chat",
                  "expert_ids": [], "workflow": "", "ambiguous": False, "candidates": [],
                  "reason": "处理用户选中的 CAD 项目：" + cad_context["project"]["name"]}
+        ids = []
+    if planning_project_id:
+        try:
+            import planning_api
+        except ImportError:
+            from demo import planning_api
+        try:
+            selected = planning_api.store().open(planning_project_id)
+        except OSError as exc:
+            raise ValueError("无法读取所选施工计划，请重新打开项目后再试") from exc
+        planning_context = {
+            "project": {"id": selected["id"], "name": selected["name"], "revision": selected["revision"],
+                        "can_undo": selected.get("can_undo", bool(selected.get("history"))) is True},
+            "plan": selected["plan"], "result": selected["result"], "method": selected["method"],
+        }
+        route = {"intent": "chat", "expert_ids": [], "workflow": "", "ambiguous": False, "candidates": [],
+                 "reason": "核对用户选中的施工计划：" + selected["name"] + "；修改须在排程页确认"}
         ids = []
     source = "given" if ids or resolve_mentions(message) else "matched" if route["expert_ids"] else ""
     ids = route["expert_ids"]
@@ -192,7 +217,8 @@ def prepare_turn(root: Path, body: dict) -> dict:
             "confirmed": body.get("confirm_ok") is True or CONFIRM in message,
             "attachments": attachment_ids, "route": route,
             "workflow_sources": workflow_sources, "workflow_budget": body.get("workflow_budget"),
-            "attachment_roles": roles, "cad_project_id": cad_project_id, "cad_context": cad_context}
+            "attachment_roles": roles, "cad_project_id": cad_project_id, "cad_context": cad_context,
+            "planning_project_id": planning_project_id, "planning_context": planning_context}
 
 
 def _event(kind: str, **data) -> dict:
@@ -320,6 +346,7 @@ def _record(root: Path, turn: dict, result: dict, deliverables: list[dict], node
     payload["route"] = turn.get("route", {})
     payload["attachment_roles"] = turn.get("attachment_roles", {})
     payload["cad_project_id"] = turn.get("cad_project_id", "")
+    payload["planning_project_id"] = turn.get("planning_project_id", "")
     if result.get("collaboration"):
         payload["collaboration"] = result["collaboration"]
     tmp = path.with_suffix(".tmp")
@@ -366,6 +393,7 @@ def session_detail(root: Path, sid: str) -> dict:
     detail["collaboration"] = runs[-1].get("collaboration") if runs else None
     detail["attachment_roles"] = runs[-1].get("attachment_roles", {}) if runs else {}
     detail["cad_project_id"] = runs[-1].get("cad_project_id", "") if runs else ""
+    detail["planning_project_id"] = runs[-1].get("planning_project_id", "") if runs else ""
     detail["deliverables"] = [f for r in runs for f in r.get("deliverables", []) if Path(f["path"]).is_file()]
     detail["deliverable_runs"] = deliverable_runs(runs)
     # Restore only the last turn's selected attachments, not every uploaded file.
@@ -422,12 +450,15 @@ def _stream_turn(root: Path, turn: dict, *, key_available: bool, plain_runner, l
 
         chosen, _mode_notice = resolve_mode()
         routed_model = (
-            (chosen == "model" or bool(turn.get("cad_context")))
+            (chosen == "model" or bool(turn.get("cad_context")) or bool(turn.get("planning_context")))
             and not workflow
             and not turn["route"].get("ambiguous")
         )
         if routed_model:
-            yield _event("status", phase="deliver", text="CAD 项目：检查图纸、执行受限工具" if turn.get("cad_context") else "模型驱动：选岗、调工具、出稿")
+            status = ("施工计划：核对当前参数、形成待确认建议" if turn.get("planning_context") else
+                      "CAD 项目：检查图纸、执行受限工具" if turn.get("cad_context") else
+                      "模型驱动：选岗、调工具、出稿")
+            yield _event("status", phase="deliver", text=status)
             control.check()
             skill = turn["ids"][0] if len(turn["ids"]) == 1 else ""
             history = list(turn["history"])
@@ -447,11 +478,37 @@ def _stream_turn(root: Path, turn: dict, *, key_available: bool, plain_runner, l
                 intent=turn["intent"],
                 cancel_event=control.event,
                 cad_context=turn.get("cad_context"),
+                planning_context=turn.get("planning_context"),
             )
             control.check()  # No project save or deliverable copy after cancellation.
             rid = uuid4().hex
             result = dict(result)
-            if result.get("cad_changed") and not result.get("cancelled"):
+            if (turn.get("planning_context") and result.get("ok", True) and not result.get("cancelled")
+                    and (result.get("planning_proposal") is not None or result.get("planning_action") == "undo")):
+                control.check()
+                try:
+                    import planning_chat_api
+                except ImportError:
+                    from demo import planning_chat_api
+                from fastapi import HTTPException
+                from packing_assistant.runtime import cancel
+                try:
+                    with cancel.scope(event=control.event):
+                        proposal_id = planning_chat_api.register_proposal(
+                            turn["planning_context"], proposal=result.get("planning_proposal"),
+                            action=result.get("planning_action"))
+                    control.check()
+                    if not isinstance(proposal_id, str) or not re.fullmatch(r"[0-9a-f]{32}", proposal_id):
+                        raise ValueError("建议编号无效")
+                    link = "/engineering/planning?project_id=" + turn["planning_project_id"] + "&proposal_id=" + proposal_id
+                    result["reply"] = str(result.get("reply") or "") + "\n\n[打开施工计划，核对并确认建议](" + link + ")"
+                except cancel.RunCancelled:
+                    raise TurnCancelled("施工计划建议已取消。") from None
+                except (ValueError, OSError, PermissionError, HTTPException) as exc:
+                    result.update(ok=False, error_code="planning_proposal_failed")
+                    reason = str(exc.detail) if isinstance(exc, HTTPException) else str(exc)
+                    result["reply"] = str(result.get("reply") or "") + "\n\n建议未登记，当前计划未修改：" + reason
+            if turn.get("cad_context") and result.get("cad_changed") and not result.get("cancelled"):
                 control.check()
                 from packing_assistant.cad3d.projects import CadProjectStore
                 from packing_assistant.runtime import cancel
@@ -615,11 +672,19 @@ def _stream_turn(root: Path, turn: dict, *, key_available: bool, plain_runner, l
                      deliverable_runs=deliverable_runs([r for r in read_runs(root, sid) if r.get("run_id") in run_ids]))
     except TurnCancelled:
         control.seal("cancelled")
-        text = "\n\n".join(texts) or "".join(partial)
         # Say who stopped it: a turn nobody was connected to any more is stopped by the server.
         unattended = control.reason == "detached_timeout"
         stopped = "页面断开后一直没有回来，本轮已取消" if unattended else "本轮已取消"
-        text += f"\n\n[{stopped}，已完成的文件保留下载。]" if files else f"\n\n[{stopped}，回答可能不完整。]"
+        if turn.get("planning_context"):
+            # A proposal link may already be in texts when cancellation wins
+            # just after _record. It must not reach this reply, restored history,
+            # or the interruption fallback if cancellation persistence fails.
+            texts.clear()
+            partial.clear()
+            text = f"{stopped}。施工计划未修改，本轮建议未发布。"
+        else:
+            text = "\n\n".join(texts) or "".join(partial)
+            text += f"\n\n[{stopped}，已完成的文件保留下载。]" if files else f"\n\n[{stopped}，回答可能不完整。]"
         rid = uuid4().hex
         _record(root, turn, {"run_id": rid, "ok": False, "state": "cancelled", "cancelled": True,
                             "error_code": "cancelled", "collaboration": collaboration_result}, [],

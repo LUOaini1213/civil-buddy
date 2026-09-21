@@ -50,6 +50,11 @@ from engineering_api import router as engineering_router
 app.include_router(engineering_router)
 from planning_api import router as planning_router
 app.include_router(planning_router)
+try:
+    from planning_chat_api import router as planning_chat_router
+except ImportError:
+    from demo.planning_chat_api import router as planning_chat_router
+app.include_router(planning_chat_router)
 from routing_api import router as routing_router
 app.include_router(routing_router)
 
@@ -90,6 +95,7 @@ class ChatIn(BaseModel):
     session_id: str = Field(default="", max_length=32)
     project_id: str = Field(default="", max_length=64)
     cad_project_id: str = Field(default="", pattern=r"^(?:[0-9a-f]{32})?$")
+    planning_project_id: str = Field(default="", pattern=r"^(?:[0-9a-f]{32})?$")
     attachments: list[str] = Field(default_factory=list, max_length=12)
     workflow_budget: dict | None = None
     attachment_roles: dict[str, str] = Field(default_factory=dict)

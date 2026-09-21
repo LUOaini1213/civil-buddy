@@ -12,6 +12,7 @@ const state = {
   attachmentRoles: {},
   jobRoot: "",
   cadProjectId: cbCadProjectFromUrl(),
+  planningProjectId: cbPlanningProjectFromUrl(),
   lastSend: "", /* ux(round7)：纠偏卡「重试」重放同 payload */
   policy: { sandbox: "workspace-write", approval: "on-request" },
   context: {
@@ -36,10 +37,65 @@ let cbServerHitlInput = null;
 const CB_ACTIVE_SESSION_KEY = "cb_active_session_v1";
 
 function cbCadProjectFromUrl() {
+  return cbProjectFromUrl("cad_project_id", "planning_project_id");
+}
+
+function cbPlanningProjectFromUrl() {
+  return cbProjectFromUrl("planning_project_id", "cad_project_id");
+}
+
+function cbProjectFromUrl(key, other) {
   try {
-    const id = new URL(globalThis.location.href).searchParams.get("cad_project_id") || "";
+    const params = new URL(globalThis.location.href).searchParams;
+    if (params.get(other)) return "";
+    const id = params.get(key) || "";
     return /^[0-9a-f]{32}$/.test(id) ? id : "";
   } catch (_) { return ""; }
+}
+
+function cbPlanningProjectRender() {
+  let banner = $("planningProjectContext");
+  if (!state.planningProjectId) {
+    if (banner) banner.remove();
+    try {
+      const url = new URL(globalThis.location.href);
+      if (url.searchParams.has("planning_project_id")) {
+        url.searchParams.delete("planning_project_id");
+        globalThis.history.replaceState(null, "", url);
+      }
+    } catch (_) { /* Non-browser render tests do not own navigation. */ }
+    return;
+  }
+  const composer = $("input") && $("input").parentElement;
+  if (!composer) return;
+  if (!banner) {
+    banner = document.createElement("div");
+    banner.id = "planningProjectContext";
+    banner.className = "status-line";
+    composer.prepend(banner);
+  }
+  banner.replaceChildren();
+  const link = document.createElement("a");
+  link.href = "/engineering/planning?project_id=" + state.planningProjectId;
+  link.textContent = "当前施工计划 · 返回排程核对";
+  banner.appendChild(link);
+  const notice = document.createElement("span");
+  notice.textContent = "对话生成建议，应用前须确认。";
+  banner.appendChild(notice);
+  const clear = document.createElement("button");
+  clear.type = "button";
+  clear.textContent = "取消选择";
+  clear.addEventListener("click", () => { state.planningProjectId = ""; cbPlanningProjectRender(); });
+  banner.appendChild(clear);
+}
+
+function cbRestoreProjectBindings(data) {
+  const cad = /^[0-9a-f]{32}$/.test(data.cad_project_id || "") ? data.cad_project_id : "";
+  const planning = /^[0-9a-f]{32}$/.test(data.planning_project_id || "") ? data.planning_project_id : "";
+  state.cadProjectId = planning ? "" : cad;
+  state.planningProjectId = cad ? "" : planning;
+  cbCadProjectRender();
+  cbPlanningProjectRender();
 }
 
 function cbCadProjectRender() {
@@ -89,7 +145,7 @@ function cbRememberSession(id) {
 }
 
 function cbRememberedSession() {
-  if (state.cadProjectId) return ""; // An explicit CAD selection starts a separate task.
+  if (state.cadProjectId || state.planningProjectId) return ""; // Explicit project selection starts a separate task.
   try {
     const id = localStorage.getItem(CB_ACTIVE_SESSION_KEY) || "";
     return /^[A-Za-z0-9][A-Za-z0-9_-]{3,31}$/.test(id) ? id : "";
@@ -956,7 +1012,9 @@ function cbNewLocalSession() {
   state.attachments = [];
     state.attachmentRoles = {};
     state.cadProjectId = "";
+    state.planningProjectId = "";
     cbCadProjectRender();
+    cbPlanningProjectRender();
   state.session = cbSessionId();
   cbUploadAbortAll(state.session);
   cbAttachRender();
@@ -1264,8 +1322,7 @@ async function cbProjOpenSession(s) {
     cbAttachRender();
     cbDraftRestore();
     cbProj.cur = d.project_id || s.project_id || "";
-    state.cadProjectId = /^[0-9a-f]{32}$/.test(d.cad_project_id || "") ? d.cad_project_id : "";
-    cbCadProjectRender();
+    cbRestoreProjectBindings(d);
     state.summoned.clear();
     const enabledExperts = new Set(state.experts.filter((expert) => expert && expert.enabled !== false).map((expert) => expert.id));
     for (const id of Array.isArray(d.expert_ids) ? d.expert_ids : []) {
@@ -1351,6 +1408,7 @@ async function cbRunBackground(text) {
         session_id: sid,
         project_id: cbProj.cur || "",
         cad_project_id: state.cadProjectId || "",
+        planning_project_id: state.planningProjectId || "",
         expert_ids: [...state.summoned],
         confirm_ok: cbConfirmed(),
       }),
@@ -1903,6 +1961,7 @@ async function streamChat(message, bodyEl, run) {
       session_id: state.session,
       project_id: cbProj.cur || "",
       cad_project_id: state.cadProjectId || "",
+      planning_project_id: state.planningProjectId || "",
       attachments: state.attachments
         .filter((a) => !String(a.id || "").startsWith("job:"))
         .map((a) => a.id),
@@ -4818,3 +4877,4 @@ if (window.visualViewport) {
   vv.addEventListener("scroll", fit);
 }
 cbCadProjectRender();
+cbPlanningProjectRender();

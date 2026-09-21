@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import importlib.util
+import base64
 import json
 from typing import Literal
 
@@ -20,7 +21,7 @@ except ImportError:
 cad = eng.cad
 router = APIRouter(dependencies=[Depends(cad.local_request)])
 RUNS = cad.MemoryStore(max_items=30, max_bytes=64 * 1024 * 1024)
-IMPORTS = cad.MemoryStore(max_items=30, max_bytes=8 * 1024 * 1024)
+IMPORTS = cad.MemoryStore(max_items=30, max_bytes=64 * 1024 * 1024)
 BASE = "/api/engineering/planning"
 
 
@@ -42,6 +43,10 @@ class SaveIn(PlanIn):
 class ExportIn(PlanIn):
     format: Literal["json", "csv", "xlsx", "xml", "mspdi"]
     run_id: str = Field(pattern=r"^[0-9a-f]{32}$")
+    confirmation: str = Field(max_length=80)
+
+
+class BundleExportIn(eng.RevisionIn):
     confirmation: str = Field(max_length=80)
 
 
@@ -95,7 +100,11 @@ def snapshot(plan, run_id=None, method=None):
 
 def project_response(project):
     if project.get("import_source"):
-        project["source_id"] = IMPORTS.put(project["import_source"])
+        source = dict(project["import_source"])
+        blob = store().source_file(project["id"], source["source"]["sha256"])
+        if blob is not None:
+            source["source_file"] = blob
+        project["source_id"] = IMPORTS.put(source)
     return {"project": project, "run_id": RUNS.put({k: project[k] for k in ("plan", "result", "method")})}
 
 
@@ -156,7 +165,40 @@ async def save(request: Request):
 @router.get(BASE + "/projects/{ident}")
 async def open_project(ident: str, version: int | None = None):
     project = await run_in_threadpool(eng.storage_call, store().open, ident, version)
-    return project_response(project)
+    return await run_in_threadpool(project_response, project)
+
+
+@router.post(BASE + "/projects/{ident}/export")
+async def export_project(ident: str, request: Request):
+    from packing_assistant.engineering.planning_bundle import export_bundle
+    body = await cad.read_json(request, BundleExportIn)
+    cad.require_export_permission()
+    if body.confirmation != cad.CONFIRMATION:
+        raise HTTPException(403, "导出项目前请完整输入现有签认确认句。")
+    def work():
+        payload = eng.storage_call(export_bundle, store(), ident, body.expected_revision)
+        return Response(payload, media_type="application/zip", headers={
+            "Content-Disposition": 'attachment; filename="civil-planning-project.zip"',
+            "Cache-Control": "no-store"})
+    return await cad.operation(request, work)
+
+
+@router.post(BASE + "/projects/import")
+async def import_project(request: Request):
+    from packing_assistant.engineering.planning_bundle import MAX_BUNDLE, import_bundle
+    data, filename = await read_upload(request, MAX_BUNDLE)
+    if not filename.lower().endswith(".zip"):
+        raise HTTPException(422, "完整施工项目包须为 ZIP 文件。")
+    project = await cad.operation(request, lambda: eng.storage_call(import_bundle, store(), data))
+    response = await run_in_threadpool(project_response, project)
+    return {**response, "confirmation_reset": True, "copy_revision_policy": "preserve_history_continue"}
+
+
+@router.post(BASE + "/projects/{ident}/source")
+async def restore_source(ident: str, expected_revision: int, request: Request):
+    data, _filename = await read_upload(request, 8 * 1024 * 1024)
+    project = await cad.operation(request, lambda: eng.storage_call(store().attach_source, ident, data, expected_revision))
+    return await run_in_threadpool(project_response, project)
 
 
 @router.post(BASE + "/projects/{ident}/{action}")
@@ -167,10 +209,8 @@ async def mutate(ident: str, action: Literal["undo", "baseline"], request: Reque
     return await run_in_threadpool(project_response, project)
 
 
-@router.post(BASE + "/import")
-async def import_file(request: Request):
-    from packing_assistant.engineering.planning_exchange import import_plan
-    raw = await cad.bounded_body(request, 8 * 1024 * 1024 + 65536)
+async def read_upload(request, limit):
+    raw = await cad.bounded_body(request, limit + 65536)
     if not request.headers.get("content-type", "").lower().startswith("multipart/form-data;"):
         raise HTTPException(400, "请上传一份进度计划文件。")
 
@@ -190,19 +230,28 @@ async def import_file(request: Request):
         file = form.get("file")
         if not isinstance(file, UploadFile) or len(form) != 1:
             raise HTTPException(422, "每次仅上传一份计划文件。")
-        data = await file.read(8 * 1024 * 1024 + 1)
+        data = await file.read(limit + 1)
         filename = (file.filename or "plan.json").replace("\\", "/").split("/")[-1][:200]
     finally:
         await form.close()
-    if not data or len(data) > 8 * 1024 * 1024:
-        raise HTTPException(413, "计划文件不能为空且不能超过 8 MiB。")
+    if not data or len(data) > limit:
+        raise HTTPException(413, f"上传文件不能为空且不能超过 {limit // (1024 * 1024)} MiB。")
+    return data, filename
+
+
+@router.post(BASE + "/import")
+async def import_file(request: Request):
+    from packing_assistant.engineering.planning_exchange import import_plan
+    data, filename = await read_upload(request, 8 * 1024 * 1024)
 
     def work():
         try:
             imported = import_plan(data, filename)
             from packing_assistant.runtime.cancel import check
             check()
-            imported["source_id"] = IMPORTS.put({k: imported[k] for k in ("source", "original_dates", "report")})
+            source = {k: imported[k] for k in ("source", "original_dates", "report")}
+            source["source_file"] = {"data": base64.b64encode(data).decode("ascii"), "size": len(data)}
+            imported["source_id"] = IMPORTS.put(source)
             return imported
         except ImportError as exc:
             raise HTTPException(503, str(exc)) from exc
