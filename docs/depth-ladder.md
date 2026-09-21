@@ -19,7 +19,7 @@
 
 **UNSPECIFIED 是特性，不是未完成。** 每岗成稿缺数处一律写 `[A001]` / `UNSPECIFIED` / `TBD`，不编造数字、不冒充签认件——这是产品纪律（tools compute numbers; the model only routes）的直接体现，也是 L1 验收闸（gaps=66）的一部分。
 
-**R5 每岗记分卡（L2 附加验收）**：`python scripts/eval_post_scorecard.py --all-pilots` 对试点 5 岗 + 第二波 8 岗跑四门禁——G1 意图命中、G2 KB 检索命中私有库、G3 exclusive 离线产出覆盖 README 必需栏、G4 缺数空态保留 `[A001]`/UNSPECIFIED 且 `forbidden_hits==0`。第二波覆盖此前多只靠 `test_expert_turn.py` n=66 扫过的车道：plan-master / quality / proc-plan / lab-record / finance-book / warehouse / worker-brief / survey。不把记分卡绿当成设计计算、IFC 抽量或可以投标。quick 预算仍只跑 bid-parse + cost。
+**R5 每岗记分卡（L2 附加验收）**：`python scripts/eval_post_scorecard.py --all-pilots` 对无设计/BIM/HR/行政/IT 专测的车道岗跑 G1–G4（意图、KB 私库、exclusive 覆盖 README 栏、空态诚实）。不把记分卡绿当成设计计算、IFC 抽量或可以投标。quick 预算仍只跑 bid-parse + cost。
 
 ## 16 车道 × L1/L2/L3 分级表
 

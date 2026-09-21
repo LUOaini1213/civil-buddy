@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""每岗记分卡（R5）：试点 5 岗 + 第二波 8 岗 × 4 门禁，全部离线、零 API Key、steps 模式。
+"""每岗记分卡（R5）：试点 + 第二波 + 第三波，全部离线、零 API Key、steps 模式。
 
 门禁：
   G1 意图命中  test/eval/intents_golden.json 中该岗金句 → (intent, skill) 全对
@@ -22,9 +22,9 @@
 并标 mode=schema-only，绝不造假绿。
 
 试点 5 岗（bid/commercial/hse）：bid-parse / bid-compliance / bid-tech / cost / safety-brief。
-第二波 8 岗（planning/hse/procurement/lab/finance/plant/people/construction，此前多只靠 n=66 扫过）：
-  plan-master / quality / proc-plan / lab-record / finance-book / warehouse / worker-brief / survey。
-不宣称新能力：G1–G4 只固化已有 exclusive 写盘与 KB 私库。
+第二波 8 岗：plan-master / quality / proc-plan / lab-record / finance-book / warehouse / worker-brief / survey。
+第三波补齐其余无记分卡车道岗（计划/施工/安质/商务/采购/物机/试验/财务/资料/日报等），不含已有专测的设计 20 与 BIM/HR/行政/IT。
+不宣称新能力：G1–G4 只固化已有 exclusive 写盘与 KB 私库；L3 仍仅 pack-ship。
 """
 from __future__ import annotations
 
@@ -147,6 +147,182 @@ PILOTS: dict[str, dict] = {
         "kb_queries": ["测量方案", "放样"],
         "required_bars": ["测量方案", "[A001]", "坐标"],
         "bars_trace": "标题测量方案/记录表 / 缺坐标 [A001] / 禁止编造坐标",
+    },
+    "plan-lookahead": {
+        "category": "planning",
+        "exclusive": "plan-lookahead__week",
+        "g3_args": {"text": "四周滚动计划：主体与装修交叉，停工条件待填。"},
+        "kb_queries": ["四周滚动", "月度计划"],
+        "required_bars": ["四周滚动", "月度计划", "[A001]"],
+        "bars_trace": "标题四周滚动计划/月度计划 / 缺数 [A001]",
+    },
+    "plan-resource": {
+        "category": "planning",
+        "exclusive": "plan-resource__peak",
+        "g3_args": {"text": "资源负荷：钢筋工与塔吊峰值待填。"},
+        "kb_queries": ["资源负荷", "峰值"],
+        "required_bars": ["资源负荷", "TBD"],
+        "bars_trace": "标题资源负荷表 / 无数 TBD",
+    },
+    "construction": {
+        "category": "construction",
+        "exclusive": "construction__scheme_draft",
+        "g3_args": {"text": "专项施工方案：临边防护讨论提纲。", "confirm_ok": True},
+        "kb_queries": ["专项施工方案", "十一章"],
+        "required_bars": ["专项施工方案", "[A001]", "UNSPECIFIED"],
+        "bars_trace": "标题专项施工方案讨论提纲 / 缺数 [A001] / 条款 UNSPECIFIED",
+    },
+    "method-hazard": {
+        "category": "construction",
+        "exclusive": "method-hazard__judge_hazard",
+        "g3_args": {"text": "危大识别：基坑深度用户未给。", "confirm_ok": True},
+        "kb_queries": ["危大", "判定书"],
+        "required_bars": ["危大判定", "UNSPECIFIED"],
+        "bars_trace": "标题危大判定书 / 缺深 UNSPECIFIED",
+    },
+    "dispatch": {
+        "category": "construction",
+        "exclusive": "dispatch__daily",
+        "g3_args": {"text": "调度日报：今日指令下达，节点待填。"},
+        "kb_queries": ["调度日报", "指令"],
+        "required_bars": ["调度日报", "[A001]"],
+        "bars_trace": "标题调度日报草稿 / 缺数 [A001]",
+    },
+    "env": {
+        "category": "hse",
+        "exclusive": "env__list",
+        "g3_args": {"text": "环保文明：扬尘与夜间施工口径待填。"},
+        "kb_queries": ["环保文明", "扬尘"],
+        "required_bars": ["环保文明", "[A001]"],
+        "bars_trace": "标题环保文明清单 / 缺数 [A001]",
+    },
+    "emergency": {
+        "category": "hse",
+        "exclusive": "emergency__plan",
+        "g3_args": {"text": "应急预案：演练记录联系人待填。", "confirm_ok": True},
+        "kb_queries": ["应急预案", "演练"],
+        "required_bars": ["应急预案", "[A001]"],
+        "bars_trace": "标题应急预案提纲 / 联系人 [A001]",
+    },
+    "variation": {
+        "category": "commercial",
+        "exclusive": "variation__form",
+        "g3_args": {"text": "工程签证：事实栏有，金额待填。"},
+        "kb_queries": ["工程签证", "设计变更"],
+        "required_bars": ["签证", "UNSPECIFIED"],
+        "bars_trace": "标题工程签证 / 金额 UNSPECIFIED",
+    },
+    "claim": {
+        "category": "commercial",
+        "exclusive": "claim__notice",
+        "g3_args": {"text": "索赔意向：证据清单待填。"},
+        "kb_queries": ["索赔意向", "调概"],
+        "required_bars": ["索赔意向", "[A001]"],
+        "bars_trace": "标题索赔意向 / 缺数 [A001]",
+    },
+    "subcontract": {
+        "category": "commercial",
+        "exclusive": "subcontract__sheet",
+        "g3_args": {"text": "分包结算：劳务验工表头，扣款待填。"},
+        "kb_queries": ["分包结算", "劳务"],
+        "required_bars": ["分包", "结算"],
+        "bars_trace": "标题分包（劳务）结算表头",
+    },
+    "interim": {
+        "category": "commercial",
+        "exclusive": "interim__measure",
+        "g3_args": {"text": "验工计价：对上计量，业主未确认金额。"},
+        "kb_queries": ["验工计价", "计量"],
+        "required_bars": ["验工计价", "[A001]"],
+        "bars_trace": "标题对上验工计价草稿 / 金额 [A001]",
+    },
+    "proc-compare": {
+        "category": "procurement",
+        "exclusive": "proc-compare__table",
+        "g3_args": {"text": "询价比价：三家报价未到。"},
+        "kb_queries": ["询价", "比价"],
+        "required_bars": ["比价", "TBD"],
+        "bars_trace": "标题询价比价表 / 无报价 TBD",
+    },
+    "proc-vendor": {
+        "category": "procurement",
+        "exclusive": "proc-vendor__eval",
+        "g3_args": {"text": "供应商准入：考察记录待填。"},
+        "kb_queries": ["供应商", "准入"],
+        "required_bars": ["供应商", "[A001]"],
+        "bars_trace": "标题供应商评价表 / 缺数 [A001]",
+    },
+    "pack-ship": {
+        "category": "plant",
+        "exclusive": "pack-ship__list",
+        "g3_args": {"text": "装箱作业：物料清单未上传。"},
+        "kb_queries": ["装箱", "拼柜"],
+        "required_bars": ["UNSPECIFIED"],
+        "bars_trace": "断线字段字面 UNSPECIFIED，不编 xyz",
+    },
+    "equip": {
+        "category": "plant",
+        "exclusive": "equip__ledger",
+        "g3_args": {"text": "设备台账：塔吊进场，证件待填。", "confirm_ok": True},
+        "kb_queries": ["设备台账", "特种设备"],
+        "required_bars": ["设备台账", "[A001]"],
+        "bars_trace": "标题设备台账/维保计划 / 证件 [A001]",
+    },
+    "material-site": {
+        "category": "plant",
+        "exclusive": "material-site__recon",
+        "g3_args": {"text": "现场材料核算：节超待盘点。"},
+        "kb_queries": ["材料核算", "节超"],
+        "required_bars": ["材料核算", "TBD"],
+        "bars_trace": "标题材料核算表头 / 无盘点 TBD",
+    },
+    "lab-mix": {
+        "category": "lab",
+        "exclusive": "lab-mix__report",
+        "g3_args": {"text": "施工配合比：C30 试验数据未给。", "confirm_ok": True},
+        "kb_queries": ["施工配合比", "配比"],
+        "required_bars": ["配比", "[A001]"],
+        "bars_trace": "标题配比报告提纲 / 无试验数据 [A001]",
+    },
+    "lab-sample": {
+        "category": "lab",
+        "exclusive": "lab-sample__list",
+        "g3_args": {"text": "见证取样：钢筋原材送检。", "confirm_ok": True},
+        "kb_queries": ["见证取样", "送检"],
+        "required_bars": ["取样送检", "[A001]"],
+        "bars_trace": "标题取样送检清单 / 缺数 [A001]",
+    },
+    "finance-tax": {
+        "category": "finance",
+        "exclusive": "finance-tax__calendar",
+        "g3_args": {"text": "税务日历：GST 税率用户未给。"},
+        "kb_queries": ["税务日历", "GST"],
+        "required_bars": ["税务日历", "UNSPECIFIED"],
+        "bars_trace": "标题税务日历/检查表 / 税率 UNSPECIFIED",
+    },
+    "finance-fund": {
+        "category": "finance",
+        "exclusive": "finance-fund__plan",
+        "g3_args": {"text": "资金计划：本月收支节点待填。"},
+        "kb_queries": ["资金计划", "以收定支"],
+        "required_bars": ["资金计划", "[A001]"],
+        "bars_trace": "标题项目资金计划草稿 / 缺数 [A001]",
+    },
+    "supervision": {
+        "category": "docs",
+        "exclusive": "supervision__reply",
+        "g3_args": {"text": "监理通知回复：验收资料目录待填。"},
+        "kb_queries": ["监理通知", "验收资料"],
+        "required_bars": ["监理通知", "[A001]"],
+        "bars_trace": "标题监理通知回复草稿 / 缺数 [A001]",
+    },
+    "pm-daily": {
+        "category": "people",
+        "exclusive": "pm-daily__log",
+        "g3_args": {"text": "项目日报：形象进度待填，天气晴。"},
+        "kb_queries": ["项目日报", "形象进度"],
+        "required_bars": ["项目日报", "[A001]"],
+        "bars_trace": "标题项目日报草稿 / 缺数 [A001]",
     },
 }
 
