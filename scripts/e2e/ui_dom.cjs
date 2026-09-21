@@ -280,5 +280,5 @@ test("stale: a turn left running by a dead process is shown as 已中断 when th
   const detail = await fetch(base + "/api/sessions/" + sid).then((r) => r.json());
   assert.equal(detail.turn_state.state, "stale");
   await cb().cbProjOpenSession({ session_id: sid });
-  await until(() => logText().includes("服务重启时被中断"), { what: "stale notice" });
+  await until(() => logText().includes("服务重启时被中断"), { what: "stale notice (log tail: " + logText().slice(-200).replace(/\s+/g, " ") + ")" });
 });

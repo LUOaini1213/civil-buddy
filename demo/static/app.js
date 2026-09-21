@@ -7,6 +7,7 @@ import { createUploads } from "./modules/uploads.js";
 import { createTurnStream } from "./modules/turn-stream.js";
 import { createDeliverables } from "./modules/deliverables.js";
 import { createSessionWatch } from "./modules/session-watch.js";
+import { createSessionNav, sessionId } from "./modules/session-nav.js";
 
 const state = {
   experts: [],
@@ -39,6 +40,8 @@ const $ = (id) => document.getElementById(id);
    watched     —— 只是旁观的后台轮次（没有 event_log 能力的后端上用轮询看着）
    background  —— 切走后仍在服务端跑的会话 id，列表画「运行中」、完成弹提示 */
 const runState = { active: null, watched: null, background: new Set() };
+/* 左栏的项目树：项目列表、收件箱、会话行、展开集合、当前项目 id（页面持有，nav 模块借用） */
+const cbProj = { projects: [], inbox: null, sessions: [], open: new Set(), cur: "" };
 let cbSessionRequest = 0;
 let cbContextRequest = 0;
 let cbContextSearchRequest = 0;
@@ -46,35 +49,10 @@ let cbContextSourceEpoch = 0;
 let cbContextRebuildRun = null;
 let cbCapabilityRequest = 0;
 let cbServerHitlInput = null;
-const CB_ACTIVE_SESSION_KEY = "cb_active_session_v1";
-
-function cbSessionId() {
-  return (globalThis.crypto && typeof globalThis.crypto.randomUUID === "function"
-    ? globalThis.crypto.randomUUID()
-    : Date.now().toString(36) + Math.random().toString(36).slice(2)).slice(0, 12);
-}
-
-function cbRememberSession(id) {
-  try {
-    if (id) localStorage.setItem(CB_ACTIVE_SESSION_KEY, id);
-    else localStorage.removeItem(CB_ACTIVE_SESSION_KEY);
-  } catch (_) { /* Session restoration is optional when storage is unavailable. */ }
-}
-
-function cbRememberedSession() {
-  try {
-    const id = localStorage.getItem(CB_ACTIVE_SESSION_KEY) || "";
-    return /^[A-Za-z0-9][A-Za-z0-9_-]{3,31}$/.test(id) ? id : "";
-  } catch (_) { return ""; }
-}
-
-async function cbResumeSession(id, request) {
-  if (!id || request !== cbSessionRequest || runState.active || state.history.length) return false;
-  const session = cbProj.sessions.find((item) => item.session_id === id);
-  if (!session) return false;
-  await cbProjOpenSession(session);
-  return state.session === id;
-}
+function cbSessionId() { return sessionId(); }
+function cbRememberSession(id) { return nav.rememberSession(id); }
+function cbRememberedSession() { return nav.rememberedSession(); }
+async function cbResumeSession(id, request) { return nav.resumeSession(id, request); }
 
 function cbConfirmed() {
   return !!($("confirmOk") && $("confirmOk").value === "我明白，将由持证人员签认");
@@ -517,7 +495,6 @@ function cbMoreInit() {
 
 cbDockInit();
 cbMoreInit();
-cbProjOpenLoad();
 if ($("btnNewProject")) {
   $("btnNewProject").addEventListener("click", () => {
     const box = $("projTree");
@@ -557,25 +534,7 @@ if ($("btnNewProject")) {
 
 
 /* ux(round19)：本地新会话 —— 不依赖任何后端接口，任何后端上都生效。 */
-function cbNewLocalSession() {
-  cbClearServerHitl();
-  cbSessionRequest += 1;
-  cbDetachActiveRun();
-  cbRememberSession("");
-  if ($("confirmOk")) $("confirmOk").value = "";
-  state.attachments = [];
-  state.attachmentRoles = {};
-  state.session = cbSessionId();
-  cbUploadAbortAll(state.session);
-  cbAttachRender();
-  cbDraftRestore();
-  state.history = [];
-  cbContextReset();
-  state.summoned.clear();
-  renderSummon();
-  cbResetToEmpty();
-  paintContext(estimateLocalContext());
-}
+function cbNewLocalSession() { return nav.newLocalSession(); }
 
 function cbContextReset() {
   cbContextRequest += 1;
@@ -599,6 +558,51 @@ function cbContextReset() {
   if ($("ctxMemoryStatus")) $("ctxMemoryStatus").textContent = "";
   cbContextRebuildControls(false);
 }
+
+/* 会话导航（modules/session-nav.js）：当前会话、记住/恢复、新建、项目与会话列表、打开会话。
+   页面持有的状态原样交进去（state / runState / cbProj / 导航计数器），跨调用经页面绕一圈，测试才能替换。 */
+const nav = createSessionNav({
+  state,
+  runState,
+  proj: cbProj,
+  request: { current: () => cbSessionRequest, bump: () => ++cbSessionRequest },
+  storage: localStorage,
+  fetch: (url, init) => fetch(url, init),
+  doc: document,
+  el: (id) => $(id),
+  relTime: (ts) => cbRelTime(ts),
+  addStatus: (text) => addStatus(text),
+  addMsg: (role, who, text) => addMsg(role, who, text),
+  reset: {
+    toEmpty: () => cbResetToEmpty(),
+    contextReset: () => cbContextReset(),
+    clearServerHitl: () => cbClearServerHitl(),
+    hideWelcome: () => cbHideWelcome(),
+    detachActiveRun: () => cbDetachActiveRun(),
+    uploadAbortAll: (sid) => cbUploadAbortAll(sid),
+    attachRender: () => cbAttachRender(),
+    draftRestore: () => cbDraftRestore(),
+    paintContext: (d) => paintContext(d),
+    estimateLocalContext: () => estimateLocalContext(),
+    renderSummon: () => renderSummon(),
+  },
+  apiError: (res) => apiError(res),
+  paint: {
+    appendDocCards: (files, bodyEl, opts) => appendDocCards(files, bodyEl, opts),
+    routePaint: (route, bodyEl, message) => cbTaskRoutePaint(route, bodyEl, message),
+    collaborationPaint: (data, bodyEl) => cbCollaborationPaint(data, bodyEl),
+    setLastDeliverables: (files) => { cbLastDeliverables = files; },
+  },
+  hooks: {
+    render: () => cbProjRender(),
+    loadThreads: () => loadThreads(),
+    openSession: (s) => cbProjOpenSession(s),
+    attachToTurn: (sid, reason) => cbAttachToTurn(sid, reason),
+    bgObserve: (rows) => cbBgObserve(rows),
+  },
+});
+
+nav.openLoad(); // 项目树的展开状态：nav 接好之后再读
 
 /* 草稿（modules/drafts.js）：按会话存 localStorage，切回来填回去，发送即清。 */
 const drafts = createDrafts({
@@ -656,265 +660,14 @@ function cbResetToEmpty() {
    数据源是 Rust 的 /api/projects 与 /api/sessions（P3-P5）。没有这两个接口的后端
    （如 Python 参考实现，P8 才补镜像）静默降级：不报错、不留空白、不写对话流。
    展开态存 localStorage，与 cb_theme_v1 / cb_dock_v1 同一套 try/catch 容错写法。 */
-const CB_PROJ_OPEN_KEY = "cb_proj_open_v1";
-const cbProj = { projects: [], inbox: null, sessions: [], open: new Set(), cur: "" };
-
-function cbProjOpenLoad() {
-  try {
-    const v = JSON.parse(localStorage.getItem(CB_PROJ_OPEN_KEY) || "[]");
-    if (Array.isArray(v)) cbProj.open = new Set(v.map(String));
-  } catch (e) { /* 存储不可用：全折叠 */ }
-}
-
-function cbProjOpenSave() {
-  try { localStorage.setItem(CB_PROJ_OPEN_KEY, JSON.stringify([...cbProj.open])); } catch (e) { /* 忽略 */ }
-}
-
-function cbProjFallback(msg) {
-  const box = $("projTree");
-  if (!box) return;
-  box.innerHTML = "";
-  const none = document.createElement("div");
-  none.className = "thread-none";
-  none.textContent = msg;
-  box.appendChild(none);
-}
-
-async function loadThreads() {
-  const box = $("projTree");
-  if (!box) return;
-  try {
-    const [pj, ss] = await Promise.all([
-      fetch("/api/projects").then((r) => (r.ok ? r.json() : null)),
-      fetch("/api/sessions?limit=100").then((r) => (r.ok ? r.json() : null)),
-    ]);
-    if (!pj || !ss) throw new Error("no-projects-api");
-    cbBgObserve(ss.sessions);
-    cbProj.projects = pj.projects || [];
-    cbProj.inbox = pj.inbox || null;
-    cbProj.sessions = ss.sessions || [];
-    cbProjRender();
-  } catch (e) {
-    /* 降级：该后端没有项目接口。静默留一行弱文本，不写对话流。 */
-    cbProjFallback("本后端不提供项目列表");
-  }
-}
-
-function cbProjSessionsOf(pid) {
-  return cbProj.sessions.filter((s) => s.project_id === pid);
-}
-
-function cbProjRender() {
-  const box = $("projTree");
-  if (!box) return;
-  box.innerHTML = "";
-  const groups = cbProj.projects.slice();
-  if (cbProj.inbox) groups.push(cbProj.inbox); /* 未归类恒在最后 */
-  if (!groups.length) {
-    cbProjFallback("还没有项目；跑一次任务后自动归入未归类");
-    return;
-  }
-  for (const p of groups) {
-    const kids = cbProjSessionsOf(p.id);
-    const open = cbProj.open.has(p.id);
-    const wrap = document.createElement("div");
-    wrap.className = "proj" + (open ? " open" : "");
-    wrap.dataset.pid = p.id;
-    wrap.setAttribute("role", "treeitem");
-    wrap.setAttribute("aria-expanded", open ? "true" : "false");
-
-    const row = document.createElement("div");
-    row.className = "proj-row";
-    const tw = document.createElement("button");
-    tw.type = "button";
-    tw.className = "proj-tw"; /* CSS 三角，不用字符（符号纪律） */
-    tw.setAttribute("aria-label", (open ? "折叠 " : "展开 ") + p.name);
-    tw.addEventListener("click", () => {
-      if (cbProj.open.has(p.id)) cbProj.open.delete(p.id);
-      else cbProj.open.add(p.id);
-      cbProjOpenSave();
-      cbProjRender();
-    });
-    const name = document.createElement("button");
-    name.type = "button";
-    name.className = "proj-name";
-    name.textContent = p.name;
-    name.title = p.name;
-    name.addEventListener("click", () => {
-      cbProj.cur = p.id;
-      cbProj.open.add(p.id);
-      cbProjOpenSave();
-      cbProjRender();
-    });
-    const n = document.createElement("span");
-    n.className = "proj-n";
-    n.textContent = String(kids.length);
-    row.append(tw, name, n);
-
-    /* 内置「未归类」不可改名 —— 服务端也会 400，这里不给入口 */
-    if (!p.builtin) {
-      const more = document.createElement("button");
-      more.type = "button";
-      more.className = "proj-more";
-      more.textContent = "改名";
-      more.setAttribute("aria-label", "重命名项目 " + p.name);
-      more.addEventListener("click", () => cbProjRename(p));
-      row.appendChild(more);
-    }
-    wrap.appendChild(row);
-
-    const kidBox = document.createElement("div");
-    kidBox.className = "proj-kids";
-    if (!open) kidBox.hidden = true;
-    for (const s of kids) {
-      const b = document.createElement("button");
-      b.type = "button";
-      b.className = "sess-row" + (s.session_id === state.session ? " on" : "");
-      b.title = s.session_id;
-      const t1 = document.createElement("span");
-      t1.className = "t-name";
-      t1.textContent = s.title || s.session_id;
-      const t2 = document.createElement("span");
-      t2.className = "t-time";
-      const running = s.running === true || runState.background.has(s.session_id);
-      const stale = !running && s.turn_state === "stale";
-      t2.textContent = running ? "运行中" : stale ? "已中断" : cbRelTime(s.updated_at);
-      if (running) t2.classList.add("t-running");
-      if (stale) { t2.classList.add("t-stale"); t2.title = "上一轮在服务重启时被中断"; }
-      b.append(t1, t2);
-      b.addEventListener("click", () => cbProjOpenSession(s));
-      kidBox.appendChild(b);
-    }
-    if (!kids.length) {
-      const none = document.createElement("div");
-      none.className = "sess-none";
-      none.textContent = "这个项目还没有会话";
-      kidBox.appendChild(none);
-    }
-    wrap.appendChild(kidBox);
-    box.appendChild(wrap);
-  }
-}
+function cbProjOpenLoad() { return nav.openLoad(); }
+async function loadThreads() { return nav.loadThreads(); }
+function cbProjRender() { return nav.renderProjects(); }
+function cbProjRename(p) { return nav.renameProject(p); }
 
 /* 行内改名：不用 prompt()（嵌入视图会被拦，且与现有 vanilla 风格不搭） */
-function cbProjRename(p) {
-  const wrap = document.querySelector('.proj[data-pid="' + p.id + '"]');
-  const row = wrap && wrap.querySelector(".proj-row");
-  if (!row) return;
-  const old = row.querySelector(".proj-name");
-  if (!old) return;
-  const inp = document.createElement("input");
-  inp.type = "text";
-  inp.className = "rail-rename";
-  inp.value = p.name;
-  let settled = false;
-  const commit = async (save) => {
-    if (settled) return;
-    settled = true;
-    const v = inp.value.trim();
-    inp.replaceWith(old);
-    if (!save || !v || v === p.name) return;
-    try {
-      const r = await fetch("/api/projects/" + encodeURIComponent(p.id), {
-        method: "PATCH",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ name: v }),
-      });
-      if (!r.ok) throw new Error("HTTP " + r.status);
-      await loadThreads();
-    } catch (e) {
-      addStatus("改名失败：" + ((e && e.message) || e));
-    }
-  };
-  inp.addEventListener("keydown", (ev) => {
-    if (ev.key === "Enter") { ev.preventDefault(); commit(true); }
-    if (ev.key === "Escape") { ev.preventDefault(); commit(false); }
-  });
-  inp.addEventListener("blur", () => commit(true));
-  old.replaceWith(inp);
-  inp.focus();
-  inp.select();
-}
-
 /* 点会话：拉详情并**整体替换** state.history（不 merge，避免与浏览器内存分叉） */
-async function cbProjOpenSession(s) {
-  const request = ++cbSessionRequest;
-  cbDetachActiveRun();
-  cbContextReset();
-  try {
-    const response = await fetch("/api/sessions/" + encodeURIComponent(s.session_id));
-    if (!response.ok) throw new Error(await apiError(response));
-    const d = await response.json();
-    if (request !== cbSessionRequest) return;
-    if (!d || !d.session_id || !Array.isArray(d.transcript)) throw new Error("会话数据格式不完整");
-    state.session = d.session_id;
-    cbRememberSession(d.session_id);
-    cbClearServerHitl();
-    if ($("confirmOk")) $("confirmOk").value = "";
-    state.attachments = Array.isArray(d.attachments) ? d.attachments.filter((file) =>
-      file && typeof file.id === "string" && file.id && !file.id.startsWith("job:")) : [];
-    state.attachmentRoles = Object.fromEntries(state.attachments.filter(file =>
-      d.attachment_roles && ["tender", "response", "reference"].includes(d.attachment_roles[file.id]))
-      .map(file => [file.id, d.attachment_roles[file.id]]));
-    cbUploadAbortAll(d.session_id);
-    cbAttachRender();
-    cbDraftRestore();
-    cbProj.cur = d.project_id || s.project_id || "";
-    state.summoned.clear();
-    const enabledExperts = new Set(state.experts.filter((expert) => expert && expert.enabled !== false).map((expert) => expert.id));
-    for (const id of Array.isArray(d.expert_ids) ? d.expert_ids : []) {
-      if (typeof id === "string" && enabledExperts.has(id)) state.summoned.add(id);
-    }
-    renderSummon();
-    state.history = (d.transcript || [])
-      .filter((t) => t && (t.role === "user" || t.role === "assistant"))
-      .map((t) => ({ role: t.role, content: t.text || "" }));
-    cbResetToEmpty();
-    const log = $("log");
-    let restoredBody = null;
-    let restoredMessage = "";
-    if (state.history.length) {
-      cbHideWelcome();
-      for (const t of state.history) {
-        const body = addMsg(t.role === "user" ? "user" : "assistant", t.role === "user" ? "你" : "岗位", t.content);
-        if (t.role === "assistant") restoredBody = body;
-        else restoredMessage = t.content;
-      }
-    } else {
-      /* 诚实：没有留存正文就明说，不假装接上了 */
-      addStatus("这条会话没有留存对话正文；上文从此刻重新开始。");
-    }
-    if (d.collaboration || d.route && (d.route.reason || d.route.ambiguous)) {
-      if (!restoredBody) restoredBody = addMsg("assistant", "本会话任务安排", "已恢复留存的任务状态。");
-      if (d.route && (d.route.reason || d.route.ambiguous)) cbTaskRoutePaint(d.route, restoredBody, restoredMessage);
-      if (d.collaboration) cbCollaborationPaint(d.collaboration, restoredBody);
-    }
-    const files = Array.isArray(d.deliverables) ? d.deliverables.filter((file) => file && typeof file.path === "string" && file.path) : [];
-    if (files.length) {
-      cbLastDeliverables = files;
-      cbHideWelcome();
-      const runs = Array.isArray(d.deliverable_runs) ? d.deliverable_runs : [];
-      const intro = runs.length > 1 ? `已恢复 ${runs.length} 轮留存的草稿（最近的在前），可继续预览或下载。` : "已恢复留存的草稿，可继续预览或下载。";
-      appendDocCards(files, addMsg("assistant", "本会话交付物", intro), { runs });
-    }
-    if (d.truncated) addStatus("列表只展示近期对话节选。可在「任务记忆与本地搜索」找回已保留的历史原文。");
-    if (d.turn_state && d.turn_state.active) {
-      addStatus("这个任务仍在后台运行，完成后会自动显示结果。");
-      cbAttachToTurn(d.session_id, "");
-    } else if (d.turn_state && d.turn_state.state === "stale") {
-      /* 服务重启时这一轮还在跑：它不会再有结果了，别让人以为还在等 */
-      addStatus("上一轮在服务重启时被中断，已有内容已保留；需要的话重新发送一次。");
-    }
-    if (d.context && (d.context.note || Number(d.context.limit) > 0)) paintContext(d.context);
-    else paintContext(estimateLocalContext());
-    if (log) log.scrollTop = log.scrollHeight;
-    cbProjRender();
-  } catch (e) {
-    if (request !== cbSessionRequest) return;
-    addStatus("载入会话失败：" + ((e && e.message) || e));
-  }
-}
-
+async function cbProjOpenSession(s) { return nav.openSession(s); }
 
 if ($("btnNewThread")) {
   /* 新建任务只在本地清屏：会话在第一条消息发出时由 /api/chat 建立，不再向服务端登记「线程」。
@@ -4111,4 +3864,4 @@ if (window.visualViewport) {
 /* 模块脚本没有全局：给旧的经典脚本（studio.js 调 reloadCatalog）和 e2e（scripts/e2e/ui_dom.cjs）
    一个明确的窗口面，而不是把几百个函数都挂到 window 上。 */
 window.reloadCatalog = reloadCatalog;
-window.__cb = Object.freeze({ state, runState, cbCapability, cbAttachUpload, cbProjOpenSession, cbNewLocalSession, uploads, drafts, turns, deliverables, watch });
+window.__cb = Object.freeze({ state, runState, cbCapability, cbAttachUpload, cbProjOpenSession, cbNewLocalSession, uploads, drafts, turns, deliverables, watch, nav });
