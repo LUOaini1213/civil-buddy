@@ -55,6 +55,11 @@ def main() -> int:
     assert fuse["error_code"] == ERR_CIRCUIT
     assert "超限" in (fuse["reason"] or "") or "熔断" in (fuse["reason"] or "")
 
+    dl = script.get("deadlock") or {}
+    assert dl.get("error_code") == "deadlock", dl
+    assert dl.get("executed") is False
+    assert "死锁" in (dl.get("reason") or "")
+
     sib = get_engine().execute(
         "pack-ship__plan",
         {"connected": False},

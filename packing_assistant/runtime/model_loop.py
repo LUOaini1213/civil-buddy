@@ -489,7 +489,7 @@ def run_model_agent(text: str, *, session_id: str = "", expert_id: str = "", p0_
     cfg = load_config()
     sid = session_id or f"sess-{uuid4().hex[:8]}"
     seed_session(sid)
-    ctx = assemble_context(sid, text=text, p0_confirmed=p0_confirmed or cfg.auto_confirm())
+    ctx = assemble_context(sid, text=text, p0_confirmed=p0_confirmed)
     turn = _Turn(session_id=sid, run_id="run-" + uuid4().hex[:8], user_text=text, approve=approve,
                  cancel_event=cancel_event, confirmed=ctx.get("p0_confirmed") is True)
     system = system_prompt(prompt_prefix(ctx))

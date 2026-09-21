@@ -1,11 +1,13 @@
 from __future__ import annotations
 
 import json
+import os
+from contextlib import asynccontextmanager
 from uuid import uuid4
 from pathlib import Path
 
 from fastapi import FastAPI, HTTPException, Request
-from fastapi.responses import FileResponse, Response, StreamingResponse
+from fastapi.responses import FileResponse, HTMLResponse, Response, StreamingResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field, StrictBool
 from starlette.background import BackgroundTask
@@ -25,13 +27,51 @@ from store import (
     upsert_expert,
 )
 
-app = FastAPI(title="Civil Buddy Workbench")
+@asynccontextmanager
+async def _lifespan(_app: FastAPI):
+    """Turns the previous process left "running" on disk are stale now; say so before any list is served."""
+    from chat_service import sweep_stale
+    import uploads as _uploads
+
+    sweep_stale(OUT_ROOT)
+    _uploads.migrate_legacy_uploads()
+    yield
+
+
+app = FastAPI(title="Civil Buddy Workbench", lifespan=_lifespan)
 STATIC = DEMO_ROOT / "static"
 app.mount("/static", StaticFiles(directory=STATIC), name="static")
 
 # CAD dependencies load only when this optional modeling workspace is used.
 from cad_api import router as cad_router
 app.include_router(cad_router)
+
+
+def auth_token() -> str:
+    """Shared secret for /api/* when the workbench is bound to a LAN address (CIVIL_TOKEN). Empty = open."""
+    return (os.environ.get("CIVIL_TOKEN") or "").strip()
+
+
+def _token_presented(request: Request) -> str:
+    auth = request.headers.get("authorization") or ""
+    if auth.startswith("Bearer "):
+        return auth[7:].strip()
+    q = request.query_params.get("token")
+    if q:
+        return q
+    return (request.cookies.get("cb_token") or "").strip()
+
+
+@app.middleware("http")
+async def require_token(request: Request, call_next):
+    expected = auth_token()
+    path = request.url.path
+    # "/" and /static stay open so the page can load and ask for the token; /api/health says auth is on
+    if expected and path.startswith("/api/") and path != "/api/health" and _token_presented(request) != expected:
+        from fastapi.responses import JSONResponse
+
+        return JSONResponse({"detail": "需要访问口令（CIVIL_TOKEN）"}, status_code=401)
+    return await call_next(request)
 
 
 class ChatIn(BaseModel):
@@ -44,6 +84,7 @@ class ChatIn(BaseModel):
     attachments: list[str] = Field(default_factory=list, max_length=12)
     workflow_budget: dict | None = None
     attachment_roles: dict[str, str] = Field(default_factory=dict)
+    background: bool = False  # run with no reader attached; the page follows it as a running session
 
 
 class ExpertIn(BaseModel):
@@ -79,9 +120,35 @@ class LLMConfigIn(BaseModel):
     semantic_summary: StrictBool = False
 
 
+def _version_static_links(html: str) -> str:
+    """Stamp /static/*.js|css links with the file's mtime so a deploy never serves a stale app.js
+    to a phone that cached the old one; the hand-written ?v= tags stay as a fallback elsewhere."""
+    import re
+
+    def stamp(m: "re.Match[str]") -> str:
+        rel = m.group(1)
+        target = STATIC / rel[len("/static/"):]
+        if not target.is_file():
+            return m.group(0)
+        return f"{rel}?v={target.stat().st_mtime_ns // 1_000_000:x}"
+
+    return re.sub(r'(/static/[^"\'?\s]+\.(?:js|css))(\?v=[^"\'\s]*)?', stamp, html)
+
+
 @app.get("/")
-def index() -> FileResponse:
-    return FileResponse(STATIC / "index.html")
+def index() -> HTMLResponse:
+    html = (STATIC / "index.html").read_text(encoding="utf-8")
+    return HTMLResponse(_version_static_links(html), headers={"Cache-Control": "no-cache"})
+
+
+@app.middleware("http")
+async def static_revalidates(request: Request, call_next):
+    """/static is served with ETag/Last-Modified; no-cache makes the browser ask every time
+    (a 304 when unchanged) instead of trusting a copy from before the last deploy."""
+    response = await call_next(request)
+    if request.url.path.startswith("/static/") and "cache-control" not in response.headers:
+        response.headers["Cache-Control"] = "no-cache"
+    return response
 
 
 @app.get("/api/health")
@@ -101,7 +168,8 @@ def health() -> dict:
                          "session_backup": True, "cancel": True, "word_export": True,
                          "task_memory": True, "local_rag": True, "task_routing": True,
                          "expert_contracts": True, "tender_collaboration": True, "semantic_summary": True,
-                         "asr": _asr_installed()},
+                         "asr": _asr_installed(), "auth": bool(auth_token()), "live_progress": True,
+                         "file_ref": True, "event_log": True, "background_turns": True},
         "deepseek": has_key(),
         "model": llm_model(),
         "context": policy(),
@@ -466,6 +534,17 @@ class MergeIn(BaseModel):
     into: str = ""
 
 
+@app.get("/api/sessions/{sid}/live")
+def session_live(sid: str) -> dict:
+    """Text and status a running (or just finished) turn has produced so far."""
+    from chat_service import live_state
+
+    try:
+        return live_state(sid)
+    except ValueError as exc:
+        raise HTTPException(400, str(exc)) from exc
+
+
 @app.post("/api/projects/{pid}/merge")
 def projects_merge(pid: str, body: MergeIn) -> dict:
     import projects as pj
@@ -483,9 +562,14 @@ def sessions_list(project_id: str = "", q: str = "", limit: int = 0, offset: int
     import turn_control
 
     listing = pj.list_sessions(OUT_ROOT, project_id, q, limit or pj.DEFAULT_LIMIT, offset, recorded_only=True)
+    from chat_service import turn_status
+
     for row in listing.get("sessions", []):
-        # A turn detached from its browser keeps running; the list must say so.
-        row["running"] = turn_control.status(row["session_id"])["active"]
+        # A turn detached from its browser keeps running; the list must say so. After a
+        # restart a cut-off turn is "stale", never "running".
+        current = turn_status(OUT_ROOT, row["session_id"])
+        row["running"] = current["active"]
+        row["turn_state"] = current["state"]
     return listing
 
 
@@ -655,48 +739,6 @@ def session_audit(sid: str) -> dict:
         raise HTTPException(400, str(exc)) from exc
 
 
-@app.get("/api/threads")
-def threads_list() -> dict:
-    from packing_assistant.runtime.threads import list_threads
-
-    rows = [t.to_dict() for t in list_threads()]
-    return {"ok": True, "n": len(rows), "threads": rows}
-
-
-class ThreadIn(BaseModel):
-    text: str = ""
-    title: str = ""
-    skill: str = ""
-    confirm_ok: StrictBool = False
-    background: bool = False
-    thread_id: str = ""
-
-
-@app.post("/api/threads")
-def threads_run(body: ThreadIn) -> dict:
-    from packing_assistant.runtime.threads import new_thread, run_on_thread, spawn
-
-    if body.background and body.text.strip():
-        return spawn(body.text, skill=body.skill, confirm=body.confirm_ok, title=body.title or body.text[:40])
-    tid = (body.thread_id or "").strip()
-    if not tid:
-        th = new_thread(body.title or body.text[:40] or "新对话", confirm=body.confirm_ok)
-        tid = th.thread_id
-        if not body.text.strip():
-            return {"ok": True, **th.to_dict()}
-    return run_on_thread(tid, body.text, skill=body.skill, confirm=body.confirm_ok, background=body.background)
-
-
-@app.get("/api/threads/{thread_id}")
-def thread_one(thread_id: str) -> dict:
-    from packing_assistant.runtime.threads import thread_status
-
-    got = thread_status(thread_id)
-    if not got.get("ok"):
-        raise HTTPException(404, "unknown thread")
-    return got
-
-
 @app.get("/api/catalog")
 def catalog() -> dict:
     return catalog_payload()
@@ -791,8 +833,8 @@ def studio_limit(body: LimitIn) -> dict:
 
 
 @app.post("/api/chat")
-def chat(body: ChatIn) -> StreamingResponse:
-    from chat_service import SessionBusy, SessionLease, prepare_turn, stream_turn, valid_session
+def chat(body: ChatIn):
+    from chat_service import SessionBusy, SessionLease, prepare_turn, start_background_turn, stream_turn, valid_session
 
     lease = None
     try:
@@ -811,6 +853,11 @@ def chat(body: ChatIn) -> StreamingResponse:
             lease.release()
         raise
 
+    if body.background:
+        # 并行任务：同一条 /api/chat，只是没有人在读。202 + session_id，页面从会话列表跟进。
+        started = start_background_turn(OUT_ROOT, turn, key_available=has_key(), plain_runner=run_plain, lease=lease)
+        return Response(json.dumps(started, ensure_ascii=False), status_code=202, media_type="application/json")
+
     def events():
         try:
             for event in stream_turn(OUT_ROOT, turn, key_available=has_key(), plain_runner=run_plain, lease=lease):
@@ -824,7 +871,33 @@ def chat(body: ChatIn) -> StreamingResponse:
 
 
 def _sse(ev: dict) -> str:
-    return f"event: {ev['event']}\ndata: {json.dumps(ev['data'], ensure_ascii=False)}\n\n"
+    head = f"id: {ev['seq']}\n" if ev.get("seq") else ""
+    return f"{head}event: {ev['event']}\ndata: {json.dumps(ev['data'], ensure_ascii=False)}\n\n"
+
+
+@app.get("/api/sessions/{sid}/events")
+def session_events(sid: str, request: Request, after: int = 0) -> StreamingResponse:
+    """Resume a turn's event stream from seq `after` (or the Last-Event-ID header): replays
+    what the browser missed, then follows the turn live until done. Same frames, same ids as
+    /api/chat, so the page runs one handler for both."""
+    from chat_service import has_event_log, replay_events, valid_session
+
+    try:
+        sid = valid_session(sid)
+    except ValueError as exc:
+        raise HTTPException(400, str(exc)) from exc
+    header = request.headers.get("last-event-id") or ""
+    if header.strip().isdigit():
+        after = max(after, int(header.strip()))
+    if not has_event_log(OUT_ROOT, sid):
+        raise HTTPException(404, "这个会话还没有事件记录")
+
+    def frames():
+        for ev in replay_events(OUT_ROOT, sid, after):
+            yield ": ping\n\n" if ev["event"] == "ping" else _sse(ev)
+
+    return StreamingResponse(frames(), media_type="text/event-stream",
+                             headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"})
 
 
 @app.get("/api/deliverables.zip")
@@ -885,8 +958,38 @@ def deliverables_zip(session_id: str, run_id: str = "") -> Response:
 
 
 @app.get("/api/file")
-def file(path: str, name: str = "") -> FileResponse:
-    target = Path(path).resolve()
+def file(path: str = "", name: str = "", session: str = "", run: str = "", file: str = "",
+         upload: str = "") -> FileResponse:
+    """One deliverable or attachment. Preferred forms: ?session=&run=&file=<stored basename>
+    (a deliverable) or ?session=&upload=<attachment id> (an uploaded original), plus
+    &name=<shown name> — no server path in the link, and the link survives a backup imported on
+    another machine. ?path=<absolute> is kept for the Rust workbench and old cards."""
+    import re
+
+    if upload:
+        import uploads as _uploads
+
+        try:
+            target, stored_name = _uploads.upload_file(session, upload)
+        except _uploads.UploadError as exc:
+            raise HTTPException(404 if "不存在" in str(exc) else 400, str(exc)) from exc
+        name = name or stored_name
+        trusted_name = stored_name  # went through safe_filename at save time; the stored file is <id>.bin
+    elif session or run or file:
+        from chat_service import valid_session
+        try:
+            sid = valid_session(session)
+        except ValueError as exc:
+            raise HTTPException(400, str(exc)) from exc
+        if not re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9_-]{0,63}", run or ""):
+            raise HTTPException(400, "run 无效")
+        if not file or file != Path(file).name or file in {".", ".."}:
+            raise HTTPException(400, "file 无效")
+        target = (OUT_ROOT / sid / "deliverables" / run / file).resolve()
+    elif path:
+        target = Path(path).resolve()
+    else:
+        raise HTTPException(400, "缺少 path 或 session/run/file")
     try:
         target.relative_to(OUT_ROOT.resolve())
     except ValueError as exc:
@@ -905,4 +1008,10 @@ def file(path: str, name: str = "") -> FileResponse:
     from uploads import safe_filename
     shown = safe_filename(name) if name else ""
     download_name = shown if shown and Path(shown).suffix.lower() == target.suffix.lower() else target.name
+    if upload:
+        import mimetypes
+
+        download_name = safe_filename(shown or trusted_name) or trusted_name
+        media_type = mimetypes.guess_type(download_name)[0] or "application/octet-stream"
+        return FileResponse(target, filename=download_name, media_type=media_type, content_disposition_type="attachment")
     return FileResponse(target, filename=download_name, content_disposition_type="attachment")

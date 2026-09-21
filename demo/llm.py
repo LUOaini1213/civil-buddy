@@ -114,6 +114,25 @@ def _stream_content(response: httpx.Response) -> Iterator[str]:
     raise LLMError("模型连接已结束但未收到完成标记，回复可能不完整，请重试")
 
 
+def default_timeout() -> httpx.Timeout:
+    """One budget per phase instead of a single 120 s: a slow model may sit for minutes
+    between two chunks (CIVIL_LLM_READ_TIMEOUT, default 180 s) while a connect that takes
+    more than 15 s is already a dead endpoint."""
+    import os
+
+    def _num(name: str, fallback: float) -> float:
+        raw = (os.environ.get(name) or "").strip()
+        try:
+            value = float(raw) if raw else fallback
+        except ValueError:
+            return fallback
+        return value if value > 0 else fallback
+
+    return httpx.Timeout(connect=_num("CIVIL_LLM_CONNECT_TIMEOUT", 15.0),
+                         read=_num("CIVIL_LLM_READ_TIMEOUT", 180.0),
+                         write=30.0, pool=15.0)
+
+
 class ModelConnection:
     """An httpx client plus every network stream its requests open.
 
@@ -126,8 +145,8 @@ class ModelConnection:
 
     _OPENED = (".connect_tcp.complete", ".connect_unix_socket.complete", ".start_tls.complete")
 
-    def __init__(self, timeout: float = 120.0):
-        self.client = httpx.Client(timeout=timeout)
+    def __init__(self, timeout: float | httpx.Timeout | None = None):
+        self.client = httpx.Client(timeout=default_timeout() if timeout is None else timeout)
         self.network_streams: list[Any] = []
 
     def _trace(self, name: str, info: dict) -> None:

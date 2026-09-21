@@ -157,6 +157,8 @@ def codex_event(event: Any) -> Optional[Dict[str, Any]]:
         return {"type": "item.completed", **base, "item": {"type": "agent_message", **payload}}
     if kind == "guard":
         return {"type": "guard.flagged", **base, **payload}
+    if kind == "deadlock":
+        return {"type": "turn.failed", **base, "error_code": "deadlock", **payload}
     return None
 
 
@@ -181,6 +183,8 @@ def progress_line(event: Any) -> str:
         parts = [label + "、".join(payload.get(key) or []) for key, label in (("untraced", "无出处的数字："), ("verdicts", "不该下的结论："))
                  if payload.get(key)]
         return "  guard " + "；".join(parts) if parts else ""
+    if kind == "deadlock":
+        return f"  deadlock {payload.get('reason') or payload.get('code') or ''}".rstrip()
     return ""
 
 

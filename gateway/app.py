@@ -603,12 +603,20 @@ def api_run_get(run_id: str, include_trace: bool = True):
 
 @app.post("/api/runs/{run_id}/cancel")
 def api_run_cancel(run_id: str):
+    """Cancel a Scheduler run, or cooperatively stop a packing pipeline by run_id / session_id.
+
+    The packing loop (teams/big_team.run_one) checks the registry at every agent boundary and
+    the placement / render / export loops call cancel.check(), so a blocking /api/pipeline or
+    /api/demo returns quickly with phase=cancelled instead of running to the end.
+    """
+    from packing_assistant.runtime import cancel as _cancel
     from packing_assistant.runtime.scheduler import get_scheduler
 
-    ok = get_scheduler().cancel(run_id)
-    if not ok:
+    sched_ok = get_scheduler().cancel(run_id)
+    coop_ok = _cancel.request(run_id)
+    if not (sched_ok or coop_ok):
         raise HTTPException(400, "cannot cancel")
-    return {"ok": True, "run_id": run_id, "state": "cancelled"}
+    return {"ok": True, "run_id": run_id, "state": "cancelled", "scheduler": sched_ok, "cooperative": coop_ok}
 
 
 def _tender_parse_via_engine(
@@ -1187,7 +1195,6 @@ def api_revise_nl(body: ReviseNlRequest):
     # applied 时 state 是新方案；unsupported 时 state 与改前一致（仅多了 nl_revision）
     _store_session(body.session_id, state)
     resp = public_response(state)
-    _attach_materials_notice(resp, _notice)
     resp["nl_revision"] = nr
     resp["revise_ok"] = bool(nr.get("applied") and nr.get("status") == "applied")
     resp["feature_available"] = bool(nr.get("feature_available"))
@@ -1212,6 +1219,9 @@ def api_confirm(body: ConfirmRequest):
         )
 
     if body.action == "cancel":
+        from packing_assistant.runtime import cancel as _cancel
+
+        _cancel.request(body.session_id)  # also stops a pipeline still running for this session
         state = {**state, "phase": "cancelled", "user_action": "cancel",
                  "final_response": "已取消", "status": "success"}
         _store_session(body.session_id, state)
@@ -1435,6 +1445,25 @@ class TableParseJsonBody(BaseModel):
     store_session: bool = False
 
 
+def _table_needs_human(result: Dict[str, Any]) -> Dict[str, Any]:
+    """上传回执上的闸门：与 pack-ship 工具面同一套规则（rows_blocking_plan），不另写一套。
+
+    有行缺重量、缺尺寸或数量读不出件数时 ok=False：表读出来了，但还不能拿去装。行照样回给页面
+    （连同 needs_human 逐行的问题），只是不写进 session——此前回执 ok=True，页面提示「可点表材料跑」，
+    读不出件数的行随后按 1 件成箱。口径与 pack-ship__ingest 一致。
+    """
+    from packing_assistant.tools.pack_ship_solve import needs_human_sentences, rows_blocking_plan
+
+    needs = rows_blocking_plan(result.get("materials") or [])
+    result["needs_human"] = needs
+    if needs:
+        result["ok"] = False
+        result["errors"] = list(result.get("errors") or []) + [
+            f"{len(needs)} 处需要人工处理后才能装箱：" + "；".join(needs_human_sentences(needs, 8))
+        ]
+    return result
+
+
 @app.post("/api/table/parse")
 async def api_table_parse(
     file: Optional[UploadFile] = File(None),
@@ -1476,10 +1505,11 @@ async def api_table_parse(
     except Exception as e:
         raise HTTPException(400, f"parse failed: {type(e).__name__}: {e}") from e
 
+    result = _table_needs_human(result)
     sid = (session_id or "").strip()
     store = str(store_session or "0").strip() in ("1", "true", "True", "yes")
     if store and sid and result.get("ok") and result.get("materials"):
-        st = _SESSIONS.get(sid) or _load_session(sid) or {
+        st = _get_session(sid) or {
             "session_id": sid,
             "phase": "materials_ready",
             "packing_options": {},
@@ -1516,6 +1546,7 @@ async def api_table_parse(
         "stats": result.get("stats") or {},
         "path": result.get("path"),
         "errors": result.get("errors") or [],
+        "needs_human": result.get("needs_human") or [],
         "session_id": result.get("session_id"),
         "stored": result.get("stored"),
         "note": "tools map columns/units only; no xyz or container count",
@@ -1539,8 +1570,9 @@ def api_table_parse_json(body: TableParseJsonBody):
     else:
         raise HTTPException(400, "need path or rows")
 
+    result = _table_needs_human(result)
     if body.store_session and body.session_id and result.get("ok"):
-        st = _SESSIONS.get(body.session_id) or _load_session(body.session_id) or {
+        st = _get_session(body.session_id) or {
             "session_id": body.session_id,
             "phase": "materials_ready",
             "packing_options": {},
@@ -1565,6 +1597,7 @@ def api_table_parse_json(body: TableParseJsonBody):
         "stats": result.get("stats") or {},
         "path": result.get("path"),
         "errors": result.get("errors") or [],
+        "needs_human": result.get("needs_human") or [],
         "session_id": result.get("session_id"),
         "stored": result.get("stored", False),
         "note": "tools map columns/units only; no xyz or container count",
@@ -1587,7 +1620,7 @@ def api_whatif(body: WhatIfRequest):
     from packing_assistant.session_store import load_session, save_session
     from packing_assistant.whatif import run_whatif
 
-    base = _SESSIONS.get(body.session_id) or _load_session(body.session_id)
+    base = _get_session(body.session_id)
     if not base or not (base.get("materials") or body.materials):
         # 无 baseline：用 materials 先跑一版再 what-if
         if not body.materials:
@@ -1647,7 +1680,7 @@ def api_whatif_apply(body: WhatIfApplyRequest):
     """把 what-if 结果写回主 session，便于前端直接展示为当前方案。"""
     from packing_assistant.session_store import save_session
 
-    src = _SESSIONS.get(body.whatif_session_id) or _load_session(body.whatif_session_id)
+    src = _get_session(body.whatif_session_id)
     if not src:
         raise HTTPException(404, f"whatif session 不存在: {body.whatif_session_id}")
     _store_session(body.session_id, src)
@@ -1717,17 +1750,40 @@ def api_business_presets():
     return {"ok": True, "presets": list_business_presets()}
 
 
+def _export_root() -> Path:
+    from packing_assistant.config import OUTPUT_DIR
+
+    return (Path(OUTPUT_DIR) / "exports").resolve()
+
+
 @app.post("/api/export/shipment")
 def api_export_shipment(body: dict):
-    """导出 POR+绑扎 xlsx。body: {session_id}"""
+    """导出 POR+绑扎 xlsx。body: {session_id} → {xlsx_path, download_url, ...}"""
+    from urllib.parse import quote
+
     from packing_assistant.export_pack import export_shipment_xlsx
 
     sid = str((body or {}).get("session_id") or "pipeline")
-    st = _SESSIONS.get(sid) or _load_session(sid)
+    st = _get_session(sid)
     if not st:
         raise HTTPException(404, "session 不存在")
-    meta = export_shipment_xlsx(st)
-    return {"ok": True, **meta}
+    meta = export_shipment_xlsx(st, output_dir=_export_root())
+    name = Path(str(meta.get("xlsx_path") or "")).name
+    return {"ok": True, **meta, "download_url": f"/api/export/file?name={quote(name)}"}
+
+
+@app.get("/api/export/file")
+def api_export_file(name: str):
+    """Download one exported workbook (name only; confined to <PACKING_OUTPUT_DIR>/exports)."""
+    root = _export_root()
+    target = (root / Path(name).name).resolve()
+    if target.parent != root or not target.is_file():
+        raise HTTPException(404, "export 不存在")
+    return FileResponse(
+        target,
+        media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        filename=target.name,  # starlette emits filename*=utf-8'' for non-ASCII names
+    )
 
 
 @app.post("/api/nonstandard/inspect")
@@ -1807,7 +1863,7 @@ def api_checklist(body: dict):
     from packing_assistant.session_store import save_session
 
     sid = str((body or {}).get("session_id") or "pipeline")
-    st = _SESSIONS.get(sid) or _load_session(sid)
+    st = _get_session(sid)
     if not st:
         raise HTTPException(404, "session 不存在")
     checked = (body or {}).get("checked") or {}
@@ -1837,7 +1893,7 @@ def api_p2_vgm(body: dict):
     from packing_assistant.p2_stubs import draft_vgm_submit
 
     sid = str((body or {}).get("session_id") or "")
-    st = (_SESSIONS.get(sid) or _load_session(sid) or {}) if sid else {}
+    st = (_get_session(sid) or {}) if sid else {}
     return {"ok": True, **draft_vgm_submit(st, dry_run=True)}
 
 
@@ -1846,7 +1902,7 @@ def api_p2_evidence(body: dict):
     from packing_assistant.p2_stubs import build_evidence_pack
 
     sid = str((body or {}).get("session_id") or "pipeline")
-    st = _SESSIONS.get(sid) or _load_session(sid)
+    st = _get_session(sid)
     if not st:
         raise HTTPException(404, "session 不存在")
     return {"ok": True, **build_evidence_pack(st)}

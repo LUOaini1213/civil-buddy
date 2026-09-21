@@ -110,6 +110,14 @@ def default_profile() -> SandboxProfile:
         if n != "d:\\layout" and not n.startswith("d:\\layout\\"):
             roots.append(jp)
     roots.append(Path.cwd() / ".civil-buddy" / "out")
+    try:
+        from packing_assistant.runtime.workspace_ctx import current_worktree
+
+        wt = current_worktree()
+        if wt:
+            roots.append(Path(wt) / ".civil-buddy" / "out")
+    except Exception:
+        pass
     return SandboxProfile(allowed_write_roots=roots)
 
 

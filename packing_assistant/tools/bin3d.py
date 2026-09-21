@@ -14,6 +14,8 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from typing import Any, Dict, List, Optional, Sequence, Tuple
 
+from packing_assistant.runtime import cancel as _cancel
+
 
 @dataclass
 class PackPolicy:
@@ -573,6 +575,7 @@ def try_place(bin: Bin3D, item: Item3D) -> Optional[Placement3D]:
         step = max(min(dx0 + max(gap, 1), 250), 100)
         x = 0
         while x + dx0 <= bin.L:
+            _cancel.check()
             pts.append((x, 0, 0))
             if dy0 <= bin.W:
                 pts.append((x, max(bin.W - dy0, 0), 0))
@@ -814,6 +817,7 @@ def _strip_pack_floor(
     # 估列宽：取众数宽度
     widths = []
     for it in work:
+        _cancel.check()
         _, dy, _ = orient_floor(it)
         widths.append(dy)
     col_w = max(widths) if widths else W
@@ -1069,6 +1073,7 @@ def _pack_items_core(
         groups: List[List[Item3D]] = [[] for _ in range(n_need)]
         loads = [0.0] * n_need
         for it in sorted(remaining, key=lambda x: -float(x.weight_kg or 0)):
+            _cancel.check()
             cands = [
                 (loads[i], i)
                 for i in range(n_need)
@@ -1135,6 +1140,7 @@ def _pack_items_core(
                 ),
             )
             for item in grp_ord:
+                _cancel.check()
                 _place_or_spill(item, preferred)
         remaining = []
         # 跳过网格/条带预装与二次配额

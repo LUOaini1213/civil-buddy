@@ -19,6 +19,19 @@ from packing_assistant.understand import understand
 
 _ROOT = Path(__file__).resolve().parents[2]
 _OUT = _ROOT / "demo" / "out"
+
+
+def _out_root() -> Path:
+    from packing_assistant.runtime.workspace_ctx import current_worktree
+
+    wt = current_worktree()
+    if wt:
+        p = Path(wt) / ".civil-buddy" / "out"
+        p.mkdir(parents=True, exist_ok=True)
+        return p
+    return _OUT
+
+
 CONFIRM = "我明白，将由持证人员签认"
 FORBIDDEN = ("可以投标", "可以开工", "中标率")
 _PIPE_KEYS = (
@@ -163,7 +176,7 @@ def _plan_calls(
             "reply": hitl_reply(exp.name),
         }
     sid = _safe_sid(session_id)
-    out_dir = _OUT / sid / (exp.id if exp else "ops")
+    out_dir = _out_root() / sid / (exp.id if exp else "ops")
     calls: List[Dict[str, Any]] = []
 
     if exp and exp.id == "pack-ship" and packing_list:
@@ -344,8 +357,6 @@ def run_agent(
     if packing_list and intent == "chat" and force_intent not in {"chat", "run", "both"}:
         intent = "run"      # 「packing.csv 要几个柜」点名了装箱单，是要算，不是要聊
     cfg = load_config()
-    if cfg.auto_confirm():
-        p0_confirmed = True
     gate = decide_gate(
         intent=intent,
         risk=(exp.risk if exp else "low"),
@@ -369,18 +380,59 @@ def run_agent(
     sched = scheduler or get_scheduler()
     engine = tools or get_engine()
     bus = get_bus()
+    from packing_assistant.runtime.deadlock import get_watch
+
+    watch = get_watch()
+    watch_on = False
     run = sched.create_run(sid, expert_id=eid, intent=intent, max_steps=max_steps)
     if run.error_code == "session_busy":
         return {
             "ok": False,
             "schema": "civil.agent.v1",
             "error_code": "session_busy",
+            "reason": f"拒绝：session {sid} 已有进行中的 run，同会话串行，不是死锁。",
             "intent": intent,
             "wrote": False,
             "submit_blocked": True,
             "run_id": run.run_id,
             "state": run.state,
             "session_id": sid,
+        }
+    holds = [f"session:{sid}"]
+    if eid:
+        holds.append(f"expert:{eid}")
+    d0 = watch.begin(run.run_id, holds=holds, label=eid or "router")
+    watch_on = True
+    if not d0.allow:
+        run.error_code = d0.err
+        try:
+            sched.transition(run, "failed")
+        except Exception:
+            run.state = "failed"
+        if d0.err == "deadlock":
+            bus.emit(
+                run.run_id,
+                "deadlock",
+                {"reason": d0.reason, "cycle": list(d0.cycle), "path": d0.path},
+            )
+        watch.end(run.run_id)
+        watch_on = False
+        sched.release(sid)
+        run.stamp_end()
+        return {
+            "ok": False,
+            "schema": "civil.agent.v1",
+            "error_code": d0.err,
+            "reason": d0.reason,
+            "cycle": list(d0.cycle),
+            "deadlock": d0.to_dict(),
+            "intent": intent,
+            "wrote": False,
+            "submit_blocked": True,
+            "run_id": run.run_id,
+            "state": run.state,
+            "session_id": sid,
+            "expert_id": eid,
         }
     sched.transition(run, "planning")
     bus.emit(run.run_id, "run_started", {"intent": intent, "expert_id": eid})
@@ -457,6 +509,8 @@ def run_agent(
             p0_confirmed=p0_confirmed,
             compressed=bool(ctx.get("compressed")),
         )
+        if watch_on:
+            watch.end(run.run_id)
         sched.release(sid)
         bus.emit(run.run_id, "run_ended", {"state": run.state, "wrote": out["wrote"]})
         from packing_assistant.runtime.middleware import annotate
@@ -499,7 +553,7 @@ def run_agent(
                     sched.transition(run, "failed")
                     return _finish()
                 sched.transition(run, "acting")
-                result = run_tender_workflow(text, session_id=sid, output_root=_OUT, sources=_tender_sources(text),
+                result = run_tender_workflow(text, session_id=sid, output_root=_out_root(), sources=_tender_sources(text),
                     confirmed=p0_confirmed, cancel_event=cancel_event)
                 out.update({key: value for key, value in result.items() if key not in {"run_id", "session_id", "schema", "state"}})
                 out["route"], out["collaboration"] = route, result
@@ -706,7 +760,7 @@ def run_agent(
             # Follow-on writes (still through the engine + sandbox).
             follow: List[Dict[str, Any]] = list(planned.get("follow") or [])
             office_reply = ""
-            out_dir = _OUT / _safe_sid(sid) / (exp.id if exp else "ops")
+            out_dir = _out_root() / _safe_sid(sid) / (exp.id if exp else "ops")
             if last_export_md:
                 follow.append(
                     {
@@ -898,4 +952,7 @@ def run_agent(
     finally:
         # A persistence/annotation failure during _finish must not strand the
         # scheduler lease and block every later turn in this session.
+        if watch_on:
+            watch.end(run.run_id)
+            watch_on = False
         sched.release(sid)

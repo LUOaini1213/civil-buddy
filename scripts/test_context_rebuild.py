@@ -45,7 +45,7 @@ class ContextRebuildTests(unittest.TestCase):
         originals = [self.folder / "transcript.jsonl", self.folder / "session.meta.json",
             self.folder / "session.summary.json", self.folder / "collaboration.summary.json",
             self.folder / "runs/prior/workbench.json", self.folder / "deliverables/prior/original.md"]
-        originals += [p for p in (uploads.UPLOAD_ROOT / self.sid).rglob("*") if p.is_file()]
+        originals += [p for p in uploads.session_uploads_dir(self.sid).rglob("*") if p.is_file()]
         self.originals = {path: path.read_bytes() for path in originals}
 
     def rebuild(self):
@@ -150,7 +150,7 @@ class ContextRebuildTests(unittest.TestCase):
         self.assertEqual(self.rebuild().status_code, 200)  # Lease was released after failure.
 
     def test_incomplete_attachment_is_not_silently_removed_from_last_good_index(self):
-        directory = uploads.UPLOAD_ROOT / self.sid
+        directory = uploads.session_uploads_dir(self.sid)
         for extension, damaged in (("json", b"invalid metadata"), ("json", None),
                                    ("bin", None), ("txt", None), ("txt", b"short"), ("bin", b"short")):
             with self.subTest(extension=extension, damaged=damaged):
@@ -172,7 +172,7 @@ class ContextRebuildTests(unittest.TestCase):
 
     @unittest.skipUnless(os.name == "nt", "Windows case-insensitive attachment paths")
     def test_uppercase_extensions_preserve_readable_windows_attachment(self):
-        directory = uploads.UPLOAD_ROOT / self.sid
+        directory = uploads.session_uploads_dir(self.sid)
         for extension in ("json", "txt", "bin"):
             path = directory / (self.attachment["id"] + "." + extension)
             path.rename(path.with_suffix("." + extension.upper()))
