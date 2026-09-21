@@ -150,8 +150,14 @@ A 和 E 说明了一件事：否决条款清单认的是一套固定说法，换
 Word 导出的 PDF 一行表格读出来是横着串的，合成 PDF 从来不是。修法见 `packing_assistant/tools/pdf_grid.py`（从表格线和文字位置还原单元格）。
 
 规则冻结（bf3a437）后另取四份没见过的，各跑一次：字段 **35/67**（错 5），否决条款清单 **44/50**、连同弱信号 48/50，初步评审标准 0/13，
-评分项 15/28。四份里三份的前附表没被认出来（换了名字和表头）。按类修完后六份合计字段 108/110、否决 84/87、评审标准 35/35、评分 40/40——
-开发数。分项表在 `docs/civil-buddy/real-tender.md` 第 2 节。
+评分项 15/28。四份里三份的前附表没被认出来（换了名字和表头）。
+
+按类修完、再冻结（dd9a0a3），第二轮又取四份没见过的：字段 **52/70**（错 2），否决条款清单 **35/40**、连同弱信号 39/40，初步评审标准 7/15，
+评分项 **1/40**——四份都把分值写在名称格里（「报价（60分）」），前十份没有一份这样写；两份的章标题不在文字层里。同一轮查出两个真错：
+页眉里重复的项目名称被当水印删掉（前附表那一格也没了）；须知里列出各章名称的那一条被读成章标题，十几页的条款定位标错了章。
+按类修完后十份合计字段 180/180、否决清单 124/127（连同弱信号 127/127）、评审标准 50/50、评分 80/80、组成 26/26——开发数。
+分项表在 `docs/civil-buddy/real-tender.md` 第 2 节。门禁里的对应用例：`scripts/test_tender_document.py::SecondRoundShapes`、
+`scripts/test_pdf_grid.py::Furniture`（全是编的文字，真实文件不入库）。
 
     python scripts/eval_real_document.py 招标文件.pdf --gold gold.json            # 任何一份真实文件
     python scripts/eval_real_document.py cn_multilot.md --with cn_multilot.addendum1.md --gold cn_multilot.gold.json --word

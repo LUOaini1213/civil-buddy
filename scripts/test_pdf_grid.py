@@ -233,6 +233,29 @@ class Furniture(unittest.TestCase):
         pages = [page([piece(60, 700, "正文\n"), piece(300, 32, "86")], []) for _ in range(6)]
         self.assertTrue(all(not drop for drop in pg.furniture(pages)), "86 on every page is not a page number")
 
+    def test_a_running_head_that_repeats_a_value_goes_where_it_stands_and_nowhere_else(self) -> None:
+        name = "栖霞学院实训楼配电改造工程施工项目"
+        pages = []
+        for number in range(1, 9):
+            pages.append(page([piece(70, 790, "项目名称："), piece(116, 790, name),                    # the head: a label and the name
+                               piece(70, 700, f"第{number}条 这一页的正文。\n"),
+                               piece(120, 640, name) if number == 3 else piece(120, 640, "正文\n"),    # the front table's 项目名称 row
+                               piece(70, 52, "青桐招标有限公司编制投标文件格式"),                           # the foot: who made it ...
+                               piece(494, 52, "-"), piece(497, 52, str(number)), piece(502, 52, "/"), piece(504, 52, "39"), piece(513, 52, "-")], []))
+        drops = pg.furniture(pages)
+        for number, (parts, drop) in enumerate(zip(pages, drops), 1):
+            kept = "".join(p.text for index, p in enumerate(parts.pieces) if index not in drop)
+            self.assertNotIn("项目名称：", kept, "what shares the head's line is the head")
+            self.assertNotIn("青桐", kept)
+            self.assertNotRegex(kept, r"[-/]|39", "a page number drawn in five pieces, on the foot's line")
+            self.assertEqual(name in kept, number == 3, "the same words in the body are the document's")
+
+    def test_a_page_number_drawn_piece_by_piece_counts_up(self) -> None:
+        pages = [page([piece(60, 700, "正文\n"), piece(280, 40, "-"), piece(286, 40, str(number)), piece(292, 40, "/"), piece(297, 40, "12"), piece(309, 40, "-")], [])
+                 for number in range(1, 7)]
+        for parts, drop in zip(pages, pg.furniture(pages)):
+            self.assertEqual("".join(p.text for index, p in enumerate(parts.pieces) if index not in drop), "正文\n")
+
 
 class OverThePage(unittest.TestCase):
     def table(self, rows: Sequence[Sequence[Tuple[float, float, str]]]) -> pg.Table:

@@ -764,5 +764,229 @@ class HeldOutShapes(unittest.TestCase):
         self.assertTrue(any("拒绝接受" in t for t in listed) and any("不接受联合体响应" in t for t in listed))
 
 
+PARTS = """栖霞学院实训楼配电改造工程
+
+竞争性磋商文件
+
+第一部分  采购公告
+
+第二部分  竞争性磋商前附表
+
+第三部分  磋商人须知
+
+第四部分  响应文件格式
+
+第五部分  合同条款格式
+
+第六部分  评审标准和方法
+
+第一部分  采购公告
+
+一、项目基本情况
+
+项目编号：栖院-2806
+
+预算金额：86(万元)
+
+本项目不接受联合体报名。
+
+三、递交投标登记文件
+
+时间：2030年3月4日至2030年3月6日
+
+地点：栖霞市文汇路 12 号青桐招标有限公司
+
+四、磋商文件发售
+
+时间：另行通知
+
+第二部分  竞争性磋商前附表
+
+| 项号 | 内容 | 说明及要求 |
+| --- | --- | --- |
+| 1 | 项目名称 | 栖霞学院实训楼配电改造工程 |
+| 8 | 响应文件份数及装订要求 | 正本壹份，副本叁份，电子版 1 份，同时密封于一个包封内。 |
+| 9 | 磋商有效期 | 为90日历天（从磋商截止之日算起） |
+| 12 | 现场踏勘 | □√不组织；□组织，踏勘时间：踏勘集中地点： |
+| 15 | 响应文件提交地点及截止时间 | 提交地点：栖霞市文汇路 12 号青桐招标有限公司会议室；截止时间：2030年3月18日14时00分 |
+| 17 | 评审标准和方法 | 详见本磋商文件第六部分 |
+| 21 | 是否允许磋商人分包 | 否 |
+| 33 | 预付款保证金 | 成交供应商在签订合同后 / 个工作日内提供 / %的预付款保函。 |
+
+第三部分  磋商人须知
+
+1. 总则
+
+1.1 适用范围：本磋商文件仅适用于本项目。
+
+5.4 经磋商提交最后报价的磋商人，由磋商小组采用综合评分法对其响应文件进行综合评分。
+
+5.5 磋商人试图对评审施加影响，都可能导致其磋商被拒绝。
+
+5.6 如未提供，磋商小组有权拒绝其响应文件。
+
+5.7 供应商如提交备选方案，响应文件将被判定为无效。
+
+第四部分  响应文件格式
+
+一、磋商函
+
+资格审查必要合格条件标准
+
+| 序号 | 项目内容 | 合格条件 | 备注 | 是否合格及相关情况 |
+| --- | --- | --- | --- | --- |
+| 1 | 营业执照 | 具有独立承担民事责任的能力 | 复印件盖公章 |  |
+| 2 | 资质证书 | 具有电力工程施工总承包叁级及以上资质 | 复印件盖公章 |  |
+| 结论 | 是否通过 |
+
+符合性评审表
+
+| 序号 | 评审内容 | 是否满足要求 |
+| --- | --- | --- |
+| 1 | 磋商人名称是否与营业执照一致 |  |
+| 2 | 磋商保证金是否按磋商文件要求缴纳 |  |
+| 结论 | 是否通过 |
+
+综合评分法评分标准
+
+| 序号 | 项目 | 评分标准 |
+| --- | --- | --- |
+| 1 | 报价（60分） | 满足磋商文件要求且最终报价最低的为磋商基准价，其价格分为满分。 |
+| 2 | 施工方案及技术措施（10分） | 针对性很强的得10分；较强的得7分；一般的得3分。 |
+| 3 | 资信（7 分） | 进货渠道（3 分）售后网点（4 分） | 提供证明材料。 |
+| 4 | 施工组织设计（20分） | 主要施工方案与技术措 | 施工方案（含工程特点） |
+|  |  | 施；（0-4 分） | 总体安排合理。2＜得分≤4 |
+|  |  | 服务承诺（0-6 分） | 优（5-6分）；良（3-4分）；一般（0-2分） |
+
+第一部分  合同协议书            编号：
+
+第五部分 技术标准和要求专用部分
+
+""" + FILLER
+
+
+class SecondRoundShapes(unittest.TestCase):
+    """The second round of real tenders nobody had fitted a rule to (first run: fields 52/70, scores 1/40): a tender in
+    部分 whose contents page has no leaders and whose last parts are headed only there, points written inside the name
+    cell, review tables headed otherwise, a row named for two things. Made-up documents of the same shapes."""
+
+    @classmethod
+    def setUpClass(cls) -> None:
+        cls.doc = td.read(PARTS)
+        cls.facts = tf.extract(PARTS)
+
+    def values(self, topic: str) -> list:
+        return [m.value for m in self.facts.of(topic) if m.side == "tender"]
+
+    def test_parts_are_chapters_and_a_contents_page_without_leaders_lays_nothing_down(self) -> None:
+        chapters = []
+        for p in self.doc.pieces:
+            if p.chapter and p.chapter not in chapters:
+                chapters.append(p.chapter)
+        self.assertEqual(chapters, ["第一部分 采购公告", "第二部分 竞争性磋商前附表", "第三部分 磋商人须知", "第四部分 响应文件格式"],
+                         "not the two parts only the contents page heads, not the contract's own 第五部分")
+        self.assertEqual(self.values("project"), ["栖霞学院实训楼配电改造工程"])
+
+    def test_a_row_named_for_two_things_gives_both_and_registering_is_not_handing_in(self) -> None:
+        self.assertEqual(self.values("deadline_bid"), ["2030年3月18日14时00分"])
+        self.assertEqual(self.values("submit_place"), ["栖霞市文汇路 12 号青桐招标有限公司会议室"], "not the address under 三、递交投标登记文件")
+
+    def test_row_names_and_values_of_the_second_round(self) -> None:
+        self.assertTrue(any("副本叁份" in v for v in self.values("copies")), "响应文件份数及装订要求 - the whole cell")
+        self.assertEqual(self.values("subcontract"), ["否"], "是否允许磋商人分包")
+        self.assertEqual(self.values("deadline_visit"), ["不组织"], "the ticked box, and no date is what is laid down")
+        self.assertEqual(self.values("bond"), [], "预付款保证金 is the contract's guarantee")
+        self.assertEqual(self.values("budget"), ["86(万元)"])
+        self.assertEqual(self.values("consortium"), ["不接受联合体报名"])
+        self.assertEqual(self.values("eval_method"), ["综合评分法"], "no heading names it: what the document says it uses")
+
+    def test_the_copies_statement_under_a_row_called_otherwise(self) -> None:
+        other = PARTS.replace("| 8 | 响应文件份数及装订要求 | 正本壹份，副本叁份，电子版 1 份，同时密封于一个包封内。 |",
+                              "| 8 | 响应文件组成和封装 | 1）正本1 份；副本2份。副本为正本的复印件。2）响应文件装订成册。 |")
+        self.assertEqual([m.value for m in tf.extract(other).of("copies")], ["正本1 份；副本2份"])
+
+    def test_a_one_cell_row_is_named_by_how_it_begins(self) -> None:
+        text = TWO_COLUMN.replace("| 17 | 磋商响应文件有效期为 90 天 |", "| 17 | 磋商响应文件有效期为 90 天 |\n| 18 | 在成交通知书发出前，采购人将成交候选人的信息予以公示。 |")
+        facts = tf.extract(text)
+        self.assertEqual([m.value for m in facts.of("owner")], [], "采购人 after the first clause: the cell is about the notice of award")
+        self.assertEqual([m.value for m in facts.of("validity")], ["90 天"])
+
+    def test_points_inside_the_name_cell(self) -> None:
+        scores = {name: value for name, value, _ in td.scores(self.doc)}
+        self.assertEqual(scores, {"报价": "60分", "施工方案及技术措施": "10分", "资信": "7分", "进货渠道": "3分", "售后网点": "4分",
+                                  "施工组织设计": "20分", "主要施工方案与技术措施": "0-4分", "服务承诺": "0-6分"},
+                         "known by the table's own header (no chapter says 评审); two items run into one cell; a name the page cut; "
+                         "a grade's band is no item")
+
+    def test_review_tables_headed_otherwise(self) -> None:
+        found = [(group, factor, standard) for group, factor, standard, _ in td.review_standards(self.doc)]
+        self.assertEqual(found, [("资格审查必要合格条件标准", "营业执照", "具有独立承担民事责任的能力"),
+                                 ("资格审查必要合格条件标准", "资质证书", "具有电力工程施工总承包叁级及以上资质"),
+                                 ("符合性评审表", "", "磋商人名称是否与营业执照一致"),
+                                 ("符合性评审表", "", "磋商保证金是否按磋商文件要求缴纳")])
+
+    def test_the_clause_that_lists_the_tenders_chapters_heads_none(self) -> None:
+        text = ("第一章 招标公告\n\n项目名称：临溪镇文化站修缮工程\n\n第二章 投标人须知\n\n1. 总则\n\n1.1 适用范围：仅适用于本项目。\n\n2.1 招标文件包括：\n\n"
+                "第一章 招标公告\n\n第二章 投标人须知\n\n第三章 评标办法\n\n第四章 合同条款及格式\n\n"
+                "2.2 投标人不按要求提交投标保证金的，其投标将被否决。\n\n第三章 评标办法\n\n综合评估法\n\n第四章 合同条款及格式\n\n" + FILLER)
+        doc = td.read(text)
+        clause = next(p for p in doc.pieces if "其投标将被否决" in p.text)
+        self.assertEqual(clause.chapter, "第二章 投标人须知", "read as headings, the listing made this clause 第四章's")
+        self.assertEqual([p.text for p in doc.pieces if p.kind == "heading" and p.text.startswith("第")],
+                         ["第一章 招标公告", "第二章 投标人须知", "第三章 评标办法", "第四章 合同条款及格式"])
+
+    def test_the_next_clause_is_no_list_item_and_cancelling_the_procurement_throws_no_bid_out(self) -> None:
+        more = PARTS.replace("5.5 磋商人试图", "4.2 磋商人不得存在下列情形之一：\n\n（1）为本项目提供过设计服务的；\n\n4.3 本次磋商是否允许联合体，详见前附表。\n\n"
+                             "28.1 出现下列情形之一的，应对采购项目予以废标：\n\n（1）有效供应商不足三家的；\n\n28.2 废标后，采购代理机构应当发布公告。\n\n"
+                             "★附件 1：\n\n磋商函\n\n5.5 磋商人试图")
+        listed = [r.piece.text for r in td.rejections(td.read(more))]
+        self.assertIn("（1）为本项目提供过设计服务的；", listed)
+        self.assertFalse(any("4.3 本次磋商" in t for t in listed), "4.3 is the next clause, not item 4. of the list under 4.2")
+        self.assertFalse(any("废标" in t or "不足三家" in t for t in listed), "the procurement is cancelled; no bid is thrown out")
+        self.assertIn("★附件 1：磋商函", listed, "a starred label takes the title on the next line")
+
+    def test_the_lot_this_document_is_for_is_read_off_its_cover(self) -> None:
+        text = ("使用说明\n\n一、本标准文件适用于公路养护项目，各标段分别编制招标文件。\n\n临溪县农村公路日常养护（一、二、三标段）\n\n（项目名称）养护二标段施工招标\n\n招标文件\n\n"
+                "第一章 招标公告\n\n1. 招标条件\n\n1.1 本项目共划分 3 个标段，一标段为北线，二标段为南线，三标段为环线。\n\n"
+                "第二章 投标人须知\n\n| 条款号 | 条款名称 | 编列内容 |\n| --- | --- | --- |\n| 1.3.2 | 计划工期 | 一标段：300日历天；二标段：365日历天 |\n\n"
+                "1. 总则\n\n1.1 适用范围：仅适用于本项目。\n\n第三章 评标办法\n\n综合评估法\n\n第四章 合同条款及格式\n\n" + FILLER + "\n\n" + FILLER.replace("承包人", "中标人"))
+        doc = td.read(text)
+        lot, piece = td.document_lot(doc)
+        self.assertEqual((lot, piece.text), ("二标段", "（项目名称）养护二标段施工招标"), "not 三标段 out of 一、二、三标段, not the sentence that splits the project")
+        from packing_assistant.tools import tender_tables
+        table = tender_tables.extract_table(parse_tender_text(text), project_name="x")
+        self.assertRegex(table, r"\| 本文件所属标段 \| 二标段 \|")
+        self.assertRegex(table, r"\| 工期（一标段） \| 300日历天 \|[^\n]*其他标段的值（本文件为二标段）")
+        self.assertNotRegex(table, r"\| 工期（二标段） \|[^\n]*其他标段")
+        self.assertIsNone(td.document_lot(td.read("第一章 招标公告\n\n1.本次招标共 1 包：\n\n第二章 投标人须知\n\n" + FILLER)), "how many there are names none")
+
+    def test_a_correction_notice_as_a_table_as_a_block_and_what_it_leaves_to_an_attachment(self) -> None:
+        tender = ("### 招标文件.docx\n\n第一章 招标公告\n\n项目名称：临溪镇文化站修缮工程\n\n第二章 投标人须知\n\n| 条款号 | 条款名称 | 编列内容 |\n| --- | --- | --- |\n"
+                  "| 3.3.1 | 投标有效期 | 90日历天 |\n| 3.4.1 | 投标保证金 | 金额：8万元；形式：银行转账 |\n| 4.2.1 | 递交投标文件截止时间 | 2030年5月6日9时30分 |\n\n"
+                  "1. 总则\n\n1.1 适用范围：仅适用于本项目。\n\n第三章 评标办法\n\n综合评估法\n\n第四章 合同条款及格式\n\n" + FILLER + "\n\n" + FILLER.replace("承包人", "中标人"))
+        notice = ("\n\n### 更正公告第1号.docx\n\n更正公告\n\n| 序号 | 原招标文件内容 | 修改后内容 |\n| --- | --- | --- |\n"
+                  "| 1 | 第二章前附表 3.3.1 投标有效期：90日历天 | 投标有效期：120日历天 |\n| 2 | 3.4.1 投标保证金金额：8万元 | 3.4.1 投标保证金金额：6万元 |\n\n"
+                  "原文：4.2.1 递交投标文件截止时间 2030年5月6日9时30分\n\n现修改为：4.2.1 递交投标文件截止时间 2030年5月13日9时30分\n\n"
+                  "工程量清单有调整，详见附件 2。\n\n第五章“工程量清单”整体替换，以重新上传的文件为准。\n")
+        facts = tf.extract(tender + notice)
+
+        def changed(topic: str) -> list:
+            return [m.value for m in facts.of(topic) if m.origin]
+
+        self.assertEqual(changed("validity"), ["120日历天"], "序号 | 原招标文件内容 | 修改后内容")
+        self.assertEqual(changed("bond"), ["6万元"])
+        self.assertEqual(changed("deadline_bid"), ["2030年5月13日9时30分"], "现修改为：4.2.1 … - the field is named after the verb")
+        self.assertEqual([c["text"] for c in facts.addenda_unread], ["工程量清单有调整，详见附件 2。", "第五章“工程量清单”整体替换，以重新上传的文件为准。"])
+        from packing_assistant.tools import tender_tables
+        table = tender_tables.extract_table(parse_tender_text(tender + notice), project_name="x")
+        self.assertRegex(table, r"\| 补遗里没读出的改动 1 \| 工程量清单有调整，详见附件 2。 \|[^\n]*未读出")
+        self.assertRegex(table, r"\| 投标有效期 \| 90日历天 \|[^\n]*已被更正公告第1号修改")
+
+    def test_rejections_of_the_second_round_wordings(self) -> None:
+        listed = [r.piece.text for r in td.rejections(self.doc)]
+        for words in ("导致其磋商被拒绝", "有权拒绝其响应文件", "将被判定为无效"):
+            self.assertTrue(any(words in t for t in listed), words)
+
+
 if __name__ == "__main__":
     unittest.main(verbosity=1)

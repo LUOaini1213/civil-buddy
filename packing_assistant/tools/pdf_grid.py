@@ -151,7 +151,8 @@ def read_page(page: Any) -> PageParts:
     return PageParts(pieces, painted, stands[0] >= stands[1], height, width)
 
 
-_PAGE_NUMBER = re.compile(r"^(?:第\s*)?[-—–]?\s*(\d{1,4})\s*[-—–]?(?:\s*页)?(?:\s*[/，,]?\s*共?\s*\d{1,4}\s*页?)?$")
+_PAGE_NUMBER = re.compile(r"^(?:第\s*)?[-—–]?\s*(\d{1,4})\s*[-—–]?(?:\s*页)?(?:\s*[/，,]?\s*共?\s*\d{1,4}\s*页?)?\s*[-—–]?$"
+                          r"|^(?i:page)\s*(\d{1,4})(?:\s*(?i:of|/)\s*\d{1,4})?$")
 
 
 def at_edge(piece: Piece, height: float, share: float = 0.1) -> bool:
@@ -161,57 +162,72 @@ def at_edge(piece: Piece, height: float, share: float = 0.1) -> bool:
 def furniture(pages: Sequence[PageParts]) -> List[Set[int]]:
     """For every page, which of its pieces are page furniture - text that belongs to the paper, not to the document:
 
-    a watermark        long words at the SAME PLACE on a quarter of the pages - and then wherever else they stand (on a
-                       landscape page the same stamp lands elsewhere). Words that merely recur - "投标人：（盖单位章）" under
-                       every form - stand somewhere else each time and stay.
+    a watermark        long words at the SAME PLACE in the body of a quarter of the pages - and then wherever else they
+                       stand (on a landscape page the same stamp lands elsewhere). Words that merely recur - "投标人：
+                       （盖单位章）" under every form - stand somewhere else each time and stay.
     a running head     any words at the same height in the outermost 6 % of a quarter of the pages (a table's header
-                       row, repeated page after page, stands further in and stays)
-    the page number    a number alone on its line in the head or foot, one more than the page before's (a figure in a
-                       sentence or in a table's last row is neither alone nor in step)
+                       row, repeated page after page, stands further in and stays); long words at the same place in the
+                       head or foot, and what shares their line ("项目名称：" before the name). A head repeats a value OF
+                       the document - the project's name - so it is dropped where it stands and nowhere else: the front
+                       table's row that says the same words is no furniture.
+    the page number    a number alone on its line in the head or foot - drawn in one piece or in five ("-", "4", "/",
+                       "39", "-"), or what a head's line still holds without the head - one more than the page before's
+                       (a figure in a sentence or in a table's last row is neither alone nor in step)
     """
     drop: List[Set[int]] = [set() for _ in pages]
     if len(pages) < 4:
         return drop
     stamped: Dict[Key, int] = {}
     placed: Dict[Key, int] = {}
-    numbers: List[Dict[int, Tuple[int, int]]] = []       # per page: piece index -> (value, height bucket)
+    edge_stamp: Dict[Key, bool] = {}
     for parts in pages:
-        stamps, keys, lone = set(), set(), {}
-        rows: Dict[int, int] = {}
+        stamps, keys = set(), set()
         for piece in parts.pieces:
-            if piece.text.strip():
-                rows[round(piece.y / 2)] = rows.get(round(piece.y / 2), 0) + 1
-        for index, piece in enumerate(parts.pieces):
             text = piece.text.strip()
             if not text:
                 continue
             if len(text) >= 12:
                 stamps.add(piece.key)
+                edge_stamp[piece.key] = at_edge(piece, parts.height)
             if at_edge(piece, parts.height, 0.06):
                 keys.add(piece.edge_key)
-            found = _PAGE_NUMBER.match(text)
-            if found and at_edge(piece, parts.height) and rows.get(round(piece.y / 2), 0) == 1:
-                lone[index] = (int(found.group(1)), round(piece.y / 3))
         for key in stamps:
             stamped[key] = stamped.get(key, 0) + 1
         for key in keys:
             placed[key] = placed.get(key, 0) + 1
-        numbers.append(lone)
     needed = max(4, math.ceil(len(pages) * 0.25))
-    watermarks = {key[0] for key, count in stamped.items() if count >= needed}
+    repeated = {key for key, count in stamped.items() if count >= needed}
+    watermarks = {key[0] for key in repeated if not edge_stamp.get(key)}
+    heads = {key for key in repeated if edge_stamp.get(key)}
+    numbers: List[Dict[Tuple[int, ...], Tuple[int, int]]] = []       # per page: the pieces of a line -> (value, height bucket)
     for at, parts in enumerate(pages):
+        head_lines = {round(piece.y / 2) for piece in parts.pieces if len(piece.text.strip()) >= 12 and piece.key in heads}
+        lines: Dict[int, List[int]] = {}
         for index, piece in enumerate(parts.pieces):
             text = piece.text.strip()
             if not text:
                 continue
             if len(text) >= 12 and piece.key[0] in watermarks:
                 drop[at].add(index)
-            elif at_edge(piece, parts.height, 0.06) and placed.get(piece.edge_key, 0) >= needed and not _PAGE_NUMBER.match(text):
-                drop[at].add(index)
-        for index, (value, bucket) in numbers[at].items():
+            elif round(piece.y / 2) in head_lines:
+                drop[at].add(index)      # the head's own line, whatever else it holds: "项目名称：", the chapter's name, "-4/39-"
+            else:
+                if at_edge(piece, parts.height, 0.06) and placed.get(piece.edge_key, 0) >= needed and not _PAGE_NUMBER.match(text):
+                    drop[at].add(index)
+                if at_edge(piece, parts.height):
+                    lines.setdefault(round(piece.y / 2), []).append(index)      # with its dashes, which stand at one place: "-", "4", "/", "39", "-"
+        lone: Dict[Tuple[int, ...], Tuple[int, int]] = {}
+        for members in lines.values():
+            members = sorted(members, key=lambda i: parts.pieces[i].x)
+            found = _PAGE_NUMBER.match("".join(parts.pieces[i].text.strip() for i in members))
+            if found:
+                lone[tuple(members)] = (int(found.group(1) or found.group(2)), round(parts.pieces[members[0]].y / 3))
+        numbers.append(lone)
+    for at in range(len(pages)):
+        for members, (value, bucket) in numbers[at].items():
             for other, delta in ((at - 1, -1), (at + 1, 1)):
                 if 0 <= other < len(pages) and any(v == value + delta and abs(b - bucket) <= 1 for v, b in numbers[other].values()):
-                    drop[at].add(index)
+                    drop[at].update(members)
     return drop
 
 

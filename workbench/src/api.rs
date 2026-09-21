@@ -891,10 +891,25 @@ async fn chat(State(st): State<Arc<AppState>>, Json(body): Json<ChatIn>) -> Resu
             }
         }
     }
-    let user_text = if body.attachments.is_empty() {
+    // a task about a document whose address is in the message: the workbench fetches it (public addresses only, the
+    // same path the 网址 button takes) and the turn works on it like on any attachment
+    let mut attachment_ids = body.attachments.clone();
+    let mut fetch_notes: Vec<String> = Vec::new();
+    if intent != crate::agent::Intent::Chat && !attach::addresses_in(&body.message).is_empty() {
+        let (paths, sess, msg) = (st.paths.clone(), session.clone(), body.message.clone());
+        if let Ok((ids, notes)) = tokio::task::spawn_blocking(move || attach::import_addresses(&paths, &sess, &msg)).await {
+            for id in ids {
+                if !attachment_ids.contains(&id) {
+                    attachment_ids.push(id);
+                }
+            }
+            fetch_notes = notes;
+        }
+    }
+    let user_text = if attachment_ids.is_empty() {
         body.message.clone()
     } else {
-        attach::bundle_for_prompt(&st.paths, &session, &body.attachments, &body.message)
+        attach::bundle_for_prompt(&st.paths, &session, &attachment_ids, &body.message)
     };
     history.push(json!({"role": "user", "content": user_text}));
     let (history, ctx_report) = crate::context::prepare_history(history);
@@ -938,6 +953,12 @@ async fn chat(State(st): State<Arc<AppState>>, Json(body): Json<ChatIn>) -> Resu
                     "status".into(),
                     json!({"phase": "compress", "text": ctx_report.note()}),
                 );
+                if tx.send(Ok(send(ev))).await.is_err() {
+                    return Ok(());
+                }
+            }
+            for note in fetch_notes {
+                let ev = ("status".into(), json!({"phase": "fetch", "text": note}));
                 if tx.send(Ok(send(ev))).await.is_err() {
                     return Ok(());
                 }

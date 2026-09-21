@@ -216,6 +216,24 @@ def _unreadable(value):
     return result
 
 
+def _properties_of(source):
+    """The document properties of a job file of ours (author, last modified by, company …); {} for pasted text, for a
+    file outside the job folder and for a file that holds none."""
+    path = str(source.get("path") or "")
+    if not path or source.get("kind") != "job_file":
+        return {}
+    from packing_assistant.office_job import job_root
+    from packing_assistant.tools import file_properties
+
+    root = job_root().resolve()
+    target = (root / path).resolve()
+    try:
+        target.relative_to(root)
+    except ValueError:
+        return {}
+    return file_properties.read(target) if target.is_file() else {}
+
+
 def _checked_entry(source):
     """One source as the check record keeps it: the hash of the text as read, and the path of a job file so
     that it can be read again."""
@@ -433,7 +451,8 @@ def run_tender_workflow(text, *, session_id, output_root, sources=None, confirme
                     markdown = _compliance_gaps_md(local["handoff"], local["matrix"], comparison=local["response_comparison"],
                                                    evidence=_evidence_files(local["sources"]),
                                                    checked=[_checked_entry(s) for s in local["sources"]],
-                                                   responses=[{"title": str(s.get("title") or s["source_id"]), "text": s["text"]}
+                                                   responses=[{"title": str(s.get("title") or s["source_id"]), "text": s["text"],
+                                                               "properties": _properties_of(s)}
                                                               for s in local["sources"] if s.get("role") == "response"])
                     child["response_comparison"] = local["response_comparison"]
                     child["unresolved"] = [str(g.get("title") or g.get("req_id")) for g in gap_rows(local["matrix"])]

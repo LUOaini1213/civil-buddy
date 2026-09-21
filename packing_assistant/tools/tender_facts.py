@@ -43,6 +43,7 @@ _NUM = r"(?<!\d,)(?<!\d，)\d+(?:[,，]\d{3})*(?:\.\d+)?"
 _TIME = re.compile(r"(?<![\dA-Za-z#.])" + _NUM + r"\s*(?:个?日历天|日历日|个?工作日|calendar\s*(?:days?|months?)|working\s*days?|days?|"
                    r"months?|weeks?|years?|个月|天|日|周|月|年)", re.I)
 _MONEY = re.compile(r"(?<![\dA-Za-z#.])" + _NUM + r"\s*(?:万元|亿元|万|亿|元)(?!/)"
+                    r"|(?<![\dA-Za-z#.])" + _NUM + r"\s*[（(]\s*(?:万元|亿元|元)\s*[)）]"       # "预算金额：86(万元)" - a platform's form
                     r"|(?:S\$|US\$|HK\$|SGD|USD|RMB|CNY|¥|￥|\$)\s*" + _NUM + r"(?:\s*(?:万元|万|million|mil|k|K))?")
 _AREA = re.compile(r"(?<![\dA-Za-z#.])" + _NUM + r"\s*(?:万?平方米|万?平米|万?平方|万?平|㎡|m²|m2)(?![一-鿿])", re.I)
 _SCORE = re.compile(r"(?<![\dA-Za-z#.])" + _NUM + r"\s*分(?![钟公包部项期批别类析布配])")
@@ -309,6 +310,7 @@ DOCUMENT_TOPICS: Tuple[Topic, ...] = (
     Topic("submit_place", "递交地点", ("递交投标文件地点", "投标文件递交地点", "递交地点"), "text", "timeline"),
     Topic("candidates", "中标候选人", ("是否授权评标委员会确定中标人", "中标候选人"), "text", "scoring"),
     Topic("budget", "采购预算", ("预算金额", "采购预算", "项目预算"), "money", "price"),
+    Topic("this_lot", "本文件所属标段", (), "text", "project"),     # read off the cover (tender_document.document_lot), never by a keyword
 )
 _DOCUMENT_ALIASES: List[Tuple[str, str]] = sorted(
     ((alias, topic.key) for topic in DOCUMENT_TOPICS for alias in topic.aliases), key=lambda pair: -len(pair[0]))
@@ -333,7 +335,11 @@ _DOCUMENT_ROW_NAMES: Tuple[Tuple[str, str], ...] = (
     # by the SHAPE of the name, not by one procurement method's words: 投标 / 响应 / 磋商 / 比选申请 / 报价 … 文件, 有效期, 人
     (r"[一-鿿]{0,4}服务期限?|合同履行期限|履约期限|履行期限|供货期限?|交付期限?", "duration"),
     (r"(?!保函|保证金|担保|证书|许可)[一-鿿]{2,6}有效期", "validity"),
-    (r"[一-鿿]{2,8}文件(?:的)?(?:正副本)?份数", "copies"),
+    (r"[一-鿿]{2,8}文件(?:的)?(?:正、?副本)?(?:份数|数量)(?:[及和与、][一-鿿]{2,10})?", "copies"),     # 响应文件份数及装订要求
+    (r"(?:供应商|成交供应商|[一-鿿]{2,4}人)(?:的)?分包", "subcontract"),                  # 是否允许投标人分包
+    (r"可选择(?:或调整)?的(?:投标|响应|报价)(?:和报价)?|选择性(?:投标|报价)(?:方案)?", "alternative"),
+    (r"评[审标分]标准(?:和|及|与)(?:方法|办法)|评[审标分](?:方法|办法)(?:和|及|与)标准", "eval_method"),
+    (r"(?:提交|递交|送达|投标)地点", "submit_place"),
     (r"(?:供应商|[一-鿿]{2,6}人)(?:的)?(?:资格|资质)(?:要求|条件)", "qualification"),
     (r"(?:首次)?[一-鿿]{2,8}文件(?:的)?(?:递交|提交)(?:的)?截止时间|(?:提交|递交)[一-鿿]{2,8}文件(?:的)?截止时间", "deadline_bid"),
     (r"[一-鿿]{0,4}特定资格要求", "qualification"),
@@ -357,6 +363,8 @@ def document_topic(name: str) -> str:
     name = re.sub(r"^(?:本项目)?是否(?:接受|允许|组织|召开|需要)?", "", name)   # "是否接受联合体" is about 联合体
     if re.search(r"分包人|分包商|分包单位|第三人", name):
         return ""   # 对分包人的资格要求 is about whoever the work is sublet to, not about the bidder
+    if re.search(r"预付款|质量保证金|质保金|工资保证金|农民工|廉洁保证金|保修金|低价风险", name):
+        return ""   # the guarantees of the contract are not the bid bond
     for alias in _DEADLINE_QUERY_NAMES:
         if alias in name:
             return "deadline_query"
@@ -493,6 +501,7 @@ class TenderFacts:
     lot_scopes: Dict[str, str] = field(default_factory=dict)  # "一标段" -> "顶管加检查井"
     unplaced: List[str] = field(default_factory=list)
     jurisdiction: str = "UNSPECIFIED"  # CN | SG | EU | DUAL, only when the text says so; never a default country
+    addenda_unread: List[Dict[str, str]] = field(default_factory=list)  # changes an addendum makes where the reader cannot follow
 
     def of(self, topic: str, *, side: Optional[str] = None, lot: Optional[str] = None) -> List[Mention]:
         return [m for m in self.mentions if m.topic == topic and (side is None or m.side == side)
@@ -515,6 +524,7 @@ class TenderFacts:
             "scores": [vars(s) for s in self.scores],
             "specials": [vars(s) for s in self.specials],
             "unplaced": list(self.unplaced),
+            **({"addenda_unread": list(self.addenda_unread)} if self.addenda_unread else {}),
         }
 
 
@@ -728,6 +738,7 @@ def _extract_document(text: str) -> TenderFacts:
     facts.lots = list(dict.fromkeys(m.lot for m in facts.mentions if m.lot))
     facts.scores = [ScorePoint(name, score, "", piece.text[:160], piece.line, piece.ref) for name, score, piece in tender_document.scores(doc)]
     facts.specials = [Special(name, detail, "", piece.text[:160], piece.line, ref=piece.ref) for name, detail, piece in tender_document.specials(doc)]
+    facts.addenda_unread = [{"text": piece.text[:200], "ref": piece.ref} for piece in tender_document.addenda_unread(doc)]
     facts.jurisdiction = infer_jurisdiction(text)
     return facts
 

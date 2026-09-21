@@ -410,6 +410,66 @@ class CheckedVersionOfOnePost(unittest.TestCase):
         self.assertEqual(load(folder / "bid-compliance__gaps.check.json")["drafts"][0]["sha256"], sha(again))
 
 
+def word_file(path: Path, paragraphs: List[str], *, author: str = "", last: str = "", company: str = "") -> None:
+    """A .docx with the given paragraphs and document properties - the parts a reader needs, written by hand."""
+    import zipfile
+
+    body = "".join(f"<w:p><w:r><w:t>{text}</w:t></w:r></w:p>" for text in paragraphs)
+    core = ('<?xml version="1.0" encoding="UTF-8" standalone="yes"?><cp:coreProperties '
+            'xmlns:cp="http://schemas.openxmlformats.org/package/2006/metadata/core-properties" xmlns:dc="http://purl.org/dc/elements/1.1/">'
+            f"<dc:creator>{author}</dc:creator><cp:lastModifiedBy>{last}</cp:lastModifiedBy></cp:coreProperties>")
+    app = ('<?xml version="1.0" encoding="UTF-8" standalone="yes"?><Properties '
+           'xmlns="http://schemas.openxmlformats.org/officeDocument/2006/extended-properties">'
+           f"<Application>Microsoft Office Word</Application><Company>{company}</Company></Properties>")
+    with zipfile.ZipFile(path, "w") as archive:
+        archive.writestr("word/document.xml", '<?xml version="1.0" encoding="UTF-8" standalone="yes"?><w:document '
+                         f'xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main"><w:body>{body}</w:body></w:document>')
+        archive.writestr("docProps/core.xml", core)
+        archive.writestr("docProps/app.xml", app)
+
+
+class DocumentProperties(JobFolder):
+    """What our files say about who made them travels with them; a committee can read it. Laid side by side, literally."""
+
+    def test_the_properties_of_our_files_are_laid_side_by_side(self) -> None:
+        word_file(self.job / "技术标.docx", ["投标响应", "我方承诺工期60日历天。"], author="张工", last="张工", company="青桐建设有限公司")
+        word_file(self.job / "商务标.docx", ["投标保证金人民币20万元已备妥。", "拟派项目经理李明，一级注册建造师。"],
+                  author="Administrator", last="某某造价咨询", company="青桐建设有限公司")
+        out = run_agent("全面检查投标响应：招标文件.txt 技术标.docx 商务标.docx", session_id="civil-cli")
+        self.assertTrue(out["ok"], out.get("reply"))
+        md = self.draft(out, "bid-compliance.md")
+        self.assertIn("## 11 我方文件的文档属性", md)
+        held = {r["文件"]: r for t in tables(md) for r in t if "最后修改人" in r}
+        self.assertEqual((held["技术标.docx"]["作者"], held["商务标.docx"]["作者"], held["商务标.docx"]["最后修改人"]), ("张工", "Administrator", "某某造价咨询"))
+        self.assertEqual(held["商务标.docx"]["公司"], "青桐建设有限公司")
+        said = next(line for line in md.splitlines() if line.startswith("- 各文件写法不同·作者："))
+        self.assertTrue("技术标.docx 写的是「张工」" in said and "商务标.docx 写的是「Administrator」" in said, said)
+        self.assertIn("文档属性各文件写法不同·最后修改人", md, "also among what is left to settle")
+        self.assertNotIn("各文件写法不同·公司", md, "the two agree on the company")
+
+    def test_text_files_hold_no_properties_and_get_no_section(self) -> None:
+        (self.job / "投标响应.txt").write_text(RESPONSE, encoding="utf-8")
+        out = run_agent("全面检查投标响应：招标文件.txt 投标响应.txt", session_id="civil-cli")
+        self.assertNotIn("我方文件的文档属性", self.draft(out, "bid-compliance.md"))
+
+    def test_the_reader_alone(self) -> None:
+        from pypdf import PdfWriter
+
+        from packing_assistant.tools import file_properties
+
+        writer = PdfWriter()
+        writer.add_blank_page(width=200, height=200)
+        writer.add_metadata({"/Author": "李工", "/Creator": "WPS 文字", "/Producer": "Some PDF Library 15.0", "/CreationDate": "D:20300318093000+08'00'"})
+        with (self.job / "报价.pdf").open("wb") as stream:
+            writer.write(stream)
+        self.assertEqual(file_properties.read(self.job / "报价.pdf"), {"作者": "李工", "软件": "WPS 文字 / Some PDF Library", "创建时间": "2030-03-18 09:30:00"},
+                         "the program, not its build number")
+        (self.job / "坏.docx").write_bytes(b"not a zip")
+        self.assertEqual(file_properties.read(self.job / "坏.docx"), {})
+        self.assertEqual(file_properties.read(self.job / "招标文件.txt"), {})
+        self.assertEqual(file_properties.differing([("a.docx", {"作者": "张工"}), ("b.docx", {"作者": "张工"}), ("c.pdf", {})]), [])
+
+
 class RecordUnit(unittest.TestCase):
     def test_hash_rows_compare_load_verify(self) -> None:
         from packing_assistant.tools import bid_check_record as cr

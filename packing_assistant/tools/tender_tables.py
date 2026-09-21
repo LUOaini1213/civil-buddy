@@ -75,6 +75,13 @@ def _lots(facts: Optional[Facts]) -> List[str]:
     return lots if len(lots) > 1 else []
 
 
+def _same_lot(a: str, b: str) -> bool:
+    """一标段 / 第1标段 / 标段1 name one lot."""
+    from packing_assistant.tools.tender_document import _lot_key
+
+    return _lot_key(a) == _lot_key(b)
+
+
 def _with_lot(label: str, lot: str) -> str:
     return f"{label}（{lot}）" if lot else label
 
@@ -159,6 +166,7 @@ _PARSE_SECTIONS: Tuple[Tuple[str, Tuple[Tuple[str, str, bool, str], ...]], ...] 
 )
 #: rows only a document's front table lays down, by the section they belong to
 _DOCUMENT_ROWS: Dict[str, Tuple[Tuple[str, str], ...]] = {
+    "1 ": (("this_lot", "本文件所属标段"),),
     "2 ": (("submit_place", "递交地点"), ("open_place", "开标地点")),
     "3 ": (("consortium", "联合体投标"),),
     "4 ": (("alternative", "备选投标方案"), ("subcontract", "分包"), ("deviation", "偏离")),
@@ -194,6 +202,11 @@ def _parse_rows(facts: Optional[Facts], topic: str, label: str, always: bool, ad
         later = [x for x in found if x.get("origin") and "不一致" not in str(x.get("origin")) and str(x.get("lot") or "") in ("", str(m.get("lot") or ""))]
         amended = ("书面提请澄清：以哪一处为准" if "不一致" in origin else "以补遗为准，对照补遗原文" if origin
                    else f"已被{later[-1].get('origin')}修改，以补遗为准" if later else "—")
+        this_lot = next((str(x.get("value")) for x in _mentions(facts, "this_lot", "tender") if x.get("value")), "")
+        if topic == "this_lot":
+            amended = "封面 / 公告标题所写；其他标段的行仅供对照"
+        elif this_lot and m.get("lot") and amended == "—" and not _same_lot(str(m.get("lot")), this_lot):
+            amended = f"其他标段的值（本文件为{this_lot}），仅供对照"
         # a document's value may be a clause long, or one figure per lot: it keeps more room than a typed field
         rows.append([name, _clip(m.get("value"), 120 if m.get("ref") else CELL), _source(m), "已检出", amended])
     if always:
@@ -248,6 +261,9 @@ def extract_table(parsed: Optional[Mapping[str, Any]], *, project_name: str = "�
             rows += [[_with_lot("标段内容", lot), _clip(scope), "—", "已检出", "—"] for lot, scope in scopes.items()]
             rows += [["未读出的文件" + (f" {n}" if len(unread) > 1 else ""), str(u["title"]).strip(), "—", "未读出", str(u.get("reason") or "—")]
                      for n, u in enumerate(unread, 1)]
+            changed = list(facts.get("addenda_unread") or [])
+            rows += [["补遗里没读出的改动" + (f" {n}" if len(changed) > 1 else ""), _clip(str(c.get("text") or ""), 120), str(c.get("ref") or "—"), "未读出",
+                      "改动在附件里或整段替换：对照补遗原文，本表没有并入"] for n, c in enumerate(changed, 1)]
         if title.startswith("3 ") and not document:
             rows += _requirement_rows(p, {"qualification"}, facts)
         if title.startswith("4 "):
@@ -911,6 +927,19 @@ def compliance_gaps(handoff: Optional[Mapping[str, Any]], matrix: Optional[Mappi
         weak = list(document.get("candidates") or [])
         if weak:
             extra += [f"另有 {len(weak)} 句弱信号（说法不在固定词表里、但可能同样致命），见招标解析表第 11 节下半；自查时一并过一遍。", ""]
+    held = [(str(r.get("title") or "未命名"), dict(r.get("properties") or {})) for r in own_files]
+    if any(props for _, props in held):
+        # about OUR files, whatever kind of tender text they are checked against
+        from packing_assistant.tools import file_properties
+
+        extra += ["## 11 我方文件的文档属性", "",
+                  "作者、最后修改人、公司这些属性随电子文件一起提交，评标时读得到；不同投标人的文件属性雷同，是串通投标的认定情形之一"
+                  "（以招标文件和当地规定为准）。工具只照抄，不判断：递交前核对它们写的是不是本单位、本项目的人。", ""]
+        extra += _table(("文件",) + file_properties.FIELDS,
+                        [[title] + [_clip(props.get(name) or "—", 40) for name in file_properties.FIELDS] for title, props in held])
+        for sentence in file_properties.differing(held):
+            extra += [f"- 各文件写法不同·{sentence}", ""]
+            open_items.append(f"文档属性各文件写法不同·{sentence}：递交前核对")
     md += ["## 7 澄清与补证", ""]
     md += [f"- {item}" for item in open_items] or ["- （本轮没有可列的缺口：要么资料不足，要么要求与响应逐项对上，仍须人工核验原件）"]
     p0 = (ho.get("p0_reject_scan") or {}).get("items") or []
