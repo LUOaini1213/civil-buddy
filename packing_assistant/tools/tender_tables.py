@@ -246,7 +246,7 @@ def extract_table(parsed: Optional[Mapping[str, Any]], *, project_name: str = "�
         if title.startswith("3 ") and not document:
             rows += _requirement_rows(p, {"qualification"}, facts)
         if title.startswith("4 "):
-            days = p.get("duration_days")
+            days = p.get("duration_days") if not document else None   # a document's first "N日历天" may be its 响应有效期
             if days is not None and not any(r[0].startswith("工期") or r[0].startswith("交货期") for r in rows if r[3] == "已检出"):
                 rows.insert(0, ["工期", f"{days} 日历天", "—", "已检出", "—"])
             day_line = f"工期（招标方的日历天数，只抄原文）：{days} 日历天" if days is not None else ""

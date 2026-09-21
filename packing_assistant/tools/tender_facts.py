@@ -58,7 +58,7 @@ _WORKHEAD = re.compile(r"(?<![A-Za-z0-9])(?:CW|CR|ME|SY|TR|MW|RW)\d{2}(?![A-Za-z
                        r"(?:\s*(?:grade\s*)?(?:[ABC]\d|L[1-6]|single\s+grade)(?![A-Za-z0-9]))?", re.I)
 _DOC_CODE = re.compile(r"(?<![A-Za-z0-9])[A-Za-z]{2,10}(?:[-_/][A-Za-z0-9]{1,8}){1,4}(?![A-Za-z0-9])")
 _GRADE = re.compile(r"(?:特|[一二三四五]|[甲乙丙])级")
-_EVAL_METHOD = re.compile(r"综合评估法|综合评分法|经评审的最低投标价法|最低评标价法|合理低价法?|最低价法|性价比法|Price Quality Method|PQM|QFM|Quality Fee Method", re.I)
+_EVAL_METHOD = re.compile(r"综合评估法|综合评分法|最低评审价法|经评审的最低投标价法|最低评标价法|合理低价法?|最低价法|性价比法|Price Quality Method|PQM|QFM|Quality Fee Method", re.I)
 _STRUCTURE = re.compile(r"(?:框架[-—－]?核心筒|框架[-—－]?剪力墙|核心筒|框剪|剪力墙|钢框架|框架|框筒|筒中筒|框支|砖混|钢[-—－]?混凝土组合|钢筋混凝土"
                         r"|型钢混凝土|钢|装配式[一-鿿]{0,6}?|木)结构")
 _FLOORS = re.compile(r"地[上下][一二三四五六七八九十百两\d]{1,4}层")
@@ -270,7 +270,7 @@ TOPICS: Tuple[Topic, ...] = (
     Topic("track_record", "类似业绩", ("类似工程业绩", "类似项目业绩", "类似业绩", "业绩要求", "同类业绩", "业绩"), "text", "qualification"),
     Topic("pm", "项目经理", ("项目经理", "项目负责人", "Project Manager", "Project Director"), "person", "qualification"),
     Topic("tech_lead", "技术负责人", ("技术负责人", "项目总工", "总工"), "person", "qualification"),
-    Topic("duration", "工期", ("计划工期", "招标工期", "要求工期", "总工期", "工期要求", "工期承诺", "承诺工期", "工期", "Contract Period", "Contract Duration",
+    Topic("duration", "工期", ("计划工期", "招标工期", "要求工期", "总工期", "工期要求", "工期承诺", "承诺工期", "工期", "服务期限", "服务期", "Contract Period", "Contract Duration",
                                 "Time for Completion", "Completion Period", "Construction Period", "completed within", "complete the Works in",
                                 "complete the Works within", "completion within", "completion in"), "time", "substantive"),
     Topic("delivery", "交货期", ("交货期", "交货时间", "供货期"), "time", "substantive"),
@@ -311,6 +311,20 @@ DOCUMENT_TOPICS: Tuple[Topic, ...] = (
 _DOCUMENT_ALIASES: List[Tuple[str, str]] = sorted(
     ((alias, topic.key) for topic in DOCUMENT_TOPICS for alias in topic.aliases), key=lambda pair: -len(pair[0]))
 _DEADLINE_QUERY_NAMES = ("提出问题的截止时间", "澄清招标文件的截止时间", "要求澄清招标文件的截止时间", "答疑截止时间", "提问截止时间")
+#: what the rows of a front table are called when the purchase is not a works tender (政府采购: 磋商 / 谈判 / 询价):
+#: 供应商 for 投标人, 响应文件 for 投标文件, 服务期限 for 工期
+_DOCUMENT_ROW_NAMES: Tuple[Tuple[str, str], ...] = (
+    (r"服务期限?|服务期|合同履行期限|履约期限|履行期限|供货期限?|交付期限?", "duration"),
+    (r"(?:响应|报价|磋商|谈判)有效期", "validity"),
+    (r"(?:响应|报价)文件(?:的)?份数", "copies"),
+    (r"(?:供应商|投标人|响应人|报价人)(?:的)?资格(?:要求|条件)", "qualification"),
+    (r"(?:首次)?(?:响应|报价)文件(?:的)?(?:递交|提交)(?:的)?截止时间", "deadline_bid"),
+    (r"质疑(?:与|和|及)?(?:澄清|答疑)?|澄清(?:与|和|及)质疑", "deadline_query"),
+    (r"(?:[一-鿿]{0,6})(?:质量)?保修期|质保期限?", "warranty"),
+    (r"(?:磋商|谈判|报价|响应)保证金", "bond"),
+    (r"评审(?:方法|办法)", "eval_method"),
+    (r"(?:响应|报价)文件(?:的)?(?:签署|签章|签字盖章)", "signing"),
+)
 _TOPIC = {t.key: t for t in TOPICS + DOCUMENT_TOPICS}
 
 
@@ -323,6 +337,9 @@ def document_topic(name: str) -> str:
             return "deadline_query"
     if re.fullmatch(r"答疑|澄清|质疑|提问|答疑澄清|澄清答疑|疑问提出", name):
         return "deadline_query"
+    for pattern, key in _DOCUMENT_ROW_NAMES:
+        if re.fullmatch(pattern, name):
+            return key
     if "资质条件" in name:
         return "qualification"
     for alias, key in _DOCUMENT_ALIASES:

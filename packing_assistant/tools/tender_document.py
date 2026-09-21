@@ -44,7 +44,8 @@ _FRONT_HEADER = ("条款号", "序号", "编号", "项号", "条款")   # local 
 _CONTRACT = re.compile(r"合同条款|合同条件|合同格式|Conditions of Contract", re.I)
 
 _REJECT = re.compile(r"否决其?投标|否决投标|作否决|被否决|予以否决|不予受理|不予接[收受]|予以拒收|拒收|拒绝接收|拒绝受理|无效投标|投标无效|按无效|"
-                     r"作无效|无效标|视为无效|废标|取消其?(?:投标|中标)资格|不予通过|不得参[加与](?:本项目|本次)?(?:的)?投标|"
+                     r"作无效|无效标|视为无效|无效响应|响应无效|无效报价|报价无效|废标|取消其?(?:投标|中标|成交|磋商)资格|不予通过|"
+                     r"不得(?:同时)?参[加与](?:本项目|本次|同一)?[^，,。；;]{0,8}(?:投标|磋商|谈判|报价|采购活动)|不得进入[^，,。；;]{0,6}(?:环节|阶段|评审)|"
                      r"shall be rejected|will be rejected|be disqualified|non-responsive", re.I)
 #: "投标文件有下列情形之一的，按无效投标处理：" - what follows, one item to a paragraph, is the list it announces
 _LIST_LEAD = re.compile(r"(?:下列|以下|如下)(?:情形|情况|行为|条件)?.{0,12}[：:]\s*$|[：:]\s*$")
@@ -53,7 +54,7 @@ _NOT_A_REJECTION = re.compile(r"否决所有投标|否决全部投标")
 _CITES = re.compile(r"第?\s*(\d+(?:\.\d+){1,3})\s*[项款条]")
 _OBLIGES = re.compile(r"须|必须|不得|应当|严禁|不允许|不接受")
 _STAR = re.compile(r"[★☆＊]")
-_FORM_LIST = re.compile(r"投标文件应包括下列内容|投标文件(?:由|应由)下列(?:部分|内容)(?:组成|构成)")
+_FORM_LIST = re.compile(r"(?:投标|响应|报价)文件应包括下列内容|(?:投标|响应|报价)文件(?:由|应由)(?:下列|以下)(?:部分|内容)(?:组成|构成)")
 _FORM_ITEM = re.compile(r"[（(]\s*\d+\s*[)）]\s*([^；;。（(]+)")
 _FORM_DIR = re.compile(r"(?:^|[；;：:])\s*[" + _CN + r"]+、\s*([^；;。]+)")
 _POINTS = re.compile(r"^\s*(\d+(?:\.\d+)?)\s*分\s*$")
@@ -114,8 +115,8 @@ def is_document(text: str) -> bool:
     if len(body) < 1500:
         return False
     chapters = {m.group(1) for line in body.splitlines() for m in [_CHAPTER.match(line.strip())] if m}
-    if len(chapters) >= 2:
-        return True
+    if len(chapters) >= 2 or len(body) >= 8000:
+        return True   # nobody types eight thousand characters: a long text is a file, whatever its headings look like
     return any(_TABLE_ROW.match(line.strip()) and "条款号" in line and ("条款名称" in line or "编列内容" in line)
                for line in body.splitlines())
 
@@ -301,11 +302,13 @@ def field_mentions(doc: Document):
                 break
     have = {m.topic for m in table}
     notice: List[tf.Mention] = []
-    for p in doc.chapter("第一章"):
+    # the notice; in a document with no chapters at all (an English ITT, a bare specification) every labelled line
+    noticed = doc.chapter("第一章") if any(p.chapter for p in doc.pieces) else doc.pieces
+    for p in noticed:
         if p.kind != "text":
             continue
         body = _LEAD_NUMBER.sub("", p.text)
-        found = re.match(r"([^：:；;，,。\s]{2,14})\s*[：:]\s*(.+)$", body)
+        found = re.match(r"([A-Za-z][A-Za-z .'/&-]{2,40}?|[^：:；;，,。\s]{2,14})\s*[：:]\s*(.+)$", body)
         if found:
             topic = tf.document_topic(found.group(1))
             if topic and topic not in tf._ALWAYS_OURS | tf._NO_SIDE | tf._STATEMENT_ONLY:
@@ -315,6 +318,15 @@ def field_mentions(doc: Document):
                 continue
         for topic, value in _strict_in_sentence(body):
             notice.append(tf.Mention(topic, "tender", "", value, p.text[:160], p.line, ref=p.ref))
+        # a sentence that is nothing but the statement of one field: "工期60日历天。", "★投标保证金人民币20万元。"
+        # Running text NEXT to a field word is not a field; a sentence that IS the field is.
+        plain = body.lstrip("★☆＊ ").rstrip("。；; ")
+        hits = tf._topic_hits(plain) if len(plain) <= 30 else []
+        if len(hits) == 1 and hits[0][0] <= 2 and hits[0][2] not in tf._ALWAYS_OURS | tf._NO_SIDE | tf._STATEMENT_ONLY:
+            kind = tf._TOPIC[hits[0][2]].kind
+            value = _document_value(hits[0][2], plain[hits[0][1]:], same_as=False) if kind in tf._KIND_RE else ""
+            if value and not any(n.topic == hits[0][2] and n.line == p.line for n in notice):
+                notice.append(tf.Mention(hits[0][2], "tender", "", value, p.text[:160], p.line, ref=p.ref))
     mentions = list(table)
     for m in notice:
         if m.topic not in have:
@@ -557,7 +569,7 @@ def forms(doc: Document) -> List[Tuple[str, Piece]]:
         seen.append(flat_name)
         out.append((name, piece))
 
-    composition = re.compile(r"投标文件的?(?:组成|构成)|投标文件由")
+    composition = re.compile(r"(?:投标|响应|报价)文件的?(?:组成|构成)|(?:投标|响应|报价)文件由")
     announced = False   # "投标文件由资格证明文件、商务技术文件、报价文件三部分组成：" - the lists follow, paragraph by paragraph
     for p in doc.pieces:
         if p.kind == "heading":
