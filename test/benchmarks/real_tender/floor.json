@@ -1,5 +1,5 @@
 {
-  "_note": "Regression floors for the real-tender documents and bid sets. All of them have been seen by the rules; a held-out item's first-run numbers are in README.md and are the ones to quote. cn_municipal first run (rules frozen at d2b71cf): fields 14/17, clause refs 1, rejections 12/22, scores 9/10, specials 2/2, forms 5/15. bid_cn_municipal first run (rules frozen at d767927): defects 6/6, false alarms 2/8. The :pdf entries run the committed PDF fixtures (first run of cn_municipal.pdf, layout rules frozen at a505c00: fields 17/17, rejections 21/22). The :ocr entries run the saved OCR readings (*.ocr.raw.txt, RapidOCR on 150-dpi scans) - the reading is fixed, what is guarded is everything done with it; first run of the municipal scan through the real OCR path (rules frozen at 8560c68): fields 13/17, rejections 21/22, scores 9/10, and two values cut short by a full-width thousands separator (￥200 for ￥200，000.00; 268.50万元 for 3，268.50万元). One rejection (Ⅱ级 read as ⅡI级) and one scoring row stay lost in that reading. cn_consultation first run (every rule frozen at 4142315): fields 10/16 with ONE WRONG (the 响应有效期's 90日历天 shown as the 工期), clause refs 9, rejections 6/18, scores 8/8, forms 5/10 - another procurement method has other words.",
+  "_note": "Regression floors for the real-tender documents and bid sets. All of them have been seen by the rules; a held-out item's first-run numbers are in README.md and are the ones to quote. cn_municipal first run (rules frozen at d2b71cf): fields 14/17, clause refs 1, rejections 12/22, scores 9/10, specials 2/2, forms 5/15. bid_cn_municipal first run (rules frozen at d767927): defects 6/6, false alarms 2/8. The :pdf entries run the committed PDF fixtures (first run of cn_municipal.pdf, layout rules frozen at a505c00: fields 17/17, rejections 21/22). The :ocr entries run the saved OCR readings (*.ocr.raw.txt, RapidOCR on 150-dpi scans) - the reading is fixed, what is guarded is everything done with it; first run of the municipal scan through the real OCR path (rules frozen at 8560c68): fields 13/17, rejections 21/22, scores 9/10, and two values cut short by a full-width thousands separator (￥200 for ￥200，000.00; 268.50万元 for 3，268.50万元). One rejection (Ⅱ级 read as ⅡI级) and one scoring row stay lost in that reading. cn_consultation first run (every rule frozen at 4142315): fields 10/16 with ONE WRONG (the 响应有效期's 90日历天 shown as the 工期), clause refs 9, rejections 6/18, scores 8/8, forms 5/10 - another procurement method has other words. cn_selection first run (every rule frozen at f7a7e39, the weak-signal net in place): fields 10/15 (wrong 0), clause refs 9, rejection list 4/18 - with the net 16/18 at a net size of 12 -, scores 7/7, forms 4/8.",
   "documents": {
     "cn_construction": {
       "fields_right": 18,
@@ -70,6 +70,16 @@
       "scores": 8,
       "specials": 0,
       "forms": 10
+    },
+    "cn_selection": {
+      "fields_right": 15,
+      "fields_wrong": 0,
+      "fields_ambiguous": 0,
+      "clause_refs": 15,
+      "rejections": 17,
+      "scores": 7,
+      "specials": 0,
+      "forms": 8
     }
   },
   "bids": {
