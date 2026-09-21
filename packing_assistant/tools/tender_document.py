@@ -557,14 +557,43 @@ def response_values(text: str, title: str):
     found = []
     seen: set = set()
     line_no = 0
+    header: List[str] = []
     for raw in (text or "").splitlines():
         line = raw.strip()
         if not line:
+            header = []
             continue
         line_no += 1
         if _TABLE_ROW.match(line):
-            cells = [c for c in _cells(line) if c and not _RULER.fullmatch(c)]
-            line = "：".join(cells[:2]) + ("，" + "，".join(cells[2:]) if len(cells) > 2 else "")
+            cells = _cells(line)
+            if all(_RULER.fullmatch(c) for c in cells if c):
+                continue
+            if not header:
+                header = cells   # 报价一览表: the field words are the column names, the values stand under them
+                continue
+            pairs = [(cells[i], cells[i + 1]) for i in range(len(cells) - 1)]          # 项目经理 | 周建华
+            pairs += [(header[i], cells[i]) for i in range(min(len(header), len(cells)))]  # 工期（日历天） over 200
+            for label, body in pairs:
+                topic = tf.document_topic(re.sub(r"[（(][^）)]*[)）]", "", label)) if label and body and "____" not in body else ""
+                if topic not in _OUR_TOPICS:
+                    continue
+                if topic in ("pm", "tech_lead"):
+                    value = tf._person(body) if len(body) <= 12 else ""
+                elif topic == "our_price":
+                    money = tf._MONEY.search(body) or re.fullmatch(r"[¥￥]?\s*\d[\d,]*(?:\.\d+)?", body)
+                    value = money.group(0).strip() if money else ""
+                elif topic == "quality":
+                    value = body if len(body) <= 12 else ""
+                else:
+                    kind = tf._TOPIC[topic].kind
+                    match = tf._KIND_RE[kind].search(body) if kind in tf._KIND_RE else None
+                    unit = re.search(r"[（(]([^）)]+)[)）]", label)
+                    value = (match.group(0).strip() if match else
+                             f"{body}{unit.group(1)}" if (unit and re.fullmatch(r"\d+(?:\.\d+)?", body)) else "")
+                if value:
+                    _keep(found, seen, tf.Mention(topic, "ours", "", value, line[:160], line_no, origin=title))
+            continue
+        header = []
         for sentence in re.split(r"[。；;]", line):
             price = _OUR_PRICE_BEFORE.search(sentence) or _OUR_PRICE.search(sentence)
             if price and "____" not in sentence:
