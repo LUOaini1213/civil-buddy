@@ -57,7 +57,7 @@ Build a Windows source-plus-executable package after committing distribution sou
 
 ```powershell
 python scripts/build_unified_release.py --version 0.5.0-preview --binary workbench/target/release/civil-workbench.exe --output-dir dist
-python scripts/build_unified_release.py --verify dist/civil-buddy-unified-workbench-0.5.0-preview-windows-x64.zip
+python scripts/build_unified_release.py --verify dist/civil-buddy-unified-workbench-0.5.0-preview-windows-x86_64.zip
 ```
 
 Use the actual filename printed by the builder for verification. The package includes a supplied Windows executable and the allowlisted source/assets; Python and optional dependencies are installed separately in a local virtual environment. No provider credentials, personal project records or generated outputs are packaged. Each file and the archive have SHA-256 checksums.

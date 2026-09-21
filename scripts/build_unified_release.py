@@ -28,6 +28,7 @@ EXTRA = (
     "workbench/Cargo.toml", "workbench/Cargo.lock",
     "scripts/build_workbench_release.py", "scripts/build_unified_release.py",
     "docs/civil-buddy/architecture/implementation.md",
+    "docs/civil-buddy/acceptance/2026-09-21.json",
     "docs/civil-buddy/architecture/civil-buddy-rust-architecture.md",
     "docs/civil-buddy/architecture/civil-buddy-document-skills.md",
     "docs/civil-buddy/architecture/civil-buddy-agent-infra.md",
