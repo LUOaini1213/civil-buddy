@@ -170,7 +170,7 @@ export function createTurnStream(deps) {
         /* ux(round11)：流式收口才播报一行（只抄事件字段，不刷屏，附录 J） */
         ui.announce(data.cancelled ? "任务已停止，已有结果已保留。" : hitl.pending(data) ? "等待签认：请在审批卡键入完整签认句后确认。" : data.ok === false ? "本轮未完成：请查看时间线和工具结果。" : "回答完毕" + (Array.isArray(data.deliverables) && data.deliverables.length ? " · 文书 " + data.deliverables.length + " 份" : ""));
         v.acc = data.text || v.acc;
-        bodyEl.textContent = v.acc;
+        if (typeof turnUi.markdown === "function") turnUi.markdown(bodyEl, v.acc); else bodyEl.textContent = v.acc;
         const whoEl = bodyEl.parentElement && bodyEl.parentElement.querySelector(".who");
         if (whoEl) whoEl.textContent = turnUi.skillWho(data.skill || data.expert || "", data.skill_source || "");
         if (v.acc && !v.recorded) {

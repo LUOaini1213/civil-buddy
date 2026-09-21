@@ -122,6 +122,25 @@ function cbReleaseWatch() { return watch.releaseWatch(); }
 async function cbWatchSession(sid, opts) { return watch.watchSession(sid, opts); }
 function cbPaintRecovered(d, options) { return watch.paintRecovered(d, options); }
 
+/* 回答收口后按 Markdown 画（标题、列表、表格、代码），流式期间仍是纯文本。
+   渲染器来自 docpreview.js（marked + 白名单清洗）；没有它就退回纯文本。history 里存的始终是原文。 */
+function cbPaintMarkdown(bodyEl, text) {
+  if (!bodyEl) return;
+  const render = typeof window.cbDocRenderMarkdown === "function" ? window.cbDocRenderMarkdown : null;
+  const raw = String(text || "");
+  if (!render || !/(^|\n)\s*(#{1,6}\s|[-*+]\s|\d+\.\s|\|.*\||```|>\s)|`[^`]+`|\*\*[^*]+\*\*/.test(raw)) {
+    bodyEl.textContent = raw;
+    if (bodyEl.classList) bodyEl.classList.remove("md");
+    return;
+  }
+  let el = null;
+  try { el = render(raw); } catch (e) { el = null; }
+  if (!el) { bodyEl.textContent = raw; return; }
+  bodyEl.textContent = "";
+  bodyEl.appendChild(el);
+  if (bodyEl.classList) bodyEl.classList.add("md");
+}
+
 /* 页面上唯一的可见提示条（modules/toast.js）：一次一条，6 s 自己消失，可带一个动作按钮。 */
 const toast = createToast({ doc: document, announce: (text) => cbAnnounce(text) });
 function cbToast(text, opts) { return toast(text, opts); }
@@ -141,6 +160,7 @@ const watch = createSessionWatch({
   appendDocCards: (files, bodyEl, opts) => appendDocCards(files, bodyEl, opts),
   setLastDeliverables: (files) => { cbLastDeliverables = files; },
   refreshAuditSoon: () => refreshAuditSoon(),
+  markdown: (bodyEl, text) => cbPaintMarkdown(bodyEl, text),
   capability: (name) => cbCapability(name),
   fetch: (url, init) => fetch(url, init),
   doc: document,
@@ -600,6 +620,7 @@ const nav = createSessionNav({
     routePaint: (route, bodyEl, message) => cbTaskRoutePaint(route, bodyEl, message),
     collaborationPaint: (data, bodyEl) => cbCollaborationPaint(data, bodyEl),
     setLastDeliverables: (files) => { cbLastDeliverables = files; },
+    markdown: (bodyEl, text) => cbPaintMarkdown(bodyEl, text),
   },
   hooks: {
     render: () => cbProjRender(),
@@ -1284,6 +1305,7 @@ const turns = createTurnStream({
     skillWho: (id, source) => skillWho(id, source),
     namesOrPlain: () => namesOrPlain(),
     setLastDeliverables: (files) => { cbLastDeliverables = files; },
+    markdown: (bodyEl, text) => cbPaintMarkdown(bodyEl, text),
   },
   projectId: () => cbProj.cur || "",
   loadThreads: () => loadThreads(),
@@ -3873,3 +3895,8 @@ if (window.visualViewport) {
    一个明确的窗口面，而不是把几百个函数都挂到 window 上。 */
 window.reloadCatalog = reloadCatalog;
 window.__cb = Object.freeze({ state, runState, cbCapability, cbAttachUpload, cbProjOpenSession, cbNewLocalSession, uploads, drafts, turns, deliverables, watch, nav });
+
+/* 离线壳：有 service worker 的浏览器把页面、脚本、样式留一份，断网也能打开上一次的界面；/api/ 不缓存。 */
+if ("serviceWorker" in navigator && typeof navigator.serviceWorker.register === "function") {
+  navigator.serviceWorker.register("/sw.js").catch(() => { /* 非安全上下文（http://LAN 地址）或被禁用：照常工作 */ });
+}

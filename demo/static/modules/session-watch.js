@@ -185,11 +185,12 @@ export function createSessionWatch(deps) {
     const text = last ? String(last.text || "") : "";
     const bodyEl = options.bodyEl && options.bodyEl.isConnected ? options.bodyEl : null;
     if (bodyEl) {
-      if (text) bodyEl.textContent = text;
+      if (text) { if (typeof deps.markdown === "function") deps.markdown(bodyEl, text); else bodyEl.textContent = text; }
       const known = state.history.filter((h) => h.role === "assistant").slice(-1)[0];
       if (text && (!known || known.content !== text)) state.history.push({ role: "assistant", content: text });
     } else if (text && !state.history.some((h) => h.role === "assistant" && h.content === text)) {
       const el = addMsg("assistant", "岗位", text);
+      if (typeof deps.markdown === "function") deps.markdown(el, text);
       state.history.push({ role: "assistant", content: text });
       options.bodyEl = el;
     }

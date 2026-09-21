@@ -131,6 +131,13 @@ def _version_static_links(html: str) -> str:
     return re.sub(r'(/static/[^"\'?\s]+\.(?:js|css))(\?v=[^"\'\s]*)?', stamp, html)
 
 
+@app.get("/sw.js")
+def service_worker() -> FileResponse:
+    """The service worker must be served from the root to control "/"; never cached stale."""
+    return FileResponse(STATIC / "sw.js", media_type="application/javascript",
+                        headers={"Cache-Control": "no-cache", "Service-Worker-Allowed": "/"})
+
+
 @app.get("/")
 def index() -> HTMLResponse:
     html = (STATIC / "index.html").read_text(encoding="utf-8")
@@ -670,43 +677,77 @@ def context_source(session_id: str, source_id: str, start: int = 0, end: int = 8
 
 
 @app.get("/api/sessions/{sid}/export")
-def session_export(sid: str) -> Response:
+def session_export(sid: str):
+    """The backup zip is written to a temp file and streamed from there; nothing bigger than
+    one attachment is held in memory."""
+    import tempfile
+
+    from starlette.background import BackgroundTask
+
     from chat_service import SessionBusy, SessionLease, valid_session
     from session_bundle import export_session
+
     lease = None
+    tmp = None
     try:
         valid_session(sid)
         lease = SessionLease(sid)
-        content = export_session(OUT_ROOT, sid)
-        return Response(content, media_type="application/zip", headers={
-            "Content-Disposition": f'attachment; filename="civil-task-{sid}.zip"',
-        })
+        fd, tmp = tempfile.mkstemp(prefix="civil-export-", suffix=".zip", dir=str(OUT_ROOT))
+        os.close(fd)
+        export_session(OUT_ROOT, sid, tmp)
+        return FileResponse(tmp, media_type="application/zip", filename=f"civil-task-{sid}.zip",
+                            background=BackgroundTask(_unlink_quietly, tmp))
     except SessionBusy as exc:
         raise HTTPException(409, "当前任务正在运行，请停止或等待完成后备份") from exc
     except (ValueError, OSError) as exc:
+        _unlink_quietly(tmp)
         raise HTTPException(400, "备份失败：" + str(exc)) from exc
+    except Exception:
+        _unlink_quietly(tmp)
+        raise
     finally:
         if lease:
             lease.release()
 
 
+def _unlink_quietly(path) -> None:
+    if not path:
+        return
+    try:
+        Path(path).unlink(missing_ok=True)
+    except OSError:
+        pass
+
+
 @app.post("/api/session-import")
 async def session_import(request: Request) -> dict:
-    from session_bundle import MAX_BYTES, BundleError, import_session
+    """The upload is spooled to a temp file chunk by chunk (128 MB cap counted on the way in),
+    then imported from disk."""
+    import tempfile
+
     from starlette.concurrency import run_in_threadpool
-    data = bytearray()
-    async for chunk in request.stream():
-        if len(data) + len(chunk) > MAX_BYTES:
-            raise HTTPException(413, "备份包不能超过 128 MB")
-        data.extend(chunk)
+
+    from session_bundle import MAX_BYTES, BundleError, import_session
+
+    OUT_ROOT.mkdir(parents=True, exist_ok=True)
+    fd, tmp = tempfile.mkstemp(prefix="civil-import-", suffix=".zip", dir=str(OUT_ROOT))
+    received = 0
     try:
-        return await run_in_threadpool(import_session, OUT_ROOT, bytes(data))
+        with os.fdopen(fd, "wb") as fh:
+            async for chunk in request.stream():
+                received += len(chunk)
+                if received > MAX_BYTES:
+                    raise HTTPException(413, "备份包不能超过 128 MB")
+                fh.write(chunk)
+        return await run_in_threadpool(import_session, OUT_ROOT, Path(tmp))
     except BundleError as exc:
         raise HTTPException(400, str(exc)) from exc
     except PermissionError as exc:
         raise HTTPException(403, "当前模式或目录权限不允许导入任务") from exc
     except OSError as exc:
         raise HTTPException(500, "导入失败，请检查工作台目录空间和权限") from exc
+    finally:
+        _unlink_quietly(tmp)
 
 
 class SessionPatchIn(BaseModel):
@@ -867,6 +908,8 @@ def chat(body: ChatIn):
 
 
 def _sse(ev: dict) -> str:
+    if ev["event"] == "heartbeat":
+        return ": ping\n\n"  # keeps the connection (and the disconnect probe) alive without a JSON event to parse
     head = f"id: {ev['seq']}\n" if ev.get("seq") else ""
     return f"{head}event: {ev['event']}\ndata: {json.dumps(ev['data'], ensure_ascii=False)}\n\n"
 

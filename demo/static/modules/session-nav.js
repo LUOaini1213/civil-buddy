@@ -288,6 +288,7 @@ export function createSessionNav(deps) {
         reset.hideWelcome();
         for (const t of state.history) {
           const body = addMsg(t.role === "user" ? "user" : "assistant", t.role === "user" ? "你" : "岗位", t.content);
+          if (t.role !== "user" && typeof paint.markdown === "function") paint.markdown(body, t.content);
           if (t.role === "assistant") restoredBody = body;
           else restoredMessage = t.content;
         }
