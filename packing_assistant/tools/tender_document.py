@@ -537,6 +537,103 @@ def forms(doc: Document) -> List[Tuple[str, Piece]]:
     return out
 
 
+#: fields whose value in OUR documents can be set against the tender's and against one another
+_OUR_TOPICS = ("duration", "validity", "warranty", "bond", "our_price", "quality", "pm", "tech_lead", "project", "tender_no")
+_OUR_PRICE = re.compile(r"(?:投标总报价|投标报价|投标总价|总报价|报价)[^，,；;。]{0,24}?(?:[¥￥]\s*)?(\d[\d,，]*(?:\.\d+)?\s*(?:万元|亿元|元))")
+_OUR_PRICE_BEFORE = re.compile(r"[¥￥]\s*(\d[\d,，]*(?:\.\d+)?\s*(?:万元|亿元|元)?)[）)]?\s*的?(?:投标总报价|投标报价|投标总价|总报价)")
+_STAGE = re.compile(r"阶段|节点|其中|里程碑|分部|单体|楼栋|每层|标准层")
+_QUALITY_WORD = re.compile(r"(?:工程)?质量(?:标准|目标|等级|要求)?\s*(?:达到|为|：|:|承诺)?\s*(合格|优良|优质工程|优质)")
+_CONTINUES = re.compile(r"^(?:金额|总额|数额|额度|期限|时间)?\s*(?:为|即|共计?|计|：|:)")
+
+
+def response_values(text: str, title: str):
+    """What one of our own documents says about the fields a tender lays down: [Mention(side="ours", origin=title)].
+
+    A bid document is ours from its first word to its last, so no cue is looked for. It is also long and full
+    of numbers, so a value counts only when it stands in the same clause as its field word - "其中基础阶段120日历天"
+    is a stage, not the 工期 - and nothing is carried from one clause to the next."""
+    from packing_assistant.tools import tender_facts as tf
+
+    found = []
+    seen: set = set()
+    line_no = 0
+    for raw in (text or "").splitlines():
+        line = raw.strip()
+        if not line:
+            continue
+        line_no += 1
+        if _TABLE_ROW.match(line):
+            cells = [c for c in _cells(line) if c and not _RULER.fullmatch(c)]
+            line = "：".join(cells[:2]) + ("，" + "，".join(cells[2:]) if len(cells) > 2 else "")
+        for sentence in re.split(r"[。；;]", line):
+            price = _OUR_PRICE_BEFORE.search(sentence) or _OUR_PRICE.search(sentence)
+            if price and "____" not in sentence:
+                _keep(found, seen, tf.Mention("our_price", "ours", "", price.group(1).replace("，", ",").strip(), sentence.strip()[:160], line_no, origin=title))
+            quality = _QUALITY_WORD.search(sentence)
+            if quality and "____" not in sentence:
+                _keep(found, seen, tf.Mention("quality", "ours", "", quality.group(1), sentence.strip()[:160], line_no, origin=title))
+            clauses = [c.strip() for c in re.split(r"[，,]", sentence)]
+            for index, clause in enumerate(clauses):
+                if not clause or "____" in clause:
+                    continue
+                following = clauses[index + 1] if index + 1 < len(clauses) else ""
+                for start, end, topic in tf._topic_hits(clause):
+                    if topic not in _OUR_TOPICS or topic in ("our_price", "quality"):
+                        continue
+                    rest = clause[end:]
+                    if topic in ("pm", "tech_lead"):
+                        value = tf._person_adjacent(rest)
+                    elif topic == "duration" and _STAGE.search(clause):
+                        continue
+                    else:
+                        kind = tf._TOPIC[topic].kind
+                        match = tf._KIND_RE[kind].search(rest) if kind in tf._KIND_RE else None
+                        value = match.group(0).strip() if (match and match.start() <= 12) else ""
+                        if not value and kind in tf._KIND_RE and _CONTINUES.match(following):
+                            # "提交投标保证金一份，金额为人民币80万元": the clause right after says how much
+                            after = tf._KIND_RE[kind].search(following)
+                            value = after.group(0).strip() if (after and after.start() <= 12) else ""
+                        if not value and kind == "text" and topic == "quality":
+                            grade = re.search(r"合格|优良|优质", rest[:16])
+                            value = grade.group(0) if grade else ""
+                        if not value and kind == "code":
+                            code = tf._DOC_CODE.search(rest[:40])
+                            value = code.group(0) if code else ""
+                    if value:
+                        _keep(found, seen, tf.Mention(topic, "ours", "", value, sentence.strip()[:160], line_no, origin=title))
+    return found
+
+
+def _keep(found: list, seen: set, mention) -> None:
+    key = (mention.topic, _flat(mention.value), mention.origin)
+    if key not in seen:
+        seen.add(key)
+        found.append(mention)
+
+
+def consistency(mentions: Sequence) -> List[Dict[str, object]]:
+    """Fields our own files do not agree on: [{topic, label, values: [(value, file)], same}]. Only fields that
+    at least two files speak of, or one file speaks of twice with different values."""
+    from packing_assistant.tools import tender_facts as tf
+
+    by_topic: Dict[str, List] = {}
+    for m in mentions:
+        by_topic.setdefault(m.topic, []).append(m)
+    rows: List[Dict[str, object]] = []
+    for topic, items in by_topic.items():
+        values = list(dict.fromkeys((_flat(m.value), m.value, m.origin) for m in items))
+        distinct = {v[0] for v in values}
+        if len(values) < 2:
+            continue
+        rows.append({"topic": topic, "label": tf._TOPIC[topic].label, "values": [(v[1], v[2]) for v in values], "same": len(distinct) == 1})
+    return rows
+
+
+def found_in(texts: Sequence[Tuple[str, str]], words: Sequence[str]) -> List[str]:
+    """The titles of the files in which any of ``words`` occurs, letter for letter after folding whitespace."""
+    return [title for title, text in texts if any(_flat(w) and _flat(w) in _flat(text) for w in words)]
+
+
 def summary(doc: Document) -> Dict[str, int]:
     return {"chars": doc.chars, "lines": doc.lines, "chapters": len({p.chapter for p in doc.pieces if p.chapter}),
             "front_rows": len(front_rows(doc)), "rejections": len(rejections(doc)), "obligations": len(obligations(doc)),

@@ -475,7 +475,9 @@ def tech_outline(handoff: Optional[Mapping[str, Any]], *, project_name: str = "�
         chapters.append({"n": n, "title": title, "source_ref": _source(s), "note": "要点：待按招标原文扩写 · 条款 [UNSPECIFIED]"})
         score_rows.append([original, f"第{n}章 {title}", proof, "正文待按评分细则扩写；分值未核验", interface])
         noted.append(re.sub(r"\s+", "", str(s.get("note") or "")))
-    for p in ho.get("scoring_points") or []:
+    # a document's scoring rows come from its scoring table (facts); the parser's line items also hold every line
+    # with a "分" in it - "9时30分" - and would each become a chapter
+    for p in (ho.get("scoring_points") or []) if not ho.get("document") else []:
         flat = re.sub(r"\s+", "", str(p.get("text") or ""))
         if not flat or any(x and (x in flat or flat in x) for x in noted):
             continue
@@ -495,7 +497,7 @@ def tech_outline(handoff: Optional[Mapping[str, Any]], *, project_name: str = "�
                          "note": "招标点名专项：目录须有章；数值待填。禁止写已论证/可开工。"})
         special_rows.append([_with_lot(str(s.get("name")), lot), str(s.get("detail") or TBD), _source(s), f"第{n}章；专项正文交施工方案岗"])
         special_notes.append(re.sub(r"\s+", "", str(s.get("note") or "")))
-    for p in doc_specials:
+    for p in doc_specials if not ho.get("document") else []:
         flat = re.sub(r"\s+", "", str(p.get("text") or ""))
         if not flat or any(x and (x in flat or flat in x) for x in special_notes):
             continue
@@ -673,7 +675,7 @@ _MATCHER_TOPICS = {"duration": ("duration", "delivery"), "delivery": ("delivery"
 
 
 def _answer_from_documents(topic: str, need_value: str, comparison: Optional[Sequence[Mapping[str, Any]]],
-                           tender: Optional[Facts] = None) -> Dict[str, Any]:
+                           tender: Optional[Facts] = None, *, named: bool = False) -> Dict[str, Any]:
     """What the response documents say to this requirement: the quotes and the numeric conflicts that are
     about this field. The comparison row may be a whole sentence holding several requirements - a conflict
     about 工期 found in it says nothing about 投标有效期."""
@@ -688,7 +690,9 @@ def _answer_from_documents(topic: str, need_value: str, comparison: Optional[Seq
             continue
         others = [re.sub(r"\s+", "", str(m.get("value") or "")) for m in (tender or {}).get("mentions") or []
                   if m.get("side") == "tender" and m.get("topic") != topic and m.get("value")]
-        alone = not any(v and v in text for v in others)  # the sentence is this one requirement and nothing else
+        # the sentence is this one requirement and nothing else. In a real document that is no licence: the
+        # 资质 row was "answered" by the project manager's certificate. There the quote has to name the field.
+        alone = not named and not any(v and v in text for v in others)
         conflicts = [c for c in row.get("conflicts") or [] if c.get("topic") in mine]
         quotes = [str(e.get("quote")) for e in row.get("response_evidence") or []
                   if alone or any(a in str(e.get("quote")) for a in aliases)]
@@ -720,7 +724,8 @@ def compliance_gaps(handoff: Optional[Mapping[str, Any]], matrix: Optional[Mappi
                     ours: Optional[Facts] = None, comparison: Optional[Sequence[Mapping[str, Any]]] = None,
                     disclaimer: str = "", unreadable: Optional[Sequence[Mapping[str, Any]]] = None,
                     evidence: Optional[Sequence[Mapping[str, Any]]] = None,
-                    checked: Optional[Sequence[Mapping[str, Any]]] = None) -> str:
+                    checked: Optional[Sequence[Mapping[str, Any]]] = None,
+                    responses: Optional[Sequence[Mapping[str, Any]]] = None) -> str:
     """``handoff`` carries what the tender asks (its ``facts``); ``ours`` is what this turn said of our side.
 
     When the same text held both, the two are the same dict. ``comparison`` is
@@ -734,8 +739,24 @@ def compliance_gaps(handoff: Optional[Mapping[str, Any]], matrix: Optional[Mappi
     occurs, never that the document is genuine or in force.
     ``checked`` - ``[{title, sha256}]``, the texts this check read (tools/bid_check_record.py). The draft
     names them, so that whoever reads it later can tell which version it is about.
+    ``responses`` - ``[{title, text}]``, our own bid documents. When the tender is a document (handoff
+    ``document``) they are read field by field (tools/tender_document.response_values): every file's value
+    stands in the row with the file's name, each is set against the tender's, and section 9 lists the
+    fields our own files do not agree on - 540 in the bid letter, 560 in the method statement.
     """
     ho = handoff or {}
+    document = ho.get("document") or {}
+    if document and isinstance(ho.get("facts"), dict):
+        ho = {**ho, "facts": {**ho["facts"], "document_mode": True}}
+    own_files = [r for r in responses or [] if isinstance(r, Mapping) and str(r.get("text") or "").strip()]
+    inconsistent: List[Row] = []
+    if document and own_files and ours is None:
+        from packing_assistant.tools import tender_document
+
+        said = [m for r in own_files for m in tender_document.response_values(str(r["text"]), str(r.get("title") or "未命名"))]
+        ours = {"mentions": [{"topic": m.topic, "label": m.label, "side": "ours", "lot": "", "value": m.value, "note": m.note,
+                              "line": m.line, "origin": m.origin} for m in said], "scores": [], "specials": [], "lots": []}
+        inconsistent = [dict(row) for row in tender_document.consistency(said)]
     unread = _unread(ho, unreadable)
     may_answer = _unread_names(unread, ("response", "reference"))
     evidence = [e for e in evidence or [] if isinstance(e, Mapping) and str(e.get("text") or "").strip()]
@@ -791,7 +812,9 @@ def compliance_gaps(handoff: Optional[Mapping[str, Any]], matrix: Optional[Mappi
                     lot = str(m.get("lot") or "")
                     rows.append([_with_lot(str(m.get("role") or "其他人员"), lot), NO_TENDER_TEXT, _clip(_value_cell(m)), NO_TENDER_TEXT,
                                  "补招标文件对该岗位的要求原文（证书、专职、在岗）后再对照", _owner_for(ours, lot)])
-        if title.startswith("5 "):
+        if title.startswith("5 ") and not document:
+            # a document's clauses are a checklist of their own (section 10); matching each of them against the
+            # sentence of ours that shares the most words with it produced sixty rows of noise on a real tender
             rows += _comparison_rows(comparison, tender, open_items, unread=may_answer)
         md += [f"## {title}", ""]
         md += _table(GAP_HEADER, rows) or ["本节无招标要求原文，也无我方说法。", ""]
@@ -805,8 +828,30 @@ def compliance_gaps(handoff: Optional[Mapping[str, Any]], matrix: Optional[Mappi
         if not s.get("not_given"):
             tech_rows.append([_with_lot("点名专项", str(s.get("lot") or "")), _clip(f"{s.get('name')} {s.get('detail') or ''}".strip()),
                               "未提供专项目录", NOT_RESPONDED, "技术标须单列专项章节", _owner_for(ours, str(s.get("lot") or ""))])
+    if document and own_files:
+        # is the item so much as named in our files? Wording only - whether the chapter is any good is for a person.
+        from packing_assistant.tools.tender_document import found_in
+
+        texts = [(str(r.get("title") or "未命名"), str(r["text"])) for r in own_files]
+        tech_rows = []
+        for s in tender.get("scores") or []:
+            name = str(s.get("name") or "")
+            where = found_in(texts, [name]) if name else []
+            tech_rows.append([_with_lot("评分点", str(s.get("lot") or "")), f"{name} {s.get('score')}".strip(),
+                              ("出现于：" + "、".join(where)) if where else "我方文件中未检出该字样", RESPONDED if where else NOT_RESPONDED,
+                              "字样出现不代表章节合格；对照评分细则核内容" if where else "对照评分细则确认由哪份文件响应、章节名是否对应", _owner_for(ours, "")])
+            if not where:
+                open_items.append(f"评分点「{name}」：我方文件中未检出该字样")
+        for s in tender.get("specials") or []:
+            name = str(s.get("name") or "")
+            core = re.sub(r"专项施工方案|专项方案|专项", "", name)
+            where = found_in(texts, [name, core]) if core else []
+            tech_rows.append(["点名专项", _clip(f"{name} {s.get('detail') or ''}".strip()), ("出现于：" + "、".join(where)) if where else "我方文件中未检出该字样",
+                              RESPONDED if where else NOT_RESPONDED, "核专项章节内容与参数" if where else "招标文件点名的专项，技术标须单列章节", _owner_for(ours, "")])
+            if not where:
+                open_items.append(f"点名专项「{name}」：我方文件中未检出，技术标须单列章节")
     noted = [re.sub(r"\s+", "", str(s.get("note") or "")) for s in (tender.get("scores") or []) + (tender.get("specials") or [])]
-    for key, label in (("scoring_points", "评分点"), ("specials", "专项")):
+    for key, label in (("scoring_points", "评分点"), ("specials", "专项")) if not document else ():
         for p in ho.get(key) or []:
             flat = re.sub(r"\s+", "", str(p.get("text") or ""))
             if flat and not any(x and (x in flat or flat in x) for x in noted):
@@ -817,6 +862,27 @@ def compliance_gaps(handoff: Optional[Mapping[str, Any]], matrix: Optional[Mappi
             row[2], row[3], row[4] = f"未读出：{_clip(may_answer, 30)}", UNKNOWN, "技术标可能就在未读出的文件里；" + row[4]
     md += _table(GAP_HEADER, tech_rows) or ["招标要求里未检出评分点或点名专项。", ""]
 
+    extra: List[str] = []
+    if document:
+        extra += ["## 9 投标文件内部一致性", ""]
+        if not own_files:
+            extra += ["未提供我方投标文件，无法核对。", ""]
+        elif not inconsistent:
+            extra += ["我方各文件里能读到的字段（工期、有效期、报价、项目经理…）没有出现两种写法；只有一个文件写到的字段不在此列。", ""]
+        else:
+            rows9 = []
+            for row in inconsistent:
+                shown = "；".join(f"{value}（{file}）" for value, file in row["values"])
+                rows9.append([str(row["label"]), _clip(shown, 160), "一致" if row["same"] else "**不一致**",
+                              "—" if row["same"] else "同一字段在我方文件里有两种写法：递交前统一，并核对哪个是对的"])
+                if not row["same"]:
+                    open_items.append(f"投标文件内部不一致·{row['label']}：{shown}")
+            extra += _table(("事项", "各文件写法", "是否一致", "说明"), rows9)
+        requirements_list = [r for r in (ho.get("rejection_clauses") or [])]
+        extra += ["## 10 否决与拒收条款自查清单", "",
+                  "招标文件里每一句会让投标被否决、拒收或按无效处理的话。工具不判断是否触发，逐条人工自查后打勾。", ""]
+        extra += _table(("序号", "条款原文", "来源", "自查"), [[str(n), _clip(r.get("text"), 160), str(r.get("locator") or "—"), "□"]
+                                                        for n, r in enumerate(requirements_list, 1)]) or ["未检出——请人工核对评标办法一章。", ""]
     md += ["## 7 澄清与补证", ""]
     md += [f"- {item}" for item in open_items] or ["- （本轮没有可列的缺口：要么资料不足，要么要求与响应逐项对上，仍须人工核验原件）"]
     p0 = (ho.get("p0_reject_scan") or {}).get("items") or []
@@ -829,6 +895,8 @@ def compliance_gaps(handoff: Optional[Mapping[str, Any]], matrix: Optional[Mappi
     if summary:
         md += ["", f"- 解析矩阵：{summary.get('n', 0)} 条要求，其中须人工 {summary.get('human_required', 0)}、待核 {summary.get('review', 0)}。"]
     md += _unplaced(ours)
+    if extra:
+        md += [""] + extra
     if evidence:
         md += ["", "## 8 证据文件字样核对", "",
                "只查我方写的字样在所给证据文件里出现没有。出现不代表证件真实、在有效期内或属于本人；没出现也可能只是文件是扫描件。", ""]
@@ -906,13 +974,25 @@ def _gap_rows(topic: str, tender: Facts, ours: Facts, lots: List[str], open_item
             NOT_WRITTEN if any(m.get("not_given") for m in needs) else (_clip(needs[0].get("note")) if needs else NO_TENDER_TEXT))
         have_value = next((str(m["value"]) for m in haves if m.get("value")), "")
         have_cell = "；".join(dict.fromkeys(_clip(_value_cell(m)) for m in haves)) if haves else "未提供"
-        if len(have_cell) > CELL and have_value:
+        filed = [m for m in haves if m.get("origin") and m.get("value")]
+        if filed:  # our own documents: the value and the file it stands in
+            have_cell = _clip("；".join(dict.fromkeys(f"{m['value']}（{m['origin']}）" for m in filed)), 160)
+        if len(have_cell) > CELL and have_value and not filed:
             # too long with the clauses: keep every value, drop the clauses - never a value for room
             have_cell = "；".join(dict.fromkeys(str(m["value"]) for m in haves if m.get("value")))
         pending = any(_PENDING.search(str(m.get("note") or "")) for m in haves)
         mismatch = _price_gap(str(need["value"]), have_value) if (topic == "price_cap" and need) else _numeric_gap(topic, str(need["value"]) if need else "", have_value)
+        if filed and need:  # each file's value against the tender's, not only the first
+            notes = []
+            for m in filed:
+                note = (_price_gap(str(need["value"]), str(m["value"])) if topic == "price_cap"
+                        else _numeric_gap(topic, str(need["value"]), str(m["value"])))
+                if note:
+                    notes.append(f"{m['origin']}：{note}")
+            mismatch = "；".join(dict.fromkeys(notes))
         # response documents (the workflow's role-tagged sources) answer a field row as well
-        answered = _answer_from_documents(topic, str(need["value"]), comparison, tender) if (need and not haves) else {"quotes": [], "conflicts": []}
+        answered = (_answer_from_documents(topic, str(need["value"]), comparison, tender, named=bool(tender.get("document_mode")))
+                    if (need and not haves) else {"quotes": [], "conflicts": []})
         quotes = answered["quotes"]
         if quotes:
             have_cell = _clip("；".join(quotes), 120)

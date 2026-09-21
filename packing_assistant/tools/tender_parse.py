@@ -780,6 +780,9 @@ def parse_tender_text(text: str, *, source: str = "text", sides: str = "auto") -
         handoff["unreadable"] = unread
     if document is not None:
         handoff["document"] = document
+        handoff["rejection_clauses"] = [{"text": r.get("display") or r.get("exact_text"), "locator": r.get("locator") or r.get("requirement_ref"),
+                                         "star": r.get("item_kind") == "star"}
+                                        for r in requirements if r.get("category") == "reject" and r.get("item_kind") in ("reject_clause", "star")]
 
     return {
         "schema": "tender.parse.v1",

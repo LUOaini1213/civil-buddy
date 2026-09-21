@@ -393,8 +393,19 @@ def run_tender_workflow(text, *, session_id, output_root, sources=None, confirme
                 data["response_sources"] = [s for s in source_pointers if s.get("role") == "response"]
             messages = worker_messages(skill, "按工具交接编制技术响应提纲" if skill == "bid-tech" else "逐项检查响应依据与缺项", data)
             contexts[skill] = messages
-            ledger.reserve(child["task_id"], tokens(messages) + 8 * len(messages) + 8,
-                limits.output_tokens if model_runner is not None else 0, model=model_runner is not None)
+            if model_runner is None:
+                # Nothing is sent anywhere: the drafts are made by tools, and a model's window is no limit for them.
+                # A real tender's handoff is several times the 32 768 a worker may hold - the check used to stop
+                # here with "子任务完整输入与输出预留超出预算" before a single draft was written.
+                ledger.reserve(child["task_id"], 0, 0, model=False)
+                continue
+            try:
+                ledger.reserve(child["task_id"], tokens(messages) + 8 * len(messages) + 8, limits.output_tokens, model=True)
+            except BudgetExceeded as exc:
+                # The material is never cut to fit a window. The tools still write their drafts; the model is
+                # not asked, and the child says why.
+                child["model_skipped"] = str(exc)
+                ledger.reserve(child["task_id"], 0, 0, model=False)
         publish({"kind": "workflow", "state": "running"})
 
         def worker(child):
@@ -421,7 +432,9 @@ def run_tender_workflow(text, *, session_id, output_root, sources=None, confirme
                     # the numeric conflict below. The comparison now answers the rows themselves.
                     markdown = _compliance_gaps_md(local["handoff"], local["matrix"], comparison=local["response_comparison"],
                                                    evidence=_evidence_files(local["sources"]),
-                                                   checked=[_checked_entry(s) for s in local["sources"]])
+                                                   checked=[_checked_entry(s) for s in local["sources"]],
+                                                   responses=[{"title": str(s.get("title") or s["source_id"]), "text": s["text"]}
+                                                              for s in local["sources"] if s.get("role") == "response"])
                     child["response_comparison"] = local["response_comparison"]
                     child["unresolved"] = [str(g.get("title") or g.get("req_id")) for g in gap_rows(local["matrix"])]
                     child["unresolved"].extend(item for row in local["response_comparison"] for item in _comparison_unresolved(row))
@@ -435,6 +448,8 @@ def run_tender_workflow(text, *, session_id, output_root, sources=None, confirme
                                               "evidence_refs": sorted({e["source_id"] for e in child["evidence"]})}]
                 stop.check()
                 document(directory / child["task_id"], skill, markdown, child)
+                if child.get("model_skipped"):
+                    raise BudgetExceeded(child["model_skipped"])   # after the draft is on disk, not instead of it
                 if model_runner is not None:
                     ledger.start_model(child["task_id"])
                     answer, usage = _analysis(model_runner, contexts[skill], limits.output_tokens, stop)
@@ -462,9 +477,11 @@ def run_tender_workflow(text, *, session_id, output_root, sources=None, confirme
                 future.result()
         stop.check()
         combined = "\n".join(Path(item["path"]).read_text(encoding="utf-8") for child in state["children"] for item in child["files"] if item["path"].endswith(".md"))
+        # with no model there is no window the controller's summary has to fit into: on a real tender the list of
+        # open items alone is longer than a small budget, and the run would fail after all its work was done
         ledger.reserve("controller-review", tokens({"children": [
             {key: child[key] for key in ("skill", "status", "conclusions", "unresolved")}
-            for child in state["children"]]}))
+            for child in state["children"]]}) if model_runner is not None else 0)
         review = review_draft(draft=combined, matrix=snapshot["matrix"])
         conflicts = []
         categories = {}
@@ -494,8 +511,13 @@ def run_tender_workflow(text, *, session_id, output_root, sources=None, confirme
             "forbidden_claims": len(review["forbidden_hits"]), "children_completed": sum(c["status"] == "done" for c in state["children"]),
             "unreadable_files": len(unread)}
         state["ok"] = all(c["status"] == "done" for c in state["children"]) and not review["forbidden_hits"]
+        if any(c.get("error_code") == "budget_exceeded" for c in state["children"]):
+            state["error_code"] = "budget_exceeded"
         state["state"] = "reviewing"
         state["reply"] = "招标协作已完成内部草稿；缺项与冲突待人工核对，不可递交。" if state["ok"] else "部分子任务未完成，已生成草稿和来源保留。"
+        skipped = next((c["model_skipped"] for c in state["children"] if c.get("model_skipped")), "")
+        if skipped:
+            state["reply"] = f"工具草稿已全部生成；模型分析未做（{skipped}）。资料不会为了塞进模型窗口而被截断。缺项与冲突待人工核对，不可递交。"
         if unread:
             state["reply"] += f" 有 {len(unread)} 份文件没读出来（{'、'.join(u['title'] for u in unread)}），相关行标为「未能判断」，不是「未响应」。"
         md = "# 招标协作汇总\n\nAI 草稿，不可递交；不代替资格、废标或签认判断。\n\n"
@@ -526,7 +548,7 @@ def run_tender_workflow(text, *, session_id, output_root, sources=None, confirme
             moved = check_record.compare(previous, record)
             state["check"] = {"compared_with": previous.get("run_id"), "inputs_changed": [i["title"] for i in moved["inputs"]],
                               "rows_changed": [r["label"] for r in moved["rows"]]}
-        ledger.reserve("controller-output", 0, tokens(md))
+        ledger.reserve("controller-output", 0, tokens(md) if model_runner is not None else 0)
         document(directory, "collaboration-review", md)
         record["drafts"] = [{"name": Path(item["path"]).name, "path": Path(item["path"]).relative_to(directory).as_posix(),
                              "sha256": check_record.sha(Path(item["path"]).read_text(encoding="utf-8"))}
