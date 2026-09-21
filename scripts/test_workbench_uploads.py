@@ -423,5 +423,43 @@ class ScanTests(unittest.TestCase):
         self.assertIn("OCR", str(caught.exception))
 
 
+class WholeTenderTests(unittest.TestCase):
+    """A tender post run from the chat reads the WHOLE attachment. It used to get the first 20 000 characters: a real
+    tender fetched by its address came back as "全文 21863 字、3 章" of 47 853 characters and 11 chapters, and the draft
+    said nothing about the rest."""
+
+    def setUp(self) -> None:
+        temp = tempfile.TemporaryDirectory(prefix="civil-uploads-")
+        self.addCleanup(temp.cleanup)
+        root_patch = patch.object(uploads, "UPLOAD_ROOT", Path(temp.name) / "uploads")
+        root_patch.start()
+        self.addCleanup(root_patch.stop)
+        env = patch.dict(os.environ, {"CIVIL_SANDBOX_ROOTS": temp.name})
+        env.start()
+        self.addCleanup(env.stop)
+
+    def test_a_tender_post_gets_every_character_under_the_files_name(self) -> None:
+        import chat_service
+
+        filler = "\n".join(f"{n}.1 承包人应在收到指示后{n}天内提交书面报告。" for n in range(1, 1600))
+        tender = "第一章 招标公告\n\n项目名称：临溪镇文化站修缮工程\n\n第二章 投标人须知\n\n" + filler + "\n\n第三章 评标办法\n\n综合评估法\n"
+        self.assertGreater(len(tender), 30_000, "longer than the prefix a post used to get")
+        meta = uploads.save_upload("session-one", "招标文件.txt", tender.encode("utf-8"))
+        material = chat_service._whole_documents("session-one", [meta["id"]], "解析招标")
+        self.assertIn("### 招标文件.txt\n", material, "under the file mark the document reader knows")
+        self.assertIn("第三章 评标办法", material, "the END of the file is there")
+        self.assertNotIn("（未读完）", material)
+        self.assertEqual(chat_service._TENDER_POSTS, {"bid-parse", "bid-tech", "bid-compliance"})
+
+    def test_a_file_cut_at_the_upload_cap_says_so(self) -> None:
+        import chat_service
+
+        with patch.object(uploads, "MAX_TEXT_CHARS", 5_000):
+            meta = uploads.save_upload("session-one", "招标文件.txt", ("第一章 招标公告\n" + "正文。" * 4_000).encode("utf-8"))
+            material = chat_service._whole_documents("session-one", [meta["id"]], "解析招标")
+        self.assertRegex(material, r"（未读完）只读了前 \d+ 个字符", "the store's own note reaches the post: the parser reports it in the draft")
+        self.assertEqual(material.count("（未读完）"), 1, "said once")
+
+
 if __name__ == "__main__":
     unittest.main()

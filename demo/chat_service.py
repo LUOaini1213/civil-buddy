@@ -103,6 +103,23 @@ class SessionLease:
 _ADDRESS = re.compile(r"https?://[^\s<>\"'，。；、（）()【】]+", re.I)
 
 
+_TENDER_POSTS = frozenset({"bid-parse", "bid-tech", "bid-compliance"})
+
+
+def _whole_documents(sid: str, attachment_ids: list, message: str) -> str:
+    """What a tender post works on: the request and every selected attachment IN FULL, each under the file mark the
+    document reader knows ("### 招标文件.pdf"). A prefix of twenty thousand characters is a fifth of a real tender - and
+    a draft made from a fifth of it reads exactly like one made from all of it. A file longer than the upload cap was
+    cut when it was stored, and its stored text ends with the line that says so (uploads.CUT_NOTE) - a line the parser
+    reports in the draft."""
+    from uploads import extracted_documents
+
+    blocks = []
+    for doc in extracted_documents(sid, attachment_ids):
+        blocks.append(f"### {doc.get('name') or '附件'}\n{doc.get('text') or ''}")
+    return message.strip() + "\n\n## 本轮附件（全文）\n\n" + "\n\n".join(blocks)
+
+
 def _fetch_addresses(sid: str, message: str, attachment_ids: list) -> tuple:
     """(attachment ids with what was fetched, a note for the person) - at most two addresses a turn."""
     from uploads import UploadError, fetch_upload
@@ -182,6 +199,8 @@ def prepare_turn(root: Path, body: dict) -> dict:
         context = max((r["context"] for r in requests.values()), key=lambda r: r["used"])
     else:
         material = session_context.draft_material(sid, attachment_ids, message, prepared)
+        if attachment_ids and ids and set(ids) <= _TENDER_POSTS:
+            material = _whole_documents(sid, attachment_ids, message)
         omitted = prepared.get("material_omitted")
         if omitted:
             context["note"] += (" 本轮资料超出预算，未加入：" + "、".join(omitted[:6])

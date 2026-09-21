@@ -36,6 +36,7 @@ from typing import Any, Dict, Iterable, List, Optional, Sequence, Set, Tuple
 Segment = Tuple[float, float, float, float]          # x0, y0, x1, y1
 Rule = Tuple[float, float, float]                    # position, from, to
 Key = Tuple[str, int, int]
+_SHOW = {b"Tj", b"TJ"}       # not ' and ": they move to the next line first, and the matrices seen before them are the old line's
 _STROKE = {b"S", b"s", b"B", b"B*", b"b", b"b*"}
 _FILL = {b"f", b"F", b"f*"}
 _TOUCH = 3.0          # rules drawn cell by cell meet within this much
@@ -96,9 +97,21 @@ def read_page(page: Any) -> PageParts:
             return all(v <= 0.03 for v in values)
         return all(v >= 0.97 for v in values)
 
+    # Where a piece STANDS is where its first text-showing operator stood. The matrices the library hands to the text
+    # visitor are its own memo of that - and up to pypdf 6.18 the memo is stale for a piece that begins with an inserted
+    # space: " 2025" reported the line above it, and one cell of a real front table came back as two lines.
+    shown: List[Tuple[List[float], List[float]]] = []
+    current = [b""]
+
     def on_text(text: str, cm: Sequence[float], tm: Sequence[float], font: Any, size: float) -> None:
         if not text:
             return
+        if shown:
+            start = shown[0]
+            # a piece handed over WHILE a text-showing operator is at work ended before it: that operator opens the next
+            shown[:] = shown[-1:] if (current[0] in _SHOW and len(shown) > 1) else []
+            if text.strip():
+                cm, tm = start      # (a run of blanks uses up its operators all the same, and stands nowhere that matters)
         x, y = _apply(cm, tm[4], tm[5])
         scale = math.hypot(tm[0], tm[1]) * math.hypot(cm[0], cm[1])
         if text.strip():
@@ -106,6 +119,9 @@ def read_page(page: Any) -> PageParts:
         pieces.append(Piece(x, y, float(size or 0) * (scale or 1.0), text))
 
     def on_operator(op: Any, args: Sequence[Any], cm: Sequence[float], tm: Sequence[float]) -> None:
+        current[0] = op
+        if op in _SHOW:
+            shown.append(([float(v) for v in cm], [float(v) for v in tm]))
         try:
             if op == b"q":
                 saved.append(dict(ink))

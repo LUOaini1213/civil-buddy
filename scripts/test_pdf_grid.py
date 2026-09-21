@@ -276,6 +276,31 @@ class Furniture(unittest.TestCase):
         self.assertTrue(rebuilt[0].endswith("Rehabilitation of Pier 4."))
         self.assertEqual(rebuilt[1:], ["(a) Valid Registration Certificate;", "(b) Statement of all ongoing contracts."], "a list item begins a paragraph")
 
+    def test_where_a_piece_stands_does_not_depend_on_the_librarys_memo(self) -> None:
+        """Up to pypdf 6.18 a piece that begins with an inserted space reports a STALE position to the text visitor (the
+        second text object of a line came back at 0, 0) - a cell of a real front table was read as two lines, and a
+        165-page tender fell from 22/22 fields to 9/22 on nothing but the library's minor version. read_page takes the
+        position from the text-showing operator itself."""
+        import io
+
+        from pypdf import PdfReader, PdfWriter
+        from pypdf.generic import DecodedStreamObject, DictionaryObject, NameObject
+
+        writer = PdfWriter()
+        made = writer.add_blank_page(width=595, height=842)
+        font = DictionaryObject({NameObject("/Type"): NameObject("/Font"), NameObject("/Subtype"): NameObject("/Type1"),
+                                 NameObject("/BaseFont"): NameObject("/Helvetica")})
+        made[NameObject("/Resources")] = DictionaryObject({NameObject("/Font"): DictionaryObject({NameObject("/F1"): writer._add_object(font)})})
+        stream = DecodedStreamObject()
+        stream.set_data(b"BT /F1 12 Tf 1 0 0 1 72 700 Tm (Alpha) Tj ET BT /F1 12 Tf 1 0 0 1 300 700 Tm (2031) Tj ET "
+                        b"BT /F1 12 Tf 1 0 0 1 72 650 Tm (Omega) Tj ET")
+        made[NameObject("/Contents")] = writer._add_object(stream)
+        buffer = io.BytesIO()
+        writer.write(buffer)
+        buffer.seek(0)
+        found = {p.text.strip(): (round(p.x), round(p.y)) for p in pg.read_page(PdfReader(buffer).pages[0]).pieces if p.text.strip()}
+        self.assertEqual(found, {"Alpha": (72, 700), "2031": (300, 700), "Omega": (72, 650)})
+
     def test_a_page_number_drawn_piece_by_piece_counts_up(self) -> None:
         pages = [page([piece(60, 700, "正文\n"), piece(280, 40, "-"), piece(286, 40, str(number)), piece(292, 40, "/"), piece(297, 40, "12"), piece(309, 40, "-")], [])
                  for number in range(1, 7)]
