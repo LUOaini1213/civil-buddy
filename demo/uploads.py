@@ -180,14 +180,13 @@ def _pdf_text(data: bytes) -> str:
     reader = PdfReader(BytesIO(data))
     if reader.is_encrypted:
         raise UploadError("暂不支持加密 PDF，请先解密后上传")
+    from packing_assistant.tools import pdf_grid
     from packing_assistant.tools.pdf_layout import pages_text
 
     pages: list[str] = []
     used = 0
-    for index, page in enumerate(reader.pages):
-        if index >= 400:
-            break
-        text = page.extract_text() or ""
+    # tables that are DRAWN come back as rows (tools/pdf_grid.py), watermarks and page numbers are left out
+    for text in pdf_grid.document_texts(reader, max_pages=400):
         pages.append(text)
         used += len(text) + 1
         if used >= MAX_TEXT_CHARS * 2:

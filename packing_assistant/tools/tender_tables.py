@@ -255,11 +255,11 @@ def extract_table(parsed: Optional[Mapping[str, Any]], *, project_name: str = "�
             if not document:  # a document's clauses are listed one by one in section 11, not quoted under a theme
                 rows += _requirement_rows(p, {"reject", "validity", "quality", "warranty", "payment"}, facts, stars=True)
         if title.startswith("5 "):
-            rows += _score_rows(p, facts)
+            rows += _score_rows(p, facts, bool(document))
         if title.startswith("6 ") and not document:
             rows += _requirement_rows(p, {"price"}, facts)
         if title.startswith("7 "):
-            rows += _special_rows(p, facts)
+            rows += _special_rows(p, facts, bool(document))
         lines += [f"## {title}", ""]
         lines += _table(PARSE_HEADER, rows) or [f"{MISSING}。", ""]
         if title.startswith("4 ") and day_line:
@@ -297,6 +297,13 @@ def _document_sections(parsed: Mapping[str, Any], facts: Facts, document: Mappin
         if re.sub(r"\s+", "", text) not in shown:
             rows.append([f"前附表要求 {n}", text, str(r.get("locator") or "—"), "已检出", "逐条自查：形式评审不符即被否决"])
     out += _table(PARSE_HEADER, rows) or [f"{MISSING}。", ""]
+    review = list(document.get("review") or [])
+    if review:
+        out += ["## 10A 初步评审标准（逐项）", "",
+                "评标先按下面每一项核对投标文件（形式、资格、响应性）；有一项不符合，投标就到此为止，不进入打分。"
+                "这些行原文里多半不带「否决」字样，所以单列。不代判是否满足，逐项自查。", ""]
+        out += _table(PARSE_HEADER, [[f"{r.get('group')}{'：' + str(r.get('factor')) if r.get('factor') else ''}", _clip(r.get("standard"), 160),
+                                      str(r.get("locator") or "—"), "已检出", "逐项自查：不符合即不能通过初步评审"] for r in review])
     out += ["## 11 否决与拒收条款（逐条）", "",
             "每一条都是原文里会让投标被否决、被拒收或按无效处理的句子，一句一行。不代判是否触发，逐条自查。", ""]
     rows = []
@@ -406,7 +413,7 @@ def _requirement_rows(parsed: Mapping[str, Any], categories: set, facts: Optiona
     return rows
 
 
-def _score_rows(parsed: Mapping[str, Any], facts: Optional[Facts]) -> List[List[str]]:
+def _score_rows(parsed: Mapping[str, Any], facts: Optional[Facts], document: bool = False) -> List[List[str]]:
     rows: List[List[str]] = []
     noted: List[str] = []
     method = str((parsed.get("handoff") or {}).get("eval_method") or "")
@@ -417,7 +424,9 @@ def _score_rows(parsed: Mapping[str, Any], facts: Optional[Facts]) -> List[List[
         rows.append([_with_lot(f"评分点：{name}" if name else "评分点（未写名称）", str(s.get("lot") or "")),
                      f"{name} {s.get('score')}".strip(), _source(s), "已检出", "分值以评标办法原文为准"])
         noted.append(re.sub(r"\s+", "", str(s.get("note") or "")))
-    for p in (parsed.get("handoff") or {}).get("scoring_points") or []:
+    # lines that merely hold a scoring word are a typed request's scoring points; in a document they are its contents
+    # page, its deadline ("09 点 30 分") and its contract clauses - the scoring table is read by its rows instead
+    for p in ((parsed.get("handoff") or {}).get("scoring_points") or []) if not document else ():
         flat = re.sub(r"\s+", "", str(p.get("text") or ""))
         if flat and not any(n and (n in flat or flat in n) for n in noted):
             rows.append([f"评分点 {p.get('requirement_ref')}", _clip(p.get("text"), 120), str(p.get("requirement_ref") or "—"), "已检出", "—"])
@@ -426,7 +435,7 @@ def _score_rows(parsed: Mapping[str, Any], facts: Optional[Facts]) -> List[List[
     return rows
 
 
-def _special_rows(parsed: Mapping[str, Any], facts: Optional[Facts]) -> List[List[str]]:
+def _special_rows(parsed: Mapping[str, Any], facts: Optional[Facts], document: bool = False) -> List[List[str]]:
     rows: List[List[str]] = []
     noted: List[str] = []
     for s in (facts or {}).get("specials") or []:
@@ -438,7 +447,7 @@ def _special_rows(parsed: Mapping[str, Any], facts: Optional[Facts]) -> List[Lis
         rows.append([_with_lot(f"专项：{s.get('name')}", lot), _clip(f"{s.get('name')}{detail}"), _source(s), "已检出",
                      "专项正文交施工方案岗；本表不判定是否危大"])
         noted.append(re.sub(r"\s+", "", str(s.get("note") or "")))
-    for p in (parsed.get("handoff") or {}).get("specials") or []:
+    for p in ((parsed.get("handoff") or {}).get("specials") or []) if not document else ():
         flat = re.sub(r"\s+", "", str(p.get("text") or ""))
         if flat and not any(n and (n in flat or flat in n) for n in noted):
             rows.append([f"专项 {p.get('requirement_ref')}", _clip(p.get("text"), 120), str(p.get("requirement_ref") or "—"), "已检出", "专项正文交施工方案岗"])

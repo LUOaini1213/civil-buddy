@@ -377,5 +377,192 @@ class JurisdictionToken(unittest.TestCase):
         self.assertEqual(infer_jurisdiction("写一份核算检查 2026-08\nSG"), "SG", "a code on the line after a date ($ matches before a final newline)")
 
 
+REAL_SHAPED = """目 录
+
+第一章 采购邀请........................................................ 1
+第二章 供应商须知...................................................... 5
+第三章 评审办法（综合评分法）.......................................... 19
+第四章 合同条款及格式.................................................. 38
+第五章 技术标准和要求.................................................. 96
+
+第一章 采购邀请
+
+东湖泵站电气改造项目竞争性磋商公告
+
+四、响应文件提交
+
+截止时间：2028 年 6 月 12 日 09 点 30 分（北京时间）
+
+地点：东湖市公共资源交易中心三层第二开标室
+
+五、开启
+
+时间：2028 年 6 月 12 日 09 点 30 分（北京时间）
+
+地点：东湖市公共资源交易中心三层第二开标室
+
+本项目（ 否 ）接受联合体投标。
+
+第二章 供应商须知
+
+供应商须知前附表
+
+| 条款号 | 条款名称 | 编列内容 |
+| --- | --- | --- |
+| 1.1.2 | 采购人 | 名称：东湖市排水管理处；地址：东湖市环湖路18号 |
+| 1.1.4 | 项目名称 | 东湖泵站电气改造项目 |
+| 1.3.3 | 质量要求 | 日常维护执行国家及本文件规定的标准；专项验收的质量评定：达到行业规范规定的合格等级 |
+| 1.4.1 | 供应商资格要求 | 1.满足《中华人民共和国政府采购法》第二十二条规定；2.落实政府采购政策需满足的资格要求：■本项目不专门面向中小企业预留采购份额；□本项目专门面向中小企业采购；3.3.1 具备机电工程施工总承包叁级及以上资质；3.3.2 拟派项目经理资格条件：具备机电工程专业贰级注册建造师执业资格；3.3.3 对列入失信被执行人名单的供应商，将拒绝其参与本次采购活动 |
+| 1.4.2 | 是否接受联合体 | ■不接受；□接受 |
+| 1.11 | 分包 | □不允许；☑允许，允许分包的专项工程：自控系统；对分包人的资格要求：具备电子与智能化工程专业承包贰级资质 |
+| 3.3.1 | 响应文件有效期 | 90 天 |
+| 3.4.1 | 磋商保证金 | 本项目不适用 |
+| 3.6 | 是否允许提交备选投标/响应方案 | ■不允许；□允许 |
+| 4.1.2 | 封套上写明 | 采购人名称：（填写采购人名称）；采购人地址：（填写采购人地址） |
+| 5.1 | 开标形式和开标时间、地点 | 开标形式：线下开标；第一个信封（商务及技术文件）开标时间：同递交截止时间；第一个信封（商务及技术文件）开标地点：三层第二开标室。第二个信封（报价文件）开标时间：2028年6月13日10时00分 |
+
+1. 总则
+
+1.4.3 供应商不得存在下列情形之一：
+
+（1）为采购人不具有独立法人资格的附属机构；
+
+（2）被责令停业的。
+
+2.1 磋商文件的组成
+
+本磋商文件包括：（1）采购邀请；（2）供应商须知；（3）评审办法。
+
+3.1.1 响应文件应包括下列内容：（1）响应函；（2）法定代表人身份证明；（3）施工组织设计。
+
+3.3.2 供应商拒绝延长的，其响应失效，但有权收回其磋商保证金。
+
+3.4.4 有下列情形之一的，磋商保证金将不予退还：
+
+（1）供应商在规定的响应有效期内撤销或修改其响应文件；
+
+报价修正应当符合第五章“技术标准和要求”中的有关规定，此修改须符合本章第 4.3 款的要求。
+
+第三章 评审办法（综合评分法）
+
+| 评审因素 | 评审标准 |
+| --- | --- |
+| 形式评审标准 | 供应商名称 | 与营业执照、资质证书一致 |
+| 形式评审标准 | 响应函签字盖章 | 符合第六章的要求 |
+| 资格评审标准 | （1）供应商具备有效的营业执照。（2）供应商的资质等级符合磋商文件规定。（3）供应商的信誉符合磋商文件规定。 |
+
+| 评分因素 | 分值分配 |
+| --- | --- |
+| 技术部分 | 45 分 |
+| 商务部分 | 25 分 |
+
+| 评分项目 | 评分标准 | 分值 |
+| --- | --- | --- |
+| 工程业绩 | 有 1 项类似业绩得 2 分，满分 10 分 | 10 |
+
+| 条款号 | 评分因素与评分标准 |
+| --- | --- |
+| 2.2.4（2） | 主要人员 | 5分 | 满足最低要求得3分 | 3-5分 |
+
+第四章 合同条款及格式
+
+某市泵站运行考核办法
+
+第一章 总则
+
+第二章 月度考核
+
+| 考核项目 | 分值 |
+| --- | --- |
+| 设备完好率 | 30分 |
+
+合同文件的组成：（1）合同协议书；（2）中标通知书。
+
+第五章 技术标准和要求
+
+12.6 材料不符合合同约定的，监理人可拒收此类材料。
+
+投标报价不得包含本章未列明的设备，否则按无效响应处理。
+""" + "\n\n" + FILLER
+
+
+class RealShaped(unittest.TestCase):
+    """One test per family of thing that went wrong when two real tenders (165 and 751 pages) were read for the first
+    time - on a made-up document that has the same shapes."""
+
+    @classmethod
+    def setUpClass(cls) -> None:
+        cls.doc = td.read(REAL_SHAPED)
+        cls.facts = tf.extract(REAL_SHAPED)
+
+    def values(self, topic: str) -> list:
+        return [m.value for m in self.facts.of(topic) if m.side == "tender"]
+
+    def test_the_contents_page_a_cross_reference_and_a_bound_in_regulation_make_no_chapters(self) -> None:
+        chapters = []
+        for p in self.doc.pieces:
+            if p.chapter and p.chapter not in chapters:
+                chapters.append(p.chapter)
+        self.assertEqual(chapters, ["第一章 采购邀请", "第二章 供应商须知", "第三章 评审办法（综合评分法）", "第四章 合同条款及格式", "第五章 技术标准和要求"])
+        self.assertFalse(any("....." in p.text for p in self.doc.pieces), "a line of the contents page lays nothing down")
+
+    def test_tick_boxes_lay_down_what_is_ticked(self) -> None:
+        self.assertEqual(self.values("consortium"), ["不接受"], "and 否 in the notice is the same answer, not a contradiction")
+        self.assertEqual(self.values("subcontract"), ["允许，允许分包的专项工程：自控系统"], "□不允许 was NOT chosen")
+        self.assertEqual(self.values("alternative"), ["不允许"], "是否允许提交备选投标/响应方案 is the 备选投标方案 row")
+
+    def test_what_is_not_a_value_is_not_shown_as_one(self) -> None:
+        self.assertEqual(self.values("owner"), ["东湖市排水管理处"], "（填写采购人名称） on the envelope row is a blank to fill in")
+        self.assertFalse(any("电子与智能化" in v for v in self.values("qualification")), "对分包人的资格要求 is not the bidder's")
+        self.assertFalse(any("专门面向" in v for v in self.values("qualification")), "a policy note names no qualification")
+        self.assertTrue(any("机电工程施工总承包叁级" in v for v in self.values("qualification")))
+        self.assertTrue(any("贰级注册建造师" in v for v in self.values("pm")), "拟派项目经理资格条件 is about the 项目经理")
+
+    def test_no_amount_is_still_what_is_laid_down(self) -> None:
+        self.assertEqual(self.values("bond"), ["本项目不适用"])
+
+    def test_a_part_whose_label_names_the_rows_own_field_is_kept(self) -> None:
+        self.assertTrue(any("合格等级" in v for v in self.values("quality")))
+
+    def test_the_notice_format_labels_under_their_headings(self) -> None:
+        self.assertEqual(self.values("deadline_bid"), ["2028 年 6 月 12 日 09 点 30 分"])
+        self.assertIn("东湖市公共资源交易中心三层第二开标室", self.values("submit_place"))
+
+    def test_two_envelopes_two_opening_times_told_apart(self) -> None:
+        opens = {m.role: m.value for m in self.facts.of("deadline_open") if m.side == "tender" and m.ref and "前附表" in m.ref}
+        self.assertEqual(opens, {"第一个信封（商务及技术文件）": "同递交截止时间", "第二个信封（报价文件）": "2028年6月13日10时00分"})
+        self.assertFalse(any("不一致" in (m.origin or "") for m in self.facts.of("deadline_open")), "同…截止时间 IS the notice's date")
+
+    def test_rejections_are_about_the_bid(self) -> None:
+        listed = [r.piece.text for r in td.rejections(self.doc)]
+        for wanted in ("将拒绝其参与本次采购活动", "其响应失效", "供应商不得存在下列情形之一", "否则按无效响应处理"):
+            self.assertTrue(any(wanted in text for text in listed), wanted)
+        self.assertFalse(any("拒收此类材料" in text for text in listed), "the technical chapter rejects a delivery, not a tender")
+        self.assertFalse(any("拒收此类材料" in p.text for p in td.rejection_candidates(self.doc)))
+
+    def test_review_standards_a_row_each_or_a_numbered_list_in_one_cell(self) -> None:
+        found = [(group, factor, standard) for group, factor, standard, _ in td.review_standards(self.doc)]
+        self.assertIn(("形式评审标准", "供应商名称", "与营业执照、资质证书一致"), found)
+        self.assertEqual([s for g, _, s in found if g == "资格评审标准"],
+                         ["（1）供应商具备有效的营业执照。", "（2）供应商的资质等级符合磋商文件规定。", "（3）供应商的信誉符合磋商文件规定。"])
+
+    def test_scores_come_from_the_evaluation_chapter_and_are_named_by_the_cell_before_the_rule(self) -> None:
+        found = {name: value for name, value, _ in td.scores(self.doc)}
+        self.assertEqual(found, {"技术部分": "45 分", "商务部分": "25 分", "工程业绩": "10分", "主要人员": "5分"},
+                         "not 设备完好率 (the contract scores the contractor's performance), not the sentence that says how points are won")
+
+    def test_forms_are_what_the_bid_must_hold(self) -> None:
+        self.assertEqual([name for name, _ in td.forms(self.doc)], ["响应函", "法定代表人身份证明", "施工组织设计"],
+                         "not 磋商文件的组成 (the buyer's), not 合同文件的组成, not the list of 3.4.4")
+
+    def test_the_table_of_a_document_holds_no_keyword_lines(self) -> None:
+        from packing_assistant.tools.tender_tables import extract_table
+
+        table = extract_table(parse_tender_text(REAL_SHAPED))
+        self.assertNotRegex(table, r"\| 评分点 L\d+|\| 专项 L\d+", "a line that merely holds 分 or 专项 is no scoring point of a document")
+        self.assertIn("## 10A 初步评审标准（逐项）", table)
+        self.assertIn("| 开标·第二个信封（报价文件） | 2028年6月13日10时00分 |", table)
+
+
 if __name__ == "__main__":
     unittest.main(verbosity=1)

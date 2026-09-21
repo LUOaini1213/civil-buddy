@@ -11,7 +11,9 @@ pypdf returns the text of a page the way it was drawn: every line of a paragraph
 - the table's header repeated on every page a table runs over, and a page number somewhere on each page.
 A sentence cut in two matches no rejection clause, and a front table that is a run of loose lines is no table.
 
-    pages_text(reader)   the pages, each under a marker line "〔第N页〕", rebuilt by rebuild()
+    pages_text(pages)    the pages, each under a marker line "〔第N页〕", rebuilt by rebuild()
+    reader_text(reader)  the same from a pypdf reader: tables that are DRAWN (ruling lines) come from
+                         tools/pdf_grid.py as "| … | … |" rows, page furniture is left out
     rebuild(text)        lines joined into paragraphs again (a line that fills the page width continues on the
                          next, also across a page break); a table whose header cells came one to a line becomes
                          "| 1.3.2 | 计划工期 | 计划工期：540日历天；… |" rows under one header; page numbers dropped
@@ -39,6 +41,8 @@ _HEADER_WORDS = ("条款号", "条款名称", "编列内容", "序号", "编号"
                  "评分项", "评分标准", "评审项目", "评审内容", "分值", "项目", "技术要求", "备注", "项目编码", "项目名称", "计量单位", "单位", "工程量",
                  "合同条款号", "约定内容", "内容", "要求", "评分内容", "评分细则", "权重", "满分")
 _NUMBERED_FIRST = ("条款号", "序号", "编号", "项号")
+_GRID_ROW = re.compile(r"^\|.*\|$")           # a row tools/pdf_grid.py rebuilt from the page's ruling lines
+_ENDED = "。；;：:，,、！？"
 
 
 def width(text: str) -> int:
@@ -52,6 +56,13 @@ def pages_text(pages: Iterable[str]) -> str:
         chunks.append(f"〔第{number}页〕")
         chunks.append(text or "")
     return rebuild("\n".join(chunks))
+
+
+def reader_text(reader: object, max_pages: Optional[int] = None) -> str:
+    """A pypdf reader's pages as one text, ruled tables rebuilt from the page geometry."""
+    from packing_assistant.tools import pdf_grid
+
+    return pages_text(pdf_grid.document_texts(reader, max_pages))
 
 
 def is_paged(text: str) -> bool:
@@ -69,13 +80,32 @@ def _header_run(lines: Sequence[str], at: int) -> int:
 def rebuild(text: str) -> str:
     raw = [line.strip() for line in (text or "").splitlines()]
     lines = [line for line in raw if line and not _FOOTER.match(line)]
-    body_widths = sorted(width(line) for line in lines if not PAGE.match(line))
-    full = body_widths[int(len(body_widths) * 0.9)] if body_widths else 0
+    # a scan's reading may run the page's own number into the line beside it ("其他主要人员第6页" on page 6)
+    on_page = 0
+    for at, line in enumerate(lines):
+        marker = PAGE.match(line)
+        if marker:
+            on_page = int(marker.group(1))
+        elif on_page:
+            glued = re.search(r"(?<=[一-鿿）)])第\s*" + str(on_page) + r"\s*页$", line)
+            if glued and not _GRID_ROW.match(line):
+                lines[at] = line[:glued.start()]
+    fulls = _full_widths(lines)
+    full = 0
     out: List[str] = []
     paragraph: List[str] = []
     pending_pages: List[str] = []
     header: Optional[List[str]] = None
     cells: List[str] = []       # the lines of the row being collected
+    grid: Optional[List[str]] = None     # the header row of the ruled table being passed through
+    grid_last = -1                       # where its last row stands in ``out``
+    grid_break = False                   # a page break since that row
+
+    def end_grid() -> None:
+        nonlocal grid, grid_last, grid_break
+        if grid is not None:
+            out.append("")
+        grid, grid_last, grid_break = None, -1, False
 
     def flush_paragraph() -> None:
         if paragraph:
@@ -105,6 +135,35 @@ def rebuild(text: str) -> str:
     index = 0
     while index < len(lines):
         line = lines[index]
+        full = fulls[index]
+        if _LEADERS.search(line) and not _GRID_ROW.match(line):
+            flush_paragraph()                   # a line of the contents page stands alone
+            end_table()
+            out.extend([line, ""])
+            index += 1
+            continue
+        if PAGE.match(line) and grid is not None and not paragraph:
+            out.append(line)                    # a ruled table may go on over the page: the marker stands between its rows
+            grid_break = True
+            index += 1
+            continue
+        if _GRID_ROW.match(line):
+            row = [cell.strip() for cell in line.strip("|").split("|")]
+            flush_paragraph()
+            end_table()
+            if grid is None:
+                grid, grid_break = row, False
+                out.append("| " + " | ".join(row) + " |")
+                grid_last = len(out) - 1
+            elif grid_break and [c for c in row if c] == [c for c in grid if c]:
+                pass                            # the header repeated at the top of the next page
+            else:
+                out.append("| " + " | ".join(row) + " |")
+                grid_last, grid_break = len(out) - 1, False
+            index += 1
+            continue
+        if grid is not None:
+            end_grid()
         if PAGE.match(line):
             if header is not None or (paragraph and full and width(paragraph[-1]) >= full * 0.9):
                 pending_pages.append(line)      # a row or a paragraph runs over the page break: the marker waits
@@ -151,7 +210,41 @@ def rebuild(text: str) -> str:
         index += 1
     end_table()
     flush_paragraph()
+    end_grid()
     return "\n".join(out).strip() + "\n"
+
+
+_LEADERS = re.compile(r"[.．·]{6,}|…{3,}")
+
+
+def _full_widths(lines: Sequence[str]) -> List[int]:
+    """For every line, how wide a line that fills the page is where it stands. A long file is many sections, each
+    with margins and a type size of its own: the measure is the page's - the width its widest lines share - and
+    the document's usual one where a page has too little text to tell (a cover, a form)."""
+    def body(line: str) -> bool:
+        return not PAGE.match(line) and not _GRID_ROW.match(line) and not _LEADERS.search(line)
+
+    widths = sorted(width(line) for line in lines if body(line))
+    upper = widths[len(widths) // 2:]
+    counted: dict = {}
+    for w in upper:
+        counted[w // 2] = counted.get(w // 2, 0) + 1
+    usual = max(counted, key=lambda k: (counted[k], k)) * 2 + 1 if counted else 0
+    if usual < 40 or len(widths) < 40:
+        # a page or two: too little running text for "the width most lines share" to mean anything
+        return [widths[int(len(widths) * 0.9)] if widths else 0] * len(lines)
+    out: List[int] = [usual] * len(lines)
+    start = 0
+    for index in range(len(lines) + 1):
+        if index == len(lines) or PAGE.match(lines[index]):
+            page = sorted((width(line) for line in lines[start:index] if body(line)), reverse=True)
+            # the widest measure at least three lines of the page reach; one long line (a URL, a heading) is not it
+            shared = next((w for w in page if sum(1 for other in page if other >= w * 0.95) >= 3), 0)
+            if usual and shared and 0.8 * usual <= shared <= 1.35 * usual:
+                for at in range(start, index):
+                    out[at] = shared
+            start = index + 1
+    return out
 
 
 def _ends_row(header: Sequence[str], cells: Sequence[str]) -> bool:
@@ -167,6 +260,14 @@ def _row(header: Sequence[str], cells: Sequence[str]) -> List[str]:
     """The cells of one row from the lines it was drawn as."""
     columns = len(header)
     lines = list(cells)
+    # a cell wrapped inside its column comes back in two pieces with the row's other cells between them:
+    # "施工组织设计评分标准（35" … "5分" / "分）". The piece that closes the bracket goes back to the one that opened it.
+    for at, line in enumerate(lines):
+        if line.count("（") + line.count("(") > line.count("）") + line.count(")"):
+            closing = next((k for k in range(at + 1, len(lines)) if len(lines[k]) <= 3 and re.fullmatch(r"[^（(]*[）)]", lines[k])), None)
+            if closing is not None:
+                lines[at] += lines.pop(closing)
+                break
     if header[0] in _NUMBERED_FIRST and lines and _NUMBER_ONLY.match(lines[0]):
         number, rest = lines[0], lines[1:]
         if not rest:

@@ -46,12 +46,25 @@ _CONTRACT = re.compile(r"合同条款|合同条件|合同格式|Conditions of Co
 _REJECT = re.compile(r"否决其?投标|否决投标|作否决|被否决|予以否决|不予受理|不予接[收受]|予以拒收|拒收|拒绝接收|拒绝受理|无效投标|投标无效|按无效|"
                      r"作无效|无效标|视为无效|无效响应|响应无效|无效报价|报价无效|废标|取消其?(?:投标|中标|成交|磋商|中选|比选|入围)资格|不予通过|"
                      r"将被拒绝|予以拒绝|恕不接受|不予接受|不被接受|视为(?:自动)?放弃|判定[^，,。；;]{0,6}不合格|按不响应处理|不进入下一(?:阶段|环节)|"
+                     r"拒绝其[^，,。；;]{0,4}参[与加]|可以?拒绝其|(?:投标|响应|报价)失效|不得存在下列(?:情形|情况|行为)|(?:资格审查|资格评审|初步评审)[^，,。；;]{0,4}不合格|"
                      r"不得(?:同时)?参[加与](?:本项目|本次|同一)?[^，,。；;]{0,8}(?:投标|磋商|谈判|报价|采购活动)|不得进入[^，,。；;]{0,6}(?:环节|阶段|评审)|"
                      r"shall be rejected|will be rejected|be disqualified|non-responsive", re.I)
 #: "投标文件有下列情形之一的，按无效投标处理：" - what follows, one item to a paragraph, is the list it announces
 _LIST_LEAD = re.compile(r"(?:下列|以下|如下)(?:情形|情况|行为|条件)?.{0,12}[：:]\s*$|[：:]\s*$")
 _LIST_ITEM = re.compile(r"^\s*(?:[（(]\s*[\d" + _CN + r"]+\s*[)）]|\d+\s*[)）.、]|[" + _CN + r"]+\s*、)\s*")
 _NOT_A_REJECTION = re.compile(r"否决所有投标|否决全部投标")
+#: chapters about the WORKS, not about the bid: "监理人可拒收此类材料" rejects a delivery, not a tender
+_WORKS_CHAPTER = re.compile(r"技术标准|技术规范|技术要求|工程量清单|图纸|计量规则|计量与支付")
+_ABOUT_BID = re.compile(r"投标|响应文件|供应商|报价|磋商|比选|应答|竞标")
+_EVALUATION = re.compile(r"评标办法|评审办法|评标方法|评审方法|评分办法|评审标准|评分标准")
+#: the buyer's own documents and the contract's - "磋商文件的组成" lists what the BUYER issued, not what the bid holds
+_THEIR_FILE = re.compile(r"(?:招标|磋商|谈判|询价|采购|比选|合同|预审|竞争性磋商|竞争性谈判)文件")
+_OUR_FILE = re.compile(r"(?:投标|响应|报价|应答|申请|竞价|参选)文件")
+
+
+def _ours(text: str) -> bool:
+    """Whether the 文件 whose composition the text announces is the bidder's."""
+    return bool(_OUR_FILE.search(text)) or not _THEIR_FILE.search(text)
 _CITES = re.compile(r"第?\s*(\d+(?:\.\d+){1,3})\s*[项款条]")
 _OBLIGES = re.compile(r"须|必须|不得|应当|严禁|不允许|不接受")
 _STAR = re.compile(r"[★☆＊]")
@@ -136,11 +149,15 @@ def read(text: str) -> Document:
     line_no = 0
     page = 0
     first = len(doc.pieces)
+    listed = _contents((text or "").splitlines())
+    at_chapter, first_title = 0, ""
     for raw in (text or "").splitlines():
         line = raw.strip()
         if not line:
             header = None
             continue
+        if _TOC_LINE.search(line) and not _TABLE_ROW.match(line):
+            continue    # the contents page names the chapters; it lays nothing down
         if line.startswith("〔OCR〕"):
             doc.ocr = True
             continue
@@ -154,6 +171,22 @@ def read(text: str) -> Document:
             continue
         line_no += 1
         found = _CHAPTER.match(line)
+        if found:
+            # a chapter of THIS document: a short title, not a sentence that begins "第五章“工程量清单”中的…", and not
+            # the 第一章 总则 of a regulation bound into the contract chapter
+            title, order = found.group(2).strip(), _ordinal(found.group(1))
+            if len(title) > 40 or re.search(r"[，。；：:]", title) or _NOT_A_TITLE.match(title):
+                found = None
+            elif listed:
+                known = listed.get(order)
+                if known is None or (title and known and not (_flat(title).startswith(known[:6]) or known.startswith(_flat(title)[:6]))):
+                    found = None
+            elif order < at_chapter and not (order == 1 and first_title and _flat(title) == first_title):
+                found = None
+            if found:
+                if not at_chapter or order == 1:
+                    first_title = first_title or _flat(title)
+                at_chapter = order
         if found:
             chapter = f"{found.group(1)} {found.group(2).strip()}".strip()
             heading, number, header = chapter, "", None
@@ -211,6 +244,36 @@ def read(text: str) -> Document:
 
 
 _PAGE_MARK = re.compile(r"^〔第(\d+)页〕$")
+_TOC_LINE = re.compile(r"[.．·]{6,}|…{3,}")            # "第二章 投标人须知........................ 9": a line of the contents page
+_NOT_A_TITLE = re.compile(r"^[“”\"「」『』‘’、）)，,]|^(?:的|中|所|内|规定|约定|第|和|及|与|或)")
+
+
+def _ordinal(chapter: str) -> int:
+    """第十二章 -> 12, 第3章 -> 3."""
+    body = re.sub(r"[第章\s]", "", chapter)
+    if body.isdigit():
+        return int(body)
+    total, current = 0, 0
+    for ch in body:
+        if ch == "百":
+            total += (current or 1) * 100
+            current = 0
+        elif ch == "十":
+            total += (current or 1) * 10
+            current = 0
+        else:
+            current = _CN.find(ch) + 1 if ch in _CN[:9] else current
+    return total + current
+
+
+def _contents(lines: Sequence[str]) -> Dict[int, str]:
+    """The chapters a contents page lists: ordinal -> title."""
+    listed: Dict[int, str] = {}
+    for line in lines:
+        found = _CHAPTER.match(line.strip())
+        if found and _TOC_LINE.search(line):
+            listed.setdefault(_ordinal(found.group(1)), _flat(_TOC_LINE.split(found.group(2))[0]))
+    return listed if len(listed) >= 2 else {}
 
 
 def _on_page(piece: Piece, page: int) -> Piece:
@@ -247,7 +310,8 @@ def _split_parts(content: str) -> List[str]:
     from packing_assistant.tools import tender_facts as tf
 
     parts: List[str] = []
-    for chunk in re.split(r"[；;]", content):
+    # at every "；" - and at a "。" that a labelled part follows ("…显示为准。第二个信封（报价文件）开标时间：…")
+    for chunk in re.split(r"[；;]|。(?=[^：:；;，,。]{2,20}[：:])", content):
         cursor = 0
         for found in _SUBLABEL.finditer(chunk):
             label = found.group(1)
@@ -288,16 +352,33 @@ def field_mentions(doc: Document):
             continue  # its rows are review standards and scoring, read by scores() and rejections()
         row_topic = tf.document_topic(row.name)
         taken: set = set()
-        for label, body, inner in _parts(row.content):
+        parts = _parts(row.content)
+        # a 资格要求 row opens with what the law asks of every bidder; the requirement of THIS tender stands further
+        # down. Where parts of the row name a qualification (资质 / 许可证 / 等级), those are the row's value.
+        strong = [body for label, body, _ in parts if not label and re.search(r"资质|许可证|等级", _chosen(body) or "")]
+        for label, body, inner in parts:
+            picked = _chosen(body if not _BOXES.search(label) else label + "：" + body)
+            if picked is None or _PLACEHOLDER.match(picked.strip()):
+                continue   # an option left unticked; "（填写采购人名称）" on the envelope row
+            body = picked
+            label = _BOXES.sub("", label).strip()
             own = tf.document_topic(label) if label else ""
+            if label and not own and row_topic == "quality" and "质量" in label:
+                own = row_topic   # "专项交（竣）工验收的质量评定：…" under 质量要求 names the row's own field
             if label and not own and not _GENERIC_LABEL.match(label):
                 continue   # "采购预算：860万元" under 采购预算及最高限价 is the budget, not the cap: a part named for something else
             topic = own or row_topic
+            if topic == "qualification" and not own and len(row.content) > 200 and not re.search(
+                    r"资质|资格|许可证|证书|等级|注册|建造师|业绩|信誉|财务|认证", body):
+                continue   # one paragraph of a long 资格要求 row that names no qualification (a policy note, an option)
             if not topic and tf._EVAL_METHOD.search(body):
                 topic = "eval_method"   # "10.1 本项目采用综合评估法评标"
             if not topic or topic in tf._ALWAYS_OURS or topic in tf._NO_SIDE or topic in tf._STATEMENT_ONLY:
                 continue
-            if not own and topic in taken:
+            if topic == "qualification" and not own and strong:
+                if body not in strong[:3]:
+                    continue
+            elif not own and topic in taken:
                 continue  # "地址：…" under 招标人 is not a second 招标人
             related = not row_topic or tf._TOPIC[topic].section == tf._TOPIC[row_topic].section
             value = _document_value(topic, body, same_as=related)
@@ -307,10 +388,16 @@ def field_mentions(doc: Document):
             ref = row.piece.ref if not inner else f"{row.piece.chapter_no} 前附表 {inner}".strip()
             # two parts of one row about the same field ("履约担保的形式：…；履约担保的金额：…") are told apart by their label
             part_name = re.sub(r"^" + re.escape(tf._TOPIC[topic].label) + r"的?", "", label) if (own and own == row_topic) else ""
+            if own and own != row_topic:
+                # "第一个信封（商务及技术文件）开标时间" / "第二个信封（报价文件）开标时间": two values of one field, told
+                # apart by what the label says beyond the field's own name
+                alias = max((a for a in tf._TOPIC[own].aliases if a in label), key=len, default="")
+                extra = label.replace(alias, "", 1).strip("的 ") if alias else ""
+                part_name = extra if len(extra) >= 4 else part_name
             table.append(tf.Mention(topic, "tender", "", value, f"{row.name}：{body}"[:160], row.piece.line, role=part_name, ref=ref))
     if not any(m.topic == "eval_method" for m in table):
         for p in doc.pieces:
-            found = tf._EVAL_METHOD.search(p.text) if (p.kind == "heading" and "评标办法" in p.text) else None
+            found = tf._EVAL_METHOD.search(p.text) if (p.kind == "heading" and _EVALUATION.search(p.text)) else None
             if found:
                 table.append(tf.Mention("eval_method", "tender", "", found.group(0), p.text[:160], p.line, ref=p.chapter_no or p.ref))
                 break
@@ -337,9 +424,18 @@ def field_mentions(doc: Document):
                 notice.append(tf.Mention("owner", "tender", "", found.group(2).strip()[:60], p.text[:160], p.line, ref=p.ref))
                 continue
             topic = tf.document_topic(label)
+            # the national notice format: "截止时间：…" under 四、响应文件提交, "时间：…" / "地点：…" under 五、开启
+            if not topic and label in ("截止时间", "时间", "地点") and under:
+                handing, opening = re.search(r"提交|递交", under), re.search(r"开启|开标", under)
+                topic = ("deadline_bid" if label == "截止时间" and handing else
+                         "deadline_open" if label == "时间" and opening else
+                         "open_place" if label == "地点" and opening else
+                         "submit_place" if label == "地点" and handing else "")
             if topic and topic not in tf._ALWAYS_OURS | tf._NO_SIDE | tf._STATEMENT_ONLY:
-                value = _document_value(topic, found.group(2))
-                if value:
+                value = _document_value(topic, _chosen(found.group(2)) or "")
+                if topic in ("pm", "tech_lead") and re.fullmatch(r"[一-鿿·]{2,4}", value or ""):
+                    value = ""   # "项目负责人：贾某" among the notice's contacts is somebody at the agency - a tender requires a grade, not a person
+                if value and not _PLACEHOLDER.match(value):
                     notice.append(tf.Mention(topic, "tender", "", value, p.text[:160], p.line, ref=p.ref))
                 continue
         for topic, value in _strict_in_sentence(body):
@@ -360,6 +456,8 @@ def field_mentions(doc: Document):
                 mentions.append(m)
             continue
         same = [x for x in table if x.topic == m.topic]
+        if any(x.value.startswith("同") for x in same):
+            continue   # "开标时间：同投标截止时间" refers to the very date the notice gives: no contradiction
         if same and not any(_same(x.value, m.value) or _flat(m.value) in _flat(x.note) or _flat(x.value) in _flat(m.note) for x in same):
             # the notice and the front table disagree: both stand, and whoever reads the draft is told
             mentions.append(tf.Mention(m.topic, "tender", "", m.value, m.note, m.line, origin="招标公告，与前附表不一致", ref=m.ref))
@@ -370,8 +468,31 @@ def _flat(text: str) -> str:
     return re.sub(r"[\s,，]+", "", text or "")
 
 
+_NO = re.compile(r"^(?:否|不|无|不接受|不允许|不得|不组织|不召开|不要求|不需要|不适用)$")
+_YES = re.compile(r"^(?:是|有|接受|允许|组织|召开|要求|需要|适用)$")
+
+
 def _same(a: str, b: str) -> bool:
-    return _flat(a) == _flat(b) or _flat(a) in _flat(b) or _flat(b) in _flat(a)
+    x, y = _flat(a), _flat(b)
+    if (_NO.match(x) or _YES.match(x)) and (_NO.match(y) or _YES.match(y)):
+        return bool(_NO.match(x)) == bool(_NO.match(y))     # 否 in the notice, 不接受 in the front table: one answer
+    return x == y or x in y or y in x
+
+
+_TICKED = "■☑✓✔√☒▣"
+_UNTICKED = "□☐◻○"
+_BOXES = re.compile("[" + _TICKED + _UNTICKED + "]")
+_PLACEHOLDER = re.compile(r"^[（(]\s*(?:请)?(?:填写|填入|此处|项目名称|招标人名称|采购人名称)[^）)]*[)）]$|^[_＿/／\s-]*$")
+
+
+def _chosen(body: str) -> Optional[str]:
+    """A row of tick boxes lays down what is TICKED: "□不允许；☑允许，允许分包的专项工程…" says 允许. The text after each
+    ticked box, up to the next box; None when the part is an option left unticked; the text itself when it has no box."""
+    if not _BOXES.search(body):
+        return body
+    chosen = [found.group(1).strip(" ；;，,/／") for found in re.finditer("[" + _TICKED + "]([^" + _TICKED + _UNTICKED + "]*)", body)]
+    chosen = [c for c in chosen if c]
+    return "；".join(chosen) if chosen else None
 
 
 def _balanced(value: str, source: str) -> str:
@@ -393,6 +514,8 @@ def _document_value(topic: str, body: str, *, same_as: bool = True) -> str:
     text = body.strip().rstrip("。；; ")
     if kind in tf._KIND_RE:
         found = tf._KIND_RE[kind].search(text)
+        if not found and len(text) <= 24 and re.search(r"不适用|不要求|不收取|不需要|无需|免收|免交|免缴|不设", text):
+            return text     # "磋商保证金：本项目不适用" - no amount, and that is what is laid down
         if not found:
             # "开标时间：同投标截止时间" - as written. Not under another field's row: the 递交截止时间 of the
             # 投标保证金 row is the bond's, not the bid's.
@@ -470,16 +593,30 @@ def rejections(doc: Document) -> List[Rejection]:
     for p in doc.pieces:
         if p.kind not in ("text", "row") or _CONTRACT.search(p.chapter):
             continue
+        if _WORKS_CHAPTER.search(p.chapter) and not _ABOUT_BID.search(p.text):
+            continue
         texts = [p.text] if p.kind == "text" else [c for c in p.cells[2:] or p.cells]
+        if p.kind == "row" and "前附表" not in p.table and not any(_REJECT.search(c) for c in p.cells):
+            marks = [c for c in p.cells if _STAR.search(c)]
+            if marks and all(not _STAR.sub("", c).strip() for c in marks) and (
+                    re.search(r"隐患|风险|危险源", "".join(p.header)) or not re.search(r"要求|参数|指标|规格|条款|响应|标准", "".join(p.header))):
+                continue    # a ★ alone in a 备注 cell of a hazard list marks a MAJOR HAZARD, not a term of the bid
         if p.kind == "row" and "前附表" not in p.table and any(_STAR.search(c) or _REJECT.search(c) for c in p.cells):
             # a row of a requirements table: "沥青混凝土面层：★上面层采用…；不满足的为无效投标" - the cells, not the bars
             cells = [c for c in p.cells if c and c != "—" and not re.fullmatch(r"[\d.]+", c)]
             texts = ["：".join(cells[:2]) + ("；" + "；".join(cells[2:]) if len(cells) > 2 else "")]
         for text in texts:
             whole_row = p.kind == "row" and "前附表" not in p.table
-            for sentence in (_rejecting_parts(text) if p.kind == "text" else [text] if whole_row else re.split(r"[；;。]", text)):
+            if whole_row and len(text) > 160:
+                # a cell as long as a page ("响应报价得分=…【异常报价】…将被作为无效响应处理"): the sentence that rejects
+                found = [s for s in re.split(r"(?<=[。；;])", text) if _REJECT.search(s) or _STAR.search(s)]
+                rows_text = found or [text]
+            else:
+                rows_text = [text]
+            for sentence in (_rejecting_parts(text) if p.kind == "text" else rows_text if whole_row else re.split(r"[；;。]", text)):
                 sentence = sentence.strip()
-                star = bool(_STAR.search(sentence))
+                # "注：备注栏中加“★”标记的为重大隐患" explains the mark; it is not an item that bears it
+                star = bool(_STAR.search(re.sub(r"[“\"‘'「]\s*[★☆＊]\s*[”\"’'」]", "", sentence)))
                 if not sentence or not (star or (_REJECT.search(sentence) and not _NOT_A_REJECTION.search(sentence))):
                     continue
                 key = _flat(sentence)
@@ -524,6 +661,8 @@ def rejection_candidates(doc: Document, limit: int = 80) -> List[Piece]:
     for index, p in enumerate(pieces):
         if p.kind not in ("text", "row") or _CONTRACT.search(p.chapter) or "格式" in p.chapter:
             continue
+        if _WORKS_CHAPTER.search(p.chapter) and not _ABOUT_BID.search(p.text):
+            continue
         texts = [p.text] if p.kind == "text" else [c for c in p.cells[1:] if c]
         for text in texts:
             for sentence in ([text] if p.kind == "text" else re.split(r"[；;。]", text)):
@@ -548,6 +687,53 @@ def rejection_candidates(doc: Document, limit: int = 80) -> List[Piece]:
     return out
 
 
+_REVIEW_GROUP = re.compile(r"(?:形式|资格|响应性|符合性|实质性)[^，。；]{0,8}评审")
+_ITEM_MARK = re.compile(r"[（(]\s*(\d{1,2})\s*[)）]")
+
+
+def review_standards(doc: Document) -> List[Tuple[str, str, str, Piece]]:
+    """The standards every bid is checked against before it is scored - (group, factor, standard, where). One that
+    is not met and the bid goes no further, whatever words the tender uses for that.
+
+        | 形式评审标准 | 供应商名称 | 与营业执照、资质证书、安全生产许可证一致 |          a row each
+        | 2.1.2 | 资格评审标准 | （1）投标人具备有效的营业执照…（2）投标人的资质等级…  |          one cell, a numbered list
+    """
+    out: List[Tuple[str, str, str, Piece]] = []
+    seen: set = set()
+    for p in doc.pieces:
+        if p.kind != "row" or _CONTRACT.search(p.chapter) or _WORKS_CHAPTER.search(p.chapter):
+            continue
+        at = next((i for i, cell in enumerate(p.cells) if _REVIEW_GROUP.search(cell) and len(cell) <= 30), None)
+        if at is None:
+            continue
+        group = p.cells[at].strip()
+        rest = [cell.strip() for cell in p.cells[at + 1:] if cell.strip()]
+        if not rest:
+            continue
+        if len(rest) >= 2:
+            entries = [(rest[0], "；".join(rest[1:]))]
+        else:
+            marks = [m for m in _ITEM_MARK.finditer(rest[0])]
+            # "（1）…（2）…": the items of a list - numbered 1, 2, 3 in turn, not a bracketed figure inside a sentence
+            starts: List[Tuple[int, int]] = []
+            for mark in marks:
+                n = int(mark.group(1))
+                if (not starts and (n == 1 or mark.start() <= 2)) or (starts and n == starts[-1][1] + 1):
+                    starts.append((mark.start(), n))
+            if len(starts) >= 2:
+                cuts = [s for s, _ in starts] + [len(rest[0])]
+                lead = rest[0][:cuts[0]].strip(" ：:；")
+                entries = [(lead, rest[0][a:b].strip(" ；;")) for a, b in zip(cuts, cuts[1:])]
+            else:
+                entries = [("", rest[0])]
+        for factor, standard in entries:
+            key = (_flat(group), _flat(factor), _flat(standard))
+            if standard and key not in seen:
+                seen.add(key)
+                out.append((group, factor, standard, p))
+    return out
+
+
 def obligations(doc: Document) -> List[Piece]:
     """Front-table content that lays down a 须 / 不得 - binding, sealing, delivery, the account a transfer
     comes from. No rejection word stands in them; the formal review rejects for them all the same."""
@@ -556,6 +742,11 @@ def obligations(doc: Document) -> List[Piece]:
     for row in front_rows(doc):
         for part in re.split(r"[；;]", row.content):
             part = part.strip()
+            if _BOXES.search(part):
+                # one option of a row of tick boxes: what is ticked is the row's field, already shown as one
+                part = _chosen(part) or ""
+                if len(part) <= 8:
+                    continue
             if part and _OBLIGES.search(part) and _flat(part) not in rejected:
                 out.append(replace(row.piece, number=row.number, heading=row.name, text=part))
     # the notice lays down who may bid at all: "本次招标不接受联合体投标", "拟派项目经理须具备…"
@@ -570,28 +761,47 @@ def obligations(doc: Document) -> List[Piece]:
 # ---------------------------------------------------------------------------
 # scoring rows, named 危大 items, the documents a bid must contain
 # ---------------------------------------------------------------------------
+#: a cell that says HOW points are won ("有 1 项类似业绩得 2 分，满分 10 分"), not what is scored ("报价得分")
+_SCORING_RULE = re.compile(r"\d\s*分|.{8,}(?:得分|满分|加分|扣分)|(?:得分|满分|加分|扣分).{8,}")
+
+
 def scores(doc: Document) -> List[Tuple[str, str, Piece]]:
     out: List[Tuple[str, str, Piece]] = []
     seen: set = set()
+    judged = any(_EVALUATION.search(p.chapter) for p in doc.pieces)     # the document has a chapter on how bids are judged
     for p in doc.pieces:
         if p.kind != "row" or "评标" not in p.chapter and "评审" not in p.chapter and "评分" not in p.table:
             continue
-        column = next((i for i, h in enumerate(p.header) if re.fullmatch(r"分值|分数|满分|权重|标准分|分值[（(]分[)）]", h.strip())), None)
+        if _CONTRACT.search(p.chapter) or _WORKS_CHAPTER.search(p.chapter) or (judged and not _EVALUATION.search(p.chapter)):
+            continue    # the contract scores the contractor's PERFORMANCE (考核评分表); that is not how the bid is scored
+        column = next((i for i, h in enumerate(p.header) if re.fullmatch(r"分值|分数|满分|权重|标准分|分值分配|分值[（(]分[)）]", h.strip())), None)
         if column is not None and column < len(p.cells) and re.fullmatch(r"\d+(?:\.\d+)?(?:\s*分)?", p.cells[column].strip()) and column >= 1:
             name = p.cells[column - 1].strip()
+            if column >= 2 and _SCORING_RULE.search(name) and p.cells[column - 2].strip() and not re.fullmatch(
+                    r"[\d.()（）；\s]+", p.cells[column - 2].strip()):
+                name = p.cells[column - 2].strip()     # "工程业绩 | 有 1 项类似业绩得 2 分，满分 10 分 | 10": the cell before the rule
             value = p.cells[column].strip()
             key = (_flat(name), _flat(value))
             if name and len(name) <= 30 and key not in seen:
                 seen.add(key)
                 out.append((name, value if value.endswith("分") else value + "分", p))
             continue
-        points = next((c for c in reversed(p.cells) if _POINTS.match(c)), "")
+        at = next((i for i, c in enumerate(p.cells) if i and _POINTS.match(c)), None)
+        points = p.cells[at] if at is not None else ""
         if points and len(p.cells) >= 3:
-            item = p.cells[-2]
-            factor = re.sub(r"评分标准|[（(][^）)]*[)）]", "", p.cells[-3] if len(p.cells) >= 4 else p.cells[1]).strip()
-            name = item if len(item) <= 24 else factor
+            # the name stands to the LEFT of the points, wherever in the row the points are
+            # ("2.2.4（2）| 主要人员 | 5分 | 满足…得3分 | 3-5分")
+            item = p.cells[at - 1]
+            if (at >= 2 and _SCORING_RULE.search(item) and p.cells[at - 2].strip()
+                    and not re.fullmatch(r"[\d.()（）；\s]+", p.cells[at - 2].strip())):
+                item = p.cells[at - 2]      # "工程业绩 | 有 1 项类似工程业绩得 3 分，满分 12 分 | 12": the name is the cell before the rule
+            # a long name: the factor in the cell before it - or, where that is the clause number (a scan's reading runs
+            # factor and item into one cell), the name itself without its "评分标准（35分）"
+            before = p.cells[at - 2].strip() if at >= 2 else ""
+            wide = before if (before and not re.fullmatch(r"[\d.()（）；\s]+", before)) else item
+            name = item if len(item) <= 24 else re.sub(r"评分标准|[（(][^）)]*[)）]", "", wide).strip(" ；;")
             key = (_flat(name), _flat(points))
-            if name and key not in seen:
+            if name and not re.fullmatch(r"[\d.\-~～—\s]+分?|[\d.()（）；\s]+", name) and key not in seen:
                 seen.add(key)
                 out.append((name, points.strip(), p))
             continue
@@ -618,7 +828,9 @@ def specials(doc: Document):
                 hazard = re.search(tf._HAZARD, found.group(0))
                 name = found.group(0)[hazard.start():] if hazard else found.group(0)  # "深基坑专项施工方案", without 须编制
                 # the figure may stand in the clause before: "基坑开挖深度6.8米，…，须编制深基坑专项施工方案"
-                detail = tf._SPECIAL_DETAIL.search(clause) or tf._SPECIAL_DETAIL.search(p.text)
+                # ... or anywhere in a sentence that names this one item only; another item's figure is not this one's
+                alone = len(tf._SPECIAL.findall(p.text)) == 1
+                detail = tf._SPECIAL_DETAIL.search(clause) or (tf._SPECIAL_DETAIL.search(p.text) if alone else None)
                 key = hazard.group(0) if hazard else name
                 if key in seen:
                     continue
@@ -641,14 +853,20 @@ def forms(doc: Document) -> List[Tuple[str, Piece]]:
         seen.append(flat_name)
         out.append((name, piece))
 
-    composition = re.compile(r"[一-鿿]{2,8}文件的?(?:组成|构成)|[一-鿿]{2,8}文件由(?:下列|以下)")
+    composition = re.compile(r"[一-鿿]{2,8}文件的?(?:组成|构成)|[一-鿿]{2,8}文件由(?:下列|以下)|[一-鿿]{2,8}文件由[^。；：:]{2,40}(?:组成|构成)")
     announced = False   # "投标文件由资格证明文件、商务技术文件、报价文件三部分组成：" - the lists follow, paragraph by paragraph
+    announced_at = ""
     for p in doc.pieces:
+        if _CONTRACT.search(p.chapter):
+            continue    # 合同文件的组成 is the contract's
         if p.kind == "heading":
-            announced = bool(composition.search(p.text))
+            found = composition.search(p.text)
+            announced, announced_at = bool(found and _ours(found.group(0))), p.number
         elif p.kind == "text" and composition.search(p.text) and not _FORM_ITEM.search(p.text):
-            announced = True
+            announced, announced_at = _ours(composition.search(p.text).group(0)), p.number
             continue
+        if announced and p.kind == "text" and re.search(r"[：:]\s*$", p.text) and not composition.search(p.text) and not _FORM_LIST.search(p.text):
+            announced = False   # another list begins: "3.4.4 有下列情形之一的，保证金不予退还：" - what follows are no documents
         if announced and p.kind == "text" and _FORM_ITEM.search(p.text) and not _FORM_LIST.search(p.text):
             for name in _FORM_ITEM.findall(p.text):
                 add(name, p)
@@ -658,11 +876,12 @@ def forms(doc: Document) -> List[Tuple[str, Piece]]:
             continue
         if p.kind != "text":
             continue
-        if composition.search(p.heading) and not _FORM_LIST.search(p.text) and _FORM_ITEM.search(p.text):
+        if (composition.search(p.heading) and _ours(composition.search(p.heading).group(0)) and not _FORM_LIST.search(p.text)
+                and _FORM_ITEM.search(p.text)):
             for name in _FORM_ITEM.findall(p.text):
                 add(name, p)
             continue
-        if _FORM_LIST.search(p.text):
+        if _FORM_LIST.search(p.text) and _ours(_FORM_LIST.search(p.text).group(0)):
             for name in _FORM_ITEM.findall(p.text):
                 for single in re.split(r"及|和(?=投标函附录)", name) if "投标函及投标函附录" in name else [name]:
                     add(single, p)

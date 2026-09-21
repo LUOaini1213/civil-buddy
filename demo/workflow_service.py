@@ -15,8 +15,10 @@ from packing_assistant.sandbox import assert_open, assert_write, guarded_write_t
 
 
 def _role_of(name):
+    from packing_assistant.office_job import material_role
+
     return ("response" if re.search(r"投标文件|投标响应|响应文件|技术标草稿|响应草稿", name) else
-            "tender" if re.search(r"招标|采购需求", name) else "reference")
+            "tender" if re.search(r"招标|采购需求", name) else material_role(name))
 
 
 def unreadable_attachments(sid):

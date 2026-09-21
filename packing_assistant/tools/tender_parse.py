@@ -334,7 +334,9 @@ def _document_summary(doc: Any) -> Dict[str, Any]:
     return {"schema": "tender.document.v1", **tender_document.summary(doc),
             "candidates": [{"text": p.text[:300], "locator": p.ref} for p in tender_document.rejection_candidates(doc)],
             "cut": any(p.text.startswith("（未读完）") for p in doc.pieces),
-            "forms": [{"name": name, "locator": piece.ref} for name, piece in tender_document.forms(doc)]}
+            "forms": [{"name": name, "locator": piece.ref} for name, piece in tender_document.forms(doc)],
+            "review": [{"group": group, "factor": factor, "standard": standard[:300], "locator": piece.ref}
+                       for group, factor, standard, piece in tender_document.review_standards(doc)]}
 
 
 def _extract_line_items(lines: List[str]) -> List[Dict[str, Any]]:
@@ -759,6 +761,9 @@ def parse_tender_text(text: str, *, source: str = "text", sides: str = "auto") -
             if item["id"] not in theme_ids:
                 requirements.append(item)
                 theme_ids.add(item["id"])
+        # a line that merely holds a ★ is a must-meet item of a typed request. In a document the structure decides:
+        # the ★ in the 备注 column of a hazard list marks a major hazard, and tender_document.rejections left it out
+        requirements = [r for r in requirements if not (r.get("item_kind") == "star" and not r.get("locator"))]
 
     duration_days = _tender_duration(facts, lines)
     envelope = _detect_envelope(blob)

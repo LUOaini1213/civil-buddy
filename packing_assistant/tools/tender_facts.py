@@ -315,6 +315,9 @@ _DEADLINE_QUERY_NAMES = ("提出问题的截止时间", "澄清招标文件的�
 #: what the rows of a front table are called when the purchase is not a works tender (政府采购: 磋商 / 谈判 / 询价):
 #: 供应商 for 投标人, 响应文件 for 投标文件, 服务期限 for 工期
 _DOCUMENT_ROW_NAMES: Tuple[Tuple[str, str], ...] = (
+    (r"(?:提交|递交)?备选[一-鿿/／]{0,8}方案", "alternative"),            # 是否允许提交备选投标/响应方案
+    (r"第[一二三两]个?信封[一-鿿]{0,4}开标时间", "deadline_open"),
+    (r"第[一二三两]个?信封[一-鿿]{0,4}开标地点", "open_place"),
     # by the SHAPE of the name, not by one procurement method's words: 投标 / 响应 / 磋商 / 比选申请 / 报价 … 文件, 有效期, 人
     (r"[一-鿿]{0,4}服务期限?|合同履行期限|履约期限|履行期限|供货期限?|交付期限?", "duration"),
     (r"(?!保函|保证金|担保|证书|许可)[一-鿿]{2,6}有效期", "validity"),
@@ -338,7 +341,10 @@ _TOPIC = {t.key: t for t in TOPICS + DOCUMENT_TOPICS}
 def document_topic(name: str) -> str:
     """The field a front-table row (or a label inside its content) is about, by its name. The keyword has
     to be what the name is about: 招标人书面澄清的时间 is not the 招标人."""
-    name = re.sub(r"^(?:本项目)?是否(?:接受|允许|组织|召开|需要)?", "", (name or "").strip())   # "是否接受联合体" is about 联合体
+    name = re.sub(r"[（(][^）)]*[)）]", "", (name or "").strip())           # 第一个信封（商务及技术文件）开标时间
+    name = re.sub(r"^(?:本项目)?是否(?:接受|允许|组织|召开|需要)?", "", name)   # "是否接受联合体" is about 联合体
+    if re.search(r"分包人|分包商|分包单位|第三人", name):
+        return ""   # 对分包人的资格要求 is about whoever the work is sublet to, not about the bidder
     for alias in _DEADLINE_QUERY_NAMES:
         if alias in name:
             return "deadline_query"
@@ -354,7 +360,8 @@ def document_topic(name: str) -> str:
             return key
     for start, end, key in _topic_hits(name):
         rest = name[:start] + name[end:]
-        if (end - start) * 2 >= len(name) or re.fullmatch(r"(?:投标人|的)?(?:要求|条件|时间|金额|标准|期限|资格|(?:和|及)地点)?", rest):
+        if (end - start) * 2 >= len(name) or re.fullmatch(
+                r"(?:投标人|供应商|拟派|拟任|拟投入|本项目|的)*(?:任职|执业)?(?:资格)?(?:要求|条件|时间|金额|标准|期限|资格|(?:和|及)地点)?", rest):
             return key
     return ""
 _ALWAYS_OURS = frozenset({"our_price", "evidence", "staff"})  # ours by nature (a named person is ours)
@@ -433,6 +440,7 @@ class ScorePoint:
     lot: str
     note: str
     line: int
+    ref: str = ""  # where it stands in a document: "第三章 前附表 2.2.4（1）（第142页）"
 
 
 @dataclass(frozen=True)
@@ -443,6 +451,7 @@ class Special:
     note: str
     line: int
     not_given: bool = False  # "专项没提"
+    ref: str = ""
 
 
 @dataclass
@@ -492,7 +501,7 @@ _HAZARD = r"(?:深基坑|基坑|高支模|高大模板|模板支撑|支模|脚�
 _SPECIAL = re.compile(r"[一-鿿A-Za-z0-9#]{0,12}?" + _HAZARD + r"[一-鿿]{0,6}?(?:专项施工方案|专项方案|专项)")
 _SPECIAL_LEAD = re.compile(r"^.*?(?:点名|要求|必须|须|还要|需要|要|需)\s*(?:要|须)?\s*(?:编制|编写|编|做|出|提交|报)\s*(?:一份|一个)?")
 _SPECIAL_DETAIL = re.compile(
-    r"(?:挖深|开挖深度|基坑深度|坑深|支模高度|搭设高度|搭设跨度|跨度|板厚|梁高|净高|高度|埋深|覆土|顶进长度|单件重量?|起重量|吊重)\s*(?:约|为|是|达|最大|最深|最高)?\s*"
+    r"(?:挖深|开挖深度|基坑深度|坑深|支模高度|搭设高度|搭设跨度|跨度|板厚|梁高|净高|高度|埋深|覆土|顶进长度|单件重量?|起重量|吊重)\s*(?:约|为|是|达|最大|最深|最高){0,3}\s*"
     + _NUM + r"\s*(?:mm|cm|km|m|毫米|厘米|米|吨|t|kN)?", re.I)
 
 
@@ -686,8 +695,8 @@ def _extract_document(text: str) -> TenderFacts:
     doc = tender_document.read(text)
     facts = TenderFacts()
     facts.mentions = list(tender_document.field_mentions(doc))
-    facts.scores = [ScorePoint(name, score, "", piece.text[:160], piece.line) for name, score, piece in tender_document.scores(doc)]
-    facts.specials = [Special(name, detail, "", piece.text[:160], piece.line) for name, detail, piece in tender_document.specials(doc)]
+    facts.scores = [ScorePoint(name, score, "", piece.text[:160], piece.line, piece.ref) for name, score, piece in tender_document.scores(doc)]
+    facts.specials = [Special(name, detail, "", piece.text[:160], piece.line, ref=piece.ref) for name, detail, piece in tender_document.specials(doc)]
     facts.jurisdiction = infer_jurisdiction(text)
     return facts
 

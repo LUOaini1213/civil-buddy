@@ -75,8 +75,6 @@ def _explain(text: str, expert_id: str, prefix: str = "") -> str:
 
 _TABLE_EXTS = (".xlsx", ".csv", ".pdf")
 _DOCUMENT_EXTS = (".docx", ".pdf", ".txt", ".md")
-_TENDER_FILE = ("招标", "tender", "itt", "rfp", "rfq")
-_RESPONSE_FILE = ("响应", "应答", "投标", "response", "bid", "proposal")
 
 
 def _named_packing_list(text: str) -> str:
@@ -109,15 +107,13 @@ def _tender_materials(text: str) -> Tuple[Optional[List[Dict[str, Any]]], List[D
     text. A file that could not be read used to be left out without a word, so a check that was handed
     a scanned 投标响应.pdf reported the response as never given.
     """
-    from packing_assistant.office_job import DOCUMENT_FILE_CHARS, files_named_in, job_root, read_material_checked
+    from packing_assistant.office_job import DOCUMENT_FILE_CHARS, files_named_in, job_root, material_role, read_material_checked
 
     sources: List[Dict[str, Any]] = []
     unread: List[Dict[str, str]] = []
     root = job_root().resolve()
     for index, path in enumerate(files_named_in(text, _DOCUMENT_EXTS)):
-        name = path.name.lower()
-        role = ("tender" if any(mark in name for mark in _TENDER_FILE)
-                else "response" if any(mark in name for mark in _RESPONSE_FILE) else "reference")
+        role = material_role(path.name)     # one rule for what a file name says (技术标.docx, 养护方案.docx are ours too)
         body, why = read_material_checked(path, DOCUMENT_FILE_CHARS)   # 40 000 used to be the cut: a quarter of a real tender
         if why:
             unread.append({"title": path.name, "role": role, "reason": why})
@@ -139,13 +135,12 @@ def _tender_sources(text: str) -> Optional[List[Dict[str, Any]]]:
 def _names_both_sides(text: str) -> bool:
     """The task names exactly one tender document and at least one document of ours (roles read off the file
     names, as everywhere)."""
-    from packing_assistant.office_job import files_named_in
+    from packing_assistant.office_job import files_named_in, material_role
 
     # by its full name, extension included: "招标文件要求工期60日历天" talks ABOUT the tender, it does not point at a file
     names = [path.name.lower() for path in files_named_in(text, _DOCUMENT_EXTS) if path.name.lower() in (text or "").lower()]
-    tenders = [n for n in names if any(mark in n for mark in _TENDER_FILE)]
-    ours = [n for n in names if n not in tenders and any(mark in n for mark in _RESPONSE_FILE)]
-    return len(tenders) == 1 and bool(ours)
+    roles = [material_role(n) for n in names]
+    return roles.count("tender") == 1 and "response" in roles
 
 
 def _draft_md(expert_id: str, tool: str, text: str) -> str:

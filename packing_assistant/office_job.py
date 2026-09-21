@@ -471,10 +471,11 @@ def pdf_document_text(source: Any) -> str:
     (tools/pdf_layout.py). ``source`` is a path or a binary stream. A scan has no text layer and gives ""."""
     from pypdf import PdfReader
 
+    from packing_assistant.tools import pdf_grid
     from packing_assistant.tools.pdf_layout import pages_text
 
     reader = PdfReader(str(source) if isinstance(source, Path) else source)
-    texts = [(page.extract_text() or "") for page in reader.pages]
+    texts = pdf_grid.document_texts(reader)
     if any(len(text.strip()) >= _MIN_TEXT for text in texts):
         return pages_text(texts)
     return _ocr_pdf_text(source) if isinstance(source, Path) else ""
@@ -520,7 +521,9 @@ _UNREAD_BLOCK = re.compile(r"^###[ \t]+(?P<name>[^\n]+)\n（读失败）(?P<reas
 
 
 _TENDER_NAME = ("招标", "tender", "itt", "rfp", "rfq")
-_RESPONSE_NAME = ("响应", "应答", "投标", "response", "bid", "proposal")
+# a bid is many files, and few of them carry 投标 in their name: 技术标.docx, 施工组织设计.docx, 养护方案.docx, 报价文件.docx
+_RESPONSE_NAME = ("响应", "应答", "投标", "技术标", "商务标", "经济标", "资信标", "报价", "施工组织设计", "方案", "承诺", "偏离表", "授权委托",
+                  "资格审查资料", "项目管理机构", "response", "bid", "proposal", "method statement")
 
 
 def material_role(name: str) -> str:
