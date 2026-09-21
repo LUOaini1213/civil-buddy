@@ -32,7 +32,11 @@ const state = {
 };
 
 const $ = (id) => document.getElementById(id);
-let cbActiveRun = null;
+/* 页面上"正在跑"的一切，一个对象：
+   active      —— 有流的那一轮（发送中 / 续流中 / 切回来跟着的），停止按钮停的就是它
+   watched     —— 只是旁观的后台轮次（没有 event_log 能力的后端上用轮询看着）
+   background  —— 切走后仍在服务端跑的会话 id，列表画「运行中」、完成弹提示 */
+const runState = { active: null, watched: null, background: new Set() };
 let cbSessionRequest = 0;
 let cbContextRequest = 0;
 let cbContextSearchRequest = 0;
@@ -63,7 +67,7 @@ function cbRememberedSession() {
 }
 
 async function cbResumeSession(id, request) {
-  if (!id || request !== cbSessionRequest || cbActiveRun || state.history.length) return false;
+  if (!id || request !== cbSessionRequest || runState.active || state.history.length) return false;
   const session = cbProj.sessions.find((item) => item.session_id === id);
   if (!session) return false;
   await cbProjOpenSession(session);
@@ -120,11 +124,11 @@ function cbRunPaint(running) {
 }
 
 function cbCancelActiveRun() {
-  if (!cbActiveRun) return;
-  const run = cbActiveRun;
+  if (!runState.active) return;
+  const run = runState.active;
   if (cbCapability("cancel") === true) cbRequestCancellation(run).catch(() => {});
   run.controller.abort();
-  cbActiveRun = null;
+  runState.active = null;
   cbRunPaint(false);
 }
 
@@ -133,19 +137,18 @@ function cbCancelActiveRun() {
    显式「停止」按钮仍走 cbCancelActiveRun。 */
 function cbDetachActiveRun() {
   cbReleaseWatch();
-  if (!cbActiveRun) return;
-  const run = cbActiveRun;
+  if (!runState.active) return;
+  const run = runState.active;
   run.detached = true;
   run.controller.abort();
-  cbActiveRun = null;
+  runState.active = null;
   cbRunPaint(false);
-  cbBackgroundSessions.add(run.session);
+  runState.background.add(run.session);
   cbAnnounce("任务继续在后台运行，回到该任务可查看结果");
   loadThreads().catch(() => {});
   cbBgSchedule();
 }
 
-const cbBackgroundSessions = new Set();
 let cbWatchTimer = null;
 
 /* 切走的任务跑完了要有人说一声：只要列表里还有「运行中」的会话，就每 5 s 拉一次
@@ -162,9 +165,9 @@ function cbBgObserve(rows) {
     cbBgRows.set(s.session_id, s);
     if (s.running === true) nowRunning.add(s.session_id);
   }
-  for (const sid of new Set([...cbBgKnownRunning, ...cbBackgroundSessions])) {
+  for (const sid of new Set([...cbBgKnownRunning, ...runState.background])) {
     if (nowRunning.has(sid) || sid === state.session) continue;
-    cbBackgroundSessions.delete(sid);
+    runState.background.delete(sid);
     const row = cbBgRows.get(sid);
     if (!row) continue; /* 列表里已经没有它了：不猜结果 */
     cbToast(`「${row.title || sid}」已在后台完成`, { action: "查看", onAction: () => cbProjOpenSession(row) });
@@ -175,7 +178,7 @@ function cbBgObserve(rows) {
 
 function cbBgSchedule() {
   if (cbBgTimer) { clearTimeout(cbBgTimer); cbBgTimer = null; }
-  const others = [...new Set([...cbBgKnownRunning, ...cbBackgroundSessions])].filter((sid) => sid !== state.session);
+  const others = [...new Set([...cbBgKnownRunning, ...runState.background])].filter((sid) => sid !== state.session);
   if (!others.length) return;
   cbBgTimer = setTimeout(cbBgTick, 5000);
 }
@@ -200,23 +203,22 @@ function cbToast(text, opts) { return toast(text, opts); }
 
 /* 旁观中的后台轮次：页面上没有流，但服务端这一轮还在跑，会话因此是忙的（再发消息只会 409）。
    所以它要按「运行中」来画，也要能被停止——否则回到任务的人只能干等到完成或服务端超时。
-   形状和 cbActiveRun 一样（session / cancelRequested），停止按钮因此不用区分两者。 */
-let cbWatchedRun = null;
+   形状和 runState.active 一样（session / cancelRequested），停止按钮因此不用区分两者。 */
 function cbReleaseWatch() {
   if (cbWatchTimer) { clearTimeout(cbWatchTimer); cbWatchTimer = null; }
-  if (!cbWatchedRun) return;
-  cbWatchedRun = null;
-  if (!cbActiveRun) cbRunPaint(false);
+  if (!runState.watched) return;
+  runState.watched = null;
+  if (!runState.active) cbRunPaint(false);
 }
 
 
 /* 手机回到前台（iOS 后台会掐掉 fetch 流）：没有活动流时，检查当前任务是否还在服务端跑。 */
 document.addEventListener("visibilitychange", () => {
-  if (document.visibilityState !== "visible" || cbActiveRun || !state.session) return;
+  if (document.visibilityState !== "visible" || runState.active || !state.session) return;
   fetch("/api/sessions/" + encodeURIComponent(state.session))
     .then((r) => (r.ok ? r.json() : null))
     .then((d) => {
-      if (d && d.turn_state && d.turn_state.active && !cbActiveRun && state.session === d.session_id) {
+      if (d && d.turn_state && d.turn_state.active && !runState.active && state.session === d.session_id) {
         cbAttachToTurn(d.session_id, "回到前台；");
       }
     })
@@ -230,26 +232,26 @@ async function cbWatchSession(sid, opts) {
   const started = Date.now();
   const maxMs = Number(options.maxMs) || 10 * 60 * 1000;
   if (cbWatchTimer) { clearTimeout(cbWatchTimer); cbWatchTimer = null; }
-  if (cbWatchedRun && cbWatchedRun.session !== sid) cbReleaseWatch();
-  const superseded = () => state.session !== sid || request !== cbSessionRequest || !!cbActiveRun;
+  if (runState.watched && runState.watched.session !== sid) cbReleaseWatch();
+  const superseded = () => state.session !== sid || request !== cbSessionRequest || !!runState.active;
   const tick = async () => {
-    if (superseded()) { if (cbWatchedRun && cbWatchedRun.session === sid) cbReleaseWatch(); return; }
+    if (superseded()) { if (runState.watched && runState.watched.session === sid) cbReleaseWatch(); return; }
     let d = null;
     try {
       const r = await fetch("/api/sessions/" + encodeURIComponent(sid));
       if (r.ok) d = await r.json();
     } catch (_) { /* 网络抖动：下一拍再试 */ }
-    if (superseded()) { if (cbWatchedRun && cbWatchedRun.session === sid) cbReleaseWatch(); return; }
+    if (superseded()) { if (runState.watched && runState.watched.session === sid) cbReleaseWatch(); return; }
     const active = !!(d && d.turn_state && d.turn_state.active);
     if (active && Date.now() - started < maxMs) {
-      if (!cbWatchedRun || cbWatchedRun.session !== sid) {
-        cbWatchedRun = { session: sid, cancelRequested: false };
+      if (!runState.watched || runState.watched.session !== sid) {
+        runState.watched = { session: sid, cancelRequested: false };
         cbRunPaint(true);
         /* 没有取消能力的后端上，停止按钮什么也做不了：不要摆一个假的。 */
         if ($("stop") && cbCapability("cancel") !== true) $("stop").hidden = true;
       }
       await cbPaintLive(sid, options);
-      if (superseded()) { if (cbWatchedRun && cbWatchedRun.session === sid) cbReleaseWatch(); return; }
+      if (superseded()) { if (runState.watched && runState.watched.session === sid) cbReleaseWatch(); return; }
       cbWatchTimer = setTimeout(tick, 1500);
       return;
     }
@@ -259,7 +261,7 @@ async function cbWatchSession(sid, opts) {
       addStatus("这个任务仍在后台运行，稍后回到该任务查看结果。");
       return;
     }
-    cbBackgroundSessions.delete(sid);
+    runState.background.delete(sid);
     if (d) cbPaintRecovered(d, options);
     loadThreads().catch(() => {});
   };
@@ -275,7 +277,7 @@ async function cbPaintLive(sid, options) {
     const r = await fetch("/api/sessions/" + encodeURIComponent(sid) + "/live");
     if (r.ok) live = await r.json();
   } catch (_) { /* 下一拍再试 */ }
-  if (!live || state.session !== sid || cbActiveRun) return;
+  if (!live || state.session !== sid || runState.active) return;
   if (options.liveSeq === live.seq) return;
   options.liveSeq = live.seq;
   if (!live.text && !live.status) return;
@@ -925,7 +927,7 @@ function cbProjRender() {
       t1.textContent = s.title || s.session_id;
       const t2 = document.createElement("span");
       t2.className = "t-time";
-      const running = s.running === true || cbBackgroundSessions.has(s.session_id);
+      const running = s.running === true || runState.background.has(s.session_id);
       const stale = !running && s.turn_state === "stale";
       t2.textContent = running ? "运行中" : stale ? "已中断" : cbRelTime(s.updated_at);
       if (running) t2.classList.add("t-running");
@@ -1100,7 +1102,7 @@ async function cbRunBackground(text) {
     if (!r.ok) throw new Error(await apiError(r) || "HTTP " + r.status);
     const data = await r.json();
     const started = data.session_id || sid;
-    cbBackgroundSessions.add(started);
+    runState.background.add(started);
     addStatus(`并行任务已开始（会话 ${started.slice(0, 8)}），完成后会提示；随时可在左栏打开查看进度。`);
     await loadThreads();
     cbBgSchedule();
@@ -1427,8 +1429,8 @@ function cbFixMount(anchor, desc) {
 
 $("form").addEventListener("submit", async (ev) => {
   ev.preventDefault();
-  if (cbActiveRun) return;
-  if (cbWatchedRun) {
+  if (runState.active) return;
+  if (runState.watched) {
     /* 服务端这一轮还占着会话，现在发只会得到 409，还会把正在轮询的结果顶掉。 */
     addStatus("这个任务还在后台运行：等它完成，或先点「停止」。输入内容已保留。");
     return;
@@ -1495,12 +1497,12 @@ $("form").addEventListener("submit", async (ev) => {
   const bodyEl = addMsg("assistant", namesOrPlain(), "");
   const run = { controller: new AbortController(), session: state.session, bodyEl };
   cbRememberSession(state.session);
-  cbActiveRun = run;
+  runState.active = run;
   cbRunPaint(true);
   try {
     await streamChat(message, bodyEl, run);
   } catch (err) {
-    if (cbActiveRun !== run) return;
+    if (runState.active !== run) return;
     const stopped = err.name === "AbortError";
     const dropped = err.name === "StreamDroppedError";
     const raw = stopped ? "已停止接收回答。已有内容已保留。" : String(err.message || err);
@@ -1511,7 +1513,7 @@ $("form").addEventListener("submit", async (ev) => {
       note.textContent = raw;
       run.bodyEl.parentElement.appendChild(note);
       cbAnnounce("连接中断，正在恢复结果");
-      cbActiveRun = null;
+      runState.active = null;
       cbRunPaint(false);
       cbWatchSession(run.session, { bodyEl: run.bodyEl, reason: "连接曾中断；" });
       return;
@@ -1524,8 +1526,8 @@ $("form").addEventListener("submit", async (ev) => {
     if (!stopped) cbFixMount(run.bodyEl.parentElement, typeof CB_FIX !== "undefined" ? CB_FIX.classify(raw, { retryable: true }) : null);
     cbAnnounce(stopped ? "已停止接收回答" : "本轮失败：请看纠偏卡的建议动作");
   } finally {
-    if (cbActiveRun === run) {
-      cbActiveRun = null;
+    if (runState.active === run) {
+      runState.active = null;
       cbRunPaint(false);
     }
   }
@@ -1533,9 +1535,9 @@ $("form").addEventListener("submit", async (ev) => {
 
 if ($("stop")) $("stop").addEventListener("click", async () => {
   /* 有流的轮次，或只是在旁观的后台轮次：停止的都是服务端那一轮。 */
-  const run = cbActiveRun || cbWatchedRun;
+  const run = runState.active || runState.watched;
   if (!run) return;
-  const current = () => cbActiveRun === run || cbWatchedRun === run;
+  const current = () => runState.active === run || runState.watched === run;
   if (cbCapability("cancel") !== true) { if (run.controller) run.controller.abort(); return; }
   $("stop").disabled = true;
   $("stop").textContent = "停止中…";
@@ -1561,7 +1563,7 @@ function cbBackupPaint(busy) {
 
 if ($("cbBackupExport")) $("cbBackupExport").addEventListener("click", async () => {
   if (cbBackupBusy) return;
-  if (cbActiveRun) { addStatus("请停止或等待本轮完成后备份任务。"); return; }
+  if (runState.active) { addStatus("请停止或等待本轮完成后备份任务。"); return; }
   const session = state.session;
   cbBackupPaint(true);
   try {
@@ -1589,7 +1591,7 @@ if ($("cbBackupExport")) $("cbBackupExport").addEventListener("click", async () 
 
 if ($("cbBackupImport")) $("cbBackupImport").addEventListener("click", () => {
   if (cbBackupBusy) return;
-  if (cbActiveRun) { addStatus("请停止或等待本轮完成后导入任务。"); return; }
+  if (runState.active) { addStatus("请停止或等待本轮完成后导入任务。"); return; }
   $("cbBackupFile").click();
 });
 
@@ -1606,7 +1608,7 @@ if ($("cbBackupFile")) $("cbBackupFile").addEventListener("change", async () => 
     if (!response.ok) throw new Error(await apiError(response) || "导入失败");
     const result = await response.json();
     await loadThreads();
-    if (request === cbSessionRequest && !cbActiveRun) {
+    if (request === cbSessionRequest && !runState.active) {
       await cbProjOpenSession({ session_id: result.session_id, title: result.title });
       addStatus("已导入为新任务，原任务保持不变。可在左侧将它移动到工程项目；后续高风险操作需重新确认。");
     }
@@ -1637,12 +1639,12 @@ async function cbAttachToTurn(sid, reason) { return turns.attachToTurn(sid, reas
 const turns = createTurnStream({
   state,
   run: {
-    active: () => cbActiveRun,
-    setActive: (r) => { cbActiveRun = r; },
+    active: () => runState.active,
+    setActive: (r) => { runState.active = r; },
     paint: (on) => cbRunPaint(on),
     releaseWatch: () => cbReleaseWatch(),
     watch: (sid, opts) => cbWatchSession(sid, opts),
-    background: cbBackgroundSessions,
+    background: runState.background,
   },
   ui: {
     log: () => $("log"),
@@ -2065,7 +2067,7 @@ async function cbContextRebuild() {
   const status = $("ctxMemoryStatus");
   const box = $("ctxMemory");
   if (!box || !status) return;
-  if (cbActiveRun && cbActiveRun.session === state.session) {
+  if (runState.active && runState.active.session === state.session) {
     status.textContent = "任务正在处理中，请结束后再重新整理记忆。";
     return;
   }
@@ -4047,7 +4049,7 @@ function cbTlCreate(bodyEl, sourceMessage) {
 
     card.querySelector(".cb-apr-confirm").addEventListener("click", () => {
       if (state.decided || acknowledgment.value !== "我明白，将由持证人员签认") return;
-      if (cbActiveRun) {
+      if (runState.active) {
         cbAnnounce("请等待当前回答结束后，再确认重提");
         return;
       }
@@ -4392,4 +4394,4 @@ if (window.visualViewport) {
 /* 模块脚本没有全局：给旧的经典脚本（studio.js 调 reloadCatalog）和 e2e（scripts/e2e/ui_dom.cjs）
    一个明确的窗口面，而不是把几百个函数都挂到 window 上。 */
 window.reloadCatalog = reloadCatalog;
-window.__cb = Object.freeze({ state, cbCapability, cbAttachUpload, cbProjOpenSession, cbNewLocalSession, uploads, drafts, turns });
+window.__cb = Object.freeze({ state, runState, cbCapability, cbAttachUpload, cbProjOpenSession, cbNewLocalSession, uploads, drafts, turns });

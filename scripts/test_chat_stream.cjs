@@ -231,7 +231,7 @@ test("stop during a resume aborts it and keeps the partial answer", async () => 
   const running = h.submit("测试任务");
   await started;
   assert.equal(h.elements.form["aria-busy"], "true");
-  h.evaluate("cbActiveRun.controller.abort()");
+  h.evaluate("runState.active.controller.abort()");
   await running;
   const answer = h.messages.find((m) => m.role === "assistant").body;
   assert.equal(answer.textContent, "一半");
@@ -314,7 +314,7 @@ test("a rejected cancel can be retried without discarding the active response", 
   const pending = h.submit("写一份草稿");
   await h.elements.stop.listeners.click();
   assert.equal(h.elements.stop.disabled, false);
-  assert.equal(h.evaluate("cbActiveRun.cancelRequested"), false);
+  assert.equal(h.evaluate("runState.active.cancelRequested"), false);
   await h.elements.stop.listeners.click();
   assert.equal(attempts, 2);
   stream.enqueue(encoder.encode(frame("done", {text:"已停止",cancelled:true,ok:false})));
@@ -338,9 +338,9 @@ test("leaving an active task detaches it: nothing is cancelled and the task is r
   await pending;
   assert.notEqual(h.evaluate("state.session"), old);
   assert.deepEqual(requested, [], "switching tasks is not the stop button");
-  assert.equal(h.evaluate(`cbBackgroundSessions.has(${JSON.stringify(old)})`), true);
-  assert.equal(h.evaluate(`cbBackgroundSessions.has(state.session)`), false);
-  assert.equal(h.evaluate("cbActiveRun"), null);
+  assert.equal(h.evaluate(`runState.background.has(${JSON.stringify(old)})`), true);
+  assert.equal(h.evaluate(`runState.background.has(state.session)`), false);
+  assert.equal(h.evaluate("runState.active"), null);
   assert.match(h.announcements.at(-1), /后台/);
 });
 
@@ -359,7 +359,7 @@ test("the stop button still cancels the session it was pressed in, and only that
   const pending = h.submit("要停的任务");
   await h.elements.stop.listeners.click();
   assert.deepEqual(requested, [`/api/sessions/${session}/cancel`]);
-  assert.equal(h.evaluate(`cbBackgroundSessions.has(${JSON.stringify(session)})`), false);
+  assert.equal(h.evaluate(`runState.background.has(${JSON.stringify(session)})`), false);
   stream.enqueue(encoder.encode(frame("done", {text:"已停止",cancelled:true,ok:false})));
   stream.close();
   await pending;
@@ -408,7 +408,7 @@ test("a task found running in the background is shown as running, refuses a new 
   await nextPoll();
   assert.equal(h.elements.stop.hidden, true);
   assert.equal(h.elements.form["aria-busy"], "false");
-  assert.equal(h.evaluate("cbWatchedRun"), null);
+  assert.equal(h.evaluate("runState.watched"), null);
   assert.match(h.errors.at(-1), /回到前台；该任务已被停止/);
 });
 
@@ -431,7 +431,7 @@ test("leaving a watched task takes the stop button away without cancelling anyth
   h.evaluate("cbNewLocalSession()");
   assert.equal(h.elements.stop.hidden, true);
   assert.equal(h.elements.form["aria-busy"], "false");
-  assert.equal(h.evaluate("cbWatchedRun"), null);
+  assert.equal(h.evaluate("runState.watched"), null);
   assert.deepEqual(server.cancels, []);
   assert.equal(h.evaluate("cbTestPolls.length"), 1, "the poll that was pending");
   await h.evaluate("cbTestPolls.shift()()");
@@ -1151,7 +1151,7 @@ test("a rebuild from a previous task cannot overwrite or unlock the current task
 
 test("a running local task explains why rebuilding must wait without sending a mutation", async () => {
   const h = contextUi(() => assert.fail("do not rebuild while the current local turn is active"));
-  h.evaluate("cbActiveRun={session:state.session};");
+  h.evaluate("runState.active={session:state.session};");
   h.elements.ctxMemory.textContent = "当前记忆";
   await h.evaluate("cbContextRebuild()");
   assert.match(h.elements.ctxMemoryStatus.textContent, /任务正在处理中/);
