@@ -1032,6 +1032,12 @@ def _gap_rows(topic: str, tender: Facts, ours: Facts, lots: List[str], open_item
                 gap = "候选响应原文，出现相同词不代表已实质响应；" + gap
         if grade:
             gap = grade + "；" + gap
+        if filed:
+            from packing_assistant.tools.tender_document import _amount, _flat as _squeeze
+
+            if len({_amount(str(m["value"])) or _squeeze(str(m["value"])) for m in filed}) > 1:
+                # 周建国 in the bid letter, 周建华 in the staffing table: said in the row itself, not only in section 9
+                gap = "**我方文件写法不一致**（见 9 节）；" + gap
         missing_words: List[str] = []
         if evidence and checks is not None and topic in _EVIDENCE_TOPICS and (haves or quotes):
             missing_words = _check_evidence(label, _evidence_tokens(topic, haves, quotes), evidence, unread_evidence, checks,

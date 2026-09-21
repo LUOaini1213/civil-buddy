@@ -109,6 +109,8 @@ def judge(draft: str, expect: List[Dict]) -> List[Dict]:
             ok = any("数值不符" in r["三态"] and flat(item["value"]) in flat(r["响应原文或证据"]) and item["file"] in r["缺口"] + r["响应原文或证据"] for r in mine)
         elif kind == "inconsistent":
             ok = any("不一致" in r["是否一致"] and all(flat(v) in flat(r["各文件写法"]) for v in item["values"]) for r in listed)
+            in_row = [r for r in fields if next(iter(r.values()), "").startswith(item["label"])]
+            ok = ok and any("不一致" in r["缺口"] for r in in_row)   # ... and the field's own row says so too
         elif kind == "missing_special":
             ok = any(r["三态"].startswith("未响应") for r in named)
         elif kind == "no_response":
