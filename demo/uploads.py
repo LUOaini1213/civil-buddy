@@ -125,7 +125,9 @@ def _docx_text(data: bytes) -> str:
     _validate_archive(data)
     with ZipFile(BytesIO(data)) as archive:
         document = ElementTree.fromstring(archive.read("word/document.xml"))
-    return docx_document_text(document, MAX_TEXT_CHARS)
+        numbering = (ElementTree.fromstring(archive.read("word/numbering.xml"))
+                     if "word/numbering.xml" in archive.namelist() else None)   # clause numbers Word generates
+    return docx_document_text(document, MAX_TEXT_CHARS, numbering)
 
 
 def _xlsx_text(data: bytes) -> str:

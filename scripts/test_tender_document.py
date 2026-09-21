@@ -201,5 +201,42 @@ class OurFiles(unittest.TestCase):
         self.assertNotIn("质量标准", rows, "only one file speaks of it")
 
 
+class WordNumbering(unittest.TestCase):
+    """A clause number that Word generates is a list number, not text. Extracted without numbering.xml the
+    paragraph "8. 投标文件有下列情形之一的…" has lost its "8." - and the clause its locator."""
+
+    W = "http://schemas.openxmlformats.org/wordprocessingml/2006/main"
+
+    def paragraph(self, text: str, num: str = "", level: int = 0) -> str:
+        props = f'<w:pPr><w:numPr><w:ilvl w:val="{level}"/><w:numId w:val="{num}"/></w:numPr></w:pPr>' if num else ""
+        return f"<w:p>{props}<w:r><w:t>{text}</w:t></w:r></w:p>"
+
+    def test_list_numbers_come_back_as_text(self) -> None:
+        from xml.etree import ElementTree as ET
+
+        from packing_assistant.document_text import docx_document_text
+
+        body = "".join([self.paragraph("投标文件", "1"), self.paragraph("投标文件的组成", "1", 1), self.paragraph("投标报价", "1", 1),
+                        self.paragraph("投标", "1"), self.paragraph("密封和标记", "1", 1), self.paragraph("无效投标情形", "2"),
+                        self.paragraph("未按规定签字盖章的", "3"), self.paragraph("报价超过限价的", "3"), self.paragraph("普通段落"),
+                        self.paragraph("", "3"), self.paragraph("项目符号", "4")])
+        document = ET.fromstring(f'<w:document xmlns:w="{self.W}"><w:body>{body}</w:body></w:document>')
+        numbering = ET.fromstring(f'''<w:numbering xmlns:w="{self.W}">
+            <w:abstractNum w:abstractNumId="0"><w:lvl w:ilvl="0"><w:start w:val="3"/><w:numFmt w:val="decimal"/><w:lvlText w:val="%1."/></w:lvl>
+              <w:lvl w:ilvl="1"><w:start w:val="1"/><w:numFmt w:val="decimal"/><w:lvlText w:val="%1.%2"/></w:lvl></w:abstractNum>
+            <w:abstractNum w:abstractNumId="1"><w:lvl w:ilvl="0"><w:start w:val="4"/><w:numFmt w:val="chineseCounting"/><w:lvlText w:val="%1、"/></w:lvl></w:abstractNum>
+            <w:abstractNum w:abstractNumId="2"><w:lvl w:ilvl="0"><w:start w:val="1"/><w:numFmt w:val="decimal"/><w:lvlText w:val="（%1）"/></w:lvl></w:abstractNum>
+            <w:abstractNum w:abstractNumId="3"><w:lvl w:ilvl="0"><w:numFmt w:val="bullet"/><w:lvlText w:val="●"/></w:lvl></w:abstractNum>
+            <w:num w:numId="1"><w:abstractNumId w:val="0"/></w:num><w:num w:numId="2"><w:abstractNumId w:val="1"/></w:num>
+            <w:num w:numId="3"><w:abstractNumId w:val="2"/></w:num><w:num w:numId="4"><w:abstractNumId w:val="3"/></w:num>
+        </w:numbering>''')
+        lines = [line for line in docx_document_text(document, 10_000, numbering).splitlines() if line]
+        self.assertEqual(lines, ["3. 投标文件", "3.1 投标文件的组成", "3.2 投标报价", "4. 投标", "4.1 密封和标记", "四、 无效投标情形",
+                                 "（1） 未按规定签字盖章的", "（2） 报价超过限价的", "普通段落", "项目符号"],
+                         "a deeper level restarts under a new parent; an empty paragraph takes no number; a bullet is no number")
+        plain = [line for line in docx_document_text(document, 10_000).splitlines() if line]
+        self.assertEqual(plain[0], "投标文件", "without numbering.xml the text is what it was")
+
+
 if __name__ == "__main__":
     unittest.main(verbosity=1)

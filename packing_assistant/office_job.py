@@ -540,8 +540,9 @@ def _read_docx_text(path: Path, limit: int) -> str:
 
     with zipfile.ZipFile(path) as z:
         xml = z.read("word/document.xml")
+        numbering = z.read("word/numbering.xml") if "word/numbering.xml" in z.namelist() else None
     root_el = ET.fromstring(xml)
-    return docx_document_text(root_el, limit)
+    return docx_document_text(root_el, limit, ET.fromstring(numbering) if numbering else None)
 
 
 def read_job_file(path: Path, limit: int = JOB_FILE_CHARS) -> str:
