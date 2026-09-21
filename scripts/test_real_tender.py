@@ -37,8 +37,10 @@ def run(script: str, *args: str) -> dict:
 def main() -> int:
     floor = json.loads(FLOOR.read_text(encoding="utf-8"))
     failures: list[str] = []
-    for name, expected in floor["documents"].items():
-        total = run("eval_real_tender.py", "--doc", name)["total"]
+    for key, expected in floor["documents"].items():
+        name, _, fmt = key.partition(":")   # "cn_municipal:pdf" - the same document as a PDF; ":ocr" - as a saved OCR reading
+        total = run("eval_real_tender.py", "--doc", name, "--format", fmt or "docx")["total"]
+        name = key
         print(f"[{name}] fields right {total['fields_right']}/{total['fields']} wrong {total['fields_wrong']} ambiguous {total['fields_ambiguous']} "
               f"clause refs {total['clause_refs']} rejections {total['rejections']}/{total['rejections_total']} scores {total['scores']} "
               f"specials {total['specials']} forms {total['forms']}")

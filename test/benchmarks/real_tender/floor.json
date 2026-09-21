@@ -1,11 +1,75 @@
 {
-  "_note": "Regression floors for the real-tender documents and bid sets. All of them have been seen by the rules; a held-out item's first-run numbers are in README.md and are the ones to quote. cn_municipal first run (rules frozen at d2b71cf): fields 14/17, clause refs 1, rejections 12/22, scores 9/10, specials 2/2, forms 5/15. bid_cn_municipal first run (rules frozen at d767927): defects 6/6, false alarms 2/8.",
+  "_note": "Regression floors for the real-tender documents and bid sets. All of them have been seen by the rules; a held-out item's first-run numbers are in README.md and are the ones to quote. cn_municipal first run (rules frozen at d2b71cf): fields 14/17, clause refs 1, rejections 12/22, scores 9/10, specials 2/2, forms 5/15. bid_cn_municipal first run (rules frozen at d767927): defects 6/6, false alarms 2/8. The :pdf entries run the committed PDF fixtures (first run of cn_municipal.pdf, layout rules frozen at a505c00: fields 17/17, rejections 21/22). The :ocr entries run the saved OCR readings (*.ocr.raw.txt, RapidOCR on 150-dpi scans) - the reading is fixed, what is guarded is everything done with it; first run of the municipal scan through the real OCR path (rules frozen at 8560c68): fields 13/17, rejections 21/22, scores 9/10, and two values cut short by a full-width thousands separator (￥200 for ￥200，000.00; 268.50万元 for 3，268.50万元). One rejection (Ⅱ级 read as ⅡI级) and one scoring row stay lost in that reading.",
   "documents": {
-    "cn_construction": {"fields_right": 18, "fields_wrong": 0, "fields_ambiguous": 0, "clause_refs": 18, "rejections": 18, "scores": 13, "specials": 2, "forms": 12},
-    "cn_municipal": {"fields_right": 17, "fields_wrong": 0, "fields_ambiguous": 0, "clause_refs": 17, "rejections": 22, "scores": 10, "specials": 2, "forms": 15}
+    "cn_construction": {
+      "fields_right": 18,
+      "fields_wrong": 0,
+      "fields_ambiguous": 0,
+      "clause_refs": 18,
+      "rejections": 18,
+      "scores": 13,
+      "specials": 2,
+      "forms": 12
+    },
+    "cn_municipal": {
+      "fields_right": 17,
+      "fields_wrong": 0,
+      "fields_ambiguous": 0,
+      "clause_refs": 17,
+      "rejections": 22,
+      "scores": 10,
+      "specials": 2,
+      "forms": 15
+    },
+    "cn_construction:pdf": {
+      "fields_right": 18,
+      "fields_wrong": 0,
+      "fields_ambiguous": 0,
+      "clause_refs": 18,
+      "rejections": 18,
+      "scores": 13,
+      "specials": 2,
+      "forms": 12
+    },
+    "cn_municipal:pdf": {
+      "fields_right": 17,
+      "fields_wrong": 0,
+      "fields_ambiguous": 0,
+      "clause_refs": 17,
+      "rejections": 22,
+      "scores": 10,
+      "specials": 2,
+      "forms": 15
+    },
+    "cn_construction:ocr": {
+      "fields_right": 18,
+      "fields_wrong": 0,
+      "fields_ambiguous": 0,
+      "clause_refs": 18,
+      "rejections": 18,
+      "scores": 13,
+      "specials": 2,
+      "forms": 12
+    },
+    "cn_municipal:ocr": {
+      "fields_right": 17,
+      "fields_wrong": 0,
+      "fields_ambiguous": 0,
+      "clause_refs": 17,
+      "rejections": 21,
+      "scores": 9,
+      "specials": 2,
+      "forms": 15
+    }
   },
   "bids": {
-    "bid_cn_construction": {"caught": 5, "false_alarms": 0},
-    "bid_cn_municipal": {"caught": 6, "false_alarms": 0}
+    "bid_cn_construction": {
+      "caught": 5,
+      "false_alarms": 0
+    },
+    "bid_cn_municipal": {
+      "caught": 6,
+      "false_alarms": 0
+    }
   }
 }

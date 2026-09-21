@@ -45,7 +45,11 @@ BENCH = ROOT / "test" / "benchmarks" / "real_tender"
 
 
 def flat(text: str) -> str:
-    return re.sub(r"[\s,，]+", "", text or "")
+    # full-width and half-width forms are the same character to a reader ("17：00" / "17:00" - a scan's reading
+    # mixes them); spaces and thousands separators carry no value
+    import unicodedata
+
+    return re.sub(r"[\s,，]+", "", unicodedata.normalize("NFKC", text or ""))
 
 
 def tables(md: str) -> List[List[Dict[str, str]]]:
@@ -69,7 +73,7 @@ def tables(md: str) -> List[List[Dict[str, str]]]:
     return found
 
 
-def deliver(fmt: str, name: str = "cn_construction") -> Dict:
+def deliver(fmt: str, name: str = "cn_construction", text_file: str = "") -> Dict:
     """Run the real entry point on the tender in a job folder of its own; return the draft and the timing."""
     from packing_assistant.runtime import workspace
     from packing_assistant.runtime.agent_loop import run_agent
@@ -78,7 +82,19 @@ def deliver(fmt: str, name: str = "cn_construction") -> Dict:
     with tempfile.TemporaryDirectory(prefix="civil-realtender-") as folder:
         job = Path(folder).resolve()
         (job / "CIVIL.md").write_text("- 项目：未填\n", encoding="utf-8")
-        if fmt == "docx":
+        if fmt == "ocr":
+            # the OCR engine's lines for every page, saved once (test/benchmarks/real_tender/<name>.ocr.raw.txt): the
+            # reading is fixed, what is measured is everything done with it - no OCR package needed
+            from packing_assistant.tools.ocr import MARK
+            from packing_assistant.tools.pdf_layout import rebuild
+
+            fmt = "txt"
+            (job / "招标文件.txt").write_text(MARK + "\n" + rebuild((BENCH / f"{name}.ocr.raw.txt").read_text(encoding="utf-8")), encoding="utf-8")
+        elif text_file:
+            # a reading made earlier (an OCR run takes minutes): the saved text as the tender, everything else the same
+            fmt = "txt"
+            (job / "招标文件.txt").write_text(Path(text_file).read_text(encoding="utf-8"), encoding="utf-8")
+        elif fmt == "docx":
             from packing_assistant.word_export import markdown_docx_bytes
 
             (job / "招标文件.docx").write_bytes(markdown_docx_bytes(source))
@@ -155,14 +171,15 @@ def summary(result: Dict) -> Dict:
 
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
-    parser.add_argument("--format", default="docx", choices=("docx", "pdf", "scan", "md", "txt"))
+    parser.add_argument("--format", default="docx", choices=("docx", "pdf", "scan", "ocr", "md", "txt"))
     parser.add_argument("--doc", default="cn_construction", help="a document of test/benchmarks/real_tender, without the extension")
+    parser.add_argument("--text", default="", help="use this saved text (e.g. an OCR reading) as the tender instead of building a file")
     parser.add_argument("--json")
     parser.add_argument("--show", action="store_true", help="print the deliverable")
     parser.add_argument("-v", "--verbose", action="store_true")
     args = parser.parse_args()
     gold = json.loads((BENCH / f"{args.doc}.gold.json").read_text(encoding="utf-8"))
-    run = deliver(args.format, args.doc)
+    run = deliver(args.format, args.doc, args.text)
     if args.show:
         print(run["draft"])
     result = measure(run["draft"], gold)

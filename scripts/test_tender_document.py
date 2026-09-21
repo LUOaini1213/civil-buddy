@@ -301,5 +301,41 @@ class OcrLines(unittest.TestCase):
         self.assertEqual(lines[10:], ["1.总则", "1.1本招标项目已具备招标条件，现对本标段施工进行招标。"], "a line across the columns ends the table")
 
 
+class ScanReadings(unittest.TestCase):
+    """What an OCR reading does to a number. The one thing worse than showing no value is showing a wrong one as
+    if it had been read: "3，268.50万元" must never come out as "268.50万元"."""
+
+    def table(self, *rows: str) -> str:
+        body = "\n".join(f"| {n} | {name} | {content} |" for n, (name, content) in enumerate((r.split("=", 1) for r in rows), 1))
+        return ("第一章 投标邀请\n\n" + "占位。" * 600 + "\n\n第二章 投标人须知\n\n投标人须知前附表\n\n| 序号 | 条款名称 | 内容及要求 |\n| --- | --- | --- |\n" + body + "\n")
+
+    def test_a_thousands_separator_read_as_a_full_width_comma(self) -> None:
+        facts = tf.extract(self.table("最高限价=人民币3，268.50万元", "投标保证金=人民币贰拾万元整（￥200，000.00）；银行转账"))
+        self.assertEqual([m.value for m in facts.of("price_cap")], ["3，268.50万元"])
+        self.assertEqual([m.value for m in facts.of("bond")], ["￥200，000.00"])
+        typed = tf.extract("招标文件要求最高限价3,268.50万元、投标保证金200，000元。")
+        self.assertEqual([m.value for m in typed.of("price_cap")], ["3,268.50万元"])
+        self.assertEqual([m.value for m in typed.of("bond")], ["200，000元"])
+
+    def test_a_date_glued_to_its_time_is_a_date_not_a_label(self) -> None:
+        facts = tf.extract(self.table("投标截止时间及地点=2027-03-0909：00：河西区公共资源交易中心", "答疑=应于2027-02-2017：00前提出"))
+        self.assertEqual([m.value for m in facts.of("deadline_bid")], ["2027-03-0909：00"])
+        self.assertEqual([m.value for m in facts.of("deadline_query")], ["2027-02-2017：00"])
+
+    def test_a_semicolon_read_as_a_colon_still_separates_two_labels(self) -> None:
+        facts = tf.extract(self.table("投标人资质条件=资质条件：市政公用工程施工总承包二级：项目经理资格：市政公用工程专业一级注册建造师",
+                                      "履约担保=履约担保的形式：银行保函：履约担保的金额：签约合同价的10%"))
+        self.assertEqual([m.value for m in facts.of("qualification")], ["市政公用工程施工总承包二级"])
+        self.assertEqual([m.value for m in facts.of("pm")], ["市政公用工程专业一级注册建造师"])
+        self.assertEqual([(m.role, m.value) for m in facts.of("performance_bond")], [("形式", "银行保函"), ("金额", "签约合同价的10%")])
+
+    def test_a_clause_number_with_no_space_after_it(self) -> None:
+        doc = td.read("第一章 招标公告\n\n" + "占位。" * 600 + "\n\n第二章 投标人须知\n\n3.4.2投标人不按要求提交投标保证金的，其投标文件作否决投标处理。\n\n"
+                      "基坑开挖深度3.5米以上的须编制专项方案，逾期送达的投标文件不予受理。")
+        refs = {r.piece.text[:8]: r.piece.ref for r in td.rejections(doc)}
+        self.assertEqual(refs["3.4.2投标人"], "第二章 3.4.2")
+        self.assertEqual(refs["基坑开挖深度3."], "第二章 3.4.2", "3.5米 is a depth, not clause 3.5: the sentence stays under the clause before it")
+
+
 if __name__ == "__main__":
     unittest.main(verbosity=1)

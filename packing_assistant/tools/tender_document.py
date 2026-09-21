@@ -34,7 +34,7 @@ _TABLE_ROW = re.compile(r"^\|.*\|$")
 _RULER = re.compile(r":?-{2,}:?")
 #: "3.4 投标保证金" / "1. 总则" / "2.4 计划工期：540日历天。" at the start of a paragraph
 _UNIT = "米天日年月万元个份名人次分项级倍吨时号％%页条款章"
-_LEAD_NUMBER = re.compile(r"^#*\s*(\d+(?:\.\d+){0,3})[.．、]?\s+(?=\S)|^#*\s*(\d+)[.．、]\s*(?=\S)"
+_LEAD_NUMBER = re.compile(r"^#*\s*(\d+(?:\.\d+){0,3})[.．、]?\s+(?=\S)|^#*\s*(\d+)[.．、]\s*(?=[^\d\s])"
                           r"|^#*\s*(\d+(?:\.\d+){1,3})(?=[一-鿿])(?![" + _UNIT + r"])")   # "1.1.1根据…": a scan's reading drops the space
 #: "… 。3.4.2 投标人不按 …" inside a paragraph: a clause number at the start of a sentence
 _INLINE_NUMBER = re.compile(r"(?:(?<=[。；;])|(?<=[。；;]\s))(\d+(?:\.\d+){1,3})(?:\s+(?=\S)|(?=[一-鿿])(?![" + _UNIT + r"]))")
@@ -260,7 +260,7 @@ def _parts(content: str) -> List[Tuple[str, str, str]]:
         lead = re.match(r"(\d+(?:\.\d+)+)\s*", part)
         number = lead.group(1) if lead else ""
         rest = part[lead.end():] if lead else part
-        found = re.match(r"([^：:；;，,。\s]{2,18})\s*[：:]\s*(.+)$", rest)
+        found = re.match(r"(?!\d)((?:(?!\d{2})[^：:；;，,。\s]){2,18})\s*[：:]\s*(.+)$", rest)   # "应于2026-10-2709：00" holds a time, not a label
         out.append((found.group(1), found.group(2).strip(), number) if found else ("", rest, number))
     return out
 

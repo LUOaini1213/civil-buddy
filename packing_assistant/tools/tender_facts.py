@@ -36,7 +36,10 @@ from packing_assistant import post_facts
 # values
 # ---------------------------------------------------------------------------
 
-_NUM = r"\d+(?:,\d{3})*(?:\.\d+)?"
+#: "3,268.50" - and "3，268.50", which is what a scan's reading makes of it. Groups of exactly three digits; and a
+#: number never starts after "digit + separator": matching only the "268.50" of "3，268.50万元" is a wrong number shown
+#: as if it were read, the one thing worse than showing none.
+_NUM = r"(?<!\d,)(?<!\d，)\d+(?:[,，]\d{3})*(?:\.\d+)?"
 _TIME = re.compile(r"(?<![\dA-Za-z#.])" + _NUM + r"\s*(?:个?日历天|日历日|个?工作日|calendar\s*(?:days?|months?)|working\s*days?|days?|"
                    r"months?|weeks?|years?|个月|天|日|周|月|年)", re.I)
 _MONEY = re.compile(r"(?<![\dA-Za-z#.])" + _NUM + r"\s*(?:万元|亿元|万|亿|元)(?!/)"
@@ -66,8 +69,10 @@ _ADDENDUM = re.compile(r"补遗(?:文件|通知)?\s*(?:第?\s*[一二三四五�
 _STOP = r"(?<!\bNo)(?<!\bRef)(?<!\bLtd)(?<!\bPte)(?<!\bCo)(?<!\bSt)\.(?=\s+[A-Z一-鿿]|\s*$)"
 _SENTENCE = re.compile(r"[\n。；;！!？?]|" + _STOP)
 #: a comma splits clauses - not a thousands comma, not the one before a time of day ("30 October 2026, 4.00 pm")
-_CLAUSE = re.compile(r"[，]|,(?!\d{3}(?!\d))(?!\s*\d{1,2}[.:]\d{2}\s*[aApP])")
-_PIECE = re.compile(r"(?<=[，,。；;！!？?])|(?<=\.)(?=\s+[A-Z])")
+#: a comma ends a clause - not the one inside a grouped number: "3,268.50万元", and "200，000元" as a scan or a Chinese
+#: keyboard writes it (a digit before, exactly three digits after)
+_CLAUSE = re.compile(r"(?<!\d)，|，(?!\d{3}(?!\d))|,(?!\d{3}(?!\d))(?!\s*\d{1,2}[.:]\d{2}\s*[aApP])")
+_PIECE = re.compile(r"(?<=[。；;！!？?])|(?<=[，,])(?<!\d[，,])|(?<=\d[，,])(?!\d{3}(?!\d))|(?<=\.)(?=\s+[A-Z])")
 _EDGE = " \t，,;；。、:：-—（）()"
 _CONNECT = re.compile(r"^(?:[\s：:＝=\-—]|为|是|约|共计|共|计|达|有|了|的|要求|要|须|应|具备|具有|持有|不少于|不超过|不低于|不高于|至少|最高|最多|大概|大约|到|至|人民币"
                       r"|(?i:\b(?:is|are|shall\s+be|will\s+be|of|the)\b))*")
