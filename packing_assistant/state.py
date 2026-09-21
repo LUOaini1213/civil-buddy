@@ -48,6 +48,7 @@ class PackingState(TypedDict, total=False):
 
     # —— 小 Team A 成箱 ——
     materials: List[Dict[str, Any]]
+    needs_human: List[Dict[str, Any]]  # 出方案前必须由人处理的行（pack_ship_solve.rows_blocking_plan）
     materials_summary: Dict[str, Any]
     perception: Dict[str, Any]  # 跑前状态摘要（感知）
     structure_constraints: List[Dict[str, Any]]
