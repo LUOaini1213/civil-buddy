@@ -225,6 +225,9 @@ def extract_table(parsed: Optional[Mapping[str, Any]], *, project_name: str = "�
                   "字段取自前附表，其次是招标公告里带标签的行；正文里挨着关键词的数不当字段。「来源页段」是条款号。", ""]
         if document.get("cut"):
             lines += ["> **文件没有读完**：超过了单个文件的读取上限，后面的内容未参与解析。把文件按章拆开后分别解析。", ""]
+        if document.get("ocr"):
+            lines += ["> **本文件是扫描件，文字由 OCR 识别。** OCR 会认错字，数字错了也看不出来（竣工→峻工、；→：、8→3）。"
+                      "下表每一个数字、日期、金额都须翻到「来源页段」标的那一页，对照原件核对后才能用。", ""]
     for title, topics in _PARSE_SECTIONS:
         rows: List[List[str]] = []
         for topic, label, always, advice in topics:

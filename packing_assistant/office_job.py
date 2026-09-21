@@ -475,9 +475,42 @@ def pdf_document_text(source: Any) -> str:
 
     reader = PdfReader(str(source) if isinstance(source, Path) else source)
     texts = [(page.extract_text() or "") for page in reader.pages]
-    if not any(text.strip() for text in texts):
+    if any(len(text.strip()) >= _MIN_TEXT for text in texts):
+        return pages_text(texts)
+    return _ocr_pdf_text(source) if isinstance(source, Path) else ""
+
+
+def _ocr_pdf_text(path: Path) -> str:
+    """A scan, read by OCR when the optional packages are installed (tools/ocr.py) - "" when they are not, and the
+    caller says the file was not read. The reading is kept beside the job (keyed by the file's sha256): a hundred
+    pages take minutes, and the same scan is read once. The first line marks the text as an OCR reading."""
+    import hashlib
+
+    from packing_assistant.tools import ocr
+    from packing_assistant.tools.pdf_layout import pages_text
+
+    if not ocr.available():
         return ""
-    return pages_text(texts)
+    digest = hashlib.sha256(path.read_bytes()).hexdigest()
+    cache = (job_root() / ".civil-buddy" / "cache" / "ocr" / f"{digest}.txt") if job_root_granted() else None
+    if cache is not None and cache.is_file():
+        return cache.read_text(encoding="utf-8")
+    def progress(done: int, total: int) -> None:
+        if done == 1 or done % 5 == 0 or done == total:   # minutes of silence look like a hang
+            import sys
+
+            print(f"OCR {path.name}：第 {done}/{total} 页", file=sys.stderr, flush=True)
+
+    pages = ocr.pdf_page_lines(path, on_page=progress)
+    text = ocr.MARK + "\n" + pages_text("\n".join(lines) for lines in pages)
+    if cache is not None:
+        try:
+            from packing_assistant.sandbox import guarded_write_text
+
+            guarded_write_text(cache, text)
+        except (OSError, RuntimeError):
+            pass  # the reading is still returned; it is only not kept
+    return text
 
 
 #: In a blob of job files: the file named on the heading above gave no text. Why follows on the same line.
@@ -505,7 +538,7 @@ def unread_reason(path: Path, body: Optional[str]) -> str:
     if len(body.strip()) >= _MIN_TEXT:
         return ""
     if path.suffix.lower() == ".pdf":
-        return "PDF 没有文字层（多半是扫描件）：先 OCR，或另存为 Word、文本"
+        return "PDF 没有文字层（多半是扫描件）：先 OCR，或另存为 Word、文本；也可装上 OCR 组件（pip install -e .[ocr]）后重试"
     return "里面几乎没有文字"
 
 

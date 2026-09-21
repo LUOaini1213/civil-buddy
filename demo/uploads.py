@@ -96,19 +96,32 @@ def _path(directory: Path, filename: str) -> Path:
     return candidate
 
 
+#: under a text that was longer than the limit: the same words office_job writes under a job file it cut
+CUT_NOTE = "（未读完）只读了前 {n} 个字符，后面的内容未参与解析"
+
+
 def _collapse(text: str) -> str:
     lines: list[str] = []
     used = 0
+    cut = False
+    noted = MAX_TEXT_CHARS >= 1024   # a limit too small to hold the note (tests) keeps the bare cut
+    limit = MAX_TEXT_CHARS - 64 if noted else MAX_TEXT_CHARS   # room for the note: a cut attachment says so, in its own text
     for line in text.splitlines():
         line = line.strip()
         if not line and (not lines or not lines[-1]):
             continue
-        room = MAX_TEXT_CHARS - used
+        room = limit - used
         if room <= 0:
+            cut = True
             break
-        line = line[:max(0, room - 1)]
+        if len(line) > room - 1:
+            line, cut = line[:max(0, room - 1)], True
         lines.append(line)
         used += len(line) + 1
+        if cut:
+            break
+    if cut and noted:
+        lines.append(CUT_NOTE.format(n=used))
     return ("\n".join(lines) + ("\n" if lines else ""))[:MAX_TEXT_CHARS]
 
 
@@ -167,17 +180,22 @@ def _pdf_text(data: bytes) -> str:
     reader = PdfReader(BytesIO(data))
     if reader.is_encrypted:
         raise UploadError("暂不支持加密 PDF，请先解密后上传")
-    lines: list[str] = []
+    from packing_assistant.tools.pdf_layout import pages_text
+
+    pages: list[str] = []
     used = 0
     for index, page in enumerate(reader.pages):
         if index >= 400:
             break
-        text = (page.extract_text() or "")[:MAX_TEXT_CHARS - used]
-        lines.append(text)
+        text = page.extract_text() or ""
+        pages.append(text)
         used += len(text) + 1
-        if used >= MAX_TEXT_CHARS:
+        if used >= MAX_TEXT_CHARS * 2:
             break
-    return "\n".join(lines)
+    if not any(text.strip() for text in pages):
+        return ""
+    # paragraphs joined, tables rebuilt, every page under its marker - the same reading a job-folder PDF gets
+    return pages_text(pages)
 
 
 def extract_upload(filename: str, data: bytes) -> tuple[str, str, str]:

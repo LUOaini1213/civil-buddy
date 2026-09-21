@@ -238,5 +238,68 @@ class WordNumbering(unittest.TestCase):
         self.assertEqual(plain[0], "投标文件", "without numbering.xml the text is what it was")
 
 
+class PdfLayout(unittest.TestCase):
+    """What pypdf gives back for a page - lines cut at the page width, table cells one to a line, the header
+    repeated on the next page, a page number - put together again."""
+
+    PAGES = ["第 1 页\n第二章 投标人须知\n投标人须知前附表\n条款号\n条款名称\n编列内容\n1.3.2\n计划工期\n计划工期：300日历天；计划开工日期：2027年4月1\n日\n"
+             "1.10.2\n投标人提出问题的截止\n时间\n2027年2月20日17时00分前\n3.3.1\n投标有效期",
+             "第 2 页\n条款号\n条款名称\n编列内容\n120日历天\n10\n需要补充的其他内容\n10.1 本项目采用综合评估法评标；10.2 缺陷责任期：12个月\n1. 总则\n"
+             "1.1 本招标项目已具备招标条件，现对本标段施工进行招标，投标人应当仔细阅读招标文件的全部内\n容。未按要求提交投标保证金的，其投标文件作否\n决投标处理。",
+             "第 3 页\n序号\n项目\n技术要求\n备注\n1\n沥青面层\n★采用SBS改性沥青\n不满足的为无效投标\n二、其他要求\n本节无。"]
+
+    def setUp(self) -> None:
+        from packing_assistant.tools.pdf_layout import pages_text
+
+        self.text = pages_text(self.PAGES)
+        self.lines = [line for line in self.text.splitlines() if line]
+
+    def test_a_table_drawn_cell_by_cell_is_a_table_again(self) -> None:
+        self.assertIn("| 条款号 | 条款名称 | 编列内容 |", self.lines)
+        self.assertEqual(self.lines.count("| 条款号 | 条款名称 | 编列内容 |"), 1, "the header repeated on page 2 is the same table")
+        self.assertIn("| 1.3.2 | 计划工期 | 计划工期：300日历天；计划开工日期：2027年4月1日 |", self.lines)
+        self.assertIn("| 1.10.2 | 投标人提出问题的截止时间 | 2027年2月20日17时00分前 |", self.lines, "a name that filled its column runs on")
+        self.assertIn("| 3.3.1 | 投标有效期 | 120日历天 |", self.lines, "a row cut by the page break")
+        self.assertIn("| 10 | 需要补充的其他内容 | 10.1 本项目采用综合评估法评标；10.2 缺陷责任期：12个月 |", self.lines, "10.1 is row 10's own content")
+
+    def test_the_text_after_the_table_is_text_and_a_cut_sentence_is_whole(self) -> None:
+        self.assertIn("1. 总则", self.lines)
+        joined = [line for line in self.lines if "否决投标处理" in line]
+        self.assertEqual(len(joined), 1)
+        self.assertIn("未按要求提交投标保证金的，其投标文件作否决投标处理。", joined[0])
+        self.assertFalse(any(line.startswith("第 ") and line.endswith(" 页") for line in self.lines), "page numbers are dropped")
+        self.assertEqual([line for line in self.lines if line.startswith("〔第")], ["〔第1页〕", "〔第2页〕", "〔第3页〕"])
+
+    def test_a_remark_column_and_a_chinese_heading_after_a_numbered_table(self) -> None:
+        self.assertIn("| 1 | 沥青面层 | ★采用SBS改性沥青 | 不满足的为无效投标 |", self.lines)
+        self.assertIn("二、其他要求", self.lines)
+
+    def test_the_document_reader_knows_the_page(self) -> None:
+        facts = tf.extract("第一章 招标公告\n\n" + "占位。" * 600 + "\n\n" + self.text)
+        self.assertEqual([(m.value, m.ref) for m in facts.of("duration")], [("300日历天", "第二章 前附表 1.3.2（第1页）")])
+        self.assertEqual([(m.value, m.ref) for m in facts.of("validity")], [("120日历天", "第二章 前附表 3.3.1（第1页）")])
+
+
+class OcrLines(unittest.TestCase):
+    """Recognised boxes as the lines a text layer would give: a table's cells one to a line, a paragraph's boxes joined."""
+
+    def test_boxes_in_columns_become_cells(self) -> None:
+        from packing_assistant.tools.ocr import lines_from_boxes
+
+        def box(x, y, text, w=60):
+            return (float(x), float(y), float(x + w), float(y + 30), text)
+
+        boxes = [box(170, 100, "投标人须知前附表", 300),
+                 box(170, 160, "条款号"), box(345, 160, "条款名称"), box(660, 162, "编列内容"),
+                 box(170, 220, "1.3.2"), box(345, 218, "计划工期"), box(660, 221, "计划工期：300日历天；计划开工日期：2027年4月1", 700), box(660, 258, "日"),
+                 box(170, 320, "1.10.2"), box(345, 320, "投标人提出问题的截止"), box(660, 321, "2027年2月20日17时前", 300), box(345, 356, "时间"),
+                 box(170, 430, "1.总则", 120), box(170, 490, "1.1本招标项目已具备招标条件，现对本标段施工进行招标。", 1100)]
+        lines = lines_from_boxes(boxes)
+        self.assertEqual(lines[:4], ["投标人须知前附表", "条款号", "条款名称", "编列内容"])
+        self.assertEqual(lines[4:7], ["1.3.2", "计划工期", "计划工期：300日历天；计划开工日期：2027年4月1日"])
+        self.assertEqual(lines[7:10], ["1.10.2", "投标人提出问题的截止时间", "2027年2月20日17时前"], "a cell's second line joins its own column")
+        self.assertEqual(lines[10:], ["1.总则", "1.1本招标项目已具备招标条件，现对本标段施工进行招标。"], "a line across the columns ends the table")
+
+
 if __name__ == "__main__":
     unittest.main(verbosity=1)

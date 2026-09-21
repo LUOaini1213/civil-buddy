@@ -82,6 +82,12 @@ def deliver(fmt: str, name: str = "cn_construction") -> Dict:
             from packing_assistant.word_export import markdown_docx_bytes
 
             (job / "招标文件.docx").write_bytes(markdown_docx_bytes(source))
+        elif fmt == "scan":
+            # every page of the committed PDF as an image, nothing else: what a scanner makes. Needs the [ocr] extra.
+            import pypdfium2 as pdfium
+
+            pages = [page.render(scale=150 / 72).to_pil().convert("L") for page in pdfium.PdfDocument(str(BENCH / f"{name}.pdf"))]
+            pages[0].save(job / "招标文件.pdf", save_all=True, append_images=pages[1:], resolution=150)
         elif fmt == "pdf":
             # the committed fixture (test/benchmarks/real_tender/build_pdf.py): a text layer, real tables, page breaks
             (job / "招标文件.pdf").write_bytes((BENCH / f"{name}.pdf").read_bytes())
@@ -93,7 +99,7 @@ def deliver(fmt: str, name: str = "cn_construction") -> Dict:
             with patch.object(Path, "home", return_value=job / "no-home"):
                 workspace.activate(job)
             started = time.monotonic()
-            out = run_agent(f"解析招标 招标文件.{fmt}", session_id="civil-cli")
+            out = run_agent(f"解析招标 招标文件.{'pdf' if fmt == 'scan' else fmt}", session_id="civil-cli")
             seconds = time.monotonic() - started
             draft = next((Path(f["path"]).read_text(encoding="utf-8") for f in out.get("files") or []
                           if Path(f["path"]).name == "tender.parse.md"), "")
@@ -149,7 +155,7 @@ def summary(result: Dict) -> Dict:
 
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
-    parser.add_argument("--format", default="docx", choices=("docx", "pdf", "md", "txt"))
+    parser.add_argument("--format", default="docx", choices=("docx", "pdf", "scan", "md", "txt"))
     parser.add_argument("--doc", default="cn_construction", help="a document of test/benchmarks/real_tender, without the extension")
     parser.add_argument("--json")
     parser.add_argument("--show", action="store_true", help="print the deliverable")

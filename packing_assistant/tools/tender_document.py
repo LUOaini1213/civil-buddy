@@ -33,9 +33,11 @@ _CHAPTER = re.compile(r"^#*\s*(第[" + _CN + r"\d]+章)\s*(.*)$")
 _TABLE_ROW = re.compile(r"^\|.*\|$")
 _RULER = re.compile(r":?-{2,}:?")
 #: "3.4 投标保证金" / "1. 总则" / "2.4 计划工期：540日历天。" at the start of a paragraph
-_LEAD_NUMBER = re.compile(r"^#*\s*(\d+(?:\.\d+){0,3})[.．、]?\s+(?=\S)|^#*\s*(\d+)[.．、]\s*(?=\S)")
+_UNIT = "米天日年月万元个份名人次分项级倍吨时号％%页条款章"
+_LEAD_NUMBER = re.compile(r"^#*\s*(\d+(?:\.\d+){0,3})[.．、]?\s+(?=\S)|^#*\s*(\d+)[.．、]\s*(?=\S)"
+                          r"|^#*\s*(\d+(?:\.\d+){1,3})(?=[一-鿿])(?![" + _UNIT + r"])")   # "1.1.1根据…": a scan's reading drops the space
 #: "… 。3.4.2 投标人不按 …" inside a paragraph: a clause number at the start of a sentence
-_INLINE_NUMBER = re.compile(r"(?:(?<=[。；;])|(?<=[。；;]\s))(\d+(?:\.\d+){1,3})\s+(?=\S)")
+_INLINE_NUMBER = re.compile(r"(?:(?<=[。；;])|(?<=[。；;]\s))(\d+(?:\.\d+){1,3})(?:\s+(?=\S)|(?=[一-鿿])(?![" + _UNIT + r"]))")
 _SENTENCE_END = re.compile(r"(?<=。)")
 _HEADING_MARK = re.compile(r"^#+\s*")
 _FRONT_HEADER = ("条款号", "序号", "编号", "项号", "条款")   # local templates number the front table 1, 2, 3 …
@@ -92,6 +94,7 @@ class Document:
     pieces: List[Piece] = field(default_factory=list)
     chars: int = 0
     lines: int = 0
+    ocr: bool = False   # the text is an OCR reading of a scan (office_job marks it): every number needs the original
 
     def chapter(self, *names: str) -> List[Piece]:
         return [p for p in self.pieces if any(n in p.chapter for n in names)]
@@ -128,6 +131,9 @@ def read(text: str) -> Document:
         line = raw.strip()
         if not line:
             header = None
+            continue
+        if line.startswith("〔OCR〕"):
+            doc.ocr = True
             continue
         marker = _PAGE_MARK.match(line)
         if marker:
@@ -169,11 +175,11 @@ def read(text: str) -> Document:
         short_title = len(body) <= 24 and not re.search(r"[。；;：:，,]", body)   # "投标人须知前附表", "一、投标函"
         if is_heading or short_title or (lead and len(body) <= 30 and not re.search(r"[。；;：:]", body)):
             heading = body
-            number = (lead.group(1) or lead.group(2)) if lead else ""
+            number = (lead.group(1) or lead.group(2) or lead.group(3)) if lead else ""
             doc.pieces.append(Piece(chapter, number, heading, "", (), body, line_no, "heading"))
             continue
         if lead:
-            number = lead.group(1) or lead.group(2)
+            number = lead.group(1) or lead.group(2) or lead.group(3)
         # a paragraph may hold several numbered clauses: "3.4.1 …。3.4.2 …。"
         current = number
         cursor = 0
@@ -221,10 +227,33 @@ def front_rows(doc: Document) -> List[FrontRow]:
     return rows
 
 
+_SUBLABEL = re.compile(r"[：:]\s*(?=(?:\d+(?:\.\d+)+\s*)?([^：:；;，,。\s]{2,12})[：:])")
+_SUBLABEL_END = re.compile(r"(?:要求|条件|资格|形式|金额|时间|日期|地点|方式|比例|期限|年份|名称|地址|联系人|电话)$")
+
+
+def _split_parts(content: str) -> List[str]:
+    """The parts of a front-table cell: at every "；" - and at a "：" that is followed by another label
+    ("…施工业绩：项目经理资格：建筑…"). A scan read by OCR gives "；" back as "：" more often than not; a label is
+    known by what it names (a field) or by how it ends (…要求 / …资格 / …金额)."""
+    from packing_assistant.tools import tender_facts as tf
+
+    parts: List[str] = []
+    for chunk in re.split(r"[；;]", content):
+        cursor = 0
+        for found in _SUBLABEL.finditer(chunk):
+            label = found.group(1)
+            # only after a part that already has its own label and value: "形式：银行保函：履约担保的金额：…"
+            if re.search(r"[：:]", chunk[cursor:found.start()]) and (tf.document_topic(label) or _SUBLABEL_END.search(label)):
+                parts.append(chunk[cursor:found.start()])
+                cursor = found.end()
+        parts.append(chunk[cursor:])
+    return parts
+
+
 def _parts(content: str) -> List[Tuple[str, str, str]]:
     """"金额：80万元；形式：银行转账…；10.3 缺陷责任期：24个月" as [(label, body, number)]; "" where a part has none."""
     out: List[Tuple[str, str, str]] = []
-    for part in re.split(r"[；;]", content):
+    for part in _split_parts(content):
         part = part.strip()
         if not part:
             continue
@@ -706,6 +735,7 @@ def found_in(texts: Sequence[Tuple[str, str]], words: Sequence[str]) -> List[str
 
 
 def summary(doc: Document) -> Dict[str, int]:
-    return {"chars": doc.chars, "lines": doc.lines, "chapters": len({p.chapter for p in doc.pieces if p.chapter}),
+    return {"chars": doc.chars, "lines": doc.lines, "ocr": doc.ocr, "pages": max((p.page for p in doc.pieces), default=0),
+            "chapters": len({p.chapter for p in doc.pieces if p.chapter}),
             "front_rows": len(front_rows(doc)), "rejections": len(rejections(doc)), "obligations": len(obligations(doc)),
             "scores": len(scores(doc)), "specials": len(specials(doc)), "forms": len(forms(doc))}
