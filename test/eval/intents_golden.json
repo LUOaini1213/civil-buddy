@@ -1,7 +1,7 @@
 {
   "version": "1",
   "contract": "contract/intents.v1.json",
-  "note": "意图行为金句（behavior golden）。期望值冻结自 2026-08 契约单源化重构前的实现（understand.py + expert_skills.match_skill），重构本身零行为变化。Python 侧由 scripts/test_stack_parity.py 实跑 understand()+match_skill() 断言；Rust 侧由 workbench/tests/intents_golden.rs 实跑 understand()+match_skill_implicit() 断言（同读 contract/intents.v1.json）。skill=null 表示不路由任何岗。改词表若导致金句变化，必须先确认新行为是想要的，再同步更新本文件并说明原因。R5 起追加每岗记分卡试点金句（bid-parse/bid-compliance/bid-tech/cost/safety-brief 各 3 条，含显式 @岗 与隐式说法），由 scripts/eval_post_scorecard.py 按岗复用。",
+  "note": "意图行为金句（behavior golden）。期望值冻结自 2026-08 契约单源化重构前的实现（understand.py + expert_skills.match_skill），重构本身零行为变化。Python 侧由 scripts/test_stack_parity.py 实跑 understand()+match_skill() 断言；Rust 侧由 workbench/tests/intents_golden.rs 实跑 understand()+match_skill_implicit() 断言（同读 contract/intents.v1.json）。skill=null 表示不路由任何岗。改词表若导致金句变化，必须先确认新行为是想要的，再同步更新本文件并说明原因。R5 记分卡金句：试点 5 岗 + 第二波 plan-master/quality/proc-plan/lab-record/finance-book/warehouse/worker-brief/survey 各 3 条（显式 @岗、隐式写盘、问答），由 scripts/eval_post_scorecard.py 按岗复用。",
   "cases": [
     { "text": "pack test/sim_materials/small_one_container/materials.xlsx", "intent": "run", "skill": "pack-ship" },
     { "text": "帮我装柜", "intent": "run", "skill": "pack-ship" },
@@ -43,6 +43,30 @@
     { "text": "工程量拆分和组价有什么区别？", "intent": "chat", "skill": "cost" },
     { "text": "@safety-brief 出一份基坑作业的安全交底", "intent": "run", "skill": "safety-brief" },
     { "text": "帮工友起草今天班前的安全交底", "intent": "run", "skill": "safety-brief" },
-    { "text": "安全交底和技术交底有什么区别？", "intent": "chat", "skill": "safety-brief" }
+    { "text": "安全交底和技术交底有什么区别？", "intent": "chat", "skill": "safety-brief" },
+    { "text": "@plan-master 出一份总进度计划草稿", "intent": "run", "skill": "plan-master" },
+    { "text": "编制总进度计划，列出一级网络和里程碑", "intent": "run", "skill": "plan-master" },
+    { "text": "总进度计划和周计划有什么区别？", "intent": "chat", "skill": "plan-master" },
+    { "text": "@quality 出一份质量检查表", "intent": "run", "skill": "quality" },
+    { "text": "编制质量检查表，主控项目先空着", "intent": "run", "skill": "quality" },
+    { "text": "质量检查表和隐蔽验收记录有什么区别？", "intent": "chat", "skill": "quality" },
+    { "text": "@proc-plan 出一份采购计划表", "intent": "run", "skill": "proc-plan" },
+    { "text": "编制采购计划，分甲供和自采", "intent": "run", "skill": "proc-plan" },
+    { "text": "采购计划和比价表有什么区别？", "intent": "chat", "skill": "proc-plan" },
+    { "text": "@lab-record 出一份试验台账", "intent": "run", "skill": "lab-record" },
+    { "text": "编制试验台账骨架，报告编号待核", "intent": "run", "skill": "lab-record" },
+    { "text": "试验台账和报告编号待核有什么区别？", "intent": "chat", "skill": "lab-record" },
+    { "text": "@finance-book 出一份核算检查表", "intent": "run", "skill": "finance-book" },
+    { "text": "编制报销审核清单", "intent": "run", "skill": "finance-book" },
+    { "text": "核算检查表和资金计划有什么区别？", "intent": "chat", "skill": "finance-book" },
+    { "text": "@warehouse 出一份收发存台账", "intent": "run", "skill": "warehouse" },
+    { "text": "编制限额领料口径", "intent": "run", "skill": "warehouse" },
+    { "text": "限额领料和现场材料核算有什么区别？", "intent": "chat", "skill": "warehouse" },
+    { "text": "@worker-brief 出一份班前白话稿", "intent": "run", "skill": "worker-brief" },
+    { "text": "出一份班前口播稿", "intent": "run", "skill": "worker-brief" },
+    { "text": "班前白话和书面交底有什么区别？", "intent": "chat", "skill": "worker-brief" },
+    { "text": "@survey 出一份测量方案", "intent": "run", "skill": "survey" },
+    { "text": "编制测量方案，坐标待填", "intent": "run", "skill": "survey" },
+    { "text": "测量方案和复测记录有什么区别？", "intent": "chat", "skill": "survey" }
   ]
 }

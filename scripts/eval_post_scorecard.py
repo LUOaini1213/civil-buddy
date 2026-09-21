@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""每岗记分卡试点（R5）：5 岗 × 4 门禁，全部离线、零 API Key、steps 模式。
+"""每岗记分卡（R5）：试点 5 岗 + 第二波 8 岗 × 4 门禁，全部离线、零 API Key、steps 模式。
 
 门禁：
   G1 意图命中  test/eval/intents_golden.json 中该岗金句 → (intent, skill) 全对
@@ -14,16 +14,17 @@
 
 用法：
   python scripts/eval_post_scorecard.py --post cost          # 单岗
-  python scripts/eval_post_scorecard.py --all-pilots         # 全量 5 岗
+  python scripts/eval_post_scorecard.py --all-pilots         # 全量试点+第二波
   python scripts/eval_post_scorecard.py --all-pilots --quick # quick 只跑 2 岗
 
 输出：output/posts/<id>.json（gitignore 内）+ 控制台摘要表。
 某岗 exclusive 工具无法离线跑（需 key/外部服务）→ 该岗 G3/G4 降级为结构断言
 并标 mode=schema-only，绝不造假绿。
 
-试点 5 岗（66 岗 roster 的首批抽样，覆盖 bid/commercial/hse 三个大类）：
-  bid-parse（招标解析）/ bid-compliance（废标检查）/ bid-tech（技术标）
-  cost（造价）/ safety-brief（安全交底，高风险岗须 confirm_ok 走 HITL 确认句）
+试点 5 岗（bid/commercial/hse）：bid-parse / bid-compliance / bid-tech / cost / safety-brief。
+第二波 8 岗（planning/hse/procurement/lab/finance/plant/people/construction，此前多只靠 n=66 扫过）：
+  plan-master / quality / proc-plan / lab-record / finance-book / warehouse / worker-brief / survey。
+不宣称新能力：G1–G4 只固化已有 exclusive 写盘与 KB 私库。
 """
 from __future__ import annotations
 
@@ -82,6 +83,70 @@ PILOTS: dict[str, dict] = {
         "kb_queries": ["安全交底"],
         "required_bars": ["草稿声明", "作业部位", "危险源", "防护要点", "个人防护", "禁止事项", "应急要点", "签字栏"],
         "bars_trace": "八栏同名字段表：草稿声明/作业部位与范围/危险源/防护要点/个人防护/禁止事项与喊停条件/应急要点/签字栏",
+    },
+    "plan-master": {
+        "category": "planning",
+        "exclusive": "plan-master__network",
+        "g3_args": {"text": "总进度计划：教学楼土建，列出基坑、主体、装修三个 WBS。"},
+        "kb_queries": ["总进度计划", "关键线路"],
+        "required_bars": ["总进度计划", "关键线路", "里程碑", "紧前"],
+        "bars_trace": "标题施工总进度计划 / 章关键线路 / 里程碑表 / 紧前列",
+    },
+    "quality": {
+        "category": "hse",
+        "exclusive": "quality__lot",
+        "g3_args": {"text": "质量检查表：三层梁板钢筋检验批，主控项目先空着。", "confirm_ok": True},
+        "kb_queries": ["质量检查表", "检验批"],
+        "required_bars": ["质量检查表", "检验批", "主控", "隐蔽", "通病"],
+        "bars_trace": "标题质量检查表 / 检验批部位 / 主控项目检查栏 / 隐蔽专项 / 通病防治",
+    },
+    "proc-plan": {
+        "category": "procurement",
+        "exclusive": "proc-plan__schedule",
+        "g3_args": {"text": "采购计划：钢筋自采、电梯甲指，提前期待填。"},
+        "kb_queries": ["采购计划", "甲指"],
+        "required_bars": ["采购计划表", "提前期", "到货节点", "供应方式"],
+        "bars_trace": "标题采购计划表 / 提前期倒排 / 到货节点 / 供应方式列",
+    },
+    "lab-record": {
+        "category": "lab",
+        "exclusive": "lab-record__ledger",
+        "g3_args": {"text": "试验台账：C30 试块报告编号待核。"},
+        "kb_queries": ["试验台账", "报告编号"],
+        "required_bars": ["试验台账", "报告编号", "仪器检定"],
+        "bars_trace": "标题试验台账骨架 / 报告编号列 / 仪器检定列",
+    },
+    "finance-book": {
+        "category": "finance",
+        "exclusive": "finance-book__check",
+        "g3_args": {"text": "核算检查：报销审核清单，发票待核。"},
+        "kb_queries": ["核算检查", "报销"],
+        "required_bars": ["核算检查表", "报销", "科目", "[A001]"],
+        "bars_trace": "标题项目部核算检查表 / 报销审核清单 / 科目对照 / 金额 [A001]",
+    },
+    "warehouse": {
+        "category": "plant",
+        "exclusive": "warehouse__log",
+        "g3_args": {"text": "收发存：钢筋入库 12 吨，限额领料待填。"},
+        "kb_queries": ["收发存", "限额领料"],
+        "required_bars": ["收发存", "限额领料", "盘点", "TBD"],
+        "bars_trace": "标题收发存台账口径 / 限额领料出库 / 盘点 / 无数 TBD",
+    },
+    "worker-brief": {
+        "category": "people",
+        "exclusive": "worker-brief__talk",
+        "g3_args": {"text": "班前白话：今天三层临边防护，不报未给的尺寸。"},
+        "kb_queries": ["班前白话", "工友白话"],
+        "required_bars": ["班前白话稿", "今天", "临边"],
+        "bars_trace": "标题班前白话稿 / 今天干什么 / 用户点名临边",
+    },
+    "survey": {
+        "category": "construction",
+        "exclusive": "survey__record",
+        "g3_args": {"text": "测量方案：基坑放样，坐标用户未给。", "confirm_ok": True},
+        "kb_queries": ["测量方案", "放样"],
+        "required_bars": ["测量方案", "[A001]", "坐标"],
+        "bars_trace": "标题测量方案/记录表 / 缺坐标 [A001] / 禁止编造坐标",
     },
 }
 

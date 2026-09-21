@@ -76,7 +76,19 @@
     ["安全交底", "safety-brief"],
     ["施工配合比", "lab-mix"],
     ["见证取样", "lab-sample"],
-    ["工程量拆分", "cost"]
+    ["工程量拆分", "cost"],
+    ["质量检查表", "quality"],
+    ["总进度计划", "plan-master"],
+    ["一级网络", "plan-master"],
+    ["采购计划", "proc-plan"],
+    ["试验台账", "lab-record"],
+    ["核算检查", "finance-book"],
+    ["报销审核", "finance-book"],
+    ["限额领料", "warehouse"],
+    ["测量方案", "survey"],
+    ["放样复测", "survey"],
+    ["主控项目", "quality"],
+    ["收发存", "warehouse"]
   ],
   "strong_match_semantics": {
     "order": "数组保序 = Python _STRONG 的「最长优先」手工排序；两侧必须按数组顺序遍历取首个命中（first-hit）",
