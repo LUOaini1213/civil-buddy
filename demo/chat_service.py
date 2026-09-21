@@ -398,97 +398,162 @@ def _stream_turn(root: Path, turn: dict, *, key_available: bool, plain_runner, l
         from semantic_service import events as semantic_events
         yield from semantic_events(root, turn, control, key_available=key_available)
         workflow = turn["route"].get("workflow")
-        for eid in ([""] if workflow else turn["ids"] or [""]):
+        from packing_assistant.runtime.turn import resolve_mode, run_turn
+
+        chosen, _mode_notice = resolve_mode()
+        routed_model = (
+            chosen == "model"
+            and not workflow
+            and not turn["route"].get("ambiguous")
+        )
+        if routed_model:
+            yield _event("status", phase="deliver", text="模型驱动：选岗、调工具、出稿")
             control.check()
-            expert = get_expert(eid) if eid else None
-            yield _event("status", phase="summon" if eid else "plain", expert=eid,
-                         text=f"{expert.name} · {turn['intent']}" if expert else "Civil Buddy 路由器")
-            rid, nodes = uuid4().hex, []
-            result = {"run_id": rid, "expert_id": eid, "ok": True}
-            local_files, local_cites = [], []
-            if turn["route"]["ambiguous"]:
-                result["reply"] = turn["route"]["reason"]
-                result["reply"] += "\n\n" + "\n".join("- " + c["label"] for c in turn["route"]["candidates"])
-            elif workflow:
-                from workflow_service import events as workflow_events
-                for event in workflow_events(root, turn, control, key_available=key_available):
-                    if event["event"] == "workflow_result":
-                        result = event["data"]
-                    else:
-                        yield event
-                result["engine_run_id"] = result.get("parent_run_id", "")
-                result["run_id"], result["expert_id"] = rid, "tender-review"
-                local_files = _deliverables(root, sid, rid, result, "tender-review")
-                collaboration_result = result["collaboration"]
-                turn["context"]["collaboration"] = collaboration_result.get("aggregate_metrics", {})
-                nodes = [{"kind": "info", "title": "招标协作", "detail": result.get("state", "")},
-                         *[{"kind": "tool", "title": c.get("skill", ""), "detail": c.get("status", "")}
-                           for c in collaboration_result.get("children", [])]]
-                local_cites = turn["local_sources"]
-                yield _event("context", **turn["context"])
-            elif turn["intent"] == "chat":
-                if key_available:
-                    request = turn["requests"][eid]
-                    gen = _model_chat(eid, request) if eid else plain_runner(request["messages"])
-                    current = []
-                    for event in turn_control.model_events(gen, control):
-                        if event["event"] == "token":
-                            piece = str(event["data"].get("text") or "")
-                            current.append(piece)
-                            partial.append(piece)
-                            if len(turn["ids"]) <= 1:
-                                yield event
-                        elif event["event"] == "done":
-                            result["reply"] = event["data"].get("text") or "".join(current)
-                            local_cites = event["data"].get("citations") or request["citations"]
-                        elif event["event"] == "error":
-                            raise RuntimeError("模型问答未完成")
-                        else:
-                            yield event
-                    if not result.get("reply"):
-                        raise RuntimeError("模型未返回有效回答")
-                else:
-                    result["reply"] = _offline_chat(eid, message)
-                    local_cites = turn["local_sources"]
-                    if local_cites:
-                        result["reply"] += "\n\n本机找到以下相关原文，可展开来源核对。"
-                nodes.append({"kind": "info", "title": "问答", "detail": "未调用写入工具"})
-            elif not eid:
-                result["reply"] = "请先选择一个岗位，或用 @岗位名 说明需要的交付物，例如「@项目日报 写一份日报模板」。"
-            elif not roster_expert(eid):
-                result["reply"] = f"{expert.name} 尚未接入本地起草工具。可以先提问或完善该岗位的工具配置。"
-            elif expert.risk == "high" and not turn["confirmed"]:
-                result.update(reply=hitl_reply(expert.name), hitl_pending=True)
-                nodes.append({"kind": "decision", "title": "等待签认确认", "detail": "本轮未执行写入", "operator": "本地用户"})
-                yield _event("status", phase="hitl_gate", text=result["reply"], gate="hitl", confirmed=False)
-            else:
-                from packing_assistant.runtime.agent_loop import run_agent
-                if expert.risk == "high":
-                    nodes.append({"kind": "decision", "title": "已收到签认确认", "detail": CONFIRM, "operator": "本地用户"})
-                yield _event("status", phase="deliver", text=f"按 {expert.name} 工序起草")
-                control.check()
-                result = run_agent(turn["material"], session_id=sid, expert_id=eid,
-                                   p0_confirmed=turn["confirmed"], force_intent=turn["intent"],
-                                   project_name=turn["project_name"], cancel_event=control.event)
-                # The UI run owns its own unique snapshot; the engine run remains linked.
-                result["engine_run_id"] = result.get("run_id", "")
-                result["run_id"] = rid
-                local_files = _deliverables(root, sid, rid, result, eid)
-                for tool in result.get("tool_results", []):
-                    nodes.append({"kind": "tool", "title": tool["name"], "detail": "完成" if tool.get("ok") else str(tool.get("error_code") or "失败")})
-                if not result.get("reply"):
-                    result["reply"] = "任务未完成：" + str(result.get("error_code") or "工具未返回结果")
-            if len(turn["ids"]) > 1 and not workflow:
-                texts.append(f"### {expert.name}\n\n" + result["reply"])
-            else:
-                texts.append(result["reply"])
+            skill = turn["ids"][0] if len(turn["ids"]) == 1 else ""
+            result = run_turn(
+                turn["message"],
+                session_id=sid,
+                skill=skill,
+                confirm=turn["confirmed"],
+                history=turn["history"],
+                cancel_event=control.event,
+            )
+            rid = uuid4().hex
+            result = dict(result)
+            result["engine_run_id"] = result.get("run_id", "")
+            result["run_id"] = rid
+            eid = str(result.get("expert_id") or result.get("skill") or skill or "")
+            if eid:
+                result["expert_id"] = eid
+                if eid not in turn["ids"]:
+                    turn["ids"] = [eid]
+            local_files = _deliverables(root, sid, rid, result, eid)
+            nodes = [
+                {"kind": "tool", "title": name, "detail": "完成"}
+                for name in (result.get("tools_run") or [])
+            ]
+            if result.get("hitl_pending"):
+                if CONFIRM not in str(result.get("reply") or ""):
+                    who = ""
+                    if eid:
+                        rec = roster_expert(eid)
+                        who = rec.name if rec else eid
+                    extra = hitl_reply(who)
+                    result["reply"] = (str(result.get("reply") or "").rstrip() + "\n\n" + extra).strip()
+                nodes.append({
+                    "kind": "decision",
+                    "title": "等待签认确认",
+                    "detail": "本轮未执行写入",
+                    "operator": "本地用户",
+                })
+                yield _event(
+                    "status",
+                    phase="hitl_gate",
+                    text=str(result.get("reply") or ""),
+                    gate="hitl",
+                    confirmed=False,
+                )
+            if not result.get("reply"):
+                result["reply"] = "任务未完成：" + str(result.get("error_code") or "模型未返回结果")
+            texts.append(str(result.get("reply") or ""))
             files.extend(local_files)
-            citations.extend(local_cites)
-            pending = pending or result.get("hitl_pending", False)
-            ok = ok and result.get("ok", True)
+            pending = pending or bool(result.get("hitl_pending"))
+            ok = ok and bool(result.get("ok", True))
             _record(root, turn, result, local_files, nodes)
             run_ids.append(rid)
             control.check()
+        else:
+            for eid in ([""] if workflow else turn["ids"] or [""]):
+                control.check()
+                expert = get_expert(eid) if eid else None
+                yield _event("status", phase="summon" if eid else "plain", expert=eid,
+                             text=f"{expert.name} · {turn['intent']}" if expert else "Civil Buddy 路由器")
+                rid, nodes = uuid4().hex, []
+                result = {"run_id": rid, "expert_id": eid, "ok": True}
+                local_files, local_cites = [], []
+                if turn["route"]["ambiguous"]:
+                    result["reply"] = turn["route"]["reason"]
+                    result["reply"] += "\n\n" + "\n".join("- " + c["label"] for c in turn["route"]["candidates"])
+                elif workflow:
+                    from workflow_service import events as workflow_events
+                    for event in workflow_events(root, turn, control, key_available=key_available):
+                        if event["event"] == "workflow_result":
+                            result = event["data"]
+                        else:
+                            yield event
+                    result["engine_run_id"] = result.get("parent_run_id", "")
+                    result["run_id"], result["expert_id"] = rid, "tender-review"
+                    local_files = _deliverables(root, sid, rid, result, "tender-review")
+                    collaboration_result = result["collaboration"]
+                    turn["context"]["collaboration"] = collaboration_result.get("aggregate_metrics", {})
+                    nodes = [{"kind": "info", "title": "招标协作", "detail": result.get("state", "")},
+                             *[{"kind": "tool", "title": c.get("skill", ""), "detail": c.get("status", "")}
+                               for c in collaboration_result.get("children", [])]]
+                    local_cites = turn["local_sources"]
+                    yield _event("context", **turn["context"])
+                elif turn["intent"] == "chat":
+                    if key_available:
+                        request = turn["requests"][eid]
+                        gen = _model_chat(eid, request) if eid else plain_runner(request["messages"])
+                        current = []
+                        for event in turn_control.model_events(gen, control):
+                            if event["event"] == "token":
+                                piece = str(event["data"].get("text") or "")
+                                current.append(piece)
+                                partial.append(piece)
+                                if len(turn["ids"]) <= 1:
+                                    yield event
+                            elif event["event"] == "done":
+                                result["reply"] = event["data"].get("text") or "".join(current)
+                                local_cites = event["data"].get("citations") or request["citations"]
+                            elif event["event"] == "error":
+                                raise RuntimeError("模型问答未完成")
+                            else:
+                                yield event
+                        if not result.get("reply"):
+                            raise RuntimeError("模型未返回有效回答")
+                    else:
+                        result["reply"] = _offline_chat(eid, message)
+                        local_cites = turn["local_sources"]
+                        if local_cites:
+                            result["reply"] += "\n\n本机找到以下相关原文，可展开来源核对。"
+                    nodes.append({"kind": "info", "title": "问答", "detail": "未调用写入工具"})
+                elif not eid:
+                    result["reply"] = "请先选择一个岗位，或用 @岗位名 说明需要的交付物，例如「@项目日报 写一份日报模板」。"
+                elif not roster_expert(eid):
+                    result["reply"] = f"{expert.name} 尚未接入本地起草工具。可以先提问或完善该岗位的工具配置。"
+                elif expert.risk == "high" and not turn["confirmed"]:
+                    result.update(reply=hitl_reply(expert.name), hitl_pending=True)
+                    nodes.append({"kind": "decision", "title": "等待签认确认", "detail": "本轮未执行写入", "operator": "本地用户"})
+                    yield _event("status", phase="hitl_gate", text=result["reply"], gate="hitl", confirmed=False)
+                else:
+                    from packing_assistant.runtime.agent_loop import run_agent
+                    if expert.risk == "high":
+                        nodes.append({"kind": "decision", "title": "已收到签认确认", "detail": CONFIRM, "operator": "本地用户"})
+                    yield _event("status", phase="deliver", text=f"按 {expert.name} 工序起草")
+                    control.check()
+                    result = run_agent(turn["material"], session_id=sid, expert_id=eid,
+                                       p0_confirmed=turn["confirmed"], force_intent=turn["intent"],
+                                       project_name=turn["project_name"], cancel_event=control.event)
+                    # The UI run owns its own unique snapshot; the engine run remains linked.
+                    result["engine_run_id"] = result.get("run_id", "")
+                    result["run_id"] = rid
+                    local_files = _deliverables(root, sid, rid, result, eid)
+                    for tool in result.get("tool_results", []):
+                        nodes.append({"kind": "tool", "title": tool["name"], "detail": "完成" if tool.get("ok") else str(tool.get("error_code") or "失败")})
+                    if not result.get("reply"):
+                        result["reply"] = "任务未完成：" + str(result.get("error_code") or "工具未返回结果")
+                if len(turn["ids"]) > 1 and not workflow:
+                    texts.append(f"### {expert.name}\n\n" + result["reply"])
+                else:
+                    texts.append(result["reply"])
+                files.extend(local_files)
+                citations.extend(local_cites)
+                pending = pending or result.get("hitl_pending", False)
+                ok = ok and result.get("ok", True)
+                _record(root, turn, result, local_files, nodes)
+                run_ids.append(rid)
+                control.check()
         text = "\n\n".join(texts)
         control.seal("done" if ok else "failed")
         projects.append_turn(root, sid, "assistant", text)

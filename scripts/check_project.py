@@ -47,6 +47,7 @@ CHECKS = (
     Check("civil-config", ("scripts/test_civil_config.py",)),
     Check("civil-workspace", ("scripts/test_civil_workspace.py",)),
     Check("model-loop", ("scripts/test_model_loop.py",)),
+    Check("workbench-model-turn", ("scripts/test_workbench_model_turn.py",), timeout=300),
     Check("steps-job-files", ("scripts/test_steps_job_files.py",)),
     Check("civil-review", ("scripts/test_civil_review.py",)),
     Check("os-sandbox", ("scripts/test_os_sandbox.py",), timeout=300),
