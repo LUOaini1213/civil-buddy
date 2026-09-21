@@ -296,15 +296,16 @@ TOPICS: Tuple[Topic, ...] = (
 #: Fields only a document lays down, row by row in its front table. They are not looked for in typed text:
 #: nobody types "投标文件副本份数", and a keyword that is never typed can only steal a clause from another field.
 DOCUMENT_TOPICS: Tuple[Topic, ...] = (
-    Topic("consortium", "联合体投标", ("是否接受联合体投标", "联合体投标", "联合体"), "text", "qualification"),
-    Topic("copies", "投标文件份数", ("投标文件副本份数", "投标文件份数", "副本份数", "正本份数"), "text", "form"),
+    Topic("consortium", "联合体投标", ("是否接受联合体投标", "联合体投标", "联合体", "Joint Ventures", "Joint Venture", "Consortium", "Consortia"), "text", "qualification"),
+    Topic("copies", "投标文件份数", ("投标文件副本份数", "投标文件份数", "副本份数", "正本份数", "Number of copies", "Copies of tender", "Copies"), "text", "form"),
     Topic("binding", "装订要求", ("装订要求", "装订"), "text", "form"),
     Topic("signing", "签字盖章要求", ("签字或盖章要求", "签字盖章要求", "签章要求"), "text", "form"),
-    Topic("performance_bond", "履约担保", ("履约担保", "履约保证金", "履约保函"), "text", "bond"),
-    Topic("alternative", "备选投标方案", ("是否允许递交备选投标方案", "备选投标方案", "备选方案"), "text", "substantive"),
+    Topic("performance_bond", "履约担保", ("履约担保", "履约保证金", "履约保函", "Performance Bond", "Performance Security", "Security Deposit"), "text", "bond"),
+    Topic("alternative", "备选投标方案", ("是否允许递交备选投标方案", "备选投标方案", "备选方案", "Alternative Tenders", "Alternative Tender", "Alternative Bids", "Alternative Offers"), "text", "substantive"),
     Topic("subcontract", "分包", ("分包",), "text", "substantive"),
     Topic("deviation", "偏离", ("偏离",), "text", "substantive"),
-    Topic("open_place", "开标地点", ("开标地点", "开标时间和地点"), "text", "timeline"),
+    Topic("open_place", "开标地点", ("开标地点", "开标时间和地点", "bid opening shall take place at", "tender opening shall take place at",
+                                "place of bid opening", "place of tender opening"), "text", "timeline"),
     Topic("submit_place", "递交地点", ("递交投标文件地点", "投标文件递交地点", "递交地点"), "text", "timeline"),
     Topic("candidates", "中标候选人", ("是否授权评标委员会确定中标人", "中标候选人"), "text", "scoring"),
     Topic("budget", "采购预算", ("预算金额", "采购预算", "项目预算"), "money", "price"),
@@ -315,6 +316,9 @@ _DEADLINE_QUERY_NAMES = ("提出问题的截止时间", "澄清招标文件的�
 #: what the rows of a front table are called when the purchase is not a works tender (政府采购: 磋商 / 谈判 / 询价):
 #: 供应商 for 投标人, 响应文件 for 投标文件, 服务期限 for 工期
 _DOCUMENT_ROW_NAMES: Tuple[Tuple[str, str], ...] = (
+    (r"(?i:deadline for (?:bid |tender )?submission|(?:bid|tender) submission deadline|closing date(?: and time)?)", "deadline_bid"),
+    (r"(?i:name of the (?:bidding process|contract|works|project)|contract title|title of (?:the )?(?:contract|works))", "project"),
+    (r"(?i:(?:invitation for bids?|IFB|ITT|tender|bid|contract|RFP|RFQ) (?:no\.?|number|ref(?:erence)?\.?)(?: no\.?)?)", "tender_no"),
     # before "X人的资格要求" below: the person in charge is not the bidder
     (r"(?:拟派|拟任|拟投入)?(?:项目负责人|项目经理)(?:的)?(?:任职|执业)?(?:资格)?(?:要求|条件|资格)?", "pm"),
     (r"(?:拟派|拟任|拟投入)?(?:技术负责人|项目总工)(?:的)?(?:任职|执业)?(?:资格)?(?:要求|条件|资格)?", "tech_lead"),
@@ -364,7 +368,7 @@ def document_topic(name: str) -> str:
     if "资质条件" in name:
         return "qualification"
     for alias, key in _DOCUMENT_ALIASES:
-        if alias in name and len(alias) * 2 >= len(name):
+        if (alias in name or (alias.isascii() and alias.lower() in name.lower())) and len(alias) * 2 >= len(name):
             return key
     for start, end, key in _topic_hits(name):
         rest = name[:start] + name[end:]
@@ -382,8 +386,9 @@ def loose_document_topic(name: str) -> str:
     for pattern, key in _DOCUMENT_ROW_NAMES:
         if re.search(pattern, name):
             return key      # the shape of a row name anywhere in the phrase: "包2合同履行期限为90日历天"
+    low = name.lower()
     for alias, key in _DOCUMENT_ALIASES:
-        if alias in name:
+        if alias in name or (alias.isascii() and alias.lower() in low):
             return key
     hits = _topic_hits(name)
     return hits[0][2] if hits else ""
