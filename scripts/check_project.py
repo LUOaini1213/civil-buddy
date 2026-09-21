@@ -41,6 +41,8 @@ CHECKS = (
     Check("tender-facts", ("scripts/test_tender_facts.py",)),
     Check("bid-posts", ("scripts/test_bid_posts.py",)),
     Check("bid-files", ("scripts/test_bid_files.py",)),
+    Check("tender-document", ("scripts/test_tender_document.py",)),
+    Check("real-tender", ("scripts/test_real_tender.py",), timeout=1200),
     # Offline, model-free, a second or two each - and until 2026-09-20 run by nothing: not by ci.yml,
     # not by this registry, not by the acceptance glob. They pin the parser the three bid posts stand on.
     Check("tender-parse", ("scripts/test_tender_parse.py",)),

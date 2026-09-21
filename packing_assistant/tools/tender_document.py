@@ -426,7 +426,8 @@ def obligations(doc: Document) -> List[Piece]:
     # the notice lays down who may bid at all: "本次招标不接受联合体投标", "拟派项目经理须具备…"
     said = {_flat(p.text) for p in out}
     for p in doc.chapter("第一章"):
-        if p.kind == "text" and "资格" in p.heading and _OBLIGES.search(p.text) and _flat(p.text) not in rejected | said:
+        about_bidders = "资格" in p.heading or re.search(r"投标人|联合体|项目经理|项目负责人", p.text)
+        if p.kind == "text" and about_bidders and _OBLIGES.search(p.text) and _flat(p.text) not in rejected | said:
             out.append(p)
     return out
 
@@ -580,8 +581,11 @@ def response_values(text: str, title: str):
                 if topic in ("pm", "tech_lead"):
                     value = tf._person(body) if len(body) <= 12 else ""
                 elif topic == "our_price":
-                    money = tf._MONEY.search(body) or re.fullmatch(r"[¥￥]?\s*\d[\d,]*(?:\.\d+)?", body)
-                    value = money.group(0).strip() if money else ""
+                    money = tf._MONEY.search(body)
+                    bare = re.fullmatch(r"[¥￥]?\s*\d[\d,]*(?:\.\d+)?", body)
+                    unit = re.search(r"[（(]\s*(万元|亿元|元)\s*[)）]", label)
+                    # "投标总报价（元）" over "33,000,000.00": the unit stands in the column name
+                    value = money.group(0).strip() if money else f"{body}{unit.group(1)}" if (bare and unit) else body if bare else ""
                 elif topic == "quality":
                     value = body if len(body) <= 12 else ""
                 else:
@@ -601,7 +605,7 @@ def response_values(text: str, title: str):
             quality = _QUALITY_WORD.search(sentence)
             if quality and "____" not in sentence:
                 _keep(found, seen, tf.Mention("quality", "ours", "", quality.group(1), sentence.strip()[:160], line_no, origin=title))
-            clauses = [c.strip() for c in re.split(r"[，,]", sentence)]
+            clauses = [c.strip() for c in re.split(r"，|,(?!\d)", sentence)]   # "¥200,000.00": that comma ends no clause
             for index, clause in enumerate(clauses):
                 if not clause or "____" in clause:
                     continue
@@ -651,11 +655,27 @@ def consistency(mentions: Sequence) -> List[Dict[str, object]]:
     rows: List[Dict[str, object]] = []
     for topic, items in by_topic.items():
         values = list(dict.fromkeys((_flat(m.value), m.value, m.origin) for m in items))
-        distinct = {v[0] for v in values}
+        distinct = {_amount(v[1]) or v[0] for v in values}   # 3,300.00万元 and 33,000,000.00元 are one amount
         if len(values) < 2:
             continue
         rows.append({"topic": topic, "label": tf._TOPIC[topic].label, "values": [(v[1], v[2]) for v in values], "same": len(distinct) == 1})
     return rows
+
+
+_AMOUNT = re.compile(r"[¥￥]?\s*(\d[\d,]*(?:\.\d+)?)\s*(亿元|万元|元|日历天|天|日|个月|月|年)?")
+_SCALE = {"亿元": ("元", 100_000_000), "万元": ("元", 10_000), "元": ("元", 1), "日历天": ("天", 1), "天": ("天", 1), "日": ("天", 1),
+          "个月": ("月", 1), "月": ("月", 1), "年": ("年", 1)}
+
+
+def _amount(value: str) -> str:
+    """"3,300.00万元" -> "元:33000000"; "" when the value is not a number with a unit. For telling whether two
+    writings are the same quantity - never for showing."""
+    found = _AMOUNT.fullmatch((value or "").strip())
+    if not found or not found.group(2):
+        return ""
+    unit, scale = _SCALE[found.group(2)]
+    number = float(found.group(1).replace(",", "")) * scale
+    return f"{unit}:{number:.4f}".rstrip("0").rstrip(".")
 
 
 def found_in(texts: Sequence[Tuple[str, str]], words: Sequence[str]) -> List[str]:

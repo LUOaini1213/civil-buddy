@@ -254,7 +254,7 @@ TOPICS: Tuple[Topic, ...] = (
     Topic("scope", "招标范围", ("招标范围", "承包范围", "施工范围", "工程范围", "发包范围", "Scope of Works", "Scope of Work"), "text", "project"),
     Topic("area", "建筑面积", ("总建筑面积", "建筑面积", "面积", "Gross Floor Area", "GFA"), "area", "project"),
     Topic("structure", "结构形式", ("结构形式", "结构类型", "结构体系", "结构"), "text", "project"),
-    Topic("deadline_bid", "投标截止", ("投标文件递交截止", "投标截止时间", "投标截止", "递交截止", "截标时间", "截标",
+    Topic("deadline_bid", "投标截止", ("投标文件递交的截止时间", "投标文件递交截止", "递交的截止时间", "投标截止时间", "投标截止", "递交截止", "截标时间", "截标",
                                      "Tender closing date", "Tender closes", "Closing date", "Submission deadline"), "date", "timeline"),
     Topic("deadline_open", "开标", ("开标时间", "开标日期", "开标"), "date", "timeline"),
     Topic("deadline_query", "答疑/澄清截止", ("答疑截止", "澄清截止", "提问截止", "质疑截止", "异议截止"), "date", "timeline"),
