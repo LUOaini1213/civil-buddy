@@ -342,6 +342,36 @@ class UrlTests(unittest.TestCase):
         self.assertEqual(len(calls), 2)
 
 
+class AddressInTheMessageTests(unittest.TestCase):
+    """"解析这份招标文件 <its address>" is one step: the turn fetches the address and works on what came back."""
+
+    def test_addresses_in_a_message_become_attachments_of_the_turn(self) -> None:
+        import chat_service
+
+        asked = []
+
+        def fetch(session: str, address: str) -> dict:
+            asked.append(address)
+            if "inside" in address:
+                raise uploads.UploadError("拒绝访问本机或内网地址")
+            return {"ok": True, "files": [{"id": "f" + str(len(asked)), "name": "招标文件.pdf"}]}
+
+        with patch.object(uploads, "fetch_upload", side_effect=fetch):
+            ids, note = chat_service._fetch_addresses(
+                "session-one", "解析招标 https://tender.example/a/招标文件.pdf。另见 http://inside.example/x 和 https://third.example/y", ["kept"])
+        self.assertEqual(asked, ["https://tender.example/a/招标文件.pdf", "http://inside.example/x"], "two a turn; the full stop is not the address's")
+        self.assertEqual(ids, ["kept", "f1"])
+        self.assertIn("已从网址取回「招标文件.pdf」", note)
+        self.assertIn("网址没有取到（拒绝访问本机或内网地址）", note, "a refusal is said, with what to do instead")
+
+    def test_a_message_without_an_address_fetches_nothing(self) -> None:
+        import chat_service
+
+        with patch.object(uploads, "fetch_upload") as fetch:
+            self.assertEqual(chat_service._fetch_addresses("session-one", "解析招标：工期60日历天", []), ([], ""))
+        fetch.assert_not_called()
+
+
 class ScanTests(unittest.TestCase):
     def setUp(self) -> None:
         temp = tempfile.TemporaryDirectory(prefix="civil-uploads-")

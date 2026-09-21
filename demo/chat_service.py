@@ -9,6 +9,7 @@ import json
 import logging
 import math
 import os
+import re
 import shutil
 import threading
 import time
@@ -99,6 +100,31 @@ class SessionLease:
         self.release()
 
 
+_ADDRESS = re.compile(r"https?://[^\s<>\"'，。；、（）()【】]+", re.I)
+
+
+def _fetch_addresses(sid: str, message: str, attachment_ids: list) -> tuple:
+    """(attachment ids with what was fetched, a note for the person) - at most two addresses a turn."""
+    from uploads import UploadError, fetch_upload
+
+    notes = []
+    ids = list(attachment_ids)
+    for address in list(dict.fromkeys(_ADDRESS.findall(message or "")))[:2]:
+        try:
+            got = fetch_upload(sid, address.rstrip(".,;:!?"))
+        except UploadError as exc:
+            notes.append(f"网址没有取到（{exc}）：请下载后用「附件」上传。")
+            continue
+        except OSError:
+            notes.append("网址取回的文件没能保存，请检查工作台目录权限。")
+            continue
+        for item in got.get("files") or []:
+            if item.get("id") and item["id"] not in ids:
+                ids.append(item["id"])
+                notes.append(f"已从网址取回「{item.get('name')}」并作为本轮附件。")
+    return ids, " ".join(notes)
+
+
 def prepare_turn(root: Path, body: dict) -> dict:
     """Validate before opening an SSE stream; no business output is created here."""
     message = body["message"].strip()
@@ -134,6 +160,11 @@ def prepare_turn(root: Path, body: dict) -> dict:
     from uploads import list_uploads
 
     attachment_ids = list(dict.fromkeys(body.get("attachments") or []))
+    fetched_note = ""
+    if route["intent"] != "chat" or route.get("workflow"):
+        # a task about a document whose address is in the message: the workbench fetches it (uploads.fetch_upload -
+        # public addresses only, 20 MB, the same path an upload takes) and the turn works on it like on any attachment
+        attachment_ids, fetched_note = _fetch_addresses(sid, message, attachment_ids)
     available = {f["id"] for f in list_uploads(sid)} if attachment_ids else set()
     if any(identifier not in available for identifier in attachment_ids):
         raise ValueError("附件不存在，请重新选择当前会话的附件")
@@ -155,6 +186,8 @@ def prepare_turn(root: Path, body: dict) -> dict:
         if omitted:
             context["note"] += (" 本轮资料超出预算，未加入：" + "、".join(omitted[:6])
                                 + (f" 等 {len(omitted)} 项" if len(omitted) > 6 else "") + "。")
+    if fetched_note:
+        context["note"] = f"{context.get('note', '')} {fetched_note}".strip()
     context = {**context, "history_count": prepared["history_count"],
                "indexed_history": prepared["indexed_history"], "attachments_indexed": prepared["attachments_indexed"],
                "retrieved": len(prepared["sources"]), "memory_saved": True}
