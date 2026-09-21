@@ -214,7 +214,8 @@ class UploadTests(unittest.TestCase):
         self.assertEqual([(n["name"], n["kind"]) for n in noted], [("投标文件.pdf", "pdf")])
         self.assertIn("OCR", noted[0]["reason"])
         self.assertEqual(uploads.unreadable_uploads("session-two"), [], "one task's note is not another's")
-        self.assertEqual(sorted(path.name for path in (uploads.UPLOAD_ROOT / "session-one").iterdir()), [uploads.UNREADABLE_LOG])
+        # the session's attachments live in <session>/uploads since 4afef4a; the note lies beside them
+        self.assertEqual(sorted(path.name for path in uploads.session_uploads_dir("session-one").iterdir()), [uploads.UNREADABLE_LOG])
 
     def test_the_note_goes_when_the_same_name_is_attached_readable(self) -> None:
         with self.assertRaises(uploads.UploadUnreadable):
@@ -234,7 +235,7 @@ class UploadTests(unittest.TestCase):
         for index in range(uploads.MAX_UNREADABLE + 6):
             with self.assertRaises(uploads.UploadUnreadable):
                 uploads.save_upload("session-one", f"坏{index}.xlsx", b"SECRET-BYTES-OF-THE-DOCUMENT")
-        log = (uploads.UPLOAD_ROOT / "session-one" / uploads.UNREADABLE_LOG).read_text(encoding="utf-8")
+        log = (uploads.session_uploads_dir("session-one") / uploads.UNREADABLE_LOG).read_text(encoding="utf-8")
         self.assertEqual(len(log.splitlines()), uploads.MAX_UNREADABLE)
         self.assertNotIn("SECRET", log)
         self.assertEqual(len(uploads.unreadable_uploads("session-one")), uploads.MAX_UNREADABLE)
