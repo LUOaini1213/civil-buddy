@@ -20,6 +20,9 @@ STATIC = (
     "manifest.webmanifest", "posts.js", "studio.js", "styles.css", "tickets.js", "voice.js",
     "icons/cb-icon-192.png", "icons/cb-icon-512.png", "icons/cb-icon.svg",
     "vendor/marked.LICENSE.md", "vendor/marked.min.js",
+    "cad.html", "cad.css", "cad.js", "cad-viewer.js",
+    "vendor/three/three.module.js", "vendor/three/three.core.js",
+    "vendor/three/OrbitControls.js", "vendor/three/LICENSE.txt", "vendor/three/manifest.json",
 )
 EXPLICIT = (
     "LICENSE", "requirements.txt", ".env.example", "demo/.env.example",
@@ -32,6 +35,9 @@ EXPLICIT = (
     "scripts/start_workbench.py",
     # 语音输入：页面加载 voice.js；本机识别需要术语表，装依赖的说明在 requirements-asr.txt 里
     "demo/asr_lexicon.txt", "requirements-asr.txt", "docs/voice-input.md",
+    "requirements-cad.txt", "docs/civil-buddy/cad-to-3d.md",
+    "examples/cad-to-3d/synthetic-building-mm.dxf", "examples/cad-to-3d/synthetic-hollow-section-mm.dxf",
+    "examples/cad-to-3d/README.md",
 )
 ASSET_ROOTS = ("demo/kb", "knowledge", "knowledge_base", "skills/civil-buddy", ".agents/skills")
 
@@ -117,6 +123,9 @@ def release_readme(version: str) -> str:
 “写一份项目日报模板，项目：试用工程，日期：2026-09-12，天气：晴，其他内容待填”。
 可下载实际生成的 Markdown / XLSX 文件，并从会话列表恢复记录。
 开放式模型问答需在界面的模型设置中配置兼容 API；Key 不随包分发。
+CAD → 3D 建模可从首页进入；先用本包 Python 安装可选依赖：
+`python -m pip install -r requirements-cad.txt`。两份内置 DXF 为合成演示样例。
+图纸和预览只在服务内存缓存 30 分钟，重启后清空；需要保留时显式导出 GLB 与参数记录。
 如使用环境文件，只编辑本包 `.env` 或 `demo/.env`；`.env.example` 只是样例。
 
 产物保存在本包 `demo/out/`，上传和本地目录配置保存在本包目录；升级前可在设置菜单备份各任务，再导入新包。任务备份不含模型 Key、全局知识库和外部作业目录。

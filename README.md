@@ -6,6 +6,13 @@
 
 Natural Language → Agent Routing → Deterministic Tools → HITL → Evaluation
 
+**CAD → 3D 建模助手（预览）** — 上传闭合直线轮廓 DXF，确认单位、图层和实体区域，
+生成墙/柱/板或带孔截面的参数化网格；旋转查看、选中追溯、修改高度/长度与撤销，
+导出 GLB 和参数记录。先运行 `python -m pip install -r requirements-cad.txt`，
+再运行 `python -m packing_assistant.civil app`，从首页进入「CAD → 3D 建模助手」（`/cad`）。
+附带两份明确标注的合成样例，真实项目图纸须另行验收；不支持直接导入 DWG，
+不自动识别门窗，不是完整 BIM 或签认模型。操作与边界见 [CAD 建模说明](docs/civil-buddy/cad-to-3d.md)。
+
 ![Civil Buddy workbench](docs/assets/workbench.png)
 
 **In one paragraph (EN)** — an agent workbench for civil / construction / tendering

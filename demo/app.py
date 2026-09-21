@@ -29,6 +29,10 @@ app = FastAPI(title="Civil Buddy Workbench")
 STATIC = DEMO_ROOT / "static"
 app.mount("/static", StaticFiles(directory=STATIC), name="static")
 
+# CAD dependencies load only when this optional modeling workspace is used.
+from cad_api import router as cad_router
+app.include_router(cad_router)
+
 
 class ChatIn(BaseModel):
     message: str = Field(min_length=1, max_length=40_000)

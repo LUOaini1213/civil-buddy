@@ -1,0 +1,85 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="theme-color" content="#111923">
+  <title>CAD → 3D 建模助手 · Civil Buddy</title>
+  <link rel="icon" href="/static/icons/cb-icon.svg" type="image/svg+xml">
+  <link rel="stylesheet" href="/static/cad.css">
+  <script type="module" src="/static/cad.js"></script>
+</head>
+<body>
+  <header class="topbar">
+    <a class="brand" href="/" aria-label="返回 Civil Buddy 工作台"><span class="brand-mark">CB</span><span>Civil Buddy <small>工程工作台</small></span></a>
+    <nav aria-label="工作台导航"><a href="/">返回工作台</a><span class="top-tag">几何预览 · 内部讨论</span></nav>
+  </header>
+  <main>
+    <div class="page-heading"><div><p class="eyebrow">CAD → PARAMETRIC 3D</p><h1>从图纸，到可操作的模型</h1><p class="subtitle">确认二维实体轮廓，指定尺寸，再用一句话调整三维模型。</p></div><span id="serviceStatus" class="service-status">正在连接建模工具</span></div>
+    <div id="notice" class="notice" role="status" aria-live="polite">先上传 DXF，或选择一个合成样例体验完整流程。</div>
+    <div class="workspace">
+      <aside class="controls" aria-label="图纸与建模参数">
+        <section class="control-section">
+          <h2><span class="step">01</span> 选择图纸</h2>
+          <label class="dropzone" id="dropzone" for="cadFile"><span class="upload-symbol" aria-hidden="true">↥</span><strong>上传 DXF 图纸</strong><span>点击选择或拖入文件</span><small>闭合直线轮廓 · 暂不直接读取 DWG</small><input id="cadFile" type="file" accept=".dxf" aria-label="上传 DXF 图纸"></label>
+          <div class="example-row"><span>试用样例</span><button type="button" data-example="building">墙 · 柱 · 板</button><button type="button" data-example="section">带孔截面</button></div>
+          <div class="file-meta" id="fileMeta" hidden><div><strong id="filename"></strong><small id="fileDetails"></small></div><button id="clearFile" class="icon-button" type="button" aria-label="清空图纸和模型">×</button></div>
+          <p class="hint" id="exampleHint" hidden>这是合成演示图纸。已填入的尺寸仅用于演示，请勿套用于实际项目。</p>
+        </section>
+        <fieldset id="configFields" disabled>
+          <section class="control-section">
+            <h2><span class="step">02</span> 确认建模对象</h2>
+            <div class="mode-switch" role="group" aria-label="建模模式"><button id="modeBuilding" type="button" data-mode="building" aria-pressed="true">建筑平面</button><button id="modeSection" type="button" data-mode="section" aria-pressed="false">构件截面</button></div>
+            <p class="hint" id="modeHint">墙、柱、板分别拉伸；请选实体占据的区域，不要把房间边界当成实心墙。</p>
+            <label class="field-label" for="drawingUnit">图纸坐标单位</label>
+            <select id="drawingUnit">
+              <option value="">请选择并确认单位</option>
+              <option value="mm">毫米 mm</option>
+              <option value="cm">厘米 cm</option>
+              <option value="m">米 m</option>
+              <option value="in">英寸 in</option>
+              <option value="ft">英尺 ft</option>
+            </select>
+            <p id="unitHint" class="hint">单位直接决定实际模型尺寸。</p>
+            <div class="section-label"><span>图层映射</span><span>实体数 / 用途</span></div>
+            <div id="layerList" class="layer-list"><p class="hint">上传后显示图层</p></div>
+            <label class="solid-confirm"><input id="solidConfirmed" type="checkbox"><span>我确认：选中的闭合轮廓表示实体区域，同层内圈表示孔洞。</span></label>
+          </section>
+          <section class="control-section">
+            <h2><span class="step">03</span> 指定建模尺寸</h2>
+            <p class="hint">所有输入均为米；高度 / 长度必须由你提供。</p>
+            <div class="parameter-head"><span>对象</span><span id="heightHeading">高度 / 厚度</span><span>底部标高</span></div>
+            <div id="parameterRows"></div>
+            <button type="button" id="buildModel" class="button-primary full-width">生成三维模型 <span aria-hidden="true">↗</span></button>
+          </section>
+        </fieldset>
+      </aside>
+      <div class="results">
+        <div class="preview-grid">
+          <section class="preview-panel drawing-panel" aria-label="二维图纸预览">
+            <div class="panel-heading"><h2><span class="panel-index">2D</span> 原图轮廓</h2><span id="entityCount" class="muted">等待图纸</span></div>
+            <div class="drawing-stage"><svg id="drawingSvg" role="img" aria-label="DXF 二维轮廓预览" preserveAspectRatio="xMidYMid meet"></svg><div id="drawingEmpty" class="empty-state"><span class="empty-glyph" aria-hidden="true">▱</span><strong>二维轮廓将在这里显示</strong><p>图层和原图实体编号始终保留</p></div></div>
+            <div class="panel-foot"><span><i class="legend-dot ready"></i> 可建模</span><span><i class="legend-dot invalid"></i> 无效 / 未支持</span><span>点击轮廓查看来源</span></div>
+          </section>
+          <section class="preview-panel model-panel" aria-label="三维模型预览">
+            <div class="panel-heading"><h2><span class="panel-index">3D</span> 参数化模型</h2><div class="view-tools"><button id="fitView" type="button" disabled title="将模型完整显示在视图中">适应视图</button><button id="toggleEdges" type="button" aria-pressed="true" disabled>边线</button></div></div>
+            <div id="modelStage" class="model-stage"><div id="modelEmpty" class="empty-state"><span class="empty-cube" aria-hidden="true">◇</span><strong>让图纸立起来</strong><p>确认图层和尺寸后，点击生成三维模型</p></div><div id="webglError" class="viewer-error" hidden></div><span id="modelBadge" class="model-badge" hidden></span></div>
+            <div class="panel-foot"><span>拖动旋转</span><span>滚轮缩放</span><span>右键平移</span><span class="axis-label">Z ↑</span></div>
+          </section>
+        </div>
+        <section class="command-panel" aria-label="自然语言修改参数">
+          <div class="command-title"><span class="assistant-mark" aria-hidden="true">✦</span><div><h2>用一句话调整</h2><p id="commandHelp">例如：把墙高改成 3.6 米；把柱子标高改为 0.2 米。</p></div><button id="undoChange" type="button" disabled>↶ 撤销</button></div>
+          <form id="commandForm"><label class="sr-only" for="commandInput">参数修改指令</label><input id="commandInput" placeholder="把墙高改成 3.6 米" autocomplete="off" disabled maxlength="500"><button id="sendCommand" class="button-primary" type="submit" disabled>应用修改 <span aria-hidden="true">↑</span></button></form>
+          <p class="hint" id="commandResult">修改只作用于图层选择、高度、长度和标高；平面轮廓来自原图。</p>
+        </section>
+        <div class="detail-grid">
+          <section class="detail-panel"><div class="panel-heading"><h2>构件来源与参数</h2><span class="muted">点击模型选择</span></div><div id="objectInspector" class="object-inspector"><p class="hint">选择一个二维轮廓或三维构件，查看原始图层、实体编号与建模尺寸。</p></div></section>
+          <section class="detail-panel"><div class="panel-heading"><h2>处理记录</h2><span id="reportSummary" class="muted">尚未建模</span></div><div id="reportList" class="report-list"><p class="hint">成功、忽略和失败的实体会分别列出，孔洞也会保留处理记录。</p></div></section>
+        </div>
+        <section class="export-panel"><div><h2>导出模型与参数记录</h2><p class="hint">GLB 可在其他三维工具重新打开。预览模型不包含完整 BIM 语义。</p></div><label for="exportConfirmation">导出前请完整输入：<strong>我明白，将由持证人员签认</strong></label><input id="exportConfirmation" placeholder="我明白，将由持证人员签认" autocomplete="off" disabled><div class="export-actions"><button type="button" data-export="glb" disabled>下载 GLB 模型</button><button type="button" data-export="json" disabled>下载参数 JSON</button><button type="button" data-export="zip" disabled>打包下载 ↓</button><span id="exportHint" class="hint">生成模型后可导出</span></div></section>
+      </div>
+    </div>
+    <footer>真实几何 · 可追溯来源 · 用户指定尺寸 <span>首版支持闭合直线 DXF 轮廓；未处理实体会明确列出。</span></footer>
+  </main>
+</body>
+</html>

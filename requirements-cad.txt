@@ -1,0 +1,5 @@
+# Optional deterministic DXF -> mesh geometry. No model endpoint is used.
+ezdxf>=1.4,<2
+shapely>=2.1,<3
+trimesh>=4.7,<6
+mapbox-earcut>=2,<3
