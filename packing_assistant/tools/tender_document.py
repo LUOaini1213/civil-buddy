@@ -476,6 +476,46 @@ def rejections(doc: Document) -> List[Rejection]:
     return out
 
 
+_WEAK = re.compile(r"无效|拒绝|拒收|否决|不予|取消[^，。；]{0,8}资格|失去[^，。；]{0,8}资格|不得|视为(?:自动)?放弃|不合格|不通过|未通过|不接受|不被接受|"
+                   r"作废|没收|淘汰|出局|排除在外|终止[^，。；]{0,6}(?:资格|评审)|shall not|will not be (?:considered|accepted)|rejected|disqualif", re.I)
+_BIDDER_SIDE = re.compile(r"投标|响应|报价|供应商|磋商|谈判|比选|竞标|应答|申请人|参选|资格|保证金|tender|bid|proposal|supplier", re.I)
+
+
+def rejection_candidates(doc: Document, limit: int = 80) -> List[Piece]:
+    """Sentences that MAY get a bid thrown out and are not on the rejection list: a weak sign of a fatal
+    consequence (无效 / 拒绝 / 不予 / 不得 / 取消…资格 …) in a sentence about the bidder's side, outside the
+    contract conditions. The rejection list knows a vocabulary; a template that uses another gets a third to
+    a half of its clauses onto it. This net is wide on purpose and is shown apart: it costs a person a minute
+    per page of it, and a missed clause costs the bid."""
+    listed = {_flat(r.piece.text) for r in rejections(doc)} | {_flat(p.text) for p in obligations(doc)}
+    out: List[Piece] = []
+    seen: set = set()
+    pieces = doc.pieces
+    for index, p in enumerate(pieces):
+        if p.kind not in ("text", "row") or _CONTRACT.search(p.chapter) or "格式" in p.chapter:
+            continue
+        texts = [p.text] if p.kind == "text" else [c for c in p.cells[1:] if c]
+        for text in texts:
+            for sentence in ([text] if p.kind == "text" else re.split(r"[；;。]", text)):
+                sentence = sentence.strip()
+                key = _flat(sentence)
+                if (not sentence or key in seen or key in listed or any(key in done or done in key for done in listed if len(done) >= 8)
+                        or not (_WEAK.search(sentence) and _BIDDER_SIDE.search(sentence))):
+                    continue
+                seen.add(key)
+                out.append(p if sentence == p.text else replace(p, text=sentence))
+                if p.kind == "text" and _LIST_LEAD.search(sentence):
+                    for item in pieces[index + 1:index + 40]:
+                        if item.kind != "text" or not _LIST_ITEM.match(item.text):
+                            break
+                        if _flat(item.text) not in seen | listed:
+                            seen.add(_flat(item.text))
+                            out.append(item)
+                if len(out) >= limit:
+                    return out
+    return out
+
+
 def obligations(doc: Document) -> List[Piece]:
     """Front-table content that lays down a 须 / 不得 - binding, sealing, delivery, the account a transfer
     comes from. No rejection word stands in them; the formal review rejects for them all the same."""
@@ -748,6 +788,7 @@ def found_in(texts: Sequence[Tuple[str, str]], words: Sequence[str]) -> List[str
 
 def summary(doc: Document) -> Dict[str, int]:
     return {"chars": doc.chars, "lines": doc.lines, "ocr": doc.ocr, "pages": max((p.page for p in doc.pieces), default=0),
+            "rejection_candidates": len(rejection_candidates(doc)),
             "chapters": len({p.chapter for p in doc.pieces if p.chapter}),
             "front_rows": len(front_rows(doc)), "rejections": len(rejections(doc)), "obligations": len(obligations(doc)),
             "scores": len(scores(doc)), "specials": len(specials(doc)), "forms": len(forms(doc))}

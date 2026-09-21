@@ -304,6 +304,14 @@ def _document_sections(parsed: Mapping[str, Any], facts: Facts, document: Mappin
         rows.append([name, _clip(r.get("display") or r.get("exact_text"), 160), str(r.get("locator") or r.get("requirement_ref") or "—"), "已检出",
                      ("所引条款 " + cited) if cited else "逐条自查"])
     out += _table(PARSE_HEADER, rows) or ["全文未检出否决/拒收字样的条款——这本身不正常，请人工核对评标办法一章。", ""]
+    candidates = list(document.get("candidates") or [])
+    if candidates:
+        out += ["### 弱信号：可能也会让投标出局的句子", "",
+                f"上表认的是一套固定说法。换一种采购方式或地方模板，说法会变——在没见过的模板上，上表第一次只抓到过三分之一到一半。"
+                f"下面 {len(candidates)} 句带着较弱的信号（无效 / 拒绝 / 不予 / 不得 / 取消资格 …）、说的又是投标人这一方，宁可多列：逐句看一眼，"
+                "是否决条款就当否决条款对待。", ""]
+        out += _table(PARSE_HEADER, [[f"弱信号 {n}", _clip(c.get("text"), 160), str(c.get("locator") or "—"), "待人工判断", "—"]
+                                     for n, c in enumerate(candidates, 1)])
     out += ["## 12 投标文件组成", ""]
     rows = [[f"组成 {n}", str(f.get("name")), str(f.get("locator") or "—"), "已检出", "按投标文件格式一章编制，缺一份即可能被否决"]
             for n, f in enumerate(document.get("forms") or [], 1)]
@@ -886,6 +894,9 @@ def compliance_gaps(handoff: Optional[Mapping[str, Any]], matrix: Optional[Mappi
                   "招标文件里每一句会让投标被否决、拒收或按无效处理的话。工具不判断是否触发，逐条人工自查后打勾。", ""]
         extra += _table(("序号", "条款原文", "来源", "自查"), [[str(n), _clip(r.get("text"), 160), str(r.get("locator") or "—"), "□"]
                                                         for n, r in enumerate(requirements_list, 1)]) or ["未检出——请人工核对评标办法一章。", ""]
+        weak = list(document.get("candidates") or [])
+        if weak:
+            extra += [f"另有 {len(weak)} 句弱信号（说法不在固定词表里、但可能同样致命），见招标解析表第 11 节下半；自查时一并过一遍。", ""]
     md += ["## 7 澄清与补证", ""]
     md += [f"- {item}" for item in open_items] or ["- （本轮没有可列的缺口：要么资料不足，要么要求与响应逐项对上，仍须人工核验原件）"]
     p0 = (ho.get("p0_reject_scan") or {}).get("items") or []

@@ -332,6 +332,7 @@ def _document_summary(doc: Any) -> Dict[str, Any]:
     from packing_assistant.tools import tender_document
 
     return {"schema": "tender.document.v1", **tender_document.summary(doc),
+            "candidates": [{"text": p.text[:300], "locator": p.ref} for p in tender_document.rejection_candidates(doc)],
             "cut": any(p.text.startswith("（未读完）") for p in doc.pieces),
             "forms": [{"name": name, "locator": piece.ref} for name, piece in tender_document.forms(doc)]}
 

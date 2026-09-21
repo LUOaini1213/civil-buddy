@@ -146,8 +146,13 @@ def measure(draft: str, gold: Dict) -> Dict:
                      for row in mine if flat(item["value"]) in flat(row.get("要求原文", "")))
         result["fields"][key] = {"state": state, "clause": bool(clause and right), "shown": [row.get("要求原文", "") for row in mine][:6]}
     table_text = flat("".join("".join(row.values()) for row in rows)) + flat("".join(l for l in draft.splitlines() if l.lstrip().startswith("- ")))
+    strong_text = flat("".join("".join(row.values()) for row in rows if not next(iter(row.values()), "").startswith("弱信号")))
+    strong_text += flat("".join(l for l in draft.splitlines() if l.lstrip().startswith("- ")))
+    result["rejections_with_net"] = {}
     for item in gold["rejections"]:
-        result["rejections"][item["id"]] = flat(item["text"]) in table_text
+        result["rejections"][item["id"]] = flat(item["text"]) in strong_text          # on the list itself
+        result["rejections_with_net"][item["id"]] = flat(item["text"]) in table_text  # on the list or in the weak-signal net
+    result["net_size"] = sum(1 for row in rows if next(iter(row.values()), "").startswith("弱信号"))
     for item in gold["scores"]:
         points = re.escape(re.sub(r"[^\d.]", "", item["score"]))   # "35分" or a bare "35": the number, standing alone
         result["scores"][item["name"]] = any(flat(item["name"]) in flat("".join(row.values()))
@@ -166,6 +171,7 @@ def summary(result: Dict) -> Dict:
             "fields_ambiguous": sum(1 for f in fields.values() if f["state"] == "ambiguous"), "fields_missing": sum(1 for f in fields.values() if f["state"] == "missing"),
             "fields": len(fields), "clause_refs": sum(1 for f in fields.values() if f["clause"]),
             "rejections": count("rejections"), "rejections_total": len(result["rejections"]), "scores": count("scores"), "scores_total": len(result["scores"]),
+            "rejections_with_net": count("rejections_with_net"), "net_size": result.get("net_size", 0),
             "specials": count("specials"), "specials_total": len(result["specials"]), "forms": count("forms"), "forms_total": len(result["forms"])}
 
 
@@ -187,7 +193,7 @@ def main() -> int:
     print(f"{args.doc}.{args.format}: {run['source_chars']} chars, run ok={run['ok']}, {run['seconds']:.1f}s, draft {len(run['draft'])} chars")
     print(f"  fields      right {total['fields_right']}/{total['fields']}  wrong {total['fields_wrong']}  ambiguous {total['fields_ambiguous']}  "
           f"missing {total['fields_missing']}  with clause ref {total['clause_refs']}")
-    print(f"  rejections  {total['rejections']}/{total['rejections_total']}   scores {total['scores']}/{total['scores_total']}   "
+    print(f"  rejections  {total['rejections']}/{total['rejections_total']} (with the weak-signal net {total['rejections_with_net']}, net size {total['net_size']})   scores {total['scores']}/{total['scores_total']}   "
           f"specials {total['specials']}/{total['specials_total']}   forms {total['forms']}/{total['forms_total']}")
     if args.verbose:
         for key, item in result["fields"].items():
