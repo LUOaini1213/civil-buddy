@@ -59,7 +59,7 @@ class TuiState:
 
         self.cfg = load_config()
         self.thread = new_thread("主对话")
-        self.confirm = self.cfg.auto_confirm()
+        self.confirm = False
         self.last_skill = ""
         self.last_skill_source = ""
         self.last_plan: List[Dict[str, str]] = []
@@ -202,8 +202,6 @@ def handle_slash(line: str, st: TuiState) -> Optional[str]:
 
             st.cfg.approval = _strip_mode(arg, APPROVAL_MODES, st.cfg.approval)
             os.environ["CIVIL_APPROVAL"] = st.cfg.approval
-            if st.cfg.auto_confirm():
-                st.confirm = True
             return f"approval = {st.cfg.approval}"
         return "approval=" + st.cfg.approval + "  可选 " + " | ".join(APPROVAL_MODES)
     if cmd == "sandbox":

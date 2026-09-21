@@ -18,6 +18,7 @@ EVENT_TYPES = (
     "skill_loaded",
     "message",
     "guard",
+    "deadlock",
 )
 
 

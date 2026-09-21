@@ -42,6 +42,11 @@ DeepSeek `chat/completions` 无会话。客户端把 `session_id` 当工地/标�
 | `circuit_open` | 同工具连续失败 |
 | `unspecified` | 未接通，字段写字面 UNSPECIFIED |
 | `max_steps` | 步数用尽 |
+| `deadlock` | Wait-for 成环，当场失败，不阻塞等待 |
+| `expert_busy` | 岗被占用但未成环；不是死锁 |
+| `session_busy` | 同 session 重入（Scheduler 锁）；不是死锁 |
+
+`approval=never` 不跳过高风险确认句。高风险写盘仍须 `我明白，将由持证人员签认`。
 
 装箱数字只抄 solver。断线：`utilization` / `can_fit` / `mid50` / `系固待办` 字面 `UNSPECIFIED`。禁止模型写 xyz。
 

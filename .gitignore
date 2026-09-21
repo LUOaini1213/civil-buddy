@@ -81,6 +81,17 @@ data/samples/vmu-*.xlsx
 # --- large local samples (optional; prefer data/samples tracked thin copies) ---
 # data/samples/ 内小样例可提交；超大原始件请放本地
 
+# --- local dumps / intern / contest scratch (never ship) ---
+scratch/
+data/external/netopt*/
+data/external/fanout*/
+docs/node_modules/
+docs/*Mintang*
+docs/*letterhead*
+docs/_letterhead_unpacked/
+nus比赛/
+output/worktrees/
+
 # --- data(round2): SQLite 统一持久层（库文件不入仓） ---
 data/civilbuddy.db
 data/civilbuddy.db-wal

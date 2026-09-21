@@ -50,6 +50,7 @@ npm run check
 | 2 越权被拒 | `bid-parse` 调 `pack-ship__plan`；写 `.env` | **原因弹窗**：「岗 bid-parse 不能调 pack-ship__plan」；密钥路径拒绝，文件不落地 |
 | 3 工具挂掉 | 下游超时 | 审计：`call → retry → degrade` · `can_fit=UNSPECIFIED` |
 | 4 成本熔断 | session steps/tokens 用尽 | `circuit_open` · 原因含「成本超限」· 工具未再执行 |
+| 附 死锁 | finance-tax ⇄ pack-ship Wait-for 成环 | `deadlock` · 当场失败 · 不是 `session_busy` |
 
 口播禁句：可以投标、可以开工、中标率、GeBIZ 代交、我们做了 RAG。
 

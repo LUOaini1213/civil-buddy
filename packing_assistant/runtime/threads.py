@@ -43,6 +43,7 @@ class CivilThread:
     wrote: bool = False
     artifacts: List[str] = field(default_factory=list)
     error: str = ""
+    worktree: str = ""
     created_at: float = field(default_factory=time.time)
     updated_at: float = field(default_factory=time.time)
 
@@ -95,6 +96,9 @@ def load_thread(thread_id: str) -> Optional[CivilThread]:
         return None
     if any(key in raw and not isinstance(raw[key], bool) for key in ("confirm", "hitl_pending", "wrote")):
         return None
+    worktree = raw.get("worktree") or ""
+    if not isinstance(worktree, str):
+        return None
     artifacts = raw.get("artifacts") or []
     if not isinstance(artifacts, list) or not all(isinstance(item, str) for item in artifacts):
         return None
@@ -118,6 +122,7 @@ def load_thread(thread_id: str) -> Optional[CivilThread]:
         wrote=bool(raw.get("wrote")),
         artifacts=artifacts,
         error=str(raw.get("error") or ""),
+        worktree=worktree,
         created_at=created_at,
         updated_at=updated_at,
     )
@@ -172,13 +177,14 @@ def list_threads() -> List[CivilThread]:
     return out
 
 
-def new_thread(title: str = "", *, confirm: bool = False) -> CivilThread:
+def new_thread(title: str = "", *, confirm: bool = False, worktree: str = "") -> CivilThread:
     tid = f"t-{uuid4().hex[:8]}"
     th = CivilThread(
         thread_id=tid,
         session_id=tid,
         title=(title or "新对话").strip()[:80],
         confirm=confirm is True,
+        worktree=(worktree or "").strip(),
     )
     save_thread(th)
     return th
@@ -199,7 +205,10 @@ def _failed(th: CivilThread, exc: Exception, *, code: str) -> Dict[str, Any]:
 def _run_on_thread(th: CivilThread, text: str, *, skill: str, confirm: bool, approve: Any = None) -> Dict[str, Any]:
     try:
         from packing_assistant.runtime.turn import run_turn
+        from packing_assistant.runtime.workspace_ctx import set_worktree
 
+        if th.worktree:
+            set_worktree(th.worktree)
         out = run_turn(
             text,
             session_id=th.session_id,
@@ -266,8 +275,8 @@ def run_on_thread(
     return _run_on_thread(th, text, skill=skill, confirm=confirm, approve=approve)
 
 
-def spawn(text: str, *, skill: str = "", confirm: bool = False, title: str = "") -> Dict[str, Any]:
-    th = new_thread(title or text, confirm=confirm)
+def spawn(text: str, *, skill: str = "", confirm: bool = False, title: str = "", worktree: str = "") -> Dict[str, Any]:
+    th = new_thread(title or text, confirm=confirm, worktree=worktree)
     return run_on_thread(th.thread_id, text, skill=skill, confirm=confirm, background=True)
 
 

@@ -67,6 +67,25 @@ def main() -> int:
     assert ut.get("wrote") is False
     os.environ.pop("CIVIL_APPROVAL", None)
 
+    os.environ["CIVIL_APPROVAL"] = "never"
+    never_cfg = load_config()
+    assert never_cfg.approval == "never"
+    assert decide_gate(intent="run", risk="high", confirmed=False, cfg=never_cfg) == "hitl"
+    assert decide_gate(intent="run", risk="low", confirmed=False, cfg=never_cfg) == "go"
+    never_high = run_agent(
+        "写临边防护方案讨论提纲",
+        expert_id="construction",
+        session_id="cx-never-high",
+        force_intent="run",
+        p0_confirmed=False,
+    )
+    assert never_high.get("wrote") is False
+    assert never_high.get("hitl_pending") is True
+    assert CONFIRM in (never_high.get("reply") or "")
+    never_tui = TuiState()
+    assert never_tui.confirm is False
+    os.environ.pop("CIVIL_APPROVAL", None)
+
     tax = run_task("出一份税务日历", session_id="cx-tax2")
     assert tax.get("skill") == "finance-tax"
     assert tax["wrote"] is True

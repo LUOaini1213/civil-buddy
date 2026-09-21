@@ -19,6 +19,17 @@ from packing_assistant.understand import understand
 
 _ROOT = Path(__file__).resolve().parents[1]
 _OUT = _ROOT / "demo" / "out"
+
+
+def _out_root() -> Path:
+    from packing_assistant.runtime.workspace_ctx import current_worktree
+
+    wt = current_worktree()
+    if wt:
+        p = Path(wt) / ".civil-buddy" / "out"
+        p.mkdir(parents=True, exist_ok=True)
+        return p
+    return _OUT
 DISCLAIMER = (
     "本文件由 Civil Buddy 根据用户输入生成，仅供内部讨论与起草。"
     "不构成设计文件、法定专项施工方案、交底签认件、监理指令、专家论证材料或开工/竣工验收依据。"
@@ -4001,7 +4012,7 @@ def _run_exclusive_body(
             "reply": hitl_reply(expert.name),
             "submit_blocked": True,
         }
-    out_dir = _OUT / session_id / expert.id
+    out_dir = _out_root() / session_id / expert.id
     out_dir.mkdir(parents=True, exist_ok=True)
     files: List[Dict[str, str]] = []
     ran: List[str] = []
