@@ -22,6 +22,7 @@ ERR_UNSPECIFIED = "unspecified"
 ERR_MAX_STEPS = "max_steps"
 ERR_DEADLOCK = "deadlock"
 ERR_BUSY = "expert_busy"
+ERR_CANCELLED = "cancelled"
 
 WRITE_TOOLS = frozenset(
     {
@@ -81,6 +82,23 @@ class ToolEngine:
     circuit_threshold: int = 3
     audit_log: List[Audit] = field(default_factory=list)
     ledger: Any = None
+    _workers: Dict[str, set] = field(default_factory=dict, repr=False)
+    _worker_lock: Any = field(default_factory=threading.Lock, repr=False)
+
+    def when_idle(self, run_id: str, callback: Callable[[], None]) -> None:
+        """Release run resources only after timed-out workers really finish."""
+        with self._worker_lock:
+            pending = tuple(self._workers.get(run_id, ()))
+        if not pending:
+            callback()
+            return
+
+        def finish() -> None:
+            for done in pending:
+                done.wait()
+            callback()
+
+        threading.Thread(target=finish, name="civil-tool-release", daemon=True).start()
 
     def register(
         self,
@@ -174,22 +192,6 @@ class ToolEngine:
             self.audit_log.append(Audit(name, ERR_INVALID, 0, expert_id))
             return {"ok": False, "error_code": ERR_INVALID, "name": name,
                     "reason": "工具参数不符合契约：" + problem}
-        if run_id and wait_resources:
-            from packing_assistant.runtime.deadlock import get_watch
-
-            for res in wait_resources:
-                d = get_watch().wait_for(run_id, res)
-                if not d.allow:
-                    rec = Audit(name=name, error_code=d.err, duration_ms=0, expert_id=expert_id)
-                    self.audit_log.append(rec)
-                    return {
-                        "ok": False,
-                        "error_code": d.err,
-                        "name": name,
-                        "reason": d.reason,
-                        "cycle": list(d.cycle),
-                        "deadlock": d.to_dict(),
-                    }
         from packing_assistant.runtime.policy import evaluate as policy_evaluate
 
         pol = policy_evaluate(
@@ -229,24 +231,59 @@ class ToolEngine:
                     "missing": key,
                     "reason": f"拒绝：工具 {name} 缺少参数 {key}。",
                 }
+        if run_id and wait_resources:
+            from packing_assistant.runtime.deadlock import get_watch
+
+            # Authorization precedes acquisition, and a contended batch rolls
+            # back only its new resources while preserving the run's old holds.
+            d = get_watch().begin(run_id, holds=wait_resources)
+            if not d.allow:
+                self.audit_log.append(Audit(name, d.err, 0, expert_id))
+                return {"ok": False, "error_code": d.err, "name": name,
+                        "reason": d.reason, "cycle": list(d.cycle), "deadlock": d.to_dict()}
         sandbox_info: Optional[Dict[str, Any]] = pol.sandbox
         if self.ledger is not None:
             self.ledger.charge(steps=1, tokens=pol.token_cost)
         box: Dict[str, Any] = {}
+        from packing_assistant.runtime import cancel as cancellation
+
+        timed_out = threading.Event()
+        worker_done = threading.Event()
 
         def _run() -> None:
             try:
-                box["data"] = spec.handler(args)
-                box["err"] = None
+                with cancellation.scope(*cancellation.current_keys(), run_id, event=timed_out):
+                    cancellation.check()
+                    box["data"] = spec.handler(args)
+                    box["err"] = None
             except Exception as e:  # noqa: BLE001 — surface as timeout/invalid, not invent numbers
                 box["err"] = e
+            finally:
+                with self._worker_lock:
+                    if run_id in self._workers:
+                        self._workers[run_id].discard(worker_done)
+                        if not self._workers[run_id]:
+                            self._workers.pop(run_id, None)
+                    worker_done.set()
 
         ctx = copy_context()
         th = threading.Thread(target=ctx.run, args=(_run,), daemon=True)
-        th.start()
+        if run_id:
+            with self._worker_lock:
+                self._workers.setdefault(run_id, set()).add(worker_done)
+        try:
+            th.start()
+        except Exception:
+            with self._worker_lock:
+                self._workers.get(run_id, set()).discard(worker_done)
+                if not self._workers.get(run_id):
+                    self._workers.pop(run_id, None)
+                worker_done.set()
+            raise
         th.join(spec.timeout_s)
         ms = int((time.perf_counter() - t0) * 1000)
         if th.is_alive():
+            timed_out.set()  # stop this worker at its next cooperative checkpoint
             self._fail_streak[name] = self._fail_streak.get(name, 0) + 1
             self.audit_log.append(Audit(name=name, error_code=ERR_TIMEOUT, duration_ms=ms, expert_id=expert_id))
             return {
@@ -254,10 +291,16 @@ class ToolEngine:
                 "error_code": ERR_TIMEOUT,
                 "name": name,
                 "duration_ms": ms,
-                "reason": f"失败：工具 {name} 下游超时（{spec.timeout_s}s）。",
+                "worker_running": not worker_done.is_set(),
+                "reason": f"失败：工具 {name} 下游超时（{spec.timeout_s}s），已请求协作停止；工作线程退出前仍保留资源占用。",
             }
         if box.get("err") is not None:
             err = box["err"]
+            if isinstance(err, cancellation.RunCancelled):
+                self.audit_log.append(Audit(name, ERR_CANCELLED, ms, expert_id))
+                return {"ok": False, "cancelled": True, "error_code": ERR_CANCELLED,
+                        "name": name, "duration_ms": ms,
+                        "reason": "本轮已取消，工具在协作检查点停止。"}
             if isinstance(err, PermissionError):
                 self.audit_log.append(Audit(name=name, error_code=ERR_DENIED, duration_ms=ms, expert_id=expert_id))
                 denied: Dict[str, Any] = {

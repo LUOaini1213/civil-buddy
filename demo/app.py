@@ -5,6 +5,7 @@ import os
 from contextlib import asynccontextmanager
 from uuid import uuid4
 from pathlib import Path
+from urllib.parse import unquote
 
 from fastapi import FastAPI, HTTPException, Request
 from fastapi.responses import FileResponse, HTMLResponse, Response, StreamingResponse
@@ -59,7 +60,8 @@ def _token_presented(request: Request) -> str:
     q = request.query_params.get("token")
     if q:
         return q
-    return (request.cookies.get("cb_token") or "").strip()
+    # Both workbench pages use encodeURIComponent for cookie-safe tokens.
+    return unquote(request.cookies.get("cb_token") or "").strip()
 
 
 @app.middleware("http")
@@ -169,7 +171,8 @@ def health() -> dict:
                          "task_memory": True, "local_rag": True, "task_routing": True,
                          "expert_contracts": True, "tender_collaboration": True, "semantic_summary": True,
                          "asr": _asr_installed(), "auth": bool(auth_token()), "live_progress": True,
-                         "file_ref": True, "event_log": True, "background_turns": True},
+                         "file_ref": True, "event_log": True, "background_turns": True,
+                         "cad": True},
         "deepseek": has_key(),
         "model": llm_model(),
         "context": policy(),

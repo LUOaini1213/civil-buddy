@@ -92,7 +92,8 @@ class DeadlockWatch:
                 if owner is None or owner == rid:
                     self._holds[name] = rid
                     self._run_holds[rid].add(name)
-                    taken.append(name)
+                    if owner is None:
+                        taken.append(name)  # rollback only acquisitions from this begin()
                     continue
                 d = self._wait_for_unlocked(rid, name)
                 if not d.allow:

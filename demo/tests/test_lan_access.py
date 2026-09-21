@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import sys
 from pathlib import Path
+from urllib.parse import quote
 
 import pytest
 
@@ -50,6 +51,16 @@ def test_token_guards_api_but_not_the_page(client, monkeypatch):
     assert client.get("/api/catalog", cookies={"cb_token": "s3cret"}).status_code == 200
     # a POST with the cookie (what the page and its uploads send) passes the same door
     assert client.post("/api/task-route", json={"message": "你好"}, cookies={"cb_token": "s3cret"}).status_code != 401
+
+
+def test_browser_encoded_token_cookie_accepts_unicode_and_reserved_characters(client, monkeypatch):
+    token = "图纸 +%/ ?&;"
+    monkeypatch.setenv("CIVIL_TOKEN", token)
+    client.cookies.set("cb_token", quote(token, safe=""))
+    assert client.get("/api/catalog").status_code == 200
+    assert client.get("/api/cad/capabilities").status_code == 200
+    client.cookies.set("cb_token", quote(token + "wrong", safe=""))
+    assert client.get("/api/catalog").status_code == 401
 
 
 def test_read_timeout_comes_from_env(monkeypatch):

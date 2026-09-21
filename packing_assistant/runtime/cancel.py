@@ -10,10 +10,11 @@ from __future__ import annotations
 import contextvars
 import time
 from threading import Lock
-from typing import Dict, Iterator, Tuple
+from typing import Any, Dict, Iterator, Tuple
 
 # keys (run_id, session_id) of the run executing on this thread — set by big_team.run_one
 _CURRENT: contextvars.ContextVar[Tuple[str, ...]] = contextvars.ContextVar("civil_cancel_keys", default=())
+_EVENTS: contextvars.ContextVar[Tuple[Any, ...]] = contextvars.ContextVar("civil_cancel_events", default=())
 
 
 class RunCancelled(Exception):
@@ -56,17 +57,23 @@ def clear(*keys: str) -> None:
 class scope:
     """`with cancel.scope(run_id, session_id):` — makes check() aware of the current run."""
 
-    def __init__(self, *keys: str) -> None:
+    def __init__(self, *keys: str, event: Any = None) -> None:
         self._keys = tuple(k for k in keys if k)
+        self._event = event
         self._token = None
+        self._events_token = None
 
     def __enter__(self) -> "scope":
         self._token = _CURRENT.set(self._keys)
+        if self._event is not None:
+            self._events_token = _EVENTS.set((*_EVENTS.get(), self._event))
         return self
 
     def __exit__(self, *exc: object) -> None:
         if self._token is not None:
             _CURRENT.reset(self._token)
+        if self._events_token is not None:
+            _EVENTS.reset(self._events_token)
 
 
 def current_keys() -> Tuple[str, ...]:
@@ -75,7 +82,9 @@ def current_keys() -> Tuple[str, ...]:
 
 def check() -> None:
     """Cheap cooperative checkpoint for hot loops (bin3d placement, LLM rounds). No-op outside a scope."""
-    if not _REQUESTED:  # fast path: nothing was ever cancelled → no lock, no contextvar lookup cost
+    if any(event.is_set() for event in _EVENTS.get()):
+        raise RunCancelled("cancelled by user")
+    if not _REQUESTED:  # no pending registry request: avoid locking
         return
     for k in _CURRENT.get():
         if is_cancelled(k):

@@ -102,6 +102,7 @@ class CadAPITests(unittest.TestCase):
         page = self.client.get("/cad")
         self.assertEqual(page.status_code, 200)
         self.assertIn("cad.js", page.text)
+        self.assertEqual(page.headers["cache-control"], "no-cache")
         for mode in ("building", "section"):
             response = self.client.get("/api/cad/examples/" + mode)
             self.assertEqual(response.status_code, 200)
@@ -195,6 +196,33 @@ class CadAPITests(unittest.TestCase):
         self.assertEqual(response.status_code, 422)
         self.assertTrue(spools)
         self.assertTrue(all(not file._rolled and file.closed for file in spools))
+
+    def test_missing_or_malformed_multipart_is_a_client_error(self):
+        for headers, body in (
+            ({}, b""),
+            ({"Content-Type": "application/json"}, b"{}"),
+            ({"Content-Type": "multipart/form-data"}, b""),
+            ({"Content-Type": "multipart/form-data; boundary=x"}, b"--x\r\nbad\r\n\r\nhi\r\n--x--"),
+        ):
+            with self.subTest(headers=headers):
+                response = self.client.post("/api/cad/import", headers=headers, content=body)
+                self.assertEqual(response.status_code, 400, response.text)
+        self.assertEqual(len(cad_api.DOCUMENTS._items), 0)
+
+    def test_malformed_later_part_closes_an_already_open_file(self):
+        import tempfile
+        spools = []
+        def spool(*args, **kwargs):
+            value = tempfile.SpooledTemporaryFile(*args, **kwargs)
+            spools.append(value)
+            return value
+        body = (b'--x\r\nContent-Disposition: form-data; name="file"; filename="x.dxf"\r\n\r\ndata'
+                b'\r\n--x\r\nbad\r\n\r\ndata\r\n--x--')
+        with patch("starlette.formparsers.SpooledTemporaryFile", side_effect=spool):
+            response = self.client.post("/api/cad/import", content=body, headers={"Content-Type": "multipart/form-data; boundary=x"})
+        self.assertEqual(response.status_code, 400)
+        self.assertTrue(spools)
+        self.assertTrue(all(file.closed for file in spools))
 
     def test_cross_origin_is_rejected(self):
         response = self.client.post("/api/cad/import", files={"file": ("x.dxf", fixture())}, headers={"Origin": "https://other.invalid"})

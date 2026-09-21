@@ -173,7 +173,7 @@ async def read_json(request: Request, schema):
 
 @router.get("/cad")
 def cad_page():
-    return FileResponse(ROOT / "demo/static/cad.html")
+    return FileResponse(ROOT / "demo/static/cad.html", headers={"Cache-Control": "no-cache"})
 
 
 @router.get("/api/cad/capabilities")
@@ -190,6 +190,9 @@ def cad_example(mode: Literal["building", "section"]):
 @router.post("/api/cad/import")
 async def cad_import(request: Request):
     require_dependencies()
+    content_type = request.headers.get("content-type", "").split(";", 1)[0].strip().lower()
+    if content_type != "multipart/form-data":
+        raise HTTPException(400, "上传格式无效，请仅上传一份 DXF 文件。")
     payload = await bounded_body(request, MAX_UPLOAD_BYTES + 64 * 1024)
 
     async def stream():
@@ -203,7 +206,11 @@ async def cad_import(request: Request):
     parser.spool_max_size = parser.max_file_size = MAX_UPLOAD_BYTES + 64 * 1024 + 1
     try:
         form = await parser.parse()
-    except MultiPartException as exc:
+    except (MultiPartException, ValueError) as exc:
+        # Older supported Starlette releases only clean up MultiPartException;
+        # malformed multipart headers can raise the parser's ValueError instead.
+        for spool in parser._files_to_close_on_error:
+            spool.close()
         raise HTTPException(400, "上传格式无效，请仅上传一份 DXF 文件。") from exc
     try:
         file = form.get("file")

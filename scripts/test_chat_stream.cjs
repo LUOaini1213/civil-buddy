@@ -95,7 +95,7 @@ function element() {
 
 function ui(fetcher) {
   const elements = Object.fromEntries(["input", "form", "send", "stop", "confirmOk", "log", "btnNewThread",
-    "keyBadge", "cbAvailability", "btnAttach", "cbPackSample", "cbEmptyModel", "cbLlmOpen", "cbLlm",
+    "keyBadge", "cbAvailability", "cbCadEntry", "btnAttach", "cbPackSample", "cbEmptyModel", "cbLlmOpen", "cbLlm",
     "cbLlmVendor", "cbLlmBase", "cbLlmModel", "cbLlmKey", "cbLlmSave", "cbLlmReset", "cbLlmModels", "cbLlmStatus",
     "cbBackupExport", "cbBackupImport", "cbBackupFile",
     "ctxMemory", "ctxMemoryStatus", "ctxRebuild", "ctxQuery", "ctxResults", "ctxSearchStatus", "ctxSearch", "ctxOpen", "ctxRefresh", "ctxBar", "ctxFill", "ctxText",
@@ -554,6 +554,20 @@ test("offline capability status enables usable tools without claiming a model is
   h.evaluate('cbApplyHealth({ has_key: true, mode: "configured", capabilities: { attachments: true } })');
   assert.equal(h.elements.keyBadge.textContent, "模型已配置");
   assert.equal(h.elements.btnAttach.disabled, false);
+});
+
+test("shared home exposes CAD only when the host explicitly advertises its routes", () => {
+  const h = ui(() => assert.fail("painting capabilities must not request network"));
+  h.evaluate('cbApplyHealth({ capabilities: { chat: true } })');
+  assert.equal(h.elements.cbCadEntry.hidden, true);
+  h.evaluate('cbApplyHealth({ capabilities: { cad: true } })');
+  assert.equal(h.elements.cbCadEntry.hidden, false);
+  h.evaluate('cbApplyHealth({ capabilities: { cad: false } })');
+  assert.equal(h.elements.cbCadEntry.hidden, true);
+  const home = fs.readFileSync(path.join(__dirname, "../demo/static/index.html"), "utf8");
+  assert.match(home, /<a\b[^>]*id="cbCadEntry"[^>]*\bhidden\b[^>]*>/);
+  const styles = fs.readFileSync(path.join(__dirname, "../demo/static/styles.css"), "utf8");
+  assert.match(styles, /\.cb-empty-card\[hidden\]\s*\{\s*display:\s*none;/);
 });
 
 test("explicitly unsupported task and upload capabilities do not send network requests", async () => {

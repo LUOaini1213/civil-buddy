@@ -107,7 +107,8 @@ def _model_tool(args: Dict[str, Any]) -> Dict[str, Any]:
     if name not in model_loop.CONFINED_TOOLS:
         return {"result": {"ok": False, "error_code": "unknown_tool", "reason": f"{name} 不在沙箱工作进程里执行"}}
     turn = model_loop._Turn(session_id=str(args.get("session_id") or ""), run_id=str(args.get("run_id") or ""),
-                            user_text=str(args.get("user_text") or ""), confirmed=args.get("confirmed") is True, approve=None)
+                            user_text=str(args.get("user_text") or ""), confirmed=args.get("confirmed") is True, approve=None,
+                            material=str(args.get("material") or ""), intent=str(args.get("intent") or ""))
     try:
         result = model_loop._DISPATCH[name](turn, dict(args.get("arguments") or {}))
     except Exception as exc:  # noqa: BLE001 - same contract as the in-process dispatcher

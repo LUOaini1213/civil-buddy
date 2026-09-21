@@ -381,6 +381,7 @@ def run_agent(
     engine = tools or get_engine()
     bus = get_bus()
     from packing_assistant.runtime.deadlock import get_watch
+    from packing_assistant.runtime import cancel as cancellation
 
     watch = get_watch()
     watch_on = False
@@ -509,9 +510,6 @@ def run_agent(
             p0_confirmed=p0_confirmed,
             compressed=bool(ctx.get("compressed")),
         )
-        if watch_on:
-            watch.end(run.run_id)
-        sched.release(sid)
         bus.emit(run.run_id, "run_ended", {"state": run.state, "wrote": out["wrote"]})
         from packing_assistant.runtime.middleware import annotate
 
@@ -525,7 +523,8 @@ def run_agent(
         return out
 
     def _cancel_requested() -> bool:
-        return run.cancelled or run.state == "cancelled" or bool(cancel_event is not None and cancel_event.is_set())
+        return (run.cancelled or run.state == "cancelled" or cancellation.is_cancelled(run.run_id)
+                or bool(cancel_event is not None and cancel_event.is_set()))
 
     def _finish_cancelled() -> Dict[str, Any]:
         run.cancelled = True
@@ -535,6 +534,8 @@ def run_agent(
         out.update(ok=False, cancelled=True, error_code="cancelled",
                    wrote=bool(out["files"] or out["artifacts"]),
                    reply="本轮已取消，停止后续步骤；已完成的文件保留供下载和核对。")
+        if out.get("worker_running"):
+            out["reply"] = "已请求取消；当前工具仍在退出，资源保持占用，后续步骤不会启动。已完成的文件保留供核对。"
         messages.append({"role": "assistant", "content": out["reply"]})
         bus.emit(run.run_id, "cancelled", {"wrote": out["wrote"]})
         return _finish()
@@ -543,7 +544,7 @@ def run_agent(
         with span(
             "civil.agent",
             {"run_id": run.run_id, "intent": intent, "expert_id": eid, "node": "agent_loop"},
-        ):
+        ), cancellation.scope(*cancellation.current_keys(), run.run_id, event=cancel_event):
             if _cancel_requested():
                 return _finish_cancelled()
             if route and route["workflow"] and intent != "chat" and gate == "go":
@@ -568,6 +569,8 @@ def run_agent(
                 return _finish()
             if intent == "chat":
                 reply = _explain(text, eid, ctx_prefix)
+                if _cancel_requested():
+                    return _finish_cancelled()
                 messages.append({"role": "assistant", "content": reply})
                 sched.transition(run, "done")
                 out["reply"] = reply
@@ -650,6 +653,7 @@ def run_agent(
                     expert_id=eid,
                     intent="run",
                     cancelled=run.cancelled,
+                    run_id=run.run_id,
                 )
                 bus.emit(
                     run.run_id,
@@ -678,10 +682,15 @@ def run_agent(
                 if result.get("sandbox"):
                     out["sandbox"].append(result["sandbox"])
                 if not result.get("ok"):
+                    out["worker_running"] = bool(result.get("worker_running"))
+                    if result.get("error_code") == "cancelled" or _cancel_requested():
+                        return _finish_cancelled()
                     out["ok"] = False
                     run.error_code = str(result.get("error_code") or "tool_failed")
                     out["error_code"] = run.error_code
                     out["reply"] = f"工具 {label} 未完成（{run.error_code}），本轮已停止。已完成的文件保留供核对。"
+                    if out["worker_running"]:
+                        out["reply"] = f"工具 {label} 超时，已请求停止；当前工具仍在退出，资源保持占用，后续步骤不会启动。"
                     if name == "pack-ship__plan" and packing_list and result.get("error"):
                         from packing_assistant.tools.pack_ship_solve import plan_reply
 
@@ -802,6 +811,7 @@ def run_agent(
                     expert_id=eid,
                     intent="run",
                     cancelled=run.cancelled,
+                    run_id=run.run_id,
                 )
                 out["tools_used"].append(name)
                 out["tools_run"].append(str(call.get("tool_label") or name))
@@ -816,10 +826,15 @@ def run_agent(
                 if result.get("sandbox"):
                     out["sandbox"].append(result["sandbox"])
                 if not result.get("ok"):
+                    out["worker_running"] = bool(result.get("worker_running"))
+                    if result.get("error_code") == "cancelled" or _cancel_requested():
+                        return _finish_cancelled()
                     out["ok"] = False
                     run.error_code = str(result.get("error_code") or "tool_failed")
                     out["error_code"] = run.error_code
                     out["reply"] = f"保存交付物未完成（{run.error_code}），本轮已停止。已完成的文件保留供核对。"
+                    if out["worker_running"]:
+                        out["reply"] = "保存交付物超时，已请求停止；当前工具仍在退出，资源保持占用，后续步骤不会启动。"
                     sched.transition(run, "failed")
                     messages.append({"role": "assistant", "content": out["reply"]})
                     return _finish()
@@ -938,6 +953,8 @@ def run_agent(
                 sched.transition(run, "done" if out["ok"] else "failed")
             messages.append({"role": "assistant", "content": out["reply"]})
             return _finish()
+    except cancellation.RunCancelled:
+        return _finish_cancelled()
     except Exception as exc:  # noqa: BLE001 — surface as failed run, do not invent numbers
         run.error_code = run.error_code or "unspecified"
         try:
@@ -952,7 +969,16 @@ def run_agent(
     finally:
         # A persistence/annotation failure during _finish must not strand the
         # scheduler lease and block every later turn in this session.
-        if watch_on:
-            watch.end(run.run_id)
-            watch_on = False
-        sched.release(sid)
+        def release_resources() -> None:
+            if watch_on:
+                watch.end(run.run_id)
+            sched.release(sid)
+            cancellation.clear(run.run_id)
+
+        # A timeout returns before a non-cooperative tool exits. Keep its lease
+        # until that actual worker stops; never admit an overlapping writer.
+        when_idle = getattr(engine, "when_idle", None)
+        if callable(when_idle):
+            when_idle(run.run_id, release_resources)
+        else:
+            release_resources()

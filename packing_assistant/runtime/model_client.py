@@ -23,6 +23,10 @@ class ModelError(RuntimeError):
     """The model endpoint could not be used; the message is safe to show to the user."""
 
 
+class ModelCancelled(ModelError):
+    """Cancellation is not endpoint unavailability; auto must not retry in steps."""
+
+
 _TAGGED = re.compile(r"<tool_call>\s*(\{.*?\})\s*</tool_call>", re.S)
 
 
@@ -87,11 +91,18 @@ def normalise(message: Dict[str, Any], tool_names: Optional[set] = None) -> Dict
 
 
 def complete(messages: List[Dict[str, Any]], tools: Optional[List[Dict[str, Any]]] = None, *,
-             temperature: float = 0.2, max_tokens: Optional[int] = None) -> Dict[str, Any]:
+             temperature: float = 0.2, max_tokens: Optional[int] = None, cancel_event: Any = None) -> Dict[str, Any]:
     import httpx
 
     from packing_assistant.llm import llm_config
+    from demo.llm import ModelConnection
+    from demo.turn_control import interrupt_event
 
+    def check_cancelled() -> None:
+        if cancel_event is not None and cancel_event.is_set():
+            raise ModelCancelled("本轮已取消。")
+
+    check_cancelled()
     config = llm_config()
     if not config.get("api_key"):
         raise ModelError("未配置模型 Key（CIVIL_API_KEY / OPENAI_API_KEY / DEEPSEEK_API_KEY）。本机 Ollama 可填任意非空值。")
@@ -101,17 +112,31 @@ def complete(messages: List[Dict[str, Any]], tools: Optional[List[Dict[str, Any]
         payload["tools"] = tools
         payload["tool_choice"] = "auto"
     try:
-        response = httpx.post(config["base_url"].rstrip("/") + "/chat/completions", json=payload, timeout=_timeout(),
-                              headers={"Authorization": "Bearer " + config["api_key"], "Content-Type": "application/json"})
+        # Reuse the workbench's transport tracker: a request awaiting response
+        # headers has no response socket yet, so track streams as httpcore opens
+        # them. interrupt_event shuts down that socket rather than waiting for
+        # the full model timeout. It needs no UI ContextVar or active browser.
+        with ModelConnection(timeout=_timeout()) as connection, interrupt_event(connection, cancel_event):
+            with connection.stream("POST", config["base_url"].rstrip("/") + "/chat/completions", json=payload,
+                                   headers={"Authorization": "Bearer " + config["api_key"], "Content-Type": "application/json"}) as response:
+                with interrupt_event(response, cancel_event):
+                    if response.status_code >= 400:
+                        raise ModelError(f"模型接口返回 {response.status_code}，请检查模型名、Key 与额度。")
+                    response.read()
+                    check_cancelled()
+                    try:
+                        message = response.json()["choices"][0]["message"]
+                    except (ValueError, KeyError, IndexError, TypeError):
+                        raise ModelError("模型返回了无法解析的回复，请检查接口兼容性。") from None
     except httpx.TimeoutException:
+        check_cancelled()
         raise ModelError("模型响应超时，请稍后重试（CIVIL_MODEL_TIMEOUT 可调）。") from None
-    except httpx.HTTPError:
+    except (httpx.HTTPError, httpx.InvalidURL):
+        check_cancelled()
         raise ModelError("无法连接模型接口，请检查 Base URL 和网络。") from None
-    if response.status_code >= 400:
-        raise ModelError(f"模型接口返回 {response.status_code}，请检查模型名、Key 与额度。")
-    try:
-        message = response.json()["choices"][0]["message"]
-    except (ValueError, KeyError, IndexError, TypeError):
-        raise ModelError("模型返回了无法解析的回复，请检查接口兼容性。") from None
+    except InterruptedError:
+        check_cancelled()
+        raise
+    check_cancelled()
     names = {t["function"]["name"] for t in tools or []}
     return normalise(message if isinstance(message, dict) else {}, names)

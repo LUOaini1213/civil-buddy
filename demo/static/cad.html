@@ -15,8 +15,12 @@
     <nav aria-label="工作台导航"><a href="/">返回工作台</a><span class="top-tag">几何预览 · 内部讨论</span></nav>
   </header>
   <main>
-    <div class="page-heading"><div><p class="eyebrow">CAD → PARAMETRIC 3D</p><h1>从图纸，到可操作的模型</h1><p class="subtitle">确认二维实体轮廓，指定尺寸，再用一句话调整三维模型。</p></div><span id="serviceStatus" class="service-status">正在连接建模工具</span></div>
+    <div class="page-heading"><div><p class="eyebrow">CAD → PARAMETRIC 3D</p><h1>从图纸，到可操作的模型</h1><p class="subtitle">确认二维实体轮廓，指定尺寸，再用一句话调整三维模型。</p></div><div class="service-controls"><span id="serviceStatus" class="service-status">正在连接建模工具</span><button id="retryService" type="button" hidden>重新检测</button></div></div>
     <div id="notice" class="notice" role="status" aria-live="polite">先上传 DXF，或选择一个合成样例体验完整流程。</div>
+    <section id="accessPanel" class="access-panel" aria-label="工作台访问口令" hidden>
+      <div><h2>此工作台需要访问口令</h2><p class="hint">请向启动工作台的人获取口令。验证后会保存在当前浏览器，已有图纸和参数会保留。</p></div>
+      <form id="accessForm"><label class="sr-only" for="accessToken">访问口令</label><input id="accessToken" type="password" autocomplete="current-password" placeholder="输入访问口令" required><button id="accessSubmit" class="button-primary" type="submit">验证并继续</button></form>
+    </section>
     <div class="workspace">
       <aside class="controls" aria-label="图纸与建模参数">
         <section class="control-section">

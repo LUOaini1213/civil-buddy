@@ -405,6 +405,9 @@ function cbApplyHealth(health) {
     if (element.disabled) element.title = title;
     else element.removeAttribute("title");
   }
+  // Other hosts share this HTML without exposing the optional CAD routes.
+  const cadEntry = $("cbCadEntry");
+  if (cadEntry) cadEntry.hidden = cbCapability("cad") !== true;
   if (health.model) state.modelName = health.model;
   cbSyncSend();
 }

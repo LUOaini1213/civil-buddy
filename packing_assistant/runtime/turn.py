@@ -36,7 +36,7 @@ def resolve_mode(requested: str = "") -> Tuple[str, str]:
 
 def run_turn(text: str, *, session_id: str = "", skill: str = "", confirm: bool = False,
              history: Optional[List[Dict[str, str]]] = None, approve: Optional[Callable[[Dict[str, Any]], bool]] = None,
-             cancel_event: Any = None, mode: str = "") -> Dict[str, Any]:
+             cancel_event: Any = None, mode: str = "", material: str = "", intent: str = "") -> Dict[str, Any]:
     from packing_assistant.runtime.agent_loop import run_agent
     from packing_assistant.runtime.civil_config import load_config
 
@@ -44,6 +44,17 @@ def run_turn(text: str, *, session_id: str = "", skill: str = "", confirm: bool 
     from packing_assistant.runtime.workspace import active
 
     chosen, notice = resolve_mode(mode)
+    def cancelled_result(out=None):
+        return {"schema": "civil.agent.v1", "wrote": False, "files": [], "artifacts": [],
+                "submit_blocked": True, "intent": "chat", "agent_mode": chosen, "session_id": session_id,
+                **(out or {}), "ok": False, "cancelled": True, "state": "cancelled", "error_code": "cancelled",
+                "reply": "本轮已取消；已完成的文件保留，未执行后续操作。"}
+
+    def is_cancelled():
+        return cancel_event is not None and cancel_event.is_set()
+
+    if is_cancelled():
+        return cancelled_result()
     try:
         backend, sandbox_notice = os_sandbox.resolve_backend()
     except PermissionError as exc:          # sandbox_backend=os and it cannot be had: refuse, do not quietly run unconfined
@@ -53,7 +64,9 @@ def run_turn(text: str, *, session_id: str = "", skill: str = "", confirm: bool 
     try:
         if backend == "os":
             try:
-                worker = os_sandbox.Worker(active()).__enter__()
+                worker = os_sandbox.Worker(active(), cancel_event=cancel_event).__enter__()
+            except os_sandbox.WorkerCancelled:
+                raise
             except (os_sandbox.WorkerError, OSError) as exc:
                 if load_config().sandbox_backend == "os":
                     return {"ok": False, "schema": "civil.agent.v1", "error_code": "sandbox_unavailable", "wrote": False, "files": [],
@@ -61,20 +74,31 @@ def run_turn(text: str, *, session_id: str = "", skill: str = "", confirm: bool 
                             "reply": "系统级沙箱没有启动，本轮未执行：" + str(exc)}
                 backend, sandbox_notice = "app", "系统级沙箱没有启动（" + str(exc)[:120] + "）；本轮只有应用层策略。"
         out: Dict[str, Any] = {}
+        if is_cancelled():
+            raise os_sandbox.WorkerCancelled("本轮已取消。")
         if chosen == "model":
             from packing_assistant.runtime.model_loop import run_model_agent
 
             out = run_model_agent(text, session_id=session_id, expert_id=skill, p0_confirmed=confirm,
-                                  history=history, approve=approve, cancel_event=cancel_event, worker=worker)
+                                  history=history, approve=approve, cancel_event=cancel_event, worker=worker,
+                                  material=material, intent=intent)
             asked = mode or load_config().agent_mode
-            if asked == "auto" and out.get("error_code") == "model_unavailable" and not out.get("tools_run"):
+            if is_cancelled():
+                out = cancelled_result(out)
+            elif asked == "auto" and out.get("error_code") == "model_unavailable" and not out.get("tools_run"):
                 notice = "模型接口不可用（" + str(out.get("reply") or "")[:80] + "）；本轮按 steps 执行。"
                 chosen = "steps"
         if chosen != "model":
+            if is_cancelled():
+                raise os_sandbox.WorkerCancelled("本轮已取消。")
             if worker is not None:
-                out = worker.call("run_agent", text=text, session_id=session_id, expert_id=skill, p0_confirmed=confirm)["out"]
+                out = worker.call("run_agent", text=material or text, session_id=session_id, expert_id=skill,
+                                  p0_confirmed=confirm, force_intent=intent or None, cancel_event=cancel_event)["out"]
             else:
-                out = run_agent(text, session_id=session_id, expert_id=skill, p0_confirmed=confirm, cancel_event=cancel_event)
+                out = run_agent(material or text, session_id=session_id, expert_id=skill, p0_confirmed=confirm,
+                                cancel_event=cancel_event, force_intent=intent or None)
+    except os_sandbox.WorkerCancelled:
+        out = cancelled_result(locals().get("out"))
     except os_sandbox.WorkerError as exc:
         out = {"ok": False, "schema": "civil.agent.v1", "error_code": "sandbox_worker_failed", "wrote": False, "files": [],
                "artifacts": [], "submit_blocked": True, "intent": "chat", "agent_mode": chosen, "session_id": session_id,
@@ -83,10 +107,15 @@ def run_turn(text: str, *, session_id: str = "", skill: str = "", confirm: bool 
         confined = dict(worker.confined) if worker is not None else {}
         if worker is not None:
             worker.close()
-    if confined:
+    if is_cancelled():
+        out = cancelled_result(out)
+    if confined and not out.get("cancelled"):
         from packing_assistant.office_job import publish_root_copy
 
         for item in list(out.get("files") or []):
+            if is_cancelled():
+                out = cancelled_result(out)
+                break
             copied = publish_root_copy(Path(str(item.get("path") or ""))) if isinstance(item, dict) else None
             if copied is not None and all(f.get("path") != str(copied) for f in out["files"]):
                 out["files"].append({"name": copied.name, "path": str(copied), "tool": "office__xlsx"})

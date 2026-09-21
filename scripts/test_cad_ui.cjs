@@ -137,10 +137,10 @@ function dom() {
 const json = (payload, status = 200) => new Response(JSON.stringify(payload), { status, headers: { 'Content-Type': 'application/json' } });
 async function waitFor(predicate) { for (let i = 0; i < 100; i++) { if (predicate()) return; await new Promise((resolve) => setImmediate(resolve)); } assert.fail('UI operation did not settle'); }
 
-async function withApp(fetcher, action) {
+async function withApp(fetcher, action, capabilities = () => json({ ok: true, available: true })) {
   const previousFetch = global.fetch, previousWindow = global.window;
   const document = dom(); global.window = { addEventListener() {}, devicePixelRatio: 1 };
-  global.fetch = (url, options) => url === '/api/cad/capabilities' ? Promise.resolve(json({ ok: true, available: true })) : fetcher(url, options);
+  global.fetch = (url, options) => url === '/api/cad/capabilities' ? Promise.resolve().then(() => capabilities(options)) : fetcher(url, options);
   try { const { startCadApp } = await ui; const state = await startCadApp(document); await action({ document, state }); }
   finally { global.fetch = previousFetch; global.window = previousWindow; }
 }
@@ -271,5 +271,123 @@ test('clicking a modeled hole targets its owning solid for subsequent parameter 
     assert.ok(numericForm, 'the selected owner exposes its numeric parameter form');
     doc.ids.commandInput.value = '把选中构件高度改为4米'; doc.ids.commandForm.emit('submit'); await waitFor(() => selected !== undefined && !state.busy);
     assert.equal(selected, 'A'); assert.equal(Object.hasOwn(state.config.overrides, 'B'), false);
+  });
+});
+
+test('direct CAD access recovers from HTTP 401 through an explicit inline token form', async () => {
+  let authenticated = false;
+  await withApp(() => assert.fail('unavailable tools must not send requests'), async ({ document: doc }) => {
+    assert.equal(doc.ids.accessPanel.hidden, false); assert.equal(doc.ids.cadFile.disabled, true);
+    assert.equal(doc.groups.example[0].disabled, true); assert.match(doc.ids.notice.textContent, /访问口令/);
+    doc.groups.example[0].click();
+    authenticated = true; doc.ids.accessToken.value = '测试 % secret'; doc.ids.accessForm.emit('submit');
+    await waitFor(() => doc.ids.accessPanel.hidden);
+    assert.match(doc.cookie, /^cb_token=%E6%B5%8B%E8%AF%95%20%25%20secret;/);
+    assert.equal(doc.ids.accessToken.value, ''); assert.equal(doc.ids.cadFile.disabled, false);
+    assert.equal(doc.groups.example[0].disabled, false);
+  }, () => authenticated ? json({ ok: true, available: true }) : json({ detail: '访问口令缺失' }, 401));
+});
+
+test('unavailable dependencies disable imports and a successful recheck restores controls', async () => {
+  let installed = false;
+  await withApp(() => assert.fail('missing dependencies must not send import requests'), async ({ document: doc }) => {
+    assert.equal(doc.ids.cadFile.disabled, true); assert.equal(doc.ids.retryService.hidden, false);
+    assert.match(doc.ids.notice.textContent, /ezdxf/); doc.groups.example[0].click();
+    installed = true; doc.ids.retryService.click(); await waitFor(() => !doc.ids.cadFile.disabled);
+    assert.equal(doc.ids.retryService.hidden, true); assert.match(doc.ids.notice.textContent, /连接已恢复/);
+  }, () => json({ ok: true, available: installed, missing_dependencies: installed ? [] : ['ezdxf'] }));
+});
+
+test('capability network failures offer retry rather than leaving a permanently disabled page', async () => {
+  let online = false;
+  await withApp(() => assert.fail('offline tools must not send requests'), async ({ document: doc }) => {
+    assert.equal(doc.ids.cadFile.disabled, true); assert.equal(doc.ids.retryService.hidden, false);
+    online = true; doc.ids.retryService.click(); await waitFor(() => !doc.ids.cadFile.disabled);
+    assert.match(doc.ids.serviceStatus.textContent, /已就绪/);
+  }, () => { if (!online) throw new TypeError('Network offline'); return json({ ok: true, available: true }); });
+});
+
+test('expired authentication preserves selected geometry and parameter drafts through login', async () => {
+  let authenticated = true, builds = 0;
+  await withApp(async (url) => {
+    if (url.includes('/examples/')) return new Response('fixture');
+    if (url.endsWith('/import')) return json(documentResponse);
+    if (url.endsWith('/build')) { builds++; return authenticated ? json(modelResponse) : json({ detail: '口令无效' }, 401); }
+    throw Error('unexpected URL ' + url);
+  }, async ({ document: doc, state }) => {
+    doc.groups.example[0].click(); await waitFor(() => state.document && !state.busy);
+    doc.ids.solidConfirmed.checked = true; doc.ids.solidConfirmed.emit('change'); doc.ids.buildModel.click(); await waitFor(() => state.model && !state.busy);
+    doc.ids.drawingSvg.children[0].click();
+    const input = doc.ids.parameterRows.children[0].children[1]; input.value = '4'; input.emit('input');
+    authenticated = false; doc.ids.buildModel.click(); await waitFor(() => builds === 2 && !state.busy);
+    assert.equal(doc.ids.accessPanel.hidden, false); assert.equal(state.modelId, 'model-one'); assert.equal(state.selectedId, 'A');
+    assert.equal(state.config.parameters.wall.height_m, 4); assert.equal(doc.ids.buildModel.disabled, true);
+    authenticated = true; doc.ids.accessToken.value = 'renewed'; doc.ids.accessForm.emit('submit'); await waitFor(() => !doc.ids.buildModel.disabled);
+    assert.equal(state.modelId, 'model-one'); assert.equal(state.selectedId, 'A'); assert.equal(state.config.parameters.wall.height_m, 4);
+    assert.equal(state.dirty, true); assert.equal(builds, 2, 'authentication never repeats a mutation on its own');
+  }, () => authenticated ? json({ ok: true, available: true }) : json({ detail: '需要口令' }, 401));
+});
+
+test('object editors show draft role parameters and cannot alter state while a build is pending', async () => {
+  let builds = 0, finishBuild;
+  await withApp(async (url) => {
+    if (url.includes('/examples/')) return new Response('fixture');
+    if (url.endsWith('/import')) return json(documentResponse);
+    if (url.endsWith('/build')) return ++builds === 1 ? json(modelResponse) : new Promise((resolve) => { finishBuild = resolve; });
+    throw Error('unexpected URL ' + url);
+  }, async ({ document: doc, state }) => {
+    doc.groups.example[0].click(); await waitFor(() => state.document && !state.busy);
+    doc.ids.solidConfirmed.checked = true; doc.ids.solidConfirmed.emit('change'); doc.ids.buildModel.click(); await waitFor(() => state.model && !state.busy);
+    const roleHeight = doc.ids.parameterRows.children[0].children[1]; roleHeight.value = '4'; roleHeight.emit('input');
+    doc.ids.drawingSvg.children[0].click();
+    let editor = doc.ids.objectInspector.children.find((item) => item.tagName === 'form');
+    assert.equal(editor.children[0].children[0].value, '4');
+    doc.ids.buildModel.click(); await waitFor(() => !!finishBuild);
+    editor = doc.ids.objectInspector.children.find((item) => item.tagName === 'form');
+    const height = editor.children[0].children[0]; assert.equal(height.disabled, true);
+    height.value = '9'; height.emit('input'); assert.equal(state.config.parameters.wall.height_m, 4); assert.equal(state.config.overrides.A, undefined);
+    const next = copy(modelResponse); next.model.objects[0].parameters.height_m = 4; finishBuild(json(next)); await waitFor(() => !state.busy);
+    assert.equal(state.model.objects[0].parameters.height_m, 4);
+  });
+});
+
+test('cleared object parameter stays blank when reselected and undo restores the current model locally', async () => {
+  let builds = 0;
+  await withApp(async (url) => {
+    if (url.includes('/examples/')) return new Response('fixture');
+    if (url.endsWith('/import')) return json(documentResponse);
+    if (url.endsWith('/build')) { builds++; return json(modelResponse); }
+    throw Error('unexpected URL ' + url);
+  }, async ({ document: doc, state }) => {
+    doc.groups.example[0].click(); await waitFor(() => state.document && !state.busy);
+    doc.ids.solidConfirmed.checked = true; doc.ids.solidConfirmed.emit('change'); doc.ids.buildModel.click(); await waitFor(() => state.model && !state.busy);
+    doc.ids.drawingSvg.children[0].click();
+    let editor = doc.ids.objectInspector.children.find((item) => item.tagName === 'form');
+    editor.children[0].children[0].value = ''; editor.children[0].children[0].emit('input');
+    doc.ids.drawingSvg.children[0].click(); editor = doc.ids.objectInspector.children.find((item) => item.tagName === 'form');
+    assert.equal(editor.children[0].children[0].value, ''); assert.equal(state.canExport, false);
+    assert.equal(doc.ids.undoChange.disabled, false); doc.ids.undoChange.click();
+    assert.equal(state.dirty, false); assert.equal(state.config.overrides.A, undefined); assert.equal(builds, 1);
+    assert.match(doc.ids.commandResult.textContent, /放弃未应用/); assert.equal(state.modelId, 'model-one');
+  });
+});
+
+test('an export failure unlocks the selected object editor and leaves the model intact', async () => {
+  let exports = 0;
+  await withApp(async (url) => {
+    if (url.includes('/examples/')) return new Response('fixture');
+    if (url.endsWith('/import')) return json(documentResponse);
+    if (url.endsWith('/build')) return json(modelResponse);
+    if (url.endsWith('/export')) { exports++; return json({ detail: '临时导出错误，请重试' }, 500); }
+    throw Error('unexpected URL ' + url);
+  }, async ({ document: doc, state }) => {
+    doc.groups.example[0].click(); await waitFor(() => state.document && !state.busy);
+    doc.ids.solidConfirmed.checked = true; doc.ids.solidConfirmed.emit('change'); doc.ids.buildModel.click(); await waitFor(() => state.model && !state.busy);
+    doc.ids.drawingSvg.children[0].click();
+    doc.ids.exportConfirmation.value = '我明白，将由持证人员签认'; doc.ids.exportConfirmation.emit('input');
+    doc.groups.export[0].click(); await waitFor(() => exports === 1 && !state.busy);
+    const editor = doc.ids.objectInspector.children.find((item) => item.tagName === 'form');
+    assert.equal(editor.children[0].children[0].disabled, false); assert.equal(editor.children[2].disabled, false);
+    assert.equal(state.modelId, 'model-one'); assert.match(doc.ids.notice.textContent, /临时导出错误/);
   });
 });

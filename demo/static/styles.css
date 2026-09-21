@@ -941,6 +941,7 @@ html.cb-large {
   font-family: inherit; font-size: var(--cb-fs-sm); color: var(--cb-text);
   transition: border-color .12s, background .12s;
 }
+.cb-empty-card[hidden] { display: none; }
 .cb-empty-card:hover { border-color: var(--cb-blue); background: var(--cb-blue-soft); }
 .cb-empty-card:focus-visible { outline: 2px solid var(--cb-blue); outline-offset: 2px; }
 .cb-empty-ico {

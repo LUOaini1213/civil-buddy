@@ -53,6 +53,7 @@ export function responseError(payload, status) {
   const detail = payload.detail;
   const message = typeof payload.error === 'string' ? payload.error : payload.error?.message || (typeof detail === 'string' ? detail : detail?.message) || payload.message || `请求失败（HTTP ${status}）。`;
   const error = new Error(message);
+  error.status = status;
   error.report = Array.isArray(detail?.report) ? detail.report : null;
   return error;
 }
@@ -92,6 +93,7 @@ export async function startCadApp(doc = document) {
   let requestController = null;
   let viewer = null;
   let capability = null;
+  let capabilityChecking = false;
   let modelViewError = false;
   let edgesVisible = true;
   const parameterInputs = new Map();
@@ -101,6 +103,7 @@ export async function startCadApp(doc = document) {
   const notice = (message, kind = '') => { $('notice').textContent = message; $('notice').className = `notice ${kind}`; };
   const numberValue = (input) => input.value.trim() === '' ? null : Number(input.value);
   const errorMessage = (error) => error.name === 'AbortError' ? '操作已取消。' : error.message || '连接失败，请检查服务是否运行后重试。';
+  const serviceReady = () => capability?.available === true && !capabilityChecking;
 
   for (const role of ['wall', 'column', 'slab', 'section']) {
     const row = node('div', undefined, 'parameter-row');
@@ -165,23 +168,31 @@ export async function startCadApp(doc = document) {
     if (!state.document) return;
     state.config = readConfig();
     if (state.model && state.dirty) notice('参数已修改，当前仍显示上次生成的模型。请生成或应用修改后再导出。', 'warn');
-    refresh();
+    refresh(); renderInspector();
   }
 
   function refresh() {
     const hasDoc = !!state.document;
+    const ready = serviceReady();
+    $('cadFile').disabled = !ready;
+    $('dropzone').setAttribute('aria-disabled', String(!ready));
+    for (const button of all('[data-example]')) button.disabled = !ready;
+    $('retryService').disabled = capabilityChecking || state.busy;
+    $('accessSubmit').disabled = capabilityChecking || state.busy;
     $('configFields').disabled = !hasDoc || state.busy;
-    $('buildModel').disabled = !hasDoc || state.busy || capability?.available === false;
+    $('buildModel').disabled = !hasDoc || state.busy || !ready;
     $('buildModel').textContent = state.busy ? '处理中…' : state.model ? '更新三维模型 ↗' : '生成三维模型 ↗';
-    $('commandInput').disabled = !hasDoc || state.busy;
-    $('sendCommand').disabled = !hasDoc || state.busy || capability?.available === false;
-    $('undoChange').disabled = !state.history.length || state.busy;
+    $('commandInput').disabled = !hasDoc || state.busy || !ready;
+    $('sendCommand').disabled = !hasDoc || state.busy || !ready;
+    const canDiscardDraft = !!state.model && state.dirty;
+    $('undoChange').disabled = !(canDiscardDraft || state.history.length) || state.busy || (!ready && !canDiscardDraft);
+    $('undoChange').title = canDiscardDraft ? '放弃未应用参数，恢复当前模型的参数' : '撤销上一次已生成的修改';
     $('fitView').disabled = !viewer || !state.model?.objects?.length;
     $('toggleEdges').disabled = $('fitView').disabled;
     $('exportConfirmation').disabled = !state.model || state.busy;
     const confirmed = $('exportConfirmation').value === CONFIRMATION;
-    for (const button of all('[data-export]')) button.disabled = !state.canExport || !confirmed;
-    $('exportHint').textContent = !state.model ? '生成模型后可导出' : state.dirty ? '参数尚未应用，导出已暂停' : !state.model.objects?.length ? '没有可导出的有效构件' : !confirmed ? '完整输入签认提示后可下载' : '模型及参数与当前预览一致';
+    for (const button of all('[data-export]')) button.disabled = !state.canExport || !confirmed || !ready;
+    $('exportHint').textContent = !state.model ? '生成模型后可导出' : !ready ? '连接恢复后可导出' : state.dirty ? '参数尚未应用，导出已暂停' : !state.model.objects?.length ? '没有可导出的有效构件' : !confirmed ? '完整输入签认提示后可下载' : '模型及参数与当前预览一致';
     $('modelBadge').hidden = !state.model;
     $('modelBadge').className = `model-badge${state.dirty ? ' stale' : ''}`;
     $('modelBadge').textContent = state.dirty ? '旧模型 · 参数未应用' : `${state.model?.objects?.length || 0} 个几何构件 · 米`;
@@ -240,18 +251,20 @@ export async function startCadApp(doc = document) {
     } else add('状态', source.reason || '尚未生成此构件');
     host.append(list);
     // An inner loop belongs to its shell. Only the shell can receive an object override.
-    if (object && object.source_entity_ids[0] === source.id) {
+    if (object && object.source_entity_ids[0] === source.id && state.config.layers[source.layer] === object.role) {
       const form = node('form', undefined, 'object-edit');
+      const draftParameters = { ...state.config.parameters[object.role], ...state.config.overrides?.[source.id] };
       const heightLabel = node('label', object.role === 'section' ? '长度（米）' : '高度 / 厚度（米）');
-      const height = node('input'); height.type = 'number'; height.step = 'any'; height.min = '.000001'; height.required = true; height.value = state.config.overrides?.[source.id]?.height_m ?? object.parameters.height_m; heightLabel.append(height);
-      const baseLabel = node('label', '标高（米）'); const base = node('input'); base.type = 'number'; base.step = 'any'; base.required = true; base.value = state.config.overrides?.[source.id]?.base_m ?? object.parameters.base_m; baseLabel.append(base);
-      const apply = node('button', '应用'); apply.type = 'submit'; apply.disabled = state.busy;
+      const height = node('input'); height.type = 'number'; height.step = 'any'; height.min = '.000001'; height.required = true; height.value = draftParameters.height_m ?? ''; height.disabled = state.busy || !serviceReady(); heightLabel.append(height);
+      const baseLabel = node('label', '标高（米）'); const base = node('input'); base.type = 'number'; base.step = 'any'; base.required = true; base.value = draftParameters.base_m ?? ''; base.disabled = height.disabled; baseLabel.append(base);
+      const apply = node('button', '应用'); apply.type = 'submit'; apply.disabled = height.disabled;
       form.append(heightLabel, baseLabel, apply);
       for (const input of [height, base]) input.addEventListener('input', () => {
+        if (state.busy || !serviceReady()) return;
         const next = readConfig(); next.overrides = { ...next.overrides, [source.id]: { height_m: numberValue(height), base_m: numberValue(base) } }; state.config = next;
         notice('构件参数已修改，点击应用后更新模型。当前模型仍是上次生成值。', 'warn'); refresh();
       });
-      form.addEventListener('submit', (event) => { event.preventDefault(); if (state.busy) return; const next = readConfig(); next.overrides = { ...next.overrides, [source.id]: { height_m: Number(height.value), base_m: Number(base.value) } }; setForm(next); build(next); });
+      form.addEventListener('submit', (event) => { event.preventDefault(); if (state.busy || !serviceReady()) return; const next = readConfig(); next.overrides = { ...next.overrides, [source.id]: { height_m: numberValue(height), base_m: numberValue(base) } }; setForm(next); build(next); });
       host.append(form);
     }
   }
@@ -270,8 +283,21 @@ export async function startCadApp(doc = document) {
     return counts;
   }
 
-  async function jsonRequest(url, options = {}) {
+  async function serviceFetch(url, options = {}) {
     const response = await fetch(url, options);
+    if (response.status === 401) {
+      capability = null;
+      $('accessPanel').hidden = false;
+      $('retryService').hidden = false;
+      $('serviceStatus').textContent = '需要访问口令';
+      $('serviceStatus').className = 'service-status offline';
+      refresh(); renderInspector();
+    }
+    return response;
+  }
+
+  async function jsonRequest(url, options = {}) {
+    const response = await serviceFetch(url, options);
     const contentType = response.headers.get('content-type') || '';
     if (!contentType.includes('json')) throw new Error(response.ok ? '服务返回了无法识别的数据。' : `建模服务请求失败（HTTP ${response.status}）。`);
     const payload = await response.json();
@@ -297,6 +323,7 @@ export async function startCadApp(doc = document) {
   }
 
   async function importFile(file, exampleMode = null) {
+    if (!serviceReady()) return;
     if (!file || !/\.dxf$/i.test(file.name)) { notice('请选择 DXF 文件。DWG 请先使用 CAD 软件另存为 DXF。', 'error'); return; }
     if (capability?.max_upload_bytes && file.size > capability.max_upload_bytes) { notice(`文件超出上传上限 ${Math.round(capability.max_upload_bytes / 1024 / 1024)} MB。`, 'error'); return; }
     clear();
@@ -324,6 +351,7 @@ export async function startCadApp(doc = document) {
   }
 
   async function build(config = readConfig(), undo = false, request = null) {
+    if (!serviceReady() || (state.busy && !request)) return false;
     const issue = validateConfig(config);
     state.config = clone(config); refresh();
     if (issue) { notice(issue, 'warn'); if (request) { state.finish(request.token); refresh(); } return false; }
@@ -334,7 +362,11 @@ export async function startCadApp(doc = document) {
       const payload = await jsonRequest('/api/cad/build', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ document_id: state.documentId, config }), signal });
       if (!state.setModel(token, payload, config, undo)) return false;
       if (undo) $('commandResult').textContent = '已撤销，恢复上一次建模参数。';
-      try { viewer?.setModel(payload.model, firstModel); } catch (error) { showViewerError(`三维显示失败：${errorMessage(error)}。模型数据仍可导出。`); }
+      try {
+        viewer?.setModel(payload.model, firstModel);
+        const selected = payload.model.objects?.find((item) => item.source_entity_ids?.includes(state.selectedId));
+        viewer?.select(selected?.id || null);
+      } catch (error) { showViewerError(`三维显示失败：${errorMessage(error)}。模型数据仍可导出。`); }
       const counts = renderReport(); renderInspector();
       if (!payload.model.objects?.length) notice('未生成有效构件，请查看处理记录，修正图层或轮廓后重试。', 'warn');
       else if (counts.failed) notice(`已生成 ${payload.model.objects.length} 个构件，但有 ${counts.failed} 个实体处理失败。请查看记录；当前为部分结果。`, 'warn');
@@ -350,7 +382,7 @@ export async function startCadApp(doc = document) {
   }
 
   async function runCommand(message) {
-    if (!message.trim() || state.busy || !state.document) return;
+    if (!message.trim() || state.busy || !state.document || !serviceReady()) return;
     const config = readConfig(); state.config = clone(config);
     const request = startRequest(); notice('正在解析参数修改…');
     try {
@@ -365,9 +397,10 @@ export async function startCadApp(doc = document) {
   }
 
   async function loadExample(mode) {
+    if (!serviceReady()) return;
     clear(); const { token, signal } = startRequest(); notice('正在载入合成演示图纸…');
     try {
-      const response = await fetch(`/api/cad/examples/${mode}`, { signal });
+      const response = await serviceFetch(`/api/cad/examples/${mode}`, { signal });
       if (!response.ok) throw new Error(`样例读取失败（HTTP ${response.status}）。`);
       const blob = await response.blob();
       if (!state.isCurrent(token)) return;
@@ -377,11 +410,11 @@ export async function startCadApp(doc = document) {
   }
 
   async function exportModel(format) {
-    if (!state.canExport || $('exportConfirmation').value !== CONFIRMATION) return;
+    if (!state.canExport || !serviceReady() || $('exportConfirmation').value !== CONFIRMATION) return;
     const modelId = state.modelId;
     const { token, signal } = startRequest(); notice('正在准备模型与参数下载…');
     try {
-      const response = await fetch('/api/cad/export', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ model_id: modelId, confirmation: $('exportConfirmation').value, format }), signal });
+      const response = await serviceFetch('/api/cad/export', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ model_id: modelId, confirmation: $('exportConfirmation').value, format }), signal });
       if (!response.ok) {
         const payload = await response.json().catch(() => ({}));
         throw responseError(payload, response.status);
@@ -392,7 +425,7 @@ export async function startCadApp(doc = document) {
       doc.body.append(link); link.click(); link.remove(); setTimeout(() => URL.revokeObjectURL(url), 10000);
       notice('已准备下载。参数记录包含原图来源、单位和坐标变换。');
     } catch (error) { if (state.isCurrent(token)) notice(errorMessage(error), 'error'); }
-    finally { state.finish(token); if (state.isCurrent(token)) refresh(); }
+    finally { state.finish(token); if (state.isCurrent(token)) { refresh(); renderInspector(); } }
   }
 
   function showViewerError(message) { modelViewError = true; $('webglError').textContent = message; $('webglError').hidden = false; $('modelEmpty').hidden = true; }
@@ -416,7 +449,27 @@ export async function startCadApp(doc = document) {
   $('drawingUnit').addEventListener('change', edited); $('solidConfirmed').addEventListener('change', edited);
   $('buildModel').addEventListener('click', () => build());
   $('commandForm').addEventListener('submit', (event) => { event.preventDefault(); runCommand($('commandInput').value); });
-  $('undoChange').addEventListener('click', () => { if (!state.history.length || state.busy) return; const previous = clone(state.history[state.history.length - 1]); setForm(previous); build(previous, true); });
+  $('undoChange').addEventListener('click', () => {
+    if (state.busy) return;
+    if (state.model && state.dirty) {
+      setForm(clone(state.appliedConfig)); renderInspector(); renderReport();
+      $('commandResult').textContent = '已放弃未应用的修改，恢复当前模型的参数。';
+      notice('已恢复当前模型的参数。');
+      return;
+    }
+    if (!state.history.length || !serviceReady()) return;
+    const previous = clone(state.history[state.history.length - 1]); setForm(previous); build(previous, true);
+  });
+  $('retryService').addEventListener('click', () => loadCapabilities(true));
+  $('accessForm').addEventListener('submit', (event) => {
+    event.preventDefault();
+    if (capabilityChecking || state.busy) return;
+    const token = $('accessToken').value.trim();
+    if (!token) { notice('请输入访问口令。', 'warn'); return; }
+    doc.cookie = `cb_token=${encodeURIComponent(token)}; path=/; max-age=${60 * 60 * 24 * 30}; SameSite=Lax`;
+    $('accessToken').value = '';
+    loadCapabilities(true);
+  });
   $('exportConfirmation').addEventListener('input', refresh);
   for (const button of all('[data-export]')) button.addEventListener('click', () => exportModel(button.dataset.export));
   $('fitView').addEventListener('click', () => viewer?.fit());
@@ -431,13 +484,29 @@ export async function startCadApp(doc = document) {
     refresh();
   }).catch(() => showViewerError('当前浏览器无法启动三维查看器（WebGL 或本地显示组件不可用）。仍可检查二维轮廓、生成模型并导出 GLB。'));
 
-  try {
-    capability = await jsonRequest('/api/cad/capabilities');
-    $('serviceStatus').textContent = capability.available === false ? '建模工具暂不可用' : '本地几何工具已就绪';
-    $('serviceStatus').className = `service-status ${capability.available === false ? 'offline' : 'online'}`;
-    if (capability.available === false) notice(`建模工具缺少依赖：${(capability.missing_dependencies || []).join('、') || '请检查服务配置'}。`, 'error');
-    refresh();
-  } catch (error) { $('serviceStatus').textContent = '建模服务连接失败'; $('serviceStatus').className = 'service-status offline'; notice(errorMessage(error), 'error'); }
+  async function loadCapabilities(retry = false) {
+    if (capabilityChecking || state.busy) return;
+    capabilityChecking = true; refresh(); renderInspector();
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), 15000);
+    try {
+      capability = await jsonRequest('/api/cad/capabilities', { signal: controller.signal, cache: 'no-store' });
+      const available = capability.available === true;
+      $('serviceStatus').textContent = available ? '本地几何工具已就绪' : '建模工具暂不可用';
+      $('serviceStatus').className = `service-status ${available ? 'online' : 'offline'}`;
+      $('accessPanel').hidden = true;
+      $('retryService').hidden = available;
+      if (!available) notice(`建模工具缺少依赖：${(capability.missing_dependencies || []).join('、') || '请检查服务配置'}。安装后可点击重新检测。`, 'error');
+      else if (retry) notice(state.document ? '连接已恢复，图纸和参数已保留。请继续操作。' : '连接已恢复，可以上传 DXF 或选择演示样例。');
+    } catch (error) {
+      capability = null;
+      $('retryService').hidden = false;
+      $('serviceStatus').textContent = error.status === 401 ? '需要访问口令' : '建模服务连接失败';
+      $('serviceStatus').className = 'service-status offline';
+      notice(error.status === 401 ? '请输入工作台访问口令，再继续使用建模工具。' : error.status === 404 ? '当前服务未提供 CAD 建模工具，请返回工作台。' : error.name === 'AbortError' ? '连接超时，请检查服务后点击重新检测。' : errorMessage(error), 'error');
+    } finally { clearTimeout(timer); capabilityChecking = false; refresh(); renderInspector(); }
+  }
+  await loadCapabilities();
   return state;
 }
 

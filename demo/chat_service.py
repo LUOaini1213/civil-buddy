@@ -410,12 +410,21 @@ def _stream_turn(root: Path, turn: dict, *, key_available: bool, plain_runner, l
             yield _event("status", phase="deliver", text="模型驱动：选岗、调工具、出稿")
             control.check()
             skill = turn["ids"][0] if len(turn["ids"]) == 1 else ""
+            history = list(turn["history"])
+            # prepare() includes the current user turn; the CLI loop appends it.
+            if history and history[-1] == {"role": "user", "content": message}:
+                history.pop()
+            from session_context import draft_material
+            material = (turn["material"] if turn["intent"] != "chat" else
+                        draft_material(sid, turn["attachments"], message, turn["prepared_context"]))
             result = run_turn(
                 turn["message"],
                 session_id=sid,
                 skill=skill,
                 confirm=turn["confirmed"],
-                history=turn["history"],
+                history=history,
+                material=material,
+                intent=turn["intent"],
                 cancel_event=control.event,
             )
             rid = uuid4().hex
@@ -457,6 +466,7 @@ def _stream_turn(root: Path, turn: dict, *, key_available: bool, plain_runner, l
                 result["reply"] = "任务未完成：" + str(result.get("error_code") or "模型未返回结果")
             texts.append(str(result.get("reply") or ""))
             files.extend(local_files)
+            citations.extend(turn["local_sources"])
             pending = pending or bool(result.get("hitl_pending"))
             ok = ok and bool(result.get("ok", True))
             _record(root, turn, result, local_files, nodes)

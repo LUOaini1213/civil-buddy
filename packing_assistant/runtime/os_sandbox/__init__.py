@@ -27,6 +27,7 @@ import subprocess
 import sys
 import tempfile
 import threading
+import time
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
 
@@ -89,19 +90,26 @@ class WorkerError(RuntimeError):
     pass
 
 
+class WorkerCancelled(WorkerError):
+    """The host cancelled a confined operation; this must never trigger fallback."""
+
+
 class Worker:
     """One confined worker for one turn. ``call`` sends a request and returns its result; bus events
     the worker emits are re-emitted on this process's bus as they arrive."""
 
-    def __init__(self, job_root: Path, *, network: bool = False, spawn: bool = False, timeout: float = CALL_TIMEOUT_S):
+    def __init__(self, job_root: Path, *, network: bool = False, spawn: bool = False, timeout: float = CALL_TIMEOUT_S,
+                 cancel_event: Any = None):
         self.job_root, self.timeout = Path(job_root).resolve(), timeout
         self.policy = {"job_root": str(self.job_root), "network": network, "spawn": spawn, "real_temp": tempfile.gettempdir()}
         self.process: Optional[subprocess.Popen] = None
         self.confined: Dict[str, Any] = {}
         self._calls = 0
         self._stderr = None
+        self.cancel_event = cancel_event
 
     def __enter__(self) -> "Worker":
+        self._check_cancelled(self.cancel_event)
         roots = prepare(self.job_root)
         self.policy["write_roots"] = [str(root) for root in roots]
         temp = str(roots[1])
@@ -112,7 +120,11 @@ class Worker:
         self.process = subprocess.Popen([sys.executable, "-m", "packing_assistant.runtime.os_sandbox.worker"], cwd=str(self.job_root),
                                         env=env, stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=self._stderr,
                                         text=True, encoding="utf-8", errors="replace", bufsize=1)
-        first = self._read(timeout=60.0)
+        try:
+            first = self._read(timeout=60.0, cancel_event=self.cancel_event)
+        except WorkerCancelled:
+            self.close()
+            raise
         if first.get("type") != "confined":
             self.close()
             raise WorkerError("沙箱工作进程没有进入受限状态：" + str(first.get("error") or first)[:300])
@@ -139,7 +151,24 @@ class Worker:
                     except OSError:
                         pass
 
-    def _read(self, timeout: float) -> Dict[str, Any]:
+    def _check_cancelled(self, cancel_event: Any = None) -> None:
+        if cancel_event is None or not cancel_event.is_set():
+            return
+        # Do not just abandon the waiter: a live child could still publish files.
+        process = self.process
+        if process is not None and process.poll() is None:
+            try:
+                process.terminate()
+            except ProcessLookupError:
+                pass  # Child finished between poll and terminate.
+            try:
+                process.wait(timeout=1)
+            except subprocess.TimeoutExpired:
+                process.kill()
+                process.wait(timeout=1)
+        raise WorkerCancelled("本轮已取消；沙箱工作进程已停止。")
+
+    def _read(self, timeout: float, cancel_event: Any = None) -> Dict[str, Any]:
         """One JSON line from the worker, or a fatal record if it dies or stays silent."""
         assert self.process is not None and self.process.stdout is not None
         box: Dict[str, Any] = {}
@@ -149,7 +178,14 @@ class Worker:
 
         reader = threading.Thread(target=read, daemon=True)
         reader.start()
-        reader.join(timeout)
+        deadline = time.monotonic() + timeout
+        while reader.is_alive():
+            self._check_cancelled(cancel_event)
+            remaining = deadline - time.monotonic()
+            if remaining <= 0:
+                break
+            reader.join(min(0.05, remaining))
+        self._check_cancelled(cancel_event)
         if reader.is_alive():
             self.process.kill()
             return {"type": "fatal", "error": f"工作进程 {int(timeout)} 秒没有回应，已终止"}
@@ -168,9 +204,12 @@ class Worker:
         except (OSError, AttributeError, ValueError):
             return "（读不到工作进程的错误输出）"
 
-    def call(self, op: str, **payload: Any) -> Dict[str, Any]:
+    def call(self, op: str, *, cancel_event: Any = None, **payload: Any) -> Dict[str, Any]:
         from packing_assistant.runtime.bus import get_bus
 
+        if cancel_event is None:
+            cancel_event = self.cancel_event
+        self._check_cancelled(cancel_event)
         if self.process is None or self.process.stdin is None:
             raise WorkerError("工作进程未启动")
         self._calls += 1
@@ -181,7 +220,7 @@ class Worker:
         except OSError as exc:
             raise WorkerError("无法写入工作进程：" + self._stderr_tail()) from exc
         while True:
-            message = self._read(self.timeout)
+            message = self._read(self.timeout, cancel_event)
             kind = message.get("type")
             if kind == "event":
                 event = message.get("event") or {}
