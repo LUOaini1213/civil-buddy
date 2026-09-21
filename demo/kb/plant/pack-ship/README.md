@@ -17,5 +17,7 @@
 | packing-agent 工具摘要 | 缺则 [A001] / 待填 |
 | CTU Code 2014 / CSC 标题 | 缺则 [A001] / 待填 |
 | 待填 [A001] | 缺则 [A001] / 待填 |
+| can_fit / mid50 / utilization | 断线字面 UNSPECIFIED |
+| xyz | 永不编造 |
 
 内部讨论 AI 草稿。缺数不编条款号、综合单价、xyz。不下开工或投标合格结论。
