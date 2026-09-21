@@ -2180,7 +2180,7 @@ function cbSubsequence(q, names) {
 const CB_LLM_VENDORS = {
   deepseek: {
     base: "https://api.deepseek.com",
-    models: ["deepseek-chat", "deepseek-reasoner", "deepseek-v4-flash"],
+    models: ["deepseek-flash", "deepseek-v4-pro"],
   },
   zai: {
     base: "https://api.z.ai/api/paas/v4",

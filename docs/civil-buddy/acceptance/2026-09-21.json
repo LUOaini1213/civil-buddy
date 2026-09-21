@@ -123,5 +123,13 @@
     "Windows kernel read/network confinement not claimed",
     "Saved domain project library shared within launched instance",
     "Model engineering tools cover selected saved CAD sections and explicit frames; other domain pages remain available"
-  ]
+  ],
+  "model_version_note": {
+    "product_model": "DeepSeek V4.1 Flash",
+    "canonical_api_id": "deepseek-flash",
+    "historical_request_id_preserved": true,
+    "legacy_alias_routes_to": "DeepSeek V4.1 Flash",
+    "mapping_source": "https://api-docs.deepseek.com/updates/",
+    "verified_date": "2026-09-21"
+  }
 }

@@ -28,6 +28,8 @@ JEV_MODE=off
 # JEV_MODEL=jev-latest
 ```
 
+The target model is **DeepSeek V4.1 Flash**, requested as `deepseek-flash`. The historical acceptance request ID `deepseek-v4-flash` is retained in the report; [DeepSeek documents](https://api-docs.deepseek.com/updates/) that this compatibility alias is served by V4.1 Flash.
+
 DeepSeek Chat Completions requests explicitly disable thinking for the initial tool-loop baseline, bound output tokens, preserve complete tool interactions, and record provider usage. See the [official DeepSeek API](https://api-docs.deepseek.com/api/create-chat-completion/). An explicit existing model setting is preserved.
 
 Jev uses the [TypeSafe System One API](https://docs.typesafe.ai/introduction/quickstart). The host defines candidates/questions from selected evidence. Off makes no Jev calls; shadow records validated proposals; assist may schedule an additional read-only review when the fixed candidate and confidence gate pass. The initial 0.9 confidence threshold is an unevaluated product setting, not a claimed accuracy guarantee. Jev cannot permit a write, change solver numbers or approve an engineering conclusion. Engineering replan adapters beyond document review remain on the implementation checklist.
