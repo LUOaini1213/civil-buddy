@@ -448,3 +448,45 @@ def test_background_turn_is_just_a_session_with_no_reader(client, monkeypatch):
     assert "bg-turn-01" not in chat_service._ACTIVE
     # the workbench no longer has a separate thread API
     assert client.get("/api/threads").status_code == 404
+
+
+def test_error_event_carries_what_the_turn_already_produced(client, monkeypatch, tmp_path):
+    """两个岗位串着干，第二个的模型断了：error 事件要带上第一个已写好的文件和已产出的正文，
+    页面能当场把文书卡片画出来，不用重开会话。"""
+    import app
+    import chat_service
+    from llm import LLMError
+    from store import all_experts
+
+    low = [e.id for e in all_experts() if e.risk != "high"][:2]
+    assert len(low) == 2
+    written = app.OUT_ROOT / "err-sess-01" / "tmp" / "日报.md"
+    written.parent.mkdir(parents=True)
+    written.write_text("# 日报\n\n今天完成了什么。\n", encoding="utf-8")
+    calls = []
+
+    def fake_run_agent(material, **kw):
+        calls.append(kw["expert_id"])
+        if len(calls) == 1:
+            return {"ok": True, "run_id": "eng-1", "reply": "日报写好了", "files": [{"path": str(written)}], "tool_results": []}
+        raise LLMError("模型连接已结束但未收到完成标记")
+
+    monkeypatch.setattr("packing_assistant.runtime.agent_loop.run_agent", fake_run_agent)
+    monkeypatch.setattr("app.has_key", lambda: True)
+    sid = "err-sess-01"
+    lease = chat_service.SessionLease(sid)
+    turn = chat_service.prepare_turn(app.OUT_ROOT, {"session_id": sid, "message": "写日报再写调度指令", "expert_ids": low})
+    events = [ev for ev in chat_service.stream_turn(app.OUT_ROOT, turn, key_available=True, plain_runner=app.run_plain, lease=lease)
+              if ev["event"] != "heartbeat"]
+    assert calls == low, "第二个岗位才失败"
+    err = [ev for ev in events if ev["event"] == "error"]
+    assert len(err) == 1 and "模型连接" in err[0]["data"]["text"]
+    data = err[0]["data"]
+    assert [f["name"] for f in data["deliverables"]] == ["日报.md"], data
+    assert data["deliverables"][0]["run_id"] == data["run_ids"][0]
+    assert "日报写好了" in data["partial_text"]
+    assert data["deliverable_runs"] and data["deliverable_runs"][0]["run_id"] == data["run_ids"][0]
+    assert _wait_idle(sid)
+    # the error frame is in the event log too, so a page that lost the stream sees the files on resume
+    replay = _read_sse(client, f"/api/sessions/{sid}/events?after=0")
+    assert replay[-1][1] == "error" and [f["name"] for f in replay[-1][2]["deliverables"]] == ["日报.md"]

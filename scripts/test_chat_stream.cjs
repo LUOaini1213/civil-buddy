@@ -1,4 +1,10 @@
 #!/usr/bin/env node
+/* Page-logic tests: the whole page (demo/static/app.js + demo/static/modules/*.js, loaded as
+   classic scripts) runs in a Node vm with a fake DOM and a fake fetch. boot() is not run and a
+   few observation stubs (addMsg / addStatus / cbAnnounce / …) replace the page's own so tests
+   can watch what happened; a test that wants the page's version says `x = __real.x`.
+   No source slicing: this file does not depend on comment markers in app.js.
+   Real page + real backend lives in scripts/e2e/ui_dom.cjs; pure modules in scripts/test_modules.cjs. */
 "use strict";
 
 // Offline behavioral regressions for the shipped transport and conversation UI.
@@ -71,26 +77,52 @@ test("SSE checks a pre-aborted signal and absent response body", async () => {
   await assert.rejects(transport.read(null, () => {}), /回答流/);
 });
 
-function section(start, end) {
-  const first = app.indexOf(start);
-  const last = app.indexOf(end, first + start.length);
-  assert.ok(first >= 0 && last > first, "UI source section exists: " + start);
-  return app.slice(first, last);
-}
 
-function element() {
-  return {
-    value: "", textContent: "", children: [], dataset: {}, style: {}, hidden: false, listeners: {}, selectors: {},
-    classList: { add() {}, remove() {} },
-    setAttribute(name, value) { this[name] = value; },
-    removeAttribute(name) { delete this[name]; },
-    focus() { this.focused = true; },
+/* The whole page is loaded, not slices of it: the ES modules and app.js are turned into
+   classic scripts (export/import lines dropped) and evaluated in the same context, so every
+   top-level function is a global the tests can call, exactly as the old sections were —
+   without depending on comment markers in the source. boot() is not run; the harness's
+   observation stubs (addMsg / addStatus / cbAnnounce / …) are re-applied after the load. */
+const MODULE_FILES = ["auth", "toast", "drafts", "uploads", "turn-stream", "deliverables", "session-watch", "session-nav"];
+const classic = (src) => src.replace(/^export /mg, "").replace(/^import .*$/mg, "");
+const moduleSources = MODULE_FILES.map((name) => classic(fs.readFileSync(path.join(__dirname, "..", "demo", "static", "modules", name + ".js"), "utf8")));
+const appSource = classic(app).replace(/^boot\(\);\s*$/m, "/* boot() is not run in the harness */");
+assert.ok(!/^boot\(\);/m.test(appSource), "boot() call removed for the harness");
+
+
+function element(tag) {
+  const classes = new Set();
+  const el = {
+    tagName: String(tag || "div").toUpperCase(), value: "", textContent: "", children: [], dataset: {}, style: {}, hidden: false,
+    listeners: {}, selectors: {}, attributes: {}, isConnected: true, disabled: false, scrollTop: 0, scrollHeight: 0,
+    classList: { add(...n) { n.forEach((c) => classes.add(c)); }, remove(...n) { n.forEach((c) => classes.delete(c)); },
+      contains: (c) => classes.has(c), toggle(c, force) { const on = force === undefined ? !classes.has(c) : !!force; on ? classes.add(c) : classes.delete(c); return on; } },
+    get className() { return [...classes].join(" "); }, set className(v) { classes.clear(); String(v || "").split(/\s+/).filter(Boolean).forEach((c) => classes.add(c)); },
+    setAttribute(name, value) { this[name] = value; this.attributes[name] = String(value); },
+    getAttribute(name) { return name in this.attributes ? this.attributes[name] : (this[name] === undefined ? null : String(this[name])); },
+    hasAttribute(name) { return name in this.attributes; },
+    removeAttribute(name) { delete this[name]; delete this.attributes[name]; },
+    focus() { this.focused = true; }, blur() {}, click() { if (this.listeners.click) return this.listeners.click({ preventDefault() {} }); },
     setSelectionRange(start, end) { this.selectionStart = start; this.selectionEnd = end; },
-    appendChild(child) { this.children.push(child); child.parentElement = this; },
+    appendChild(child) { this.children.push(child); child.parentElement = this; return child; },
+    append(...nodes) { nodes.forEach((n) => { if (n && typeof n === "object") this.appendChild(n); }); },
+    prepend(...nodes) { nodes.forEach((n) => { if (n && typeof n === "object") { this.children.unshift(n); n.parentElement = this; } }); },
+    insertBefore(child, ref) { const i = this.children.indexOf(ref); if (i < 0) this.children.push(child); else this.children.splice(i, 0, child); child.parentElement = this; return child; },
+    removeChild(child) { this.children = this.children.filter((c) => c !== child); child.parentElement = null; return child; },
+    remove() { if (this.parentElement) this.parentElement.removeChild(this); },
     replaceChildren(...children) { this.children.forEach(child => { child.parentElement = null; }); this.children = []; children.forEach(child => this.appendChild(child)); },
+    get firstChild() { return this.children[0] || null; }, get lastChild() { return this.children[this.children.length - 1] || null; },
+    get firstElementChild() { return this.children[0] || null; },
     querySelector(selector) { return this.selectors[selector] || (this.selectors[selector] = element()); },
+    querySelectorAll() { return []; }, closest() { return null; }, contains(n) { return n === this || this.children.includes(n); },
+    getBoundingClientRect() { return { top: 0, left: 0, width: 0, height: 0, bottom: 0, right: 0 }; },
+    scrollIntoView() {}, dispatchEvent() { return true; },
     addEventListener(name, callback) { this.listeners[name] = callback; },
+    removeEventListener(name) { delete this.listeners[name]; },
   };
+  let html = "";
+  Object.defineProperty(el, "innerHTML", { get() { return html; }, set(v) { html = String(v); if (html === "") { this.children.forEach((c) => { c.parentElement = null; }); this.children = []; } } });
+  return el;
 }
 
 function ui(fetcher) {
@@ -107,11 +139,8 @@ function ui(fetcher) {
   const announcements = [];
   const onboarding = [];
   const stored = new Map();
-  const context = vm.createContext({
-    AbortController, TextDecoder, FormData, URL, setTimeout, clearTimeout, CB_CHAT_STREAM: transport, fetch: fetcher,
-    window: {}, cbProj: { cur: "", sessions: [] }, cbCmd: {}, cbCmdUpdate() {},
-    localStorage: { getItem: (key) => stored.get(key) || null, setItem: (key, value) => stored.set(key, value), removeItem: (key) => stored.delete(key) },
-    document: { getElementById: (id) => elements[id] || null, createElement: element, addEventListener() {} },
+  const stubs = {
+    cbCmd: {}, cbCmdUpdate() {},
     cbDockSet(open) { elements.ctxOpen.expanded = open; },
     escapeHtml: value => String(value || "").replace(/[&<>"']/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c])),
     layerName: layer => layer,
@@ -134,19 +163,28 @@ function ui(fetcher) {
       messages.push({ role, body });
       return body;
     },
+  };
+  const context = vm.createContext({
+    ...stubs,
+    AbortController, TextDecoder, FormData, URL, setTimeout, clearTimeout, CB_CHAT_STREAM: transport, fetch: fetcher,
+    window: {}, navigator: {}, location: { href: "http://localhost/", origin: "http://localhost", search: "", hash: "", pathname: "/" },
+    history: { replaceState() {}, pushState() {} }, console,
+    getComputedStyle: () => ({ getPropertyValue: () => "" }), requestAnimationFrame: (fn) => setTimeout(fn, 0), cancelAnimationFrame: (t) => clearTimeout(t),
+    matchMedia: () => ({ matches: false, addEventListener() {}, removeEventListener() {}, addListener() {}, removeListener() {} }),
+    alert() {}, confirm: () => true, prompt: () => null, queueMicrotask, structuredClone, atob, btoa, TextEncoder, Blob, File, Headers, Response, Request, ReadableStream,
+    MutationObserver: class { observe() {} disconnect() {} }, ResizeObserver: class { observe() {} disconnect() {} }, IntersectionObserver: class { observe() {} disconnect() {} },
+    Event: class { constructor(type) { this.type = type; } preventDefault() {} }, CustomEvent: class { constructor(type, init) { this.type = type; this.detail = init && init.detail; } },
+    performance: { now: () => Date.now() },
+    localStorage: { getItem: (key) => stored.get(key) || null, setItem: (key, value) => stored.set(key, value), removeItem: (key) => stored.delete(key) },
+    document: { getElementById: (id) => elements[id] || (elements[id] = element()), createElement: element, addEventListener() {},
+      querySelector: () => null, querySelectorAll: () => [], body: element(), documentElement: element(), visibilityState: "visible" },
   });
-  for (const code of [
-    section("const state =", "async function boot()"),
-    section("function cbNewLocalSession()", "/* ux(round14)：相对时间"),
-    section("async function cbAttachUpload(", "function cbAttachInit()"),
-    section("function cbEmptyPrefill(", "/* 网关兜底空态"),
-    section("function cbSlashQuery(", "function cbSlashFilter("),
-    section("const CB_LLM_VENDORS =", "function cbLlmOpen()"),
-    section("async function cbProjOpenSession(s)", "/* ux(round19)：并行任务逻辑"),
-    section('$("form").addEventListener("submit"', "function skillWho("),
-    section("async function streamChat(", "/* ux(round19)：「依据」"),
-    section("function cbTaskText(", "async function cbContextLoad("),
-  ]) vm.runInContext(code, context);
+  for (const code of moduleSources) vm.runInContext(code, context);
+  vm.runInContext(appSource, context);
+  /* The page defined its own versions of the observation points; put the harness's back so the
+     tests keep seeing messages, status lines and announcements the way they always did. */
+  context.__stubs = stubs;
+  vm.runInContext(`var __real = {}; for (const name of Object.keys(__stubs)) { try { __real[name] = eval(name); eval(name + " = __stubs[name]"); } catch (e) { /* const in the page: keep the page's */ } }`, context);
   return {
     elements, messages, errors, stored, announcements, onboarding,
     evaluate(code) { return vm.runInContext(code, context); },
@@ -219,7 +257,7 @@ test("stop during a resume aborts it and keeps the partial answer", async () => 
   const running = h.submit("测试任务");
   await started;
   assert.equal(h.elements.form["aria-busy"], "true");
-  h.evaluate("cbActiveRun.controller.abort()");
+  h.evaluate("runState.active.controller.abort()");
   await running;
   const answer = h.messages.find((m) => m.role === "assistant").body;
   assert.equal(answer.textContent, "一半");
@@ -302,7 +340,7 @@ test("a rejected cancel can be retried without discarding the active response", 
   const pending = h.submit("写一份草稿");
   await h.elements.stop.listeners.click();
   assert.equal(h.elements.stop.disabled, false);
-  assert.equal(h.evaluate("cbActiveRun.cancelRequested"), false);
+  assert.equal(h.evaluate("runState.active.cancelRequested"), false);
   await h.elements.stop.listeners.click();
   assert.equal(attempts, 2);
   stream.enqueue(encoder.encode(frame("done", {text:"已停止",cancelled:true,ok:false})));
@@ -326,9 +364,9 @@ test("leaving an active task detaches it: nothing is cancelled and the task is r
   await pending;
   assert.notEqual(h.evaluate("state.session"), old);
   assert.deepEqual(requested, [], "switching tasks is not the stop button");
-  assert.equal(h.evaluate(`cbBackgroundSessions.has(${JSON.stringify(old)})`), true);
-  assert.equal(h.evaluate(`cbBackgroundSessions.has(state.session)`), false);
-  assert.equal(h.evaluate("cbActiveRun"), null);
+  assert.equal(h.evaluate(`runState.background.has(${JSON.stringify(old)})`), true);
+  assert.equal(h.evaluate(`runState.background.has(state.session)`), false);
+  assert.equal(h.evaluate("runState.active"), null);
   assert.match(h.announcements.at(-1), /后台/);
 });
 
@@ -347,7 +385,7 @@ test("the stop button still cancels the session it was pressed in, and only that
   const pending = h.submit("要停的任务");
   await h.elements.stop.listeners.click();
   assert.deepEqual(requested, [`/api/sessions/${session}/cancel`]);
-  assert.equal(h.evaluate(`cbBackgroundSessions.has(${JSON.stringify(session)})`), false);
+  assert.equal(h.evaluate(`runState.background.has(${JSON.stringify(session)})`), false);
   stream.enqueue(encoder.encode(frame("done", {text:"已停止",cancelled:true,ok:false})));
   stream.close();
   await pending;
@@ -396,7 +434,7 @@ test("a task found running in the background is shown as running, refuses a new 
   await nextPoll();
   assert.equal(h.elements.stop.hidden, true);
   assert.equal(h.elements.form["aria-busy"], "false");
-  assert.equal(h.evaluate("cbWatchedRun"), null);
+  assert.equal(h.evaluate("runState.watched"), null);
   assert.match(h.errors.at(-1), /回到前台；该任务已被停止/);
 });
 
@@ -419,7 +457,7 @@ test("leaving a watched task takes the stop button away without cancelling anyth
   h.evaluate("cbNewLocalSession()");
   assert.equal(h.elements.stop.hidden, true);
   assert.equal(h.elements.form["aria-busy"], "false");
-  assert.equal(h.evaluate("cbWatchedRun"), null);
+  assert.equal(h.evaluate("runState.watched"), null);
   assert.deepEqual(server.cancels, []);
   assert.equal(h.evaluate("cbTestPolls.length"), 1, "the poll that was pending");
   await h.evaluate("cbTestPolls.shift()()");
@@ -706,14 +744,13 @@ test("both Python and Rust pending responses mount the typed confirmation card",
   for (const data of [{ hitl_pending: true, skill: "construction", run_ids: ["run-one"] },
     { hitl: { pending: true, gate: "exclusive_write" }, expert: "construction", run_id: "run-one" }]) {
     const h = ui(() => assert.fail("must not request network"));
-    h.evaluate('var mountedApproval = null, activeKey = "", stages = {}, hitlEl = { hidden: true, querySelector: () => null };' +
-      'function settleActive() {} function setStage() {} function setBadge() {}' +
-      'function mountApproval(info) { mountedApproval = info; }');
-    h.evaluate(section("  function finish(data)", "  function status(data)"));
-    h.evaluate("finish(" + JSON.stringify(data) + ")");
-    assert.equal(h.evaluate("hitlEl.hidden"), false);
-    assert.equal(h.evaluate("mountedApproval.expert"), "construction");
-    assert.equal(h.evaluate("mountedApproval.runId"), "run-one");
+    h.evaluate("cbTlCreate = __real.cbTlCreate");
+    const pending = h.evaluate(`cbHitlPending(${JSON.stringify(data)})`);
+    assert.equal(pending, true, "both response shapes count as a pending gate");
+    h.evaluate(`var __body = addMsg("assistant", "岗位", ""); var __tl = cbTlCreate(__body, "写一份方案"); __tl.finish(${JSON.stringify(data)});`);
+    const root = h.evaluate("__body.parentElement.children.find((c) => c.className === 'cb-tl')");
+    assert.ok(root, "the timeline is mounted next to the bubble");
+    assert.equal(root.selectors[".tl-hitl"].hidden, false, "the HITL slot is shown while the gate waits");
   }
 });
 
@@ -785,7 +822,7 @@ test("new and restored tasks discard server gate UI and cannot inherit confirmat
 
 test("upload errors show actionable API details and do not select a failed file", async () => {
   const h = ui(async () => ({ ok: false, status: 400, text: async () => JSON.stringify({ detail: "扫描件 PDF 需要先 OCR" }) }));
-  h.evaluate(section("async function apiError(", "function escapeHtml("));
+  h.evaluate("apiError = __real.apiError");
   await h.evaluate('cbAttachUpload([{ name: "scan.pdf" }])');
   assert.match(h.errors[0], /scan\.pdf.*需要先 OCR/);
   assert.equal(h.evaluate("state.attachments.length"), 0);
@@ -793,8 +830,6 @@ test("upload errors show actionable API details and do not select a failed file"
 
 test("generic and packing timelines describe the selected workflow", () => {
   const h = ui(() => assert.fail("must not request network"));
-  h.evaluate(section("const CB_TL_STAGES =", "/* ux(round5)"));
-  h.evaluate(section("const CB_PHASE_STAGE =", "function cbTlCreate("));
   assert.equal(h.evaluate('cbTlStageDefinitions(false).map((item) => item[1]).join("/")'), "理解任务/召唤岗位/读取资料/起草/人工确认/检查/保存/完成");
   assert.match(h.evaluate('cbTlStageDefinitions(true).map((item) => item[1]).join("/")'), /成箱.*拼柜/);
   assert.equal(h.evaluate('cbTlStageDefinitions(false).find((item) => item[0] === cbTlPhase("deliver", false))[1]'), "起草");
@@ -803,7 +838,7 @@ test("generic and packing timelines describe the selected workflow", () => {
 
 test("summon events show the named expert before any tokens arrive", async () => {
   const h = ui(async () => ({ ok: true, body: bytesStream(encoder.encode(frame("status", { phase: "summon", expert: "pm-daily" }))) }));
-  h.evaluate(section("function skillWho(", "function namesOrPlain("));
+  h.evaluate("skillWho = __real.skillWho; namesOrPlain = __real.namesOrPlain");
   h.evaluate('state.experts = [{ id: "pm-daily", name: "项目日报" }]');
   await h.submit("@项目日报 写一份日报");
   const who = h.messages[1].body.parentElement.querySelector(".who").textContent;
@@ -841,8 +876,7 @@ test("startup restores a listed session but never overrides a later user operati
 
 test("browsing categories and posts does not silently truncate the catalog to nine entries", () => {
   const h = ui(() => assert.fail("must not request network"));
-  h.evaluate(section("function cbSlashFilter(", "/* ===== ux(round17)"));
-  h.evaluate(section("function cbCmdFiltered(", "function cbCmdClose("));
+  h.evaluate("cbCmdUpdate = __real.cbCmdUpdate");
   h.evaluate('function cbCmdSubItems() { return Array.from({ length: 16 }, (_, i) => ({ id: "item-" + i, name: "岗位" + i })); }');
   assert.equal(h.evaluate('cbCmdFiltered("cats", "").length'), 16);
   assert.equal(h.evaluate('cbCmdFiltered("posts", "").length'), 16);
@@ -881,8 +915,8 @@ test("restored expert selections filter the live catalog and preserve follow-up 
 
 function contextUi(fetcher) {
   const h = ui(fetcher);
-  h.evaluate(section("function fmtNum(", "function addMsg("));
-  h.evaluate(section("function renderCites(", "function fileUrl("));
+  /* the context panel tests want the page's own painters, not the harness stubs */
+  h.evaluate("renderCites = __real.renderCites; paintContext = __real.paintContext; estimateLocalContext = __real.estimateLocalContext");
   return h;
 }
 
@@ -1181,7 +1215,7 @@ test("a rebuild from a previous task cannot overwrite or unlock the current task
 
 test("a running local task explains why rebuilding must wait without sending a mutation", async () => {
   const h = contextUi(() => assert.fail("do not rebuild while the current local turn is active"));
-  h.evaluate("cbActiveRun={session:state.session};");
+  h.evaluate("runState.active={session:state.session};");
   h.elements.ctxMemory.textContent = "当前记忆";
   await h.evaluate("cbContextRebuild()");
   assert.match(h.elements.ctxMemoryStatus.textContent, /任务正在处理中/);
@@ -1285,7 +1319,6 @@ test("context settings load, submit numeric limits, clear stale reports, and res
     }
     return response(current);
   });
-  h.evaluate(section("function cbLlmOpen()", "/* ===== ux(round15)"));
   await h.evaluate("cbLlmLoad()");
   assert.equal(h.elements.cbLlmContext.value, 65536);
   assert.equal(h.elements.cbLlmReserve.value, 8192);
@@ -1318,7 +1351,6 @@ test("semantic summary checkbox loads, saves strict booleans, and resets without
     }
     return response(current);
   });
-  h.evaluate(section("function cbLlmOpen()", "/* ===== ux(round15)"));
   await h.evaluate("cbLlmLoad()");
   assert.equal(h.elements.cbLlmSemantic.checked, true);
   assert.equal(requests.length, 1);
@@ -1507,7 +1539,7 @@ test("attachment purpose controls are labelled, optional and sent only for selec
     payload = JSON.parse(options.body);
     return { ok: true, body: bytesStream(encoder.encode(frame("done", { text: "已处理" }))) };
   });
-  h.evaluate(section("function cbAttachRender()", "async function cbAttachUpload("));
+  h.evaluate("cbAttachRender = __real.cbAttachRender");
   h.evaluate('state.attachments = [{ id: "tender-file", name: "招标.pdf" }, { id: "response-file", name: "响应.docx" }]; cbAttachRender();');
   const role = h.elements.attaches.children[0].children[1];
   assert.equal(role["aria-label"], "资料用途：招标.pdf");

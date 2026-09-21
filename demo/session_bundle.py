@@ -267,7 +267,10 @@ def _restore_budget(manifest: dict, content: dict[str, bytes]) -> None:
         raise BundleError("恢复后的任务数据超过大小上限，请拆分任务")
 
 
-def export_session(root: Path, sid: str) -> bytes:
+def export_session(root: Path, sid: str, archive_target=None):
+    """Build the backup. archive_target=None returns the zip as bytes (tests, small sessions);
+    a path writes the zip there so the HTTP route can stream the file instead of holding a
+    second copy in memory."""
     from chat_service import read_runs, valid_session
 
     valid_session(sid)
@@ -322,22 +325,35 @@ def export_session(root: Path, sid: str) -> bytes:
     encoded = json.dumps(manifest, ensure_ascii=False).encode("utf-8")
     if len(encoded) > MANIFEST_LIMIT:
         raise BundleError("任务记录超过备份大小上限")
-    with BytesIO() as buffer:
-        with ZipFile(buffer, "w", compression=ZIP_DEFLATED) as archive:
-            archive.writestr("bundle.json", encoded)
-            for name, data in content.items():
-                archive.writestr(name, data)
-        result = buffer.getvalue()
-    if len(result) > MAX_BYTES:
+    if archive_target is None:
+        with BytesIO() as buffer:
+            _write_zip(buffer, encoded, content)
+            result = buffer.getvalue()
+        if len(result) > MAX_BYTES:
+            raise BundleError("备份包超过 128 MB，请拆分任务")
+        return result
+    target = Path(archive_target)
+    with open(target, "wb") as fh:
+        _write_zip(fh, encoded, content)
+    if target.stat().st_size > MAX_BYTES:
+        target.unlink(missing_ok=True)
         raise BundleError("备份包超过 128 MB，请拆分任务")
-    return result
+    return target
 
 
-def _validated(data: bytes) -> tuple[dict, dict[str, bytes]]:
-    if len(data) > MAX_BYTES:
+def _write_zip(fileobj, encoded: bytes, content: dict) -> None:
+    with ZipFile(fileobj, "w", compression=ZIP_DEFLATED) as archive:
+        archive.writestr("bundle.json", encoded)
+        for name, data in content.items():
+            archive.writestr(name, data)
+
+
+def _validated(data) -> tuple[dict, dict[str, bytes]]:
+    size = data.stat().st_size if isinstance(data, Path) else len(data)
+    if size > MAX_BYTES:
         raise BundleError("备份包不能超过 128 MB")
     try:
-        with ZipFile(BytesIO(data)) as archive:
+        with ZipFile(data if isinstance(data, Path) else BytesIO(data)) as archive:
             entries = archive.infolist()
             names = [item.filename for item in entries]
             if (len(entries) > MAX_ENTRIES or len(names) != len(set(names))
@@ -433,7 +449,8 @@ def _validated(data: bytes) -> tuple[dict, dict[str, bytes]]:
         raise BundleError("备份包损坏或格式不完整") from exc
 
 
-def import_session(root: Path, data: bytes) -> dict:
+def import_session(root: Path, data) -> dict:
+    """data: the zip as bytes, or a Path to it on disk (the HTTP route spools the upload to a file)."""
     from packing_assistant.runtime.civil_config import load_config
 
     if not load_config().allow_write():

@@ -22,6 +22,11 @@ if os.getenv("PYTHON_DOTENV_DISABLED") != "1":
     load_dotenv()
     load_dotenv(DEMO_ROOT / ".env", override=True)
 
+# One workbench = one session root. CIVIL_OUT_ROOT lets a test run or a second instance keep
+# its sessions (transcripts, runs, deliverables, uploads, events) away from demo/out.
+if os.environ.get("CIVIL_OUT_ROOT"):
+    OUT_ROOT = Path(os.environ["CIVIL_OUT_ROOT"]).expanduser().resolve()
+
 from packing_assistant.llm import llm_config as _llm_config  # noqa: E402
 
 

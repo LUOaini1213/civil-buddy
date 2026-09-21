@@ -124,3 +124,59 @@ def test_legacy_uploads_are_adopted_into_the_session_dir(client, tmp_path, monke
     assert (app.OUT_ROOT / "old-b" / "uploads").is_dir() and not (legacy_root / "old-b").exists()
     assert uploads.migrate_legacy_uploads() == 0
     assert [f["name"] for f in client.get("/api/attachments", params={"session_id": "old-b"}).json()["files"]] == ["旧附件.md"]
+
+
+def test_service_worker_is_served_from_the_root_and_never_cached(client):
+    r = client.get("/sw.js")
+    assert r.status_code == 200
+    assert r.headers["content-type"].startswith("application/javascript")
+    assert r.headers["cache-control"] == "no-cache"
+    assert r.headers["service-worker-allowed"] == "/"
+    assert "/api/" in r.text and "network" in r.text.lower() or "fetch(req)" in r.text
+    index = client.get("/").text
+    assert 'rel="manifest"' in index
+    assert "serviceWorker" in client.get("/static/app.js").text
+
+
+def test_heartbeat_is_a_comment_frame_on_the_wire(client, monkeypatch):
+    """0.5 s 一次的心跳在线上是 `: ping` 注释帧，不再是要解析的 JSON 事件；业务帧照旧带 id。"""
+    import sys
+    sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+    monkeypatch.setattr("app.has_key", lambda: True)
+
+    def slow(history):
+        import time
+        for i in range(3):
+            time.sleep(0.6)
+            yield {"event": "token", "data": {"text": f"片段{i} "}}
+        yield {"event": "done", "data": {"text": "片段0 片段1 片段2", "citations": []}}
+    monkeypatch.setattr("app.run_plain", slow)
+    with client.stream("POST", "/api/chat", json={"message": "聊聊", "session_id": "ping-sess-01"}) as r:
+        raw = b"".join(r.iter_bytes()).decode("utf-8")
+    assert ": ping\n\n" in raw, raw[:300]
+    assert "event: heartbeat" not in raw
+    assert "id: 1\nevent: session" in raw and "event: done" in raw
+
+
+def test_backup_export_streams_a_file_and_import_reads_from_disk(client, monkeypatch):
+    """导出：zip 写临时文件后流式发出，发完即删；导入：分块落盘再从磁盘读，内存里不再放两份 128 MB。"""
+    import app
+
+    monkeypatch.setattr("app.has_key", lambda: True)
+    monkeypatch.setattr("app.run_plain", lambda history: iter([{"event": "token", "data": {"text": "你好呀"}}, {"event": "done", "data": {"text": "你好呀", "citations": []}}]))
+    sid = "bk-sess-01"
+    with client.stream("POST", "/api/chat", json={"message": "你好", "session_id": sid}) as r:
+        b"".join(r.iter_bytes())
+    r = client.get(f"/api/sessions/{sid}/export")
+    assert r.status_code == 200 and r.headers["content-type"].startswith("application/zip")
+    assert f'civil-task-{sid}.zip' in r.headers["content-disposition"]
+    assert r.content[:2] == b"PK" and len(r.content) > 100
+    assert not list(app.OUT_ROOT.glob("civil-export-*.zip")), "the temp file is gone once the response is sent"
+
+    imported = client.post("/api/session-import", content=r.content, headers={"Content-Type": "application/zip"})
+    assert imported.status_code == 200, imported.text
+    new_sid = imported.json()["session_id"]
+    assert new_sid.startswith("import-")
+    assert (app.OUT_ROOT / new_sid / "transcript.jsonl").is_file()
+    assert not list(app.OUT_ROOT.glob("civil-import-*.zip")), "the spooled upload is removed after import"
+    assert client.post("/api/session-import", content=b"not a zip", headers={"Content-Type": "application/zip"}).status_code == 400

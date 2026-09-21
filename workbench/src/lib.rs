@@ -16,6 +16,8 @@ pub mod parse;
 pub mod projects;
 pub mod packs;
 pub mod rag;
+pub mod runtime_core;
+pub mod product;
 pub mod store;
 pub mod tier_map;
 pub mod websearch;
