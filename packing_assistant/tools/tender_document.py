@@ -805,7 +805,7 @@ def _document_value(topic: str, body: str, *, same_as: bool = True) -> str:
         return found.group(0) if found else ""
     if kind == "code":
         found = (tf._DOC_CODE.search(text) or re.match(r"[A-Za-z0-9][A-Za-z0-9\-_/]{5,60}", text)   # "310115…-15372573": all digits
-                 or re.match(r"[一-鿿]{1,6}[-－—][A-Za-z0-9][A-Za-z0-9\-_/]{1,30}", text))                # "附中-2603"
+                 or re.match(r"[一-鿿]{1,6}[-－—][A-Za-z0-9][A-Za-z0-9\-_/]{1,30}", text))                # "青中-2711"
         return found.group(0) if found else ""
     if kind == "person":
         return _balanced(tf._requirement_text(text), text) or text[:80]
