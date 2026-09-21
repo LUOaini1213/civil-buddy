@@ -124,7 +124,9 @@ def measure(draft: str, gold: Dict) -> Dict:
     for item in gold["rejections"]:
         result["rejections"][item["id"]] = flat(item["text"]) in table_text
     for item in gold["scores"]:
-        result["scores"][item["name"]] = any(flat(item["name"]) in flat("".join(row.values())) and flat(item["score"]) in flat("".join(row.values())) for row in rows)
+        points = re.escape(re.sub(r"[^\d.]", "", item["score"]))   # "35分" or a bare "35": the number, standing alone
+        result["scores"][item["name"]] = any(flat(item["name"]) in flat("".join(row.values()))
+                                             and re.search(r"(?<![\d.])" + points + r"(?![\d.])", " ".join(row.values())) for row in rows)
     for item in gold["specials"]:
         result["specials"][item["name"]] = any(item["name"] in "".join(row.values()) and flat(item["detail"]) in flat("".join(row.values())) for row in rows)
     for name in gold["forms"]:
@@ -145,17 +147,18 @@ def summary(result: Dict) -> Dict:
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     parser.add_argument("--format", default="docx", choices=("docx", "md", "txt"))
+    parser.add_argument("--doc", default="cn_construction", help="a document of test/benchmarks/real_tender, without the extension")
     parser.add_argument("--json")
     parser.add_argument("--show", action="store_true", help="print the deliverable")
     parser.add_argument("-v", "--verbose", action="store_true")
     args = parser.parse_args()
-    gold = json.loads((BENCH / "cn_construction.gold.json").read_text(encoding="utf-8"))
-    run = deliver(args.format)
+    gold = json.loads((BENCH / f"{args.doc}.gold.json").read_text(encoding="utf-8"))
+    run = deliver(args.format, args.doc)
     if args.show:
         print(run["draft"])
     result = measure(run["draft"], gold)
     total = summary(result)
-    print(f"cn_construction.{args.format}: {run['source_chars']} chars, run ok={run['ok']}, {run['seconds']:.1f}s, draft {len(run['draft'])} chars")
+    print(f"{args.doc}.{args.format}: {run['source_chars']} chars, run ok={run['ok']}, {run['seconds']:.1f}s, draft {len(run['draft'])} chars")
     print(f"  fields      right {total['fields_right']}/{total['fields']}  wrong {total['fields_wrong']}  ambiguous {total['fields_ambiguous']}  "
           f"missing {total['fields_missing']}  with clause ref {total['clause_refs']}")
     print(f"  rejections  {total['rejections']}/{total['rejections_total']}   scores {total['scores']}/{total['scores_total']}   "

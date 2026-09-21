@@ -296,7 +296,7 @@ def _line_item(
 
 
 def _squash(text: str) -> str:
-    return re.sub(r"[\s★☆＊]+", "", text or "")
+    return re.sub(r"[\W_]+", "", text or "")   # letters and digits only: a table row and its cells joined are one text
 
 
 def _document_items(doc: Any) -> List[Dict[str, Any]]:
@@ -748,10 +748,12 @@ def parse_tender_text(text: str, *, source: str = "text", sides: str = "auto") -
         doc = tender_document.read(text or "")
         document = _document_summary(doc)
         for item in _document_items(doc):
-            twin = next((r for r in requirements if r.get("item_kind") == "star"
-                         and _squash(item["exact_text"]) in _squash(str(r.get("exact_text") or ""))), None)
+            mine = _squash(item["exact_text"])
+            twin = next((r for r in requirements if r.get("item_kind") == "star" and mine
+                         and (mine in _squash(str(r.get("exact_text") or "")) or _squash(str(r.get("exact_text") or "")) in mine)), None)
             if twin is not None:
                 twin["locator"] = item["locator"]   # the ★ line is already a row: it gains its clause
+                twin["display"] = item["exact_text"]   # ... and, for a table row, its cells without the bars
                 continue
             if item["id"] not in theme_ids:
                 requirements.append(item)

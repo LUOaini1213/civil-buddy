@@ -298,7 +298,7 @@ def _document_sections(parsed: Mapping[str, Any], facts: Facts, document: Mappin
     for n, r in enumerate([r for r in requirements if r.get("item_kind") in ("reject_clause", "star") and r.get("category") == "reject"], 1):
         cited = "；".join(f"{c.get('locator')}：{_clip(c.get('text'), 60)}" for c in r.get("cited") or [])
         name = f"★ 必须满足 {n}" if r.get("item_kind") == "star" else f"否决条款 {n}"
-        rows.append([name, _clip(r.get("exact_text"), 160), str(r.get("locator") or r.get("requirement_ref") or "—"), "已检出",
+        rows.append([name, _clip(r.get("display") or r.get("exact_text"), 160), str(r.get("locator") or r.get("requirement_ref") or "—"), "已检出",
                      ("所引条款 " + cited) if cited else "逐条自查"])
     out += _table(PARSE_HEADER, rows) or ["全文未检出否决/拒收字样的条款——这本身不正常，请人工核对评标办法一章。", ""]
     out += ["## 12 投标文件组成", ""]

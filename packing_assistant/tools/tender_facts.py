@@ -248,7 +248,7 @@ class Topic:
 
 TOPICS: Tuple[Topic, ...] = (
     Topic("project", "项目名称", ("项目名称", "工程名称", "项目名", "工程名", "Project Title", "Project Name", "Name of Project", "Tender for"), "text", "project"),
-    Topic("owner", "招标人", ("招标人", "建设单位", "发包人", "业主单位", "业主", "甲方", "Procuring Entity", "Employer", "Developer"), "text", "project"),
+    Topic("owner", "招标人", ("招标人", "采购人", "建设单位", "发包人", "业主单位", "业主", "甲方", "Procuring Entity", "Employer", "Developer"), "text", "project"),
     Topic("tender_no", "招标编号", ("招标项目编号", "招标文件编号", "招标编号", "项目编号", "标书编号", "招标文件",
                                   "Tender Reference", "Tender Ref", "Tender No", "Quotation No", "Contract No", "ITT No", "ITQ No"), "code", "project"),
     Topic("scope", "招标范围", ("招标范围", "承包范围", "施工范围", "工程范围", "发包范围", "Scope of Works", "Scope of Work"), "text", "project"),
@@ -311,10 +311,12 @@ _TOPIC = {t.key: t for t in TOPICS + DOCUMENT_TOPICS}
 def document_topic(name: str) -> str:
     """The field a front-table row (or a label inside its content) is about, by its name. The keyword has
     to be what the name is about: 招标人书面澄清的时间 is not the 招标人."""
-    name = (name or "").strip()
+    name = re.sub(r"^是否(?:接受|允许|组织|召开|需要)?", "", (name or "").strip())   # "是否接受联合体" is about 联合体
     for alias in _DEADLINE_QUERY_NAMES:
         if alias in name:
             return "deadline_query"
+    if re.fullmatch(r"答疑|澄清|质疑|提问|答疑澄清|澄清答疑|疑问提出", name):
+        return "deadline_query"
     if "资质条件" in name:
         return "qualification"
     for alias, key in _DOCUMENT_ALIASES:

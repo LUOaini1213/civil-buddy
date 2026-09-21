@@ -38,11 +38,15 @@ _LEAD_NUMBER = re.compile(r"^#*\s*(\d+(?:\.\d+){0,3})[.．、]?\s+(?=\S)|^#*\s*(
 _INLINE_NUMBER = re.compile(r"(?:(?<=[。；;])|(?<=[。；;]\s))(\d+(?:\.\d+){1,3})\s+(?=\S)")
 _SENTENCE_END = re.compile(r"(?<=。)")
 _HEADING_MARK = re.compile(r"^#+\s*")
-_FRONT_HEADER = ("条款号",)
+_FRONT_HEADER = ("条款号", "序号", "编号", "项号", "条款")   # local templates number the front table 1, 2, 3 …
 _CONTRACT = re.compile(r"合同条款|合同条件|合同格式|Conditions of Contract", re.I)
 
-_REJECT = re.compile(r"否决其?投标|否决投标|作否决|被否决|予以否决|不予受理|予以拒收|拒收|无效投标|投标无效|按无效|作无效|无效标|废标|"
-                     r"取消其?(?:投标|中标)资格|不予通过|shall be rejected|will be rejected|be disqualified|non-responsive", re.I)
+_REJECT = re.compile(r"否决其?投标|否决投标|作否决|被否决|予以否决|不予受理|不予接[收受]|予以拒收|拒收|拒绝接收|拒绝受理|无效投标|投标无效|按无效|"
+                     r"作无效|无效标|视为无效|废标|取消其?(?:投标|中标)资格|不予通过|不得参[加与](?:本项目|本次)?(?:的)?投标|"
+                     r"shall be rejected|will be rejected|be disqualified|non-responsive", re.I)
+#: "投标文件有下列情形之一的，按无效投标处理：" - what follows, one item to a paragraph, is the list it announces
+_LIST_LEAD = re.compile(r"(?:下列|以下|如下)(?:情形|情况|行为|条件)?.{0,12}[：:]\s*$|[：:]\s*$")
+_LIST_ITEM = re.compile(r"^\s*(?:[（(]\s*[\d" + _CN + r"]+\s*[)）]|\d+\s*[)）.、]|[" + _CN + r"]+\s*、)\s*")
 _NOT_A_REJECTION = re.compile(r"否决所有投标|否决全部投标")
 _CITES = re.compile(r"第?\s*(\d+(?:\.\d+){1,3})\s*[项款条]")
 _OBLIGES = re.compile(r"须|必须|不得|应当|严禁|不允许|不接受")
@@ -66,6 +70,7 @@ class Piece:
     text: str               # literal
     line: int               # n-th non-empty line of the source, from 1
     kind: str               # "heading" | "text" | "row" | "header"
+    header: Tuple[str, ...] = ()  # a row's column names
 
     @property
     def chapter_no(self) -> str:
@@ -135,14 +140,15 @@ def read(text: str) -> Document:
                 # what a table is follows from its own header row - a Word reader gives no "#", and the line
                 # "投标人须知前附表" above the table is just one more paragraph
                 joined = "".join(cells)
-                front = cells[0].strip() == "条款号" and "格式" not in chapter
+                front = cells[0].strip() in _FRONT_HEADER and "格式" not in chapter and (
+                    cells[0].strip() == "条款号" or "前附表" in heading or re.search(r"条款名称|编列内容|内容及要求|说明[与和及]要求", joined))
                 table_heading = ("投标人须知前附表" if (front and ("条款名称" in joined or "编列内容" in joined))
                                  else "评标办法前附表" if (front and re.search(r"评审因素|评审标准|评分因素|评分标准|分值", joined)) else heading)
                 header = cells
                 doc.pieces.append(Piece(chapter, "", heading, table_heading, tuple(cells), line, line_no, "header"))
                 continue
             row_number = cells[0] if (header and header[0] in _FRONT_HEADER and re.fullmatch(r"[\d.()（）]+", cells[0] or "")) else ""
-            doc.pieces.append(Piece(chapter, row_number, heading, table_heading, tuple(cells), line, line_no, "row"))
+            doc.pieces.append(Piece(chapter, row_number, heading, table_heading, tuple(cells), line, line_no, "row", tuple(header)))
             continue
         header = None
         is_heading = line.startswith("#")
@@ -352,6 +358,19 @@ class Rejection:
     star: bool
 
 
+def _rejecting_parts(sentence: str) -> List[str]:
+    """A sentence, or - when it is a run of "；"-separated items of which one says 不得参加投标 - that item.
+    A sentence that announces a list ("有下列情形之一的，否决其投标：（1）…；（2）…") stays whole: its items are
+    what it is about."""
+    parts = [part.strip() for part in re.split(r"[；;]", sentence) if part.strip()]
+    if len(parts) < 3 or len(sentence) <= 160:
+        return [sentence]
+    lead = next((i for i, part in enumerate(parts) if _REJECT.search(part) or _STAR.search(part)), None)
+    if lead is None or re.search(r"[：:]", parts[lead]) and lead + 1 < len(parts) and _LIST_ITEM.match(parts[lead + 1]):
+        return [sentence]
+    return [part for part in parts if _REJECT.search(part) or _STAR.search(part)]
+
+
 def rejections(doc: Document) -> List[Rejection]:
     out: List[Rejection] = []
     seen: set = set()
@@ -359,8 +378,13 @@ def rejections(doc: Document) -> List[Rejection]:
         if p.kind not in ("text", "row") or _CONTRACT.search(p.chapter):
             continue
         texts = [p.text] if p.kind == "text" else [c for c in p.cells[2:] or p.cells]
+        if p.kind == "row" and "前附表" not in p.table and any(_STAR.search(c) or _REJECT.search(c) for c in p.cells):
+            # a row of a requirements table: "沥青混凝土面层：★上面层采用…；不满足的为无效投标" - the cells, not the bars
+            cells = [c for c in p.cells if c and c != "—" and not re.fullmatch(r"[\d.]+", c)]
+            texts = ["：".join(cells[:2]) + ("；" + "；".join(cells[2:]) if len(cells) > 2 else "")]
         for text in texts:
-            for sentence in ([text] if p.kind == "text" else re.split(r"[；;。]", text)):
+            whole_row = p.kind == "row" and "前附表" not in p.table
+            for sentence in (_rejecting_parts(text) if p.kind == "text" else [text] if whole_row else re.split(r"[；;。]", text)):
                 sentence = sentence.strip()
                 star = bool(_STAR.search(sentence))
                 if not sentence or not (star or (_REJECT.search(sentence) and not _NOT_A_REJECTION.search(sentence))):
@@ -373,8 +397,19 @@ def rejections(doc: Document) -> List[Rejection]:
                 for number in _CITES.findall(sentence):
                     if number != p.number:
                         cited += [c for c in doc.pieces if c.number == number and c.kind == "text" and c is not p][:6]
-                piece = p if p.kind == "text" else Piece(p.chapter, p.number, p.heading, p.table, p.cells, sentence, p.line, "row")
+                piece = p if (p.kind == "text" and sentence == p.text) else Piece(p.chapter, p.number, p.heading, p.table, p.cells, sentence, p.line, p.kind)
                 out.append(Rejection(piece, tuple(cited), star))
+                if p.kind == "text" and not star and _LIST_LEAD.search(sentence):
+                    at = doc.pieces.index(p)
+                    for item in doc.pieces[at + 1:at + 40]:
+                        if item.kind != "text" or not _LIST_ITEM.match(item.text):
+                            break
+                        mark = _LIST_ITEM.match(item.text).group(0).strip()
+                        if _flat(item.text) in seen:
+                            continue
+                        seen.add(_flat(item.text))
+                        number = f"{p.number}{mark}" if p.number else mark
+                        out.append(Rejection(Piece(item.chapter, number, item.heading, "", (), item.text, item.line, "text"), (), False))
     return out
 
 
@@ -404,6 +439,15 @@ def scores(doc: Document) -> List[Tuple[str, str, Piece]]:
     seen: set = set()
     for p in doc.pieces:
         if p.kind != "row" or "评标" not in p.chapter and "评审" not in p.chapter and "评分" not in p.table:
+            continue
+        column = next((i for i, h in enumerate(p.header) if re.fullmatch(r"分值|分数|满分|权重|标准分|分值[（(]分[)）]", h.strip())), None)
+        if column is not None and column < len(p.cells) and re.fullmatch(r"\d+(?:\.\d+)?(?:\s*分)?", p.cells[column].strip()) and column >= 1:
+            name = p.cells[column - 1].strip()
+            value = p.cells[column].strip()
+            key = (_flat(name), _flat(value))
+            if name and len(name) <= 30 and key not in seen:
+                seen.add(key)
+                out.append((name, value if value.endswith("分") else value + "分", p))
             continue
         points = next((c for c in reversed(p.cells) if _POINTS.match(c)), "")
         if points and len(p.cells) >= 3:
@@ -461,8 +505,26 @@ def forms(doc: Document) -> List[Tuple[str, Piece]]:
         seen.append(flat_name)
         out.append((name, piece))
 
+    composition = re.compile(r"投标文件的?(?:组成|构成)|投标文件由")
+    announced = False   # "投标文件由资格证明文件、商务技术文件、报价文件三部分组成：" - the lists follow, paragraph by paragraph
     for p in doc.pieces:
+        if p.kind == "heading":
+            announced = bool(composition.search(p.text))
+        elif p.kind == "text" and composition.search(p.text) and not _FORM_ITEM.search(p.text):
+            announced = True
+            continue
+        if announced and p.kind == "text" and _FORM_ITEM.search(p.text) and not _FORM_LIST.search(p.text):
+            for name in _FORM_ITEM.findall(p.text):
+                add(name, p)
+            continue
+        if p.kind == "heading" and "格式" in p.chapter and re.match(r"[" + _CN + r"]+、", p.text):
+            add(re.sub(r"^[" + _CN + r"]+、\s*", "", p.text), p)   # "一、投标函": a form of its own
+            continue
         if p.kind != "text":
+            continue
+        if composition.search(p.heading) and not _FORM_LIST.search(p.text) and _FORM_ITEM.search(p.text):
+            for name in _FORM_ITEM.findall(p.text):
+                add(name, p)
             continue
         if _FORM_LIST.search(p.text):
             for name in _FORM_ITEM.findall(p.text):
