@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 import os
+from contextlib import asynccontextmanager
 from uuid import uuid4
 from pathlib import Path
 
@@ -26,7 +27,16 @@ from store import (
     upsert_expert,
 )
 
-app = FastAPI(title="Civil Buddy Workbench")
+@asynccontextmanager
+async def _lifespan(_app: FastAPI):
+    """Turns the previous process left "running" on disk are stale now; say so before any list is served."""
+    from chat_service import sweep_stale
+
+    sweep_stale(OUT_ROOT)
+    yield
+
+
+app = FastAPI(title="Civil Buddy Workbench", lifespan=_lifespan)
 STATIC = DEMO_ROOT / "static"
 app.mount("/static", StaticFiles(directory=STATIC), name="static")
 
@@ -545,9 +555,14 @@ def sessions_list(project_id: str = "", q: str = "", limit: int = 0, offset: int
     import turn_control
 
     listing = pj.list_sessions(OUT_ROOT, project_id, q, limit or pj.DEFAULT_LIMIT, offset, recorded_only=True)
+    from chat_service import turn_status
+
     for row in listing.get("sessions", []):
-        # A turn detached from its browser keeps running; the list must say so.
-        row["running"] = turn_control.status(row["session_id"])["active"]
+        # A turn detached from its browser keeps running; the list must say so. After a
+        # restart a cut-off turn is "stale", never "running".
+        current = turn_status(OUT_ROOT, row["session_id"])
+        row["running"] = current["active"]
+        row["turn_state"] = current["state"]
     return listing
 
 

@@ -356,3 +356,63 @@ def test_turn_events_are_numbered_logged_and_resumable(client, monkeypatch):
     # 没有记录的会话 → 404；非法 id → 400
     assert client.get("/api/sessions/never-ran-01/events").status_code == 404
     assert client.get("/api/sessions/bad%20id/events").status_code == 400
+
+
+def test_turn_state_is_on_disk_and_a_restart_marks_leftovers_stale(client, monkeypatch):
+    """运行态落盘：跑的时候 running（pid、心跳、seq），结束后 done；
+    上一个进程留下的 running 在启动扫描时判 stale，列表和详情都不再说它在跑（也不说 idle）。"""
+    import app
+    import chat_service
+
+    monkeypatch.setattr("app.has_key", lambda: True)
+    monkeypatch.setattr("app.run_plain", _slow_plain(n=10, dt=0.04))
+    sid = "state-turn-01"
+    lease = chat_service.SessionLease(sid)
+    turn = chat_service.prepare_turn(app.OUT_ROOT, {"session_id": sid, "message": "聊聊天气", "expert_ids": []})
+    gen = chat_service.stream_turn(app.OUT_ROOT, turn, key_available=True, plain_runner=app.run_plain, lease=lease)
+    for ev in gen:
+        if ev["event"] == "token":
+            break
+    state_path = app.OUT_ROOT / sid / "events" / f"{turn['turn_id']}.state.json"
+    row = json.loads(state_path.read_text(encoding="utf-8"))
+    assert row["state"] == "running" and row["pid"] == __import__("os").getpid() and row["heartbeat_at"]
+    assert client.get("/api/sessions/" + sid).json()["turn_state"]["state"] == "running"
+    gen.close()
+    assert _wait_idle(sid)
+    row = json.loads(state_path.read_text(encoding="utf-8"))
+    assert row["state"] == "done" and row["finished_at"] and row["seq"] >= 10
+    detail = client.get("/api/sessions/" + sid).json()
+    assert detail["turn_state"]["state"] == "done" and detail["turn_state"]["turn_id"] == turn["turn_id"]
+
+    # 上一个进程留下的 running：启动扫描判 stale
+    ghost = "state-ghost-01"
+    folder = app.OUT_ROOT / ghost / "events"
+    folder.mkdir(parents=True)
+    (folder / "latest").write_text("deadbeef0001", encoding="utf-8")
+    (folder / "deadbeef0001.jsonl").write_text(
+        json.dumps({"seq": 1, "event": "token", "data": {"text": "写到一半"}}, ensure_ascii=False) + "\n", encoding="utf-8")
+    (folder / "deadbeef0001.state.json").write_text(json.dumps({
+        "turn_id": "deadbeef0001", "session_id": ghost, "state": "running", "pid": 999999,
+        "started_at": "2026-09-21T00:00:00+00:00", "heartbeat_at": "2026-09-21T00:00:05+00:00",
+        "finished_at": "", "seq": 1}), encoding="utf-8")
+    chat_service._LIVE.clear()
+    marked = chat_service.sweep_stale(app.OUT_ROOT)
+    assert [m["session_id"] for m in marked] == [ghost]
+    row = json.loads((folder / "deadbeef0001.state.json").read_text(encoding="utf-8"))
+    assert row["state"] == "stale" and row["finished_at"]
+    assert chat_service.sweep_stale(app.OUT_ROOT) == [], "第二次扫描没有东西可标"
+    st = client.get("/api/sessions/" + ghost).json()["turn_state"]
+    assert st["active"] is False and st["state"] == "stale" and st["turn_id"] == "deadbeef0001" and st["seq"] == 1
+    # 半截正文还能回放
+    assert [e for _, e, _ in _read_sse(client, f"/api/sessions/{ghost}/events?after=0")] == ["token"]
+
+    # 没扫描、直接读到一个不在内存里的 running：读的时候顺手判 stale
+    lazy = "state-ghost-02"
+    folder = app.OUT_ROOT / lazy / "events"
+    folder.mkdir(parents=True)
+    (folder / "latest").write_text("deadbeef0002", encoding="utf-8")
+    (folder / "deadbeef0002.state.json").write_text(json.dumps({
+        "turn_id": "deadbeef0002", "session_id": lazy, "state": "running", "pid": 999999,
+        "started_at": "", "heartbeat_at": "", "finished_at": "", "seq": 0}), encoding="utf-8")
+    assert chat_service.turn_status(app.OUT_ROOT, lazy)["state"] == "stale"
+    assert json.loads((folder / "deadbeef0002.state.json").read_text(encoding="utf-8"))["state"] == "stale"

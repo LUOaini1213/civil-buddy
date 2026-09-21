@@ -1131,8 +1131,10 @@ function cbProjRender() {
       const t2 = document.createElement("span");
       t2.className = "t-time";
       const running = s.running === true || cbBackgroundSessions.has(s.session_id);
-      t2.textContent = running ? "运行中" : cbRelTime(s.updated_at);
+      const stale = !running && s.turn_state === "stale";
+      t2.textContent = running ? "运行中" : stale ? "已中断" : cbRelTime(s.updated_at);
       if (running) t2.classList.add("t-running");
+      if (stale) { t2.classList.add("t-stale"); t2.title = "上一轮在服务重启时被中断"; }
       b.append(t1, t2);
       b.addEventListener("click", () => cbProjOpenSession(s));
       kidBox.appendChild(b);
@@ -1254,6 +1256,9 @@ async function cbProjOpenSession(s) {
     if (d.turn_state && d.turn_state.active) {
       addStatus("这个任务仍在后台运行，完成后会自动显示结果。");
       cbAttachToTurn(d.session_id, "");
+    } else if (d.turn_state && d.turn_state.state === "stale") {
+      /* 服务重启时这一轮还在跑：它不会再有结果了，别让人以为还在等 */
+      addStatus("上一轮在服务重启时被中断，已有内容已保留；需要的话重新发送一次。");
     }
     if (d.context && (d.context.note || Number(d.context.limit) > 0)) paintContext(d.context);
     else paintContext(estimateLocalContext());
