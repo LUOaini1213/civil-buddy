@@ -10,7 +10,7 @@ def _positive(value, integer=False):
 
 
 def prepare(project, mode, container_type, max_containers):
-    from .ledger import validate_document, audit_document
+    from .ledger import validate_document, audit_document, package_identities
     if not project.get("confirmed"):
         raise ValueError("请先核对并确认当前版本台账；未确认台账不能进入装箱。")
     if mode not in {"packaged", "materials"} or container_type not in {"20GP", "40GP", "40HQ", "45HQ"}:
@@ -24,6 +24,7 @@ def prepare(project, mode, container_type, max_containers):
     if not doc["rows"]:
         raise ValueError("台账没有货物行。")
     needs, boxes, materials, seen = [], [], [], set()
+    identities, _ = package_identities(doc["rows"])
     for row in doc["rows"]:
         check()
         ident = row["id"]
@@ -40,10 +41,11 @@ def prepare(project, mode, container_type, max_containers):
             missing.append("weight_scope=" + scope)
         if mode == "materials" and (row.get("package_id") not in (None, "", "UNSPECIFIED") or row.get("package_count") not in (None, "", "UNSPECIFIED")):
             missing.append("已包装行不能再次成箱；请选择已包装箱拼柜")
-        if mode == "packaged" and row.get("package_id") not in (None, "", "UNSPECIFIED"):
-            if row["package_id"] in seen:
+        identity = identities[ident]
+        if mode == "packaged" and identity is not None:
+            if identity in seen:
                 missing.append("同一箱号跨多行，须先明确一箱的外廓与总毛重，不能把材料行重复当箱")
-            seen.add(row["package_id"])
+            seen.add(identity)
         if missing:
             needs.append({"row_id": ident, "fields": missing, "message": "缺失、无效或口径未明确：" + "、".join(missing)})
             continue
@@ -53,6 +55,7 @@ def prepare(project, mode, container_type, max_containers):
         if mode == "packaged":
             for index in range(int(row["package_count"])):
                 boxes.append({"box_id": f"{ident}-{index + 1}", "source_row_id": ident, "source_package_id": row.get("package_id"),
+                              "source_container_id": identity[0] if identity else row.get("container_id"),
                               "box_type": "已包装箱", "outer_size_mm": {"length": row["length_mm"], "width": row["width_mm"], "height": row["height_mm"]},
                               "gross_weight_kg": row["gross_kg"], "stackable": False, "allowRotate": False,
                               "booking_volume_m3": row["length_mm"] * row["width_mm"] * row["height_mm"] / 1e9,

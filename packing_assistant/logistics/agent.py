@@ -64,10 +64,25 @@ def propose_changes(document, changes, reason):
 
 
 def propose_command(document, message):
+    from .ledger import validate_document
     if not isinstance(message, str) or not 1 <= len(message) <= 4000:
         raise ValueError("修订指令长度无效。")
+    rows = {row["id"]: row for row in validate_document(document)["rows"]}
+
+    def quantity_unit(value):
+        unit = str(value).strip().lower()
+        for normalized, aliases in {
+            "pcs": {"pc", "pcs", "ea", "piece", "pieces", "件", "个"},
+            "m": {"m", "米"}, "cm": {"cm", "厘米"}, "mm": {"mm", "毫米"},
+            "kg": {"kg", "千克", "公斤"}, "g": {"g", "克"}, "t": {"t", "吨"},
+            "roll": {"roll", "rolls", "卷"}, "set": {"set", "sets", "套"},
+        }.items():
+            if unit in aliases:
+                return normalized
+        return unit
+
     commands = [s.strip() for s in re.split(r"[;；\n]", message) if s.strip()]
-    changes = []
+    changes, explicit_quantity_units = [], []
     fields = "|".join(sorted([*ALIASES, *NUMERIC, *TEXT], key=len, reverse=True))
     for command in commands:
         match = re.fullmatch(r"(?:把|将)?\s*([A-Za-z][A-Za-z0-9_-]{0,63})\s*(?:的)?\s*(" + fields + r")\s*(?:改为|设为|设置为|=|：|:)\s*(.+?)\s*[。.]?", command)
@@ -79,7 +94,7 @@ def propose_command(document, message):
         if value in {"未知", "未指定", "UNSPECIFIED"}:
             value = "UNSPECIFIED"
         elif field in NUMERIC:
-            number = re.fullmatch(r"([0-9]+(?:\.[0-9]+)?)\s*(mm|cm|m|kg|g|t|毫米|厘米|米|千克|公斤|克|吨|件|箱)?", value, re.I)
+            number = re.fullmatch(r"([0-9]+(?:\.[0-9]+)?)\s*([A-Za-z]+|毫米|厘米|米|千克|公斤|克|吨|件|个|箱|卷|套)?", value, re.I)
             if not number:
                 raise ValueError("数字或单位不明确，未提出修订。")
             value, unit = float(number[1]), (number[2] or "").lower()
@@ -91,11 +106,23 @@ def propose_command(document, message):
                 if unit not in {"", "kg", "g", "t", "千克", "公斤", "克", "吨"}:
                     raise ValueError("重量须使用 kg、g 或 t。")
                 value *= {"g": .001, "克": .001, "t": 1000, "吨": 1000}.get(unit, 1)
-            elif unit not in ({"", "箱"} if field == "package_count" else {"", "件"}):
-                raise ValueError("包装数使用箱，货物数量和每箱件数使用件；不混用箱与件。")
+            elif field == "package_count":
+                if unit not in {"", "箱"}:
+                    raise ValueError("包装数使用箱；不混用箱与货物数量单位。")
+            elif unit:
+                current_unit = rows.get(ident, {}).get("unit", "UNSPECIFIED")
+                if current_unit == "UNSPECIFIED" or not str(current_unit).strip():
+                    raise ValueError("原数量单位未明确，请先核对并明确单位，再修改数量；不会自动填入单位。")
+                if quantity_unit(unit) != quantity_unit(current_unit):
+                    raise ValueError(f"指令数量单位 {unit} 与原单位 {current_unit} 不一致，请先核对并确认单位；未修改数量或换算单位。")
+                explicit_quantity_units.append((ident, unit))
         elif field in {"dimension_scope", "weight_scope"}:
             value = {"每箱": "package", "包装": "package", "单件": "item", "每件": "item", "整行": "row"}.get(value, value)
         changes.append({"row_id": ident, "field": field, "value": value})
+    revised_units = {change["row_id"]: change["value"] for change in changes if change["field"] == "unit"}
+    for ident, unit in explicit_quantity_units:
+        if ident in revised_units and quantity_unit(revised_units[ident]) != quantity_unit(unit):
+            raise ValueError("同一提案中的数量单位与单位修订不一致，请分别核对单位和数量；未应用修改。")
     proposal = propose_changes(document, changes, message)
     proposal["command"] = True
     return proposal

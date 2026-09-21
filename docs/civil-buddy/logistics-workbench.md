@@ -67,7 +67,9 @@ API 根为 `/api/logistics`：
 
 所有修订带 `expected_revision`；旧版本冲突返回 409。API 使用现有本地请求、访问口令、沙箱及导出检查。原件最大 8 MiB，项目包最大 24 MiB；解析最多 40 页、5000 行。OCR 单次 240 秒，装箱计算单次 60 秒，并可取消子进程。主聊天和页内操作都绑定项目及版本，取消不发布后续修改建议。
 
-离线检查：`npm run check` 中的 `logistics-intake`、`logistics-workbench`、`logistics-chat`、`logistics-ui`。已安装并预热 OCR 时，可另运行 `python scripts/smoke_logistics_ocr.py`；它使用明确标注的合成图片，不能替代真实箱单验收。
+离线检查：`npm run check` 中的 `logistics-intake`、`logistics-groups`、`logistics-workbench`、`logistics-chat`、`logistics-ui`。已安装并预热 OCR 时，可另运行 `python scripts/smoke_logistics_ocr.py`；它使用明确标注的合成图片，不能替代真实箱单验收。
+
+尺寸组合列与独立长宽高列重复时，对应分量保持未知并要求核对；提取器拒绝的跨列值不会被当成尺寸。同表明确的 Grand total/总计覆盖全部材料行，小计只核对所属区段。箱号按明确集装箱号区分，共享柜号通过来源组定位，柜号含糊时不猜测包装身份。对话修改数量须保持显式单位一致，同义单位可识别，不隐式换算或覆盖原单位。
 
 2026-09-21 本机验收：真实 PaddleOCR 推理读取两行合成扫描箱单，箱号、材料编号、箱数、件数、净重、毛重与生成图一致，保存逐格坐标，未知尺寸保持未知。一次 CPU 解析约 83 秒，仅为本机单样例测量。网页上传相同图片也返回 5 箱、22 件、净重 440 kg、毛重 490 kg；这些是测试数据，不是业务记录。浏览器另验证改参提案、应用、撤销和刷新恢复。
 

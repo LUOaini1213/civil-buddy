@@ -140,6 +140,43 @@ class IntakeTests(unittest.TestCase):
         self.assertEqual(summarize(doc)["totals"]["gross_kg"], UNSPECIFIED)
         self.assertIn("unknown_scope", [i["code"] for i in doc["report"]["issues"]])
 
+    def test_combined_and_individual_dimensions_cannot_choose_by_column_order(self):
+        headers = ["name", "package_count", "package dimensions (mm)", "length_mm", "weight_scope", "gross_kg"]
+        values = ["Synthetic", 1, "1000x800x600", 2000, "package", 100]
+        for order in (list(range(len(headers))), list(reversed(range(len(headers))))):
+            with self.subTest(order=order):
+                doc = parse_document(csv_bytes([headers[i] for i in order], [[values[i] for i in order]]), "dimension-conflict.csv")
+                row = doc["rows"][0]
+                self.assertEqual(row["length_mm"], UNSPECIFIED)
+                self.assertEqual((row["width_mm"], row["height_mm"]), (800, 600))
+                self.assertIn("多个列", row["evidence"]["length_mm"]["reason"])
+                self.assertFalse(doc["report"]["ok"])
+                self.assertFalse(summarize(doc)["ready_for_packing"])
+
+    def test_duplicate_combined_dimension_columns_reject_all_three_targets(self):
+        doc = parse_document(csv_bytes(["name", "package dimensions (mm)", "dimensions (mm)"],
+                                      [["Synthetic", "1000x800x600", "2000x900x700"]]), "duplicate-dimensions.csv")
+        row = doc["rows"][0]
+        for field in ("length_mm", "width_mm", "height_mm"):
+            self.assertEqual(row[field], UNSPECIFIED)
+            self.assertIn("多个列", row["evidence"][field]["reason"])
+        self.assertFalse(doc["report"]["ok"])
+
+    def test_rejected_pdf_dimensions_keep_the_extractor_reason(self):
+        headers = ["name", "package_count", "package dimensions (mm)", "weight_scope", "gross_kg"]
+        values = ["Synthetic", 1, "1000x800x600", "package", 100]
+        table = {"rows": [[intake._cell(v, page=1, row=ri, column=ci)
+                           for ci, v in enumerate(row, 1)] for ri, row in enumerate((headers, values), 1)]}
+        reason = "单元格横跨多个字段列，未猜测该值属于哪一列。"
+        table["rows"][1][2]["reason"] = reason
+        with patch.object(intake, "_pdf", return_value=([table], [], "pdfplumber")):
+            doc = parse_document(b"synthetic extractor boundary", "synthetic.pdf", "off")
+        for field in ("length_mm", "width_mm", "height_mm"):
+            self.assertEqual(doc["rows"][0][field], UNSPECIFIED)
+            self.assertEqual(doc["rows"][0]["evidence"][field]["reason"], reason)
+        self.assertFalse(summarize(doc)["ready_for_packing"])
+        self.assertEqual(sum(i["code"] == "unresolved_field" for i in doc["report"]["issues"]), 3)
+
     def test_totals_and_quantity_reconcile_independently(self):
         values = list(VALUES); values[4] = 11
         total = ["", "", "Grand total", 2, 10, "", "", "", "", "", "", 201, 220, "row"]
@@ -363,6 +400,39 @@ class IntakeTests(unittest.TestCase):
         rows, totals = intake._table_rows([table(7), table(11)], [])
         self.assertEqual([t["row_ids"] for t in totals], [["R00001"], ["R00002"]])
         self.assertEqual([r["quantity"] for r in rows], [7, 11])
+
+    def test_grand_total_after_subtotals_keeps_the_full_table_scope(self):
+        for label in ("Grand total", "总计", "总计\nTotal"):
+            with self.subTest(label=label):
+                doc = parse_document(csv_bytes(["name", "package_count", "quantity", "unit"], [
+                    ["Synthetic A", 1, 2, "pcs"], ["Subtotal", 1, 2, ""],
+                    ["Synthetic B", 3, 4, "pcs"], ["Subtotal", 3, 4, ""], [label, 4, 6, ""]]), "subtotals.csv")
+                self.assertEqual([t["row_ids"] for t in doc["totals"]],
+                                 [["R00001"], ["R00002"], ["R00001", "R00002"]])
+                self.assertTrue(doc["report"]["ok"])
+
+    def test_incorrect_grand_total_after_subtotal_still_fails_reconciliation(self):
+        doc = parse_document(csv_bytes(["name", "package_count", "quantity", "unit"], [
+            ["Synthetic A", 1, 2, "pcs"], ["Subtotal", 1, 2, ""],
+            ["Synthetic B", 3, 4, "pcs"], ["Grand total", 3, 4, ""]]), "wrong-total.csv")
+        self.assertEqual(doc["totals"][-1]["row_ids"], ["R00001", "R00002"])
+        self.assertEqual(sum(i["code"] == "total_mismatch" for i in doc["report"]["issues"]), 2)
+
+    def test_header_after_closed_grand_total_starts_an_independent_table(self):
+        headers = ["name", "package_count", "quantity", "unit"]
+        doc = parse_document(csv_bytes(headers, [
+            ["Synthetic A", 1, 2, "pcs"], ["Grand total", 1, 2, ""], [], headers,
+            ["Synthetic B", 3, 4, "pcs"], ["Grand total", 3, 4, ""]]), "separate-tables.csv")
+        self.assertEqual([t["row_ids"] for t in doc["totals"]], [["R00001"], ["R00002"]])
+        self.assertTrue(doc["report"]["ok"])
+
+    def test_repeated_header_before_grand_total_keeps_accumulating(self):
+        headers = ["name", "package_count", "quantity", "unit"]
+        doc = parse_document(csv_bytes(headers, [
+            ["Synthetic A", 1, 2, "pcs"], ["Subtotal", 1, 2, ""], [], headers,
+            ["Synthetic B", 3, 4, "pcs"], ["Grand total", 4, 6, ""]]), "continued-table.csv")
+        self.assertEqual([t["row_ids"] for t in doc["totals"]], [["R00001"], ["R00001", "R00002"]])
+        self.assertTrue(doc["report"]["ok"])
 
     def test_explicit_invoice_and_contract_pages_are_excluded(self):
         doc = parse_document(business_pdf_bytes(("INVOICE", "PACKING LIST", "CONTRACT")), "mixed-synthetic.pdf", "off")

@@ -7,6 +7,8 @@ import json
 from pathlib import Path
 import sys
 from threading import Event, Thread
+import time
+from types import SimpleNamespace
 import unittest
 from unittest.mock import patch
 
@@ -27,6 +29,7 @@ class LocalModel:
         self.mode = "valid"
         self.release = Event()
         self.summary_entered = Event()
+        self.summary_finished = Event()
         owner = self
 
         class Handler(BaseHTTPRequestHandler):
@@ -45,7 +48,7 @@ class LocalModel:
                 else:
                     owner.summary_entered.set()
                     if owner.mode == "blocked":
-                        owner.release.wait(5)
+                        owner.release.wait()  # The test or close() releases this fixture.
                     source = json.loads(data["messages"][-1]["content"])["sources"][0]
                     quote = source["text"][:24]
                     item = {"kind": "goal", "text": "较早讨论强调接口协调。", "evidence": [{
@@ -65,6 +68,9 @@ class LocalModel:
                     self.wfile.flush()
                 except (ConnectionError, OSError):
                     pass
+                finally:
+                    if not data.get("stream"):
+                        owner.summary_finished.set()
 
         self.server = ThreadingHTTPServer(("127.0.0.1", 0), Handler)
         self.thread = Thread(target=self.server.serve_forever, kwargs={"poll_interval": .05}, daemon=True)
@@ -181,14 +187,44 @@ class SemanticHttpTests(unittest.TestCase):
         self.assertEqual(projects.read_full_history(self.root, self.sid)[:len(self.original)], self.original)
 
     def test_http_body_deadline_falls_back_and_late_response_is_not_persisted(self):
+        import llm
+
         self.model.mode = "blocked"
-        with patch.object(semantic_service, "SUMMARY_TIMEOUT_SECONDS", .4):
+        headers_received, body_started = Event(), Event()
+        summary_connection = []
+        original_trace = llm.ModelConnection._trace
+
+        def trace(connection, name, info):
+            original_trace(connection, name, info)
+            if not summary_connection:
+                summary_connection.append(connection)
+            if connection is not summary_connection[0]:
+                return  # The fallback answer has its own successful connection.
+            if name.endswith(".receive_response_headers.complete"):
+                headers_received.set()
+            if name.endswith(".receive_response_body.started"):
+                body_started.set()
+
+        # Only advance the summary's clock after the client has received headers
+        # and started reading the deliberately withheld body. HTTP client setup
+        # can exceed .4s on a busy machine; that is not the deadline phase tested.
+        # The real-time bound prevents a broken fixture from waiting indefinitely.
+        started = time.monotonic()
+        clock = SimpleNamespace(time=time.time, monotonic=lambda: (
+            1.0 if body_started.is_set() or time.monotonic() - started > 5 else 0.0))
+        with patch.object(semantic_service, "SUMMARY_TIMEOUT_SECONDS", .4), \
+                patch.object(semantic_service, "time", clock), \
+                patch.object(llm.ModelConnection, "_trace", trace):
             done, _ = self.ask()
         self.assertTrue(self.model.summary_entered.is_set())
+        self.assertTrue(headers_received.is_set(), "client must receive the summary response headers")
+        self.assertTrue(body_started.is_set(), "deadline must interrupt the response body phase")
         self.assertTrue(done["ok"], done)
         self.assertEqual(done["context"]["semantic"]["error_code"], "timeout")
         self.assertEqual(len(self.model.answers), 1)
+        self.assertFalse(self.model.summary_finished.is_set(), "summary body must still be withheld")
         self.model.release.set()
+        self.assertTrue(self.model.summary_finished.wait(3), "late summary response must finish its send attempt")
         self.assertFalse((self.root / self.sid / "semantic.summary.json").exists())
 
     def test_identical_failure_uses_cooldown_without_repeating_http(self):

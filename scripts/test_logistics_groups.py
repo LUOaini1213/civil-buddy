@@ -6,7 +6,7 @@ import unittest
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 from packing_assistant.logistics import ledger
-from packing_assistant.logistics.agent import propose_changes
+from packing_assistant.logistics.agent import propose_changes, propose_command
 
 
 def document():
@@ -29,6 +29,87 @@ def document():
 
 
 class SharedCellTests(unittest.TestCase):
+    def packaged_document(self, containers=("C-A", "C-B")):
+        doc = document()
+        doc["totals"] = []
+        for row, container in zip(doc["rows"], containers):
+            row.update(evidence={}, package_id="BOX-1", container_id=container, package_count=1,
+                       net_kg=8, gross_kg=10, length_mm=100, width_mm=100, height_mm=100,
+                       dimension_scope="package", weight_scope="package")
+        return doc
+
+    def test_same_box_label_in_different_explicit_containers_counts_separately(self):
+        from packing_assistant.logistics.packing import prepare
+        doc = self.packaged_document()
+        summary = ledger.summarize(doc)
+        self.assertEqual(summary["totals"]["package_count"], 2)
+        self.assertEqual(summary["totals"]["gross_kg"], 20)
+        self.assertEqual(summary["totals"]["net_kg"], 16)
+        self.assertTrue(summary["audit"]["ok"])
+        result = prepare({"confirmed": True, "document": doc}, "packaged", "20GP", 1)
+        self.assertTrue(result["ok"], result)
+        self.assertEqual(len(result["boxes"]), 2)
+        self.assertEqual([box["source_container_id"] for box in result["boxes"]], ["C-A", "C-B"])
+
+    def test_known_and_unknown_container_for_same_label_require_clarification(self):
+        from packing_assistant.logistics.packing import prepare
+        doc = self.packaged_document(("C-A", ledger.UNSPECIFIED))
+        summary = ledger.summarize(doc)
+        self.assertEqual(summary["totals"]["package_count"], ledger.UNSPECIFIED)
+        self.assertEqual(summary["totals"]["gross_kg"], ledger.UNSPECIFIED)
+        self.assertFalse(summary["audit"]["ok"])
+        self.assertIn("package_group_conflict", {issue["code"] for issue in summary["audit"]["issues"]})
+        self.assertFalse(prepare({"confirmed": True, "document": doc}, "packaged", "20GP", 1)["ok"])
+
+    def test_same_container_or_unspecified_container_keeps_shared_box_semantics(self):
+        from packing_assistant.logistics.packing import prepare
+        for container in ("C-A", ledger.UNSPECIFIED):
+            with self.subTest(container=container):
+                doc = self.packaged_document((container, container))
+                self.assertEqual(ledger.summarize(doc)["totals"]["gross_kg"], 10)
+                self.assertFalse(prepare({"confirmed": True, "document": doc}, "packaged", "20GP", 1)["ok"])
+
+    def test_shared_container_cell_resolves_identity_without_filling_members(self):
+        from packing_assistant.logistics.packing import prepare
+        doc = self.packaged_document(("C-A", ledger.UNSPECIFIED))
+        group = {"id": "synthetic:container", "row_ids": [r["id"] for r in doc["rows"]],
+                 "anchor_row_id": "R00001", "source": {"page": 2, "bbox": [10, 20, 30, 60]}}
+        for row in doc["rows"]:
+            row["evidence"]["container_id"] = {"raw": "C-A" if row["id"] == "R00001" else "",
+                                                 "source": group["source"], "group": deepcopy(group)}
+        summary = ledger.summarize(doc)
+        self.assertTrue(summary["audit"]["ok"])
+        self.assertEqual(summary["totals"]["gross_kg"], 10)
+        self.assertFalse(prepare({"confirmed": True, "document": doc}, "packaged", "20GP", 1)["ok"])
+        doc["rows"][1]["package_id"] = "BOX-2"
+        self.assertEqual(ledger.summarize(doc)["totals"]["gross_kg"], 20)
+        result = prepare({"confirmed": True, "document": doc}, "packaged", "20GP", 1)
+        self.assertTrue(result["ok"], result)
+        self.assertEqual([box["source_container_id"] for box in result["boxes"]], ["C-A", "C-A"])
+        self.assertEqual(doc["rows"][1]["container_id"], ledger.UNSPECIFIED)
+
+    def test_quantity_command_must_match_the_stated_unit(self):
+        for original, suffix in (("米", "件"), ("pcs", "箱"), ("m", "cm"), (ledger.UNSPECIFIED, "件")):
+            with self.subTest(original=original, suffix=suffix), self.assertRaisesRegex(ValueError, "单位"):
+                doc = document()
+                doc["rows"][0]["unit"] = original
+                propose_command(doc, f"把 R00001 数量改为 5 {suffix}")
+
+    def test_quantity_command_accepts_synonyms_without_changing_original_unit(self):
+        for original, suffix in (("PCS", "件"), ("pieces", "ea"), ("米", "m"), ("rolls", "卷")):
+            with self.subTest(original=original, suffix=suffix):
+                doc = document()
+                doc["rows"][0]["unit"] = original
+                result = propose_command(doc, f"把 R00001 数量改为 5 {suffix}")
+                self.assertEqual(result["document"]["rows"][0]["quantity"], 5)
+                self.assertEqual(result["document"]["rows"][0]["unit"], original)
+                self.assertEqual(result["changes"], [{"row_id": "R00001", "field": "quantity", "before": 4, "after": 5}])
+
+    def test_quantity_command_cannot_hide_a_conflicting_unit_in_the_same_proposal(self):
+        for message in ("R00001 数量改为 5 件；R00001 单位改为 米", "R00001 单位改为 米；R00001 数量改为 5 件"):
+            with self.subTest(message=message), self.assertRaisesRegex(ValueError, "单位"):
+                propose_command(document(), message)
+
     def test_group_facts_count_once_without_filling_member_rows(self):
         doc = ledger.validate_document(document())
         summary = ledger.summarize(doc)

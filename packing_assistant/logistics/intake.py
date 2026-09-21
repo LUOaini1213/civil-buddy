@@ -321,6 +321,13 @@ def _summary_label(raw):
     return bool(parts) and (chinese or latin) and all(not part or part in known for part in (chinese, latin))
 
 
+def _grand_total_label(raw):
+    chinese = "".join(re.findall(r"[\u4e00-\u9fff]+", str(raw)))
+    latin = _norm(re.sub(r"[\u4e00-\u9fff]+", "", str(raw)))
+    return (chinese == "总计" or latin == "grandtotal") and all(
+        not part or part in ("总计", "合计", "total", "grandtotal") for part in (chinese, latin))
+
+
 def _table_rows(tables, issues):
     rows, totals = [], []
     prior_header = None
@@ -330,6 +337,7 @@ def _table_rows(tables, issues):
         if len(matrix) > 10000 or sum(len(r) for r in matrix) > MAX_CELLS:
             raise ValueError("表格规模超过限制")
         header, section_ids, source_rows = None, [], {}
+        grand_total_ids, grand_total_closed = [], False
         table_start = len(rows)
         # A headerless continuation is used only when explicitly labelled by the extractor.
         if table.get("continuation") and prior_header:
@@ -344,6 +352,10 @@ def _table_rows(tables, issues):
             fields = [h[0] for h in mapped if h[0]]
             conflicts = any(len(_header_candidates(c.get("raw", ""))) > 1 for c in cells)
             if (len(set(fields)) >= 2 or (fields and conflicts)) and any(f in fields for f in ("name", "package_id", "material_id")):
+                # A repeated header may continue one table across pages. Only a
+                # completed grand total proves the next header starts a new one.
+                if grand_total_closed:
+                    grand_total_ids, section_ids, grand_total_closed = [], [], False
                 header = [(mapping, cell.get("raw", "")) for mapping, cell in zip(mapped, cells)]
                 for cell in cells:
                     if len(_header_candidates(cell.get("raw", ""))) > 1:
@@ -355,7 +367,11 @@ def _table_rows(tables, issues):
                 continue
             row = {"id": f"R{len(rows) + 1:05d}", **dict.fromkeys(FIELDS, UNSPECIFIED), "evidence": {}}
             scopes = {"dimension_scope": set(), "weight_scope": set()}
-            targets = [h[0][0] for h in header if h[0][0]]
+            dimension_fields = ("length_mm", "width_mm", "height_mm")
+            # A combined dimensions column writes the same fields as individual
+            # L/W/H columns. Detect overlap before any column can overwrite them.
+            targets = [target for h in header if h[0][0]
+                       for target in (dimension_fields if h[0][0] == "dimensions" else (h[0][0],))]
             for index, ((field, unit, scope), raw_header) in enumerate(header):
                 if not field or index >= len(cells):
                     continue
@@ -368,18 +384,23 @@ def _table_rows(tables, issues):
                     evidence["ocr"] = True
                 if "confidence" in cell:
                     evidence["confidence"] = cell["confidence"]
-                if targets.count(field) > 1:
-                    evidence["reason"] = "同一字段对应多个列，需人工选择，未自动取第一列。"
-                    row["evidence"][field] = evidence
-                    continue
                 if field == "dimensions":
                     pieces = re.split(r"\s*[x×*]\s*", raw.strip())
-                    for f, part in zip(("length_mm", "width_mm", "height_mm"), pieces if len(pieces) == 3 else ["", "", ""]):
-                        value, reason = _number(part, f, unit)
+                    for f, part in zip(dimension_fields, pieces if len(pieces) == 3 else ["", "", ""]):
+                        if targets.count(f) > 1:
+                            value, reason = UNSPECIFIED, "同一字段对应多个列，需人工选择，未自动取第一列。"
+                        elif cell.get("reason"):
+                            value, reason = UNSPECIFIED, str(cell["reason"])
+                        else:
+                            value, reason = _number(part, f, unit)
                         row[f] = value
                         row["evidence"][f] = {**evidence, **({"reason": reason or "尺寸须明确长×宽×高及单位。"} if value == UNSPECIFIED else {})}
                     if scope != UNSPECIFIED:
                         scopes["dimension_scope"].add(scope)
+                    continue
+                if targets.count(field) > 1:
+                    evidence["reason"] = "同一字段对应多个列，需人工选择，未自动取第一列。"
+                    row["evidence"][field] = evidence
                     continue
                 if cell.get("reason"):
                     value, reason = UNSPECIFIED, str(cell["reason"])
@@ -423,14 +444,18 @@ def _table_rows(tables, issues):
             first_written = next((str(c.get("raw", "")) for c in cells if str(c.get("raw", "")).strip()), "")
             summary = first_written if _summary_label(first_written) else None
             if summary:
-                totals.append({"label": summary, "values": {f: row[f] for f in NUMERIC_FIELDS if type(row[f]) in (int, float)}, "source": next((c.get("source", {}) for c in cells if str(c.get("raw", "")).strip() == summary), table.get("source", {})), "row_ids": list(section_ids)})
+                is_grand_total = _grand_total_label(summary)
+                total_ids = list(grand_total_ids) if is_grand_total else list(section_ids)
+                totals.append({"label": summary, "values": {f: row[f] for f in NUMERIC_FIELDS if type(row[f]) in (int, float)}, "source": next((c.get("source", {}) for c in cells if str(c.get("raw", "")).strip() == summary), table.get("source", {})), "row_ids": total_ids})
                 section_ids = []
+                grand_total_closed |= is_grand_total
                 continue
             if not any(row[f] != UNSPECIFIED for f in ("name", "package_id", "material_id", *NUMERIC_FIELDS)):
                 continue
             rows.append(row)
             source_rows[matrix_index] = row["id"]
             section_ids.append(row["id"])
+            grand_total_ids.append(row["id"])
             if len(rows) > MAX_ROWS:
                 raise ValueError("物料行超过 5000 行限制")
         for row in rows[table_start:]:

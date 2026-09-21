@@ -179,6 +179,35 @@ def row_total(row, field):
     return value
 
 
+def package_identities(rows):
+    """Resolve stated package identity, including an explicit shared container cell.
+
+    A box label is local to its container. When the same label has both known
+    and unknown containers we cannot decide whether those rows are one box.
+    Shared evidence is read here without filling values into member rows.
+    """
+    by_id = {row["id"]: row for row in rows}
+
+    def stated(row, field):
+        group = row.get("evidence", {}).get(field, {}).get("group")
+        if group:
+            anchor = by_id.get(group["anchor_row_id"])
+            if not anchor or anchor.get("evidence", {}).get(field, {}).get("group") != group:
+                return UNSPECIFIED
+            row = anchor
+        value = row.get(field, UNSPECIFIED)
+        return value.strip() if isinstance(value, str) and value.strip() else UNSPECIFIED
+
+    identities, containers = {}, {}
+    for row in rows:
+        pid, cid = stated(row, "package_id"), stated(row, "container_id")
+        identities[row["id"]] = None if pid == UNSPECIFIED else (cid, pid)
+        if pid != UNSPECIFIED:
+            containers.setdefault(pid, set()).add(cid)
+    ambiguous = {pid for pid, values in containers.items() if UNSPECIFIED in values and len(values) > 1}
+    return identities, ambiguous
+
+
 def aggregate_rows(rows):
     """One package may contain several material rows; package facts count once.
 
@@ -186,10 +215,13 @@ def aggregate_rows(rows):
     This function is shared by screen summaries and source-total reconciliation.
     """
     issues, groups, quantities = [], {}, {}
+    identities, ambiguous = package_identities(rows)
     for row in rows:
         check()
-        pid = row["package_id"]
-        groups.setdefault(("package", pid) if pid != UNSPECIFIED else ("row", row["id"]), []).append(row)
+        identity = identities[row["id"]]
+        key = (("ambiguous-package", identity[1]) if identity and identity[1] in ambiguous
+               else ("package", *identity) if identity else ("row", row["id"]))
+        groups.setdefault(key, []).append(row)
         unit = str(row["unit"]).strip().lower()
         if unit in ("pc", "pcs", "ea", "件", "个"):
             unit = "pcs"
@@ -203,14 +235,17 @@ def aggregate_rows(rows):
     for group in groups.values():
         first = group[0]
         repeated = len(group) > 1
+        identity = identities[first["id"]]
+        ambiguous_container = identity is not None and identity[1] in ambiguous
         conflict = repeated and (
-            any(r["dimension_scope"] != "package" or r["weight_scope"] != "package" for r in group)
+            ambiguous_container or any(r["dimension_scope"] != "package" or r["weight_scope"] != "package" for r in group)
             or any(any(r[field] != first[field] for r in group[1:]) for field in ("package_count", "length_mm", "width_mm", "height_mm", "net_kg", "gross_kg"))
             or not known(first["package_count"])
         )
         if conflict:
             issues.append({"severity": "error", "code": "package_group_conflict", "row_id": ",".join(r["id"] for r in group), "field": "package_id",
-                           "message": "同一箱号的包装数量、尺寸或重量不一致，或每箱范围未明确；不合并计算包数与重量。"})
+                           "message": "同一箱号同时存在明确和未知柜号，无法确定是否同一包装；请先核对柜号。" if ambiguous_container else
+                           "同一柜号下同一箱号的包装数量、尺寸或重量不一致，或每箱范围未明确；不合并计算包数与重量。"})
         for field in sums:
             if conflict:
                 sums[field].append(None)

@@ -140,6 +140,48 @@ class WorkbenchCancelTests(unittest.TestCase):
         self.assert_released()
         self.assertTrue(self.done(self.post())["ok"])
 
+    def test_terminal_state_is_persisted_before_session_can_be_reused(self):
+        entered, proceed = Event(), Event()
+        original = chat_service._write_state
+
+        def paused(path, payload):
+            if payload.get("session_id") == self.sid and payload.get("state") == "done":
+                entered.set()
+                self.assertTrue(proceed.wait(5), "test must release the terminal state write")
+            return original(path, payload)
+
+        with patch.object(chat_service, "_write_state", side_effect=paused):
+            future = self.pool.submit(self.post)
+            try:
+                self.assertTrue(entered.wait(3), "producer did not reach terminal persistence")
+                state = chat_service.turn_state_on_disk(self.root, self.sid)
+                self.assertEqual(state["state"], "running")
+                self.assertTrue(turn_control.status(self.sid)["active"])
+                self.assertIn(self.sid, chat_service._ACTIVE)
+                self.assertEqual(self.post().status_code, 409)
+                self.assertEqual(chat_service.live_seq(self.sid)["turn_id"], state["turn_id"])
+            finally:
+                proceed.set()
+                response = future.result(timeout=5)
+        self.assertTrue(self.done(response)["ok"])
+        self.assert_released()
+        completed = chat_service.turn_state_on_disk(self.root, self.sid)
+        self.assertEqual(completed["state"], "done")
+        self.assertTrue(completed["finished_at"])
+        self.assertTrue(self.done(self.post())["ok"])
+        self.assertNotEqual(chat_service.turn_state_on_disk(self.root, self.sid)["turn_id"], completed["turn_id"])
+        previous = chat_service._read_state(chat_service._state_path(self.root, self.sid, completed["turn_id"]))
+        self.assertEqual(previous, completed)
+
+    def test_terminal_persistence_failure_does_not_strand_session_or_consumer(self):
+        with patch.object(chat_service, "_finish_state", side_effect=OSError("fixture state write failed")), \
+                self.assertLogs(chat_service.logger, level="ERROR") as logs:
+            response = self.pool.submit(self.post).result(timeout=5)
+        self.assertTrue(self.done(response)["ok"])
+        self.assertTrue(any("Turn finalization failed" in message for message in logs.output))
+        self.assert_released()
+        self.assertTrue(self.done(self.post())["ok"])
+
     def test_cancel_during_admission_prevents_any_tool(self):
         entered, proceed = Event(), Event()
         original = chat_service.prepare_turn

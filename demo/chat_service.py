@@ -504,6 +504,7 @@ def audit_session(root: Path, sid: str) -> dict:
 
 
 def _stream_turn(root: Path, turn: dict, *, key_available: bool, plain_runner, lease: SessionLease):
+    """Produce content; stream_turn owns the lease through final state persistence."""
     sid, message = turn["session_id"], turn["message"]
     texts, files, citations, run_ids = [], [], [], []
     partial, user_saved, assistant_saved = [], False, False
@@ -834,8 +835,6 @@ def _stream_turn(root: Path, turn: dict, *, key_available: bool, plain_runner, l
                     persist(root, sid, turn["context"])
             except Exception:
                 logger.exception("Task context cache refresh failed for session %s; raw history is retained", sid)
-            finally:
-                lease.finish()
 
 
 DETACHED_TURN_SECONDS = 600.0
@@ -1195,10 +1194,27 @@ def stream_turn(root: Path, turn: dict, *, key_available: bool, plain_runner, le
                             if lease.control.event.is_set():
                                 break
         finally:
-            _live_close(turn["session_id"])
-            lease.finish()
-            _finish_state(turn["session_id"], lease.control.state if lease.control.state in _TERMINAL_STATES else "done")
-            finished.set()
+            try:
+                try:
+                    _live_close(turn["session_id"])
+                finally:
+                    state = lease.control.state
+                    if state not in _TERMINAL_STATES:
+                        state = "cancelled" if lease.control.event.is_set() else "failed"
+                    try:
+                        lease.control.seal(state)
+                    except TurnCancelled:
+                        lease.control.seal("cancelled")
+                    _finish_state(turn["session_id"], lease.control.state)
+            except Exception:
+                logger.exception("Turn finalization failed for session %s", turn["session_id"])
+            finally:
+                # A new producer may replace _LIVE immediately after release.
+                # Finish every operation on this turn's log and state first.
+                try:
+                    lease.finish()
+                finally:
+                    finished.set()
 
     threading.Thread(target=produce, name="civil-turn-" + turn["session_id"], daemon=True).start()
     last_heartbeat = time.monotonic()
