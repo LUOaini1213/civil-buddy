@@ -64,10 +64,10 @@ class Piece:
 
 
 class PageParts:
-    __slots__ = ("pieces", "segments", "upright", "height")
+    __slots__ = ("pieces", "segments", "upright", "height", "width")
 
-    def __init__(self, pieces: List[Piece], segments: List[Segment], upright: bool, height: float) -> None:
-        self.pieces, self.segments, self.upright, self.height = pieces, segments, upright, height
+    def __init__(self, pieces: List[Piece], segments: List[Segment], upright: bool, height: float, width: float = 595.0) -> None:
+        self.pieces, self.segments, self.upright, self.height, self.width = pieces, segments, upright, height, width
 
 
 def _apply(cm: Sequence[float], x: float, y: float) -> Tuple[float, float]:
@@ -82,6 +82,19 @@ def read_page(page: Any) -> PageParts:
     painted: List[Segment] = []
     paths: List[List[Tuple[float, float]]] = []
     stands = [0, 0]
+    ink = {"fill": False, "stroke": False}     # whether the colour in force is white: white laid behind a run of
+    saved: List[Dict[str, bool]] = []          # characters, or a border "drawn" in the paper's colour, rules nothing
+
+    def white(args: Sequence[Any], cmyk: bool = False) -> bool:
+        try:
+            values = [float(a) for a in args if isinstance(a, (int, float)) or str(a).replace(".", "", 1).replace("-", "", 1).isdigit()]
+        except (TypeError, ValueError):
+            return False
+        if not values:
+            return False
+        if cmyk or len(values) == 4:
+            return all(v <= 0.03 for v in values)
+        return all(v >= 0.97 for v in values)
 
     def on_text(text: str, cm: Sequence[float], tm: Sequence[float], font: Any, size: float) -> None:
         if not text:
@@ -94,6 +107,14 @@ def read_page(page: Any) -> PageParts:
 
     def on_operator(op: Any, args: Sequence[Any], cm: Sequence[float], tm: Sequence[float]) -> None:
         try:
+            if op == b"q":
+                saved.append(dict(ink))
+            elif op == b"Q" and saved:
+                ink.update(saved.pop())
+            elif op in (b"g", b"rg", b"k", b"sc", b"scn"):
+                ink["fill"] = white(args, cmyk=op == b"k")
+            elif op in (b"G", b"RG", b"K", b"SC", b"SCN"):
+                ink["stroke"] = white(args, cmyk=op == b"K")
             if op == b"m":
                 paths.append([_apply(cm, float(args[0]), float(args[1]))])
             elif op == b"l" and paths:
@@ -105,11 +126,11 @@ def read_page(page: Any) -> PageParts:
                 corners = [_apply(cm, x, y), _apply(cm, x + w, y), _apply(cm, x + w, y + h), _apply(cm, x, y + h)]
                 paths.append(corners + [corners[0]])
             elif op in _STROKE:
-                for path in paths:
+                for path in paths if not ink["stroke"] else ():
                     painted.extend((*a, *b) for a, b in zip(path, path[1:]))
                 paths.clear()
             elif op in _FILL:
-                for path in paths:
+                for path in paths if not ink["fill"] else ():
                     xs, ys = [pt[0] for pt in path], [pt[1] for pt in path]
                     wide, high = max(xs) - min(xs), max(ys) - min(ys)
                     if high <= 2.5 and wide >= 5:
@@ -124,10 +145,10 @@ def read_page(page: Any) -> PageParts:
 
     page.extract_text(visitor_text=on_text, visitor_operand_before=on_operator)
     try:
-        height = float(page.mediabox.height)
+        height, width = float(page.mediabox.height), float(page.mediabox.width)
     except Exception:   # noqa: BLE001
-        height = 842.0
-    return PageParts(pieces, painted, stands[0] >= stands[1], height)
+        height, width = 842.0, 595.0
+    return PageParts(pieces, painted, stands[0] >= stands[1], height, width)
 
 
 _PAGE_NUMBER = re.compile(r"^(?:第\s*)?[-—–]?\s*(\d{1,4})\s*[-—–]?(?:\s*页)?(?:\s*[/，,]?\s*共?\s*\d{1,4}\s*页?)?$")
@@ -497,14 +518,61 @@ def _underlines(rule: Rule, pieces: Sequence[Piece]) -> bool:
     return False
 
 
+def two_columns(pieces: Sequence[Piece], width: float) -> Optional[float]:
+    """Where the gutter of a page of prose in two columns runs - None for every other page.
+
+    Two columns of PROSE: text starts at two left edges, a good dozen lines at each; the lines of the left column
+    mostly run up to the gutter (they are full lines of a paragraph), and none runs through it. Labels with their
+    values beside them are short on the left and are left alone: read column-wise, every label would lose its value."""
+    lines: Dict[int, List[Piece]] = {}
+    for piece in pieces:
+        if piece.text.strip():
+            lines.setdefault(round(piece.y / 2), []).append(piece)
+    starts = sorted(min(p.x for p in line) for line in lines.values())
+    if len(starts) < 24:
+        return None
+    left_edge = starts[len(starts) // 10]
+    right_starts = [x for line in lines.values() for x in [min((p.x for p in line if p.x > width * 0.42), default=None)] if x is not None]
+    if len(right_starts) < 12:
+        return None
+    gutter_right = sorted(right_starts)[len(right_starts) // 2]        # where the right column's lines begin
+    if gutter_right < left_edge + width * 0.3 or sum(1 for x in right_starts if abs(x - gutter_right) <= 3) < len(right_starts) * 0.7:
+        return None
+    full = crossing = left_lines = 0
+    for line in lines.values():
+        left = [p for p in line if p.x < gutter_right - 2]
+        if not left:
+            continue
+        left_lines += 1
+        size = max(p.size for p in left) or 10.0
+        end = max(p.x + _width(p.text.strip(), p.size or size) for p in left)
+        if len({round(p.x, 1) for p in left}) == 1:
+            end = left[0].x + _width("".join(p.text for p in left).strip(), size)
+        crossing += end > gutter_right + 2 * size
+        full += gutter_right - 5 * size <= end <= gutter_right + 2 * size
+    if left_lines < 12 or crossing > left_lines * 0.1 or full < left_lines * 0.6:
+        return None
+    return gutter_right - 1.0
+
+
+def _column_text(pieces: Sequence[Piece]) -> str:
+    out: List[str] = []
+    for text, _, _, _ in cell_lines(pieces):
+        out.append(text)
+    return "\n".join(out) + ("\n" if out else "")
+
+
 def page_layout(parts: PageParts, drop: Optional[Set[int]] = None) -> Layout:
     pieces = [p for index, p in enumerate(parts.pieces) if not (drop and index in drop)]
     plain = "".join(p.text for p in pieces)
-    if not parts.upright or not parts.segments or len(parts.segments) > 20000:
+    if not parts.upright or len(parts.segments) > 20000:
         return [plain]
     across, down = rules_of(parts.segments)
-    grids = grids_of([rule for rule in across if not _underlines(rule, pieces)], down)
+    grids = grids_of([rule for rule in across if not _underlines(rule, pieces)], down) if parts.segments else []
     if not grids:
+        gutter = two_columns(pieces, parts.width)
+        if gutter is not None:
+            return [_column_text([p for p in pieces if p.x < gutter]) + _column_text([p for p in pieces if p.x >= gutter])]
         return [plain]
     inside: Dict[int, List[Piece]] = {}
     order: List[Any] = []

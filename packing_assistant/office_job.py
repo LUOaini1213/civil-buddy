@@ -520,7 +520,8 @@ _MIN_TEXT = 8  # the floor demo/uploads.py uses too: fewer characters than this 
 _UNREAD_BLOCK = re.compile(r"^###[ \t]+(?P<name>[^\n]+)\n（读失败）(?P<reason>[^\n]*)", re.M)
 
 
-_TENDER_NAME = ("招标", "tender", "itt", "rfp", "rfq")
+# ... and what the buyer issues AFTER the tender is the tender's too: 补遗书第1号.pdf, 澄清答疑纪要.docx
+_TENDER_NAME = ("招标", "补遗", "澄清", "答疑", "修改通知", "变更通知", "更正公告", "tender", "itt", "rfp", "rfq", "addend", "clarif", "corrigend")
 # a bid is many files, and few of them carry 投标 in their name: 技术标.docx, 施工组织设计.docx, 养护方案.docx, 报价文件.docx
 _RESPONSE_NAME = ("响应", "应答", "投标", "技术标", "商务标", "经济标", "资信标", "报价", "施工组织设计", "方案", "承诺", "偏离表", "授权委托",
                   "资格审查资料", "项目管理机构", "response", "bid", "proposal", "method statement")

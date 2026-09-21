@@ -375,9 +375,13 @@ def document_topic(name: str) -> str:
 def loose_document_topic(name: str) -> str:
     """The field a loosely worded name is about - "转包与分包", "磋商响应文件有效期为 90 天": any field word in it. Only
     where a name HAS to be read this way (the one-cell rows of a two-column front table)."""
+    name = re.sub(r"^\s*(?:\d+(?:\.\d+)*\s*[.．、]?|[（(]\s*\d+\s*[)）])\s*", "", name or "")
     found = document_topic(name)
     if found:
         return found
+    for pattern, key in _DOCUMENT_ROW_NAMES:
+        if re.search(pattern, name):
+            return key      # the shape of a row name anywhere in the phrase: "包2合同履行期限为90日历天"
     for alias, key in _DOCUMENT_ALIASES:
         if alias in name:
             return key
@@ -716,6 +720,7 @@ def _extract_document(text: str) -> TenderFacts:
     doc = tender_document.read(text)
     facts = TenderFacts()
     facts.mentions = list(tender_document.field_mentions(doc))
+    facts.lots = list(dict.fromkeys(m.lot for m in facts.mentions if m.lot))
     facts.scores = [ScorePoint(name, score, "", piece.text[:160], piece.line, piece.ref) for name, score, piece in tender_document.scores(doc)]
     facts.specials = [Special(name, detail, "", piece.text[:160], piece.line, ref=piece.ref) for name, detail, piece in tender_document.specials(doc)]
     facts.jurisdiction = infer_jurisdiction(text)

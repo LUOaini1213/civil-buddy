@@ -26,6 +26,7 @@ from __future__ import annotations
 
 import re
 from dataclasses import dataclass, field, replace
+from pathlib import Path
 from typing import Dict, Iterable, List, Optional, Sequence, Tuple
 
 _CN = "一二三四五六七八九十百"
@@ -90,6 +91,11 @@ class Piece:
     kind: str               # "heading" | "text" | "row" | "header"
     header: Tuple[str, ...] = ()  # a row's column names
     page: int = 0           # the PDF page it stands on; 0 when the source has no pages (Word, text)
+    file: str = ""          # the job file it comes from when several were given ("补遗书第1号.docx"); "" for a single text
+
+    @property
+    def addendum(self) -> bool:
+        return bool(self.file and ADDENDUM_NAME.search(self.file))
 
     @property
     def chapter_no(self) -> str:
@@ -102,7 +108,8 @@ class Piece:
         parts = [self.chapter_no, (where + self.number).strip() or ""]
         shown = " ".join(p for p in parts if p)
         where_page = f"第{self.page}页" if self.page else ""
-        return (f"{shown}（{where_page}）" if (shown and where_page) else shown or where_page) or f"L{self.line}"
+        found = (f"{shown}（{where_page}）" if (shown and where_page) else shown or where_page) or f"L{self.line}"
+        return f"{Path(self.file).stem} {found}" if self.addendum else found
 
 
 @dataclass
@@ -153,9 +160,15 @@ def read(text: str) -> Document:
     listed = _contents((text or "").splitlines())
     at_chapter, first_title = 0, ""
     body_started = False      # the chapter's numbered text has begun: a table after that is not its front table
+    current_file = ""
     opening_header: Optional[List[str]] = None   # the header of the table a 须知 chapter opens with
+    stamp_from = 0
     for raw in (text or "").splitlines():
         line = raw.strip()
+        if current_file and stamp_from < len(doc.pieces):
+            for index in range(stamp_from, len(doc.pieces)):      # what the last line gave belongs to the file it stood in
+                doc.pieces[index] = replace(doc.pieces[index], file=current_file)
+        stamp_from = len(doc.pieces)
         if not line:
             header = None
             continue
@@ -163,6 +176,19 @@ def read(text: str) -> Document:
             continue    # the contents page names the chapters; it lays nothing down
         if line.startswith("〔OCR〕"):
             doc.ocr = True
+            continue
+        opened = _FILE_MARK.match(line)
+        if opened:
+            # the next job file: a document of its own - its chapters are not the last file's, its pages start again
+            for index in range(first, len(doc.pieces)):
+                if not doc.pieces[index].page and page:
+                    doc.pieces[index] = _on_page(doc.pieces[index], page)
+            current_file = opened.group(1).strip()
+            chapter = heading = number = table_heading = ""
+            header, page, first = None, 0, len(doc.pieces)
+            at_chapter, first_title, body_started, opening_header = 0, "", False, None
+            if ADDENDUM_NAME.search(current_file):
+                chapter = f"补遗 {current_file}"
             continue
         marker = _PAGE_MARK.match(line)
         if marker:
@@ -254,11 +280,16 @@ def read(text: str) -> Document:
     if page:
         for index in range(first, len(doc.pieces)):
             doc.pieces[index] = _on_page(doc.pieces[index], page)
+    if current_file:
+        for index in range(stamp_from, len(doc.pieces)):
+            doc.pieces[index] = replace(doc.pieces[index], file=current_file)
     doc.lines = line_no
     return doc
 
 
 _PAGE_MARK = re.compile(r"^〔第(\d+)页〕$")
+_FILE_MARK = re.compile(r"^###\s+(.+\.(?:pdf|docx?|xlsx?|txt|md|csv))\s*$", re.I)     # office_job.named_files_blob: one job file begins
+ADDENDUM_NAME = re.compile(r"补遗|澄清|答疑|修改通知|变更通知|更正|补充通知|addend|clarif|corrigend", re.I)
 _TOC_LINE = re.compile(r"[.．·]{6,}|…{3,}")            # "第二章 投标人须知........................ 9": a line of the contents page
 _NOT_A_TITLE = re.compile(r"^[“”\"「」『』‘’、）)，,]|^(?:的|中|所|内|规定|约定|第|和|及|与|或)")
 
@@ -309,6 +340,8 @@ class FrontRow:
 def front_rows(doc: Document) -> List[FrontRow]:
     rows: List[FrontRow] = []
     for p in doc.pieces:
+        if p.addendum:
+            continue
         if p.kind == "row" and "前附表" in p.table and len(p.cells) >= 3:
             rows.append(FrontRow(p.cells[0], p.cells[1], "；".join(c for c in p.cells[2:] if c), p))
         elif p.kind == "row" and "前附表" in p.table and len(p.cells) == 2 and p.cells[1]:
@@ -361,8 +394,112 @@ def _parts(content: str) -> List[Tuple[str, str, str]]:
 _GENERIC_LABEL = re.compile(r"^(?:金额|数额|额度|形式|名称|内容|要求|标准|期限|时间|方式|规定|说明|全称)$")
 
 
+_LOT = re.compile(r"第?\s*([一二三四五六七八九十\d]{1,3})\s*(标段|标包|合同包|包)|(?<![A-Za-z])([A-Z])\s*(标段|包)|(包|标段)\s*(\d{1,2})(?!\d)")
+_LOT_HEAD = re.compile(r"^(?:标段|标段名称|标段号|标段编号|包号|包|标包|合同包|采购包)$")
+_CHANGED = re.compile(r"(?:修改|调整|变更|更正|改|延期|顺延|推迟|延长|提前|延)(?:为|至|到)\s*[：:]?\s*")
+
+
+def lot_of(text: str) -> str:
+    """The lot a stretch of text names, as it is written ("二标段", "第2包"); "" when it names none or several."""
+    found = {m.group(0).replace(" ", "") for m in _LOT.finditer(text or "")}
+    return found.pop() if len(found) == 1 else ""
+
+
+def _lot_key(lot: str) -> str:
+    """一标段 / 第1标段 / 1标段 / 标段1 are one lot."""
+    found = _LOT.search(lot or "")
+    if not found:
+        return lot
+    number = found.group(1) or found.group(3) or found.group(6) or ""
+    kind = found.group(2) or found.group(4) or found.group(5) or ""
+    digits = str(_ordinal("第" + number + "章")) if number and not number.isdigit() and not number.isalpha() else number
+    return f"{digits}{'包' if '包' in kind else '标段'}"
+
+
+def lot_mentions(doc: Document):
+    """A table that has one row per lot: 标段 | 建设内容 | 最高投标限价 | 计划工期 | 投标保证金 - every column that is a
+    field gives that lot's value."""
+    from packing_assistant.tools import tender_facts as tf
+
+    out = []
+    for p in doc.pieces:
+        if p.kind != "row" or p.addendum or not p.header or not _LOT_HEAD.match(p.header[0].strip()) or _CONTRACT.search(p.chapter):
+            continue
+        lot = p.cells[0].strip()
+        if not _LOT.search(lot) and not re.fullmatch(r"[\d一二三四五六七八九十A-Z]{1,3}", lot):
+            continue
+        lot = lot if _LOT.search(lot) else f"{lot}{'包' if '包' in p.header[0] else '标段'}"
+        for name, cell in zip(p.header[1:], p.cells[1:]):
+            topic = tf.document_topic(name.strip())
+            if not topic or topic in tf._ALWAYS_OURS | tf._NO_SIDE | tf._STATEMENT_ONLY or not cell.strip():
+                continue
+            value = _document_value(topic, cell.strip(), same_as=False)
+            if value:
+                out.append(tf.Mention(topic, "tender", lot, value, f"{lot} {name}：{cell}"[:160], p.line, ref=p.ref))
+    return out
+
+
+def addenda_mentions(doc: Document):
+    """What the addenda change. The field comes from the front-table clause the sentence names ("前附表第3.4.1项") or from
+    its own words; the lot from the sentence (or, for an answer, from the question); the value is what stands after
+    修改为 / 调整为 / 延至 - or the answer itself where a question about one field is answered plainly."""
+    from packing_assistant.tools import tender_facts as tf
+
+    by_number = {row.number: tf.document_topic(row.name) for row in front_rows(doc) if not row.piece.addendum}
+    out = []
+    question = ""
+    for p in doc.pieces:
+        if not p.addendum or p.kind != "text":
+            continue
+        text = p.text.strip()
+        if re.match(r"问\s*\d*\s*[：:]", text):
+            question = text
+            continue
+        answer = re.match(r"答\s*\d*\s*[：:]\s*", text)
+        said = text[answer.end():] if answer else text
+        around = (question + " " + said) if answer else said
+        change = _CHANGED.search(said)
+        cited = re.search(r"第?\s*(\d+(?:\.\d+)+)\s*[项款条]", around)
+        before = said[:change.start()] if change else around
+        topic = (by_number.get(cited.group(1)) if cited else "") or tf.loose_document_topic(re.sub(r"[“”\"][^“”\"]*[“”\"]", "", before)[-40:])
+        if not topic and answer:
+            topic = tf.loose_document_topic(question)
+        if not topic or topic in tf._ALWAYS_OURS | tf._NO_SIDE | tf._STATEMENT_ONLY:
+            if answer:
+                question = ""
+            continue
+        tail = said[change.end():] if change else said
+        value = _document_value(topic, tail.strip("“”\" "), same_as=False)
+        if not value and answer and tf._TOPIC[topic].kind not in tf._KIND_RE:
+            value = said.rstrip("。 ")[:60]
+        if value:
+            lot = lot_of(before) or lot_of(question if answer else "")
+            origin = re.sub(r"^招标文件?", "", Path(p.file).stem)
+            out.append(tf.Mention(topic, "tender", lot, value, text[:160], p.line, origin=origin, ref=p.ref))
+        if answer:
+            question = ""
+    return out
+
+
 def field_mentions(doc: Document):
-    """Mentions for the facts layer: the front table first, the notice for what the table lacks."""
+    """Mentions for the facts layer: the front table first, the notice for what the table lacks; then the values the
+    lot table gives per lot, and last what the addenda changed."""
+    found = _main_mentions(doc)
+    per_lot = lot_mentions(doc)
+    lots = {_lot_key(m.lot): m.lot for m in per_lot + [m for m in found if m.lot]}
+    merged = []
+    for m in found + per_lot:
+        m = replace(m, lot=lots.get(_lot_key(m.lot), m.lot)) if m.lot else m
+        if not any(x.topic == m.topic and _lot_key(x.lot) == _lot_key(m.lot) and _same(x.value, m.value) for x in merged):
+            merged.append(m)
+    # a value given for every lot makes the lot-less one of the same field a leftover of the same cell, not a second value
+    for m in addenda_mentions(doc):
+        merged.append(replace(m, lot=lots.get(_lot_key(m.lot), m.lot)) if m.lot else m)
+    return merged
+
+
+def _main_mentions(doc: Document):
+    """The front table first, the notice for what the table lacks."""
     from packing_assistant.tools import tender_facts as tf
 
     table: List[tf.Mention] = []
@@ -380,6 +517,9 @@ def field_mentions(doc: Document):
         # down. Where parts of the row name a qualification (资质 / 许可证 / 等级), those are the row's value.
         strong = [body for label, body, _ in parts if not label and re.search(r"资质|许可证|等级", _chosen(body) or "")]
         for label, body, inner in parts:
+            part_lot = ""
+            if label and _LOT.fullmatch(label.replace(" ", "")):
+                part_lot, label = label.replace(" ", ""), ""      # "一标段：30万元": the row's field, for that lot
             picked = _chosen(body if not _BOXES.search(label) else label + "：" + body)
             if picked is None or _PLACEHOLDER.match(picked.strip()):
                 continue   # an option left unticked; "（填写采购人名称）" on the envelope row
@@ -405,13 +545,13 @@ def field_mentions(doc: Document):
             if topic == "qualification" and not own and strong:
                 if body not in strong[:3]:
                     continue
-            elif not own and topic in taken:
+            elif not own and topic in taken and not part_lot:
                 continue  # "地址：…" under 招标人 is not a second 招标人
             related = not row_topic or tf._TOPIC[topic].section == tf._TOPIC[row_topic].section
             value = _document_value(topic, body, same_as=related)
             if re.match(r"(?:同|见|详见|按)\s*[《“\"]?[^，。；;]{0,12}(?:公告|邀请)", value or ""):
                 continue   # "资质要求：同招标公告" lays nothing down here; what the notice says is read from the notice
-            if not value or any(m.topic == topic and _flat(m.value) == _flat(value) for m in table):
+            if not value or any(m.topic == topic and m.lot == part_lot and _flat(m.value) == _flat(value) for m in table):
                 continue  # "招标人名称：…" on the envelope row says nothing the 招标人 row did not
             taken.add(topic)
             ref = row.piece.ref if not inner else f"{row.piece.chapter_no} 前附表 {inner}".strip()
@@ -423,7 +563,7 @@ def field_mentions(doc: Document):
                 alias = max((a for a in tf._TOPIC[own].aliases if a in label), key=len, default="")
                 extra = label.replace(alias, "", 1).strip("的 ") if alias else ""
                 part_name = extra if len(extra) >= 4 else part_name
-            table.append(tf.Mention(topic, "tender", "", value, f"{row.name}：{body}"[:160], row.piece.line, role=part_name, ref=ref))
+            table.append(tf.Mention(topic, "tender", part_lot, value, f"{row.name}：{body}"[:160], row.piece.line, role=part_name, ref=ref))
     # how bids are judged is what the chapter on it is called ("第三章 评标办法（综合评分法）") - or what it opens with
     # ("评审方法：最低评标价法"); a method some row of the front table mentions in passing does not outrank that
     named_method = None
@@ -450,9 +590,11 @@ def field_mentions(doc: Document):
     # the notice; in a document with no chapters at all (an English ITT, a bare specification) every labelled line
     # ... and the cover before it ("项目编号：…", "采 购 人：…")
     chaptered = any(p.chapter for p in doc.pieces)
-    noticed = ([p for p in doc.pieces if "第一章" in p.chapter] + [replace(p, table="封面") for p in doc.pieces if not p.chapter and p.kind == "text"]
+    noticed = ([p for p in doc.pieces if "第一章" in p.chapter and not p.addendum]
+               + [replace(p, table="封面") for p in doc.pieces if not p.chapter and p.kind == "text" and not p.addendum]
                if chaptered else doc.pieces)
     under = ""   # the heading a labelled line stands under: "名称：…" is the 采购人's only under 采购人信息
+    under_lot = ""
     qualifying = False
     lines_of_notice: List[Piece] = []
     for p in noticed:
@@ -468,6 +610,10 @@ def field_mentions(doc: Document):
             lines_of_notice.append(p)
     for p in lines_of_notice:
         opens = p.kind == "text" and len(p.text) <= 24 and re.search(r"资格要求\s*[：:]?\s*$|资格条件\s*[：:]?\s*$", p.text)
+        if p.kind in ("heading", "text") and len(p.text) <= 24 and lot_of(p.text) and not re.search(r"[：:。，]", p.text):
+            under_lot = lot_of(p.text)      # "3.1.2 二标段": what follows is that lot's
+        elif p.kind == "heading" and not lot_of(p.text):
+            under_lot = ""
         if p.kind == "heading" or opens or (p.kind == "text" and len(p.text) <= 16 and not re.search(r"[：:。]", p.text)):
             under = p.text
             qualifying = bool(re.search(r"资格要求|资格条件", p.text)) or (qualifying and not re.match(r"\s*[一二三四五六七八九十]+\s*、", p.text))
@@ -476,11 +622,11 @@ def field_mentions(doc: Document):
         body = re.sub(r"^\s*(?:\d+(?:\.\d+)*\s*[.．、]?\s*)?(?:[（(]\s*\d+\s*[)）]\s*)?", "", _LEAD_NUMBER.sub("", p.text))
         if qualifying and not re.match(r"[^：:]{2,14}[：:]", body):
             # under 申请人的资格要求: "供应商具有…建筑工程施工总承包叁级及以上资质…" / "拟派项目经理具有…贰级…注册建造师…"
-            for topic, wanted in (("qualification", r"[^。；;]*?(?:具有|具备|持有|须有)[^。；;]*?资质[^。；;]*"),
+            for topic, wanted in (("qualification", r"[^。；;]*?(?:具有|具备|持有|须有)[^。；;]*?(?:资质|许可证|资格证书)[^。；;]*"),
                                   ("pm", r"[^。；;，,]*?(?:项目经理|项目负责人)[^。；;]*?(?:建造师|职称|证书)[^。；;]*")):
                 said = re.search(wanted, body)
-                if said and not any(n.topic == topic for n in notice):
-                    notice.append(tf.Mention(topic, "tender", "", said.group(0).strip()[:120], p.text[:160], p.line, ref=p.ref))
+                if said and not any(n.topic == topic and n.lot == under_lot for n in notice):
+                    notice.append(tf.Mention(topic, "tender", under_lot, said.group(0).strip()[:120], p.text[:160], p.line, ref=p.ref))
         joint = re.search(r"[（(]\s*(是|否|不|不允许|不接受|允许|接受)\s*[)）]\s*接受联合体", body)   # "本项目（ 否 ）接受联合体投标。"
         if joint:
             notice.append(tf.Mention("consortium", "tender", "", joint.group(1), p.text[:160], p.line, ref=p.ref))

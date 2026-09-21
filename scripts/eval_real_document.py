@@ -68,7 +68,20 @@ def rows_of(md: str) -> List[Dict[str, str]]:
     return out
 
 
-def deliver(source: Path, out_dir: Path) -> Dict:
+def _place(source: Path, target_stem: str, job: Path, as_word: bool) -> Path:
+    """The file in the job folder; a Markdown benchmark goes in as the Word file a buyer would have issued."""
+    if as_word and source.suffix.lower() == ".md":
+        from packing_assistant.word_export import markdown_docx_bytes
+
+        target = job / f"{target_stem}.docx"
+        target.write_bytes(markdown_docx_bytes(source.read_text(encoding="utf-8")))
+    else:
+        target = job / (target_stem + source.suffix.lower())
+        shutil.copyfile(source, target)
+    return target
+
+
+def deliver(source: Path, out_dir: Path, extra: List[Path] = (), as_word: bool = False) -> Dict:
     from packing_assistant.runtime import workspace
     from packing_assistant.runtime.agent_loop import run_agent
 
@@ -76,15 +89,17 @@ def deliver(source: Path, out_dir: Path) -> Dict:
     with tempfile.TemporaryDirectory(prefix="civil-real-", dir=str(ROOT / "output")) as folder:
         job = Path(folder).resolve()
         (job / "CIVIL.md").write_text("- 项目：未填\n", encoding="utf-8")
-        target = job / ("招标文件" + source.suffix.lower())
-        shutil.copyfile(source, target)
+        target = _place(source, "招标文件", job, as_word)
+        # an addendum goes by what it is: 补遗书第1号.docx - that is how anybody tells it from the tender
+        others = [_place(path, ("更正公告第{}号" if "correction" in path.name.lower() else "澄清答疑第{}号" if "clarif" in path.name.lower()
+                                else "补遗书第{}号").format(n), job, as_word) for n, path in enumerate(extra, 1)]
         cwd = Path.cwd()
         os.chdir(job)
         try:
             with patch.object(Path, "home", return_value=job / "no-home"):
                 workspace.activate(job)
             started = time.monotonic()
-            result = run_agent(f"解析招标 {target.name}", session_id="civil-cli")
+            result = run_agent("解析招标 " + " ".join(path.name for path in [target, *others]), session_id="civil-cli")
             seconds = time.monotonic() - started
             for f in result.get("files") or []:
                 path = Path(f["path"])
@@ -126,6 +141,17 @@ def score(md: str, gold: Dict, verbose: bool) -> Dict[str, object]:
         for w in wanted:
             if w not in caught:
                 print(f"  MISS {key}: {w}")
+    wanted = gold.get("amended") or []
+    if wanted:
+        # the row that shows the addendum's value says that it is the addendum's
+        got = [pair for pair in wanted if any(
+            re.fullmatch(re.escape(pair[0]) + r"(?:[·（(/ ].*)?", r.get("事项", "")) and flat(pair[1]) in flat(r.get("要求原文", ""))
+            and "补遗" in (r.get("澄清建议", "") + r.get("来源页段", "")) for r in rows)]
+        out["amended"] = f"{len(got)}/{len(wanted)}"
+        print(f"amended {out['amended']}")
+        for pair in wanted:
+            if pair not in got:
+                print(f"  MISS amended: {pair}")
     wanted = gold.get("scores") or []
     if wanted:
         mine = [(flat(r.get("事项", "")), flat(r.get("要求原文", ""))) for r in rows if r.get("事项", "").startswith("评分点")]
@@ -142,12 +168,14 @@ def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     parser.add_argument("tender", help="the tender document: .pdf / .docx / .txt / .md")
     parser.add_argument("--gold", help="gold.json read off the document by hand")
+    parser.add_argument("--with", dest="extra", nargs="*", default=[], help="addenda / clarifications issued after the tender, in order")
+    parser.add_argument("--word", action="store_true", help="put a Markdown benchmark into the job as the Word file it stands for")
     parser.add_argument("--out", help="where the drafts go (default: output/real/<file name>)")
     parser.add_argument("-v", "--verbose", action="store_true")
     args = parser.parse_args()
     source = Path(args.tender).resolve()
     out_dir = Path(args.out).resolve() if args.out else ROOT / "output" / "real" / source.stem
-    run = deliver(source, out_dir)
+    run = deliver(source, out_dir, [Path(x).resolve() for x in args.extra], args.word)
     draft = out_dir / "tender.parse.md"
     md = draft.read_text(encoding="utf-8") if draft.exists() else ""
     banner = next((line for line in md.splitlines() if line.startswith("> 按文件结构解析")), "")

@@ -138,6 +138,74 @@ class WhatIsARule(unittest.TestCase):
         layout = pg.page_layout(page([piece(60, 700, "注意事项：投标人应当仔细阅读。")], segments))
         self.assertEqual(layout, ["注意事项：投标人应当仔细阅读。"])
 
+    def test_what_is_painted_in_the_papers_colour_rules_nothing(self) -> None:
+        """White slivers laid behind the characters of "名  称：" (Word's distributed alignment): taken for rules they cut
+        one cell into three - "名地联电 | 系 | 称：某某中心"."""
+        class FakePage:
+            mediabox = type("Box", (), {"height": 842.0, "width": 595.0})()
+
+            def extract_text(self, visitor_text=None, visitor_operand_before=None):
+                identity = [1, 0, 0, 1, 0, 0]
+                visitor_operand_before(b"q", [], identity, identity)
+                visitor_operand_before(b"rg", [1, 1, 1], identity, identity)
+                for x in (272.0, 277.0, 282.0):
+                    visitor_operand_before(b"re", [x, 600.0, 2.0, 80.0], identity, identity)
+                    visitor_operand_before(b"f*", [], identity, identity)
+                visitor_operand_before(b"RG", [1, 1, 1], identity, identity)
+                visitor_operand_before(b"m", [300.0, 600.0], identity, identity)
+                visitor_operand_before(b"l", [300.0, 680.0], identity, identity)
+                visitor_operand_before(b"S", [], identity, identity)
+                visitor_operand_before(b"Q", [], identity, identity)
+                visitor_operand_before(b"m", [50.0, 590.0], identity, identity)      # black again after Q: a real rule
+                visitor_operand_before(b"l", [520.0, 590.0], identity, identity)
+                visitor_operand_before(b"S", [], identity, identity)
+                return ""
+
+        across, down = pg.rules_of(pg.read_page(FakePage()).segments)
+        self.assertEqual((len(across), len(down)), (1, 0))
+
+
+class Nested(unittest.TestCase):
+    def test_a_table_inside_a_cell_reads_row_by_row_with_the_outer_rows_number_and_name(self) -> None:
+        """表中表: the content cell of row 3.4.1 holds a grid of its own (one line per lot). Every inner row comes out as a
+        row that still says which clause it belongs to; no two cells' words are run together."""
+        outer = [(50.0, 600.0, 50.0, 760.0), (110.0, 600.0, 110.0, 760.0), (200.0, 600.0, 200.0, 760.0), (520.0, 600.0, 520.0, 760.0),
+                 (50.0, 760.0, 520.0, 760.0), (50.0, 720.0, 520.0, 720.0), (50.0, 600.0, 520.0, 600.0)]
+        inner = [(360.0, 600.0, 360.0, 720.0), (200.0, 680.0, 520.0, 680.0), (200.0, 640.0, 520.0, 640.0)]
+        pieces = [piece(55, 736, "条款号"), piece(115, 736, "条款名称"), piece(205, 736, "编列内容"),
+                  piece(55, 656, "3.4.1"), piece(115, 656, "投标保证金"),
+                  piece(205, 696, "一标段"), piece(365, 696, "20万元"), piece(205, 656, "二标段"), piece(365, 656, "15万元"),
+                  piece(205, 616, "三标段"), piece(365, 616, "18万元")]
+        rows = rows_of(pg.page_layout(page(pieces, outer + inner)))
+        self.assertEqual(rows[1:], [["3.4.1", "投标保证金", "一标段", "20万元"], ["3.4.1", "投标保证金", "二标段", "15万元"],
+                                    ["3.4.1", "投标保证金", "三标段", "18万元"]])
+
+
+class TwoColumns(unittest.TestCase):
+    LEFT = ["投标人应当按照招标文件的要求编制投标", "文件，并对招标文件提出的实质性要求和", "条件作出响应。投标文件应当包括下列内"]
+    RIGHT = ["评标委员会应当按照招标文件确定的评标", "标准和方法，对投标文件进行评审和比较", "；设有标底的，应当参考标底。评标委员"]
+
+    def prose(self) -> List[pg.Piece]:
+        pieces = []
+        for n in range(30):
+            y = 790.0 - 18 * n
+            pieces += [piece(60, y, self.LEFT[n % 3]), piece(310, y, self.RIGHT[n % 3])]      # written row by row: left, right, left, …
+        return pieces
+
+    def test_prose_in_two_columns_is_read_column_by_column(self) -> None:
+        text = "".join(pg.page_layout(page(self.prose(), [])))
+        lines = text.splitlines()
+        self.assertEqual(lines[:3], self.LEFT)
+        self.assertEqual(lines[30:33], self.RIGHT, "the right column follows the WHOLE left one")
+        self.assertFalse(any(left in line and right in line for line in lines for left in self.LEFT for right in self.RIGHT))
+
+    def test_labels_with_their_values_beside_them_are_not_two_columns(self) -> None:
+        pieces = []
+        for n, (label, value) in enumerate([("项目名称", "某某河道整治工程"), ("建设地点", "某某市某某区"), ("计划工期", "180日历天")] * 6):
+            pieces += [piece(60, 760.0 - 18 * n, label), piece(310, 760.0 - 18 * n, value)]
+        parts = page(pieces, [])
+        self.assertIsNone(pg.two_columns(parts.pieces, parts.width), "read column-wise, every label would lose its value")
+
 
 class Furniture(unittest.TestCase):
     def pages(self) -> List[pg.PageParts]:

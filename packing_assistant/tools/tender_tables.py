@@ -190,7 +190,10 @@ def _parse_rows(facts: Optional[Facts], topic: str, label: str, always: bool, ad
         if key in seen:
             continue
         seen.add(key)
-        amended = "以补遗为准，对照补遗原文" if m.get("origin") else "—"
+        origin = str(m.get("origin") or "")
+        later = [x for x in found if x.get("origin") and "不一致" not in str(x.get("origin")) and str(x.get("lot") or "") in ("", str(m.get("lot") or ""))]
+        amended = ("书面提请澄清：以哪一处为准" if "不一致" in origin else "以补遗为准，对照补遗原文" if origin
+                   else f"已被{later[-1].get('origin')}修改，以补遗为准" if later else "—")
         # a document's value may be a clause long, or one figure per lot: it keeps more room than a typed field
         rows.append([name, _clip(m.get("value"), 120 if m.get("ref") else CELL), _source(m), "已检出", amended])
     if always:
