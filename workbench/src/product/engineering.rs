@@ -268,13 +268,24 @@ impl EngineeringHost {
         if response["ok"] != true {
             return Ok(response);
         }
-        if response["result"]["kind"] != operation {
-            return Err("计算结果类型与授权操作不一致".into());
-        }
-        if authorized.kind == EngineeringKind::CadSection
-            && response["result"]["source_sha256"] != json!(authorized.source_sha256)
-        {
-            return Err("截面结果未绑定授权原图摘要".into());
+        match authorized.kind {
+            EngineeringKind::CadSection => {
+                if response["result"]["kind"] != "section" {
+                    return Err("计算结果类型与授权操作不一致".into());
+                }
+                if response["result"]["source_sha256"] != json!(authorized.source_sha256) {
+                    return Err("截面结果未绑定授权原图摘要".into());
+                }
+            }
+            EngineeringKind::SavedFrame => {
+                // analyze_frame returns its native analysis schema, without a
+                // kind field. Validate that contract before adding a host tag;
+                // no solver values are synthesized, converted or recomputed.
+                if !valid_frame_result(&response["result"]) {
+                    return Err("梁框架计算结果格式与授权分析不一致".into());
+                }
+                response["result"]["kind"] = json!("frame");
+            }
         }
         // A result belongs to the selected revision, never a concurrently saved
         // new design. Fail before publishing it as the current project result.
@@ -289,6 +300,70 @@ impl EngineeringHost {
             "current_user_confirmed_solid":authorized.confirmed_solid,"engineering_verdict":"not_provided"});
         Ok(response)
     }
+}
+
+fn valid_frame_result(result: &Value) -> bool {
+    fn named(value: &Value) -> bool {
+        value.as_str().is_some_and(|name| !name.is_empty())
+    }
+    fn vector3(value: &Value) -> bool {
+        value.as_array().is_some_and(|values| {
+            values.len() == 3
+                && values
+                    .iter()
+                    .all(|v| v.as_f64().is_some_and(f64::is_finite))
+        })
+    }
+    if result["ok"] != true
+        || result["schema_version"].as_u64() != Some(1)
+        || result["analysis"] != "linear_elastic_frame"
+        || result["engine"]["name"] != "PyniteFEA"
+        || !named(&result["engine"]["version"])
+        || result.get("kind").is_some_and(|kind| kind != "frame")
+    {
+        return false;
+    }
+    result["combinations"]
+        .as_array()
+        .is_some_and(|combinations| {
+            !combinations.is_empty()
+                && combinations.iter().all(|combination| {
+                    named(&combination["id"])
+                        && combination["factors"].as_object().is_some_and(|factors| {
+                            !factors.is_empty()
+                                && factors.iter().all(|(name, factor)| {
+                                    !name.is_empty() && factor.as_f64().is_some_and(f64::is_finite)
+                                })
+                        })
+                        && combination["nodes"].as_array().is_some_and(|nodes| {
+                            !nodes.is_empty()
+                                && nodes.iter().all(|node| {
+                                    named(&node["id"])
+                                        && [
+                                            "displacement_m",
+                                            "rotation_rad",
+                                            "reaction_N",
+                                            "reaction_Nm",
+                                        ]
+                                        .iter()
+                                        .all(|key| vector3(&node[*key]))
+                                })
+                        })
+                        && combination["members"].as_array().is_some_and(|members| {
+                            !members.is_empty()
+                                && members.iter().all(|member| {
+                                    named(&member["id"])
+                                        && named(&member["i"])
+                                        && named(&member["j"])
+                                        && member["length_m"].as_f64().is_some_and(|length| {
+                                            length.is_finite() && length > 0.0
+                                        })
+                                        && member["curves"].is_object()
+                                        && member["sampled_extrema"].is_object()
+                                })
+                        })
+                })
+        })
 }
 
 fn valid_id(value: &str) -> bool {

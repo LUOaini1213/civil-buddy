@@ -43,9 +43,33 @@ request = json.loads(sys.stdin.readline())
 root = pathlib.Path(request['workspace'])
 (root / 'worker-called.json').write_text(json.dumps(request), encoding='utf-8')
 payload = request['payload']
+if request['operation'] == 'frame':
+    # Native analyze_frame schema: kind is deliberately absent. These finite
+    # fixture numbers exercise transport only, never claim solver correctness.
+    curves = {key: [0.0, 0.0] for key in ('x_m', 'axial_N', 'shear_y_N', 'shear_z_N',
+        'moment_y_Nm', 'moment_z_Nm', 'torque_Nm', 'dx_m', 'dy_m', 'dz_m')}
+    curves['x_m'] = [0.0, 4.0]
+    result = {'ok': True, 'schema_version': 1, 'analysis': 'linear_elastic_frame',
+        'units': {'length': 'm', 'force': 'N', 'moment': 'N*m', 'stress': 'Pa', 'rotation': 'rad'},
+        'source': payload['source'], 'title': 'Scripted frame transport fixture',
+        'engine': {'name': 'PyniteFEA', 'version': 'test-fixture'}, 'model': payload,
+        'combinations': [{'id': 'C1', 'factors': {'D': 1.0},
+            'nodes': [{'id': 'N1', 'displacement_m': [0.0, 0.0, 0.0], 'rotation_rad': [0.0, 0.0, 0.0],
+                'reaction_N': [0.0, 123.5, 0.0], 'reaction_Nm': [0.0, 0.0, 0.0]}],
+            'members': [{'id': 'B1', 'i': 'N1', 'j': 'N2', 'length_m': 4.0,
+                'local_axes_global': [[1,0,0], [0,1,0], [0,0,1]], 'curves': curves,
+                'sampled_extrema': {key: {'min': min(values), 'max': max(values)}
+                    for key, values in curves.items() if key != 'x_m'}}]}],
+        'assumptions': ['Scripted protocol fixture; not a numerical solver test.']}
+else:
+    result = {'kind': request['operation'], 'received_payload': payload,
+              'source_sha256': payload.get('document', {}).get('sha256')}
+override = root / 'worker-result-override.json'
+if override.is_file():
+    result = json.loads(override.read_text(encoding='utf-8'))
+(root / 'worker-result.json').write_text(json.dumps(result), encoding='utf-8')
 print(json.dumps({'version':1, 'ok':True, 'call_id':request['call_id'],
- 'result': {'kind':request['operation'], 'received_payload':payload,
-            'source_sha256':payload.get('document',{}).get('sha256')},
+ 'result': result,
  'sandbox': {'enforces':{'write':True,'spawn':True}}}))
 "#,
         )
@@ -70,7 +94,7 @@ fn cad_record() -> Value {
 fn frame_record() -> Value {
     json!({"ok":true,"project":{"id":FRAME,"revision":3,"kind":"frame","name":"Saved frame"},"snapshot":{"kind":"frame",
         "inputs":{"schema_version":1,"units":"SI","source":"user","nodes":[{"id":"user-node"}],"members":[{"id":"user-member"}],
-            "materials":[{"E_Pa":200000000000_u64}],"sections":[{"A_m2":0.01}],"load_cases":["D"],"combinations":[{"D":1}],
+            "materials":[{"E_Pa":200000000000_u64}],"sections":[{"A_m2":0.01}],"load_cases":[{"id":"D"}],"combinations":[{"id":"C1","factors":{"D":1.0}}],
             "nodal_loads":[],"member_loads":[]},"result":{"kind":"frame"}}})
 }
 
@@ -289,15 +313,88 @@ async fn saved_frame_uses_only_original_inputs_without_inferring_a_model_from_ca
         .await
         .unwrap();
     assert_eq!(
-        result["result"]["received_payload"],
+        result["result"]["model"],
         domain.frame.lock().unwrap()["snapshot"]["inputs"]
     );
     assert_eq!(result["provenance"]["revision"], 3);
     assert_eq!(result["provenance"]["source_sha256"], Value::Null);
+    let raw: Value =
+        serde_json::from_slice(&std::fs::read(job.0.join("worker-result.json")).unwrap()).unwrap();
+    assert!(
+        raw.get("kind").is_none(),
+        "native frame result must not invent kind"
+    );
+    let mut returned = result["result"].clone();
+    assert_eq!(
+        returned.as_object_mut().unwrap().remove("kind"),
+        Some(json!("frame"))
+    );
+    assert_eq!(
+        returned, raw,
+        "host changed a solver value or native metadata"
+    );
     assert!(host
         .inspect_project(EngineeringKind::CadSection, "../other", &cancel)
         .await
         .is_err());
+}
+
+#[tokio::test]
+async fn frame_result_rejects_wrong_native_schema_and_malformed_combinations() {
+    let domain = Domain::start().await;
+    let repository = Temp::new();
+    let job = Temp::new();
+    let host = EngineeringHost::new(repository.worker(), &domain.base).unwrap();
+    let cancel = CancellationToken::new();
+    let selection = host
+        .inspect_project(EngineeringKind::SavedFrame, FRAME, &cancel)
+        .await
+        .unwrap()
+        .selection;
+    host.calculate(&job.workspace(), &selection, &cancel)
+        .await
+        .unwrap();
+    let valid: Value =
+        serde_json::from_slice(&std::fs::read(job.0.join("worker-result.json")).unwrap()).unwrap();
+    let invalids = [
+        ("/ok", json!(false)),
+        ("/schema_version", json!(2)),
+        ("/analysis", json!("unrelated_analysis")),
+        ("/engine/name", json!("unregistered_engine")),
+        ("/engine/version", Value::Null),
+        ("/combinations", json!({})),
+        ("/combinations", json!([])),
+        ("/combinations/0/id", Value::Null),
+        ("/combinations/0/factors", json!({"D":"fabricated"})),
+        ("/combinations/0/nodes", json!([])),
+        ("/combinations/0/nodes/0/reaction_N", json!([1, 2])),
+        ("/combinations/0/members", json!({})),
+    ];
+    for (pointer, value) in invalids {
+        let mut invalid = valid.clone();
+        *invalid.pointer_mut(pointer).unwrap() = value;
+        std::fs::write(
+            job.0.join("worker-result-override.json"),
+            serde_json::to_vec(&invalid).unwrap(),
+        )
+        .unwrap();
+        let result = host.calculate(&job.workspace(), &selection, &cancel).await;
+        assert!(
+            result.unwrap_err().contains("梁框架计算结果格式"),
+            "accepted {pointer}"
+        );
+    }
+    // The former echo mock must not conceal this bridge/solver contract again.
+    std::fs::write(
+        job.0.join("worker-result-override.json"),
+        br#"{"kind":"frame"}"#,
+    )
+    .unwrap();
+    assert!(host
+        .calculate(&job.workspace(), &selection, &cancel)
+        .await
+        .unwrap_err()
+        .contains("梁框架计算结果格式"));
 }
 
 #[tokio::test]

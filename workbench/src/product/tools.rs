@@ -5,7 +5,10 @@ use sha2::{Digest, Sha256};
 use std::{collections::HashSet, io::Read, path::Path};
 
 fn value_text(value: &Value) -> String {
-    value.as_str().map(str::to_owned).unwrap_or_else(|| value.to_string())
+    value
+        .as_str()
+        .map(str::to_owned)
+        .unwrap_or_else(|| value.to_string())
 }
 
 // Cell addresses are locations, while constants (including quoted text) still
@@ -14,15 +17,24 @@ fn formula_constants(formula: &str) -> String {
     let address = regex::Regex::new(r"(?i)\$?[A-Z]{1,3}\$?[1-9][0-9]{0,6}").unwrap();
     let mut out = String::new();
     for (index, segment) in formula.split('"').enumerate() {
-        if index > 0 { out.push('"'); }
-        if index % 2 == 1 { out.push_str(segment); continue; }
+        if index > 0 {
+            out.push('"');
+        }
+        if index % 2 == 1 {
+            out.push_str(segment);
+            continue;
+        }
         let mut position = 0;
         for found in address.find_iter(segment) {
             let before = segment[..found.start()].chars().next_back();
             let after = segment[found.end()..].chars().next();
             let identifier = |c: char| c.is_alphanumeric() || c == '_' || c == '.';
-            if before.is_some_and(identifier) || after.is_some_and(identifier)
-                || segment[found.end()..].trim_start().starts_with('(') { continue; }
+            if before.is_some_and(identifier)
+                || after.is_some_and(identifier)
+                || segment[found.end()..].trim_start().starts_with('(')
+            {
+                continue;
+            }
             out.push_str(&segment[position..found.start()]);
             out.push('x');
             position = found.end();
@@ -33,30 +45,64 @@ fn formula_constants(formula: &str) -> String {
 }
 
 fn numeric_literals(text: &str, formula: bool) -> HashSet<String> {
-    let input = if formula { formula_constants(text) } else { text.to_owned() };
+    let input = if formula {
+        formula_constants(text)
+    } else {
+        text.to_owned()
+    };
     let pattern = regex::Regex::new(r"[-+]?(?:\d+(?:\.\d*)?|\.\d+)(?:[eE][-+]?\d+)?").unwrap();
-    pattern.find_iter(&input).map(|found| {
-        let mut literal = found.as_str();
-        if formula && literal.starts_with(['+', '-']) {
-            let previous = input[..found.start()].trim_end().chars().next_back();
-            if previous.is_some_and(|c| c.is_alphanumeric() || matches!(c, ')' | '%' | '"')) {
-                literal = &literal[1..];
+    pattern
+        .find_iter(&input)
+        .map(|found| {
+            let mut literal = found.as_str();
+            if formula && literal.starts_with(['+', '-']) {
+                let previous = input[..found.start()].trim_end().chars().next_back();
+                if previous.is_some_and(|c| c.is_alphanumeric() || matches!(c, ')' | '%' | '"')) {
+                    literal = &literal[1..];
+                }
             }
-        }
-        literal.trim_start_matches('+').to_owned()
-    }).collect()
+            literal.trim_start_matches('+').to_owned()
+        })
+        .collect()
 }
 
 fn patch_contents(patch: &Value) -> Vec<(String, String, bool, bool)> {
-    let typed = |new: &Value, old: &Value| (value_text(&new["value"]), value_text(&old["value"]), new["type"] == "formula", old["type"] == "formula");
+    let typed = |new: &Value, old: &Value| {
+        (
+            value_text(&new["value"]),
+            value_text(&old["value"]),
+            new["type"] == "formula",
+            old["type"] == "formula",
+        )
+    };
     match patch["op"].as_str().unwrap_or("") {
-        "replace_paragraph" | "replace_cell" | "annotate" => vec![(value_text(&patch["text"]), value_text(&patch["expected_text"]), false, false)],
+        "replace_paragraph" | "replace_cell" | "annotate" => vec![(
+            value_text(&patch["text"]),
+            value_text(&patch["expected_text"]),
+            false,
+            false,
+        )],
         "set_cell" => vec![typed(&patch["value"], &patch["expected"])],
-        "set_range" => patch["values"].as_array().into_iter().flatten().enumerate()
-            .flat_map(|(row, cells)| cells.as_array().into_iter().flatten().enumerate()
-                .map(move |(column, cell)| typed(cell, &patch["expected"][row][column]))).collect(),
-        "fill_fields" => patch["fields"].as_object().into_iter().flat_map(|fields| fields.values())
-            .map(|value| (value_text(value), String::new(), false, false)).collect(),
+        "set_range" => patch["values"]
+            .as_array()
+            .into_iter()
+            .flatten()
+            .enumerate()
+            .flat_map(|(row, cells)| {
+                cells
+                    .as_array()
+                    .into_iter()
+                    .flatten()
+                    .enumerate()
+                    .map(move |(column, cell)| typed(cell, &patch["expected"][row][column]))
+            })
+            .collect(),
+        "fill_fields" => patch["fields"]
+            .as_object()
+            .into_iter()
+            .flat_map(|fields| fields.values())
+            .map(|value| (value_text(value), String::new(), false, false))
+            .collect(),
         _ => Vec::new(),
     }
 }
@@ -145,7 +191,7 @@ pub fn definitions(write: bool, children: bool) -> Vec<Value> {
         schema("preview_document","结构化差异预览，不写文件。patches要求op与期望旧值。Word:replace_paragraph(paragraph_id,expected_text,text)或replace_cell(table,row,column,expected_text,text)。XLSX:set_cell(sheet,cell,expected:{type,value},value:{type,value})；type=blank/text/number/boolean/formula。PDF:annotate(page,rect,text)/reorder_pages(pages)/fill_fields(fields)。",json!({"source":{"type":"string"},"expected_sha256":{"type":"string"},"patches":{"type":"array","items":{"type":"object"}}}),&["source","expected_sha256","patches"]),
     ];
     if write {
-        tools.push(schema("apply_document","将已预览的同一补丁写入新的文件副本，重新打开校验；原文件不变。必须已read并preview。不得把模型内容标为已证实。",json!({"source":{"type":"string"},"expected_sha256":{"type":"string"},"patches":{"type":"array","items":{"type":"object"}}}),&["source","expected_sha256","patches"]));
+        tools.push(schema("apply_document","保存成功预览的新副本。推荐仅传preview_id（来自preview_document.result.preview_id），宿主复用完全相同补丁。也兼容完整source/expected_sha256/patches且evidence不得省略。工具已重新打开验证；返回成功即可汇总，无需再读输出副本。",json!({"preview_id":{"type":"string"},"source":{"type":"string"},"expected_sha256":{"type":"string"},"patches":{"type":"array","items":{"type":"object"}}}),&[]));
     }
     if children {
         tools.push(schema("delegate","委派1到2个并行只读子代理，最多累计4个。角色 evidence 或 review；独立上下文，共享预算。",json!({"tasks":{"type":"array","maxItems":2,"items":{"type":"object","properties":{"role":{"type":"string","enum":["evidence","review"]},"goal":{"type":"string"}},"required":["role","goal"],"additionalProperties":false}}}),&["tasks"]));
@@ -181,14 +227,21 @@ impl ToolScope<'_> {
             }
             Some(report["result"].clone())
         };
-        let references_text = references.iter().filter_map(|r| r["quote"].as_str()).collect::<Vec<_>>().join("\n");
+        let references_text = references
+            .iter()
+            .filter_map(|r| r["quote"].as_str())
+            .collect::<Vec<_>>()
+            .join("\n");
         let source_numbers = numeric_literals(&references_text, false);
         let user_numbers = numeric_literals(self.user_request, false);
         for patch in patches {
             for (proposed, old, formula, old_formula) in patch_contents(patch) {
                 let old_numbers = numeric_literals(&old, old_formula);
                 for found in numeric_literals(&proposed, formula) {
-                    if !old_numbers.contains(&found) && !source_numbers.contains(&found) && !user_numbers.contains(&found) {
+                    if !old_numbers.contains(&found)
+                        && !source_numbers.contains(&found)
+                        && !user_numbers.contains(&found)
+                    {
                         return Err(format!("新增数字 {} 没有来自已核验引文或用户明确输入；先search_sources并把对应完整hit放入patch.evidence", found));
                     }
                 }
@@ -203,8 +256,14 @@ impl ToolScope<'_> {
             if verdict["ok"] != true || !results.is_some_and(|items| items.len() == batch.len()) {
                 return Err("工程结论检查未能执行，未发布修改".into());
             }
-            if results.is_some_and(|items| items.iter().any(|item| item["found"].as_array().is_some_and(|a| !a.is_empty()))) {
-                return Err("补丁含本系统不可签认的工程结论；请改为有来源的事实、待核查项或条件说明".into());
+            if results.is_some_and(|items| {
+                items
+                    .iter()
+                    .any(|item| item["found"].as_array().is_some_and(|a| !a.is_empty()))
+            }) {
+                return Err(
+                    "补丁含本系统不可签认的工程结论；请改为有来源的事实、待核查项或条件说明".into(),
+                );
             }
         }
         Ok(
@@ -298,13 +357,20 @@ impl ToolScope<'_> {
                         )
                         .await
                 } else {
-                    let file = std::fs::File::open(self.workspace.resolve_read(source).map_err(|e| e.to_string())?).map_err(|e| e.to_string())?;
+                    let file = std::fs::File::open(
+                        self.workspace
+                            .resolve_read(source)
+                            .map_err(|e| e.to_string())?,
+                    )
+                    .map_err(|e| e.to_string())?;
                     const LIMIT: u64 = 256 * 1024;
                     if file.metadata().map_err(|e| e.to_string())?.len() > LIMIT {
                         return Err("文本超过256 KiB，请缩小资料范围".into());
                     }
                     let mut bytes = Vec::new();
-                    file.take(LIMIT + 1).read_to_end(&mut bytes).map_err(|e| e.to_string())?;
+                    file.take(LIMIT + 1)
+                        .read_to_end(&mut bytes)
+                        .map_err(|e| e.to_string())?;
                     if bytes.len() as u64 > LIMIT {
                         return Err("文本超过256 KiB，请缩小资料范围".into());
                     }

@@ -38,7 +38,7 @@ export function createAgentWorkbench(deps) {
   const $ = (id) => doc.getElementById(id);
   const node = (tag, text, cls) => { const n = doc.createElement(tag); if (text !== undefined) n.textContent = text; if (cls) n.className = cls; return n; };
   const state = { capabilities: null, workspace: null, session: "", files: [], selected: new Set(), turn: null,
-    seq: 0, artifacts: new Map(), epoch: 0, workspaceEpoch: 0, fileEpoch: 0, listEpoch: 0,
+    seq: 0, artifacts: new Map(), engineeringResults: new Map(), epoch: 0, workspaceEpoch: 0, fileEpoch: 0, listEpoch: 0,
     engineeringEpoch: 0, engineeringRows: [], engineeringLoading: false, experts: [],
     opening: false, submitting: false, cancelling: false, modelBusy: false, modelConfigured: false, disposed: false };
   let saved = { lastRoot: "", workspaces: {} }, timer = null, controller = null, started = false;
@@ -61,9 +61,10 @@ export function createAgentWorkbench(deps) {
   const post = (body) => ({ method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
   function stopPolling() { if (timer !== null) unschedule(timer); timer = null; if (controller) controller.abort(); controller = null; }
   function resetView() {
-    stopPolling(); state.epoch += 1; state.listEpoch += 1; state.turn = null; state.seq = 0; state.artifacts.clear();
+    stopPolling(); state.epoch += 1; state.listEpoch += 1; state.turn = null; state.seq = 0; state.artifacts.clear(); state.engineeringResults.clear();
     state.submitting = false; state.cancelling = false;
     $("agentEvents").replaceChildren(); $("agentArtifacts").replaceChildren(); $("agentReply").textContent = "结果将显示在这里。";
+    if ($("agentEngineeringResults")) { $("agentEngineeringResults").replaceChildren(); $("agentEngineeringResults").hidden = true; }
     $("agentTurnStatus").textContent = "尚未开始"; $("agentPartial").hidden = true; $("agentUsage").hidden = true;
     $("agentContextMeter").hidden = true; $("agentContextText").textContent = "收到后端请求预算后显示；这不是任务完成进度。";
     controls();
@@ -177,7 +178,7 @@ export function createAgentWorkbench(deps) {
     clearEngineering(); const version = state.engineeringEpoch; state.engineeringLoading = true; state.engineeringRows = []; controls();
     $("agentEngineeringStatus").textContent = "正在读取已保存工程…";
     try {
-      const data = await request("/api/agent/engineering/projects");
+      const data = await request(`/api/agent/engineering/projects?${scoped()}`);
       if (version !== state.engineeringEpoch || state.disposed) return;
       if (!Array.isArray(data.projects)) throw new Error("工程项目列表不完整");
       state.engineeringRows = data.projects.filter((row) => row && ["cad_section", "saved_frame"].includes(row.kind) && /^[A-Za-z0-9_-]+$/.test(row.project_id || "")).map((row) => ({ ...row, name: String(row.name || row.project_id), selected: false, confirmed: false, loading: false, detail: null, snapshot: null }));
@@ -186,7 +187,7 @@ export function createAgentWorkbench(deps) {
     finally { if (version === state.engineeringEpoch) { state.engineeringLoading = false; controls(); } }
   }
   async function fetchEngineering(row) {
-    const detail = await request(`/api/agent/engineering/projects/${encodeURIComponent(row.kind)}/${encodeURIComponent(row.project_id)}`);
+    const detail = await request(`/api/agent/engineering/projects/${encodeURIComponent(row.kind)}/${encodeURIComponent(row.project_id)}?${scoped()}`);
     return { detail, snapshot: engineeringSnapshot(detail, row) };
   }
   async function inspectEngineering(row) {
@@ -307,11 +308,77 @@ export function createAgentWorkbench(deps) {
       card.appendChild(details); host.appendChild(card);
     }
   }
+  const engineeringNumber = (value) => typeof value === "number" && Number.isFinite(value)
+    ? value.toLocaleString("zh-CN", { maximumSignificantDigits: 12, useGrouping: false }) : "未返回";
+  function engineeringMetric(host, label, value) {
+    const item = node("div"); item.append(node("dt", label), node("dd", value)); host.appendChild(item);
+  }
+  function engineeringRange(value) {
+    return object(value) ? `最小 ${engineeringNumber(value.min)} · 最大 ${engineeringNumber(value.max)}` : "工具未返回采样极值";
+  }
+  function paintEngineeringResult(value) {
+    const data = value?.result, source = value?.provenance;
+    if (value?.ok !== true || !object(data) || !object(source) || !["cad_section", "saved_frame"].includes(source.kind)) return;
+    const section = source.kind === "cad_section" && data.kind === "section";
+    const frame = source.kind === "saved_frame" && (data.kind === "frame" || data.analysis === "linear_elastic_frame");
+    if (!section && !frame) return;
+    const key = String(value.call_id || [source.kind, source.project_id, source.revision].join(":"));
+    state.engineeringResults.set(key, value);
+    let host = $("agentEngineeringResults");
+    if (!host) { host = node("div", undefined, "engineering-results"); host.id = "agentEngineeringResults"; $("agentArtifacts").before(host); }
+    host.hidden = false; host.replaceChildren();
+    for (const [id, item] of state.engineeringResults) {
+      const result = item.result, provenance = item.provenance, isSection = provenance.kind === "cad_section";
+      const card = node("article", undefined, "engineering-result"); card.dataset.callId = id;
+      card.appendChild(node("h3", isSection ? "截面几何计算" : "梁框架线弹性分析"));
+      card.appendChild(node("p", `来源项目 ${provenance.project_id || "未返回"} · 修订 ${provenance.revision ?? "未返回"}`, "muted small wrap"));
+      if (isSection) {
+        card.appendChild(node("p", `原图单位：${result.unit || "未返回"}；面积 mm²，惯性矩 mm⁴。`, "muted small"));
+        for (const [index, region] of (Array.isArray(result.regions) ? result.regions : []).entries()) {
+          if (!object(region)) continue;
+          card.appendChild(node("h4", `区域 ${index + 1}${typeof region.layer === "string" ? " · " + region.layer : ""}`));
+          const metrics = node("dl", undefined, "engineering-metrics");
+          engineeringMetric(metrics, "面积（mm²）", engineeringNumber(region.area_mm2));
+          const center = Array.isArray(region.centroid_source) && region.centroid_source.length === 2 ? region.centroid_source.map(engineeringNumber).join(", ") : "未返回";
+          engineeringMetric(metrics, `形心（原图 x, y；${result.unit || "单位未返回"}）`, center);
+          engineeringMetric(metrics, "Ixx（mm⁴）", engineeringNumber(region.Ixx_mm4));
+          engineeringMetric(metrics, "Iyy（mm⁴）", engineeringNumber(region.Iyy_mm4));
+          card.appendChild(metrics);
+        }
+        card.appendChild(node("p", "惯性矩关于区域形心轴；此结果未提供强度或规范合格结论。", "muted small"));
+      } else {
+        const units = object(result.units) ? result.units : {};
+        card.appendChild(node("p", `单位：长度 ${units.length || "未返回"} · 力 ${units.force || "未返回"} · 弯矩 ${units.moment || "未返回"}`, "muted small"));
+        for (const combination of Array.isArray(result.combinations) ? result.combinations : []) {
+          if (!object(combination)) continue;
+          card.appendChild(node("h4", `荷载组合 ${combination.id ?? "未返回"}`));
+          const reactions = node("dl", undefined, "engineering-metrics");
+          for (const point of Array.isArray(combination.nodes) ? combination.nodes : []) {
+            if (!object(point)) continue;
+            const reaction = Array.isArray(point.reaction_N) ? point.reaction_N : [];
+            engineeringMetric(reactions, `节点 ${point.id ?? "未返回"} 反力（${units.force || "单位未返回"}）`, ["FX", "FY", "FZ"].map((axis, index) => `${axis} ${engineeringNumber(reaction[index])}`).join(" · "));
+          }
+          card.appendChild(reactions);
+          for (const member of Array.isArray(combination.members) ? combination.members : []) {
+            if (!object(member)) continue;
+            card.appendChild(node("h4", `杆件 ${member.id ?? "未返回"} · 采样极值`));
+            const extrema = object(member.sampled_extrema) ? member.sampled_extrema : {}, metrics = node("dl", undefined, "engineering-metrics");
+            for (const [label, field, unit] of [["弯矩 My", "moment_y_Nm", units.moment], ["弯矩 Mz", "moment_z_Nm", units.moment], ["挠度 dy", "dy_m", units.length], ["挠度 dz", "dz_m", units.length]]) engineeringMetric(metrics, `${label}（${unit || "单位未返回"}）`, engineeringRange(extrema[field]));
+            card.appendChild(metrics);
+          }
+        }
+        card.appendChild(node("p", "节点反力采用全局坐标；杆件弯矩和挠度采用局部坐标。最小/最大为工具返回的有符号采样极值，并非连续包络或规范判定。", "muted small"));
+      }
+      card.appendChild(node("p", "摘要保留至 12 位有效数字；完整精度与来源记录见下方执行事件。", "muted small"));
+      host.appendChild(card);
+    }
+  }
   function paintResult(result) {
     if (!object(result)) return;
     if (typeof result.reply === "string") $("agentReply").textContent = result.reply;
     $("agentPartial").hidden = result.partial !== true;
     for (const item of Array.isArray(result.artifacts) ? result.artifacts : []) paintArtifact(item);
+    for (const item of Array.isArray(result.findings) ? result.findings : []) paintEngineeringResult(item);
     if (object(result.usage)) { $("agentUsageText").textContent = printable(result.usage); $("agentUsage").hidden = false; }
   }
   function paintTurn(turn) {
@@ -326,6 +393,7 @@ export function createAgentWorkbench(deps) {
     const data = object(event.data) ? event.data : {}, kind = String(event.kind || "status");
     if (kind === "context") paintContext(data);
     if (kind === "artifact") paintArtifact(data);
+    if (kind === "tool_finished" && (data.name === "engineering_analyze" || data.tool === "engineering_analyze")) paintEngineeringResult(data.result);
     if (kind === "done") paintResult(data.result || data);
     if (TURN_EVENTS[kind]) paintTurn({ status: TURN_EVENTS[kind], ...(data.result ? { result: data.result } : {}) });
     const li = node("li"), title = node("div", undefined, "event-title");

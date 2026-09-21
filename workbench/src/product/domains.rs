@@ -49,6 +49,12 @@ async fn forward(request: Request) -> Response {
         );
     }
     let (parts, body) = request.into_parts();
+    // reqwest normalizes dot segments. Reject them before building the fixed
+    // domain URL, including encoded separators; current route IDs are ASCII.
+    let path = parts.uri.path();
+    if path.contains(['%', '\\']) || path.split('/').any(|segment| matches!(segment, "." | "..")) {
+        return error(StatusCode::BAD_REQUEST, "领域路径含不支持的编码或目录跳转");
+    }
     if parts
         .headers
         .get("sec-fetch-site")
@@ -98,7 +104,12 @@ async fn forward(request: Request) -> Response {
             ),
         )
         .body(bytes);
-    for name in ["content-type", "x-civil-asr-id", "x-civil-operation-id", "x-cad-operation-id"] {
+    for name in [
+        "content-type",
+        "x-civil-asr-id",
+        "x-civil-operation-id",
+        "x-cad-operation-id",
+    ] {
         if let Some(value) = parts.headers.get(name) {
             outgoing = outgoing.header(name, value);
         }

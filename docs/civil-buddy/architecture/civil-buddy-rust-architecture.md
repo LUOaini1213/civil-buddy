@@ -1,5 +1,7 @@
 # Civil Buddy：Rust 土木工作台架构设计
 
+> 后续实现记录：本文保留设计时的源码盘点与历史验证。2026-09-21 的实际实现、测试证据及未覆盖能力见 [implementation.md](implementation.md)；文末“尚未实现”描述的是设计快照。
+
 设计日期：2026-09-21。修订版 v0.5：在已有 Agent 基础设施上增加共享 PDF、Excel、Word 读改技能、文档修改协议，以及 LLM/Jev 参与跨文件工程任务的具体流程。
 
 核对基线：已合并的 [PR #55](https://github.com/LUOaini1213/civil-buddy/pull/55) head `8ab5677`、merge `279da2c`，远端 main `b3ccc72`；队友 cuizhi-chat 的 [PR #56](https://github.com/LUOaini1213/civil-buddy/pull/56) head `f328693`；你的 [PR #58](https://github.com/LUOaini1213/civil-buddy/pull/58) head `3e93025`。后两项核对时仍是开放 PR。主目录 main 仍在 `40ba86c`；CAD 工作区本轮另有 planning/routing 的未提交修改及新文件，本文读改能力仍以固定提交 `3e93025` 为准，未将进行中的其他开发算作已验证能力。本轮未修改、切换或合并项目源码。

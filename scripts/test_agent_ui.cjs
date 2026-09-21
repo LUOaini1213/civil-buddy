@@ -24,7 +24,7 @@ function harness(route = () => undefined, saved = storage()) {
     if (custom !== undefined) return custom;
     if (url === "/api/agent/capabilities") return response(caps);
     if (url === "/api/catalog") return response({ experts: [{ id: "plans", name: "施工方案", category_name: "施工", enabled: true, risk: "high" }, { id: "checks", name: "资料检查", category_name: "资料", enabled: true, risk: "low" }] });
-    if (url === "/api/agent/engineering/projects") return response({ projects: [] });
+    if (url.startsWith("/api/agent/engineering/projects?")) return response({ projects: [] });
     if (url === "/api/llm-config" && !init) return response({ configured: false, model: "", base_url: "https://example.invalid/v1" });
     if (url === "/api/agent/workspaces") return response({ workspace: { id: "workspace-1", root: "C:/engineering" }, capabilities: caps });
     if (url.startsWith("/api/agent/files?")) return response({ files: [{ path: "方案.docx", name: "方案.docx", size: 120 }, { path: "计划.xlsx", name: "计划.xlsx", size: 240 }] });
@@ -235,8 +235,8 @@ function terminalRoute(url, init) {
 test("Engineering selection: inspect before selection, explicit CAD snapshot confirmation, missing-input block and maximum four", async (t) => {
   const rows = [project("cad_section", "cad-1"), project("saved_frame", "missing", "missing_inputs"), ...[1, 2, 3, 4].map((n) => project("saved_frame", "frame-" + n))];
   const h = harness((url, init) => {
-    if (url === "/api/agent/engineering/projects") return response({ projects: rows });
-    if (url.startsWith("/api/agent/engineering/projects/")) return response(inspection(rows.find((row) => url.endsWith("/" + row.project_id))));
+    if (url.startsWith("/api/agent/engineering/projects?")) return response({ projects: rows });
+    if (url.startsWith("/api/agent/engineering/projects/")) return response(inspection(rows.find((row) => new URL(url, "http://localhost").pathname.endsWith("/" + row.project_id))));
     return terminalRoute(url, init);
   }); t.after(h.close); await h.ready();
   assert.equal(h.doc.querySelectorAll("#agentEngineering input").length, 0);
@@ -262,8 +262,8 @@ test("Engineering selection: inspect before selection, explicit CAD snapshot con
 test("Engineering selection: changed revision before submission invalidates confirmation and submits nothing", async (t) => {
   const row = project("cad_section", "cad-1"); let revision = 1;
   const h = harness((url) => {
-    if (url === "/api/agent/engineering/projects") return response({ projects: [row] });
-    if (url.endsWith("/cad_section/cad-1")) return response(inspection(row, revision));
+    if (url.startsWith("/api/agent/engineering/projects?")) return response({ projects: [row] });
+    if (new URL(url, "http://localhost").pathname.endsWith("/cad_section/cad-1")) return response(inspection(row, revision));
   }); t.after(h.close); await h.ready(); await h.app.inspectEngineering(h.app.state.engineeringRows[0]);
   change(h, engineeringInput(h, "cad_section:cad-1", "我已核对当前截面的实体区域与孔洞"), true);
   change(h, engineeringInput(h, "cad_section:cad-1", "加入本次任务"), true);
@@ -275,11 +275,42 @@ test("Engineering selection: changed revision before submission invalidates conf
   assert.equal(engineeringInput(h, "cad_section:cad-1", "加入本次任务").disabled, true);
 });
 
+test("Engineering selection: list, inspect and pre-submit verification use the active workspace scope", async (t) => {
+  const row = project("cad_section", "cad-1");
+  const h = harness((url, init) => {
+    if (url === "/api/agent/workspaces") {
+      const root = JSON.parse(init.body).path;
+      return response({ workspace: { id: root === "C:/second job" ? "workspace-2" : "workspace-1", root }, capabilities: caps });
+    }
+    if (url.startsWith("/api/agent/engineering/projects?")) return response({ projects: [row] });
+    if (url.startsWith("/api/agent/engineering/projects/cad_section/")) return response(inspection(row));
+    return terminalRoute(url, init);
+  }); t.after(h.close); await h.ready();
+  await h.app.inspectEngineering(h.app.state.engineeringRows[0]);
+  const firstCalls = h.calls.filter((call) => call.url.startsWith("/api/agent/engineering/projects"));
+  assert.equal(firstCalls.length, 2);
+  for (const call of firstCalls) assert.equal(new URL(call.url, "http://localhost").searchParams.get("workspace"), "workspace-1");
+  const beforeSwitch = h.calls.length;
+  await h.app.openWorkspace("C:/second job");
+  await h.app.inspectEngineering(h.app.state.engineeringRows[0]);
+  change(h, engineeringInput(h, "cad_section:cad-1", "我已核对当前截面的实体区域与孔洞"), true);
+  change(h, engineeringInput(h, "cad_section:cad-1", "加入本次任务"), true);
+  h.$("agentMessage").value = "核对选中工程"; await h.app.send();
+  const secondCalls = h.calls.slice(beforeSwitch).filter((call) => call.url.startsWith("/api/agent/engineering/projects"));
+  assert.equal(secondCalls.length, 3, "list, explicit inspect and pre-submit verification");
+  for (const call of secondCalls) {
+    const query = new URL(call.url, "http://localhost").searchParams;
+    assert.equal(query.get("workspace"), "workspace-2");
+    assert.equal(query.get("session_id"), h.app.state.session);
+  }
+  assert.equal(h.calls.find((call) => call.url === "/api/agent/turns").body.workspace, "workspace-2");
+});
+
 test("Engineering selection: delayed inspection cannot restore authorization after a new session", async (t) => {
   const row = project("cad_section", "cad-1"); let finish;
   const h = harness((url) => {
-    if (url === "/api/agent/engineering/projects") return response({ projects: [row] });
-    if (url.endsWith("/cad_section/cad-1")) return new Promise((resolve) => { finish = () => resolve(response(inspection(row))); });
+    if (url.startsWith("/api/agent/engineering/projects?")) return response({ projects: [row] });
+    if (new URL(url, "http://localhost").pathname.endsWith("/cad_section/cad-1")) return new Promise((resolve) => { finish = () => resolve(response(inspection(row))); });
   }); t.after(h.close); await h.ready();
   const pending = h.app.inspectEngineering(h.app.state.engineeringRows[0]);
   await h.app.changeSession("", true); finish(); await pending;
@@ -303,4 +334,58 @@ test("Expert selection: high-risk writes require explicit phrase once per sessio
   assert.equal(h.$("agentRiskConfirmation").value, ""); assert.equal(h.$("agentRiskWrap").hidden, true);
   await h.app.changeSession("", true); assert.equal(h.$("agentRiskWrap").hidden, false); assert.equal(h.$("agentSend").disabled, true);
   selectValue(h, "agentExpert", "checks"); assert.equal(h.$("agentRiskWrap").hidden, true); assert.equal(h.$("agentSend").disabled, false);
+});
+
+// Captured numeric fields from the real synthetic 400 x 600 mm rectangle and
+// saved 4 m beam acceptance fixtures; rendering tests never run a solver.
+const engineeringRenderFixtures = () => [
+  { call_id: "rectangle-result", ok: true, provenance: { kind: "cad_section", project_id: "16ad9512626b4613a38dc2e11617bea8", revision: 1 }, result: {
+    kind: "section", unit: "mm", regions: [{ layer: "UI_SECTION", area_mm2: 240000.00000000015, centroid_source: [200.00000000000003, 300.00000000000006], Ixx_mm4: 7200000000.000008, Iyy_mm4: 3200000000, hole_ids: [] }] } },
+  { call_id: "frame-result", ok: true, provenance: { kind: "saved_frame", project_id: "681fedaa6ce6471d8c9b94abfc5e5bc3", revision: 1 }, result: {
+    kind: "frame", analysis: "linear_elastic_frame", units: { length: "m", force: "N", moment: "N*m" }, combinations: [{ id: "C1",
+      nodes: [{ id: "N1", reaction_N: [0, 2000.0000000000002, 0] }, { id: "N2", reaction_N: [0, 1999.9999999999998, 0] }],
+      members: [{ id: "B1", sampled_extrema: { moment_y_Nm: { min: 0, max: 0 }, moment_z_Nm: { min: -2000, max: 2.2737367544323206e-13 }, dy_m: { min: -0.0020833333333333333, max: 0 }, dz_m: { min: 0, max: 0 } } }] }] } },
+];
+
+test("Engineering results: real rectangle and beam values become concise cards and replay does not duplicate them", async (t) => {
+  const findings = engineeringRenderFixtures();
+  const h = harness((url, init) => {
+    if (url === "/api/agent/turns" && init) return response({ turn_id: "render-turn", session_id: JSON.parse(init.body).session_id });
+    if (url.includes("/render-turn/events?")) return response({ events: findings.map((result, index) => event(index + 1, "tool_finished", { name: "engineering_analyze", result })), turn: { status: "completed", result: { reply: "已完成确定性计算", findings } } });
+  }); t.after(h.close); await h.ready(); h.$("agentMessage").value = "展示已保存结果"; await h.app.send();
+  const cards = [...h.doc.querySelectorAll(".engineering-result")];
+  assert.equal(cards.length, 2, "tool events and terminal findings must share the same cards");
+  const metrics = (card) => Object.fromEntries([...card.querySelectorAll("dl>div")].map((row) => [row.querySelector("dt").textContent, row.querySelector("dd").textContent]));
+  assert.match(cards[0].textContent, /截面几何计算.*16ad9512626b4613a38dc2e11617bea8.*修订 1/);
+  assert.deepEqual(metrics(cards[0]), { "面积（mm²）": "240000", "形心（原图 x, y；mm）": "200, 300", "Ixx（mm⁴）": "7200000000", "Iyy（mm⁴）": "3200000000" });
+  const beam = metrics(cards[1]);
+  assert.equal(beam["节点 N1 反力（N）"], "FX 0 · FY 2000 · FZ 0");
+  assert.equal(beam["节点 N2 反力（N）"], "FX 0 · FY 2000 · FZ 0");
+  assert.equal(beam["弯矩 Mz（N*m）"], "最小 -2000 · 最大 0.000000000000227373675443");
+  assert.equal(beam["挠度 dy（m）"], "最小 -0.00208333333333 · 最大 0");
+  assert.match(cards[1].textContent, /有符号采样极值/);
+  assert.equal(h.doc.querySelectorAll(".engineering-result pre").length, 0);
+  assert.equal(h.doc.querySelectorAll("#agentEvents details pre").length, 2, "full precision remains in expandable events");
+  await h.app.changeSession("", true);
+  assert.equal(h.$("agentEngineeringResults").hidden, true);
+  assert.equal(h.doc.querySelectorAll(".engineering-result").length, 0);
+});
+
+test("Engineering results: missing values are not calculated from curves and returned strings remain plain text", async (t) => {
+  const [section, frame] = engineeringRenderFixtures();
+  section.result.regions[0].layer = '<img src=x onerror="bad()">';
+  delete section.result.regions[0].centroid_source;
+  delete frame.result.combinations[0].members[0].sampled_extrema;
+  frame.result.combinations[0].members[0].curves = { moment_z_Nm: [-999999, 0], dy_m: [-123456, 0] };
+  const h = harness((url, init) => {
+    if (url === "/api/agent/turns" && init) return response({ turn_id: "missing-turn", session_id: JSON.parse(init.body).session_id });
+    if (url.includes("/missing-turn/events?")) return response({ events: [], turn: { status: "completed", result: { findings: [section, frame, { ...section, call_id: "failed-result", ok: false }] } } });
+  }); t.after(h.close); await h.ready(); h.$("agentMessage").value = "检查返回字段"; await h.app.send();
+  const host = h.$("agentEngineeringResults");
+  assert.equal(host.querySelectorAll("article").length, 2);
+  assert.equal(host.querySelectorAll("img,script").length, 0);
+  assert.match(host.textContent, /<img src=x onerror="bad\(\)">/);
+  assert.match(host.textContent, /形心（原图 x, y；mm）未返回/);
+  assert.match(host.textContent, /工具未返回采样极值/);
+  assert.doesNotMatch(host.textContent, /999999|123456/);
 });

@@ -22,9 +22,17 @@ async fn main() {
             eprintln!("bind {addr} failed: {e}");
             std::process::exit(1);
         });
-    let product = civil_workbench::product::api::ProductState::open(paths.clone())
-        .unwrap_or_else(|e| { eprintln!("product runtime startup failed: {e}"); std::process::exit(1); });
-    axum::serve(listener, app(AppState::live(paths)).merge(civil_workbench::product::api::router(product)).merge(civil_workbench::product::domains::router()))
-        .await
-        .expect("server");
+    let product =
+        civil_workbench::product::api::ProductState::open(paths.clone()).unwrap_or_else(|e| {
+            eprintln!("product runtime startup failed: {e}");
+            std::process::exit(1);
+        });
+    axum::serve(
+        listener,
+        app(AppState::live(paths))
+            .merge(civil_workbench::product::api::router(product))
+            .merge(civil_workbench::product::domains::router()),
+    )
+    .await
+    .expect("server");
 }

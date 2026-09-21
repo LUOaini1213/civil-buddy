@@ -14,6 +14,10 @@ use std::{
     sync::Arc,
 };
 
+// The runtime model override is process-wide; scripted loop tests must not
+// replace another test's provider while its turn is still running.
+static SCRIPTED_MODEL_LOCK: std::sync::Mutex<()> = std::sync::Mutex::new(());
+
 struct Fixture {
     state: Arc<ProductState>,
     workspace: WorkspaceContext,
@@ -366,6 +370,7 @@ async fn oversized_selected_text_is_rejected() {
 
 #[tokio::test]
 async fn model_loop_requires_prior_read_identical_preview_and_loaded_risk_acknowledgement() {
+    let _model_guard = SCRIPTED_MODEL_LOCK.lock().unwrap();
     use axum::{
         body::Body,
         http::{Request, StatusCode},
@@ -582,6 +587,168 @@ async fn model_loop_requires_prior_read_identical_preview_and_loaded_risk_acknow
                 .unwrap()
                 .is_empty());
             f.no_documents_published();
+        }
+    }
+}
+
+#[tokio::test]
+async fn preview_ids_apply_the_cached_patch_and_reject_unknown_or_mixed_arguments() {
+    use axum::{
+        body::Body,
+        http::{Request, StatusCode},
+        routing::post,
+        Json, Router,
+    };
+    use civil_workbench::config::{set_runtime_llm, LlmConfig};
+    use http_body_util::BodyExt;
+    use std::time::Duration;
+    use tower::ServiceExt;
+    let _model_guard = SCRIPTED_MODEL_LOCK.lock().unwrap();
+    struct ResetModel;
+    impl Drop for ResetModel {
+        fn drop(&mut self) {
+            set_runtime_llm(None);
+        }
+    }
+    let _reset = ResetModel;
+
+    async fn http(app: &Router, method: &str, url: &str, body: Value) -> (StatusCode, Value) {
+        let response = app
+            .clone()
+            .oneshot(
+                Request::builder()
+                    .method(method)
+                    .uri(url)
+                    .header("content-type", "application/json")
+                    .body(Body::from(body.to_string()))
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+        let status = response.status();
+        let bytes = response.into_body().collect().await.unwrap().to_bytes();
+        (status, serde_json::from_slice(&bytes).unwrap())
+    }
+    fn call(id: &str, name: &str, args: Value) -> Value {
+        json!({"id":id,"type":"function","function":{"name":name,"arguments":args.to_string()}})
+    }
+
+    for scenario in ["cached", "unknown", "mixed"] {
+        let fixture = Fixture::new();
+        let original = std::fs::read(fixture.workspace.root().join("report.docx")).unwrap();
+        let args = fixture.args(
+            "report.docx",
+            word("Source record remains subject to review."),
+        );
+        let expected_preview_id = sha256(args.to_string().as_bytes());
+        let server = Router::new().route("/chat/completions",post(move |Json(payload): Json<Value>| {
+            let args = args.clone();
+            async move {
+                let messages = payload["messages"].as_array().unwrap();
+                let preview_response = messages.iter().find(|m| m["role"] == "tool" && m["tool_call_id"] == "preview");
+                let applied = messages.iter().any(|m| m["role"] == "tool" && m["tool_call_id"] == "apply");
+                let message = if applied {
+                    json!({"role":"assistant","content":"待核查内容已记录。"})
+                } else if let Some(preview) = preview_response {
+                    let result: Value = serde_json::from_str(preview["content"].as_str().unwrap()).unwrap();
+                    let mut apply = json!({"preview_id":result["result"]["preview_id"]});
+                    if scenario == "unknown" { apply["preview_id"] = json!("0".repeat(64)); }
+                    if scenario == "mixed" { apply["source"] = json!("report.docx"); }
+                    json!({"role":"assistant","content":null,"tool_calls":[call("apply","apply_document",apply)]})
+                } else {
+                    json!({"role":"assistant","content":null,"tool_calls":[
+                        call("inspect","read_file",json!({"source":"report.docx","operation":"inspect"})),
+                        call("preview","preview_document",args)]})
+                };
+                let finish = if message["tool_calls"].is_array() { "tool_calls" } else { "stop" };
+                Json(json!({"model":"preview-id-scripted","choices":[{"message":message,"finish_reason":finish}],
+                    "usage":{"prompt_tokens":100,"completion_tokens":100}}))
+            }
+        }));
+        let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let base_url = format!("http://{}", listener.local_addr().unwrap());
+        let server = tokio::spawn(async move {
+            axum::serve(listener, server).await.unwrap();
+        });
+        set_runtime_llm(Some(LlmConfig {
+            api_key: "scripted-local-only".into(),
+            base_url,
+            model: "preview-id-scripted".into(),
+        }));
+        let app = civil_workbench::product::api::router(fixture.state.clone());
+        let registered = fixture
+            .state
+            .register(fixture.workspace.root().to_str().unwrap())
+            .unwrap();
+        let wid = registered["id"].as_str().unwrap();
+        let (status, started) = http(&app,"POST","/api/agent/turns",json!({"workspace":wid,"session_id":scenario,
+            "message":"修改待核查草稿","mode":"model","sandbox":"workspace-write","files":fixture.selected})).await;
+        assert_eq!(status, StatusCode::ACCEPTED, "{started}");
+        let url = format!(
+            "/api/agent/turns/{}/events?workspace={wid}&session_id={scenario}",
+            started["turn_id"].as_str().unwrap()
+        );
+        let mut result = Value::Null;
+        for _ in 0..300 {
+            result = http(&app, "GET", &url, Value::Null).await.1;
+            if result["turn"]["status"] != "running" {
+                break;
+            }
+            tokio::time::sleep(Duration::from_millis(100)).await;
+        }
+        set_runtime_llm(None);
+        server.abort();
+        assert_eq!(
+            result["turn"]["status"], "completed",
+            "{scenario}: {result}"
+        );
+        let events = result["events"].as_array().unwrap();
+        let preview = events
+            .iter()
+            .find(|event| {
+                event["kind"] == "tool_finished" && event["data"]["name"] == "preview_document"
+            })
+            .unwrap();
+        assert_eq!(preview["data"]["result"]["ok"], true, "{preview}");
+        assert_eq!(
+            preview["data"]["result"]["result"]["preview_id"],
+            expected_preview_id
+        );
+        let applied = events
+            .iter()
+            .find(|event| {
+                event["kind"] == "tool_finished" && event["data"]["name"] == "apply_document"
+            })
+            .unwrap();
+        assert_eq!(
+            std::fs::read(fixture.workspace.root().join("report.docx")).unwrap(),
+            original,
+            "original modified"
+        );
+        let artifacts = result["turn"]["result"]["artifacts"].as_array().unwrap();
+        if scenario == "cached" {
+            assert_eq!(applied["data"]["result"]["ok"], true, "{applied}");
+            assert_eq!(artifacts.len(), 1);
+            assert_eq!(result["turn"]["result"]["tool_errors"], 0);
+            let path = applied["data"]["result"]["result"]["output_path"]
+                .as_str()
+                .unwrap();
+            let bytes = std::fs::read(path).unwrap();
+            assert_ne!(bytes, original);
+            assert_eq!(sha256(&bytes), artifacts[0]["output_sha256"]);
+        } else {
+            assert_eq!(applied["data"]["result"]["ok"], false, "{applied}");
+            let error = applied["data"]["result"]["error"].as_str().unwrap();
+            assert!(
+                error.contains(if scenario == "unknown" {
+                    "不属于本轮成功预览"
+                } else {
+                    "不能与新的补丁参数混用"
+                }),
+                "{error}"
+            );
+            assert!(artifacts.is_empty());
+            fixture.no_documents_published();
         }
     }
 }
