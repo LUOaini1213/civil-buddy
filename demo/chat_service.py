@@ -646,10 +646,11 @@ def turn_status(root: Path, sid: str) -> dict:
         if row.get("state") == "running":
             # Found running on disk but not in memory: nobody is producing it. Same rule as sweep.
             row = _mark_stale(root, sid, row)
-        if current["state"] == "idle" or not current["turn_id"]:
-            current["state"] = row.get("state", current["state"])
         current.setdefault("turn_id", "")
-        if not current["turn_id"]:
+        # events/latest is always the newest turn; if memory knows an older one (or none), the disk wins.
+        newer = bool(row.get("turn_id")) and row.get("turn_id") != current["turn_id"]
+        if current["state"] == "idle" or not current["turn_id"] or newer:
+            current["state"] = row.get("state", current["state"])
             current["turn_id"] = row.get("turn_id", "")
             current["seq"] = int(row.get("seq") or 0)
         current["finished_at"] = row.get("finished_at", "")

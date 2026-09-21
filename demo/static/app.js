@@ -1866,7 +1866,13 @@ async function streamChat(message, bodyEl, run) {
   const v = cbTurnView(message, bodyEl, run);
   run.view = v;
   try {
-    await CB_CHAT_STREAM.read(res.body, cbTurnHandler(v), { signal: run.controller.signal });
+    try {
+      await CB_CHAT_STREAM.read(res.body, cbTurnHandler(v), { signal: run.controller.signal });
+    } catch (e) {
+      /* 真实浏览器里连接被掐是 reader.read() 直接 reject（TypeError），不是流悄悄结束：
+         同样按断流处理；用户停止（AbortError）和服务端明确报错（TurnError）原样上抛。 */
+      if (!e || e.name === "AbortError" || e.name === "TurnError") throw e;
+    }
     if (!v.complete) {
       /* 流断了（锁屏 / 切 App / 换网络）：服务端这一轮还在跑，并且每一帧都有编号——
          从最后看到的编号往后续，跟到 done。没有这个能力的后端仍走轮询恢复。 */
@@ -1899,6 +1905,13 @@ function cbTurnBubble(v, who) {
   return v.bodyEl;
 }
 
+/* 服务端说的错（error 事件、格式错）和网络断掉不是一回事：前者不重连。 */
+function cbTurnError(text) {
+  const e = new Error(text);
+  e.name = "TurnError";
+  return e;
+}
+
 function cbTurnHandler(v) {
   const run = v.run;
   return (eventName, dataLine, id) => {
@@ -1912,9 +1925,9 @@ function cbTurnHandler(v) {
     if (!["context", "status", "token", "error", "done", "collaboration"].includes(eventName)) return;
     let data;
     try { data = JSON.parse(dataLine); }
-    catch (_) { throw new Error("服务器返回了无法解析的回答事件，请重试。"); }
+    catch (_) { throw cbTurnError("服务器返回了无法解析的回答事件，请重试。"); }
     if (!data || typeof data !== "object" || Array.isArray(data)) {
-      throw new Error("服务器返回的回答事件格式不完整，请重试。");
+      throw cbTurnError("服务器返回的回答事件格式不完整，请重试。");
     }
     if (eventName === "context") {
       paintContext(data);
@@ -1945,7 +1958,7 @@ function cbTurnHandler(v) {
       $("log").scrollTop = $("log").scrollHeight;
     }
     if (eventName === "error") {
-      throw new Error(data.text || "error");
+      throw cbTurnError(data.text || "error");
     }
     if (eventName === "done") {
       const bodyEl = cbTurnBubble(v);
@@ -2004,8 +2017,7 @@ async function cbResumeTurn(v) {
       try {
         await CB_CHAT_STREAM.read(res.body, cbTurnHandler(v), { signal: run.controller.signal });
       } catch (e) {
-        if (e && e.name === "AbortError") throw e;
-        if (!/中断|network|fetch|load/i.test(String(e && e.message || e))) throw e; // 服务端明确报错：不重试
+        if (e && (e.name === "AbortError" || e.name === "TurnError")) throw e; // 用户停止 / 服务端明确报错：不重试
       }
       if (v.complete) return;
       wait = 1000;
