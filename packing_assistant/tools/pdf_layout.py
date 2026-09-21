@@ -109,7 +109,12 @@ def rebuild(text: str) -> str:
 
     def flush_paragraph() -> None:
         if paragraph:
-            out.extend(["".join(paragraph), ""])
+            from packing_assistant.tools.pdf_grid import between
+
+            joined = paragraph[0]
+            for following in paragraph[1:]:
+                joined += between(joined, following) + following      # a space between two Latin ends, nothing in Chinese
+            out.extend([joined, ""])
             paragraph.clear()
         out.extend(pending_pages)
         pending_pages.clear()
@@ -204,7 +209,7 @@ def rebuild(text: str) -> str:
             index += 1
             continue
         # running text
-        if paragraph and (_BLOCK_START.match(line) or not full or width(paragraph[-1]) < full * 0.9):
+        if paragraph and (_BLOCK_START.match(line) or not ((full and width(paragraph[-1]) >= full * 0.9) or _latin_runs_on(paragraph[-1], line))):
             flush_paragraph()
         paragraph.append(line)
         index += 1
@@ -215,6 +220,18 @@ def rebuild(text: str) -> str:
 
 
 _LEADERS = re.compile(r"[.．·]{6,}|…{3,}")
+_LATIN_STOP = re.compile(r"[.;:!?][)\]’”\"']*\s*$")
+_LATIN_ITEM = re.compile(r"^(?:\(?[a-z0-9]{1,3}[.)]|[A-Z][.)]|[•\-–—*])\s")
+
+
+def _latin_runs_on(previous: str, line: str) -> bool:
+    """A Latin line that does not end its sentence runs on into a line that begins in lower case - or, being as long
+    as running text is (not a heading, not a line of an address), into whatever comes next that is no list item."""
+    if re.search(r"[一-鿿]", previous + line) or sum(1 for ch in previous if ch.isalpha()) < 12:
+        return False
+    if _LATIN_STOP.search(previous) or _LATIN_ITEM.match(line):
+        return False
+    return bool(re.match(r"[a-z(“\"‘']", line)) or len(previous) >= 60
 
 
 def _full_widths(lines: Sequence[str]) -> List[int]:

@@ -156,8 +156,13 @@ Word 导出的 PDF 一行表格读出来是横着串的，合成 PDF 从来不�
 评分项 **1/40**——四份都把分值写在名称格里（「报价（60分）」），前十份没有一份这样写；两份的章标题不在文字层里。同一轮查出两个真错：
 页眉里重复的项目名称被当水印删掉（前附表那一格也没了）；须知里列出各章名称的那一条被读成章标题，十几页的条款定位标错了章。
 按类修完后十份合计字段 180/180、否决清单 124/127（连同弱信号 127/127）、评审标准 50/50、评分 80/80、组成 26/26——开发数。
+第三轮（冻结于 468af47）：两份中文——字段 **29/39**（错 3），否决条款清单 **18/32**（一份把整份否决清单写在前附表一个格子里、分三层编号、
+条目不带「否决」字样：6/20），评分项 8/9（上一轮修的评分表读法在新文件上 8/8）；**第一份真实英文招标文件——字段 0/13、组成 0/8**
+（目录页标题大写、正文不大写，一章都没认出来；下面还有英文换行粘词、段落被逐行切断、BDS 行无名称、Php 金额、checklist）。
+按类修完后十三份合计字段 232/232、否决清单 160/163（连同弱信号 163/163）、评审标准 55/55、评分 89/89、组成 41/41——开发数；
+重跑时纠正了一处自己的标准答案（751 页那份的项目经理要求写在附录人员表里，原答案记成「无」）。
 分项表在 `docs/civil-buddy/real-tender.md` 第 2 节。门禁里的对应用例：`scripts/test_tender_document.py::SecondRoundShapes`、
-`scripts/test_pdf_grid.py::Furniture`（全是编的文字，真实文件不入库）。
+`::ThirdRoundShapes`、`::RealEnglishShapes`，`scripts/test_pdf_grid.py::Furniture`（全是编的文字，真实文件不入库）。
 
     python scripts/eval_real_document.py 招标文件.pdf --gold gold.json            # 任何一份真实文件
     python scripts/eval_real_document.py cn_multilot.md --with cn_multilot.addendum1.md --gold cn_multilot.gold.json --word

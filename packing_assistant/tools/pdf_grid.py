@@ -395,7 +395,17 @@ def cell_lines(pieces: Sequence[Piece]) -> List[Line]:
     lines: List[Line] = []
     for line in grouped:
         ordered = sorted(enumerate(line), key=lambda item: (round(item[1].x, 1), item[0]))
-        text = re.sub(r"\s+", " ", "".join(p.text for _, p in ordered)).strip()
+        joined = ""
+        last_x: Optional[float] = None
+        for _, p in ordered:
+            # two text objects side by side: Chinese is set solid, Latin words are set apart by position alone - the page
+            # holds no space character between "the Project" and "refer to" when the font changes there
+            if (joined and last_x is not None and abs(p.x - last_x) > 0.5
+                    and re.search(r"[A-Za-z][,.;:)]?$", joined) and re.match(r"[(“\"]?[A-Za-z]", p.text)):
+                joined += " "
+            joined += p.text
+            last_x = p.x
+        text = re.sub(r"\s+", " ", joined).strip()
         if not text:
             continue
         size = max(p.size for p in line) or 10.0
@@ -406,6 +416,22 @@ def cell_lines(pieces: Sequence[Piece]) -> List[Line]:
             end = max(p.x + _width(p.text.strip(), p.size or size) for p in line)
         lines.append((text, start, end, size))
     return lines
+
+
+_LATIN_END = re.compile(r"[A-Za-z0-9,.;:!?)\]%’”\"']$")
+_LATIN_START = re.compile(r"^[A-Za-z0-9(\[‘“\"'$₱]")
+
+
+def between(before: str, after: str) -> str:
+    """What stands between a line and the line it runs on into: nothing in Chinese, a space between two Latin ends
+    ("the sum" / "of Five Million"). A word divided at the line end ("inter-" / "national") is one word."""
+    if not before or not after:
+        return ""
+    if re.search(r"[A-Za-z]-$", before) and re.match(r"[a-z]", after):
+        return ""
+    if before[-1].isdigit() and after[0].isdigit():
+        return ""       # a long number broken by the line ("…0320400" / "0207189") is one number
+    return " " if (_LATIN_END.search(before) and _LATIN_START.match(after)) else ""
 
 
 def join_lines(lines: Sequence[Line], left: float, right: float, reach: float = 0.0) -> str:
@@ -452,6 +478,8 @@ def join_lines(lines: Sequence[Line], left: float, right: float, reach: float = 
             runs_on = first_line_style and next_start < margin + 0.8 * size and not plainly_short(index)
         if not runs_on and text[-1] not in _ENDED:
             out += "；"
+        elif runs_on:
+            out += between(text, following)
     if re.fullmatch(r"[\d.．；\s（）()]+", out):
         out = re.sub(r"[；\s]+(?=[（(）)])", "", out)   # "2.2.4" over "（4）" in a narrow number cell is one number
     return out.replace("|", "／")

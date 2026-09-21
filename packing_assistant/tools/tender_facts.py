@@ -44,7 +44,7 @@ _TIME = re.compile(r"(?<![\dA-Za-z#.])" + _NUM + r"\s*(?:个?日历天|日历日
                    r"months?|weeks?|years?|个月|天|日|周|月|年)", re.I)
 _MONEY = re.compile(r"(?<![\dA-Za-z#.])" + _NUM + r"\s*(?:万元|亿元|万|亿|元)(?!/)"
                     r"|(?<![\dA-Za-z#.])" + _NUM + r"\s*[（(]\s*(?:万元|亿元|元)\s*[)）]"       # "预算金额：86(万元)" - a platform's form
-                    r"|(?:S\$|US\$|HK\$|SGD|USD|RMB|CNY|¥|￥|\$)\s*" + _NUM + r"(?:\s*(?:万元|万|million|mil|k|K))?")
+                    r"|(?:S\$|US\$|HK\$|SGD|USD|RMB|CNY|PHP|PhP|Php|₱|¥|￥|\$)\s*" + _NUM + r"(?:\s*(?:万元|万|million|mil|k|K))?")
 _AREA = re.compile(r"(?<![\dA-Za-z#.])" + _NUM + r"\s*(?:万?平方米|万?平米|万?平方|万?平|㎡|m²|m2)(?![一-鿿])", re.I)
 _SCORE = re.compile(r"(?<![\dA-Za-z#.])" + _NUM + r"\s*分(?![钟公包部项期批别类析布配])")
 _MONTH = r"(?:Jan(?:uary)?|Feb(?:ruary)?|Mar(?:ch)?|Apr(?:il)?|May|June?|July?|Aug(?:ust)?|Sep(?:t(?:ember)?)?|Oct(?:ober)?|Nov(?:ember)?|Dec(?:ember)?)"
@@ -268,7 +268,8 @@ TOPICS: Tuple[Topic, ...] = (
     Topic("deadline_visit", "踏勘", ("现场踏勘", "踏勘现场", "踏勘", "Site show-round", "Site briefing", "Site visit"), "date", "timeline"),
     Topic("registration", "注册资格/工作类别", ("workhead", "BCA"), "workhead", "qualification"),
     Topic("qualification", "资质", ("资质要求", "资质条件", "企业资质", "资质等级", "资质"), "text", "qualification"),
-    Topic("track_record", "类似业绩", ("类似工程业绩", "类似项目业绩", "类似业绩", "业绩要求", "同类业绩", "业绩"), "text", "qualification"),
+    Topic("track_record", "类似业绩", ("类似工程业绩", "类似项目业绩", "类似业绩", "业绩要求", "同类业绩", "业绩", "contracts similar to the Project",
+                                   "similar contracts", "Single Largest Completed Contract"), "text", "qualification"),
     Topic("pm", "项目经理", ("项目经理", "项目负责人", "Project Manager", "Project Director"), "person", "qualification"),
     Topic("tech_lead", "技术负责人", ("技术负责人", "项目总工", "总工"), "person", "qualification"),
     Topic("duration", "工期", ("计划工期", "招标工期", "要求工期", "总工期", "工期要求", "工期承诺", "承诺工期", "工期", "服务期限", "服务期", "Contract Period", "Contract Duration",
@@ -303,13 +304,13 @@ DOCUMENT_TOPICS: Tuple[Topic, ...] = (
     Topic("signing", "签字盖章要求", ("签字或盖章要求", "签字盖章要求", "签章要求"), "text", "form"),
     Topic("performance_bond", "履约担保", ("履约担保", "履约保证金", "履约保函", "Performance Bond", "Performance Security", "Security Deposit"), "text", "bond"),
     Topic("alternative", "备选投标方案", ("是否允许递交备选投标方案", "备选投标方案", "备选方案", "Alternative Tenders", "Alternative Tender", "Alternative Bids", "Alternative Offers"), "text", "substantive"),
-    Topic("subcontract", "分包", ("分包",), "text", "substantive"),
+    Topic("subcontract", "分包", ("分包", "Subcontracting", "Sub-contracting", "Subcontracts"), "text", "substantive"),
     Topic("deviation", "偏离", ("偏离",), "text", "substantive"),
     Topic("open_place", "开标地点", ("开标地点", "开标时间和地点", "bid opening shall take place at", "tender opening shall take place at",
                                 "place of bid opening", "place of tender opening"), "text", "timeline"),
     Topic("submit_place", "递交地点", ("递交投标文件地点", "投标文件递交地点", "递交地点"), "text", "timeline"),
     Topic("candidates", "中标候选人", ("是否授权评标委员会确定中标人", "中标候选人"), "text", "scoring"),
-    Topic("budget", "采购预算", ("预算金额", "采购预算", "项目预算"), "money", "price"),
+    Topic("budget", "采购预算", ("预算金额", "采购预算", "项目预算", "Approved Budget for the Contract"), "money", "price"),
     Topic("this_lot", "本文件所属标段", (), "text", "project"),     # read off the cover (tender_document.document_lot), never by a keyword
 )
 _DOCUMENT_ALIASES: List[Tuple[str, str]] = sorted(
@@ -340,6 +341,8 @@ _DOCUMENT_ROW_NAMES: Tuple[Tuple[str, str], ...] = (
     (r"可选择(?:或调整)?的(?:投标|响应|报价)(?:和报价)?|选择性(?:投标|报价)(?:方案)?", "alternative"),
     (r"评[审标分]标准(?:和|及|与)(?:方法|办法)|评[审标分](?:方法|办法)(?:和|及|与)标准", "eval_method"),
     (r"(?:提交|递交|送达|投标)地点", "submit_place"),
+    (r"(?:评标委员会)?推荐(?:的)?中标候选人(?:的)?(?:人数|数量|名额)?", "candidates"),
+    (r"偏差|偏离", "deviation"),
     (r"(?:供应商|[一-鿿]{2,6}人)(?:的)?(?:资格|资质)(?:要求|条件)", "qualification"),
     (r"(?:首次)?[一-鿿]{2,8}文件(?:的)?(?:递交|提交)(?:的)?截止时间|(?:提交|递交)[一-鿿]{2,8}文件(?:的)?截止时间", "deadline_bid"),
     (r"[一-鿿]{0,4}特定资格要求", "qualification"),
@@ -360,7 +363,7 @@ def document_topic(name: str) -> str:
     """The field a front-table row (or a label inside its content) is about, by its name. The keyword has
     to be what the name is about: 招标人书面澄清的时间 is not the 招标人."""
     name = re.sub(r"[（(][^）)]*[)）]", "", (name or "").strip())           # 第一个信封（商务及技术文件）开标时间
-    name = re.sub(r"^(?:本项目)?是否(?:接受|允许|组织|召开|需要)?", "", name)   # "是否接受联合体" is about 联合体
+    name = re.sub(r"^(?:本项目|本工程|本次招标|招标工程|招标项目)?是否(?:接受|允许|组织|召开|需要)?", "", name)   # "是否接受联合体" is about 联合体
     if re.search(r"分包人|分包商|分包单位|第三人", name):
         return ""   # 对分包人的资格要求 is about whoever the work is sublet to, not about the bidder
     if re.search(r"预付款|质量保证金|质保金|工资保证金|农民工|廉洁保证金|保修金|低价风险", name):

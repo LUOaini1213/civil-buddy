@@ -250,6 +250,32 @@ class Furniture(unittest.TestCase):
             self.assertNotRegex(kept, r"[-/]|39", "a page number drawn in five pieces, on the foot's line")
             self.assertEqual(name in kept, number == 3, "the same words in the body are the document's")
 
+    def test_latin_lines_and_pieces_are_joined_with_a_space_chinese_and_numbers_are_not(self) -> None:
+        self.assertEqual(pg.between("intends to apply the sum", "of Five Million"), " ")
+        self.assertEqual(pg.between("投标人须具备市政公用工程", "施工总承包资质"), "")
+        self.assertEqual(pg.between("账号：9410070100320400", "0207189"), "", "a long number broken by the line is one number")
+        self.assertEqual(pg.between("an inter-", "national bidder"), "", "a word divided at the line end is one word")
+        self.assertEqual(pg.between("采用 BIM", "技术"), "")
+        # two text objects side by side in one cell line: no space character stands between them on the page
+        lines = pg.cell_lines([piece(60, 700, "contracts similar to the Project"), piece(232, 700, "refer to contracts")])
+        self.assertEqual(lines[0][0], "contracts similar to the Project refer to contracts")
+        lines = pg.cell_lines([piece(60, 700, "招标编号：LX-"), piece(140, 700, "2031-07")])
+        self.assertEqual(lines[0][0], "招标编号：LX-2031-07", "a number is set solid, whatever objects it is drawn in")
+
+    def test_an_english_paragraph_cut_at_every_line_end_is_whole_again(self) -> None:
+        from packing_assistant.tools import pdf_layout
+
+        text = ("1. The Harbour Works Authority through the Capital Fund intends to apply the sum of One Million\n"
+                "Dollars (USD 1,000,000.00), being the Approved Budget for the Contract (ABC) to payments under the\n"
+                "contract for the Rehabilitation of Pier 4.\n"
+                "(a) Valid Registration Certificate;\n"
+                "(b) Statement of all ongoing contracts.\n")
+        rebuilt = [line for line in pdf_layout.rebuild(text).splitlines() if line.strip()]
+        self.assertEqual(len(rebuilt), 3, rebuilt)
+        self.assertIn("the sum of One Million Dollars (USD 1,000,000.00), being", rebuilt[0])
+        self.assertTrue(rebuilt[0].endswith("Rehabilitation of Pier 4."))
+        self.assertEqual(rebuilt[1:], ["(a) Valid Registration Certificate;", "(b) Statement of all ongoing contracts."], "a list item begins a paragraph")
+
     def test_a_page_number_drawn_piece_by_piece_counts_up(self) -> None:
         pages = [page([piece(60, 700, "正文\n"), piece(280, 40, "-"), piece(286, 40, str(number)), piece(292, 40, "/"), piece(297, 40, "12"), piece(309, 40, "-")], [])
                  for number in range(1, 7)]

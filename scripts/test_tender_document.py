@@ -988,5 +988,217 @@ class SecondRoundShapes(unittest.TestCase):
             self.assertTrue(any(words in t for t in listed), words)
 
 
+ONE_CELL = """第一章 招标公告
+
+项目名称：临溪镇污水泵站改造工程
+
+1、招标人不组织踏勘现场。招标人不组织投标预备会。
+
+第二章 投标人须知
+
+投标人须知前附表
+
+| 条款号 | 条款名称 | 编列内容 |
+| --- | --- | --- |
+| 1.4.1 | 投标人资质条件、能力和信誉 | 资质条件：见附录1；项目负责人资格：见附录4；其他人员最低要求：见附录5 |
+| 1.11 | 招标工程是否允许分包 | 除禁止分包的工程外，其余工程允许分包，但必须经招标人同意。 |
+| 1.12.2 | 偏差 | 不允许 |
+| 3.1 | 投标文件的组成 | 商务标（主要包括下列内容）：（1）投标函；（2）投标函附录；（3）已标价工程量清单；（4）资格审查资料。 |
+| 3.2.5 | 最高投标限价 | ■有，最高投标限价：100%；投标人的投标报价（费率）不得超出最高投标限价，否则其投标将被否决。 |
+| 3.2.6 | 投标报价的其他要求 | 1.有下列情形之一的，其投标将被否决：（1）税金少计的；（2）规费漏计的。2.结算时按实调整下列内容：（1）材料价差；（2）人工价差。 |
+| 1.4.3 | 投标人不得存在的情形 | 有下列情形之一的，其投标将被否决：（1）近三年内有骗取中标行为的；（2）有严重违约行为的。前款所称“骗取中标”是指：（1）以他人名义投标的；（2）以其他方式弄虚作假的。 |
+| 11.3 | 投诉 | 有下列情形之一的投诉，不予受理：（一）投诉事项不具体的；（二）超过投诉时效的。 |
+| 4.2.5 | 电子投标文件的拒收情形 | 1.投标截止时间后送达的投标文件；2.未按规定加密的投标文件。 |
+| 5.1 | 开标时间和地点 | 1.开标时间：同投标截止时间；2.现场开标地点：临溪市政务服务中心四楼开标室；3.不见面开标系统网址另行通知。 |
+| 6.3 | 评标办法 | 评审价法。 |
+| 6.3.2 | 评标委员会推荐中标候选人的人数 | 1-3名 |
+| 10.1 | 否决投标的情形 | 1.投标文件存在以下情形之一的，经过询标程序，其投标文件将被否决：（1）资格审查内容：①投标人不满足招标文件载明的企业资格的；②委托代理人未提供有效的授权委托书的。（2）初步评审内容：①投标文件未经投标人盖章的；投标文件未经法定代表人盖章的；②投标报价高于最高限价的；③凡投标人有下列情形之一的，视为串通投标行为，其投标文件将被否决：1）不同投标人的投标文件由同一台电脑编制的；2）不同投标人的文件制作机器码相同的。2.在正式投标人中，有下列情况之一的不进入算术平均值计算范围（下述第②条除外）：①未通过资格审查的投标报价。注：①凡评标委员会拟作出否决投标决定的，应先向投标人询问核对。 |
+
+附录4 资格审查条件（项目负责人最低要求）
+
+| 人员 | 数量 | 资格要求 |
+| --- | --- | --- |
+| 项目负责人 | 1 | 具有道桥及相关专业中级及以上职称。具有试验检测工程师证书。 |
+| 技术负责人 | 1 | 具有道桥及相关专业高级及以上职称。 |
+
+1. 总则
+
+1.1 适用范围：仅适用于本项目。
+
+第三章 评标定标办法
+
+2.2.6计算商务报价得分（满分100分）
+
+按以下方式计算商务报价得分。
+
+第四章 合同条款及格式
+
+""" + FILLER + "\n\n" + FILLER.replace("承包人", "中标人")
+
+
+class ThirdRoundShapes(unittest.TestCase):
+    """The third round of real tenders (first run: fields 29/39, rejections 18/32 on two Chinese tenders): a tender
+    whose whole rejection list stands in ONE cell of the front table, parts of a cell numbered 1. 2. 3., a front table
+    that says 见附录4, a tender on rates. Made-up documents of the same shapes."""
+
+    @classmethod
+    def setUpClass(cls) -> None:
+        cls.doc = td.read(ONE_CELL)
+        cls.facts = tf.extract(ONE_CELL)
+
+    def values(self, topic: str) -> list:
+        return [m.value for m in self.facts.of(topic) if m.side == "tender"]
+
+    def test_a_rejection_list_inside_one_cell_is_listed_item_by_item(self) -> None:
+        listed = [r.piece.text for r in td.rejections(self.doc)]
+        for item in ("①投标人不满足招标文件载明的企业资格的", "②委托代理人未提供有效的授权委托书的", "①投标文件未经投标人盖章的", "投标文件未经法定代表人盖章的",
+                     "②投标报价高于最高限价的", "1）不同投标人的投标文件由同一台电脑编制的", "2）不同投标人的文件制作机器码相同的"):
+            self.assertIn(item, listed, "an item carries no rejecting word of its own - the sentence over it does")
+        self.assertFalse(any(t.startswith("（1）资格审查内容") or t.startswith("（2）初步评审内容") for t in listed), "a group's heading is no item")
+        self.assertTrue({"（1）税金少计的", "（2）规费漏计的"} <= set(listed))
+        self.assertFalse(any("材料价差" in t or "人工价差" in t for t in listed), "2.结算时… rejects nothing: the list under it is no rejection list")
+        self.assertTrue({"（1）近三年内有骗取中标行为的", "（2）有严重违约行为的"} <= set(listed))
+        self.assertFalse(any("以他人名义投标的" in t for t in listed), "“骗取中标”是指：… is a list of definitions")
+        self.assertFalse(any("投诉" in t for t in listed), "a COMPLAINT that is turned away is no bid thrown out")
+        self.assertFalse(any(t.startswith("②条") for t in listed), "第②条 inside a sentence is no item mark")
+        self.assertIn("1.投标截止时间后送达的投标文件", listed, "电子投标文件的拒收情形: the ROW'S NAME announces the list")
+        self.assertIn("2.未按规定加密的投标文件", listed)
+
+    def test_numbered_parts_keep_their_labels_and_a_reference_lays_nothing_down(self) -> None:
+        self.assertEqual(self.values("deadline_open"), ["同投标截止时间"])
+        self.assertEqual(self.values("open_place"), ["临溪市政务服务中心四楼开标室"], "2.现场开标地点：… - the number is no part of the label")
+        self.assertTrue(any("道桥及相关专业中级及以上职称" in v for v in self.values("pm")), "见附录4 points at the table 人员 | 数量 | 资格要求")
+        self.assertTrue(any("道桥及相关专业高级及以上职称" in v for v in self.values("tech_lead")))
+        self.assertFalse(any("附录" in v for v in self.values("qualification") + self.values("pm")))
+
+    def test_row_names_and_values_of_the_third_round(self) -> None:
+        self.assertTrue(any("其余工程允许分包" in v for v in self.values("subcontract")), "招标工程是否允许分包")
+        self.assertEqual(self.values("deviation"), ["不允许"], "偏差")
+        self.assertEqual(self.values("candidates"), ["1-3名"], "评标委员会推荐中标候选人的人数")
+        self.assertEqual(self.values("price_cap"), ["100%"], "a tender on rates caps the rate")
+        self.assertEqual(self.values("eval_method"), ["评审价法"], "a method this reader has no word for, named by the row that is about it")
+        self.assertEqual(self.values("deadline_visit"), ["不组织踏勘现场"], "a sentence of the notice")
+
+    def test_forms_from_the_front_row_and_the_price_as_the_only_score(self) -> None:
+        self.assertEqual([name for name, _ in td.forms(self.doc)], ["投标函", "投标函附录", "已标价工程量清单", "资格审查资料"],
+                         "投标函 and 投标函附录 are two forms")
+        self.assertEqual([(name, value) for name, value, _ in td.scores(self.doc)], [("商务报价", "100分")])
+
+
+INVITATION = """TABLE OF CONTENTS
+
+SECTION I.  INVITATION TO BID ........................................ 3
+
+SECTION II.  INSTRUCTIONS TO BIDDERS ................................. 6
+
+SECTION III.  BID DATA SHEET ......................................... 14
+
+SECTION IV.  GENERAL CONDITIONS OF CONTRACT .......................... 16
+
+SECTION V.  BILL OF QUANTITIES ....................................... 30
+
+SECTION VI.  CHECKLIST OF TECHNICAL AND FINANCIAL DOCUMENTS ......... 38
+
+Section I.  Invitation to Bid
+
+1. The Harbour Works Authority – Northern District through the Capital Fund intends to apply the sum of One Million Two Hundred Fifty Thousand Dollars (USD 1,250,000.00), inclusive of applicable taxes, being the Approved Budget for the Contract (ABC) to payments under the contract for the “Rehabilitation of Pier 4 Fendering” under Project Identification (ID) Number HW-2031-07. Bids received in excess of the ABC shall be automatically rejected at bid opening.
+
+2. The Harbour Works Authority – Northern District now invites bids for the above Procurement Project.  Completion of the Works is within One Hundred Twenty (120) calendar days upon receipt of the approved Notice to Proceed.
+
+8. Bids must be duly received by the BAC Secretariat, one (1) original copy (hardcopy) and one (1) electronic copy of the bid documents, at the address below and by e-mail at bac.secretariat@harbourworks.example and on or before 14 August 2031 at 9:00 A.M. Late bids shall not be accepted.
+
+10. Bid Opening shall be on 14 August 2031 at 1 0:30 A.M. at the address below.
+
+Section II.  Instructions to Bidders
+
+14.2 The Bid and bid security shall be valid until 12 December 2031. Any bid not accompanied by an acceptable bid security shall be rejected by the Procuring Entity as non-responsive.
+
+15. The Procuring Entity may request additional hard copies of the Bid. However, failure of the Bidders to comply with the said request shall not be a ground for disqualification.
+
+Section III.  Bid Data Sheet
+
+| ITB Clause |  |
+| --- | --- |
+| 5.2 | For this purpose, contracts similar to the Project refer to contracts which have the same major categories of work, which shall be: a. Marine fendering works.；b. Completed within five (5) years prior to the deadline. |
+| 7.1 | Subcontracting is not allowed. |
+| 10.3 | [Specify if another Contractor license or permit is required.] (Please refer to the Scope of Works under the Bidding Documents). |
+| 12 | [Insert Value Engineering clause if allowed.] Value engineering is not allowed. |
+| 15.1 | The bid security shall be in the form of a Bid Securing Declaration or any of the following forms and amounts: a. The amount of not less than USD 25,000.00 [Two percent (2%) of ABC], if bid security is in cash, cashier’s check or bank guarantee; b. The amount of not less than USD 62,500.00 [Five percent (5%) of ABC] if bid security is in Surety Bond. |
+| 21 | Additional contract documents relevant to the Project that may be required by existing laws and/or the Procuring Entity, such as the construction schedule and the manpower schedule. |
+
+Section IV.  General Conditions of Contract
+
+""" + "\n\n".join(f"{n}.1 The Contractor shall submit a written report within {7 + n} days of receiving an instruction, and the Procuring Entity's Representative shall reply within {14 + n} days." for n in range(1, 16)) + """
+
+Section V.  Bill of Quantities
+
+A signature box shall be added at the bottom of each page of the Bill of Quantities. Failure of the authorized representative to sign each and every page of the Bill of Quantities shall be a cause for rejection of his bid.
+
+Section VI.  Checklist of Technical and Financial Documents
+
+(a) Valid Registration Certificate (all pages) in accordance with Section 8.5.2 of the rules;
+
+(b) Statement of the bidder’s Single Largest Completed Contract (SLCC) similar to the contract to be bid, except under conditions provided under the rules; and
+
+(c) Original copy of Bid Security. If in the form of a Surety Bond, submit also a certification issued by the Insurance Commission; and
+
+(d) Original duly signed Omnibus Sworn Statement (OSS) and if applicable, Original Notarized Secretary’s Certificate in case of a corporation, partnership, or cooperative.
+"""
+
+
+class RealEnglishShapes(unittest.TestCase):
+    """The first REAL English tender (first run: fields 0/13, forms 0/8): its contents page sets the section titles in
+    capitals and the body does not - so no section was one - and everything it lays down stands in sentences, in a Bid
+    Data Sheet whose rows have a clause number and no name, and in a checklist. A made-up tender of the same shape."""
+
+    @classmethod
+    def setUpClass(cls) -> None:
+        cls.doc = td.read(INVITATION)
+        cls.facts = tf.extract(INVITATION)
+
+    def values(self, topic: str) -> list:
+        return [m.value for m in self.facts.of(topic) if m.side == "tender"]
+
+    def test_a_contents_page_in_capitals_heads_the_same_sections(self) -> None:
+        chapters = []
+        for p in self.doc.pieces:
+            if p.chapter and p.chapter not in chapters:
+                chapters.append(p.chapter)
+        self.assertEqual([c.split()[1] for c in chapters], ["I", "II", "III", "IV", "V", "VI"])
+        self.assertEqual(len(td.front_rows(self.doc)), 6, "the Bid Data Sheet is the front table")
+
+    def test_an_invitation_lays_its_fields_down_in_sentences(self) -> None:
+        self.assertEqual(self.values("owner"), ["Harbour Works Authority – Northern District"])
+        self.assertEqual(self.values("budget"), ["USD 1,250,000.00"])
+        self.assertEqual(self.values("project"), ["Rehabilitation of Pier 4 Fendering"])
+        self.assertEqual(self.values("tender_no"), ["HW-2031-07"])
+        self.assertEqual(self.values("duration"), ["One Hundred Twenty (120) calendar days"])
+        self.assertEqual(self.values("deadline_bid"), ["14 August 2031 at 9:00 A.M"], "the sentence holds an e-mail address: dots do not end it")
+        self.assertEqual(self.values("deadline_open"), ["14 August 2031 at 1 0:30 A.M"], "a clock the text layer broke")
+        self.assertEqual(self.values("copies"), ["one (1) original copy (hardcopy) and one (1) electronic copy"])
+        self.assertEqual(self.values("validity"), ["until 12 December 2031"], "in the instructions, not in the notice")
+
+    def test_a_bid_data_sheet_row_is_named_by_how_it_begins(self) -> None:
+        self.assertEqual(self.values("subcontract"), ["Subcontracting is not allowed."])
+        self.assertTrue(any("Marine fendering works" in v for v in self.values("track_record")), "what similar contracts ARE, not the row's opening words")
+        bond = self.values("bond")
+        self.assertTrue(len(bond) == 1 and "USD 25,000.00" in bond[0] and "USD 62,500.00" in bond[0], f"one amount per form, both shown: {bond}")
+        self.assertLessEqual(len(bond[0]), 120, "in a length the table shows whole")
+        self.assertEqual([m.value for m in self.facts.mentions if m.ref.endswith("21") or "Scope of Works" in m.value], [],
+                         "a field word far into the cell names nothing; a cell that only refers elsewhere lays nothing down")
+
+    def test_rejections_in_english(self) -> None:
+        listed = [r.piece.text for r in td.rejections(self.doc)]
+        for words in ("shall be automatically rejected at bid opening", "Late bids shall not be accepted", "rejected by the Procuring Entity as non-responsive",
+                      "shall be a cause for rejection of his bid"):
+            self.assertTrue(any(words in t for t in listed), words)
+        self.assertFalse(any("shall not be a ground for disqualification" in t for t in listed), "a sentence that says what does NOT disqualify")
+
+    def test_the_checklist_is_what_a_bid_must_hold(self) -> None:
+        self.assertEqual([name for name, _ in td.forms(self.doc)],
+                         ["Valid Registration Certificate (all pages)", "Statement of the bidder’s Single Largest Completed Contract (SLCC)",
+                          "Original copy of Bid Security", "Original duly signed Omnibus Sworn Statement (OSS)"])
+
+
 if __name__ == "__main__":
     unittest.main(verbosity=1)
