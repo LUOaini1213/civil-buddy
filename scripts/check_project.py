@@ -29,6 +29,7 @@ CHECKS = (
     Check("js-syntax", ("scripts/test_js_syntax.py",)),
     Check("vue-bindings", ("scripts/test_vue_bindings.py",)),
     Check("chat-stream", ("scripts/test_chat_stream.cjs",), "node"),
+    Check("ui-modules", ("scripts/test_modules.cjs",), "node"),  # demo/static/modules/*.js on their own
     Check("ui-dom", ("scripts/e2e/ui_dom.cjs",), "node"),  # real page + real backend in jsdom
     Check("stack-parity", ("scripts/test_stack_parity.py",)),
     Check("expert-capabilities", ("scripts/test_expert_capabilities.py",)),

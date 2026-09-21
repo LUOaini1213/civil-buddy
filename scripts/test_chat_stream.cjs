@@ -71,6 +71,13 @@ test("SSE checks a pre-aborted signal and absent response body", async () => {
   await assert.rejects(transport.read(null, () => {}), /回答流/);
 });
 
+const modules = {
+  auth: require("../demo/static/modules/auth.js"),
+  toast: require("../demo/static/modules/toast.js"),
+  drafts: require("../demo/static/modules/drafts.js"),
+  uploads: require("../demo/static/modules/uploads.js"),
+};
+
 function section(start, end) {
   const first = app.indexOf(start);
   const last = app.indexOf(end, first + start.length);
@@ -108,6 +115,9 @@ function ui(fetcher) {
   const onboarding = [];
   const stored = new Map();
   const context = vm.createContext({
+    /* app.js is an ES module now; the pieces it imports are real modules, handed in here. */
+    createAuth: modules.auth.createAuth, createToast: modules.toast.createToast,
+    createDrafts: modules.drafts.createDrafts, createUploads: modules.uploads.createUploads,
     AbortController, TextDecoder, FormData, URL, setTimeout, clearTimeout, CB_CHAT_STREAM: transport, fetch: fetcher,
     window: {}, cbProj: { cur: "", sessions: [] }, cbCmd: {}, cbCmdUpdate() {},
     localStorage: { getItem: (key) => stored.get(key) || null, setItem: (key, value) => stored.set(key, value), removeItem: (key) => stored.delete(key) },

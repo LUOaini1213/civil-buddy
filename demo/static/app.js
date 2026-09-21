@@ -1,3 +1,10 @@
+/* Civil Buddy 工作台页面。作为 ES module 加载（index.html: type="module"）；
+   可复用的部件在 ./modules/ 里，这里只做接线和页面逻辑。 */
+import { createAuth } from "./modules/auth.js";
+import { createToast } from "./modules/toast.js";
+import { createDrafts } from "./modules/drafts.js";
+import { createUploads } from "./modules/uploads.js";
+
 const state = {
   experts: [],
   catalog: null,
@@ -186,34 +193,9 @@ async function cbBgTick() {
   if (changed) loadThreads().catch(() => {});
 }
 
-/* 页面上唯一的可见提示条：一次一条，6 s 自己消失，可带一个动作按钮。 */
-let cbToastTimer = null;
-function cbToast(text, opts) {
-  const options = opts || {};
-  let box = $("cbToast");
-  if (!box) {
-    box = document.createElement("div");
-    box.id = "cbToast";
-    box.className = "cb-toast";
-    box.setAttribute("role", "status");
-    document.body.appendChild(box);
-  }
-  box.innerHTML = "";
-  const msg = document.createElement("span");
-  msg.textContent = String(text || "");
-  box.appendChild(msg);
-  if (options.action && typeof options.onAction === "function") {
-    const btn = document.createElement("button");
-    btn.type = "button";
-    btn.textContent = options.action;
-    btn.addEventListener("click", () => { box.hidden = true; options.onAction(); });
-    box.appendChild(btn);
-  }
-  box.hidden = false;
-  cbAnnounce(text);
-  if (cbToastTimer) clearTimeout(cbToastTimer);
-  cbToastTimer = setTimeout(() => { box.hidden = true; }, 6000);
-}
+/* 页面上唯一的可见提示条（modules/toast.js）：一次一条，6 s 自己消失，可带一个动作按钮。 */
+const toast = createToast({ doc: document, announce: (text) => cbAnnounce(text) });
+function cbToast(text, opts) { return toast(text, opts); }
 
 /* 旁观中的后台轮次：页面上没有流，但服务端这一轮还在跑，会话因此是忙的（再发消息只会 409）。
    所以它要按「运行中」来画，也要能被停止——否则回到任务的人只能干等到完成或服务端超时。
@@ -225,6 +207,7 @@ function cbReleaseWatch() {
   cbWatchedRun = null;
   if (!cbActiveRun) cbRunPaint(false);
 }
+
 
 /* 手机回到前台（iOS 后台会掐掉 fetch 流）：没有活动流时，检查当前任务是否还在服务端跑。 */
 document.addEventListener("visibilitychange", () => {
@@ -409,46 +392,10 @@ function cbApplyHealth(health) {
   cbSyncSend();
 }
 
-/* Optional shared secret (CIVIL_TOKEN on the server, for CIVIL_HOST=0.0.0.0). Kept in a
-   cookie so plain download links and uploads carry it too; asked for once — on boot when
-   /api/health says auth is on, or on the first 401 — then every /api/ fetch retries once. */
-const TOKEN_COOKIE = "cb_token";
-let tokenPromptOpen = false;
-
-function hasToken() {
-  return document.cookie.split(";").some((c) => c.trim().startsWith(`${TOKEN_COOKIE}=`));
-}
-
-function setToken(tok) {
-  const v = encodeURIComponent((tok || "").trim());
-  document.cookie = `${TOKEN_COOKIE}=${v}; path=/; max-age=${60 * 60 * 24 * 30}; SameSite=Lax`;
-}
-
-async function askToken(reason) {
-  if (tokenPromptOpen) return false;
-  tokenPromptOpen = true;
-  try {
-    const tok = window.prompt(`${reason || "这个工作台需要访问口令"}（CIVIL_TOKEN）`);
-    if (!tok) return false;
-    setToken(tok);
-    return true;
-  } finally {
-    tokenPromptOpen = false;
-  }
-}
-
-(function guardApiFetch() {
-  if (typeof window.fetch !== "function") return;
-  const rawFetch = window.fetch.bind(window);
-  window.fetch = async function cbFetch(input, init) {
-    const res = await rawFetch(input, init);
-    const url = typeof input === "string" ? input : (input && input.url) || "";
-    if (res.status === 401 && url.startsWith("/api/") && !(init && init.cbRetried)) {
-      if (await askToken("口令缺失或不对")) return cbFetch(input, { ...(init || {}), cbRetried: true });
-    }
-    return res;
-  };
-})();
+/* 访问口令（modules/auth.js）：cookie 里的 CIVIL_TOKEN，首个 401 问一次并重试那一次请求。 */
+const auth = createAuth({ win: window, doc: document });
+const { hasToken, askToken } = auth;
+auth.installFetchGuard();
 
 async function boot() {
   const request = cbSessionRequest;
@@ -504,7 +451,7 @@ function cbAttachRender() {
   const box = $("attaches");
   if (!box) return;
   box.innerHTML = "";
-  const pending = cbUploadsPending.filter((u) => u.session === state.session);
+  const pending = uploads.pending.filter((u) => u.session === state.session);
   if (!state.attachments.length && !pending.length) {
     box.hidden = true;
     return;
@@ -529,7 +476,7 @@ function cbAttachRender() {
       retry.type = "button";
       retry.className = "cb-att-x";
       retry.textContent = "重试";
-      retry.addEventListener("click", () => { u.error = ""; cbUploadPump(); });
+      retry.addEventListener("click", () => uploads.retry(u));
       chip.appendChild(retry);
     } else {
       const bar = document.createElement("span");
@@ -548,15 +495,10 @@ function cbAttachRender() {
     x.className = "cb-att-x";
     x.textContent = "\u00d7";
     x.setAttribute("aria-label", "取消上传 " + u.name);
-    x.addEventListener("click", () => {
-      if (u.xhr) u.xhr.abort();
-      cbUploadDrop(u);
-      cbAttachRender();
-      cbUploadPump();
-    });
+    x.addEventListener("click", () => uploads.cancel(u));
     chip.appendChild(x);
     box.appendChild(chip);
-    cbAttachPaintProgress(u);
+    uploads.paintProgress(u);
   }
   for (const f of state.attachments) {
     const chip = document.createElement("span");
@@ -607,161 +549,22 @@ function cbAttachRender() {
   }
 }
 
-async function cbAttachUpload(fileList) {
-  if (cbCapability("attachments") === false) {
-    addStatus("当前工作台未提供附件上传，可以将材料要点粘贴到输入框。");
-    return;
-  }
-  const files = Array.from(fileList || []);
-  if (!files.length) return;
-  const session = state.session;
-  let slots = cbUploadSlotsLeft(session);
-  const refused = [];
-  const queued = [];
-  for (const file of files) {
-    const why = cbUploadPrecheck(file);
-    if (why) { refused.push(`${file.name}：${why}`); continue; }
-    if (slots <= 0) { refused.push(`${file.name}：同一会话最多 ${CB_UPLOAD_LIMITS.maxFiles} 个附件`); continue; }
-    slots -= 1;
-    cbUploadKey += 1;
-    const u = { key: "up" + cbUploadKey, session, name: file.name, bytes: file.size || 0, loaded: 0, xhr: null, file, error: "", done: false };
-    cbUploadsPending.push(u);
-    queued.push(u);
-  }
-  if (refused.length) addStatus("未上传：" + refused.join("；"));
-  cbUploadPump();
-  /* 等这一批都有结果（成功、失败或被取消）再返回：调用方（拖拽 / 粘贴 / 选择器）不关心进度 */
-  await Promise.all(queued.map((u) => u.settled || Promise.resolve()));
-}
+async function cbAttachUpload(fileList) { return uploads.upload(fileList); }
+function cbUploadAbortAll(exceptSession) { uploads.abortAll(exceptSession); }
 
-/* 服务端的门槛（demo/uploads.py）在这里先问一遍：类型、单文件 20 MB、一个会话 12 个。
-   手机 4G 上传完 20 MB 才被告知"不支持 .pptx"是最伤人的一种失败。 */
-const CB_UPLOAD_LIMITS = { maxBytes: 20 * 1024 * 1024, maxFiles: 12,
-  ext: ["pdf", "docx", "xlsx", "txt", "md", "csv", "json", "log"] };
-const CB_UPLOAD_CONCURRENCY = 2;
-/* 进行中的上传：{ key, session, name, bytes, loaded, xhr, file, error, done } —— 和 state.attachments 一起画成 chip。 */
-const cbUploadsPending = [];
-let cbUploadKey = 0;
-
-function cbUploadPrecheck(file) {
-  const name = String(file.name || "");
-  const ext = (name.match(/\.([A-Za-z0-9]+)$/) || [, ""])[1].toLowerCase();
-  if (!CB_UPLOAD_LIMITS.ext.includes(ext)) return `不支持 .${ext || "?"}，只收 ${CB_UPLOAD_LIMITS.ext.map((e) => "." + e).join(" ")}`;
-  if (file.size > CB_UPLOAD_LIMITS.maxBytes) return `单文件不能超过 ${fmtBytes(CB_UPLOAD_LIMITS.maxBytes)}（这个 ${fmtBytes(file.size)}）`;
-  return "";
-}
-
-function cbUploadSlotsLeft(session) {
-  const have = state.attachments.filter((a) => !String(a.id || "").startsWith("job:")).length
-    + cbUploadsPending.filter((u) => u.session === session && !u.error).length;
-  return CB_UPLOAD_LIMITS.maxFiles - have;
-}
-
-function cbUploadDrop(u) {
-  const i = cbUploadsPending.indexOf(u);
-  if (i >= 0) cbUploadsPending.splice(i, 1);
-  if (u.resolve) u.resolve();
-}
-
-function cbUploadAbortAll(exceptSession) {
-  for (const u of cbUploadsPending.slice()) {
-    if (exceptSession && u.session === exceptSession) continue;
-    if (u.xhr) { u.xhr.abort(); u.xhr = null; }
-    cbUploadDrop(u);
-  }
-}
-
-function cbUploadPump() {
-  for (const u of cbUploadsPending) {
-    if (cbUploadsPending.filter((v) => v.xhr).length >= CB_UPLOAD_CONCURRENCY) break;
-    if (u.xhr || u.error || u.done) continue;
-    cbUploadStart(u);
-  }
-  cbAttachRender();
-}
-
-function cbUploadAccept(u, meta) {
-  /* /api/upload 回的是 {ok, files:[{id,name,bytes,...}]}，不是裸 meta。 */
-  const items = Array.isArray(meta && meta.files) ? meta.files : (meta && meta.id ? [meta] : []);
-  if (!items.length) return "工作台未返回附件信息，请重试上传。";
-  for (const item of items) {
-    if (item && item.id && !state.attachments.some((a) => a.id === item.id)) state.attachments.push(item);
-  }
-  return "";
-}
-
-function cbUploadFinish(u, err) {
-  u.xhr = null;
-  if (err) {
-    u.error = err;
-    addStatus("附件上传失败（" + u.name + "）：" + err);
-    if (u.resolve) u.resolve(); /* 调用方不等「重试」 */
-  } else {
-    u.done = true;
-    cbUploadDrop(u);
-  }
-  cbAttachRender();
-  cbUploadPump();
-}
-
-function cbUploadStart(u, retried) {
-  if (!u.settled) u.settled = new Promise((resolve) => { u.resolve = resolve; });
-  if (typeof XMLHttpRequest !== "function") { cbUploadStartFetch(u); return; }
-  const xhr = new XMLHttpRequest();
-  u.xhr = xhr; u.loaded = 0; u.error = "";
-  const fd = new FormData();
-  fd.append("session_id", u.session);
-  fd.append("file", u.file);
-  xhr.upload.onprogress = (ev) => {
-    if (ev.lengthComputable) u.loaded = ev.loaded;
-    cbAttachPaintProgress(u);
-  };
-  xhr.onload = async () => {
-    if (state.session !== u.session) { cbUploadDrop(u); cbAttachRender(); cbUploadPump(); return; }
-    if (xhr.status === 401 && !retried) {
-      if (await askToken("上传需要口令，填好后再传一次")) { cbUploadStart(u, true); return; }
-    }
-    if (xhr.status < 200 || xhr.status >= 300) {
-      let msg = "HTTP " + xhr.status;
-      try { const j = JSON.parse(xhr.responseText); if (typeof j.detail === "string") msg = j.detail; } catch (e) { /* 非 JSON */ }
-      cbUploadFinish(u, msg); return;
-    }
-    let meta = null;
-    try { meta = JSON.parse(xhr.responseText); } catch (e) { cbUploadFinish(u, "工作台未返回附件信息，请重试上传。"); return; }
-    cbUploadFinish(u, cbUploadAccept(u, meta));
-  };
-  xhr.onerror = () => cbUploadFinish(u, "网络错误，可点「重试」");
-  xhr.onabort = () => { u.xhr = null; cbAttachRender(); cbUploadPump(); };
-  xhr.open("POST", "/api/upload");
-  xhr.send(fd);
-  cbAttachRender();
-}
-
-/* 没有 XMLHttpRequest 的环境（自动化测试）：老的 fetch 通道，语义相同，只是没有进度。 */
-async function cbUploadStartFetch(u) {
-  u.xhr = { abort() {} };
-  const fd = new FormData();
-  fd.append("session_id", u.session);
-  fd.append("file", u.file);
-  try {
-    const r = await fetch("/api/upload", { method: "POST", body: fd });
-    if (state.session !== u.session) { cbUploadDrop(u); cbAttachRender(); cbUploadPump(); return; }
-    if (!r.ok) throw new Error(await apiError(r) || "HTTP " + r.status);
-    cbUploadFinish(u, cbUploadAccept(u, await r.json()));
-  } catch (e) {
-    if (state.session !== u.session) { cbUploadDrop(u); cbAttachRender(); cbUploadPump(); return; }
-    cbUploadFinish(u, (e && e.message) || String(e));
-  }
-}
-
-function cbAttachPaintProgress(u) {
-  if (!document.querySelector) return;
-  const bar = document.querySelector(`[data-upload="${u.key}"] .cb-att-bar > i`);
-  const pct = document.querySelector(`[data-upload="${u.key}"] .cb-att-pct`);
-  const ratio = u.bytes ? Math.min(1, u.loaded / u.bytes) : 0;
-  if (bar) bar.style.width = Math.round(ratio * 100) + "%";
-  if (pct) pct.textContent = Math.round(ratio * 100) + "%";
-}
+/* 上传队列（modules/uploads.js）：发前预检、并发 2、XHR 进度、失败留在原位可重试。 */
+const uploads = createUploads({
+  state,
+  capability: (name) => cbCapability(name),
+  addStatus: (text) => addStatus(text),
+  render: () => cbAttachRender(),
+  apiError: (res) => apiError(res),
+  askToken: (reason) => (typeof askToken === "function" ? askToken(reason) : Promise.resolve(false)),
+  fmtBytes: (n) => (typeof fmtBytes === "function" ? fmtBytes(n) : `${n} B`),
+  fetch: (url, init) => fetch(url, init),
+  XMLHttpRequest: typeof XMLHttpRequest === "function" ? XMLHttpRequest : null,
+  doc: document,
+});
 
 function cbAttachInit() {
   const btn = $("btnAttach");
@@ -945,28 +748,16 @@ function cbContextReset() {
   cbContextRebuildControls(false);
 }
 
-/* 输入到一半切去别的会话，回来时话还在：草稿按会话存 localStorage，发送后清掉。 */
-const CB_DRAFT_PREFIX = "cb_draft:";
-function cbDraftSave() {
-  const ta = $("input");
-  if (!ta || !state.session) return;
-  try {
-    if (ta.value.trim()) localStorage.setItem(CB_DRAFT_PREFIX + state.session, ta.value);
-    else localStorage.removeItem(CB_DRAFT_PREFIX + state.session);
-  } catch (e) { /* 存储不可用：不存 */ }
-}
-function cbDraftClear(sid) {
-  try { localStorage.removeItem(CB_DRAFT_PREFIX + (sid || state.session)); } catch (e) { /* 忽略 */ }
-}
-function cbDraftRestore() {
-  const ta = $("input");
-  if (!ta) return;
-  let v = "";
-  try { v = localStorage.getItem(CB_DRAFT_PREFIX + state.session) || ""; } catch (e) { /* 忽略 */ }
-  ta.value = v;
-  cbAutosize(ta);
-  cbSyncSend();
-}
+/* 草稿（modules/drafts.js）：按会话存 localStorage，切回来填回去，发送即清。 */
+const drafts = createDrafts({
+  storage: localStorage,
+  input: () => $("input"),
+  session: () => state.session,
+  afterRestore: (ta) => { cbAutosize(ta); cbSyncSend(); },
+});
+function cbDraftSave() { drafts.save(); }
+function cbDraftClear(sid) { drafts.clear(sid); }
+function cbDraftRestore() { drafts.restore(); }
 if ($("input")) $("input").addEventListener("input", cbDraftSave);
 
 /* ux(round14)：相对时间（参考图会话列表「名称 + 相对时间」；只抄线程 updated_at 字段） */
@@ -4778,3 +4569,8 @@ if (window.visualViewport) {
   vv.addEventListener("resize", fit);
   vv.addEventListener("scroll", fit);
 }
+
+/* 模块脚本没有全局：给旧的经典脚本（studio.js 调 reloadCatalog）和 e2e（scripts/e2e/ui_dom.cjs）
+   一个明确的窗口面，而不是把几百个函数都挂到 window 上。 */
+window.reloadCatalog = reloadCatalog;
+window.__cb = Object.freeze({ state, cbCapability, cbAttachUpload, cbProjOpenSession, cbNewLocalSession, uploads, drafts });

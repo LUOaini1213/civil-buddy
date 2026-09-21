@@ -19,7 +19,8 @@ const { spawn } = require("node:child_process");
 const fs = require("node:fs");
 const path = require("node:path");
 const net = require("node:net");
-const { JSDOM, VirtualConsole } = require("jsdom");
+const { JSDOM, VirtualConsole, ResourceLoader } = require("jsdom");
+const esbuild = require("esbuild");
 
 const ROOT = path.resolve(__dirname, "..", "..");
 const PYTHON = process.env.PYTHON || process.env.PY || (process.platform === "win32" ? "python" : "python3");
@@ -120,14 +121,38 @@ function makeFetch(win) {
   };
 }
 
+/* jsdom cannot run <script type="module">. The page ships app.js as an ES module (no build
+   step in production); here the same sources are bundled in memory with esbuild into one
+   classic script and served in place of /static/app.js. Everything else comes from the real
+   server. */
+let bundle = null;
+function bundledApp() {
+  if (bundle) return bundle;
+  const r = esbuild.buildSync({ entryPoints: [path.join(ROOT, "demo", "static", "app.js")], bundle: true, format: "iife",
+    platform: "browser", target: "es2020", write: false, logLevel: "silent" });
+  bundle = Buffer.from(r.outputFiles[0].text, "utf8");
+  return bundle;
+}
+
+class PageResources extends ResourceLoader {
+  fetch(url, options) {
+    if (/\/static\/app\.js(\?|$)/.test(url)) return Promise.resolve(bundledApp());
+    return super.fetch(url, options);
+  }
+}
+
 async function loadPage() {
   const vc = new VirtualConsole();
   vc.on("jsdomError", (e) => { console.error("[page]", e && e.message ? e.message : e, e && e.detail && e.detail.stack ? e.detail.stack : ""); });
   vc.on("error", (...a) => console.error("[page:console]", ...a));
-  dom = await JSDOM.fromURL(base + "/", {
+  const html = (await fetch(base + "/").then((r) => r.text()))
+    .replace(/<script type="module" src="(\/static\/app\.js[^"]*)"><\/script>/, '<script src="$1"></script>');
+  assert.ok(html.includes('src="/static/app.js'), "index.html loads app.js");
+  dom = new JSDOM(html, {
+    url: base + "/",
     virtualConsole: vc,
     runScripts: "dangerously",
-    resources: "usable",
+    resources: new PageResources(),
     pretendToBeVisual: true,
     beforeParse(win) {
       win.fetch = makeFetch(win);
@@ -142,14 +167,14 @@ async function loadPage() {
   });
   window = dom.window;
   document = window.document;
-  await until(() => typeof window.cbAttachUpload === "function", { what: "app.js globals" });
-  await until(() => window.cbCapability("chat") === true, { what: "boot()" });
+  await until(() => window.__cb && typeof window.__cb.cbAttachUpload === "function", { what: "app.js window surface (__cb)" });
+  await until(() => window.__cb.cbCapability("chat") === true, { what: "boot()" });
   return window;
 }
 
-/* `const state = ...` in a classic script lives in the global lexical scope, not on window;
-   indirect eval in the page sees it. */
-const state = () => window.eval("typeof state === 'undefined' ? null : state");
+/* app.js is a module: its state and entry points are reachable only through window.__cb. */
+const state = () => window.__cb.state;
+const cb = () => window.__cb;
 
 const $ = (id) => document.getElementById(id);
 const logText = () => $("log").textContent;
@@ -164,8 +189,8 @@ async function send(text) {
 test("boot: the real page reaches the real backend and applies its capabilities", async () => {
   await loadPage();
   assert.ok(state().session, "a local session id exists after boot");
-  assert.equal(window.cbCapability("event_log"), true);
-  assert.equal(window.cbCapability("file_ref"), true);
+  assert.equal(cb().cbCapability("event_log"), true);
+  assert.equal(cb().cbCapability("file_ref"), true);
   assert.equal($("send").disabled, true, "send is disabled while the composer is empty");
   assert.equal($("stop").hidden, true);
 });
@@ -219,7 +244,7 @@ test("upload: progress chip, then a chip whose name downloads the original by re
   const big = "第一章 总则：本项目位于某市，工期 180 天。\n".repeat(400);
   const file = new window.File([big], "投标说明.txt", { type: "text/plain" });
   const bad = new window.File(["x"], "幻灯片.pptx");
-  const run = window.cbAttachUpload([file, bad]);
+  const run = cb().cbAttachUpload([file, bad]);
   await until(() => document.querySelector("#attaches .cb-att-chip.pending"), { what: "pending chip" });
   await run;
   assert.ok(logText().includes("未上传：幻灯片.pptx"), logText());
@@ -240,7 +265,7 @@ test("drafts: a half-typed message survives switching sessions", async () => {
   $("btnNewThread").click();
   assert.notEqual(state().session, here);
   assert.equal($("input").value, "");
-  await window.cbProjOpenSession({ session_id: here });
+  await cb().cbProjOpenSession({ session_id: here });
   assert.equal(state().session, here);
   assert.equal($("input").value, "写到一半的话");
 });
@@ -254,6 +279,6 @@ test("stale: a turn left running by a dead process is shown as 已中断 when th
   fs.writeFileSync(path.join(dir, "deadbeef0001.state.json"), JSON.stringify({ turn_id: "deadbeef0001", session_id: sid, state: "running", pid: 999999, seq: 1, started_at: "", heartbeat_at: "", finished_at: "" }));
   const detail = await fetch(base + "/api/sessions/" + sid).then((r) => r.json());
   assert.equal(detail.turn_state.state, "stale");
-  await window.cbProjOpenSession({ session_id: sid });
+  await cb().cbProjOpenSession({ session_id: sid });
   await until(() => logText().includes("服务重启时被中断"), { what: "stale notice" });
 });

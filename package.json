@@ -8,6 +8,7 @@
     "demo": "python scripts/demo_agent_middleware.py"
   },
   "devDependencies": {
+    "esbuild": "^0.24.2",
     "jsdom": "^24.1.3"
   }
 }
