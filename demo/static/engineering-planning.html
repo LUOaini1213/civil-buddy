@@ -1,15 +1,33 @@
 <!doctype html>
 <html lang="zh-CN">
 <head>
-  <meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+  <meta charset="utf-8">
+  <meta name="theme-color" content="#17181a">
+  <script src="/static/theme.js?v=unified1"></script>
+  <link rel="stylesheet" href="/static/theme.css?v=unified1">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
   <title>施工计划与关键路径 · Civil Buddy</title>
   <link rel="icon" href="/static/icons/cb-icon.svg">
   <link rel="stylesheet" href="/static/vendor/frappe-gantt-1.2.2/frappe-gantt.css">
-  <link rel="stylesheet" href="/static/engineering-planning.css">
+  <link rel="stylesheet" href="/static/engineering-planning.css?v=unified1">
   <script type="module" src="/static/engineering-planning.js"></script>
+
+  <link rel="stylesheet" href="/static/workbench-shell.css?v=unified1">
 </head>
 <body>
-  <header class="site-header"><a class="brand" href="/">CB <span>Civil Buddy</span></a><nav aria-label="工作台导航"><a href="/engineering">工程计算</a><a href="/cad">CAD 工作台</a><a href="/engineering/schedule">日期甘特图</a></nav></header>
+  <header class="cb-app-header">
+    <a class="cb-app-brand" href="/static/index.html" aria-label="返回 Civil Buddy 工作台"><span class="cb-app-mark" aria-hidden="true">CB</span><span>Civil Buddy<small>施工计划</small></span></a>
+    <div class="cb-app-actions"><button type="button" data-cb-theme-toggle>切换主题</button></div>
+    <nav class="cb-app-nav" aria-label="工作台导航">
+      <a href="/static/index.html">工作台</a>
+      <a href="/static/agent.html">Agent</a>
+      <a href="/cad">CAD</a>
+      <a href="/engineering">工程计算</a>
+      <a href="/engineering/planning" aria-current="page">施工计划</a>
+      <a href="/engineering/schedule">日期计划</a>
+      <a href="/engineering/routes">现场路线</a>
+    </nav>
+  </header>
   <main>
     <div class="hero"><div><p class="eyebrow">CONSTRUCTION PLANNING</p><h1>看清依赖，掌握下一步</h1><p class="muted">工作日排程 · 关键路径 · 资源与每周履约</p></div><span class="draft-badge">施工计划草稿</span></div>
     <p id="notice" class="notice" role="status" aria-live="polite">从真实任务开始，或载入明确标注的合成示例。工期与资源用量由你确认。</p>

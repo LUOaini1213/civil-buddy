@@ -2,17 +2,30 @@
 <html lang="zh-CN">
 <head>
   <meta charset="utf-8">
+  <meta name="theme-color" content="#17181a">
+  <script src="/static/theme.js?v=unified1"></script>
+  <link rel="stylesheet" href="/static/theme.css?v=unified1">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <meta name="theme-color" content="#111923">
   <title>CAD → 3D 建模助手 · Civil Buddy</title>
   <link rel="icon" href="/static/icons/cb-icon.svg" type="image/svg+xml">
-  <link rel="stylesheet" href="/static/cad.css">
+  <link rel="stylesheet" href="/static/cad.css?v=unified1">
   <script type="module" src="/static/cad.js"></script>
+
+  <link rel="stylesheet" href="/static/workbench-shell.css?v=unified1">
 </head>
 <body>
-  <header class="topbar">
-    <a class="brand" href="/" aria-label="返回 Civil Buddy 工作台"><span class="brand-mark">CB</span><span>Civil Buddy <small>工程工作台</small></span></a>
-    <nav aria-label="工作台导航"><a href="/engineering">工程计算</a><a href="/engineering/schedule">施工计划</a><a href="/">返回工作台</a><span class="top-tag">几何预览 · 内部讨论</span></nav>
+  <header class="cb-app-header">
+    <a class="cb-app-brand" href="/static/index.html" aria-label="返回 Civil Buddy 工作台"><span class="cb-app-mark" aria-hidden="true">CB</span><span>Civil Buddy<small>CAD 建模</small></span></a>
+    <div class="cb-app-actions"><button type="button" data-cb-theme-toggle>切换主题</button></div>
+    <nav class="cb-app-nav" aria-label="工作台导航">
+      <a href="/static/index.html">工作台</a>
+      <a href="/static/agent.html">Agent</a>
+      <a href="/cad" aria-current="page">CAD</a>
+      <a href="/engineering">工程计算</a>
+      <a href="/engineering/planning">施工计划</a>
+      <a href="/engineering/schedule">日期计划</a>
+      <a href="/engineering/routes">现场路线</a>
+    </nav>
   </header>
   <main>
     <div class="page-heading"><div><p class="eyebrow">CAD → PARAMETRIC 3D</p><h1>从图纸，到可操作的模型</h1><p class="subtitle">确认二维实体轮廓，指定尺寸，再用一句话调整三维模型。</p></div><div class="service-controls"><span id="serviceStatus" class="service-status">正在连接建模工具</span><button id="retryService" type="button" hidden>重新检测</button></div></div>

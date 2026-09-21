@@ -20,7 +20,7 @@ STATIC = (
     "manifest.webmanifest", "posts.js", "studio.js", "styles.css", "tickets.js", "voice.js",
     "sw.js", "modules/auth.js", "modules/toast.js", "modules/drafts.js", "modules/uploads.js",
     "modules/turn-stream.js", "modules/deliverables.js", "modules/session-watch.js", "modules/session-nav.js",
-    "agent.html", "agent.css", "agent.js",
+    "agent.html", "agent.css", "agent.js", "theme.css", "theme.js", "workbench-shell.css",
     "icons/cb-icon-192.png", "icons/cb-icon-512.png", "icons/cb-icon.svg",
     "vendor/marked.LICENSE.md", "vendor/marked.min.js",
     "cad.html", "cad.css", "cad.js", "cad-viewer.js",

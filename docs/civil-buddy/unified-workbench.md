@@ -63,3 +63,10 @@ python scripts/build_unified_release.py --verify dist/civil-buddy-unified-workbe
 ```
 
 Use the actual filename printed by the builder for verification. The package includes a supplied Windows executable and the allowlisted source/assets; Python and optional dependencies are installed separately in a local virtual environment. No provider credentials, personal project records or generated outputs are packaged. Each file and the archive have SHA-256 checksums.
+
+
+## Shared frontend appearance
+
+All seven workbench pages share `demo/static/theme.css`, the persisted appearance bootstrap in `theme.js`, and navigation/status components in `workbench-shell.css`. Domain layouts remain scoped to their page styles. Reuse the shared `--cb-*` tokens when adding surfaces; do not introduce a separate palette. The home composer folds the optional high-risk acknowledgment into a disclosure, automatically expanded when the server requires confirmation; the exact phrase gate is unchanged. Voice warnings use the same status treatment on the home and Agent pages.
+
+2026-09-21 validation: seven targeted offline gates passed (assets, JS/CSS syntax, chat streaming, UI modules, Agent UI, release packaging and real-page DOM); voice harness 13/13; existing CAD 51/51, engineering 14/14, planning 18/18 and date-plan gesture tests passed. Browser checks covered persisted light/dark themes, all seven pages at 390 px without document overflow, and representative desktop layouts at 1280 px. Voice warning presentation was checked with a static simulated warning; microphone recognition was not exercised.

@@ -74,6 +74,8 @@ function cbEnableServerHitl(data) {
   if (!cbServerHitlInput) cbServerHitlInput = { disabled: !!input.disabled, placeholder: input.placeholder || "" };
   input.disabled = false;
   input.placeholder = "服务器要求本轮确认，请键入完整签认句";
+  const disclosure = $("riskDisclosure");
+  if (disclosure) disclosure.open = true;
 }
 
 function cbClearServerHitl() {
