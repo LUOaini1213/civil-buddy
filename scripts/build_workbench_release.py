@@ -24,6 +24,8 @@ STATIC = (
     "engineering.html", "engineering.css", "engineering.js", "engineering-notices.txt",
     "engineering-schedule.html", "engineering-schedule.css", "engineering-schedule.js",
     "engineering-schedule-state.js",
+    "engineering-planning.html", "engineering-planning.css", "engineering-planning.js",
+    "engineering-routing.html", "engineering-routing.css", "engineering-routing.js",
     "vendor/frappe-gantt-1.2.2/frappe-gantt.css", "vendor/frappe-gantt-1.2.2/frappe-gantt.es.js",
     "vendor/frappe-gantt-1.2.2/license.txt", "vendor/frappe-gantt-1.2.2/SOURCE.json", "vendor/frappe-gantt-1.2.2/package.json",
     "vendor/three/three.module.js", "vendor/three/three.core.js",
@@ -42,6 +44,7 @@ EXPLICIT = (
     "demo/asr_lexicon.txt", "requirements-asr.txt", "docs/voice-input.md",
     "requirements-cad.txt", "docs/civil-buddy/cad-to-3d.md",
     "requirements-analysis.txt", "requirements-engineering.txt", "docs/civil-buddy/engineering-workbench.md",
+    "requirements-planning.txt", "docs/civil-buddy/planning-workbench.md",
     "docs/civil-buddy/open-source-integrate.md", "docs/civil-buddy/open-source-integrate.xlsx",
     "examples/cad-to-3d/synthetic-building-mm.dxf", "examples/cad-to-3d/synthetic-hollow-section-mm.dxf",
     "examples/cad-to-3d/README.md",
@@ -138,6 +141,11 @@ CAD → 3D 建模可从首页进入；先用本包 Python 安装可选依赖：
 临时图纸缓存约 30 分钟；使用“保存项目”持久保存原图、草稿和成功模型版本，重启后可从最近项目恢复。
 工程计算与计划从首页进入。截面性质、梁/杆系和 IFC 检查另需安装：
 `python -m pip install -r requirements-engineering.txt`；甘特图资源已随包提供。
+施工排程在 `/engineering/planning`，场内最短路线在 `/engineering/routes`。
+CPM 工作日排程使用标准库；资源容量排程、路线与计划文件交换另需安装：
+`python -m pip install -r requirements-planning.txt`。这些可选工程依赖建议使用 Python 3.11 或更高版本，
+并用启动本包的同一解释器安装。MPP 导入还需要可用的 Java/JVM；本包不含 Java，
+不会自动安装系统 Java。当前可用格式以页面探测为准；原生 MPP 只读，导出使用 Project XML。
 工程分析结果须点击保存；计划须点击保存计划。内置 DXF、梁和 IFC 均为合成测试数据，不代替真实工程验收。
 如使用环境文件，只编辑本包 `.env` 或 `demo/.env`；`.env.example` 只是样例。
 
@@ -153,6 +161,7 @@ CAD → 3D 建模可从首页进入；先用本包 Python 安装可选依赖：
 [岗位深度](docs/depth-ladder.md)、[产品计划](docs/civil-buddy/product-plan.md)、
 [完成情况](docs/civil-buddy/product-completion-plan.md)、[协议](docs/civil-buddy/PROTOCOL.md)、
 [MCP](docs/civil-buddy/MCP.md)、[Skills](docs/civil-buddy/SKILLS.md)、[知识库](docs/civil-buddy/KB.md)。
+[施工排程与路线说明](docs/civil-buddy/planning-workbench.md) 记录工作日历、资源方案、导入差异及交接边界。
 开发文档中涉及完整测试套件和其他服务的命令需使用完整源码仓库；本包用于运行工作台。
 """
 

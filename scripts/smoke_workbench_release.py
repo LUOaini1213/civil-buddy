@@ -286,7 +286,9 @@ def office_attachment_flows(base: str, extracted: Path) -> list[dict]:
 def session_transfer_flow(base: str, extracted: Path, sid: str) -> dict:
     """Export raw ZIP over HTTP, import a new task, and compare actual saved bytes."""
     output = (extracted / "demo" / "out").resolve()
-    upload_root = (extracted / "demo" / "data" / "uploads").resolve()
+    # Attachments now travel with their session under demo/out/<sid>/uploads.
+    # Keep checking actual bytes from the extracted product, not the source repo.
+    upload_root = output
     before = json.loads(request(base, "/api/sessions/" + sid))
     attachments = json.loads(request(base, "/api/attachments?" + urlencode({"session_id": sid})))["files"]
     assert before["transcript"] and before["deliverables"] and attachments, before
@@ -298,8 +300,9 @@ def session_transfer_flow(base: str, extracted: Path, sid: str) -> dict:
     def attachment_bytes(session: str, rows: list[dict]) -> Counter:
         content = Counter()
         for item in rows:
-            path = (upload_root / session / (item["id"] + ".bin")).resolve()
-            path.relative_to(upload_root / session)
+            directory = upload_root / session / "uploads"
+            path = (directory / (item["id"] + ".bin")).resolve()
+            path.relative_to(directory)
             data = path.read_bytes()
             assert len(data) == item["bytes"], item
             content[(item["name"], data)] += 1
@@ -318,7 +321,7 @@ def session_transfer_flow(base: str, extracted: Path, sid: str) -> dict:
         return content
 
     old_files = snapshot(output / sid)
-    old_uploads = snapshot(upload_root / sid)
+    old_uploads = snapshot(upload_root / sid / "uploads")
     expected_attachments = attachment_bytes(sid, attachments)
     expected_deliverables = deliverable_bytes(sid, before["deliverables"])
     raw = request(base, "/api/sessions/" + sid + "/export")
@@ -355,7 +358,7 @@ def session_transfer_flow(base: str, extracted: Path, sid: str) -> dict:
     summary = json.loads((output / new_sid / "session.summary.json").read_text(encoding="utf-8"))
     assert summary["p0_confirmed"] is False
     assert json.loads(request(base, "/api/sessions/" + sid)) == before, "Source task changed after import"
-    assert snapshot(output / sid) == old_files and snapshot(upload_root / sid) == old_uploads
+    assert snapshot(output / sid) == old_files and snapshot(upload_root / sid / "uploads") == old_uploads
     return {"source_session": sid, "imported_session": new_sid, "archive_bytes": len(raw),
             "archive_sha256": hashlib.sha256(raw).hexdigest(), "transcript_messages": len(restored["transcript"]),
             "attachments": len(copied_attachments), "deliverables": len(restored["deliverables"]),

@@ -66,6 +66,24 @@ Python 库通过 requirements-engineering.txt 安装；本轮未把这些库的�
    上游：https://github.com/IfcOpenShell/IfcOpenShell/tree/v0.8.0/src/bcf
    采用/再分发该包前，保留两项证据并向上游澄清所选发布版本的适用许可。
 
+7. OR-Tools 9.15.6755 — Apache-2.0
+   上游：https://github.com/google/or-tools
+   许可：https://github.com/google/or-tools/blob/v9.15/LICENSE
+   用途：由用户提供工期、依赖与资源容量，使用 CP-SAT 区间与 cumulative 约束求解。
+   Civil Buddy 自行编写受限适配层，求解结果区分 OPTIMAL 与 FEASIBLE。
+
+8. NetworkX 3.6.1 — BSD-3-Clause
+   上游：https://github.com/networkx/networkx
+   许可：https://github.com/networkx/networkx/blob/networkx-3.6.1/LICENSE.txt
+   用途：用户输入道路网络的最短路线，不把道路最短路等同于施工关键路径。
+
+9. MPXJ 16.7.0 — LGPL-2.1
+   上游：https://github.com/joniles/mpxj
+   许可：https://github.com/joniles/mpxj/blob/v16.7.0/LICENSE
+   用途：可选的 MPP / P6 读取；通过 JPype1 与项目本地 Java 运行时调用。
+   不支持原生 MPP 写回，不声称兼容所有 Project / P6 排程语义。
+   此轮没有复制 gantts-app 的保留权利模板、品牌或翻译，也未嵌入完整 OpenProject。
+
 比赛与数据
 ----------
 “学校非商业”不取消许可证义务，也不代表已满足比赛的原创性、开源复用或 AI 辅助规则。
