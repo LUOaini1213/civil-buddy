@@ -163,6 +163,7 @@ _DOCUMENT_ROWS: Dict[str, Tuple[Tuple[str, str], ...]] = {
     "3 ": (("consortium", "联合体投标"),),
     "4 ": (("alternative", "备选投标方案"), ("subcontract", "分包"), ("deviation", "偏离")),
     "5 ": (("candidates", "中标候选人"),),
+    "6 ": (("budget", "采购预算"),),
     "8 ": (("performance_bond", "履约担保"),),
 }
 _FORM_ROWS = (("signing", "签字盖章要求"), ("copies", "投标文件份数"), ("binding", "装订要求"))
@@ -190,7 +191,8 @@ def _parse_rows(facts: Optional[Facts], topic: str, label: str, always: bool, ad
             continue
         seen.add(key)
         amended = "以补遗为准，对照补遗原文" if m.get("origin") else "—"
-        rows.append([name, _clip(m.get("value")), _source(m), "已检出", amended])
+        # a document's value may be a clause long, or one figure per lot: it keeps more room than a typed field
+        rows.append([name, _clip(m.get("value"), 120 if m.get("ref") else CELL), _source(m), "已检出", amended])
     if always:
         lots = _lots(facts)
         have = {str(m.get("lot") or "") for m in found}

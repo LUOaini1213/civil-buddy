@@ -337,5 +337,45 @@ class ScanReadings(unittest.TestCase):
         self.assertEqual(refs["基坑开挖深度3."], "第二章 3.4.2", "3.5米 is a depth, not clause 3.5: the sentence stays under the clause before it")
 
 
+class NoticeFormat(unittest.TestCase):
+    """The national format of a government-procurement notice: fixed headings over labelled lines. Read as somebody
+    talking, a real one gave 招标人 = "信息" (from 采购人信息) and 招标范围 = "内" (from 不在本次招标范围内)."""
+
+    NOTICE = ("石门镇2027年排水设施养护项目公开招标公告\n\n项目概况\n\n石门镇2027年排水设施养护项目的潜在投标人应在市政府采购网获取招标文件，并于2027年3月18日 09:30（北京时间）前递交投标文件。\n\n"
+              "一、项目基本情况\n\n项目编号：330482202703001-886\n\n项目名称：石门镇2027年排水设施养护项目\n\n预算金额（元）： 第1包3200000元,第2包2750000元\n\n"
+              "最高限价（元）： 5800000.00元\n\n采购需求：零星维修之外的大修不在本次招标范围内。\n\n合同履约期限： 本项目服务期限为2年。\n\n本项目（ 否 ）接受联合体投标。\n\n"
+              "二、申请人的资格要求：\n\n1.满足《中华人民共和国政府采购法》第二十二条规定；\n\n3.本项目的特定资格要求：具备市政公用工程施工总承包三级及以上资质。\n\n"
+              "四、提交投标文件截止时间、开标时间和地点\n\n提交（上传）投标文件截止时间（开标时间）：2027年3月18日 09:30（北京时间）\n\n五、公告期限\n\n自本公告发布之日起5个工作日。\n\n"
+              "七、对本次采购提出询问，请按以下方式联系\n\n1.采购人信息\n\n名 称：石门镇人民政府\n\n地 址：石门镇政通路1号\n\n2.采购代理机构信息\n\n名 称：嘉禾招标代理有限公司\n")
+
+    def test_a_short_notice_in_the_national_format_is_a_document(self) -> None:
+        self.assertTrue(td.is_document(self.NOTICE), "two thousand characters, no chapters - and still a form, not a request")
+        facts = tf.extract(self.NOTICE)
+        first = {topic: [m.value for m in facts.of(topic)] for topic in ("owner", "tender_no", "project", "price_cap", "duration", "consortium",
+                                                                         "deadline_bid", "qualification", "scope")}
+        self.assertEqual(first["owner"], ["石门镇人民政府"], "名 称 under 采购人信息 - not 信息, and not the agency's 名称")
+        self.assertEqual(first["tender_no"], ["330482202703001-886"], "a number made of digits only")
+        self.assertEqual(first["project"], ["石门镇2027年排水设施养护项目"])
+        self.assertEqual(first["price_cap"], ["5800000.00元"])
+        self.assertEqual(first["duration"], ["2年"])
+        self.assertEqual(first["consortium"], ["否"])
+        self.assertEqual(first["deadline_bid"], ["2027年3月18日 09:30"])
+        self.assertEqual(first["qualification"], ["具备市政公用工程施工总承包三级及以上资质"])
+        self.assertEqual(first["scope"], [], "不在本次招标范围内 says nothing about the scope")
+
+    def test_one_figure_per_lot_is_shown_whole(self) -> None:
+        budget = [m.value for m in tf.extract(self.NOTICE).of("budget")]
+        self.assertEqual(budget, ["第1包3200000元,第2包2750000元"], "the first lot's figure alone would read as the total")
+
+
+class JurisdictionToken(unittest.TestCase):
+    def test_a_code_inside_a_document_number_is_not_a_code(self) -> None:
+        from packing_assistant.jurisdiction import infer_jurisdiction
+
+        self.assertEqual(infer_jurisdiction("招标编号：LJZB-2026-SG-0418，执行GB 50300-2013"), "CN", "SG is 施工")
+        self.assertEqual(infer_jurisdiction("辖区：CN/SG"), "DUAL", "two codes side by side are two codes")
+        self.assertEqual(infer_jurisdiction("写一份核算检查 2026-08\nSG"), "SG", "a code on the line after a date ($ matches before a final newline)")
+
+
 if __name__ == "__main__":
     unittest.main(verbosity=1)

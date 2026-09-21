@@ -109,15 +109,22 @@ def _cells(line: str) -> List[str]:
     return [c.strip() for c in line.strip().strip("|").split("|")]
 
 
+#: 《政府采购公告和公示信息格式规范》: every notice on ccgp.gov.cn is laid out under these headings
+_NOTICE_HEADINGS = ("项目基本情况", "申请人的资格要求", "获取招标文件", "获取采购文件", "提交投标文件截止时间", "响应文件提交", "公告期限", "对本次招标提出询问",
+                    "对本次采购提出询问")
+
+
 def is_document(text: str) -> bool:
     """A document, not a request: two chapters, or a front table. A pasted page or two is neither - it is
     read the way it always was."""
     body = text or ""
-    if len(body) < 1500:
+    if len(body) < 1500 and sum(1 for heading in _NOTICE_HEADINGS if heading in body) < 2:
         return False
     chapters = {m.group(1) for line in body.splitlines() for m in [_CHAPTER.match(line.strip())] if m}
     if len(chapters) >= 2 or len(body) >= 8000:
         return True   # nobody types eight thousand characters: a long text is a file, whatever its headings look like
+    if sum(1 for heading in _NOTICE_HEADINGS if heading in body) >= 2:
+        return True   # the national format of a procurement notice: fixed headings over labelled lines
     return any(_TABLE_ROW.match(line.strip()) and "条款号" in line and ("条款名称" in line or "编列内容" in line)
                for line in body.splitlines())
 
@@ -311,13 +318,25 @@ def field_mentions(doc: Document):
     notice: List[tf.Mention] = []
     # the notice; in a document with no chapters at all (an English ITT, a bare specification) every labelled line
     noticed = doc.chapter("第一章") if any(p.chapter for p in doc.pieces) else doc.pieces
+    under = ""   # the heading a labelled line stands under: "名称：…" is the 采购人's only under 采购人信息
     for p in noticed:
+        if p.kind == "heading" or (p.kind == "text" and len(p.text) <= 16 and not re.search(r"[：:。]", p.text)):
+            under = p.text
         if p.kind != "text":
             continue
-        body = _LEAD_NUMBER.sub("", p.text)
-        found = re.match(r"([A-Za-z][A-Za-z .'/&-]{2,40}?|[^：:；;，,。\s]{2,14})\s*[：:]\s*(.+)$", body)
+        body = re.sub(r"^\s*\d+\s*[.．、]\s*", "", _LEAD_NUMBER.sub("", p.text))
+        joint = re.search(r"[（(]\s*(是|否|不)\s*[)）]\s*接受联合体", body)   # "本项目（ 否 ）接受联合体投标。"
+        if joint:
+            notice.append(tf.Mention("consortium", "tender", "", joint.group(1), p.text[:160], p.line, ref=p.ref))
+            continue
+        found = re.match(r"([A-Za-z][A-Za-z .'/&-]{2,40}?|(?:[^：:；;，,。\s]\s?){2,20}?)\s*[：:]\s*(.+)$", body)
         if found:
-            topic = tf.document_topic(found.group(1))
+            label = re.sub(r"[（(][^）)]*[)）]|\s+", "", found.group(1)) if re.search(r"[一-鿿]", found.group(1)) else found.group(1)
+            label = re.sub(r"^本项目(?:的)?", "", label)
+            if label == "名称" and re.search(r"采购人|招标人|比选人", under) and "代理" not in under:
+                notice.append(tf.Mention("owner", "tender", "", found.group(2).strip()[:60], p.text[:160], p.line, ref=p.ref))
+                continue
+            topic = tf.document_topic(label)
             if topic and topic not in tf._ALWAYS_OURS | tf._NO_SIDE | tf._STATEMENT_ONLY:
                 value = _document_value(topic, found.group(2))
                 if value:
@@ -380,6 +399,10 @@ def _document_value(topic: str, body: str, *, same_as: bool = True) -> str:
             said = re.match(r"同[^，,；;。]{2,12}(?:时间|日期)", text) if (kind == "date" and same_as) else None
             return said.group(0) if said else ""
         value = found.group(0).strip()
+        lots = re.search(r"第\s*[\d一二三四五六七八九十]+\s*(?:包|标段|标包)|[包标]\s*\d+\s*[:：-]", text)
+        if lots and len(tf._KIND_RE[kind].findall(text)) >= 2:
+            # "第1包390.66万元,第2包398.76万元,第3包424.72万元": one value per lot - the first alone would read as the total
+            return text[:120]
         if kind == "date":
             clock = tf._CLOCK.match(text[found.end():].lstrip("，, "))
             if clock:
@@ -389,7 +412,7 @@ def _document_value(topic: str, body: str, *, same_as: bool = True) -> str:
         found = tf._EVAL_METHOD.search(text)
         return found.group(0) if found else ""
     if kind == "code":
-        found = tf._DOC_CODE.search(text)
+        found = tf._DOC_CODE.search(text) or re.match(r"[A-Za-z0-9][A-Za-z0-9\-_/]{5,60}", text)   # "310115…-15372573": all digits
         return found.group(0) if found else ""
     if kind == "person":
         return _balanced(tf._requirement_text(text), text) or text[:80]

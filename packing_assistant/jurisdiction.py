@@ -12,7 +12,7 @@ def _codes(blob: str) -> set:
     is 施工, and nearly every Chinese construction tender number carries it. "CN/SG" is two codes side by side."""
     found = set()
     for match in _CODES.finditer(blob):
-        left = re.search(r"[A-Za-z0-9_\-/.]*$", blob[:match.start()]).group(0)
+        left = re.search(r"[A-Za-z0-9_\-/.]*\Z", blob[:match.start()]).group(0)   # \Z: "$" also matches before a final newline
         right = re.match(r"[A-Za-z0-9_\-/.]*", blob[match.end():]).group(0)
         token = left + match.group(0) + right
         if re.search(r"\d", token) and re.search(r"[-_/.]", token):

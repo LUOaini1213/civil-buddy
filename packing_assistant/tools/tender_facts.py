@@ -307,6 +307,7 @@ DOCUMENT_TOPICS: Tuple[Topic, ...] = (
     Topic("open_place", "开标地点", ("开标地点", "开标时间和地点"), "text", "timeline"),
     Topic("submit_place", "递交地点", ("递交投标文件地点", "投标文件递交地点", "递交地点"), "text", "timeline"),
     Topic("candidates", "中标候选人", ("是否授权评标委员会确定中标人", "中标候选人"), "text", "scoring"),
+    Topic("budget", "采购预算", ("预算金额", "采购预算", "项目预算"), "money", "price"),
 )
 _DOCUMENT_ALIASES: List[Tuple[str, str]] = sorted(
     ((alias, topic.key) for topic in DOCUMENT_TOPICS for alias in topic.aliases), key=lambda pair: -len(pair[0]))
@@ -319,7 +320,9 @@ _DOCUMENT_ROW_NAMES: Tuple[Tuple[str, str], ...] = (
     (r"(?!保函|保证金|担保|证书|许可)[一-鿿]{2,6}有效期", "validity"),
     (r"[一-鿿]{2,8}文件(?:的)?(?:正副本)?份数", "copies"),
     (r"(?:供应商|[一-鿿]{2,6}人)(?:的)?(?:资格|资质)(?:要求|条件)", "qualification"),
-    (r"(?:首次)?[一-鿿]{2,8}文件(?:的)?(?:递交|提交)(?:的)?截止时间", "deadline_bid"),
+    (r"(?:首次)?[一-鿿]{2,8}文件(?:的)?(?:递交|提交)(?:的)?截止时间|(?:提交|递交)[一-鿿]{2,8}文件(?:的)?截止时间", "deadline_bid"),
+    (r"[一-鿿]{0,4}特定资格要求", "qualification"),
+    (r"合同履约期限", "duration"),
     (r"比选人|询价人|谈判人|磋商人|发包人名称", "owner"),
     (r"总监理工程师(?:的)?(?:要求|资格|条件)?|总监(?:的)?(?:要求|资格)|项目总监(?:的)?(?:要求|资格)?", "pm"),
     (r"[一-鿿]{0,6}最高限价|[一-鿿]{0,6}控制价|[一-鿿]{0,6}拦标价", "price_cap"),
@@ -335,7 +338,7 @@ _TOPIC = {t.key: t for t in TOPICS + DOCUMENT_TOPICS}
 def document_topic(name: str) -> str:
     """The field a front-table row (or a label inside its content) is about, by its name. The keyword has
     to be what the name is about: 招标人书面澄清的时间 is not the 招标人."""
-    name = re.sub(r"^是否(?:接受|允许|组织|召开|需要)?", "", (name or "").strip())   # "是否接受联合体" is about 联合体
+    name = re.sub(r"^(?:本项目)?是否(?:接受|允许|组织|召开|需要)?", "", (name or "").strip())   # "是否接受联合体" is about 联合体
     for alias in _DEADLINE_QUERY_NAMES:
         if alias in name:
             return "deadline_query"
