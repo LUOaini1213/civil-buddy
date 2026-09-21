@@ -56,6 +56,7 @@ CHECKS = (
     Check("host-worker", ("scripts/test_host_worker.py",)),
     Check("unified-acceptance-oracle", ("scripts/test_unified_acceptance.py",)),
     Check("unified-launcher", ("scripts/test_unified_launcher.py",)),
+    Check("unified-packing", ("scripts/test_unified_packing.py",)),
     Check("unified-release", ("scripts/test_unified_release.py",)),
     Check("ui-dom", ("scripts/e2e/ui_dom.cjs",), "node"),  # real page + real backend in jsdom
     Check("engineering-planning", ("scripts/test_engineering_planning.py",)),

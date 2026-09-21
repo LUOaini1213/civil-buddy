@@ -35,6 +35,10 @@ STATIC = (
     "vendor/three/OrbitControls.js", "vendor/three/LICENSE.txt", "vendor/three/manifest.json",
 )
 EXPLICIT = (
+    "gateway/__init__.py", "gateway/app.py", "frontend/workbench.html",
+    "frontend/vendor/vue.min.js", "frontend/vendor/vue.LICENSE",
+    "frontend/vendor/marked.min.js", "frontend/vendor/marked.LICENSE.md",
+    "frontend/vendor/cb-doc.js", "frontend/vendor/cb-fix.js",
     "LICENSE", "requirements.txt", ".env.example", "demo/.env.example",
     "给试用的人.md", "docs/depth-ladder.md", "docs/civil-buddy/GETTING-STARTED.md",
     "docs/civil-buddy/PROTOCOL.md", "docs/civil-buddy/MCP.md", "docs/civil-buddy/SKILLS.md",

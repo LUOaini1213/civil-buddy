@@ -58,10 +58,16 @@ def main():
                   {"PATH", "SYSTEMROOT", "WINDIR", "PATHEXT", "TEMP", "TMP", "APPDATA", "LOCALAPPDATA", "USERPROFILE", "LANG"}}
     domain_env.update(PYTHONUTF8="1", PYTHON_DOTENV_DISABLED="1", CIVIL_OUT_ROOT=str(args.state_root / "domains"),
                       CIVIL_SANDBOX_ROOTS=str(args.state_root / "domains"),
-                      CIVIL_DOMAIN_WORKSPACE=str(args.state_root / "domains"))
+                      CIVIL_DOMAIN_WORKSPACE=str(args.state_root / "domains"),
+                      PACKING_OUTPUT_DIR=str(args.state_root / "packing"),
+                      PACKING_TRACE_DIR=str(args.state_root / "packing" / "traces"),
+                      CB_DB_PATH=str(args.state_root / "packing" / "civilbuddy.db"),
+                      PACKING_LG_CHECKPOINT_PATH=str(args.state_root / "packing" / "checkpoints.db"),
+                      PACKING_LLM_AGENT="0", PACKING_SKIP_SKJOLBER="1")
     environment.update(CIVIL_PORT=str(args.port), CIVIL_DOMAIN_URL=f"http://127.0.0.1:{domain_port}",
                        CIVIL_STATE_ROOT=str(args.state_root), CIVIL_DEMO_ROOT=str(ROOT / "demo"),
-                       CIVIL_PYTHON=str(Path(args.python).resolve()), CIVIL_UNIFIED_HOME="1")
+                       CIVIL_PYTHON=str(Path(args.python).resolve()), CIVIL_UNIFIED_HOME="1",
+                       PACKING_AGENT_URL=f"http://127.0.0.1:{domain_port}/packing")
     flags = subprocess.CREATE_NO_WINDOW if os.name == "nt" else 0
     processes = []
     logs = [(args.state_root / name).open("ab") for name in ("domains.log", "rust.log")]

@@ -1,4 +1,4 @@
-//! Narrow loopback bridge for existing deterministic CAD/engineering pages.
+//! Narrow loopback bridge for existing deterministic CAD/engineering/packing pages.
 //! It cannot proxy chat, sessions, model settings or arbitrary URLs.
 use axum::{
     body::{to_bytes, Body},
@@ -10,9 +10,14 @@ use axum::{
 };
 use serde_json::json;
 use std::time::Duration;
+use tokio_stream::StreamExt;
+
+const MAX_RESULT_BYTES: usize = 50 * 1024 * 1024;
 
 pub fn router() -> Router {
     Router::new()
+        .route("/packing", any(forward))
+        .route("/packing/{*path}", any(forward))
         .route("/cad", any(forward))
         .route("/engineering", any(forward))
         .route("/engineering/{*path}", any(forward))
@@ -52,6 +57,7 @@ async fn forward(request: Request) -> Response {
     // reqwest normalizes dot segments. Reject them before building the fixed
     // domain URL, including encoded separators; current route IDs are ASCII.
     let path = parts.uri.path();
+    let is_packing = path == "/packing" || path.starts_with("/packing/");
     if path.contains(['%', '\\']) || path.split('/').any(|segment| matches!(segment, "." | "..")) {
         return error(StatusCode::BAD_REQUEST, "领域路径含不支持的编码或目录跳转");
     }
@@ -84,7 +90,7 @@ async fn forward(request: Request) -> Response {
         Err(_) => return error(StatusCode::PAYLOAD_TOO_LARGE, "领域请求超过32MiB"),
     };
     let Ok(client) = reqwest::Client::builder()
-        .timeout(Duration::from_secs(150))
+        .timeout(Duration::from_secs(if is_packing { 300 } else { 150 }))
         .redirect(reqwest::redirect::Policy::none())
         .build()
     else {
@@ -124,19 +130,6 @@ async fn forward(request: Request) -> Response {
     };
     let status = response.status();
     let headers = response.headers().clone();
-    let mut bytes = Vec::new();
-    loop {
-        match response.chunk().await {
-            Ok(Some(chunk)) => {
-                if bytes.len() + chunk.len() > 50 * 1024 * 1024 {
-                    return error(StatusCode::BAD_GATEWAY, "领域结果超过50MiB");
-                }
-                bytes.extend_from_slice(&chunk);
-            }
-            Ok(None) => break,
-            Err(_) => return error(StatusCode::BAD_GATEWAY, "读取领域结果失败"),
-        }
-    }
     let mut output = Response::builder().status(status);
     for name in [
         header::CONTENT_TYPE,
@@ -145,6 +138,50 @@ async fn forward(request: Request) -> Response {
     ] {
         if let Some(value) = headers.get(&name) {
             output = output.header(name, value);
+        }
+    }
+    let is_event_stream = headers
+        .get(header::CONTENT_TYPE)
+        .and_then(|value| value.to_str().ok())
+        .is_some_and(|value| {
+            value
+                .split(';')
+                .next()
+                .unwrap_or("")
+                .trim()
+                .eq_ignore_ascii_case("text/event-stream")
+        });
+    if is_packing && status.is_success() && is_event_stream {
+        // Deliver progress immediately instead of waiting for the packing job
+        // to finish. The request timeout still bounds the complete stream, and
+        // the same output cap applies without buffering the result in memory.
+        // A transport/size error aborts the body; it must not look like a clean
+        // end-of-stream to the browser's existing resume recovery.
+        let mut received = 0usize;
+        let stream = response.bytes_stream().map(move |chunk| {
+            let chunk = chunk.map_err(std::io::Error::other)?;
+            received = received.saturating_add(chunk.len());
+            if received > MAX_RESULT_BYTES {
+                return Err(std::io::Error::other("领域结果超过50MiB"));
+            }
+            Ok(chunk)
+        });
+        return output
+            .header("x-accel-buffering", "no")
+            .body(Body::from_stream(stream))
+            .unwrap_or_else(|_| error(StatusCode::INTERNAL_SERVER_ERROR, "无效领域响应"));
+    }
+    let mut bytes = Vec::new();
+    loop {
+        match response.chunk().await {
+            Ok(Some(chunk)) => {
+                if bytes.len() + chunk.len() > MAX_RESULT_BYTES {
+                    return error(StatusCode::BAD_GATEWAY, "领域结果超过50MiB");
+                }
+                bytes.extend_from_slice(&chunk);
+            }
+            Ok(None) => break,
+            Err(_) => return error(StatusCode::BAD_GATEWAY, "读取领域结果失败"),
         }
     }
     output
