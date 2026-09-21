@@ -83,6 +83,7 @@ class ChatIn(BaseModel):
     confirm_ok: StrictBool = False
     session_id: str = Field(default="", max_length=32)
     project_id: str = Field(default="", max_length=64)
+    cad_project_id: str = Field(default="", pattern=r"^(?:[0-9a-f]{32})?$")
     attachments: list[str] = Field(default_factory=list, max_length=12)
     workflow_budget: dict | None = None
     attachment_roles: dict[str, str] = Field(default_factory=dict)

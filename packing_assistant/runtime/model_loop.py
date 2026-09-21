@@ -78,6 +78,17 @@ TOOL_NAMES = {t["function"]["name"] for t in TOOLS}
 #: 模型对话本身留在宿主进程——它需要网络，工作进程没有。
 CONFINED_TOOLS = frozenset({"read_job_file", "run_skill", "pack_plan", "tender_compare"})
 WRITE_TOOLS = frozenset({"run_skill", "pack_plan", "tender_compare"})
+CAD_TOOLS = [
+    _tool("cad_inspect", "检查用户已选中的 CAD 项目、单位、参数和逐项实体报告。", {}, []),
+    _tool("cad_suggest_layers", "建议图层用途；只提出建议，必须由用户在 CAD 页面确认。", {}, []),
+    _tool("cad_build", "使用用户已经确认的图层和参数生成三维预览，不能自行补充尺寸。", {}, []),
+    _tool("cad_modify", "只解析本轮用户原话修改尺寸或图层，并重新生成；不能传入你编写的指令或尺寸。", {}, []),
+    _tool("cad_undo", "撤销至前一个已生成模型的参数，并重新生成。", {}, []),
+    _tool("cad_export", "导出已生成模型；必须有本轮用户亲自提供的签认，不能在工具参数内代填。",
+          {"format": {"type": "string", "enum": ["glb", "json", "zip"]}}, []),
+]
+CAD_TOOL_NAMES = frozenset(t["function"]["name"] for t in CAD_TOOLS)
+CONFINED_TOOLS = CONFINED_TOOLS | CAD_TOOL_NAMES
 
 SYSTEM = """你是 Civil Buddy（土木版 Codex）：在用户的工地文件夹里，替土木工程师把事情办完的 agent。
 
@@ -105,6 +116,11 @@ class _Turn:
     cancel_event: Any = None
     material: str = ""  # host-selected reference data, never a write authorization
     intent: str = ""
+    cad_context: Optional[Dict[str, Any]] = None
+    cad_confirmed: bool = False  # current user confirmation, never sticky memory
+    cad_changed: bool = False
+    cad_mutation_done: bool = False
+    cad_results: List[Dict[str, Any]] = field(default_factory=list)
     evidence: List[str] = field(default_factory=list)
     files: List[Dict[str, str]] = field(default_factory=list)
     tools_run: List[str] = field(default_factory=list)
@@ -384,6 +400,10 @@ def _dispatch(turn: _Turn, name: str, arguments: Dict[str, Any], worker: Any) ->
         return {"ok": False, "error_code": "cancelled", "reason": "本轮已取消，未执行后续工具。"}
     if turn.intent == "chat" and name in WRITE_TOOLS:
         return {"ok": False, "error_code": "read_only_intent", "reason": "本轮仅问答，未授权生成文件。"}
+    if name in CAD_TOOL_NAMES:
+        from packing_assistant.cad3d.agent import MUTATE_TOOLS
+        if name in MUTATE_TOOLS and turn.cad_mutation_done:
+            return {"ok": True, "summary": "本轮 CAD 操作已完成，未重复修改或导出。"}
     if worker is None or name not in CONFINED_TOOLS:
         with cancel.scope(*cancel.current_keys(), event=turn.cancel_event):
             return _DISPATCH[name](turn, arguments)
@@ -391,7 +411,9 @@ def _dispatch(turn: _Turn, name: str, arguments: Dict[str, Any], worker: Any) ->
     def once() -> Dict[str, Any]:
         reply = worker.call("model_tool", name=name, arguments=arguments, session_id=turn.session_id, run_id=turn.run_id,
                             user_text=turn.user_text, material=turn.material, intent=turn.intent,
-                            confirmed=turn.confirmed, cancel_event=turn.cancel_event)["out"]
+                            confirmed=turn.confirmed, cancel_event=turn.cancel_event,
+                            cad_context=turn.cad_context, cad_confirmed=turn.cad_confirmed,
+                            cad_mutation_done=turn.cad_mutation_done)["out"]
         return reply if isinstance(reply.get("result"), dict) else {"result": {"ok": False, "error_code": "worker_failed",
                                                                                 "reason": str(reply.get("reply") or reply)[:300]}}
 
@@ -403,9 +425,37 @@ def _dispatch(turn: _Turn, name: str, arguments: Dict[str, Any], worker: Any) ->
             turn.confirmed = True
             reply = once()
     turn.add_files(reply.get("files"))
+    if name in CAD_TOOL_NAMES:
+        turn.cad_context = reply.get("cad_context") or turn.cad_context
+        turn.cad_changed = turn.cad_changed or bool(reply.get("cad_changed"))
+        turn.cad_mutation_done = turn.cad_mutation_done or bool(reply.get("cad_mutation_done"))
+        turn.cad_results.append(reply["result"])
     turn.skill = str(reply.get("skill") or turn.skill)
-    turn.hitl_pending = bool(reply.get("hitl_pending")) and reply["result"].get("error_code") == "approval_required"
+    turn.hitl_pending = turn.hitl_pending or (bool(reply.get("hitl_pending")) and reply["result"].get("error_code") == "approval_required")
     return reply["result"]
+
+
+def _cad_tool(turn: _Turn, args: Dict[str, Any], *, name: str) -> Dict[str, Any]:
+    from packing_assistant.cad3d.agent import MUTATE_TOOLS, execute
+    if not turn.cad_context:
+        return {"ok": False, "error_code": "no_cad_project", "reason": "请先在 CAD 页面选择并保存一个项目。"}
+    if name in MUTATE_TOOLS and turn.cad_mutation_done:
+        return {"ok": True, "summary": "本轮 CAD 操作已完成，未重复修改或导出。"}
+    result = execute(turn.cad_context, name, args, user_text=turn.user_text,
+                     session_id=turn.session_id, run_id=turn.run_id, confirmed=turn.cad_confirmed)
+    if result.get("cad_context"):
+        turn.cad_context = result.pop("cad_context")
+    turn.cad_changed = turn.cad_changed or bool(result.pop("cad_changed", False))
+    if name in MUTATE_TOOLS and result.get("ok"):
+        turn.cad_mutation_done = True
+    turn.add_files(result.get("files"))
+    if result.get("error_code") == "approval_required":
+        turn.hitl_pending = True
+    turn.cad_results.append(result)
+    return result
+
+
+_DISPATCH.update({name: partial(_cad_tool, name=name) for name in CAD_TOOL_NAMES})
 
 
 def system_prompt(context_prefix: str = "") -> str:
@@ -499,7 +549,8 @@ def _guarded(reply: str, turn: _Turn, messages: List[Dict[str, Any]], complete: 
 def run_model_agent(text: str, *, session_id: str = "", expert_id: str = "", p0_confirmed: bool = False,
                     history: Optional[List[Dict[str, str]]] = None, complete: Optional[Complete] = None,
                     approve: Optional[Approve] = None, max_steps: int = MAX_STEPS,
-                    cancel_event: Any = None, worker: Any = None, material: str = "", intent: str = "") -> Dict[str, Any]:
+                    cancel_event: Any = None, worker: Any = None, material: str = "", intent: str = "",
+                    cad_context: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
     from packing_assistant.runtime.agent_loop import _scrub
     from packing_assistant.runtime.civil_config import load_config
     from packing_assistant.runtime.expert_skills import skill_body
@@ -513,13 +564,21 @@ def run_model_agent(text: str, *, session_id: str = "", expert_id: str = "", p0_
     seed_session(sid)
     ctx = assemble_context(sid, text=text, p0_confirmed=p0_confirmed)
     turn = _Turn(session_id=sid, run_id="run-" + uuid4().hex[:8], user_text=text, approve=approve,
-                 cancel_event=cancel_event, confirmed=ctx.get("p0_confirmed") is True, material=material, intent=intent)
+                 cancel_event=cancel_event, confirmed=ctx.get("p0_confirmed") is True, material=material, intent=intent,
+                 cad_context=cad_context, cad_confirmed=p0_confirmed is True)
     system = system_prompt(prompt_prefix(ctx))
     past = [{"role": m["role"], "content": str(m.get("content") or "")} for m in history or []
             if m.get("role") in {"user", "assistant"} and str(m.get("content") or "").strip()]
     turn.evidence += [system, text] + [m["content"] for m in past]
     messages: List[Dict[str, Any]] = [{"role": "system", "content": system}, *past]
     tools = [tool for tool in TOOLS if tool["function"]["name"] not in WRITE_TOOLS] if intent == "chat" else TOOLS
+    if cad_context:
+        from packing_assistant.cad3d.agent import READ_TOOLS, operation
+        allowed = operation(text, cad_context)
+        tools = [tool for tool in CAD_TOOLS if tool["function"]["name"] in READ_TOOLS | {allowed}]
+        messages.append({"role": "system", "content": "本轮绑定用户在 CAD 页选择的项目，只能用 CAD 工具处理它。"
+                         "参数只来自保存的项目与本轮用户原话；先检查再操作，不得自行填写尺寸、顶点或签认。"
+                         "图层建议必须由用户在 CAD 页确认。最终成功状态由工具结果决定。"})
     if intent == "chat":
         messages.append({"role": "system", "content": "本轮用户只要求问答；仅可读取资料与解释，不得执行产稿、装箱方案保存或其他写入。"})
     if material:
@@ -565,7 +624,9 @@ def run_model_agent(text: str, *, session_id: str = "", expert_id: str = "", p0_
                 arguments = call.get("arguments") if isinstance(call.get("arguments"), dict) else {}
                 signature = name + json.dumps(arguments, ensure_ascii=False, sort_keys=True)
                 turn.emit("tool_call", {"name": name, "arguments": arguments})
-                if name not in _DISPATCH:
+                if cad_context and name not in {tool["function"]["name"] for tool in tools}:
+                    result = {"ok": False, "error_code": "read_only_intent", "reason": "本轮未授权此操作；仅可处理已选中的 CAD 项目。"}
+                elif name not in _DISPATCH:
                     result: Dict[str, Any] = {"ok": False, "error_code": "unknown_tool",
                                               "reason": f"没有工具 {name}。可用：" + "、".join(sorted(TOOL_NAMES))}
                 elif signature == last_call:
@@ -576,6 +637,8 @@ def run_model_agent(text: str, *, session_id: str = "", expert_id: str = "", p0_
                     except Exception as exc:  # noqa: BLE001 - a tool failure is a result the model can react to
                         result = {"ok": False, "error_code": "tool_failed", "reason": f"{type(exc).__name__}: {str(exc)[:200]}"}
                 last_call = signature
+                if cad_context and (not turn.cad_results or turn.cad_results[-1] is not result):
+                    turn.cad_results.append(result)
                 turn.tools_run.append(name)
                 content = json.dumps(result, ensure_ascii=False, default=str)[:_RESULT_CHARS]
                 turn.evidence.append(content)
@@ -593,7 +656,12 @@ def run_model_agent(text: str, *, session_id: str = "", expert_id: str = "", p0_
         reply = str(exc)
 
     provenance: Dict[str, Any] = {"checked": False, "rewrites": 0, "untraced": [], "verdicts": []}
-    if out["ok"] and reply and not out["error_code"]:
+    if cad_context and out["ok"]:
+        from packing_assistant.cad3d.agent import reply_for
+        reply = reply_for(turn.cad_results, turn.cad_context)
+        if turn.cad_results and not all(result.get("ok") for result in turn.cad_results):
+            out.update(ok=False, error_code=next((r.get("error_code") for r in turn.cad_results if not r.get("ok")), "cad_failed"))
+    elif out["ok"] and reply and not out["error_code"]:
         try:
             reply, provenance = _guarded(reply, turn, messages, complete)
             model_calls += provenance.pop("model_calls", 0)
@@ -610,6 +678,8 @@ def run_model_agent(text: str, *, session_id: str = "", expert_id: str = "", p0_
                skill_source=("given" if pinned and pinned.id == turn.skill else "model") if turn.skill else "",
                hitl_pending=turn.hitl_pending, plan=turn.plan, provenance=provenance,
                usage={"model_calls": model_calls, "tool_calls": len(turn.tools_run)})
+    if cad_context:
+        out.update(cad_context=turn.cad_context, cad_changed=turn.cad_changed)
     turn.emit("run_ended", {"state": "done" if out["ok"] else "failed", "wrote": turn.wrote})
     out["events"] = [e.to_dict() for e in get_bus().for_run(turn.run_id)]
     return out

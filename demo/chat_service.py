@@ -116,6 +116,24 @@ def prepare_turn(root: Path, body: dict) -> dict:
         raise ValueError("请选择有效岗位，一次最多 8 岗")
     from task_router import route_task
     route = route_task(message, ids)
+    cad_project_id = body.get("cad_project_id") or ""
+    cad_context = None
+    if cad_project_id:
+        from packing_assistant.cad3d.projects import CadProjectStore
+        from packing_assistant.cad3d.agent import MUTATE_TOOLS, operation
+        store = CadProjectStore(root / "_cad")
+        cad_context = store.open(cad_project_id)
+        current = (cad_context.get("model") or {}).get("config")
+        for version in reversed(cad_context["project"].get("versions", [])[:-1]):
+            previous = store.open(cad_project_id, version=version["version"])
+            candidate = (previous.get("model") or {}).get("config")
+            if candidate and candidate != current:
+                cad_context["undo_config"] = candidate
+                break
+        route = {"intent": "run" if operation(message, cad_context) in MUTATE_TOOLS else "chat",
+                 "expert_ids": [], "workflow": "", "ambiguous": False, "candidates": [],
+                 "reason": "处理用户选中的 CAD 项目：" + cad_context["project"]["name"]}
+        ids = []
     source = "given" if ids or resolve_mentions(message) else "matched" if route["expert_ids"] else ""
     ids = route["expert_ids"]
     if len(ids) > 8 or any(not get_expert(eid) for eid in ids):
@@ -174,7 +192,7 @@ def prepare_turn(root: Path, body: dict) -> dict:
             "confirmed": body.get("confirm_ok") is True or CONFIRM in message,
             "attachments": attachment_ids, "route": route,
             "workflow_sources": workflow_sources, "workflow_budget": body.get("workflow_budget"),
-            "attachment_roles": roles}
+            "attachment_roles": roles, "cad_project_id": cad_project_id, "cad_context": cad_context}
 
 
 def _event(kind: str, **data) -> dict:
@@ -301,6 +319,7 @@ def _record(root: Path, turn: dict, result: dict, deliverables: list[dict], node
     payload["engine_run_id"] = result.get("engine_run_id", "")
     payload["route"] = turn.get("route", {})
     payload["attachment_roles"] = turn.get("attachment_roles", {})
+    payload["cad_project_id"] = turn.get("cad_project_id", "")
     if result.get("collaboration"):
         payload["collaboration"] = result["collaboration"]
     tmp = path.with_suffix(".tmp")
@@ -346,6 +365,7 @@ def session_detail(root: Path, sid: str) -> dict:
     detail["route"] = runs[-1].get("route", {}) if runs else {}
     detail["collaboration"] = runs[-1].get("collaboration") if runs else None
     detail["attachment_roles"] = runs[-1].get("attachment_roles", {}) if runs else {}
+    detail["cad_project_id"] = runs[-1].get("cad_project_id", "") if runs else ""
     detail["deliverables"] = [f for r in runs for f in r.get("deliverables", []) if Path(f["path"]).is_file()]
     detail["deliverable_runs"] = deliverable_runs(runs)
     # Restore only the last turn's selected attachments, not every uploaded file.
@@ -402,12 +422,12 @@ def _stream_turn(root: Path, turn: dict, *, key_available: bool, plain_runner, l
 
         chosen, _mode_notice = resolve_mode()
         routed_model = (
-            chosen == "model"
+            (chosen == "model" or bool(turn.get("cad_context")))
             and not workflow
             and not turn["route"].get("ambiguous")
         )
         if routed_model:
-            yield _event("status", phase="deliver", text="模型驱动：选岗、调工具、出稿")
+            yield _event("status", phase="deliver", text="CAD 项目：检查图纸、执行受限工具" if turn.get("cad_context") else "模型驱动：选岗、调工具、出稿")
             control.check()
             skill = turn["ids"][0] if len(turn["ids"]) == 1 else ""
             history = list(turn["history"])
@@ -426,9 +446,27 @@ def _stream_turn(root: Path, turn: dict, *, key_available: bool, plain_runner, l
                 material=material,
                 intent=turn["intent"],
                 cancel_event=control.event,
+                cad_context=turn.get("cad_context"),
             )
+            control.check()  # No project save or deliverable copy after cancellation.
             rid = uuid4().hex
             result = dict(result)
+            if result.get("cad_changed") and not result.get("cancelled"):
+                control.check()
+                from packing_assistant.cad3d.projects import CadProjectStore
+                from packing_assistant.runtime import cancel
+                updated = result["cad_context"]
+                try:
+                    with cancel.scope(event=control.event):
+                        CadProjectStore(root / "_cad").update(turn["cad_project_id"],
+                            expected_revision=turn["cad_context"]["project"]["revision"],
+                            draft_config=updated["draft_config"], model=updated.get("model"))
+                    result["reply"] += "\n\n模型与参数已保存到所选 CAD 项目。"
+                except cancel.RunCancelled:
+                    raise TurnCancelled("CAD 项目保存已取消。") from None
+                except (ValueError, OSError, PermissionError) as exc:
+                    result.update(ok=False, error_code="cad_save_failed")
+                    result["reply"] += "\n\n模型预览计算已完成，但项目未保存：" + str(exc) + "。请重新打开 CAD 项目后再试。"
             result["engine_run_id"] = result.get("run_id", "")
             result["run_id"] = rid
             eid = str(result.get("expert_id") or result.get("skill") or skill or "")

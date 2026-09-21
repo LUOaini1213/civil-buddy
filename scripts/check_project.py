@@ -32,6 +32,8 @@ CHECKS = (
     Check("cad-geometry", ("scripts/test_cad_geometry.py",)),
     Check("cad-commands", ("scripts/test_cad_commands.py",)),
     Check("cad-api", ("scripts/test_cad_api.py",)),
+    Check("cad-projects", ("scripts/test_cad_projects.py",)),
+    Check("cad-agent", ("scripts/test_cad_agent.py",), timeout=300),
     Check("cad-ui", ("scripts/test_cad_ui.cjs",), "node"),
     Check("stack-parity", ("scripts/test_stack_parity.py",)),
     Check("expert-capabilities", ("scripts/test_expert_capabilities.py",)),

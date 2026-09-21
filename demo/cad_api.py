@@ -1,12 +1,12 @@
-"""Local CAD workspace: bounded, temporary memory; geometry never comes from chat.
+"""CAD previews plus explicitly saved, versioned projects; deterministic geometry.
 
-Uploaded drawings and previews expire on restart or after 30 minutes. Only an
-explicit export with the product confirmation phrase returns deliverable bytes.
-No source drawing, model, or API key is persisted by these routes.
+Unsaved previews expire after 30 minutes. Saved recipes retain the original DXF
+in the workspace output directory. All portable exports require confirmation.
 """
 from __future__ import annotations
 
 from collections import OrderedDict
+import base64
 from copy import deepcopy
 import importlib.util
 import io
@@ -22,7 +22,7 @@ import zipfile
 
 from fastapi import APIRouter, Depends, HTTPException, Request
 from fastapi.responses import FileResponse, JSONResponse, Response
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, StrictInt
 from starlette.datastructures import UploadFile
 from starlette.concurrency import run_in_threadpool
 from starlette.formparsers import MultiPartException, MultiPartParser
@@ -64,7 +64,7 @@ class MemoryStore:
         with self._lock:
             self._expire()
             if key not in self._items:
-                raise HTTPException(410, "图纸或模型已过期、服务已重启或缓存已释放，请重新上传并生成。")
+                raise HTTPException(410, "图纸或模型缓存已过期、服务已重启或缓存已释放。请从最近项目重新打开；未保存的图纸需重新上传并生成。")
             return deepcopy(self._items[key][2])
 
 
@@ -118,7 +118,8 @@ def capabilities() -> dict:
         "install_command": "python -m pip install -r requirements-cad.txt",
         "modes": ["building", "section"], "units": ["mm", "cm", "m", "in", "ft"],
         "max_upload_bytes": MAX_UPLOAD_BYTES, "session_ttl_seconds": TTL_SECONDS,
-        "storage": "temporary-memory", "formats": ["dxf"], "exports": ["glb", "json", "zip"],
+        "storage": "temporary-memory-with-explicit-project-save", "formats": ["dxf"], "exports": ["glb", "json", "zip"],
+        "persistent_projects": True, "max_project_bundle_bytes": 16 * 1024 * 1024,
     }
 
 
@@ -228,7 +229,7 @@ async def cad_import(request: Request):
     from packing_assistant.cad3d.geometry import inspect_dxf
     document = await run_in_threadpool(compute, inspect_dxf, data, filename)
     try:
-        document_id = DOCUMENTS.put(document)
+        document_id = DOCUMENTS.put({**document, "_source_b64": base64.b64encode(data).decode("ascii")})
     except ValueError as exc:
         raise HTTPException(413, str(exc)) from exc
     return JSONResponse({"ok": True, "document_id": document_id, "document": document}, headers={"Cache-Control": "no-store"})
@@ -287,3 +288,130 @@ async def cad_export(request: Request):
     model = MODELS.get(body.model_id)
     data, media_type, filename = await run_in_threadpool(compute, export_model, model, body.format)
     return Response(data, media_type=media_type, headers={"Content-Disposition": f'attachment; filename="{filename}"', "Cache-Control": "no-store", "X-Content-Type-Options": "nosniff"})
+
+
+class ProjectSaveIn(BuildIn):
+    name: str = Field(min_length=1, max_length=100)
+    project_id: str | None = Field(default=None, pattern=r"^[0-9a-f]{32}$")
+    expected_revision: StrictInt | None = Field(default=None, ge=1)
+    model_id: str | None = Field(default=None, pattern=r"^[0-9a-f]{32}$")
+
+
+class ProjectExportIn(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    confirmation: str = Field(max_length=80)
+    expected_revision: StrictInt = Field(ge=1)
+
+
+def project_store():
+    # App entry points also import config as a top-level module; its root is
+    # resolved from __file__, so package imports use the same storage location.
+    from demo.config import OUT_ROOT
+    from packing_assistant.cad3d.projects import CadProjectStore
+    return CadProjectStore(OUT_ROOT / "_cad")
+
+
+def project_compute(fn, *args, **kwargs):
+    from packing_assistant.cad3d.projects import ProjectConflict, ProjectNotFound
+    if not COMPUTE.acquire(blocking=False):
+        raise HTTPException(429, "已有建模任务正在处理，请稍后重试。")
+    try:
+        return fn(*args, **kwargs)
+    except ProjectConflict as exc:
+        raise HTTPException(409, str(exc)) from exc
+    except ProjectNotFound as exc:
+        raise HTTPException(404, str(exc)) from exc
+    except PermissionError as exc:
+        raise HTTPException(403, str(exc)) from exc
+    except ValueError as exc:
+        raise HTTPException(422, str(exc)) from exc
+    except OSError as exc:
+        raise HTTPException(503, "项目存储暂不可用，请稍后重试。原项目保持不变。") from exc
+    finally:
+        COMPUTE.release()
+
+
+def cache_project(snapshot: dict) -> dict:
+    document = snapshot["document"]
+    source = project_store().source(snapshot["project"]["id"])
+    snapshot["document_id"] = DOCUMENTS.put({**document, "_source_b64": base64.b64encode(source).decode("ascii")})
+    if snapshot.get("model"):
+        snapshot["model_id"] = MODELS.put(snapshot["model"])
+    return {"ok": True, **snapshot}
+
+
+@router.get("/api/cad/projects")
+async def cad_projects():
+    rows = await run_in_threadpool(project_compute, project_store().list_projects)
+    return JSONResponse({"ok": True, "projects": rows}, headers={"Cache-Control": "no-store"})
+
+
+@router.post("/api/cad/projects")
+async def cad_project_save(request: Request):
+    body = await read_json(request, ProjectSaveIn)
+    require_dependencies()
+    document = DOCUMENTS.get(body.document_id)
+    source = base64.b64decode(document.pop("_source_b64", ""))
+    model = MODELS.get(body.model_id) if body.model_id else None
+    value = await run_in_threadpool(project_compute, project_store().save, name=body.name, document=document,
+                                   source=source, draft_config=body.config, model=model, project_id=body.project_id,
+                                   expected_revision=body.expected_revision)
+    return JSONResponse({"ok": True, "project": value}, headers={"Cache-Control": "no-store"})
+
+
+@router.post("/api/cad/projects/import")
+async def cad_project_import(request: Request):
+    from packing_assistant.cad3d.projects import MAX_BUNDLE
+    require_dependencies()
+    if request.headers.get("content-type", "").split(";", 1)[0].strip().lower() != "multipart/form-data":
+        raise HTTPException(400, "请选择一个 CAD 项目 ZIP 包。")
+    payload = await bounded_body(request, MAX_BUNDLE + 65536)
+
+    async def stream():
+        yield payload
+        yield b""
+
+    parser = MultiPartParser(request.headers, stream(), max_files=1, max_fields=0)
+    parser.spool_max_size = parser.max_file_size = MAX_BUNDLE + 65537
+    try:
+        form = await parser.parse()
+    except (MultiPartException, ValueError) as exc:
+        for spool in parser._files_to_close_on_error:
+            spool.close()
+        raise HTTPException(400, "项目包上传格式无效。") from exc
+    try:
+        file = form.get("file")
+        if not isinstance(file, UploadFile) or len(form) != 1:
+            raise HTTPException(422, "请选择一份 CAD 项目包。")
+        data = await file.read(MAX_BUNDLE + 1)
+    finally:
+        await form.close()
+    if len(data) > MAX_BUNDLE:
+        raise HTTPException(413, "CAD 项目包不能超过 16 MiB。")
+
+    def restore():
+        return cache_project(project_store().import_bundle(data))
+
+    value = await run_in_threadpool(project_compute, restore)
+    return JSONResponse(value, headers={"Cache-Control": "no-store"})
+
+
+@router.get("/api/cad/projects/{project_id}")
+async def cad_project_open(project_id: str, version: int | None = None):
+    require_dependencies()
+
+    def restore():
+        return cache_project(project_store().open(project_id, version=version))
+
+    value = await run_in_threadpool(project_compute, restore)
+    return JSONResponse(value, headers={"Cache-Control": "no-store"})
+
+
+@router.post("/api/cad/projects/{project_id}/export")
+async def cad_project_export(project_id: str, request: Request):
+    body = await read_json(request, ProjectExportIn)
+    if body.confirmation != CONFIRMATION:
+        raise HTTPException(403, "导出前请完整键入：" + CONFIRMATION)
+    payload = await run_in_threadpool(project_compute, project_store().export_bundle, project_id, body.expected_revision)
+    return Response(payload, media_type="application/zip", headers={"Content-Disposition": 'attachment; filename="cad-project.zip"',
+                    "Cache-Control": "no-store", "X-Content-Type-Options": "nosniff"})

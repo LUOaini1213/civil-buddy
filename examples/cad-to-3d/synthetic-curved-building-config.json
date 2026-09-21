@@ -1,0 +1,26 @@
+{
+  "mode": "building",
+  "unit": "mm",
+  "curve_tolerance_mm": 0.1,
+  "confirmed_solid": true,
+  "layers": {
+    "WALL": "wall",
+    "COLUMN": "column",
+    "SLAB": "slab"
+  },
+  "parameters": {
+    "wall": {
+      "height_m": 3,
+      "base_m": 0
+    },
+    "column": {
+      "height_m": 3,
+      "base_m": 0
+    },
+    "slab": {
+      "height_m": 0.12,
+      "base_m": -0.12
+    }
+  },
+  "overrides": {}
+}

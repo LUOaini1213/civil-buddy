@@ -21,11 +21,16 @@
       <div><h2>此工作台需要访问口令</h2><p class="hint">请向启动工作台的人获取口令。验证后会保存在当前浏览器，已有图纸和参数会保留。</p></div>
       <form id="accessForm"><label class="sr-only" for="accessToken">访问口令</label><input id="accessToken" type="password" autocomplete="current-password" placeholder="输入访问口令" required><button id="accessSubmit" class="button-primary" type="submit">验证并继续</button></form>
     </section>
+    <section class="project-panel" aria-label="CAD 项目保存与恢复">
+      <div class="project-heading"><div><h2>项目与版本</h2><p class="hint">保存原图与建模参数，重启后继续；项目包可交给同事打开。</p></div><span id="projectStatus" class="hint" role="status">尚未保存项目</span></div>
+      <div class="project-actions"><label class="project-name" for="projectName">项目名称<input id="projectName" maxlength="100" placeholder="例如：单层建筑方案" autocomplete="off"></label><button id="saveDraft" type="button" disabled>保存草稿</button><button id="saveVersion" type="button" disabled>保存模型版本</button><button id="saveCopy" type="button" disabled>另存副本</button><a id="agentProjectLink" class="button-link" aria-disabled="true">在工作台用 Agent 继续 ↗</a></div>
+      <details class="project-library"><summary>最近项目、版本历史与项目包</summary><div class="project-library-grid"><div><label class="field-label" for="recentProjects">最近项目</label><div class="project-picker"><select id="recentProjects"><option value="">正在读取项目列表</option></select><button id="openProject" type="button" disabled>打开</button><button id="refreshProjects" type="button">刷新</button></div></div><div><label class="field-label" for="projectVersions">当前项目的模型版本</label><div class="project-picker"><select id="projectVersions" disabled><option value="">尚无已保存版本</option></select><button id="openVersion" type="button" disabled>载入版本</button></div></div></div><div class="project-package"><label class="button-link package-upload" for="projectPackage">导入项目包<input id="projectPackage" type="file" accept=".zip" aria-label="导入 CAD 项目包"></label><button id="exportProject" type="button" disabled>下载项目包</button><span class="hint">下载前请在页面底部填写签认提示。载入项目会替换当前画面，请先保存更改。</span></div></details>
+    </section>
     <div class="workspace">
       <aside class="controls" aria-label="图纸与建模参数">
         <section class="control-section">
           <h2><span class="step">01</span> 选择图纸</h2>
-          <label class="dropzone" id="dropzone" for="cadFile"><span class="upload-symbol" aria-hidden="true">↥</span><strong>上传 DXF 图纸</strong><span>点击选择或拖入文件</span><small>闭合直线轮廓 · 暂不直接读取 DWG</small><input id="cadFile" type="file" accept=".dxf" aria-label="上传 DXF 图纸"></label>
+          <label class="dropzone" id="dropzone" for="cadFile"><span class="upload-symbol" aria-hidden="true">↥</span><strong>上传 DXF 图纸</strong><span>点击选择或拖入文件</span><small>闭合轮廓、圆弧与平面块 · DWG 请先转换</small><input id="cadFile" type="file" accept=".dxf" aria-label="上传 DXF 图纸"></label>
           <div class="example-row"><span>试用样例</span><button type="button" data-example="building">墙 · 柱 · 板</button><button type="button" data-example="section">带孔截面</button></div>
           <div class="file-meta" id="fileMeta" hidden><div><strong id="filename"></strong><small id="fileDetails"></small></div><button id="clearFile" class="icon-button" type="button" aria-label="清空图纸和模型">×</button></div>
           <p class="hint" id="exampleHint" hidden>这是合成演示图纸。已填入的尺寸仅用于演示，请勿套用于实际项目。</p>
@@ -45,6 +50,7 @@
               <option value="ft">英尺 ft</option>
             </select>
             <p id="unitHint" class="hint">单位直接决定实际模型尺寸。</p>
+            <label class="field-label" for="curveTolerance">曲线弦高误差上限（毫米）</label><input id="curveTolerance" type="number" min="0.001" max="10" step="any" value="0.1" aria-describedby="curveToleranceHint"><p id="curveToleranceHint" class="hint">默认 0.1 mm；越小越精细。误差与单位随项目保存。</p>
             <div class="section-label"><span>图层映射</span><span>实体数 / 用途</span></div>
             <div id="layerList" class="layer-list"><p class="hint">上传后显示图层</p></div>
             <label class="solid-confirm"><input id="solidConfirmed" type="checkbox"><span>我确认：选中的闭合轮廓表示实体区域，同层内圈表示孔洞。</span></label>
@@ -75,6 +81,7 @@
           <div class="command-title"><span class="assistant-mark" aria-hidden="true">✦</span><div><h2>用一句话调整</h2><p id="commandHelp">例如：把墙高改成 3.6 米；把柱子标高改为 0.2 米。</p></div><button id="undoChange" type="button" disabled>↶ 撤销</button></div>
           <form id="commandForm"><label class="sr-only" for="commandInput">参数修改指令</label><input id="commandInput" placeholder="把墙高改成 3.6 米" autocomplete="off" disabled maxlength="500"><button id="sendCommand" class="button-primary" type="submit" disabled>应用修改 <span aria-hidden="true">↑</span></button></form>
           <p class="hint" id="commandResult">修改只作用于图层选择、高度、长度和标高；平面轮廓来自原图。</p>
+          <div id="commandDiff" class="command-diff" hidden><p id="commandDiffStatus" class="hint"></p><div id="commandDiffRows"></div></div>
         </section>
         <div class="detail-grid">
           <section class="detail-panel"><div class="panel-heading"><h2>构件来源与参数</h2><span class="muted">点击模型选择</span></div><div id="objectInspector" class="object-inspector"><p class="hint">选择一个二维轮廓或三维构件，查看原始图层、实体编号与建模尺寸。</p></div></section>
@@ -83,7 +90,7 @@
         <section class="export-panel"><div><h2>导出模型与参数记录</h2><p class="hint">GLB 可在其他三维工具重新打开。预览模型不包含完整 BIM 语义。</p></div><label for="exportConfirmation">导出前请完整输入：<strong>我明白，将由持证人员签认</strong></label><input id="exportConfirmation" placeholder="我明白，将由持证人员签认" autocomplete="off" disabled><div class="export-actions"><button type="button" data-export="glb" disabled>下载 GLB 模型</button><button type="button" data-export="json" disabled>下载参数 JSON</button><button type="button" data-export="zip" disabled>打包下载 ↓</button><span id="exportHint" class="hint">生成模型后可导出</span></div></section>
       </div>
     </div>
-    <footer>真实几何 · 可追溯来源 · 用户指定尺寸 <span>首版支持闭合直线 DXF 轮廓；未处理实体会明确列出。</span></footer>
+    <footer>真实几何 · 可追溯来源 · 用户指定尺寸 <span>支持闭合 DXF 轮廓、曲线与受限平面块；未处理实体会明确列出。</span></footer>
   </main>
 </body>
 </html>

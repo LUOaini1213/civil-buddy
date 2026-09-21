@@ -556,6 +556,34 @@ test("offline capability status enables usable tools without claiming a model is
   assert.equal(h.elements.btnAttach.disabled, false);
 });
 
+test("explicit CAD project URL binds chat without restoring an unrelated remembered task", async () => {
+  let payload;
+  const h = ui(async (_url, options) => {
+    payload = JSON.parse(options.body);
+    return { ok: true, body: bytesStream(encoder.encode(frame("done", { text: "已检查" }))) };
+  });
+  const id = "a".repeat(32);
+  h.evaluate(`globalThis.location = { href: "http://localhost/?cad_project_id=${id}" }; state.cadProjectId = cbCadProjectFromUrl(); cbRememberSession("old-task");`);
+  assert.equal(h.evaluate("cbRememberedSession()"), "");
+  await h.submit("检查图纸");
+  assert.equal(payload.cad_project_id, id);
+  assert.equal(payload.confirm_ok, false);
+  h.evaluate('globalThis.location.href = "http://localhost/?cad_project_id=../../other"');
+  assert.equal(h.evaluate("cbCadProjectFromUrl()"), "");
+  h.evaluate("cbNewLocalSession()");
+  assert.equal(h.evaluate("state.cadProjectId"), "");
+});
+
+test("saved task restores only its server-bound CAD selection and clears it for ordinary tasks", async () => {
+  const id = "b".repeat(32);
+  const h = ui(async (url) => response({ session_id: String(url).includes("cad-task") ? "cad-task" : "ordinary-task",
+    transcript: [], cad_project_id: String(url).includes("cad-task") ? id : "" }));
+  await h.evaluate('cbProjOpenSession({ session_id: "cad-task" })');
+  assert.equal(h.evaluate("state.cadProjectId"), id);
+  await h.evaluate('cbProjOpenSession({ session_id: "ordinary-task" })');
+  assert.equal(h.evaluate("state.cadProjectId"), "");
+});
+
 test("shared home exposes CAD only when the host explicitly advertises its routes", () => {
   const h = ui(() => assert.fail("painting capabilities must not request network"));
   h.evaluate('cbApplyHealth({ capabilities: { chat: true } })');

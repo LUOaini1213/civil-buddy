@@ -36,11 +36,12 @@ def resolve_mode(requested: str = "") -> Tuple[str, str]:
 
 def run_turn(text: str, *, session_id: str = "", skill: str = "", confirm: bool = False,
              history: Optional[List[Dict[str, str]]] = None, approve: Optional[Callable[[Dict[str, Any]], bool]] = None,
-             cancel_event: Any = None, mode: str = "", material: str = "", intent: str = "") -> Dict[str, Any]:
+             cancel_event: Any = None, mode: str = "", material: str = "", intent: str = "",
+             cad_context: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
     from packing_assistant.runtime.agent_loop import run_agent
     from packing_assistant.runtime.civil_config import load_config
 
-    from packing_assistant.runtime import os_sandbox
+    from packing_assistant.runtime import cancel, os_sandbox
     from packing_assistant.runtime.workspace import active
 
     chosen, notice = resolve_mode(mode)
@@ -81,7 +82,7 @@ def run_turn(text: str, *, session_id: str = "", skill: str = "", confirm: bool 
 
             out = run_model_agent(text, session_id=session_id, expert_id=skill, p0_confirmed=confirm,
                                   history=history, approve=approve, cancel_event=cancel_event, worker=worker,
-                                  material=material, intent=intent)
+                                  material=material, intent=intent, cad_context=cad_context)
             asked = mode or load_config().agent_mode
             if is_cancelled():
                 out = cancelled_result(out)
@@ -91,13 +92,16 @@ def run_turn(text: str, *, session_id: str = "", skill: str = "", confirm: bool 
         if chosen != "model":
             if is_cancelled():
                 raise os_sandbox.WorkerCancelled("本轮已取消。")
-            if worker is not None:
+            if cad_context:
+                out = _cad_steps(text, cad_context, session_id=session_id, confirmed=confirm,
+                                 cancel_event=cancel_event, worker=worker)
+            elif worker is not None:
                 out = worker.call("run_agent", text=material or text, session_id=session_id, expert_id=skill,
                                   p0_confirmed=confirm, force_intent=intent or None, cancel_event=cancel_event)["out"]
             else:
                 out = run_agent(material or text, session_id=session_id, expert_id=skill, p0_confirmed=confirm,
                                 cancel_event=cancel_event, force_intent=intent or None)
-    except os_sandbox.WorkerCancelled:
+    except (os_sandbox.WorkerCancelled, cancel.RunCancelled):
         out = cancelled_result(locals().get("out"))
     except os_sandbox.WorkerError as exc:
         out = {"ok": False, "schema": "civil.agent.v1", "error_code": "sandbox_worker_failed", "wrote": False, "files": [],
@@ -127,3 +131,29 @@ def run_turn(text: str, *, session_id: str = "", skill: str = "", confirm: bool 
         out["mode_notice"] = " ".join(notices)
         out["reply"] = out["mode_notice"] + "\n\n" + str(out.get("reply") or "")
     return out
+
+
+def _cad_steps(text: str, context: dict, *, session_id: str, confirmed: bool,
+               cancel_event: Any = None, worker: Any = None) -> Dict[str, Any]:
+    from uuid import uuid4
+    from packing_assistant.cad3d.agent import operation, reply_for
+    from packing_assistant.runtime import model_loop, os_sandbox
+    turn = model_loop._Turn(session_id=session_id, run_id="run-" + uuid4().hex[:8], user_text=text,
+                           confirmed=confirmed, approve=None, cancel_event=cancel_event,
+                           cad_context=context, cad_confirmed=confirmed)
+    name = operation(text, context)
+    try:
+        result = model_loop._dispatch(turn, name, {}, worker)
+    except os_sandbox.WorkerCancelled:
+        raise
+    except (ValueError, OSError, RuntimeError) as exc:
+        result = {"ok": False, "error_code": "cad_failed", "reason": str(exc)}
+    if not turn.cad_results or turn.cad_results[-1] is not result:
+        turn.cad_results.append(result)
+    return {"ok": bool(result.get("ok")), "schema": "civil.agent.v1", "agent_mode": "steps",
+            "run_id": turn.run_id, "session_id": session_id, "intent": "run" if turn.wrote else "chat",
+            "reply": reply_for(turn.cad_results, turn.cad_context), "files": turn.files,
+            "artifacts": [row["path"] for row in turn.files], "wrote": turn.wrote, "submit_blocked": True,
+            "tools_run": [name], "hitl_pending": turn.hitl_pending,
+            "error_code": result.get("error_code", ""), "cad_context": turn.cad_context,
+            "cad_changed": turn.cad_changed}

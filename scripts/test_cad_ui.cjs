@@ -137,10 +137,10 @@ function dom() {
 const json = (payload, status = 200) => new Response(JSON.stringify(payload), { status, headers: { 'Content-Type': 'application/json' } });
 async function waitFor(predicate) { for (let i = 0; i < 100; i++) { if (predicate()) return; await new Promise((resolve) => setImmediate(resolve)); } assert.fail('UI operation did not settle'); }
 
-async function withApp(fetcher, action, capabilities = () => json({ ok: true, available: true })) {
+async function withApp(fetcher, action, capabilities = () => json({ ok: true, available: true }), options = {}) {
   const previousFetch = global.fetch, previousWindow = global.window;
-  const document = dom(); global.window = { addEventListener() {}, devicePixelRatio: 1 };
-  global.fetch = (url, options) => url === '/api/cad/capabilities' ? Promise.resolve().then(() => capabilities(options)) : fetcher(url, options);
+  const document = dom(); global.window = { addEventListener() {}, devicePixelRatio: 1, location: { search: options.search || '' } };
+  global.fetch = (url, request) => url === '/api/cad/capabilities' ? Promise.resolve().then(() => capabilities(request)) : url === '/api/cad/projects' && !request?.method ? Promise.resolve().then(() => options.projectList ? options.projectList() : json({ ok: true, projects: [] })) : fetcher(url, request);
   try { const { startCadApp } = await ui; const state = await startCadApp(document); await action({ document, state }); }
   finally { global.fetch = previousFetch; global.window = previousWindow; }
 }
@@ -245,9 +245,13 @@ test('natural-language parameters rebuild geometry and undo rebuilds the saved c
     doc.ids.solidConfirmed.checked = true; doc.ids.solidConfirmed.emit('change'); doc.ids.buildModel.click(); await waitFor(() => state.model && !state.busy);
     doc.ids.commandInput.value = '把墙高改成3.6米'; doc.ids.commandForm.emit('submit'); await waitFor(() => heights.length === 2 && !state.busy);
     assert.equal(state.model.objects[0].parameters.height_m, 3.6); assert.equal(doc.ids.undoChange.disabled, false);
+    assert.equal(doc.ids.commandDiffRows.children[0].children[1].textContent, '3 m');
+    assert.equal(doc.ids.commandDiffRows.children[0].children[3].textContent, '3.6 m');
+    assert.match(doc.ids.commandDiffStatus.textContent, /已应用/);
     doc.ids.undoChange.click(); await waitFor(() => heights.length === 3 && !state.busy);
     assert.deepEqual(heights, [3, 3.6, 3]); assert.equal(state.model.objects[0].parameters.height_m, 3); assert.equal(state.history.length, 0);
     assert.equal(doc.ids.commandResult.textContent, '已撤销，恢复上一次建模参数。');
+    assert.equal(doc.ids.commandDiff.hidden, true);
   });
 });
 
@@ -389,5 +393,188 @@ test('an export failure unlocks the selected object editor and leaves the model 
     const editor = doc.ids.objectInspector.children.find((item) => item.tagName === 'form');
     assert.equal(editor.children[0].children[0].disabled, false); assert.equal(editor.children[2].disabled, false);
     assert.equal(state.modelId, 'model-one'); assert.match(doc.ids.notice.textContent, /临时导出错误/);
+  });
+});
+
+const project = { id: 'a'.repeat(32), name: '测试项目', revision: 2, updated_at: '2026-09-21T12:00:00Z', versions: [{ version: 1, created_at: '2026-09-21T12:00:00Z', objects: 1 }] };
+async function restoredProject(draftHeight = 3) {
+  const { defaultConfig } = await ui;
+  const config = defaultConfig(drawing, 'building', true); config.confirmed_solid = true;
+  const draft = copy(config); draft.parameters.wall.height_m = draftHeight;
+  return { ...documentResponse, ...modelResponse, project: copy(project), draft_config: draft, applied_config: config };
+}
+
+test('curve precision defaults to 0.1 mm, rejects missing/out-of-range values and compares visibly', async () => {
+  const { defaultConfig, validateConfig, configChanges } = await ui;
+  const config = defaultConfig(drawing, 'building', true); config.confirmed_solid = true;
+  assert.equal(config.curve_tolerance_mm, .1);
+  for (const tolerance of [null, 0, .0009, 10.1, Infinity]) { config.curve_tolerance_mm = tolerance; assert.match(validateConfig(config), /曲线/); }
+  config.curve_tolerance_mm = .001; assert.equal(validateConfig(config), '');
+  const next = copy(config); next.curve_tolerance_mm = .2;
+  assert.deepEqual(configChanges(config, next), [{ label: '曲线误差', before: '0.001 mm', after: '0.2 mm' }]);
+});
+
+test('selected-object command diffs use the previous effective layer dimensions', async () => {
+  const { defaultConfig, configChanges } = await ui;
+  const config = defaultConfig(drawing, 'building', true), next = copy(config);
+  next.overrides.A = { height_m: 4 };
+  assert.deepEqual(configChanges(config, next, drawing), [{ label: '实体 A 高度 / 长度', before: '3 m', after: '4 m' }]);
+});
+
+test('saving a draft never archives an unrequested model, and a clean model version does', async () => {
+  const saves = [];
+  await withApp(async (url, options) => {
+    if (url.includes('/examples/')) return new Response('fixture');
+    if (url.endsWith('/import')) return json(documentResponse);
+    if (url.endsWith('/build')) return json(modelResponse);
+    if (url === '/api/cad/projects') { saves.push(JSON.parse(options.body)); return json({ ok: true, project: { ...project, revision: saves.length, versions: saves.length > 1 ? project.versions : [] } }); }
+    throw Error('unexpected URL ' + url);
+  }, async ({ document: doc, state }) => {
+    doc.groups.example[0].click(); await waitFor(() => state.document && !state.busy);
+    doc.ids.solidConfirmed.checked = true; doc.ids.solidConfirmed.emit('change'); doc.ids.buildModel.click(); await waitFor(() => state.model && !state.busy);
+    doc.ids.projectName.value = '测试项目'; doc.ids.projectName.emit('input');
+    doc.ids.saveDraft.click(); await waitFor(() => saves.length === 1 && !state.busy);
+    assert.equal(saves[0].model_id, undefined); assert.equal(saves[0].document_id, 'drawing-one'); assert.equal(state.projectDirty, true);
+    assert.match(doc.ids.notice.textContent, /模型尚未归档/); assert.equal(doc.ids.exportProject.disabled, true);
+    doc.ids.saveVersion.click(); await waitFor(() => saves.length === 2 && !state.busy);
+    assert.equal(saves[1].model_id, 'model-one'); assert.equal(saves[1].expected_revision, 1); assert.equal(saves[1].project_id, project.id);
+    assert.equal(state.projectDirty, false); assert.equal(doc.ids.agentProjectLink.href, '/?cad_project_id=' + project.id);
+    doc.ids.exportConfirmation.value = '我明白，将由持证人员签认'; doc.ids.exportConfirmation.emit('input'); assert.equal(doc.ids.exportProject.disabled, false);
+    doc.ids.parameterRows.children[0].children[1].value = '4'; doc.ids.parameterRows.children[0].children[1].emit('input');
+    assert.equal(doc.ids.exportProject.disabled, true); assert.equal(doc.ids.agentProjectLink.attributes['aria-disabled'], 'true');
+  });
+});
+
+test('reopening a saved project restores its draft separately from the last good model and clears signing', async () => {
+  const payload = await restoredProject(4);
+  await withApp(async (url) => { assert.equal(url, '/api/cad/projects/' + project.id); return json(payload); }, async ({ document: doc, state }) => {
+    doc.ids.exportConfirmation.value = '我明白，将由持证人员签认';
+    doc.ids.recentProjects.value = project.id; doc.ids.recentProjects.emit('change'); doc.ids.openProject.click();
+    await waitFor(() => state.project && !state.busy);
+    assert.equal(state.config.parameters.wall.height_m, 4); assert.equal(state.model.objects[0].parameters.height_m, 3);
+    assert.equal(state.dirty, true); assert.equal(state.projectDirty, false); assert.equal(state.history.length, 0);
+    assert.equal(doc.ids.exportConfirmation.value, ''); assert.equal(doc.ids.exportProject.disabled, true);
+    assert.equal(doc.ids.projectVersions.children[1].value, '1'); assert.match(doc.ids.notice.textContent, /草稿与上次生成模型/);
+  }, undefined, { projectList: () => json({ ok: true, projects: [project] }) });
+});
+
+test('the project URL restores a saved model only after capabilities are ready', async () => {
+  const payload = await restoredProject();
+  await withApp(async (url) => { assert.equal(url, '/api/cad/projects/' + project.id); return json(payload); }, async ({ state }) => {
+    assert.equal(state.project.id, project.id); assert.equal(state.canExport, true); assert.equal(state.projectDirty, false);
+  }, undefined, { search: '?project_id=' + project.id });
+});
+
+test('loading a historical version is a local unsaved change with the latest revision retained', async () => {
+  const payload = await restoredProject(); const requests = [];
+  await withApp(async (url) => { requests.push(url); return json(payload); }, async ({ document: doc, state }) => {
+    doc.ids.recentProjects.value = project.id; doc.ids.openProject.click(); await waitFor(() => state.project && !state.busy);
+    doc.ids.projectVersions.value = '1'; doc.ids.projectVersions.emit('change'); doc.ids.openVersion.click(); await waitFor(() => requests.length === 2 && !state.busy);
+    assert.equal(requests[1], '/api/cad/projects/' + project.id + '?version=1'); assert.equal(state.project.revision, 2);
+    assert.equal(state.projectDirty, true); assert.equal(doc.ids.exportProject.disabled, true); assert.match(doc.ids.notice.textContent, /保存后才会写入/);
+  });
+});
+
+test('revision conflicts preserve drafts and allow saving an independent copy without a stale lock', async () => {
+  const payload = await restoredProject(); const saves = [];
+  await withApp(async (url, options) => {
+    if (url === '/api/cad/projects') { const body = JSON.parse(options.body); saves.push(body); return saves.length === 1 ? json({ detail: 'revision conflict' }, 409) : json({ ok: true, project: { ...project, id: 'b'.repeat(32), revision: 1, versions: [] } }); }
+    return json(payload);
+  }, async ({ document: doc, state }) => {
+    doc.ids.recentProjects.value = project.id; doc.ids.openProject.click(); await waitFor(() => state.project && !state.busy);
+    const height = doc.ids.parameterRows.children[0].children[1]; height.value = '4'; height.emit('input');
+    doc.ids.saveDraft.click(); await waitFor(() => saves.length === 1 && !state.busy);
+    assert.equal(state.project.revision, 2); assert.equal(state.config.parameters.wall.height_m, 4); assert.match(doc.ids.notice.textContent, /本次未覆盖/);
+    doc.ids.saveCopy.click(); await waitFor(() => saves.length === 2 && !state.busy);
+    assert.equal(saves[1].project_id, undefined); assert.equal(saves[1].expected_revision, undefined); assert.equal(state.project.id, 'b'.repeat(32));
+  });
+});
+
+test('clearing during a project reopen discards a late response even if the server ignores abort', async () => {
+  const payload = await restoredProject(); let finish;
+  await withApp(async () => new Promise((resolve) => { finish = resolve; }), async ({ document: doc, state }) => {
+    doc.ids.recentProjects.value = project.id; doc.ids.openProject.click(); await waitFor(() => !!finish);
+    doc.ids.clearFile.click(); finish(json(payload)); await new Promise((resolve) => setImmediate(resolve));
+    assert.equal(state.project, null); assert.equal(state.document, null); assert.equal(state.model, null);
+  });
+});
+
+test('project packages import into a new project with no remembered signing phrase', async () => {
+  const payload = await restoredProject(); payload.project.id = 'c'.repeat(32);
+  await withApp(async (url, options) => {
+    assert.equal(url, '/api/cad/projects/import'); assert.equal(options.body.get('file').name, 'shared.zip'); return json(payload);
+  }, async ({ document: doc, state }) => {
+    doc.ids.exportConfirmation.value = '我明白，将由持证人员签认'; doc.ids.projectPackage.files = [new File(['fixture'], 'shared.zip')]; doc.ids.projectPackage.emit('change');
+    await waitFor(() => state.project && !state.busy);
+    assert.equal(state.project.id, 'c'.repeat(32)); assert.equal(doc.ids.exportConfirmation.value, ''); assert.equal(doc.ids.exportProject.disabled, true);
+    assert.match(doc.ids.notice.textContent, /新项目/);
+  });
+});
+
+test('a damaged package cannot clear an already open model or its pending draft', async () => {
+  const payload = await restoredProject(4);
+  await withApp(async (url) => url.endsWith('/import') ? json({ detail: '项目包损坏' }, 422) : json(payload), async ({ document: doc, state }) => {
+    doc.ids.recentProjects.value = project.id; doc.ids.openProject.click(); await waitFor(() => state.project && !state.busy);
+    doc.ids.projectPackage.files = [new File(['bad'], 'damaged.zip')]; doc.ids.projectPackage.emit('change'); await waitFor(() => !state.busy);
+    assert.equal(state.project.id, project.id); assert.equal(state.modelId, 'model-one'); assert.equal(state.config.parameters.wall.height_m, 4);
+    assert.match(doc.ids.notice.textContent, /项目包损坏/);
+  });
+});
+
+test('failed natural-language rebuild shows the proposed diff as unapplied', async () => {
+  let builds = 0;
+  await withApp(async (url, options) => {
+    if (url.includes('/examples/')) return new Response('fixture');
+    if (url.endsWith('/import')) return json(documentResponse);
+    if (url.endsWith('/command')) { const cfg = JSON.parse(options.body).config; cfg.parameters.wall.height_m = 4; return json({ ok: true, config: cfg, changes: ['墙高改为4米'] }); }
+    if (url.endsWith('/build')) return ++builds === 1 ? json(modelResponse) : json({ detail: '无法计算几何' }, 422);
+    throw Error('unexpected URL ' + url);
+  }, async ({ document: doc, state }) => {
+    doc.groups.example[0].click(); await waitFor(() => state.document && !state.busy);
+    doc.ids.solidConfirmed.checked = true; doc.ids.solidConfirmed.emit('change'); doc.ids.buildModel.click(); await waitFor(() => state.model && !state.busy);
+    doc.ids.commandInput.value = '墙高改为4米'; doc.ids.commandForm.emit('submit'); await waitFor(() => builds === 2 && !state.busy);
+    assert.match(doc.ids.commandDiffStatus.textContent, /未应用/); assert.equal(state.model.objects[0].parameters.height_m, 3);
+    assert.equal(state.canExport, false); assert.equal(doc.ids.commandDiffRows.children[0].children[3].textContent, '4 m');
+  });
+});
+
+test('a successful curve build redraws the source preview with the actual model discretization', async () => {
+  const result = copy(modelResponse); result.model.preview_entities = [{ ...drawing.entities[0], points: [[0, 0], [4000, 0], [5000, 1000], [4000, 3000], [0, 3000]] }];
+  let config;
+  await withApp(async (url, options) => {
+    if (url.includes('/examples/')) return new Response('fixture');
+    if (url.endsWith('/import')) return json(documentResponse);
+    if (url.endsWith('/build')) { config = JSON.parse(options.body).config; return json(result); }
+    throw Error('unexpected URL ' + url);
+  }, async ({ document: doc, state }) => {
+    doc.groups.example[0].click(); await waitFor(() => state.document && !state.busy);
+    doc.ids.curveTolerance.value = '.05'; doc.ids.curveTolerance.emit('input'); doc.ids.solidConfirmed.checked = true; doc.ids.solidConfirmed.emit('change');
+    doc.ids.buildModel.click(); await waitFor(() => state.model && !state.busy);
+    assert.equal(config.curve_tolerance_mm, .05); assert.match(doc.ids.drawingSvg.children[0].attributes.d, /L5000 -1000/);
+  });
+});
+
+test('project exports carry the shown revision and reject concurrent updates without replacing the view', async () => {
+  const payload = await restoredProject(); let exportBody;
+  await withApp(async (url, options) => {
+    if (url.endsWith('/export')) { exportBody = JSON.parse(options.body); return json({ detail: '项目修订冲突' }, 409); }
+    return json(payload);
+  }, async ({ document: doc, state }) => {
+    doc.ids.recentProjects.value = project.id; doc.ids.openProject.click(); await waitFor(() => state.project && !state.busy);
+    doc.ids.exportProject.click(); assert.equal(exportBody, undefined);
+    doc.ids.exportConfirmation.value = '我明白，将由持证人员签认'; doc.ids.exportConfirmation.emit('input');
+    doc.ids.exportProject.click(); await waitFor(() => exportBody && !state.busy);
+    assert.equal(exportBody.expected_revision, 2); assert.equal(exportBody.confirmation, '我明白，将由持证人员签认');
+    assert.equal(state.project.revision, 2); assert.equal(state.modelId, 'model-one'); assert.match(doc.ids.notice.textContent, /项目已有更新/);
+  });
+});
+
+test('saving a historical draft does not claim the historical preview was saved as the latest model', async () => {
+  const payload = await restoredProject(); let saves = 0;
+  await withApp(async (url) => url === '/api/cad/projects' ? (saves++, json({ ok: true, project: { ...project, revision: 3 } })) : json(payload), async ({ document: doc, state }) => {
+    doc.ids.recentProjects.value = project.id; doc.ids.openProject.click(); await waitFor(() => state.project && !state.busy);
+    doc.ids.projectVersions.value = '1'; doc.ids.openVersion.click(); await waitFor(() => state.projectDirty && !state.busy);
+    doc.ids.saveDraft.click(); await waitFor(() => saves === 1 && !state.busy);
+    assert.equal(state.projectDirty, true); assert.equal(doc.ids.exportProject.disabled, true); assert.match(doc.ids.notice.textContent, /尚未归档/);
   });
 });

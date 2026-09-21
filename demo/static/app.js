@@ -11,6 +11,7 @@ const state = {
   attachments: [],
   attachmentRoles: {},
   jobRoot: "",
+  cadProjectId: cbCadProjectFromUrl(),
   lastSend: "", /* ux(round7)：纠偏卡「重试」重放同 payload */
   policy: { sandbox: "workspace-write", approval: "on-request" },
   context: {
@@ -34,6 +35,46 @@ let cbCapabilityRequest = 0;
 let cbServerHitlInput = null;
 const CB_ACTIVE_SESSION_KEY = "cb_active_session_v1";
 
+function cbCadProjectFromUrl() {
+  try {
+    const id = new URL(globalThis.location.href).searchParams.get("cad_project_id") || "";
+    return /^[0-9a-f]{32}$/.test(id) ? id : "";
+  } catch (_) { return ""; }
+}
+
+function cbCadProjectRender() {
+  let banner = $("cadProjectContext");
+  if (!state.cadProjectId) {
+    if (banner) banner.remove();
+    try {
+      const url = new URL(globalThis.location.href);
+      if (url.searchParams.has("cad_project_id")) {
+        url.searchParams.delete("cad_project_id");
+        globalThis.history.replaceState(null, "", url);
+      }
+    } catch (_) { /* Non-browser render tests do not own navigation. */ }
+    return;
+  }
+  const composer = $("input") && $("input").parentElement;
+  if (!composer) return;
+  if (!banner) {
+    banner = document.createElement("div");
+    banner.id = "cadProjectContext";
+    banner.className = "status-line";
+    composer.prepend(banner);
+  }
+  banner.replaceChildren();
+  const link = document.createElement("a");
+  link.href = "/cad?project_id=" + state.cadProjectId;
+  link.textContent = "当前 CAD 项目 · 返回三维模型";
+  banner.appendChild(link);
+  const clear = document.createElement("button");
+  clear.type = "button";
+  clear.textContent = "取消选择";
+  clear.addEventListener("click", () => { state.cadProjectId = ""; cbCadProjectRender(); });
+  banner.appendChild(clear);
+}
+
 function cbSessionId() {
   return (globalThis.crypto && typeof globalThis.crypto.randomUUID === "function"
     ? globalThis.crypto.randomUUID()
@@ -48,6 +89,7 @@ function cbRememberSession(id) {
 }
 
 function cbRememberedSession() {
+  if (state.cadProjectId) return ""; // An explicit CAD selection starts a separate task.
   try {
     const id = localStorage.getItem(CB_ACTIVE_SESSION_KEY) || "";
     return /^[A-Za-z0-9][A-Za-z0-9_-]{3,31}$/.test(id) ? id : "";
@@ -912,7 +954,9 @@ function cbNewLocalSession() {
   cbRememberSession("");
   if ($("confirmOk")) $("confirmOk").value = "";
   state.attachments = [];
-  state.attachmentRoles = {};
+    state.attachmentRoles = {};
+    state.cadProjectId = "";
+    cbCadProjectRender();
   state.session = cbSessionId();
   cbUploadAbortAll(state.session);
   cbAttachRender();
@@ -1220,6 +1264,8 @@ async function cbProjOpenSession(s) {
     cbAttachRender();
     cbDraftRestore();
     cbProj.cur = d.project_id || s.project_id || "";
+    state.cadProjectId = /^[0-9a-f]{32}$/.test(d.cad_project_id || "") ? d.cad_project_id : "";
+    cbCadProjectRender();
     state.summoned.clear();
     const enabledExperts = new Set(state.experts.filter((expert) => expert && expert.enabled !== false).map((expert) => expert.id));
     for (const id of Array.isArray(d.expert_ids) ? d.expert_ids : []) {
@@ -1304,6 +1350,7 @@ async function cbRunBackground(text) {
         background: true,
         session_id: sid,
         project_id: cbProj.cur || "",
+        cad_project_id: state.cadProjectId || "",
         expert_ids: [...state.summoned],
         confirm_ok: cbConfirmed(),
       }),
@@ -1855,6 +1902,7 @@ async function streamChat(message, bodyEl, run) {
       confirm_ok: confirmed,
       session_id: state.session,
       project_id: cbProj.cur || "",
+      cad_project_id: state.cadProjectId || "",
       attachments: state.attachments
         .filter((a) => !String(a.id || "").startsWith("job:"))
         .map((a) => a.id),
@@ -4769,3 +4817,4 @@ if (window.visualViewport) {
   vv.addEventListener("resize", fit);
   vv.addEventListener("scroll", fit);
 }
+cbCadProjectRender();

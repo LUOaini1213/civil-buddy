@@ -38,6 +38,9 @@ EXPLICIT = (
     "requirements-cad.txt", "docs/civil-buddy/cad-to-3d.md",
     "examples/cad-to-3d/synthetic-building-mm.dxf", "examples/cad-to-3d/synthetic-hollow-section-mm.dxf",
     "examples/cad-to-3d/README.md",
+    "examples/cad-to-3d/EXTENDED-SAMPLES.md", "examples/cad-to-3d/generate_extended_samples.py",
+    "examples/cad-to-3d/synthetic-curved-building-mm.dxf", "examples/cad-to-3d/synthetic-curved-building-config.json",
+    "examples/cad-to-3d/synthetic-bulge-section-mm.dxf", "examples/cad-to-3d/synthetic-bulge-section-config.json",
 )
 ASSET_ROOTS = ("demo/kb", "knowledge", "knowledge_base", "skills/civil-buddy", ".agents/skills")
 

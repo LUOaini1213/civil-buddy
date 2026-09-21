@@ -1,0 +1,16 @@
+{
+  "mode": "section",
+  "unit": "mm",
+  "curve_tolerance_mm": 0.1,
+  "confirmed_solid": true,
+  "layers": {
+    "SECTION": "section"
+  },
+  "parameters": {
+    "section": {
+      "height_m": 2,
+      "base_m": 0
+    }
+  },
+  "overrides": {}
+}
