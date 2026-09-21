@@ -37,6 +37,7 @@ The integration lives on `codex/unified-workbench-20260921`. Original user and t
 - Default gate initial final-integration run: 115/116, with one existing 0.4-second semantic HTTP deadline test failing under concurrent compilation. Its isolated rerun and the extended-gate rerun passed; no production timeout or test assertion was weakened.
 - Real DeepSeek engineering turn `456a38e82a894974bf9a21416120f47d` called both section and frame workers; the independent analytical checks passed. A native frame schema mismatch found by this live test was fixed without changing solver values.
 - Final Rust suite: 190 passed / 0 failed / 0 ignored. Agent UI: 18 passed. Extended non-Rust checks: 9/9 gates passed, including HTTP demo 87 passed / 9 optional-dependency skips. An earlier Rust attempt compiled during the frame fix; the complete stable-source rerun supersedes it.
+- Unpacked clean-environment acceptance exposed an optional JVM discovery exception. Capability probing now returns MPP/P6 unavailable while retaining JSON/CSV/XLSX/XML; 4 targeted tests include the real HTTP endpoint. No Java installation is attempted.
 - Machine-readable summary: [2026-09-21 acceptance](../acceptance/2026-09-21.json). Distribution verification and unpacked startup are recorded with the delivered package. Optional dependency skips remain skips.
 
 ## Unverified or intentionally unsupported

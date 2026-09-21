@@ -108,6 +108,11 @@
     "secrets": {
       "files": 1786,
       "passed": true
+    },
+    "optional_jvm": {
+      "passed": 4,
+      "http_status_without_jvm": 200,
+      "non_java_formats_preserved": true
     }
   },
   "limits": [
