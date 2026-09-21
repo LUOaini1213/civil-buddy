@@ -121,6 +121,21 @@ class CadAgentTests(unittest.TestCase):
         restored = self.execute("cad_undo", "撤销上次修改")
         self.assertEqual(restored["cad_context"]["draft_config"], self.config)
 
+    def test_model_cannot_override_explicit_export_format(self):
+        for requested, wrong in (("STEP","glb"),("GLB","step"),("参数","zip"),("项目模型包","json")):
+            with self.subTest(requested=requested), patch.object(agent,"_export") as export:
+                result = self.execute("cad_export", "导出" + requested, {"format":wrong}, confirmed=True)
+                self.assertEqual(result["error_code"], "invalid_args")
+                export.assert_not_called()
+        with patch.object(agent,"_export",return_value=[]) as export:
+            self.assertTrue(self.execute("cad_export","导出STEP",confirmed=True)["ok"])
+            self.assertEqual(export.call_args.args[-1],"step")
+
+    def test_malformed_export_format_is_rejected_without_exception(self):
+        for format in ([],{},1,None):
+            with self.subTest(format=format):
+                self.assertEqual(self.execute("cad_export","导出模型",{"format":format},confirmed=True)["error_code"],"invalid_args")
+
     def test_interleaved_reads_do_not_allow_double_undo_in_one_model_turn(self):
         self.context = self.execute("cad_modify", "把墙高改成3.6米")["cad_context"]
         script = Script(("cad_undo", {}), ("cad_inspect", {}), ("cad_undo", {}), "已经撤销")

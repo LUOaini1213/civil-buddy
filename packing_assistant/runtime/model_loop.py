@@ -85,7 +85,7 @@ CAD_TOOLS = [
     _tool("cad_modify", "只解析本轮用户原话修改尺寸或图层，并重新生成；不能传入你编写的指令或尺寸。", {}, []),
     _tool("cad_undo", "撤销至前一个已生成模型的参数，并重新生成。", {}, []),
     _tool("cad_export", "导出已生成模型；必须有本轮用户亲自提供的签认，不能在工具参数内代填。",
-          {"format": {"type": "string", "enum": ["glb", "json", "zip"]}}, []),
+          {"format": {"type": "string", "enum": ["glb", "json", "zip", "step"]}}, []),
 ]
 CAD_TOOL_NAMES = frozenset(t["function"]["name"] for t in CAD_TOOLS)
 CONFINED_TOOLS = CONFINED_TOOLS | CAD_TOOL_NAMES

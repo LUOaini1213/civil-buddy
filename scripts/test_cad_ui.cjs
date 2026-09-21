@@ -114,13 +114,15 @@ class Element {
   constructor(tag = 'div') { this.tagName = tag; this.children = []; this.listeners = {}; this.dataset = {}; this.value = ''; this.checked = false; this.disabled = false; this.hidden = false; this.textContent = ''; this.style = { setProperty() {} }; this.attributes = {}; const classes = new Set(); this.classList = { add: (...names) => names.forEach((name) => classes.add(name)), remove: (...names) => names.forEach((name) => classes.delete(name)), toggle: (name, on) => on ? classes.add(name) : classes.delete(name) }; }
   set value(value) { this._value = String(value); }
   get value() { return this._value; }
-  append(...items) { this.children.push(...items); }
+  append(...items) { this.children.push(...items); for (const item of items) if (typeof item === 'object') item.parent = this; }
   prepend(...items) { this.children.unshift(...items); }
   replaceChildren(...items) { this.children = items; }
   setAttribute(name, value) { this.attributes[name] = value; }
+  getAttribute(name) { return this.attributes[name]; }
+  getBoundingClientRect() { return { left: 0, top: 0, width: 100, height: 100 }; }
   addEventListener(name, listener) { (this.listeners[name] ||= []).push(listener); }
   emit(name, data = {}) { for (const listener of this.listeners[name] || []) listener({ target: this, preventDefault() {}, ...data }); }
-  remove() {}
+  remove() { if (this.parent) this.parent.children = this.parent.children.filter((item) => item !== this); }
   click() { this.emit('click'); }
 }
 
@@ -140,9 +142,10 @@ async function waitFor(predicate) { for (let i = 0; i < 100; i++) { if (predicat
 async function withApp(fetcher, action, capabilities = () => json({ ok: true, available: true }), options = {}) {
   const previousFetch = global.fetch, previousWindow = global.window;
   const document = dom(); global.window = { addEventListener() {}, devicePixelRatio: 1, location: { search: options.search || '' } };
-  global.fetch = (url, request) => url === '/api/cad/capabilities' ? Promise.resolve().then(() => capabilities(request)) : url === '/api/cad/projects' && !request?.method ? Promise.resolve().then(() => options.projectList ? options.projectList() : json({ ok: true, projects: [] })) : fetcher(url, request);
-  try { const { startCadApp } = await ui; const state = await startCadApp(document); await action({ document, state }); }
-  finally { global.fetch = previousFetch; global.window = previousWindow; }
+  global.fetch = (url, request) => url === '/api/cad/capabilities' ? Promise.resolve().then(() => capabilities(request)) : url === '/api/cad/projects' && !request?.method ? Promise.resolve().then(() => options.projectList ? options.projectList() : json({ ok: true, projects: [] })) : url === '/api/cad/analyze' && !options.analyze ? Promise.resolve(json({ ok: true, contours: [], diagnostics: [], selected_ids: [], preview_entities: drawing.entities, buildable: true })) : fetcher(url, request);
+  let state;
+  try { const { startCadApp } = await ui; state = await startCadApp(document); await action({ document, state }); }
+  finally { state?.dispose(); global.fetch = previousFetch; global.window = previousWindow; }
 }
 
 test('actual UI requires confirmation, builds sample and suspends download on a parameter edit', async () => {
@@ -577,4 +580,191 @@ test('saving a historical draft does not claim the historical preview was saved 
     doc.ids.saveDraft.click(); await waitFor(() => saves === 1 && !state.busy);
     assert.equal(state.projectDirty, true); assert.equal(doc.ids.exportProject.disabled, true); assert.match(doc.ids.notice.textContent, /尚未归档/);
   });
+});
+
+const entityPath = (doc, id) => doc.ids.drawingSvg.children.find((item) => item.attributes['aria-label']?.startsWith(`实体 ${id}，`));
+const projectOptions = { search: '?project_id=' + project.id };
+
+test('entity exclusion is passed to geometry and project persistence, while hole picking retains its own selection ID', async () => {
+  const payload = await restoredProject(); const requests = [];
+  await withApp(async (url, options) => {
+    if (url.endsWith('/build')) { requests.push(JSON.parse(options.body)); return json({ detail: '不能遗漏孔洞' }, 422); }
+    if (url === '/api/cad/projects') { requests.push(JSON.parse(options.body)); return json({ ok: true, project: { ...project, revision: 3 } }); }
+    return json(payload);
+  }, async ({ document: doc, state }) => {
+    entityPath(doc, 'B').click(); assert.deepEqual(state.pickedIds, ['B']); assert.equal(state.selectedId, 'A');
+    doc.ids.excludePicked.click(); assert.deepEqual(state.config.selection.exclude_ids, ['B']); assert.equal(state.canExport, false);
+    doc.ids.buildModel.click(); await waitFor(() => requests.length === 1 && !state.busy);
+    assert.deepEqual(requests[0].config.selection.exclude_ids, ['B']); assert.equal(state.modelId, 'model-one');
+    doc.ids.saveDraft.click(); await waitFor(() => requests.length === 2 && !state.busy);
+    assert.deepEqual(requests[1].config.selection.exclude_ids, ['B']);
+    doc.ids.undoSelection.click(); assert.deepEqual(state.config.selection.exclude_ids, []); assert.equal(state.dirty, false);
+  }, undefined, projectOptions);
+});
+
+test('Shift picking, view-only groups and explicit group modeling remain distinct', async () => {
+  const payload = await restoredProject();
+  await withApp(async () => json(payload), async ({ document: doc, state }) => {
+    entityPath(doc, 'A').click(); entityPath(doc, 'B').emit('click', { shiftKey: true }); assert.deepEqual(state.pickedIds, ['A', 'B']);
+    entityPath(doc, 'A').emit('click', { shiftKey: true }); assert.deepEqual(state.pickedIds, ['B']);
+    doc.ids.selectionGroupName.value = '内圈检查'; doc.ids.saveSelectionGroup.click();
+    const before = copy(state.config); doc.ids.showSelectionGroup.click();
+    assert.equal(entityPath(doc, 'A'), undefined); assert.ok(entityPath(doc, 'B')); assert.deepEqual(state.config, before);
+    doc.ids.useSelectionGroup.click(); assert.deepEqual(state.config.selection.include_ids, ['B']);
+    doc.ids.showAllEntities.click(); assert.ok(entityPath(doc, 'A')); assert.deepEqual(state.config.selection.include_ids, ['B']);
+    doc.ids.undoSelection.click(); assert.equal(state.config.selection.include_ids, null); assert.equal(state.config.selection.groups[0].name, '内圈检查');
+  }, undefined, projectOptions);
+});
+
+test('box picking selects complete contours and viewport selection is a draft only after explicit include', async () => {
+  const payload = await restoredProject();
+  await withApp(async () => json(payload), async ({ document: doc, state }) => {
+    doc.ids.drawingInteraction.value = 'box';
+    const svg = doc.ids.drawingSvg; svg.setAttribute('viewBox', '0 -3000 4000 4000');
+    svg.emit('pointerdown', { clientX: 4, clientY: 4, button: 0 }); svg.emit('pointermove', { clientX: 96, clientY: 71 }); svg.emit('pointerup', { clientX: 96, clientY: 71 });
+    assert.deepEqual(state.pickedIds, ['B']); assert.equal(state.config.selection.include_ids, null);
+    doc.ids.includePicked.click(); assert.deepEqual(state.config.selection.include_ids, ['B']);
+    doc.ids.fitDrawing.click(); doc.ids.pickVisible.click(); assert.deepEqual(state.pickedIds, ['A', 'B']);
+    doc.ids.addPicked.click(); assert.deepEqual(state.config.selection.include_ids, ['A', 'B']);
+  }, undefined, projectOptions);
+});
+
+test('material preview uses even-odd hole geometry, and diagnosis clicking focuses its source points', async () => {
+  const payload = await restoredProject();
+  const analysis = { ok: true, contours: [{ outer_id: 'A', hole_ids: ['B'], layer: 'WALL', points: drawing.entities[0].points, holes: [drawing.entities[1].points] }], preview_entities: drawing.entities, diagnostics: [{ code: 'open', message: '轮廓有开口', severity: 'error', entity_ids: ['B'], points: [[200, 200], [201, 200]], gap_mm: 1 }], buildable: false };
+  await withApp(async (url) => json(url.endsWith('/analyze') ? analysis : payload), async ({ document: doc, state }) => {
+    doc.ids.analyzeDrawing.click(); await waitFor(() => !!state.analysis);
+    const fill = doc.ids.drawingSvg.children.find((item) => item.attributes.class === 'material-fill');
+    assert.equal(fill.attributes['fill-rule'], 'evenodd'); assert.equal((fill.attributes.d.match(/ Z/g) || []).length, 2);
+    assert.match(doc.ids.analysisStatus.textContent, /不可建模/);
+    doc.ids.diagnosticList.children[0].click(); assert.deepEqual(state.pickedIds, ['B']);
+    assert.equal(doc.ids.drawingSvg.children.filter((item) => item.tagName === 'circle').length, 2);
+    assert.ok(Number(doc.ids.drawingSvg.attributes.viewBox.split(' ')[2]) < 10);
+  }, undefined, { ...projectOptions, analyze: true });
+});
+
+test('a stale analysis cannot repaint a newer entity selection even when abort is ignored', async () => {
+  const payload = await restoredProject(); let finish;
+  await withApp(async (url) => url.endsWith('/analyze') ? new Promise((resolve) => { finish = resolve; }) : json(payload), async ({ document: doc, state }) => {
+    doc.ids.analyzeDrawing.click(); await waitFor(() => !!finish);
+    entityPath(doc, 'A').click(); doc.ids.excludePicked.click();
+    finish(json({ ok: true, contours: [{ outer_id: 'A', layer: 'WALL', points: drawing.entities[0].points, holes: [] }], diagnostics: [], preview_entities: drawing.entities }));
+    await new Promise((resolve) => setImmediate(resolve)); assert.equal(state.analysis, null);
+    assert.deepEqual(state.config.selection.exclude_ids, ['A']); assert.equal(doc.ids.drawingSvg.children.some((item) => item.attributes.class === 'material-fill'), false);
+  }, undefined, { ...projectOptions, analyze: true });
+});
+
+test('dimension binding requires an explicit purpose, keeps annotation separate, and manual edits detach provenance', async () => {
+  const payload = await restoredProject(); payload.document = copy(drawing);
+  payload.document.dimensions = [{ id: 'D1', layer: 'DIMS', kind: 'DIMENSION', text: '3600 mm', annotation_value: 3600, annotation_unit: 'mm', measurement: 3500, measurement_unit: 'drawing', points: [[0, 0], [3600, 0]], bindable: true, reference_only: true }];
+  let bindingRequest;
+  await withApp(async (url, options) => {
+    if (url.endsWith('/bind-dimension')) { bindingRequest = JSON.parse(options.body); const config = copy(bindingRequest.config); config.parameters.wall.height_m = 3.6; config.dimension_bindings = [bindingRequest.binding]; return json({ ok: true, config }); }
+    return json(payload);
+  }, async ({ document: doc, state }) => {
+    assert.equal(state.config.parameters.wall.height_m, 3);
+    doc.ids.dimensionList.children[0].click(); assert.match(doc.ids.dimensionDetails.textContent, /3600/); assert.match(doc.ids.dimensionDetails.textContent, /3500/);
+    doc.ids.bindDimension.click(); assert.equal(bindingRequest, undefined); assert.match(doc.ids.notice.textContent, /明确选择/);
+    doc.ids.dimensionTarget.value = 'role:wall'; doc.ids.dimensionValueSource.value = 'annotation'; doc.ids.dimensionParameter.value = 'height_m'; doc.ids.bindDimension.click();
+    await waitFor(() => !!bindingRequest && !state.busy);
+    assert.deepEqual(bindingRequest.binding, { dimension_id: 'D1', role: 'wall', parameter: 'height_m', value_source: 'annotation' });
+    assert.equal(state.config.parameters.wall.height_m, 3.6); assert.equal(state.model.objects[0].parameters.height_m, 3); assert.equal(state.config.dimension_bindings.length, 1);
+    const input = doc.ids.parameterRows.children[0].children[1]; input.value = '4'; input.emit('input'); assert.deepEqual(state.config.dimension_bindings, []);
+  }, undefined, projectOptions);
+});
+
+test('unit changes detach all dimension bindings and entity parameter changes detach only their binding', async () => {
+  const { detachDimensionBindings, defaultConfig } = await ui;
+  const config = defaultConfig(drawing, 'building', true); config.overrides.A = { height_m: 3 };
+  config.dimension_bindings = [{ dimension_id: 'D1', role: 'wall', parameter: 'height_m', value_source: 'annotation' }, { dimension_id: 'D2', target_id: 'A', parameter: 'height_m', value_source: 'measurement' }];
+  const change = copy(config); change.overrides.A.height_m = 4;
+  assert.equal(detachDimensionBindings(change, config).dimension_bindings.length, 1);
+  const unit = copy(config); unit.unit = 'm'; assert.deepEqual(detachDimensionBindings(unit, config).dimension_bindings, []);
+});
+
+test('excluding a dimension-bound entity detaches that evidence and selection undo restores it', async () => {
+  const payload = await restoredProject(); payload.draft_config.overrides.A = { height_m: 3 };
+  const binding = { dimension_id: 'D1', target_id: 'A', parameter: 'height_m', value_source: 'measurement' };
+  payload.draft_config.dimension_bindings = [binding]; payload.applied_config = copy(payload.draft_config);
+  await withApp(async () => json(payload), async ({ document: doc, state }) => {
+    entityPath(doc, 'A').click(); doc.ids.excludePicked.click(); assert.deepEqual(state.config.dimension_bindings, []);
+    doc.ids.undoSelection.click(); assert.deepEqual(state.config.dimension_bindings, [binding]); assert.equal(state.dirty, false);
+    entityPath(doc, 'A').click(); doc.ids.excludePicked.click(); doc.ids.drawingUnit.value = 'm'; doc.ids.drawingUnit.emit('change');
+    doc.ids.undoSelection.click(); assert.deepEqual(state.config.dimension_bindings, []); assert.equal(state.config.unit, 'm');
+  }, undefined, projectOptions);
+});
+
+const scanResponse = { ok: true, import_id: 'd'.repeat(32), index: { filename: 'large.dxf', sha256: 'source', layers: [{ name: 'WALL', entity_count: 2, bounds: { min: [0, 0], max: [4000, 3000] } }, { name: 'TITLE', entity_count: 1, bounds: { min: [-1000, -1000], max: [5000, 4000] } }], bounds: { min: [-1000, -1000], max: [5000, 4000] }, preview: [{ id: 'I1', layer: '0', layers: ['WALL'], block_overview: true, points: [], bounds: { min: [0, 0], max: [4000, 3000] } }], counts: { modelspace: 3, expanded: 300000, previewed: 1 }, preview_sampled: true, warnings: ['块引用以概览框显示'] } };
+
+test('large files scan first, retain the previous model, and only selected layers and complete bounds are imported', async () => {
+  const payload = await restoredProject(); let scanRequest, selectRequest;
+  await withApp(async (url, options) => {
+    if (url.endsWith('/scan')) { scanRequest = options; return json(scanResponse); }
+    if (url.endsWith('/select')) { selectRequest = JSON.parse(options.body); return json({ ...documentResponse, document_id: 'new-source' }); }
+    return json(payload);
+  }, async ({ document: doc, state }) => {
+    doc.ids.cadFile.files = [new File([new Uint8Array(10 * 1024 * 1024 + 1)], 'large.dxf')]; doc.ids.cadFile.emit('change'); await waitFor(() => !!state.scan && !state.busy);
+    assert.ok(/^[a-f0-9]{32}$/.test(scanRequest.headers['X-CAD-Operation-ID'])); assert.equal(state.modelId, 'model-one'); assert.equal(doc.ids.importScanSelection.disabled, true);
+    assert.match(doc.ids.scanSummary.textContent, /抽样/); assert.equal(doc.ids.scanSvg.children[0].attributes['stroke-dasharray'], '5 4');
+    const beforeZoom = doc.ids.scanSvg.attributes.viewBox;
+    doc.ids.scanSvg.emit('wheel', { deltaY: -200, clientX: 50, clientY: 50 }); const zoomed = doc.ids.scanSvg.attributes.viewBox;
+    assert.notEqual(zoomed, beforeZoom);
+    const checkbox = doc.ids.scanLayers.children[0].children[0]; checkbox.checked = true; checkbox.emit('change');
+    assert.equal(doc.ids.scanSvg.attributes.viewBox, zoomed); doc.ids.fitScan.click(); assert.equal(doc.ids.scanSvg.attributes.viewBox, beforeZoom);
+    assert.equal(doc.ids.importScanSelection.disabled, false);
+    ['scanMinX', 'scanMinY', 'scanMaxX', 'scanMaxY'].forEach((id, index) => { doc.ids[id].value = [0, 0, 4000, 3000][index]; });
+    doc.ids.importScanSelection.click(); await waitFor(() => state.documentId === 'new-source' && !state.busy);
+    assert.deepEqual(selectRequest, { import_id: scanResponse.import_id, layers: ['WALL'], bounds: [0, 0, 4000, 3000] });
+    assert.equal(state.model, null); assert.equal(state.config.parameters.wall.height_m, null); assert.equal(state.scan, null); assert.equal(doc.ids.exportConfirmation.value, '');
+  }, undefined, projectOptions);
+});
+
+test('large import cancellation notifies its exact operation before abort and discards late results', async () => {
+  const payload = await restoredProject(); let finish, operation, signal; const cancelled = [];
+  await withApp(async (url, options) => {
+    if (url.endsWith('/scan')) { operation = options.headers['X-CAD-Operation-ID']; signal = options.signal; return new Promise((resolve) => { finish = resolve; }); }
+    if (url.endsWith('/cancel')) { cancelled.push({ url, wasAborted: signal.aborted }); return json({ ok: true }); }
+    return json(payload);
+  }, async ({ document: doc, state }) => {
+    doc.ids.scanFirst.checked = true; doc.ids.cadFile.files = [new File(['fixture'], 'large.dxf')]; doc.ids.cadFile.emit('change'); await waitFor(() => !!finish);
+    assert.equal(doc.ids.operationProgress.hidden, false); assert.match(doc.ids.operationStage.textContent, /第一阶段/);
+    doc.ids.cancelOperation.click(); await waitFor(() => signal.aborted);
+    assert.deepEqual(cancelled, [{ url: `/api/cad/import/${operation}/cancel`, wasAborted: false }]); assert.equal(state.modelId, 'model-one');
+    finish(json(scanResponse)); await new Promise((resolve) => setImmediate(resolve)); assert.equal(state.scan, null); assert.equal(state.documentId, 'drawing-one');
+  }, undefined, projectOptions);
+});
+
+test('invalid scan bounds and a failed selected import retain the old model and resumable scan', async () => {
+  const payload = await restoredProject(); let selects = 0;
+  await withApp(async (url) => {
+    if (url.endsWith('/scan')) return json(scanResponse);
+    if (url.endsWith('/select')) { selects++; return json({ detail: '所选区域太大' }, 422); }
+    return json(payload);
+  }, async ({ document: doc, state }) => {
+    doc.ids.scanFirst.checked = true; doc.ids.cadFile.files = [new File(['fixture'], 'large.dxf')]; doc.ids.cadFile.emit('change'); await waitFor(() => !!state.scan && !state.busy);
+    doc.ids.scanSelectAll.click(); doc.ids.scanMinX.value = '42'; doc.ids.importScanSelection.click();
+    assert.equal(selects, 0); assert.match(doc.ids.notice.textContent, /完整有效/);
+    doc.ids.resetScanBounds.click(); doc.ids.importScanSelection.click(); await waitFor(() => selects === 1 && !state.busy);
+    assert.equal(state.modelId, 'model-one'); assert.equal(state.scan.import_id, scanResponse.import_id); assert.match(doc.ids.notice.textContent, /缩小范围/);
+  }, undefined, projectOptions);
+});
+
+test('STEP availability and exact signing are both required before the export request', async () => {
+  const payload = await restoredProject(); let exports = 0;
+  await withApp(async (url) => { if (url.endsWith('/export')) exports++; return json(payload); }, async ({ document: doc }) => {
+    const step = doc.groups.export.find((item) => item.dataset.export === 'step');
+    doc.ids.exportConfirmation.value = '我明白，将由持证人员签认'; doc.ids.exportConfirmation.emit('input'); assert.equal(step.disabled, true); step.click(); assert.equal(exports, 0); assert.match(doc.ids.stepHint.textContent, /requirements-cad-step/);
+  }, () => json({ ok: true, available: true, step_available: false, step_install_command: 'python -m pip install -r requirements-cad-step.txt' }), projectOptions);
+  await withApp(async () => json(payload), async ({ document: doc }) => {
+    const step = doc.groups.export.find((item) => item.dataset.export === 'step'); assert.equal(step.disabled, true);
+    doc.ids.exportConfirmation.value = '我明白，将由持证人员签认'; doc.ids.exportConfirmation.emit('input'); assert.equal(step.disabled, false); assert.match(doc.ids.stepHint.textContent, /离散轮廓/);
+  }, () => json({ ok: true, available: true, step_available: true }), projectOptions);
+});
+
+test('project package upload respects the advertised limit for preserved large sources', async () => {
+  const payload = await restoredProject(); let imported = 0;
+  await withApp(async (url) => { assert.equal(url, '/api/cad/projects/import'); imported++; return json(payload); }, async ({ document: doc, state }) => {
+    doc.ids.projectPackage.files = [new File([new Uint8Array(17 * 1024 * 1024)], 'large-project.zip')]; doc.ids.projectPackage.emit('change');
+    await waitFor(() => imported === 1 && !state.busy); assert.equal(state.project.id, project.id);
+  }, () => json({ ok: true, available: true, max_project_bundle_bytes: 80 * 1024 * 1024 }));
 });

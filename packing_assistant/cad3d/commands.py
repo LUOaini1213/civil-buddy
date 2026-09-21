@@ -248,4 +248,6 @@ def apply_command(document: dict, config: dict, message: str, selected_id: str |
                         override[field] = value
             updated.setdefault("parameters", {}).setdefault(role, {})[field] = value
             changes.append(f"{_ROLE_NAMES[role]}的{label}改为 {value:g} m")
+    from .dimensions import detach_changed_bindings
+    detach_changed_bindings(config, updated)
     return {"config": updated, "changes": changes, "message": "；".join(changes)}

@@ -1,6 +1,6 @@
 """Strict DXF solid boundaries -> parameterized meshes, without model-generated code.
 
-Closed zero-width 2D polylines, circles and closed LINE/ARC chains on XY are
+Closed zero-width 2D polylines, circles and closed LINE/ARC/SPLINE chains on XY are
 accepted, including bounded planar uniform INSERT instances. A selected layer
 is atomic: an invalid/unsupported entity or touching
 boundaries blocks that layer, so an unhandled inner boundary cannot become solid.
@@ -216,15 +216,28 @@ def _transform_segment(segment: dict, transform: tuple) -> dict:
         result.update(center=_transform_point(segment["center"], transform),
                       radius=segment["radius"] * math.hypot(a, b),
                       start_angle=segment["start_angle"] + math.atan2(b, a))
+    elif segment["kind"] == "spline":
+        result["bezier_spans"] = [[[*_transform_point(p[:2], transform), p[2]] for p in span]
+                                  for span in segment["bezier_spans"]]
     return result
 
 
 def _sample_segments(segments: list[dict], tolerance_units: float) -> tuple[list[list[float]], float]:
     points, max_error = [], 0.0
+    has_spline = any(segment["kind"] == "spline" for segment in segments)
+    topology_hulls = []
     for segment in segments:
         _checkpoint()
         if segment["kind"] == "line":
             sampled = [segment["start"], segment["end"]]
+            if has_spline:
+                numerical = 128 * max(math.ulp(max(abs(value), 1.0)) for point in sampled for value in point)
+                topology_hulls.append((sampled, numerical))
+        elif segment["kind"] == "spline":
+            from .splines import sample_spline
+            sampled, error, hulls = sample_spline(segment, tolerance_units, return_hulls=True)
+            topology_hulls.extend(hulls)
+            max_error = max(max_error, error)
         else:
             radius, sweep = segment["radius"], segment["sweep_angle"]
             # Stable for tiny tolerances: sagitta = 2r sin(step/4)^2.
@@ -240,10 +253,29 @@ def _sample_segments(segments: list[dict], tolerance_units: float) -> tuple[list
                 sampled.append(_xy([segment["center"][0] + radius * cosine,
                                     segment["center"][1] + radius * sine]))
             sampled.append(segment["end"])
+            if has_spline:
+                # Each <=90-degree arc has an exact positive rational quadratic
+                # representation. Its middle control lies at the tangents'
+                # intersection, so its hull also contains the entire arc.
+                delta = sweep / count
+                for index, (first, last) in enumerate(zip(sampled, sampled[1:])):
+                    cosine, sine = _sincos(segment["start_angle"] + (index + .5) * delta)
+                    middle_radius = radius / math.cos(delta / 2)
+                    middle = _xy([segment["center"][0] + middle_radius * cosine,
+                                  segment["center"][1] + middle_radius * sine])
+                    controls = [first, middle, last]
+                    numerical = 128 * max(math.ulp(max(abs(value), 1.0)) for point in controls for value in point)
+                    topology_hulls.append((controls, numerical))
             max_error = max(max_error, 2 * radius * math.sin(abs(sweep) / count / 4) ** 2)
         points.extend(sampled[:-1])
         if len(points) > MAX_ENTITY_VERTICES:
             raise CAD3DError(f"单个轮廓超过 {MAX_ENTITY_VERTICES} 个顶点限制。")
+    if has_spline:
+        from .splines import _check_adjacent_hulls
+        # Multiple source segments are only assembled after a closed graph or
+        # closed-polyline check. Their endpoints may differ by accepted ULPs.
+        closed = len(segments) > 1 or segments[0]["start"] == segments[-1]["end"]
+        _check_adjacent_hulls(topology_hulls, closed)
     return points, max_error
 
 
@@ -259,8 +291,17 @@ def _refresh_entities(entities: list[dict], scale: float, tolerance_mm: float) -
                     raise CAD3DError("确认单位后的端点偏差超过浮点舍入边界；未自动吸附或填补缺口，请核对图纸坐标精度。")
                 points, error = _sample_segments(entity["geometry_source"]["segments"], tolerance_mm / 1000 / scale)
                 _polygon(points)
+                if error and any(segment["kind"] == "spline" for segment in entity["geometry_source"]["segments"]):
+                    from .splines import check_topology
+                    check_topology(points, error)
                 entity.update(points=points, status="ready", reason="闭合轮廓；实体含义与单位仍需确认。",
                               curve_max_error_mm=error * scale * 1000)
+            except CAD3DError as exc:
+                entity.update(points=[], status="invalid", reason=str(exc))
+        elif entity.get("edge_source"):
+            try:
+                points, error = _sample_segments([entity["edge_source"]], tolerance_mm / 1000 / scale)
+                entity.update(points=[*points, entity["edge_source"]["end"]], curve_max_error_mm=error * scale * 1000)
             except CAD3DError as exc:
                 entity.update(points=[], status="invalid", reason=str(exc))
         total += len(entity["points"])
@@ -276,22 +317,25 @@ def _join_edges(items: list[dict], scale: float = 1.0) -> list[dict]:
         return items
     nodes, endpoints = [], []
     for item in edges:
+        _checkpoint()
         segment = item["_edge"]
         pair = []
         for point in (segment["start"], segment["end"]):
             match = None
             for index, (other, curved) in enumerate(nodes):
+                if index % 64 == 0:
+                    _checkpoint()
                 # A trigonometric endpoint can differ by a few ULPs. This is
                 # numerical equality, independent of the user curve tolerance.
                 tolerance = min(MAX_JOIN_ROUNDOFF_M / scale,
                                 16 * max(math.ulp(max(abs(x), 1.0)) for x in (*point, *other)))
-                if point == other or ((curved or segment["kind"] == "arc")
+                if point == other or ((curved or segment["kind"] in {"arc", "spline"})
                                       and math.dist(point, other) <= tolerance):
                     match = index
                     break
             if match is None:
                 match = len(nodes)
-                nodes.append((point, segment["kind"] == "arc"))
+                nodes.append((point, segment["kind"] in {"arc", "spline"}))
             pair.append(match)
         endpoints.append(pair)
     adjacency: dict[int, list[int]] = defaultdict(list)
@@ -311,9 +355,13 @@ def _join_edges(items: list[dict], scale: float = 1.0) -> list[dict]:
                          if neighbor not in component)
         pending -= component
         if any(len(adjacency[node]) != 2 for edge_index in component for node in endpoints[edge_index]):
+            bad_nodes = sorted({node for index in component for node in endpoints[index] if len(adjacency[node]) != 2})
+            related = [edges[index]["id"] for index in sorted(component)]
             for index in sorted(component):
                 item = edges[index]
-                item.update(status="invalid", reason="LINE/ARC 轮廓未闭合或端点分支；未自动补线、吸附或选择分支。")
+                item.update(status="invalid", reason="LINE/ARC/SPLINE 轮廓未闭合或端点分支；未自动补线、吸附或选择分支。",
+                            edge_source=copy.deepcopy(item["_edge"]), related_entity_ids=related,
+                            diagnostic_points=[nodes[node][0] for node in bad_nodes])
                 item.pop("_edge", None)
                 assembled.append(item)
             continue
@@ -328,6 +376,8 @@ def _join_edges(items: list[dict], scale: float = 1.0) -> list[dict]:
                 if segment["kind"] == "arc":
                     segment["start_angle"] += segment["sweep_angle"]
                     segment["sweep_angle"] *= -1
+                elif segment["kind"] == "spline":
+                    segment["bezier_spans"] = [list(reversed(span)) for span in reversed(segment["bezier_spans"])]
                 current_node = endpoints[index][0]
             else:
                 current_node = endpoints[index][1]
@@ -347,12 +397,16 @@ def _join_edges(items: list[dict], scale: float = 1.0) -> list[dict]:
             for item in items if not item.get("_edge") or item["id"] in by_id]
 
 
-def inspect_dxf(data: bytes, filename: str) -> dict:
+def inspect_dxf(data: bytes, filename: str, source_filter: dict | None = None) -> dict:
     """Read an ASCII DXF modelspace without altering geometry or inferring units."""
     if not isinstance(data, bytes) or not data:
         raise CAD3DError("请上传非空 DXF 文件。")
-    if len(data) > MAX_DXF_BYTES:
-        raise CAD3DError(f"DXF 超过 {MAX_DXF_BYTES // 1024 // 1024} MiB 大小限制。")
+    byte_limit = MAX_DXF_BYTES
+    if source_filter is not None:
+        from .imports import MAX_SCAN_BYTES
+        byte_limit = MAX_SCAN_BYTES
+    if len(data) > byte_limit:
+        raise CAD3DError(f"DXF 超过 {byte_limit // 1024 // 1024} MiB 大小限制。")
     if not isinstance(filename, str) or not filename.lower().endswith(".dxf"):
         raise CAD3DError("当前预览仅接受 DXF。请将 DWG 单独转换为 DXF 后上传。")
     if data.startswith(b"AutoCAD Binary DXF"):
@@ -360,13 +414,26 @@ def inspect_dxf(data: bytes, filename: str) -> dict:
     ezdxf = _dependency("ezdxf")
     _dependency("shapely.geometry")
     try:
-        probe = io.StringIO(data.decode("latin1"), newline=None)
+        from .imports import _CheckedStream
+        probe = _CheckedStream(data.decode("latin1"), newline=None)
         encoding = _dependency("ezdxf.filemanagement").dxf_stream_info(probe).encoding
-        drawing = ezdxf.read(io.StringIO(data.decode(encoding, errors="strict"), newline=None))
+        drawing = ezdxf.read(_CheckedStream(data.decode(encoding, errors="strict"), newline=None))
     except Exception as exc:
+        from packing_assistant.runtime.cancel import RunCancelled
+        if isinstance(exc, RunCancelled):
+            raise
         raise CAD3DError(f"DXF 读取失败，未自动修复图纸：{type(exc).__name__}: {exc}") from exc
     space = drawing.modelspace()
-    if len(drawing.entitydb) > MAX_DATABASE_ENTITIES:
+    filter_audit, filtered_ids = None, None
+    if source_filter is not None:
+        from .imports import MAX_SCAN_DATABASE_ENTITIES, filter_modelspace
+        if len(drawing.entitydb) > MAX_SCAN_DATABASE_ENTITIES:
+            raise CAD3DError("DXF 数据库超过分阶段导入预算。")
+        space, source_filter, filter_audit = filter_modelspace(drawing, source_filter)
+        filtered_ids = set(filter_audit["selected_entity_ids"])
+        if filter_audit.get("excluded_crossing", 0) > len(filter_audit.get("excluded", [])):
+            raise CAD3DError("选择范围跨越过多实体，无法完整列出边界诊断；请收窄图层或扩大范围以包含完整轮廓。")
+    if source_filter is None and len(drawing.entitydb) > MAX_DATABASE_ENTITIES:
         raise CAD3DError(f"DXF 数据库超过 {MAX_DATABASE_ENTITIES} 个实体限制（含块和布局）。")
     if len(space) > MAX_ENTITIES:
         raise CAD3DError(f"DXF 模型空间超过 {MAX_ENTITIES} 个实体限制。")
@@ -375,6 +442,12 @@ def inspect_dxf(data: bytes, filename: str) -> dict:
     entities = []
     counts: dict[str, int] = defaultdict(int)
     visited = 0
+
+    def source_selected(logical_id):
+        if filtered_ids is None:
+            return True
+        parts = logical_id.split("/")
+        return any("/".join(parts[:end]) in filtered_ids for end in range(1, len(parts) + 1))
 
     def block_failures(entity, insert_path, inherited_layer, reason):
         """Expose every affected descendant layer even when its INSERT fails.
@@ -402,13 +475,15 @@ def inspect_dxf(data: bytes, filename: str) -> dict:
             path = (*ancestors, reference_row)
             for child in block:
                 _checkpoint()
+                handle = str(child.dxf.handle)
+                logical_id = "/".join([*[row["handle"] for row in path], handle])
+                if child.dxftype() != "INSERT" and not source_selected(logical_id):
+                    continue
                 visited += 1
                 if visited > MAX_ENTITIES:
                     raise _ExpansionLimit(f"DXF 展开后超过 {MAX_ENTITIES} 个实体限制。")
                 raw_layer = str(child.dxf.get("layer", "0"))
                 layer = effective_layer if raw_layer == "0" else raw_layer
-                handle = str(child.dxf.handle)
-                logical_id = "/".join([*[row["handle"] for row in path], handle])
                 metadata = {"id": logical_id, "handle": handle, "type": child.dxftype(),
                             "layer": raw_layer, "insert_path": list(path)}
                 entities.append({"id": logical_id, "layer": layer, "type": child.dxftype(),
@@ -421,13 +496,15 @@ def inspect_dxf(data: bytes, filename: str) -> dict:
     def read(entity, transform=(1.0, 0.0, 0.0, 0.0), insert_path=(), names=(), inherited_layer="0"):
         nonlocal visited
         _checkpoint()
-        visited += 1
-        if visited > MAX_ENTITIES:
-            raise _ExpansionLimit(f"DXF 展开后超过 {MAX_ENTITIES} 个实体限制。")
         kind, raw_layer = entity.dxftype(), str(entity.dxf.get("layer", "0"))
         layer = inherited_layer if insert_path and raw_layer == "0" else raw_layer
         handle = str(entity.dxf.handle)
         logical_id = "/".join([*[row["handle"] for row in insert_path], handle])
+        if kind != "INSERT" and not source_selected(logical_id):
+            return
+        visited += 1
+        if visited > MAX_ENTITIES:
+            raise _ExpansionLimit(f"DXF 展开后超过 {MAX_ENTITIES} 个实体限制。")
         metadata = {"id": logical_id, "handle": handle, "type": kind, "layer": raw_layer,
                     "insert_path": list(insert_path)}
         item = {"id": logical_id, "layer": layer, "type": kind, "status": "unsupported", "reason": "",
@@ -474,6 +551,13 @@ def inspect_dxf(data: bytes, filename: str) -> dict:
                 else:
                     _polygon(item["points"])
                     item.update(status="ready", reason="闭合直线轮廓；实体含义与单位仍需确认。")
+            elif kind == "SPLINE":
+                from .splines import read_spline
+                segment = read_spline(entity, transform)
+                if segment["start"] == segment["end"]:
+                    item["geometry_source"] = {"segments": [segment]}
+                else:
+                    item.update(points=[segment["start"], segment["end"]], _edge=segment)
             elif kind in ("LINE", "ARC", "CIRCLE"):
                 plane_values = (entity.dxf.start.z, entity.dxf.end.z) if kind == "LINE" else (entity.dxf.center.z,)
                 if (any(value != 0 for value in plane_values)
@@ -509,6 +593,21 @@ def inspect_dxf(data: bytes, filename: str) -> dict:
 
     for entity in space:
         read(entity)
+    if filter_audit:
+        for excluded in filter_audit.get("excluded", []):
+            _checkpoint()
+            low, high = excluded["bounds"]["min"], excluded["bounds"]["max"]
+            points = [low, [high[0], low[1]], high, [low[0], high[1]], low]
+            identifier = excluded["id"]
+            entities.append({"id": identifier, "layer": excluded["layer"], "type": excluded["type"],
+                             "status": "invalid", "reason": "实体跨越导入选区边界，无法确认完整材料区；未自动裁切，请扩大范围或明确排除参考图框。",
+                             "points": points, "display_only": True, "source_filter_excluded": True,
+                             "source_entity_ids": [identifier],
+                             "source_entities": [{"id": identifier, "handle": identifier.split("/")[-1],
+                                                  "type": excluded["type"], "layer": excluded["layer"]}]})
+            counts[excluded["layer"]] += 1
+        if len(entities) > MAX_ENTITIES:
+            raise CAD3DError("选中实体和跨界诊断总量超过严检预算，请缩小范围。")
     # Joining never crosses a layer. Block instances share effective layers,
     # but source identities retain the complete instance path.
     by_layer: dict[str, list[dict]] = defaultdict(list)
@@ -518,24 +617,29 @@ def inspect_dxf(data: bytes, filename: str) -> dict:
     entities = [joined[item["id"]] for item in entities if item["id"] in joined]
     entities = _refresh_entities(entities, factor or 0.001, DEFAULT_CURVE_TOLERANCE_MM)
     all_points = [point for item in entities for point in item["points"]]
-    return {"schema_version": 1, "filename": filename, "sha256": hashlib.sha256(data).hexdigest(),
+    from .dimensions import extract_dimensions
+    result = {"schema_version": 1, "filename": filename, "sha256": hashlib.sha256(data).hexdigest(),
             "units": {"code": units_code, "name": name, "meters_per_unit": factor},
             "layers": [{"name": name, "suggested_role": _suggest_role(name), "entity_count": count}
                        for name, count in sorted(counts.items())],
             "entities": entities, "bounds": _bounds(all_points, 2),
+            "dimensions": extract_dimensions(drawing, space if source_filter is not None else None),
             "curve_tolerance_mm": DEFAULT_CURVE_TOLERANCE_MM,
             "preview_unit": name if factor else "mm",
             "warnings": ["仅检查模型空间，图纸空间布局暂未建模。",
                          "图层建议尚未确认；仅可拉伸用户确认的实体边界。",
                          "初次曲线预览按 DXF 单位提示离散；单位未知时临时按毫米显示，建模按用户确认单位重新离散。",
-                         "选中图层若含不支持或无效实体，整层暂停建模，以免填实尚未处理的孔洞。"]}
+                         "选中实体若含不支持或无效边界，相关图层暂停建模，以免填实尚未处理的孔洞。"]}
+    if source_filter is not None:
+        result.update(source_filter=source_filter, source_filter_audit=filter_audit)
+    return result
 
 
-def _checked_config(document: dict, config: dict) -> dict:
+def _checked_config(document: dict, config: dict, *, preview: bool = False) -> dict:
     if not isinstance(config, dict):
         raise CAD3DError("建模配置必须是 JSON 对象。")
     cfg = copy.deepcopy(config)
-    if set(cfg) - {"mode", "unit", "confirmed_solid", "layers", "parameters", "overrides", "curve_tolerance_mm"}:
+    if set(cfg) - {"mode", "unit", "confirmed_solid", "layers", "parameters", "overrides", "curve_tolerance_mm", "selection", "dimension_bindings"}:
         raise CAD3DError("建模配置包含未知设置。")
     tolerance = _finite(cfg.setdefault("curve_tolerance_mm", DEFAULT_CURVE_TOLERANCE_MM), "弦高误差", positive=True)
     if not MIN_CURVE_TOLERANCE_MM <= tolerance <= MAX_CURVE_TOLERANCE_MM:
@@ -544,7 +648,7 @@ def _checked_config(document: dict, config: dict) -> dict:
         raise CAD3DError("请选择建筑 building 或截面 section 模式。")
     if not isinstance(cfg.get("unit"), str) or cfg["unit"] not in UNIT_FACTORS:
         raise CAD3DError("请明确确认图纸单位：mm、cm、m、in 或 ft。")
-    if cfg.get("confirmed_solid") is not True:
+    if not preview and cfg.get("confirmed_solid") is not True:
         raise CAD3DError("请确认所选轮廓代表实体材料区域；房间边界不能直接作为实体拉伸。")
     layers = cfg.get("layers")
     if not isinstance(layers, dict):
@@ -574,7 +678,7 @@ def _checked_config(document: dict, config: dict) -> dict:
                     raise CAD3DError(f"{role}.{name} 超过 {MAX_EXTENT_M:g} 米数值范围限制。")
         if values.get("height_m") is not None and values.get("base_m") is not None:
             _check_parameters(values, role)
-    for role in set(layers.values()) - {"ignore"}:
+    for role in (set(layers.values()) - {"ignore"}) if not preview else []:
         values = params.get(role)
         if not isinstance(values, dict):
             raise CAD3DError(f"请为 {role} 明确填写 height_m 与 base_m。")
@@ -594,7 +698,18 @@ def _checked_config(document: dict, config: dict) -> dict:
             raise CAD3DError(f"实体 {entity_id} 尚未选中或轮廓无效，不能设置单体参数。")
         for name, value in values.items():
             _finite(value, f"{entity_id}.{name}", positive=name == "height_m")
-        _check_parameters({**params[role], **values}, entity_id)
+        combined = {**params.get(role, {}), **values}
+        if not preview or (combined.get("height_m") is not None and combined.get("base_m") is not None):
+            _check_parameters(combined, entity_id)
+    from .selection import validate_selection, selected_ids
+    selection = validate_selection(document, cfg)
+    if "selection" in cfg:
+        cfg["selection"] = selection
+    selected = set(selected_ids(document["entities"], selection, layers))
+    if any(entity_id not in selected for entity_id in overrides):
+        raise CAD3DError("未选中的实体不能保留单体参数覆盖；请先清除覆盖或恢复选中。")
+    from .dimensions import validate_bindings
+    validate_bindings(document, cfg)
     return cfg
 
 
@@ -653,31 +768,83 @@ def _check_float32_precision(mesh: Any) -> None:
         raise CAD3DError("当前细部在三维预览或 GLB 的 float32 坐标下会塌缩或改变体积，未生成失真模型；请分开建模相距很远的构件。")
 
 
+def _prepare_geometry(document: dict, cfg: dict) -> dict:
+    from .selection import checked_selection, selected_ids
+    from .diagnostics import diagnose_layers
+    scale = UNIT_FACTORS[cfg["unit"]]
+    entities = _refresh_entities(_checked_entities(document), scale, cfg["curve_tolerance_mm"])
+    selection = checked_selection(document, cfg.get("selection"))
+    ids = selected_ids(entities, selection, cfg["layers"])
+    chosen = set(ids)
+    selected = defaultdict(list)
+    for entity in entities:
+        if entity["id"] in chosen:
+            item = copy.deepcopy(entity)
+            if item.get("edge_source"):
+                item["_edge"] = item["edge_source"]
+                item.pop("related_entity_ids", None)
+                item.pop("diagnostic_points", None)
+            selected[item["layer"]].append(item)
+    # Explicit removal of a duplicate edge may make its old branched graph
+    # close. Reassemble only the selected source edges, with no gap snapping.
+    for layer, members in selected.items():
+        selected[layer] = _refresh_entities(_join_edges(members, scale), scale, cfg["curve_tolerance_mm"])
+    refreshed = {entity["id"]: entity for members in selected.values() for entity in members}
+    effective = [refreshed[e["id"]] if e["id"] in refreshed else e for e in entities
+                 if e["id"] not in chosen or e["id"] in refreshed]
+    ready_points = [point for members in selected.values() if len(members) <= MAX_LAYER_RINGS
+                    and all(e["status"] == "ready" for e in members) for e in members for point in e["points"]]
+    bounds = _bounds(ready_points, 2)
+    origin = bounds["min"] if bounds else [0.0, 0.0]
+    layers, diagnostics, contours = diagnose_layers(entities, selected, scale, origin)
+    return {"entities": effective, "selected": selected, "selected_ids": ids, "selection": selection,
+            "origin": origin, "layers": layers, "diagnostics": diagnostics, "contours": contours}
+
+
+def analyze_document(document: dict, config: dict) -> dict:
+    """Inspect source-coordinate material regions without height or extrusion."""
+    _checked_entities(document)
+    cfg = _checked_config(document, config, preview=True)
+    prepared = _prepare_geometry(document, cfg)
+    chosen = {item["id"] for members in prepared["selected"].values() for item in members}
+    report = []
+    for item in prepared["entities"]:
+        selected = item["id"] in chosen
+        failure = prepared["layers"][item["layer"]]["failure"] if selected else None
+        status = ("failed" if failure else "ready") if selected else "ignored"
+        reason = (item["reason"] if item["status"] != "ready" else failure or "二维轮廓检查通过；尺寸及实体用途仍需确认。") if selected else "此图层或实体未选中。"
+        report.extend({"id": source_id, "contour_id": item["id"], "layer": item["layer"], "status": status, "reason": reason}
+                      for source_id in item.get("source_entity_ids", [item["id"]]))
+    return {"contours": prepared["contours"], "diagnostics": prepared["diagnostics"],
+            "report": report,
+            "selected_ids": prepared["selected_ids"], "selection": prepared["selection"],
+            "preview_entities": prepared["entities"],
+            "buildable": bool(prepared["contours"]) and not prepared["diagnostics"],
+            "requires_confirmation": cfg.get("confirmed_solid") is not True,
+            "unit": cfg["unit"], "curve_tolerance_mm": cfg["curve_tolerance_mm"],
+            "warnings": ["二维材料区预检不代表尺寸或实体用途已经确认；生成三维模型仍需明确高度/长度与实体确认。"]}
+
+
 def build_model(document: dict, config: dict) -> dict:
     """Extrude user-confirmed contours into closed Z-up metre meshes."""
-    entities = _checked_entities(document)
+    _checked_entities(document)
     cfg = _checked_config(document, config)
     trimesh = _dependency("trimesh")
     _dependency("mapbox_earcut")
     geometry = _dependency("shapely.geometry")
     scale = UNIT_FACTORS[cfg["unit"]]
-    entities = _refresh_entities(entities, scale, cfg["curve_tolerance_mm"])
+    prepared = _prepare_geometry(document, cfg)
+    entities = prepared["entities"]
     objects, reports = [], {}
-    selected: dict[str, list[dict]] = defaultdict(list)
+    selected = prepared["selected"]
+    selected_ids = {e["id"] for members in selected.values() for e in members}
     for e in entities:
-        role = cfg["layers"].get(e["layer"], "ignore")
-        if role == "ignore":
+        if e["id"] not in selected_ids:
             reports[e["id"]] = {"id": e["id"], "layer": e["layer"], "status": "ignored",
-                                "reason": "此图层未选中建模。"}
-        else:
-            selected[e["layer"]].append(e)
+                                "reason": "此图层或实体未选中建模。"}
     # Ignored or blocked layers must not drag the working origin far away from
     # the selected geometry. Height/base edits keep this same XY transform.
-    ready_points = [p for members in selected.values()
-                    if len(members) <= MAX_LAYER_RINGS and all(e["status"] == "ready" for e in members)
-                    for e in members for p in e["points"]]
-    original_bounds = _bounds(ready_points, 2)
-    origin = original_bounds["min"] if original_bounds else [0.0, 0.0]
+    origin = prepared["origin"]
     transform = {"source_unit": cfg["unit"], "meters_per_unit": scale,
                  "origin_source_units": [*origin, 0.0], "model_up_axis": "Z",
                  "glb_up_axis": "Y", "glb_position_mapping": ["x", "z", "-y"],
@@ -691,45 +858,14 @@ def build_model(document: dict, config: dict) -> dict:
     for layer, members in selected.items():
         _checkpoint()
         role = cfg["layers"][layer]
-        failure = None
-        if any(e["status"] != "ready" for e in members):
-            failure = "整层暂停：不支持或无效实体可能代表孔洞；请清理或拆分此图层后再建模。"
-        if len(members) > MAX_LAYER_RINGS:
-            failure = f"图层超过 {MAX_LAYER_RINGS} 个轮廓限制。"
-        polygons = []
-        if not failure:
-            try:
-                for e in members:
-                    points = [[(p[0] - origin[0]) * scale, (p[1] - origin[1]) * scale]
-                              for p in e["points"]]
-                    if any(abs(x) > MAX_EXTENT_M for p in points for x in p):
-                        raise CAD3DError("平移原点后坐标仍超出支持的米制范围。")
-                    polygons.append(_polygon(points))
-                for i, first in enumerate(polygons):
-                    for j, second in enumerate(polygons[i + 1:], i + 1):
-                        if first.boundary.intersects(second.boundary):
-                            raise CAD3DError("图层含相触、相交或重复轮廓；未自动合并或修复。")
-                        uncertainty_m = (members[i].get("curve_max_error_mm", 0)
-                                         + members[j].get("curve_max_error_mm", 0)) / 1000
-                        if uncertainty_m > 0 and first.boundary.distance(second.boundary) <= uncertainty_m:
-                            raise CAD3DError("曲线轮廓间距小于双方离散误差之和，无法确认是否相交或孔洞相接；请减小弦高误差后重试。")
-            except CAD3DError as exc:
-                failure = str(exc)
+        checked = prepared["layers"][layer]
+        failure, polygons = checked["failure"], checked["polygons"]
         if failure:
             for e in members:
                 reports[e["id"]] = {"id": e["id"], "layer": layer, "status": "failed",
                                     "reason": e["reason"] if e["status"] != "ready" else failure}
             continue
-        parents = []
-        for i, polygon in enumerate(polygons):
-            containers = [j for j, other in enumerate(polygons) if i != j and other.contains(polygon)]
-            parents.append(min(containers, key=lambda j: polygons[j].area) if containers else None)
-        depths = []
-        for i in range(len(members)):
-            depth, parent = 0, parents[i]
-            while parent is not None:
-                depth, parent = depth + 1, parents[parent]
-            depths.append(depth)
+        parents, depths = checked["parents"], checked["depths"]
         layer_objects, layer_reports = [], {}
         for i, e in enumerate(members):
             if depths[i] % 2:
@@ -766,6 +902,8 @@ def build_model(document: dict, config: dict) -> dict:
                        "vertices": mesh.vertices.tolist(), "faces": mesh.faces.tolist(),
                        "bounds": {"min": mesh.bounds[0].tolist(), "max": mesh.bounds[1].tolist()},
                        "volume_m3": float(mesh.volume), "footprint_area_m2": float(polygon.area),
+                       "footprint": {"outer": [list(point) for point in polygon.exterior.coords],
+                                     "holes": [[list(point) for point in ring.coords] for ring in polygon.interiors]},
                        "hole_count": len(holes), "color": ROLE_COLORS[role]}
                 layer_objects.append(obj)
                 for source in source_members:
@@ -789,6 +927,7 @@ def build_model(document: dict, config: dict) -> dict:
     return {"schema_version": 1, "filename": document.get("filename", ""),
             "source_sha256": document.get("sha256", ""), "objects": objects, "report": report,
             "bounds": bounds, "transform": transform, "config": cfg,
+            "diagnostics": prepared["diagnostics"],
             "preview_entities": entities,
             "summary": {status: sum(row["status"] == status for row in report)
                         for status in ("modeled", "ignored", "failed")},

@@ -23,9 +23,9 @@ from packing_assistant.sandbox import assert_open, assert_write
 
 SCHEMA = "civil-buddy.cad3d.project.v1"
 BUNDLE_SCHEMA = "civil-buddy.cad3d.project-bundle.v1"
-MAX_SOURCE = 10 * 1024 * 1024
-MAX_MANIFEST = 24 * 1024 * 1024
-MAX_BUNDLE = 16 * 1024 * 1024
+MAX_SOURCE = 64 * 1024 * 1024
+MAX_MANIFEST = 128 * 1024 * 1024
+MAX_BUNDLE = 80 * 1024 * 1024
 MAX_PROJECTS = 100
 MAX_VERSIONS = 50
 MAX_STORE = 512 * 1024 * 1024
@@ -62,8 +62,9 @@ def _name(value: str) -> str:
 
 def _draft(document: dict, value: dict) -> dict:
     """Incomplete dimensions may be saved, but never arbitrary payloads or IDs."""
-    if not isinstance(value, dict) or set(value) - {"mode", "unit", "layers", "parameters", "overrides", "confirmed_solid", "curve_tolerance_mm"}:
+    if not isinstance(value, dict) or set(value) - {"mode", "unit", "layers", "parameters", "overrides", "confirmed_solid", "curve_tolerance_mm", "selection", "dimension_bindings"}:
         raise ValueError("项目参数字段无效。")
+    value = deepcopy(value)
     if len(_json(value).encode("utf-8")) > 512 * 1024:
         raise ValueError("项目参数过大。")
     if value.get("mode") not in ("building", "section") or value.get("unit", "") not in ("", "mm", "cm", "m", "in", "ft"):
@@ -91,6 +92,11 @@ def _draft(document: dict, value: dict) -> dict:
     tolerance = value.get("curve_tolerance_mm", 0.1)
     if type(tolerance) not in {int, float} or not 0.001 <= tolerance <= 10 or not math.isfinite(tolerance):
         raise ValueError("曲线弦高误差须在 0.001–10 mm 之间。")
+    if "selection" in value:
+        from .selection import validate_selection
+        value["selection"] = validate_selection(document, value)
+    from .dimensions import validate_bindings
+    validate_bindings(document, value)
     return deepcopy(value)
 
 
@@ -136,7 +142,7 @@ class CadProjectStore:
                 if not isinstance(record[field], str):
                     raise ValueError("项目日期无效")
                 datetime.fromisoformat(record[field])
-            if not isinstance(record["source"], dict) or set(record["source"]) != {"filename", "sha256", "data"}:
+            if not isinstance(record["source"], dict) or set(record["source"]) not in ({"filename", "sha256", "data"}, {"filename", "sha256", "data", "filter"}):
                 raise ValueError("原图记录无效")
             if not isinstance(record["versions"], list) or len(record["versions"]) > MAX_VERSIONS:
                 raise ValueError("版本数量无效")
@@ -163,7 +169,7 @@ class CadProjectStore:
             source = base64.b64decode(record["source"]["data"], validate=True)
             if not source or len(source) > MAX_SOURCE or hashlib.sha256(source).hexdigest() != record["source"]["sha256"]:
                 raise ValueError("图纸摘要或大小不匹配")
-            document = inspect_dxf(source, filename)
+            document = inspect_dxf(source, filename, source_filter=record["source"].get("filter"))
             _draft(document, record["draft_config"])
             for version in record["versions"]:
                 _draft(document, version["config"])
@@ -217,12 +223,13 @@ class CadProjectStore:
         self._writable()
         name = _name(name)
         if not isinstance(source, bytes) or not source or len(source) > MAX_SOURCE:
-            raise ValueError("原始 DXF 缺失或超过 10 MiB。")
+            raise ValueError("原始 DXF 缺失或超过 64 MiB。")
         sha = hashlib.sha256(source).hexdigest()
         if document.get("sha256") != sha:
             raise ValueError("缓存原图与待保存图纸不一致，请重新上传。")
         filename = str(document.get("filename", "drawing.dxf")).replace("\\", "/").split("/")[-1][:200]
-        checked = inspect_dxf(source, filename)
+        source_filter = deepcopy(document.get("source_filter"))
+        checked = inspect_dxf(source, filename, source_filter=source_filter)
         draft = _draft(checked, draft_config)
         if model is not None:
             saved_cfg, model_cfg = deepcopy(draft), deepcopy(model.get("config", {}))
@@ -239,6 +246,8 @@ class CadProjectStore:
                     raise ProjectConflict("项目已被其他页面更新，请重新打开后再保存；当前修改未覆盖。")
                 if record["source"]["sha256"] != sha:
                     raise ValueError("项目原图不可替换，请保存为新项目。")
+                if record["source"].get("filter") != source_filter:
+                    raise ValueError("项目导入范围不可替换，请另存副本以保留历史来源。")
                 record = deepcopy(record)
                 record["revision"] += 1
             else:
@@ -248,6 +257,8 @@ class CadProjectStore:
                     raise ValueError("CAD 项目数量已达上限。")
                 record = {"schema": SCHEMA, "id": uuid4().hex, "revision": 1, "created_at": _now(), "versions": [],
                           "source": {"filename": filename, "sha256": sha, "data": base64.b64encode(source).decode("ascii")}}
+                if source_filter is not None:
+                    record["source"]["filter"] = source_filter
             record.update(name=name, updated_at=_now(), draft_config=draft)
             if model is not None and (not record["versions"] or record["versions"][-1]["config"] != model["config"]):
                 if len(record["versions"]) >= MAX_VERSIONS:
@@ -308,7 +319,7 @@ class CadProjectStore:
         from .geometry import build_model
         self._writable()
         if not data or len(data) > MAX_BUNDLE:
-            raise ValueError("项目包不能为空或超过 16 MiB。")
+            raise ValueError("项目包不能为空或超过 80 MiB。")
         try:
             with zipfile.ZipFile(io.BytesIO(data)) as archive:
                 info = archive.infolist()
@@ -329,7 +340,7 @@ class CadProjectStore:
                     raise ValueError("不支持此项目包格式。")
                 if set(record) != {"schema", "id", "revision", "name", "created_at", "updated_at", "source", "draft_config", "versions"}:
                     raise ValueError("项目包含未知字段。")
-                if set(record["source"]) != {"filename", "sha256"} or not isinstance(record["versions"], list) or len(record["versions"]) > MAX_VERSIONS:
+                if set(record["source"]) not in ({"filename", "sha256"}, {"filename", "sha256", "filter"}) or not isinstance(record["versions"], list) or len(record["versions"]) > MAX_VERSIONS:
                     raise ValueError("原图或版本记录格式无效。")
                 record["source"]["data"] = base64.b64encode(source).decode("ascii")
                 _, document = self._document(record)

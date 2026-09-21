@@ -33,7 +33,7 @@ def operation(text: str, context: dict) -> str:
         return "cad_build"
     if re.fullmatch(r"(?:请)?(?:撤销|撤回)(?:上一次|上次|刚才的)?(?:修改|操作)?", clean):
         return "cad_undo"
-    if re.fullmatch(r"(?:请)?导出(?:当前|这个)?(?:三维|3D)?(?:模型|GLB|参数|项目模型包)?", clean, re.I):
+    if re.fullmatch(r"(?:请)?导出(?:当前|这个)?(?:三维|3D)?(?:模型|GLB|STEP|参数|项目模型包)?", clean, re.I):
         return "cad_export"
     from .commands import apply_command
     try:
@@ -63,8 +63,21 @@ def _limited_report(rows: list[dict]) -> list[dict]:
 
 def _summary(context: dict) -> dict:
     doc, model = context["document"], context.get("model") or {}
+    from .geometry import analyze_document
+    try:
+        analysis = analyze_document(doc, context["draft_config"])
+        analysis_summary = {"diagnostics": analysis.get("diagnostics", [])[:40],
+                            "contours": [{k: row.get(k) for k in ("outer_id", "hole_ids", "area_m2")} for row in analysis.get("contours", [])[:40]],
+                            "geometry_buildable": analysis.get("buildable", False)}
+    except ValueError as exc:
+        analysis_summary = {"diagnostics": [{"code": "configuration", "message": str(exc), "entity_ids": []}],
+                            "geometry_buildable": False, "contours": []}
     return {"project": context["project"]["name"], "filename": doc.get("filename"),
             "units": doc.get("units"), "config": context["draft_config"],
+            **analysis_summary,
+            "dimensions": [{k: d.get(k) for k in ("id", "text", "measurement", "annotation_value", "annotation_unit", "axis", "bindable")}
+                           for d in doc.get("dimensions", [])[:40]],
+            "dimension_notice": "标注与测量仅作来源证据；未绑定的长度不得自动填入。",
             "layers": doc.get("layers", []), "objects": len(model.get("objects", [])),
             "report": _limited_report(model.get("report") or [{k: e.get(k) for k in ("id", "layer", "status", "reason")}
                                                    for e in doc.get("entities", [])]),
@@ -87,6 +100,9 @@ def _export(context: dict, session_id: str, run_id: str, format: str) -> list[di
     parameters = json.dumps(record, ensure_ascii=False, allow_nan=False, indent=2).encode("utf-8")
     if format == "json":
         data, name = parameters, "cad-parameters.json"
+    elif format == "step":
+        from .step import export_step
+        data, name = export_step(model), "cad-model.step"
     else:
         glb = export_glb(model)
         if format == "glb":
@@ -121,8 +137,8 @@ def execute(context: dict, name: str, args: dict, *, user_text: str, session_id:
         return {"ok": False, "error_code": "unknown_tool", "reason": "没有这个 CAD 操作。"}
     if args and (name != "cad_export" or set(args) - {"format"}):
         return {"ok": False, "error_code": "invalid_args", "reason": "CAD 工具不能接收项目、坐标、尺寸或用户确认。"}
-    if name == "cad_export" and args.get("format", "zip") not in {"glb", "json", "zip"}:
-        return {"ok": False, "error_code": "invalid_args", "reason": "只支持 GLB、JSON 或 ZIP 导出。"}
+    if name == "cad_export" and (not isinstance(args.get("format", "zip"), str) or args.get("format", "zip") not in {"glb", "json", "zip", "step"}):
+        return {"ok": False, "error_code": "invalid_args", "reason": "只支持 GLB、STEP、JSON 或 ZIP 导出。"}
     allowed = operation(user_text, context)
     if name in MUTATE_TOOLS and name != allowed:
         return {"ok": False, "error_code": "read_only_intent", "reason": "本轮用户未请求这项 CAD 操作。"}
@@ -140,8 +156,11 @@ def execute(context: dict, name: str, args: dict, *, user_text: str, session_id:
     if name == "cad_export":
         if not confirmed:
             return {"ok": False, "error_code": "approval_required", "reason": "模型导出需要本轮用户亲自输入签认确认句。"}
-        requested_format = "glb" if re.search(r"GLB", user_text, re.I) else "json" if "参数" in user_text else "zip"
-        files = _export(context, session_id, run_id, args.get("format", requested_format))
+        requested_format = "step" if re.search(r"STEP", user_text, re.I) else "glb" if re.search(r"GLB", user_text, re.I) else "json" if "参数" in user_text else "zip" if "项目模型包" in user_text else None
+        chosen_format = args.get("format", requested_format or "zip")
+        if requested_format and requested_format != chosen_format:
+            return {"ok": False, "error_code": "invalid_args", "reason": "导出格式必须与本轮用户明确指定的格式一致。"}
+        files = _export(context, session_id, run_id, chosen_format)
         return {"ok": True, "summary": "已导出模型文件。", "files": files}
     from .commands import apply_command
     from .geometry import build_model
@@ -186,6 +205,10 @@ def reply_for(results: list[dict], context: dict) -> str:
             lines.append(f"- {row['layer']}：{row['suggested_role']}（待确认）")
         for row in [r for r in result.get("report", []) if r.get("status") in {"failed", "unsupported", "invalid"}][:12]:
             lines.append(f"- 实体 {row.get('id')}（{row.get('layer')}）：{row.get('reason')}")
+        for row in result.get("diagnostics", [])[:8]:
+            lines.append(f"- 轮廓检查 {'、'.join(row.get('entity_ids', []))}：{row.get('message', '')}")
+        if result.get("dimensions"):
+            lines.append("原图尺寸已保留；请在 CAD 页查看标注值与测量值，并明确绑定建模用途。")
         if result.get("error_code") == "approval_required":
             lines.append("请在确认栏亲自输入：" + CONFIRM)
     lines.append("[打开 CAD 项目](/cad?project_id=" + context["project"]["id"] + ")")

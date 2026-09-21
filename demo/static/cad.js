@@ -2,6 +2,45 @@ const CONFIRMATION = '我明白，将由持证人员签认';
 const ROLES = { wall: '墙体', column: '柱子', slab: '楼板', section: '截面', ignore: '忽略' };
 const COLORS = { wall: '#8dcad8', column: '#52dbc3', slab: '#8aa4c5', section: '#52dbc3', ignore: '#708296' };
 const clone = (value) => JSON.parse(JSON.stringify(value));
+const selectionOf = (config) => config?.selection || { include_ids: null, exclude_ids: [], groups: [] };
+export function selectedEntityIds(document, config) {
+  const selection = selectionOf(config), included = selection.include_ids === null ? null : new Set(selection.include_ids), excluded = new Set(selection.exclude_ids || []);
+  return (document?.entities || []).filter((entity) => (!included || included.has(entity.id)) && !excluded.has(entity.id) && ['wall', 'column', 'slab', 'section'].includes(config?.layers?.[entity.layer])).map((entity) => entity.id);
+}
+export function editSelection(config, ids, action) {
+  const next = clone(config), selection = clone(selectionOf(config)), picked = [...new Set(ids)];
+  if (action === 'only') { selection.include_ids = picked; selection.exclude_ids = []; }
+  if (action === 'add') { if (selection.include_ids !== null) selection.include_ids = [...new Set([...selection.include_ids, ...picked])]; selection.exclude_ids = selection.exclude_ids.filter((id) => !picked.includes(id)); }
+  if (action === 'exclude') selection.exclude_ids = [...new Set([...selection.exclude_ids, ...picked])];
+  if (action === 'reset') { selection.include_ids = null; selection.exclude_ids = []; }
+  next.selection = selection; return next;
+}
+export function entityBounds(entity) {
+  if (entity.bounds?.min && entity.bounds?.max) return [...entity.bounds.min.slice(0, 2), ...entity.bounds.max.slice(0, 2)];
+  const points = (entity.points || []).filter((p) => Number.isFinite(p[0]) && Number.isFinite(p[1]));
+  if (!points.length) return null;
+  return points.reduce(([x0, y0, x1, y1], [x, y]) => [Math.min(x0, x), Math.min(y0, y), Math.max(x1, x), Math.max(y1, y)], [Infinity, Infinity, -Infinity, -Infinity]);
+}
+export function idsInBounds(entities, bounds) {
+  return (entities || []).filter((entity) => { const box = entityBounds(entity); return box && box[0] >= bounds[0] && box[1] >= bounds[1] && box[2] <= bounds[2] && box[3] <= bounds[3]; }).map((entity) => entity.id);
+}
+export function materialPath(contour) {
+  return [contour.points || [], ...(contour.holes || [])].filter((points) => points.length > 2).map((points) => points.map(([x, y], index) => `${index ? 'L' : 'M'}${x} ${-y}`).join(' ') + ' Z').join(' ');
+}
+export function detachDimensionBindings(config, previous) {
+  const next = clone(config);
+  if (!next.dimension_bindings?.length) return next;
+  if (next.unit !== previous.unit) { next.dimension_bindings = []; return next; }
+  next.dimension_bindings = next.dimension_bindings.filter((binding) => {
+    if (!sameConfig(next.layers, previous.layers) && binding.target_id) return false;
+    if (binding.role && !Object.values(next.layers || {}).includes(binding.role)) return false;
+    const selection = selectionOf(next);
+    if (binding.target_id && (selection.exclude_ids.includes(binding.target_id) || (selection.include_ids !== null && !selection.include_ids.includes(binding.target_id)))) return false;
+    const value = (cfg) => binding.target_id ? cfg.overrides?.[binding.target_id]?.[binding.parameter] : cfg.parameters?.[binding.role]?.[binding.parameter];
+    return Object.is(value(next), value(previous));
+  });
+  return next;
+}
 
 export function sameConfig(a, b) {
   const ordered = (value) => Array.isArray(value) ? value.map(ordered) : value && typeof value === 'object' ? Object.fromEntries(Object.keys(value).sort().map((key) => [key, ordered(value[key])])) : value;
@@ -11,7 +50,7 @@ export function sameConfig(a, b) {
 /** Requests are tied to a document generation. A late response may never replace a new file. */
 export class CadState {
   constructor() { this.sequence = 0; this.reset(); }
-  reset() { this.sequence += 1; this.document = null; this.documentId = null; this.model = null; this.modelId = null; this.appliedConfig = null; this.config = null; this.history = []; this.busy = false; this.selectedId = null; this.project = null; this.savedConfig = null; this.savedModelId = null; this.projectName = ''; this.savedName = ''; }
+  reset() { this.sequence += 1; this.document = null; this.documentId = null; this.model = null; this.modelId = null; this.appliedConfig = null; this.config = null; this.history = []; this.busy = false; this.selectedId = null; this.project = null; this.savedConfig = null; this.savedModelId = null; this.projectName = ''; this.savedName = ''; this.pickedIds = []; this.selectionHistory = []; this.analysis = null; this.analysisConfig = null; this.scan = null; }
   begin() { this.busy = true; return ++this.sequence; }
   isCurrent(token) { return token === this.sequence; }
   finish(token) { if (this.isCurrent(token)) this.busy = false; }
@@ -38,7 +77,7 @@ export class CadState {
     this.config = clone(payload.draft_config); this.appliedConfig = payload.applied_config ? clone(payload.applied_config) : null;
     this.project = clone(payload.project); this.projectName = payload.project.name; this.savedName = payload.project.name;
     this.savedConfig = historical ? null : clone(payload.draft_config); this.savedModelId = historical ? null : this.modelId;
-    this.history = []; this.selectedId = null;
+    this.history = []; this.selectedId = null; this.pickedIds = []; this.selectionHistory = []; this.analysis = null; this.analysisConfig = null; this.scan = null;
     return true;
   }
 }
@@ -77,7 +116,7 @@ export function defaultConfig(document, mode = 'building', example = false) {
   for (const layer of document.layers || []) layers[layer.name] = roles.includes(layer.suggested_role) ? layer.suggested_role : 'ignore';
   const parameters = Object.create(null);
   for (const role of ['wall', 'column', 'slab', 'section']) parameters[role] = { height_m: example ? ({ wall: 3, column: 3, slab: .12, section: 6 })[role] : null, base_m: 0 };
-  return { mode, unit: example ? 'mm' : '', layers, parameters, overrides: {}, confirmed_solid: false, curve_tolerance_mm: .1 };
+  return { mode, unit: example ? 'mm' : '', layers, parameters, overrides: {}, confirmed_solid: false, curve_tolerance_mm: .1, selection: { include_ids: null, exclude_ids: [], groups: [] }, dimension_bindings: [] };
 }
 
 export function configChanges(before, after, document = { entities: [] }) {
@@ -89,6 +128,7 @@ export function configChanges(before, after, document = { entities: [] }) {
   };
   add('图纸单位', before.unit, after.unit);
   add('曲线误差', before.curve_tolerance_mm ?? .1, after.curve_tolerance_mm ?? .1, ' mm');
+  if (!sameConfig(selectionOf(before), selectionOf(after))) add('参与建模的实体', selectedEntityIds(document, before).length, selectedEntityIds(document, after).length, ' 个');
   for (const layer of new Set([...Object.keys(before.layers || {}), ...Object.keys(after.layers || {})])) add(`图层 ${layer}`, ROLES[before.layers?.[layer]] || '忽略', ROLES[after.layers?.[layer]] || '忽略');
   for (const role of ['wall', 'column', 'slab', 'section']) {
     add(`${ROLES[role]}${role === 'section' ? '长度' : role === 'slab' ? '厚度' : '高度'}`, before.parameters?.[role]?.height_m, after.parameters?.[role]?.height_m, ' m');
@@ -138,6 +178,9 @@ export async function startCadApp(doc = document) {
   let projectsLoading = false;
   let projectListError = '';
   let projects = [];
+  let analysisController = null, analysisSequence = 0, analysisTimer = null, analysisBusy = false;
+  let drawingView = null, scanView = null, visibleGroup = null, diagnosticPoints = [], selectedDimensionId = null;
+  let scanLayersSelected = new Set(), activeImportOperation = null, requestPhase = '';
   const queryProjectId = new URLSearchParams(window.location?.search || '').get('project_id');
   let pendingProjectId = /^[a-f0-9]{32}$/i.test(queryProjectId || '') ? queryProjectId : null;
   const parameterInputs = new Map();
@@ -166,7 +209,7 @@ export async function startCadApp(doc = document) {
     config.confirmed_solid = $('solidConfirmed').checked;
     config.layers = Object.fromEntries([...layerInputs].map(([name, input]) => [name, input.value]));
     config.parameters = Object.fromEntries([...parameterInputs].map(([role, inputs]) => [role, { height_m: numberValue(inputs.height), base_m: numberValue(inputs.base) }]));
-    return config;
+    return state.config ? detachDimensionBindings(config, state.config) : config;
   }
 
   function setForm(config) {
@@ -184,7 +227,7 @@ export async function startCadApp(doc = document) {
     $('heightHeading').textContent = config.mode === 'section' ? '拉伸长度' : '高度 / 厚度';
     $('commandHelp').textContent = config.mode === 'section' ? '例如：把拉伸长度改为 6 米；把选中构件长度改成 2 米。' : '例如：把墙高改成 3.6 米；把柱子标高改为 0.2 米。';
     $('commandInput').placeholder = config.mode === 'section' ? '把拉伸长度改为 6 米' : '把墙高改成 3.6 米';
-    renderLayers(); updateParameterRows(); renderDrawing(); refresh();
+    renderLayers(); updateParameterRows(); renderDrawing(); renderSelectionGroups(); renderDimensions(); refresh(); scheduleAnalysis();
   }
 
   function renderLayers() {
@@ -214,7 +257,7 @@ export async function startCadApp(doc = document) {
     if (!state.document) return;
     state.config = readConfig();
     if (state.model && state.dirty) notice('参数已修改，当前仍显示上次生成的模型。请生成或应用修改后再导出。', 'warn');
-    refresh(); renderInspector();
+    refresh(); renderInspector(); renderDimensions(); scheduleAnalysis();
   }
 
   function refresh() {
@@ -237,13 +280,31 @@ export async function startCadApp(doc = document) {
     $('toggleEdges').disabled = $('fitView').disabled;
     $('exportConfirmation').disabled = (!state.model && !state.project) || state.busy;
     const confirmed = $('exportConfirmation').value === CONFIRMATION;
-    for (const button of all('[data-export]')) button.disabled = !state.canExport || !confirmed || !ready;
+    for (const button of all('[data-export]')) button.disabled = !state.canExport || !confirmed || !ready || (button.dataset.export === 'step' && !capability?.step_available);
+    $('stepHint').textContent = capability?.step_available ? 'STEP 使用与预览相同的离散轮廓，不包含完整参数历史。' : `STEP 导出需安装可选内核：${capability?.step_install_command || '安装项目 CAD STEP 依赖后重新检测'}。采用与预览相同的离散轮廓，不包含完整参数历史。`;
     $('exportHint').textContent = !state.model ? '生成模型后可导出' : !ready ? '连接恢复后可导出' : state.dirty ? '参数尚未应用，导出已暂停' : !state.model.objects?.length ? '没有可导出的有效构件' : !confirmed ? '完整输入签认提示后可下载' : '模型及参数与当前预览一致';
     $('modelBadge').hidden = !state.model;
     $('modelBadge').className = `model-badge${state.dirty ? ' stale' : ''}`;
     $('modelBadge').textContent = state.dirty ? '旧模型 · 参数未应用' : `${state.model?.objects?.length || 0} 个几何构件 · 米`;
     $('modelEmpty').hidden = !!state.model?.objects?.length || modelViewError;
     $('fileMeta').hidden = !hasDoc;
+    const picked = state.pickedIds.length > 0;
+    for (const id of ['includePicked', 'addPicked', 'excludePicked', 'saveSelectionGroup']) $(id).disabled = !hasDoc || !picked || state.busy;
+    $('resetSelection').disabled = !hasDoc || state.busy;
+    $('undoSelection').disabled = !state.selectionHistory.length || state.busy;
+    $('analyzeDrawing').disabled = !hasDoc || state.busy || analysisBusy || !ready;
+    $('pickVisible').disabled = !hasDoc || state.busy; $('fitDrawing').disabled = !hasDoc;
+    $('drawingInteraction').disabled = !hasDoc || state.busy;
+    for (const id of ['showSelectionGroup', 'useSelectionGroup', 'deleteSelectionGroup']) $(id).disabled = !$('selectionGroups').value || state.busy;
+    $('bindDimension').disabled = !selectedDimensionId || state.busy || !ready || !state.document?.dimensions?.find((item) => item.id === selectedDimensionId)?.bindable;
+    for (const id of ['dimensionValueSource', 'dimensionTarget', 'dimensionParameter']) $(id).disabled = !hasDoc || state.busy;
+    $('selectionSummary').textContent = hasDoc ? `参与建模 ${selectedEntityIds(state.document, state.config).length} / ${state.document.entities.length} 个轮廓或实体；排除 ${selectionOf(state.config).exclude_ids.length} 个。` : '图层映射决定用途，实体选集决定范围。';
+    $('pickedSummary').textContent = picked ? `已点选 ${state.pickedIds.length} 个：${state.pickedIds.slice(0, 5).join('、')}${state.pickedIds.length > 5 ? '…' : ''}` : '尚未点选实体';
+    $('operationProgress').hidden = !state.busy;
+    $('operationStage').textContent = requestPhase || '正在处理，请稍候';
+    $('scanPanel').hidden = !state.scan;
+    $('importScanSelection').disabled = !state.scan || !scanLayersSelected.size || state.busy || !ready;
+    for (const id of ['scanSelectAll', 'scanSelectNone', 'scanLayerFilter', 'resetScanBounds', 'scanMinX', 'scanMinY', 'scanMaxX', 'scanMaxY', 'scanInteraction', 'fitScan']) $(id).disabled = state.busy;
     $('projectName').disabled = !hasDoc || state.busy;
     $('saveDraft').disabled = !hasDoc || state.busy || !ready;
     $('saveCopy').disabled = !hasDoc || state.busy || !ready;
@@ -264,10 +325,17 @@ export async function startCadApp(doc = document) {
 
   function renderDrawing() {
     svgPaths.clear(); $('drawingSvg').replaceChildren();
-    const geometry = drawingGeometry(state.model?.preview_entities || state.document?.entities);
-    $('drawingSvg').setAttribute('viewBox', geometry.viewBox);
+    const entities = state.analysis?.preview_entities || state.model?.preview_entities || state.document?.entities;
+    const geometry = drawingGeometry(entities?.filter((entity) => !visibleGroup || visibleGroup.has(entity.id)));
+    if (!drawingView) drawingView = geometry.viewBox.split(' ').map(Number);
+    $('drawingSvg').setAttribute('viewBox', drawingView.join(' '));
     $('drawingEmpty').hidden = !!geometry.paths.length;
     $('entityCount').textContent = state.document ? `${state.document.entities?.length || 0} 个轮廓 / 实体` : '等待图纸';
+    for (const contour of state.analysis?.contours || []) {
+      if (visibleGroup && !visibleGroup.has(contour.outer_id)) continue;
+      const fill = doc.createElementNS(namespace, 'path'); fill.setAttribute('d', materialPath(contour)); fill.setAttribute('fill-rule', 'evenodd'); fill.setAttribute('class', 'material-fill'); fill.setAttribute('aria-hidden', 'true'); fill.setAttribute('fill', COLORS[state.config.layers[contour.layer]] || COLORS.section); $('drawingSvg').append(fill);
+    }
+    const included = new Set(selectedEntityIds(state.document, state.config));
     for (const { entity, path } of geometry.paths) {
       const element = doc.createElementNS(namespace, 'path');
       element.setAttribute('d', path);
@@ -275,15 +343,18 @@ export async function startCadApp(doc = document) {
       element.setAttribute('stroke', color); element.setAttribute('fill', color); element.setAttribute('tabindex', '0');
       element.setAttribute('role', 'button'); element.setAttribute('aria-label', `实体 ${entity.id}，图层 ${entity.layer}，${entity.status === 'ready' ? '可建模' : entity.reason || '未支持'}`);
       const title = doc.createElementNS(namespace, 'title'); title.textContent = `${entity.layer} · ${entity.id}${entity.reason ? ` · ${entity.reason}` : ''}`; element.append(title);
-      const choose = () => selectEntity(entity.id);
-      element.addEventListener('click', choose); element.addEventListener('keydown', (event) => { if (event.key === 'Enter' || event.key === ' ') { event.preventDefault(); choose(); } });
+      element.classList.toggle('build-excluded', !included.has(entity.id));
+      element.setAttribute('fill-opacity', '0');
+      const choose = (event) => { if (state.busy || $('drawingInteraction').value === 'box' || $('drawingInteraction').value === 'pan') return; state.pickedIds = event?.shiftKey ? (state.pickedIds.includes(entity.id) ? state.pickedIds.filter((id) => id !== entity.id) : [...state.pickedIds, entity.id]) : [entity.id]; selectEntity(entity.id); };
+      element.addEventListener('click', choose); element.addEventListener('keydown', (event) => { if (event.key === 'Enter' || event.key === ' ') { event.preventDefault(); choose(event); } });
       $('drawingSvg').append(element); svgPaths.set(entity.id, element);
     }
+    for (const [x, y] of diagnosticPoints) { const marker = doc.createElementNS(namespace, 'circle'); marker.setAttribute('cx', x); marker.setAttribute('cy', -y); marker.setAttribute('r', Math.max(drawingView[2], drawingView[3]) * .007); marker.setAttribute('class', 'diagnostic-mark'); $('drawingSvg').append(marker); }
     highlightSelection();
   }
 
   function highlightSelection() {
-    for (const [id, path] of svgPaths) path.classList.toggle('selected', id === state.selectedId);
+    for (const [id, path] of svgPaths) { path.classList.toggle('selected', id === state.selectedId); path.classList.toggle('picked', state.pickedIds.includes(id)); }
   }
 
   function selectEntity(id) {
@@ -291,7 +362,216 @@ export async function startCadApp(doc = document) {
     // A hole is a boundary of its owning solid, never an independently extrudable
     // component. Both numeric and language edits must address the shell handle.
     state.selectedId = object?.source_entity_ids?.[0] || id;
-    viewer?.select(object?.id || null); highlightSelection(); renderInspector();
+    viewer?.select(object?.id || null); highlightSelection(); renderInspector(); renderDimensionTargets(); refresh();
+  }
+
+  function setSelection(config) {
+    if (!state.document || state.busy) return;
+    state.selectionHistory.push({ selection: clone(selectionOf(state.config)), bindingConfig: clone(state.config) }); if (state.selectionHistory.length > 30) state.selectionHistory.shift();
+    const orderedIds = (ids) => { const set = new Set(ids); return state.document.entities.filter((entity) => set.has(entity.id)).map((entity) => entity.id); };
+    if (config.selection.include_ids !== null) config.selection.include_ids = orderedIds(config.selection.include_ids);
+    config.selection.exclude_ids = orderedIds(config.selection.exclude_ids);
+    config.selection.groups.forEach((group) => { group.entity_ids = orderedIds(group.entity_ids); });
+    state.config = detachDimensionBindings(config, state.config); diagnosticPoints = []; renderDrawing(); renderSelectionGroups(); renderDimensions(); refresh(); renderInspector(); scheduleAnalysis();
+    notice('建模选集已修改。先检查实体材料和孔洞，再生成更新后的模型。', 'warn');
+  }
+
+  function renderSelectionGroups() {
+    const value = $('selectionGroups').value; $('selectionGroups').replaceChildren();
+    const placeholder = node('option', '选择分组'); placeholder.value = ''; $('selectionGroups').append(placeholder);
+    for (const [index, group] of (selectionOf(state.config).groups || []).entries()) { const option = node('option', `${group.name} · ${group.entity_ids.length} 个`); option.value = String(index + 1); $('selectionGroups').append(option); }
+    $('selectionGroups').value = Number(value) <= (selectionOf(state.config).groups || []).length ? value : '';
+  }
+
+  function currentGroup() { return selectionOf(state.config).groups?.[Number($('selectionGroups').value) - 1]; }
+
+  function analysisKey(config) { return { unit: config?.unit, layers: config?.layers, selection: selectionOf(config), curve_tolerance_mm: config?.curve_tolerance_mm ?? .1, confirmed_solid: config?.confirmed_solid }; }
+
+  function scheduleAnalysis() {
+    clearTimeout(analysisTimer); analysisController?.abort(); analysisSequence += 1; analysisBusy = false;
+    if (!state.document) return;
+    if (state.analysisConfig && sameConfig(state.analysisConfig, analysisKey(state.config))) return;
+    state.analysis = null; state.analysisConfig = null;
+    $('analysisStatus').textContent = state.config.unit ? '选集已变化，等待检查' : '请先确认图纸单位';
+    $('diagnosticList').replaceChildren(node('p', '待检查当前选集。材料填充和诊断以本次检查结果为准。', 'hint'));
+    renderDrawing();
+    const run = () => { analysisTimer = null; if (!state.document || !state.config.unit) return; if (state.busy) analysisTimer = setTimeout(run, 350); else analyze(); };
+    if (state.config.unit) analysisTimer = setTimeout(run, 350);
+  }
+
+  async function analyze() {
+    if (!state.document || state.busy || !serviceReady()) return;
+    if (!state.config.unit) { $('analysisStatus').textContent = '请先确认图纸单位'; return; }
+    analysisController?.abort(); const controller = new AbortController(); analysisController = controller;
+    const sequence = ++analysisSequence, documentId = state.documentId, key = analysisKey(state.config);
+    analysisBusy = true; $('analysisStatus').textContent = '正在检查连通性、重复边界和孔洞…'; refresh();
+    try {
+      const result = await jsonRequest('/api/cad/analyze', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ document_id: documentId, config: state.config }), signal: controller.signal });
+      if (sequence !== analysisSequence || documentId !== state.documentId || !sameConfig(key, analysisKey(state.config))) return;
+      state.analysis = result; state.analysisConfig = clone(key); diagnosticPoints = [];
+      renderDiagnostics(); renderDrawing();
+    } catch (error) { if (sequence === analysisSequence && error.name !== 'AbortError') { $('analysisStatus').textContent = '检查未完成'; $('diagnosticList').replaceChildren(node('p', errorMessage(error), 'hint')); } }
+    finally { if (sequence === analysisSequence) { analysisBusy = false; refresh(); } }
+  }
+
+  function renderDiagnostics() {
+    const result = state.analysis; $('diagnosticList').replaceChildren();
+    if (!result) { $('analysisStatus').textContent = '确认单位与图层后检查'; return; }
+    $('analysisStatus').textContent = `${result.contours?.length || 0} 个材料区域 · ${result.diagnostics?.length || 0} 条诊断${result.buildable === false ? ' · 当前不可建模' : ''}`;
+    for (const diagnostic of result.diagnostics || []) {
+      const button = node('button', undefined, 'diagnostic-row'); button.type = 'button';
+      const detail = node('span', diagnostic.message); detail.append(node('small', `${(diagnostic.entity_ids || []).join('、')}${Number.isFinite(diagnostic.gap_mm) ? ` · 缺口 ${diagnostic.gap_mm} mm` : ''}`));
+      button.append(node('strong', diagnostic.severity === 'error' ? '需处理' : '注意', diagnostic.severity || 'warning'), detail);
+      button.addEventListener('click', () => { diagnosticPoints = diagnostic.points || []; state.pickedIds = diagnostic.entity_ids || []; visibleGroup = null; focusPoints(diagnosticPoints.length ? diagnosticPoints : (state.document.entities || []).filter((item) => state.pickedIds.includes(item.id)).flatMap((item) => item.points || [])); if (state.pickedIds.length) selectEntity(state.pickedIds[0]); renderDrawing(); refresh(); });
+      $('diagnosticList').append(button);
+    }
+    if (!result.diagnostics?.length) $('diagnosticList').append(node('p', result.contours?.length ? '轮廓检查通过。着色区域代表材料，内圈留白代表孔洞。高度 / 长度仍须单独确认。' : '当前选集没有可生成的材料区域。请检查图层用途及实体选择。', 'hint'));
+  }
+
+  function focusPoints(points) {
+    const geometry = drawingGeometry([{ points, status: 'invalid' }]); drawingView = geometry.viewBox.split(' ').map(Number);
+    if (points.length === 1) { const [x, y] = points[0]; const span = Math.max(drawingView[2], 10); drawingView = [x - span / 2, -y - span / 2, span, span]; }
+    renderDrawing();
+  }
+
+  function pointInSvg(svg, event) {
+    if (svg.createSVGPoint && svg.getScreenCTM?.()) { const p = svg.createSVGPoint(); p.x = event.clientX; p.y = event.clientY; const q = p.matrixTransform(svg.getScreenCTM().inverse()); return [q.x, q.y]; }
+    const box = (svg.getAttribute?.('viewBox') || svg.attributes?.viewBox || '0 0 100 100').split(' ').map(Number), rect = svg.getBoundingClientRect?.() || { left: 0, top: 0, width: 100, height: 100 };
+    const scale = Math.min(rect.width / box[2], rect.height / box[3]);
+    return [box[0] + (event.clientX - rect.left - (rect.width - box[2] * scale) / 2) / scale, box[1] + (event.clientY - rect.top - (rect.height - box[3] * scale) / 2) / scale];
+  }
+
+  function wireRectangle(svg, mode, completed) {
+    let start = null, rect = null, initialView = null;
+    svg.addEventListener('pointerdown', (event) => {
+      if (state.busy || event.button > 0 || mode() === 'pick') return;
+      start = pointInSvg(svg, event); initialView = (svg.getAttribute?.('viewBox') || '0 0 100 100').split(' ').map(Number); svg.setPointerCapture?.(event.pointerId); event.preventDefault();
+      if (mode() !== 'pan') { rect = doc.createElementNS(namespace, 'rect'); rect.setAttribute('class', 'selection-rectangle'); svg.append(rect); }
+    });
+    svg.addEventListener('pointermove', (event) => {
+      if (!start) return; const point = pointInSvg(svg, event);
+      if (mode() === 'pan' && initialView) { const current = (svg.getAttribute('viewBox')).split(' ').map(Number); const next = [current[0] + start[0] - point[0], current[1] + start[1] - point[1], initialView[2], initialView[3]]; if (svg === $('drawingSvg')) drawingView = next; else scanView = next; svg.setAttribute('viewBox', next.join(' ')); return; }
+      rect?.setAttribute('x', Math.min(start[0], point[0])); rect?.setAttribute('y', Math.min(start[1], point[1])); rect?.setAttribute('width', Math.abs(point[0] - start[0])); rect?.setAttribute('height', Math.abs(point[1] - start[1]));
+    });
+    const finish = (event, cancelled = false) => { if (!start) return; const point = pointInSvg(svg, event), from = start; start = null; rect?.remove(); rect = null; if (!cancelled && mode() !== 'pan' && Math.abs(point[0] - from[0]) + Math.abs(point[1] - from[1]) > 0) completed([Math.min(from[0], point[0]), -Math.max(from[1], point[1]), Math.max(from[0], point[0]), -Math.min(from[1], point[1])], event.shiftKey); };
+    svg.addEventListener('pointerup', (event) => finish(event)); svg.addEventListener('pointercancel', (event) => finish(event, true));
+  }
+
+  function renderDimensionTargets() {
+    const previous = $('dimensionTarget').value; $('dimensionTarget').replaceChildren();
+    const prompt = node('option', '请选择用途对象'); prompt.value = ''; $('dimensionTarget').append(prompt);
+    if (state.selectedId && state.document?.entities?.some((entity) => entity.id === state.selectedId && state.config.layers[entity.layer] !== 'ignore')) {
+      const option = node('option', `所选实体 ${state.selectedId}`); option.value = `entity:${state.selectedId}`; $('dimensionTarget').append(option);
+    }
+    for (const role of [...new Set(Object.values(state.config?.layers || {}))].filter((value) => value !== 'ignore')) {
+      const option = node('option', `所有${ROLES[role] || role}`); option.value = `role:${role}`; $('dimensionTarget').append(option);
+    }
+    $('dimensionTarget').value = $('dimensionTarget').children && [...$('dimensionTarget').children].some((option) => option.value === previous) ? previous : '';
+  }
+
+  function renderDimensions() {
+    const dimensions = state.document?.dimensions || []; $('dimensionList').replaceChildren();
+    $('dimensionCount').textContent = `${dimensions.length} 条原图标注`;
+    if (!dimensions.some((item) => item.id === selectedDimensionId)) selectedDimensionId = null;
+    for (const dimension of dimensions) {
+      const button = node('button', `${dimension.id} · ${dimension.text || '自动测量标注'} · ${dimension.layer}`, 'dimension-item'); button.type = 'button'; button.setAttribute('aria-pressed', String(dimension.id === selectedDimensionId));
+      button.addEventListener('click', () => { if (state.busy) return; selectedDimensionId = dimension.id; diagnosticPoints = dimension.points || []; if (diagnosticPoints.length) focusPoints(diagnosticPoints); renderDimensions(); refresh(); });
+      $('dimensionList').append(button);
+    }
+    if (!dimensions.length) $('dimensionList').append(node('p', '未读取到 DIMENSION 标注。请在参数面板手工填写已确认尺寸。', 'hint'));
+    const dimension = dimensions.find((item) => item.id === selectedDimensionId);
+    $('dimensionDetails').textContent = dimension ? `原文：${dimension.text || '无覆盖文字'}；标注数值：${dimension.annotation_value ?? '不可读取'} ${dimension.annotation_unit || '图纸单位'}；几何测量：${dimension.measurement ?? '不可读取'} 图纸单位${dimension.axis ? `；方向：${dimension.axis}` : ''}。${dimension.bindable ? '请核对数值，并明确指定三维用途。' : '该标注仅供参考，不能绑定。'}` : '选择一条原图标注，核对原文和几何测量，再明确指定用途。';
+    renderDimensionTargets(); $('dimensionBindings').replaceChildren();
+    for (const binding of state.config?.dimension_bindings || []) {
+      const row = node('div', undefined, 'dimension-binding');
+      const value = binding.target_id ? state.config.overrides?.[binding.target_id]?.[binding.parameter] : state.config.parameters?.[binding.role]?.[binding.parameter];
+      row.append(node('span', `${binding.dimension_id} → ${binding.target_id || ROLES[binding.role]} · ${binding.parameter === 'base_m' ? '标高' : '高度 / 长度'} ${value ?? '未确认'} m（${binding.value_source === 'annotation' ? '标注文字' : '几何测量'}）`));
+      const remove = node('button', '解除绑定'); remove.type = 'button'; remove.disabled = state.busy;
+      remove.addEventListener('click', () => { if (state.busy) return; state.config.dimension_bindings = state.config.dimension_bindings.filter((item) => item !== binding); renderDimensions(); refresh(); notice('已解除尺寸来源绑定；已填写参数保留，可继续手工修改。'); });
+      row.append(remove); $('dimensionBindings').append(row);
+    }
+  }
+
+  async function bindDimension() {
+    if (!selectedDimensionId || state.busy || !serviceReady()) return;
+    const target = $('dimensionTarget').value;
+    if (!target) { notice('请明确选择尺寸要应用的实体或用途。', 'warn'); return; }
+    const binding = { dimension_id: selectedDimensionId, parameter: $('dimensionParameter').value, value_source: $('dimensionValueSource').value };
+    binding[target.startsWith('entity:') ? 'target_id' : 'role'] = target.slice(target.indexOf(':') + 1);
+    const before = readConfig(), { token, signal } = startRequest('正在核对标注来源并绑定指定参数');
+    try {
+      const payload = await jsonRequest('/api/cad/bind-dimension', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ document_id: state.documentId, config: before, binding }), signal });
+      if (!state.isCurrent(token)) return;
+      setForm(payload.config); renderChanges(configChanges(before, payload.config, state.document), '已绑定为草稿参数，生成模型后应用');
+      notice('已核对并绑定尺寸来源。请检查参数，再生成模型。');
+    } catch (error) { if (state.isCurrent(token)) notice(errorMessage(error), 'error'); }
+    finally { state.finish(token); if (state.isCurrent(token)) { renderDimensions(); refresh(); } }
+  }
+
+  const scanBoundInputs = () => ['scanMinX', 'scanMinY', 'scanMaxX', 'scanMaxY'].map($);
+  function scanBounds() {
+    const fields = scanBoundInputs();
+    if (fields.every((input) => input.value.trim() === '')) return null;
+    const values = fields.map(numberValue);
+    if (values.some((value) => !Number.isFinite(value)) || values[0] >= values[2] || values[1] >= values[3]) throw new Error('请填写完整有效的范围坐标，最小值须小于最大值；也可点击“不限范围”。');
+    return values;
+  }
+  function renderScanLayers() {
+    $('scanLayers').replaceChildren(); const filter = $('scanLayerFilter').value.toLowerCase();
+    for (const layer of state.scan?.index.layers || []) {
+      if (!layer.name.toLowerCase().includes(filter)) continue;
+      const row = node('label', undefined, 'scan-layer-row'); const input = node('input'); input.type = 'checkbox'; input.checked = scanLayersSelected.has(layer.name); input.disabled = state.busy;
+      input.addEventListener('change', () => { if (state.busy) return; if (input.checked) scanLayersSelected.add(layer.name); else scanLayersSelected.delete(layer.name); renderScanPreview(); refresh(); });
+      row.append(input, node('span', layer.name), node('small', String(layer.entity_count))); $('scanLayers').append(row);
+    }
+  }
+  function renderScanPreview() {
+    const svg = $('scanSvg'); svg.replaceChildren();
+    const index = state.scan?.index; if (!index) return;
+    const bounds = index.bounds;
+    const geometry = drawingGeometry((index.preview || []).map((entity) => ({ ...entity, points: entity.points?.length ? entity.points : entity.bounds ? [[...entity.bounds.min], [entity.bounds.max[0], entity.bounds.min[1]], [...entity.bounds.max], [entity.bounds.min[0], entity.bounds.max[1]], [...entity.bounds.min]] : [], status: 'scan' })));
+    const overall = bounds ? drawingGeometry([{ points: [bounds.min, bounds.max] }]).viewBox : geometry.viewBox;
+    if (!scanView) scanView = overall.split(' ').map(Number); svg.setAttribute('viewBox', scanView.join(' '));
+    for (const { entity, path } of geometry.paths) { const element = doc.createElementNS(namespace, 'path'); const selected = scanLayersSelected.has(entity.layer) || entity.layers?.some((layer) => scanLayersSelected.has(layer)); element.setAttribute('d', path); element.setAttribute('fill', 'none'); element.setAttribute('stroke', selected ? COLORS.section : COLORS.ignore); element.setAttribute('opacity', selected ? '.9' : '.25'); if (entity.block_overview) element.setAttribute('stroke-dasharray', '5 4'); element.setAttribute('vector-effect', 'non-scaling-stroke'); svg.append(element); }
+    try { const region = scanBounds(); if (region) { const rectangle = doc.createElementNS(namespace, 'rect'); rectangle.setAttribute('class', 'selection-rectangle'); rectangle.setAttribute('x', region[0]); rectangle.setAttribute('y', -region[3]); rectangle.setAttribute('width', region[2] - region[0]); rectangle.setAttribute('height', region[3] - region[1]); svg.append(rectangle); } } catch { /* Incomplete bounds remain editable. */ }
+    $('scanSummary').textContent = `${index.filename} · ${index.layers.length} 个图层 · ${index.counts?.expanded ?? index.counts?.modelspace ?? 0} 个实体 · ${index.preview_sampled ? '抽样预览' : '范围预览'}`;
+    $('scanWarnings').textContent = (index.warnings || []).map((item) => typeof item === 'string' ? item : item.message || JSON.stringify(item)).join('；');
+  }
+  function operationId() { return globalThis.crypto?.randomUUID?.().replaceAll('-', '') || Array.from({ length: 32 }, () => Math.floor(Math.random() * 16).toString(16)).join(''); }
+  async function scanFile(file) {
+    const request = startRequest('第一阶段：上传并扫描图层、块引用与范围'); const id = operationId(); activeImportOperation = id;
+    notice(`正在扫描 ${file.name}。完成后可先选图层和范围，当前模型保留。`);
+    try {
+      const form = new FormData(); form.append('file', file);
+      const payload = await jsonRequest('/api/cad/import/scan', { method: 'POST', headers: { 'X-CAD-Operation-ID': id }, body: form, signal: request.signal });
+      if (!state.isCurrent(request.token)) return;
+      state.scan = payload; scanView = null; scanLayersSelected = new Set(); $('scanLayerFilter').value = ''; scanBoundInputs().forEach((input) => { input.value = ''; });
+      renderScanLayers(); renderScanPreview(); notice('扫描完成。请先勾选需要的图层，并按需框选完整实体所在范围。');
+    } catch (error) { if (state.isCurrent(request.token)) notice(`${errorMessage(error)} 当前图纸与模型保留。`, 'error'); }
+    finally { if (activeImportOperation === id) activeImportOperation = null; state.finish(request.token); if (state.isCurrent(request.token)) { renderScanLayers(); refresh(); } }
+  }
+  async function importScanSelection() {
+    if (!state.scan || !scanLayersSelected.size || state.busy || !serviceReady()) return;
+    let bounds; try { bounds = scanBounds(); } catch (error) { notice(error.message, 'warn'); return; }
+    const body = { import_id: state.scan.import_id, layers: [...scanLayersSelected] }; if (bounds) body.bounds = bounds;
+    const request = startRequest('第二阶段：读取所选实体并检查建模轮廓'); const id = operationId(); activeImportOperation = id;
+    try {
+      const payload = await jsonRequest('/api/cad/import/select', { method: 'POST', headers: { 'Content-Type': 'application/json', 'X-CAD-Operation-ID': id }, body: JSON.stringify(body), signal: request.signal });
+      acceptDocument(request.token, payload);
+    } catch (error) { if (state.isCurrent(request.token)) notice(`${errorMessage(error)} 当前图纸与模型保留，可缩小范围后重试。`, 'error'); }
+    finally { if (activeImportOperation === id) activeImportOperation = null; state.finish(request.token); if (state.isCurrent(request.token)) { renderScanLayers(); refresh(); } }
+  }
+
+  async function cancelOperation() {
+    if (!state.busy) return;
+    const operation = activeImportOperation, controller = requestController;
+    state.sequence += 1; state.busy = false; activeImportOperation = null;
+    refresh(); renderInspector(); notice('操作已取消，当前图纸、草稿和已生成模型保留。');
+    // Publish cancellation to the server before aborting the upload/selection request.
+    if (operation) {
+      const timeout = new AbortController(), timer = setTimeout(() => timeout.abort(), 3000);
+      try { await serviceFetch(`/api/cad/import/${operation}/cancel`, { method: 'POST', signal: timeout.signal }); } catch { /* Local ownership is already invalidated. */ } finally { clearTimeout(timer); controller?.abort(); }
+    } else controller?.abort();
   }
 
   function renderInspector() {
@@ -324,8 +604,8 @@ export async function startCadApp(doc = document) {
       form.append(heightLabel, baseLabel, apply);
       for (const input of [height, base]) input.addEventListener('input', () => {
         if (state.busy || !serviceReady()) return;
-        const next = readConfig(); next.overrides = { ...next.overrides, [source.id]: { height_m: numberValue(height), base_m: numberValue(base) } }; state.config = next;
-        notice('构件参数已修改，点击应用后更新模型。当前模型仍是上次生成值。', 'warn'); refresh();
+        const next = readConfig(); next.overrides = { ...next.overrides, [source.id]: { height_m: numberValue(height), base_m: numberValue(base) } }; state.config = detachDimensionBindings(next, state.config);
+        notice('构件参数已修改，点击应用后更新模型。当前模型仍是上次生成值。', 'warn'); renderDimensions(); refresh();
       });
       form.addEventListener('submit', (event) => { event.preventDefault(); if (state.busy || !serviceReady()) return; const next = readConfig(); next.overrides = { ...next.overrides, [source.id]: { height_m: numberValue(height), base_m: numberValue(base) } }; setForm(next); build(next); });
       host.append(form);
@@ -368,7 +648,8 @@ export async function startCadApp(doc = document) {
     return payload;
   }
 
-  function startRequest() {
+  function startRequest(phase = '正在处理，请稍候') {
+    clearTimeout(analysisTimer); analysisController?.abort(); analysisSequence += 1; analysisBusy = false; requestPhase = phase;
     requestController?.abort(); requestController = new AbortController();
     const token = state.begin(); refresh(); renderInspector();
     return { token, signal: requestController.signal };
@@ -409,6 +690,7 @@ export async function startCadApp(doc = document) {
 
   function showProject(token, payload, historical = false) {
     if (!state.setProject(token, payload, historical)) return false;
+    drawingView = null; visibleGroup = null; diagnosticPoints = []; selectedDimensionId = null;
     $('cadFile').value = ''; $('projectPackage').value = ''; $('projectName').value = state.project.name;
     $('exportConfirmation').value = ''; $('commandInput').value = ''; $('exampleHint').hidden = true;
     $('commandResult').textContent = '项目已载入。修改只作用于图层选择和建模参数，原图保持不变。';
@@ -451,13 +733,14 @@ export async function startCadApp(doc = document) {
       await refreshProjects();
     } catch (error) {
       if (state.isCurrent(token)) notice(error.status === 409 ? '项目已被其他页面修改，本次未覆盖。当前草稿仍在，请另存为新项目，或打开最新项目后重新修改。' : `${errorMessage(error)} 当前草稿仍保留，可重试保存。`, 'error');
-    } finally { state.finish(token); if (state.isCurrent(token)) { refresh(); renderInspector(); } }
+    } finally { state.finish(token); if (state.isCurrent(token)) { refresh(); renderInspector(); scheduleAnalysis(); } }
   }
 
   async function importProject(file) {
     if (!file || state.busy || !serviceReady()) return;
     if (!/\.zip$/i.test(file.name)) { notice('请选择 CAD 项目 ZIP 包。', 'warn'); return; }
-    if (file.size > 16 * 1024 * 1024) { notice('项目包超出 16 MB 上传上限。', 'warn'); return; }
+    const maxBundle = capability?.max_project_bundle_bytes || 16 * 1024 * 1024;
+    if (file.size > maxBundle) { notice(`项目包超出 ${Math.round(maxBundle / 1024 / 1024)} MiB 上传上限。`, 'warn'); return; }
     const { token, signal } = startRequest(); notice('正在检查项目包并创建独立副本…');
     try {
       const form = new FormData(); form.append('file', file);
@@ -493,7 +776,10 @@ export async function startCadApp(doc = document) {
   }
 
   function clear() {
+    if (activeImportOperation) cancelOperation();
+    clearTimeout(analysisTimer); analysisController?.abort(); analysisSequence += 1; analysisBusy = false;
     requestController?.abort(); state.reset(); viewer?.clear();
+    drawingView = null; visibleGroup = null; diagnosticPoints = []; selectedDimensionId = null;
     $('cadFile').value = ''; $('drawingSvg').replaceChildren(); $('drawingEmpty').hidden = false; $('entityCount').textContent = '等待图纸';
     $('exampleHint').hidden = true; $('exportConfirmation').value = ''; $('commandInput').value = '';
     $('projectName').value = ''; $('projectPackage').value = ''; renderVersions(); renderChanges([], '');
@@ -501,31 +787,38 @@ export async function startCadApp(doc = document) {
     layerInputs.clear(); $('layerList').replaceChildren(node('p', '上传后显示图层', 'hint')); svgPaths.clear();
     for (const fields of parameterInputs.values()) { fields.height.value = ''; fields.base.value = '0'; }
     $('drawingUnit').value = ''; $('curveTolerance').value = '.1'; $('solidConfirmed').checked = false;
-    renderReport(); renderInspector(); refresh(); notice('先上传 DXF，或选择一个合成样例体验完整流程。');
+    renderReport(); renderInspector(); renderDimensions(); renderSelectionGroups(); renderDiagnostics(); refresh(); notice('先上传 DXF，或选择一个合成样例体验完整流程。');
+  }
+
+  function acceptDocument(token, payload, exampleMode = null) {
+    if (!state.isCurrent(token)) return false;
+    const config = defaultConfig(payload.document, exampleMode || 'building', !!exampleMode);
+    // Replace the old document only after the new source has passed import.
+    state.model = null; state.modelId = null; state.appliedConfig = null; state.history = []; state.project = null; state.savedConfig = null; state.savedModelId = null; state.savedName = '';
+    state.selectedId = null; state.pickedIds = []; state.selectionHistory = []; state.analysis = null; state.analysisConfig = null; state.scan = null;
+    drawingView = null; visibleGroup = null; diagnosticPoints = []; selectedDimensionId = null;
+    state.setDocument(token, payload, config); viewer?.clear(); $('exportConfirmation').value = ''; renderVersions(); renderChanges([], '');
+    state.projectName = (payload.document.filename || 'CAD 项目').replace(/\.dxf$/i, '').slice(0, 100); $('projectName').value = state.projectName;
+    showDocumentDetails(); $('exampleHint').hidden = !exampleMode; setForm(config); renderInspector(); renderDiagnostics();
+    const rejected = payload.document.entities.filter((entity) => entity.status !== 'ready');
+    renderReport(rejected.map((entity) => ({ id: entity.id, layer: entity.layer, status: 'failed', reason: entity.reason || '无效或暂未支持的原图实体' })));
+    if (rejected.length) $('reportSummary').textContent = `导入检查 · ${rejected.length} 个未支持 / 无效实体`;
+    notice(`已读取图纸。${rejected.length ? `其中 ${rejected.length} 个实体无效或暂未支持；` : ''}请确认单位、图层映射、实体区域及尺寸。`, rejected.length ? 'warn' : '');
+    return true;
   }
 
   async function importFile(file, exampleMode = null) {
     if (!serviceReady()) return;
     if (!file || !/\.dxf$/i.test(file.name)) { notice('请选择 DXF 文件。DWG 请先使用 CAD 软件另存为 DXF。', 'error'); return; }
-    if (capability?.max_upload_bytes && file.size > capability.max_upload_bytes) { notice(`文件超出上传上限 ${Math.round(capability.max_upload_bytes / 1024 / 1024)} MB。`, 'error'); return; }
-    clear();
-    const { token, signal } = startRequest(); notice(`正在读取 ${file.name} 的实体和图层…`);
+    const maxBytes = capability?.max_upload_bytes || 64 * 1024 * 1024;
+    if (file.size > maxBytes) { notice(`文件超出上传上限 ${Math.round(maxBytes / 1024 / 1024)} MiB。`, 'error'); return; }
+    if (activeImportOperation) await cancelOperation();
+    if (!exampleMode && ($('scanFirst').checked || file.size > (capability?.direct_import_max_bytes || 10 * 1024 * 1024))) return scanFile(file);
+    const { token, signal } = startRequest('正在读取图纸实体与图层'); notice(`正在读取 ${file.name} 的实体和图层…`);
     try {
       const form = new FormData(); form.append('file', file);
       const payload = await jsonRequest('/api/cad/import', { method: 'POST', body: form, signal });
-      const config = defaultConfig(payload.document, exampleMode || 'building', !!exampleMode);
-      if (!state.setDocument(token, payload, config)) return;
-      state.projectName = (payload.document.filename || file.name).replace(/\.dxf$/i, '').slice(0, 100); $('projectName').value = state.projectName;
-      showDocumentDetails();
-      $('exampleHint').hidden = !exampleMode;
-      setForm(config);
-      const rejectedEntities = payload.document.entities.filter((entity) => entity.status !== 'ready');
-      const rejected = rejectedEntities.length;
-      if (rejected) {
-        renderReport(rejectedEntities.map((entity) => ({ id: entity.id, layer: entity.layer, status: 'failed', reason: entity.reason || '无效或暂未支持的原图实体' })));
-        $('reportSummary').textContent = `导入检查 · ${rejected} 个未支持 / 无效实体`;
-      }
-      notice(`已读取图纸。${rejected ? `其中 ${rejected} 个实体无效或暂未支持；` : ''}请确认单位、图层映射、实体区域及尺寸。`, rejected ? 'warn' : '');
+      acceptDocument(token, payload, exampleMode);
     } catch (error) { if (state.isCurrent(token)) notice(errorMessage(error), 'error'); }
     finally { state.finish(token); if (state.isCurrent(token)) refresh(); }
   }
@@ -535,7 +828,7 @@ export async function startCadApp(doc = document) {
     const issue = validateConfig(config);
     state.config = clone(config); refresh();
     if (issue) { notice(issue, 'warn'); if (request) { state.finish(request.token); refresh(); } return false; }
-    const { token, signal } = request || startRequest();
+    const { token, signal } = request || startRequest('正在检查轮廓并生成三维模型');
     notice('正在检查轮廓并计算三维几何…');
     const firstModel = !state.model;
     try {
@@ -558,7 +851,7 @@ export async function startCadApp(doc = document) {
         notice(`${errorMessage(error)}${state.model ? ' 当前保留上次生成的模型，本次参数尚未应用。' : ''}`, 'error');
       }
       return false;
-    } finally { state.finish(token); if (state.isCurrent(token)) { refresh(); renderInspector(); } }
+    } finally { state.finish(token); if (state.isCurrent(token)) { refresh(); renderInspector(); scheduleAnalysis(); } }
   }
 
   async function runCommand(message) {
@@ -592,7 +885,7 @@ export async function startCadApp(doc = document) {
   }
 
   async function exportModel(format) {
-    if (!state.canExport || !serviceReady() || $('exportConfirmation').value !== CONFIRMATION) return;
+    if (!state.canExport || !serviceReady() || $('exportConfirmation').value !== CONFIRMATION || (format === 'step' && !capability?.step_available)) return;
     const modelId = state.modelId;
     const { token, signal } = startRequest(); notice('正在准备模型与参数下载…');
     try {
@@ -616,6 +909,55 @@ export async function startCadApp(doc = document) {
   for (const type of ['dragleave', 'drop']) dropzone.addEventListener(type, (event) => { event.preventDefault(); dropzone.classList.remove('dragging'); });
   dropzone.addEventListener('drop', (event) => { const file = event.dataTransfer.files[0]; if (file) importFile(file); });
   $('clearFile').addEventListener('click', clear);
+  $('cancelOperation').addEventListener('click', cancelOperation);
+  $('closeScan').addEventListener('click', async () => { if (activeImportOperation) await cancelOperation(); state.scan = null; refresh(); });
+  $('scanLayerFilter').addEventListener('input', renderScanLayers);
+  $('scanSelectAll').addEventListener('click', () => { if (state.busy) return; scanLayersSelected = new Set((state.scan?.index.layers || []).map((layer) => layer.name)); renderScanLayers(); renderScanPreview(); refresh(); });
+  $('scanSelectNone').addEventListener('click', () => { if (state.busy) return; scanLayersSelected.clear(); renderScanLayers(); renderScanPreview(); refresh(); });
+  $('resetScanBounds').addEventListener('click', () => { if (state.busy) return; scanBoundInputs().forEach((input) => { input.value = ''; }); renderScanPreview(); });
+  for (const input of scanBoundInputs()) input.addEventListener('input', renderScanPreview);
+  $('importScanSelection').addEventListener('click', importScanSelection);
+  wireRectangle($('scanSvg'), () => $('scanInteraction').value || 'box', (bounds) => { scanBoundInputs().forEach((input, index) => { input.value = Number(bounds[index].toPrecision(12)); }); renderScanPreview(); });
+  $('fitScan').addEventListener('click', () => { scanView = null; renderScanPreview(); });
+  $('scanSvg').addEventListener('wheel', (event) => {
+    if (!state.scan || !scanView || state.busy) return; event.preventDefault();
+    const point = pointInSvg($('scanSvg'), event), factor = Math.exp(Math.max(-1, Math.min(1, event.deltaY * .0015)));
+    if (scanView[2] * factor < 1e-9 || scanView[2] * factor > 1e15) return;
+    scanView = [point[0] + (scanView[0] - point[0]) * factor, point[1] + (scanView[1] - point[1]) * factor, scanView[2] * factor, scanView[3] * factor]; $('scanSvg').setAttribute('viewBox', scanView.join(' '));
+  }, { passive: false });
+  for (const [id, action] of [['includePicked', 'only'], ['addPicked', 'add'], ['excludePicked', 'exclude'], ['resetSelection', 'reset']]) $(id).addEventListener('click', () => { if (!state.document || state.busy || (action !== 'reset' && !state.pickedIds.length)) return; setSelection(editSelection(readConfig(), state.pickedIds, action)); });
+  $('undoSelection').addEventListener('click', () => { if (state.busy || !state.selectionHistory.length) return; const previous = state.selectionHistory.pop(); state.config = detachDimensionBindings({ ...readConfig(), selection: previous.selection, dimension_bindings: previous.bindingConfig.dimension_bindings || [] }, previous.bindingConfig); visibleGroup = null; renderSelectionGroups(); renderDimensions(); renderDrawing(); scheduleAnalysis(); refresh(); notice('已恢复上一次实体选集、分组和仍适用的尺寸绑定。'); });
+  $('saveSelectionGroup').addEventListener('click', () => {
+    if (state.busy || !state.pickedIds.length) return;
+    const name = $('selectionGroupName').value.trim(); if (!name) { notice('请先填写实体分组名称。', 'warn'); return; }
+    const config = readConfig(); config.selection = clone(selectionOf(config));
+    const groups = config.selection.groups, group = { name, entity_ids: [...state.pickedIds] }, index = groups.findIndex((item) => item.name === name);
+    if (index < 0 && groups.length >= 64) { notice('每个项目最多保存 64 个分组，请删除不再需要的分组。', 'warn'); return; }
+    if (index < 0) groups.push(group); else groups[index] = group;
+    setSelection(config); $('selectionGroups').value = String(index < 0 ? groups.length : index + 1); refresh(); notice(`已保存分组“${name}”，请保存项目以便下次恢复。`);
+  });
+  $('selectionGroups').addEventListener('change', refresh);
+  $('showSelectionGroup').addEventListener('click', () => { if (state.busy || !currentGroup()) return; visibleGroup = new Set(currentGroup().entity_ids); drawingView = null; renderDrawing(); notice('当前只显示所选分组；建模范围保持不变。'); });
+  $('useSelectionGroup').addEventListener('click', () => { if (state.busy || !currentGroup()) return; setSelection(editSelection(readConfig(), currentGroup().entity_ids, 'only')); });
+  $('deleteSelectionGroup').addEventListener('click', () => { if (state.busy || !currentGroup()) return; const config = readConfig(); config.selection = clone(selectionOf(config)); config.selection.groups.splice(Number($('selectionGroups').value) - 1, 1); visibleGroup = null; setSelection(config); });
+  $('showAllEntities').addEventListener('click', () => { visibleGroup = null; drawingView = null; renderDrawing(); });
+  $('fitDrawing').addEventListener('click', () => { drawingView = null; renderDrawing(); });
+  function pickRegion(bounds, additive = false) {
+    const entities = state.analysis?.preview_entities || state.document?.entities || [];
+    const picked = idsInBounds(entities.filter((entity) => !visibleGroup || visibleGroup.has(entity.id)), bounds);
+    state.pickedIds = additive ? [...new Set([...state.pickedIds, ...picked])] : picked;
+    if (state.pickedIds.length) selectEntity(state.pickedIds[0]); else { state.selectedId = null; highlightSelection(); renderInspector(); refresh(); }
+  }
+  $('pickVisible').addEventListener('click', () => { if (state.busy || !drawingView) return; const [x, y, width, height] = drawingView; pickRegion([x, -(y + height), x + width, -y]); });
+  wireRectangle($('drawingSvg'), () => $('drawingInteraction').value || 'pick', pickRegion);
+  $('drawingSvg').addEventListener('wheel', (event) => {
+    if (!state.document || !drawingView || state.busy) return; event.preventDefault();
+    const point = pointInSvg($('drawingSvg'), event), factor = Math.exp(Math.max(-1, Math.min(1, event.deltaY * .0015)));
+    if (drawingView[2] * factor < 1e-9 || drawingView[2] * factor > 1e15) return;
+    drawingView = [point[0] + (drawingView[0] - point[0]) * factor, point[1] + (drawingView[1] - point[1]) * factor, drawingView[2] * factor, drawingView[3] * factor]; $('drawingSvg').setAttribute('viewBox', drawingView.join(' '));
+  }, { passive: false });
+  $('analyzeDrawing').addEventListener('click', () => { clearTimeout(analysisTimer); analyze(); });
+  $('bindDimension').addEventListener('click', bindDimension);
   $('projectName').addEventListener('input', () => { state.projectName = $('projectName').value; refresh(); });
   $('saveDraft').addEventListener('click', () => saveProject(false));
   $('saveVersion').addEventListener('click', () => saveProject(true));
@@ -636,7 +978,7 @@ export async function startCadApp(doc = document) {
       const current = next.layers[layer.name];
       next.layers[layer.name] = current === 'ignore' ? 'ignore' : next.mode === 'section' ? 'section' : ['wall', 'column', 'slab'].includes(layer.suggested_role) ? layer.suggested_role : 'ignore';
     }
-    next.overrides = {}; next.confirmed_solid = false; setForm(next); edited();
+    next.overrides = {}; next.dimension_bindings = []; next.confirmed_solid = false; setForm(next); edited();
   });
   $('drawingUnit').addEventListener('change', edited); $('curveTolerance').addEventListener('input', edited); $('solidConfirmed').addEventListener('change', edited);
   $('buildModel').addEventListener('click', () => build());
@@ -667,7 +1009,8 @@ export async function startCadApp(doc = document) {
   for (const button of all('[data-export]')) button.addEventListener('click', () => exportModel(button.dataset.export));
   $('fitView').addEventListener('click', () => viewer?.fit());
   $('toggleEdges').addEventListener('click', () => { edgesVisible = !edgesVisible; viewer?.setEdges(edgesVisible); $('toggleEdges').setAttribute('aria-pressed', String(edgesVisible)); });
-  window.addEventListener('beforeunload', () => { requestController?.abort(); viewer?.dispose(); });
+  state.dispose = () => { clearTimeout(analysisTimer); analysisController?.abort(); analysisSequence += 1; requestController?.abort(); state.sequence += 1; viewer?.dispose(); };
+  window.addEventListener('beforeunload', state.dispose);
   updateParameterRows(); refresh();
 
   // A missing graphics driver never blocks source inspection, parameter entry, or export.
