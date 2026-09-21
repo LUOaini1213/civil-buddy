@@ -280,6 +280,19 @@ def _deliverables(root: Path, sid: str, run_id: str, result: dict, eid: str) -> 
     return saved
 
 
+def _error_extras(root: Path, sid: str, text: str, files: list[dict], run_ids: list[str]) -> dict:
+    """What a failing turn had already produced: the text so far and the files earlier experts
+    wrote. The page shows them next to the error instead of losing them until the session is
+    reopened."""
+    extras = {"partial_text": (text or "").strip(), "deliverables": list(files or []), "run_ids": list(run_ids or [])}
+    if run_ids:
+        try:
+            extras["deliverable_runs"] = deliverable_runs([r for r in read_runs(root, sid) if r.get("run_id") in run_ids])
+        except Exception:  # pragma: no cover - a broken run record must not hide the error itself
+            logger.exception("deliverable_runs failed while reporting an error for %s", sid)
+    return extras
+
+
 def _record(root: Path, turn: dict, result: dict, deliverables: list[dict], nodes: list[dict]) -> None:
     rid = result["run_id"]
     path = root / turn["session_id"] / "runs" / rid / "workbench.json"
@@ -526,10 +539,11 @@ def _stream_turn(root: Path, turn: dict, *, key_available: bool, plain_runner, l
         _record(root, turn, {"run_id": uuid4().hex, "ok": False, "error_code": "model_error"}, [],
                 [{"kind": "error", "title": "模型问答未完成", "detail": str(exc)}])
         failure_recorded = True
-        yield _event("error", text=str(exc))
+        yield _event("error", text=str(exc), **_error_extras(root, sid, "\n\n".join(texts) or "".join(partial), files, run_ids))
     except Exception:
         logger.exception("Workbench turn failed for session %s", sid)
-        yield _event("error", text="本轮未完成，请检查模型设置或本地日志后重试。")
+        yield _event("error", text="本轮未完成，请检查模型设置或本地日志后重试。",
+                     **_error_extras(root, sid, "\n\n".join(texts) or "".join(partial), files, run_ids))
     finally:
         try:
             if user_saved and not assistant_saved:

@@ -150,18 +150,26 @@ const watch = createSessionWatch({
   now: () => Date.now(),
 });
 
-/* 手机回到前台（iOS 后台会掐掉 fetch 流）：没有活动流时，检查当前任务是否还在服务端跑。 */
-document.addEventListener("visibilitychange", () => {
-  if (document.visibilityState !== "visible" || runState.active || !state.session) return;
+/* 手机回到前台（iOS 后台会掐掉 fetch 流）、从 bfcache 回来（pageshow persisted）、断网恢复（online）：
+   没有活动流时，检查当前任务是否还在服务端跑，在跑就接上。 */
+function cbCheckForegroundTurn(reason) {
+  if (runState.active || !state.session) return;
   fetch("/api/sessions/" + encodeURIComponent(state.session))
     .then((r) => (r.ok ? r.json() : null))
     .then((d) => {
       if (d && d.turn_state && d.turn_state.active && !runState.active && state.session === d.session_id) {
-        cbAttachToTurn(d.session_id, "回到前台；");
+        cbAttachToTurn(d.session_id, reason);
       }
     })
     .catch(() => {});
+}
+document.addEventListener("visibilitychange", () => {
+  if (document.visibilityState === "visible") cbCheckForegroundTurn("回到前台；");
 });
+if (typeof window.addEventListener === "function") {
+  window.addEventListener("pageshow", (ev) => { if (ev && ev.persisted) cbCheckForegroundTurn("回到页面；"); });
+  window.addEventListener("online", () => cbCheckForegroundTurn("网络恢复；"));
+}
 
 async function cbRequestCancellation(run) {
   if (!run || run.cancelRequested) return;

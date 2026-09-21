@@ -213,7 +213,13 @@ test("turn-stream: the handler paints tokens, records the answer once on done, a
   h("done", JSON.stringify({ text: "已生成的一部分，完", deliverables: [] }), "4");
   assert.equal(v.complete, true);
   assert.deepEqual(t.state.history, [{ role: "assistant", content: "已生成的一部分，完" }]);
-  assert.throws(() => h("error", JSON.stringify({ text: "模型说不行" }), "5"), (e) => e.name === "TurnError" && /模型说不行/.test(e.message));
+  const painted = [];
+  t.deps.turnUi.appendDocCards = (files, bodyEl, opts) => painted.push({ files, runs: opts && opts.runs });
+  assert.throws(() => h("error", JSON.stringify({ text: "模型说不行", deliverables: [{ path: "/o/r1/1-日报.md", name: "日报.md", run_id: "r1" }], deliverable_runs: [{ run_id: "r1" }] }), "5"),
+    (e) => e.name === "TurnError" && /模型说不行/.test(e.message));
+  assert.equal(painted.length, 1, "files that were already written are shown next to the error");
+  assert.deepEqual(painted[0].files.map((f) => f.name), ["日报.md"]);
+  assert.deepEqual(painted[0].runs, [{ run_id: "r1" }]);
   assert.throws(() => h("done", "not-json", "6"), (e) => e.name === "TurnError");
   t.setActive(null);
   h("token", JSON.stringify({ text: "晚到的" }), "7");

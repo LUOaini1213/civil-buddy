@@ -141,6 +141,17 @@ export function createTurnStream(deps) {
         ui.log().scrollTop = ui.log().scrollHeight;
       }
       if (eventName === "error") {
+        /* 已经写好的文书随错误一起来：当场画出来，别让人重开会话才找到 */
+        const files = Array.isArray(data.deliverables) ? data.deliverables : [];
+        if (files.length) {
+          const bodyEl = turnBubble(v);
+          turnUi.setLastDeliverables(files);
+          turnUi.appendDocCards(files, bodyEl, { runs: data.deliverable_runs });
+        }
+        if (data.partial_text && !v.acc) {
+          v.acc = data.partial_text;
+          turnBubble(v).textContent = v.acc;
+        }
         throw turnError(data.text || "error");
       }
       if (eventName === "done") {
