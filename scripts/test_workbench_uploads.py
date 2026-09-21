@@ -69,7 +69,7 @@ class UploadTests(unittest.TestCase):
         self.assertEqual(meta["name"], "清单.txt")
         self.assertEqual(meta["bytes"], len(raw))
         self.assertEqual(uploads.list_uploads("session-one"), [meta])
-        directory = uploads.UPLOAD_ROOT / "session-one"
+        directory = uploads.session_uploads_dir("session-one")
         self.assertEqual((directory / f"{meta['id']}.bin").read_bytes(), raw)
         text = uploads.read_upload("session-one", meta["id"], offset=3, limit=8)
         self.assertIn("offset=3 本段8字", text)
@@ -117,7 +117,7 @@ class UploadTests(unittest.TestCase):
             with self.assertRaises(OSError):
                 uploads.save_upload("session-one", "one.txt", b"valid attachment text")
         self.assertEqual(uploads.list_uploads("session-one"), [])
-        self.assertEqual(list((uploads.UPLOAD_ROOT / "session-one").iterdir()), [])
+        self.assertEqual(list(uploads.session_uploads_dir("session-one").iterdir()), [])
 
     def test_size_limits_are_checked_before_writes(self) -> None:
         with patch.object(uploads, "MAX_BYTES", 10), self.assertRaises(uploads.UploadTooLarge):
@@ -191,7 +191,7 @@ class UploadTests(unittest.TestCase):
         self.assertIn("中文附件", text)
 
     def test_corrupt_and_incomplete_metadata_is_not_listed(self) -> None:
-        directory = uploads.UPLOAD_ROOT / "session-one"
+        directory = uploads.session_uploads_dir("session-one")
         directory.mkdir(parents=True)
         (directory / "abc123def456.json").write_text("not json", encoding="utf-8")
         (directory / "abcdef123456.json").write_text(json.dumps({"id": "abcdef123456", "name": "missing.txt"}), encoding="utf-8")

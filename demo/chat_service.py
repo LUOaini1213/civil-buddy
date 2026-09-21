@@ -354,8 +354,8 @@ def session_detail(root: Path, sid: str) -> dict:
     detail["attachments"] = [f for f in list_uploads(sid) if f["id"] in selected]
     detail["expert_ids"] = runs[-1].get("expert_ids", [runs[-1].get("expert_id", "")]) if runs else []
     detail["expert_ids"] = [eid for eid in detail["expert_ids"] if get_expert(eid)]
-    current = turn_control.status(sid)
-    if not current["active"] and runs:
+    current = turn_status(root, sid)
+    if not current["active"] and runs and current["state"] in {"idle", "done"}:
         current["state"] = runs[-1].get("state", "done")
     detail["turn_state"] = current
     from session_context import detail as context_detail
@@ -583,17 +583,321 @@ def _bound_detached_turn(control, finished: threading.Event):
     threading.Thread(target=watch, name="civil-detached-" + control.session, daemon=True).start()
 
 
+_LIVE_MAX_SESSIONS = 256
+_LIVE: dict[str, dict] = {}
+_LIVE_LOCK = threading.Lock()
+_LIVE_COND = threading.Condition(_LIVE_LOCK)
+# Everything the browser acts on gets a sequence number and a line in the log; the 0.5 s
+# heartbeat is transport noise and gets neither.
+_LOGGED_EVENTS = frozenset({"session", "context", "status", "token", "error", "done", "collaboration"})
+
+
+def _events_dir(root: Path, sid: str) -> Path:
+    return root / sid / "events"
+
+
+# ---- On-disk turn state: what a restart needs to know about a turn that was running.
+# One JSON per turn beside its event log: {turn_id, session_id, state, pid, started_at,
+# heartbeat_at, finished_at, seq}. "running" is only trusted while the pid is this process and
+# turn_control still holds the turn; anything else found running at startup becomes "stale".
+_STATE_HEARTBEAT_SEC = 2.0
+_TERMINAL_STATES = frozenset({"done", "failed", "cancelled", "stale"})
+
+
+def _state_path(root: Path, sid: str, turn_id: str) -> Path:
+    return _events_dir(root, sid) / f"{turn_id}.state.json"
+
+
+def _write_state(path: Path, payload: dict) -> None:
+    tmp = path.with_suffix(path.suffix + ".tmp")
+    tmp.write_text(json.dumps(payload, ensure_ascii=False), encoding="utf-8")
+    os.replace(tmp, path)
+
+
+def _read_state(path: Path) -> dict | None:
+    try:
+        row = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return None
+    return row if isinstance(row, dict) and row.get("turn_id") else None
+
+
+def _now() -> str:
+    return datetime.now(timezone.utc).isoformat()
+
+
+def turn_state_on_disk(root: Path, sid: str) -> dict | None:
+    """State file of the session's latest turn, or None when it never ran a logged turn."""
+    latest = _events_dir(root, sid) / "latest"
+    if not latest.is_file():
+        return None
+    return _read_state(_state_path(root, sid, latest.read_text(encoding="utf-8").strip()))
+
+
+def turn_status(root: Path, sid: str) -> dict:
+    """turn_control's view plus what the disk remembers: after a restart the memory tables are
+    empty, so "idle" is wrong for a session whose last turn was cut off — that one is "stale"."""
+    current = turn_control.status(sid)
+    current.update(live_seq(sid))
+    if current["active"]:
+        return current
+    row = turn_state_on_disk(root, sid)
+    if row:
+        if row.get("state") == "running":
+            # Found running on disk but not in memory: nobody is producing it. Same rule as sweep.
+            row = _mark_stale(root, sid, row)
+        if current["state"] == "idle" or not current["turn_id"]:
+            current["state"] = row.get("state", current["state"])
+        current.setdefault("turn_id", "")
+        if not current["turn_id"]:
+            current["turn_id"] = row.get("turn_id", "")
+            current["seq"] = int(row.get("seq") or 0)
+        current["finished_at"] = row.get("finished_at", "")
+    return current
+
+
+def _mark_stale(root: Path, sid: str, row: dict) -> dict:
+    row = {**row, "state": "stale", "finished_at": row.get("finished_at") or _now(),
+           "reason": "服务重启时这一轮还在跑，没有跑完"}
+    try:
+        _write_state(_state_path(root, sid, row["turn_id"]), row)
+    except OSError:
+        logger.exception("could not mark %s stale", sid)
+    return row
+
+
+def sweep_stale(root: Path) -> list[dict]:
+    """Startup: every turn still marked running on disk was cut off by the previous process.
+    Mark it stale so lists and session detail stop calling it running (or idle)."""
+    marked = []
+    if not root.is_dir():
+        return marked
+    for path in root.glob("*/events/*.state.json"):
+        row = _read_state(path)
+        if not row or row.get("state") != "running":
+            continue
+        sid = row.get("session_id") or path.parents[1].name
+        if row.get("pid") == os.getpid() and turn_control.status(sid)["active"]:
+            continue  # this process, still producing: not stale
+        marked.append(_mark_stale(root, sid, row))
+    if marked:
+        logger.warning("marked %d turn(s) stale after restart: %s", len(marked),
+                       ", ".join(sorted({m["session_id"] for m in marked})))
+    return marked
+
+
+def _live_begin(root: Path, sid: str, turn_id: str) -> None:
+    """Open the event log of a new turn: memory for the followers, disk for the restart."""
+    folder = _events_dir(root, sid)
+    folder.mkdir(parents=True, exist_ok=True)
+    fh = open(folder / f"{turn_id}.jsonl", "a", encoding="utf-8")
+    with _LIVE_COND:
+        old = _LIVE.pop(sid, None)
+        if old and old.get("fh"):
+            old["fh"].close()
+            old["fh"] = None
+        while len(_LIVE) >= _LIVE_MAX_SESSIONS:
+            gone = _LIVE.pop(next(iter(_LIVE)))
+            if gone.get("fh"):
+                gone["fh"].close()
+        _LIVE[sid] = {"turn_id": turn_id, "seq": 0, "events": [], "done": False, "fh": fh,
+                      "state_path": _state_path(root, sid, turn_id), "state_at": 0.0}
+        _LIVE_COND.notify_all()
+    (folder / "latest").write_text(turn_id, encoding="utf-8")
+    _write_state(_state_path(root, sid, turn_id), {
+        "turn_id": turn_id, "session_id": sid, "state": "running", "pid": os.getpid(),
+        "started_at": _now(), "heartbeat_at": _now(), "finished_at": "", "seq": 0})
+
+
+def _live_note(sid: str, event: dict) -> None:
+    """Number the event, keep it for followers, append it to the turn's log."""
+    if event["event"] not in _LOGGED_EVENTS:
+        return
+    with _LIVE_COND:
+        live = _LIVE.get(sid)
+        if live is None or live["done"]:
+            return
+        live["seq"] += 1
+        event["seq"] = live["seq"]
+        live["events"].append(event)
+        if event["event"] in {"done", "error"}:
+            live["done"] = True
+        fh = live.get("fh")
+        if fh:
+            try:
+                fh.write(json.dumps({"seq": event["seq"], "event": event["event"], "data": event["data"]},
+                                    ensure_ascii=False) + "\n")
+                fh.flush()
+            except OSError:
+                logger.exception("event log write failed for %s", sid)
+            if live["done"]:
+                fh.close()
+                live["fh"] = None
+        now = time.monotonic()
+        if live.get("state_path") and (now - live["state_at"] >= _STATE_HEARTBEAT_SEC or live["done"]):
+            live["state_at"] = now
+            _touch_state(live["state_path"], seq=live["seq"])
+        _LIVE_COND.notify_all()
+
+
+def _touch_state(path: Path, **fields) -> None:
+    row = _read_state(path)
+    if not row or row.get("state") in _TERMINAL_STATES:
+        return
+    row.update(fields, heartbeat_at=_now())
+    try:
+        _write_state(path, row)
+    except OSError:
+        logger.exception("turn state heartbeat failed: %s", path)
+
+
+def _finish_state(sid: str, state: str) -> None:
+    with _LIVE_COND:
+        live = _LIVE.get(sid)
+        path = live.get("state_path") if live else None
+        seq = live["seq"] if live else 0
+    if not path:
+        return
+    row = _read_state(path)
+    if not row or row.get("state") in _TERMINAL_STATES:
+        return
+    row.update(state=state, seq=seq, finished_at=_now(), heartbeat_at=_now())
+    try:
+        _write_state(path, row)
+    except OSError:
+        logger.exception("turn state finish failed: %s", path)
+
+
+def _live_close(sid: str) -> None:
+    """The producer is gone: whatever it managed to say is final now."""
+    with _LIVE_COND:
+        live = _LIVE.get(sid)
+        if live is None:
+            return
+        live["done"] = True
+        if live.get("fh"):
+            live["fh"].close()
+            live["fh"] = None
+        _LIVE_COND.notify_all()
+
+
+def live_seq(sid: str) -> dict:
+    """turn_id / seq / done of the session's current or last turn (for turn_state)."""
+    with _LIVE_COND:
+        live = _LIVE.get(sid)
+        if live is None:
+            return {"turn_id": "", "seq": 0, "log_done": False}
+        return {"turn_id": live["turn_id"], "seq": live["seq"], "log_done": live["done"]}
+
+
+def has_event_log(root: Path, sid: str) -> bool:
+    with _LIVE_COND:
+        if sid in _LIVE:
+            return True
+    return (_events_dir(root, sid) / "latest").is_file()
+
+
+def replay_events(root: Path, sid: str, after: int = 0, *, ping: float = 15.0):
+    """Yield the turn's events with seq > after; while the turn is still running, keep
+    yielding new ones as they come (a {"event": "ping"} every `ping` seconds of silence so the
+    connection stays alive). GET /api/sessions/{sid}/events is a thin wrapper.
+
+    From memory when the turn is current or recent; from events/<latest>.jsonl otherwise
+    (after a restart, or for an old turn the memory table evicted).
+    """
+    valid_session(sid)
+    with _LIVE_COND:
+        live = _LIVE.get(sid)
+    if live is None:
+        folder = _events_dir(root, sid)
+        latest = folder / "latest"
+        if not latest.is_file():
+            raise LookupError("no event log for this session")
+        path = folder / f"{latest.read_text(encoding='utf-8').strip()}.jsonl"
+        if not path.is_file():
+            raise LookupError("event log missing")
+        with open(path, encoding="utf-8") as fh:
+            for line in fh:
+                line = line.strip()
+                if not line:
+                    continue
+                try:
+                    row = json.loads(line)
+                except ValueError:
+                    continue
+                if int(row.get("seq") or 0) > after:
+                    yield row
+        return
+    i = 0
+    while True:
+        with _LIVE_COND:
+            if i >= len(live["events"]) and not live["done"]:
+                _LIVE_COND.wait(timeout=ping)
+            batch = live["events"][i:]
+            i = len(live["events"])
+            done = live["done"]
+        if not batch and not done:
+            yield {"event": "ping", "data": {}}
+            continue
+        for event in batch:
+            if event["seq"] > after:
+                yield event
+        if done and i >= len(live["events"]):
+            return
+
+
+def live_state(sid: str) -> dict:
+    """What a detached turn has produced so far (GET /api/sessions/{sid}/live), derived from
+    the event log: text so far, last status line, seq. Kept for pages that poll instead of
+    following /events.
+    """
+    valid_session(sid)
+    current = turn_control.status(sid)
+    text, status, phase, seq, done, turn_id = "", "", "", 0, False, ""
+    with _LIVE_COND:
+        live = _LIVE.get(sid)
+        if live is not None:
+            seq, done, turn_id = live["seq"], live["done"], live["turn_id"]
+            for event in live["events"]:
+                kind, data = event["event"], event["data"]
+                if kind == "token":
+                    text += str(data.get("text") or "")
+                elif kind == "status":
+                    status, phase = str(data.get("text") or ""), str(data.get("phase") or "")
+                elif kind == "done":
+                    text = str(data.get("text") or text)
+    return {"session_id": sid, "active": current["active"], "state": current["state"], "turn_id": turn_id,
+            "seq": seq, "text": text, "status": status, "phase": phase, "done": done}
+
+
+def start_background_turn(root: Path, turn: dict, *, key_available: bool, plain_runner, lease: SessionLease) -> dict:
+    """Run a turn with no browser attached from the start: the same producer, event log, state
+    file and lease as a streamed turn — it is simply detached before anyone reads it. The page
+    sees it as a running session (list, /events, toast on completion); there is no separate
+    "thread" object any more."""
+    gen = stream_turn(root, turn, key_available=key_available, plain_runner=plain_runner, lease=lease)
+    next(gen, None)  # starts the producer thread; the first frame is the session event
+    gen.close()      # no reader: stream_turn's finally disconnects the lease, the turn keeps running
+    return {"ok": True, "background": True, "session_id": turn["session_id"], "turn_id": turn["turn_id"],
+            "state": turn_control.status(turn["session_id"])["state"]}
+
+
 def stream_turn(root: Path, turn: dict, *, key_available: bool, plain_runner, lease: SessionLease):
     """A turn owns its lease until persistence, even after the browser disconnects."""
     queue = Queue(maxsize=64)
     finished = threading.Event()
     detached = lease.detached
     lease.start()
+    turn["turn_id"] = turn.get("turn_id") or uuid4().hex[:12]
+    _live_begin(root, turn["session_id"], turn["turn_id"])
 
     def produce():
         try:
             with turn_control.using(lease.control):
                 for event in _stream_turn(root, turn, key_available=key_available, plain_runner=plain_runner, lease=lease):
+                    if event["event"] in {"session", "context"}:
+                        event["data"].setdefault("turn_id", turn["turn_id"])
+                    _live_note(turn["session_id"], event)
                     while not detached.is_set() and (not lease.control.event.is_set() or event["event"] in {"done", "error"}):
                         try:
                             queue.put(event, timeout=0.05)
@@ -602,7 +906,9 @@ def stream_turn(root: Path, turn: dict, *, key_available: bool, plain_runner, le
                             if lease.control.event.is_set():
                                 break
         finally:
+            _live_close(turn["session_id"])
             lease.finish()
+            _finish_state(turn["session_id"], lease.control.state if lease.control.state in _TERMINAL_STATES else "done")
             finished.set()
 
     threading.Thread(target=produce, name="civil-turn-" + turn["session_id"], daemon=True).start()

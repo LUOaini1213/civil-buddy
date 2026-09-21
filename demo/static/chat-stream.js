@@ -18,6 +18,7 @@
     let buffer = "";
     let eventName = "message";
     let dataLines = [];
+    let lastId = "";
     let ended = false;
     let cancelled = null;
     const cancel = () => {
@@ -33,7 +34,7 @@
         const hasData = dataLines.length > 0;
         eventName = "message";
         dataLines = [];
-        if (hasData) await onEvent(name, data);
+        if (hasData) await onEvent(name, data, lastId);
         return;
       }
       if (value[0] === ":") return; // Keepalive comment.
@@ -43,6 +44,8 @@
       if (data[0] === " ") data = data.slice(1);
       if (field === "event") eventName = data || "message";
       if (field === "data") dataLines.push(data);
+      if (field === "id") lastId = data; // Sequence number of this and later frames until the next id.
+
     };
     const drain = async (final) => {
       let start = 0;

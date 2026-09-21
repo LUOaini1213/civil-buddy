@@ -272,7 +272,7 @@ class SessionBundleTests(unittest.TestCase):
     def test_restore_after_relocation_does_not_reference_original_paths(self):
         raw, done = self.backup()
         moved = self.root / "new-install"
-        with patch.object(flow.workbench, "OUT_ROOT", moved / "out"), patch.object(flow.uploads, "UPLOAD_ROOT", moved / "uploads"):
+        with patch.object(flow.workbench, "OUT_ROOT", moved / "out"), patch.object(flow.uploads, "UPLOAD_ROOT", moved / "out"):
             response = self.client.post("/api/session-import", content=raw)
             self.assertEqual(response.status_code, 200, response.text)
             sid = response.json()["session_id"]

@@ -52,7 +52,7 @@
 | 应用 | `python -m packing_assistant.civil app` → :8765 工作台（threads / 审批 / 技能） |
 | IDE | `ide/cursor/mcp.json` · `ide/vscode/mcp.json` · `civil mcp --pack construction` |
 | App Server | `civil serve`：JSON-RPC `thread/start` · `turn/start`（土木 harness，不是官方 Codex 二进制） |
-| 并行 | `/bg` 或 `POST /api/threads` `background: true`（同 session 仍串行） |
+| 并行 | `/bg` 或 `POST /api/chat` `background: true`：同一条 chat 接口，只是没有人在读，202 回 `session_id`；页面把它当运行中的会话跟进（同 session 仍串行） |
 | 沙箱 / 审批 | `read-only` \| `workspace-write` · `untrusted` \| `on-request` \| `never` |
 
 对照腾讯云 WorkBuddy（2026-08-20 官网 [intl.cloud.tencent.com/products/workbuddy](https://intl.cloud.tencent.com/products/workbuddy) · [codebuddy.cn/work](https://www.codebuddy.cn/work/)）：它卖「自然语言 → 规划步骤 → **授权文件夹里读写 Word/Excel** → 成品」，另加桌面壳、IM、100+ 通岗、云端托管。本仓对齐 **同一条回路里的本地成稿**：作业根（`CIVIL_JOB_ROOT`）里读本机表、另存 `.xlsx`，点名已有工作簿时只改 `CB草稿-*` 表；construction 模板 `.docx`。**不**做桌面壳、IM、100 个办公专家、云端 7×24、接管 Word/Excel 窗口、默认 `D:\layout`。成品永远是内部讨论草稿，不是可直接验收的签认件。

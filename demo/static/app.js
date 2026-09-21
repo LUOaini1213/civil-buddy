@@ -11,7 +11,6 @@ const state = {
   attachments: [],
   attachmentRoles: {},
   jobRoot: "",
-  threadId: "",
   lastSend: "", /* ux(round7)：纠偏卡「重试」重放同 payload */
   policy: { sandbox: "workspace-write", approval: "on-request" },
   context: {
@@ -106,7 +105,8 @@ function cbRunPaint(running) {
     }
   }
   const stop = $("stop");
-  if (stop) { stop.hidden = !running; stop.disabled = false; stop.textContent = "停止"; }
+  /* 没有取消能力的后端上，停止只会断开浏览器这一端，服务端那轮照跑：不要摆一个假按钮。 */
+  if (stop) { stop.hidden = !running || cbCapability("cancel") === false; stop.disabled = false; stop.textContent = "停止"; }
   const form = $("form");
   if (form) form.setAttribute("aria-busy", String(running));
 }
@@ -134,10 +134,86 @@ function cbDetachActiveRun() {
   cbBackgroundSessions.add(run.session);
   cbAnnounce("任务继续在后台运行，回到该任务可查看结果");
   loadThreads().catch(() => {});
+  cbBgSchedule();
 }
 
 const cbBackgroundSessions = new Set();
 let cbWatchTimer = null;
+
+/* 切走的任务跑完了要有人说一声：只要列表里还有「运行中」的会话，就每 5 s 拉一次
+   /api/sessions，从运行中变成不运行的那一个弹一条可点的提示，点了就切过去。
+   当前会话由 cbWatchSession 自己盯着，这里只管别的。 */
+let cbBgTimer = null;
+let cbBgKnownRunning = new Set();
+let cbBgRows = new Map();
+
+function cbBgObserve(rows) {
+  const nowRunning = new Set();
+  for (const s of rows || []) {
+    if (!s || !s.session_id) continue;
+    cbBgRows.set(s.session_id, s);
+    if (s.running === true) nowRunning.add(s.session_id);
+  }
+  for (const sid of new Set([...cbBgKnownRunning, ...cbBackgroundSessions])) {
+    if (nowRunning.has(sid) || sid === state.session) continue;
+    cbBackgroundSessions.delete(sid);
+    const row = cbBgRows.get(sid);
+    if (!row) continue; /* 列表里已经没有它了：不猜结果 */
+    cbToast(`「${row.title || sid}」已在后台完成`, { action: "查看", onAction: () => cbProjOpenSession(row) });
+  }
+  cbBgKnownRunning = nowRunning;
+  cbBgSchedule();
+}
+
+function cbBgSchedule() {
+  if (cbBgTimer) { clearTimeout(cbBgTimer); cbBgTimer = null; }
+  const others = [...new Set([...cbBgKnownRunning, ...cbBackgroundSessions])].filter((sid) => sid !== state.session);
+  if (!others.length) return;
+  cbBgTimer = setTimeout(cbBgTick, 5000);
+}
+
+async function cbBgTick() {
+  cbBgTimer = null;
+  let rows = null;
+  try {
+    const r = await fetch("/api/sessions?limit=100");
+    if (r.ok) rows = (await r.json()).sessions;
+  } catch (_) { /* 网络抖动：下一拍再试 */ }
+  if (!Array.isArray(rows)) { cbBgSchedule(); return; }
+  const before = new Set(cbBgKnownRunning);
+  cbBgObserve(rows);
+  const changed = before.size !== cbBgKnownRunning.size || [...before].some((sid) => !cbBgKnownRunning.has(sid));
+  if (changed) loadThreads().catch(() => {});
+}
+
+/* 页面上唯一的可见提示条：一次一条，6 s 自己消失，可带一个动作按钮。 */
+let cbToastTimer = null;
+function cbToast(text, opts) {
+  const options = opts || {};
+  let box = $("cbToast");
+  if (!box) {
+    box = document.createElement("div");
+    box.id = "cbToast";
+    box.className = "cb-toast";
+    box.setAttribute("role", "status");
+    document.body.appendChild(box);
+  }
+  box.innerHTML = "";
+  const msg = document.createElement("span");
+  msg.textContent = String(text || "");
+  box.appendChild(msg);
+  if (options.action && typeof options.onAction === "function") {
+    const btn = document.createElement("button");
+    btn.type = "button";
+    btn.textContent = options.action;
+    btn.addEventListener("click", () => { box.hidden = true; options.onAction(); });
+    box.appendChild(btn);
+  }
+  box.hidden = false;
+  cbAnnounce(text);
+  if (cbToastTimer) clearTimeout(cbToastTimer);
+  cbToastTimer = setTimeout(() => { box.hidden = true; }, 6000);
+}
 
 /* 旁观中的后台轮次：页面上没有流，但服务端这一轮还在跑，会话因此是忙的（再发消息只会 409）。
    所以它要按「运行中」来画，也要能被停止——否则回到任务的人只能干等到完成或服务端超时。
@@ -157,7 +233,7 @@ document.addEventListener("visibilitychange", () => {
     .then((r) => (r.ok ? r.json() : null))
     .then((d) => {
       if (d && d.turn_state && d.turn_state.active && !cbActiveRun && state.session === d.session_id) {
-        cbWatchSession(d.session_id, { bodyEl: null, reason: "回到前台；" });
+        cbAttachToTurn(d.session_id, "回到前台；");
       }
     })
     .catch(() => {});
@@ -188,6 +264,8 @@ async function cbWatchSession(sid, opts) {
         /* 没有取消能力的后端上，停止按钮什么也做不了：不要摆一个假的。 */
         if ($("stop") && cbCapability("cancel") !== true) $("stop").hidden = true;
       }
+      await cbPaintLive(sid, options);
+      if (superseded()) { if (cbWatchedRun && cbWatchedRun.session === sid) cbReleaseWatch(); return; }
       cbWatchTimer = setTimeout(tick, 1500);
       return;
     }
@@ -204,8 +282,45 @@ async function cbWatchSession(sid, opts) {
   tick();
 }
 
+/* 旁观时也要看得见它跑到哪：服务端把这一轮已产出的正文和最近一条状态留在内存里
+   （GET /api/sessions/{sid}/live），每一拍拉一次，有变化就画。没有气泡的（切回来的会话）先补一个。 */
+async function cbPaintLive(sid, options) {
+  if (cbCapability("live_progress") !== true) return;
+  let live = null;
+  try {
+    const r = await fetch("/api/sessions/" + encodeURIComponent(sid) + "/live");
+    if (r.ok) live = await r.json();
+  } catch (_) { /* 下一拍再试 */ }
+  if (!live || state.session !== sid || cbActiveRun) return;
+  if (options.liveSeq === live.seq) return;
+  options.liveSeq = live.seq;
+  if (!live.text && !live.status) return;
+  let bodyEl = options.bodyEl && options.bodyEl.isConnected ? options.bodyEl : null;
+  if (!bodyEl && live.text) {
+    bodyEl = addMsg("assistant", "岗位", "");
+    options.bodyEl = bodyEl;
+  }
+  if (bodyEl && live.text && bodyEl.textContent !== live.text) {
+    bodyEl.textContent = live.text;
+    $("log").scrollTop = $("log").scrollHeight;
+  }
+  if (live.status && !live.done) {
+    let line = options.liveStatusEl && options.liveStatusEl.isConnected ? options.liveStatusEl : null;
+    if (!line) {
+      line = document.createElement("p");
+      line.className = "status-line";
+      line.dataset.live = "1";
+      const host = bodyEl ? bodyEl.parentElement : $("log");
+      if (host) host.appendChild(line);
+      options.liveStatusEl = line;
+    }
+    line.textContent = "后台进行中 · " + live.status;
+  }
+}
+
 /* 把服务端留存的最后一条助手回复 + 交付物补画到当前视图（断流恢复 / 后台任务完成）。 */
 function cbPaintRecovered(d, options) {
+  if (options.liveStatusEl && options.liveStatusEl.isConnected) options.liveStatusEl.remove();
   const transcript = Array.isArray(d.transcript) ? d.transcript : [];
   const last = transcript.filter((t) => t && t.role === "assistant").slice(-1)[0];
   const text = last ? String(last.text || "") : "";
@@ -294,6 +409,47 @@ function cbApplyHealth(health) {
   cbSyncSend();
 }
 
+/* Optional shared secret (CIVIL_TOKEN on the server, for CIVIL_HOST=0.0.0.0). Kept in a
+   cookie so plain download links and uploads carry it too; asked for once — on boot when
+   /api/health says auth is on, or on the first 401 — then every /api/ fetch retries once. */
+const TOKEN_COOKIE = "cb_token";
+let tokenPromptOpen = false;
+
+function hasToken() {
+  return document.cookie.split(";").some((c) => c.trim().startsWith(`${TOKEN_COOKIE}=`));
+}
+
+function setToken(tok) {
+  const v = encodeURIComponent((tok || "").trim());
+  document.cookie = `${TOKEN_COOKIE}=${v}; path=/; max-age=${60 * 60 * 24 * 30}; SameSite=Lax`;
+}
+
+async function askToken(reason) {
+  if (tokenPromptOpen) return false;
+  tokenPromptOpen = true;
+  try {
+    const tok = window.prompt(`${reason || "这个工作台需要访问口令"}（CIVIL_TOKEN）`);
+    if (!tok) return false;
+    setToken(tok);
+    return true;
+  } finally {
+    tokenPromptOpen = false;
+  }
+}
+
+(function guardApiFetch() {
+  if (typeof window.fetch !== "function") return;
+  const rawFetch = window.fetch.bind(window);
+  window.fetch = async function cbFetch(input, init) {
+    const res = await rawFetch(input, init);
+    const url = typeof input === "string" ? input : (input && input.url) || "";
+    if (res.status === 401 && url.startsWith("/api/") && !(init && init.cbRetried)) {
+      if (await askToken("口令缺失或不对")) return cbFetch(input, { ...(init || {}), cbRetried: true });
+    }
+    return res;
+  };
+})();
+
 async function boot() {
   const request = cbSessionRequest;
   const remembered = cbRememberedSession();
@@ -303,6 +459,9 @@ async function boot() {
       if (!r.ok) throw new Error(await apiError(r) || "HTTP " + r.status);
       return r.json();
     });
+    if (health && health.capabilities && health.capabilities.auth && !hasToken()) {
+      await askToken("这个工作台开了访问口令");
+    }
     cbApplyHealth(health);
     if (health.context) state.context = { ...state.context, ...health.context };
     CB_PACK_TRIAL = cbPackTrialFrom(health);
@@ -345,18 +504,72 @@ function cbAttachRender() {
   const box = $("attaches");
   if (!box) return;
   box.innerHTML = "";
-  if (!state.attachments.length) {
+  const pending = cbUploadsPending.filter((u) => u.session === state.session);
+  if (!state.attachments.length && !pending.length) {
     box.hidden = true;
     return;
   }
   box.hidden = false;
+  for (const u of pending) {
+    const chip = document.createElement("span");
+    chip.className = "cb-att-chip pending" + (u.error ? " err" : "");
+    chip.dataset.upload = u.key;
+    const nm = document.createElement("span");
+    nm.className = "cb-att-name";
+    nm.textContent = u.name;
+    nm.title = u.name;
+    chip.appendChild(nm);
+    if (u.error) {
+      const er = document.createElement("span");
+      er.className = "cb-att-size";
+      er.textContent = "失败：" + u.error;
+      er.title = u.error;
+      chip.appendChild(er);
+      const retry = document.createElement("button");
+      retry.type = "button";
+      retry.className = "cb-att-x";
+      retry.textContent = "重试";
+      retry.addEventListener("click", () => { u.error = ""; cbUploadPump(); });
+      chip.appendChild(retry);
+    } else {
+      const bar = document.createElement("span");
+      bar.className = "cb-att-bar";
+      bar.setAttribute("role", "progressbar");
+      bar.setAttribute("aria-label", "上传 " + u.name);
+      bar.appendChild(document.createElement("i"));
+      chip.appendChild(bar);
+      const pct = document.createElement("span");
+      pct.className = "cb-att-pct";
+      pct.textContent = u.xhr ? "0%" : "排队";
+      chip.appendChild(pct);
+    }
+    const x = document.createElement("button");
+    x.type = "button";
+    x.className = "cb-att-x";
+    x.textContent = "\u00d7";
+    x.setAttribute("aria-label", "取消上传 " + u.name);
+    x.addEventListener("click", () => {
+      if (u.xhr) u.xhr.abort();
+      cbUploadDrop(u);
+      cbAttachRender();
+      cbUploadPump();
+    });
+    chip.appendChild(x);
+    box.appendChild(chip);
+    cbAttachPaintProgress(u);
+  }
   for (const f of state.attachments) {
     const chip = document.createElement("span");
     chip.className = "cb-att-chip";
-    const nm = document.createElement("span");
+    const byRef = cbCapability("file_ref") === true && f.id && !String(f.id).startsWith("job:") && state.session;
+    const nm = document.createElement(byRef ? "a" : "span");
     nm.className = "cb-att-name";
     nm.textContent = f.name || f.id;
-    nm.title = f.name || f.id;
+    nm.title = byRef ? "下载原件 " + (f.name || f.id) : (f.name || f.id);
+    if (byRef) {
+      nm.href = `/api/file?session=${encodeURIComponent(state.session)}&upload=${encodeURIComponent(f.id)}&name=${encodeURIComponent(f.name || f.id)}`;
+      nm.setAttribute("download", f.name || f.id);
+    }
     chip.appendChild(nm);
     const role = document.createElement("select");
     role.className = "cb-att-role";
@@ -402,37 +615,152 @@ async function cbAttachUpload(fileList) {
   const files = Array.from(fileList || []);
   if (!files.length) return;
   const session = state.session;
+  let slots = cbUploadSlotsLeft(session);
+  const refused = [];
+  const queued = [];
   for (const file of files) {
-    if (state.session !== session) return;
-    try {
-      const fd = new FormData();
-      fd.append("session_id", session);
-      fd.append("file", file);
-      const r = await fetch("/api/upload", { method: "POST", body: fd });
-      if (!r.ok) throw new Error(await apiError(r) || "HTTP " + r.status);
-      const meta = await r.json();
-      if (state.session !== session) return;
-      /* /api/upload 回的是 {ok, files:[{id,name,bytes,...}]}，不是裸 meta。
-         首版按 meta.id 取，chip 永远是空的 —— 实测发现（返回体包了一层）。 */
-      const items = Array.isArray(meta && meta.files) ? meta.files : (meta && meta.id ? [meta] : []);
-      if (!items.length) throw new Error("工作台未返回附件信息，请重试上传。");
-      for (const item of items) {
-        if (item && item.id && !state.attachments.some((a) => a.id === item.id)) {
-          state.attachments.push(item);
-        }
-      }
-    } catch (e) {
-      if (state.session !== session) return;
-      addStatus("附件上传失败（" + file.name + "）：" + ((e && e.message) || e));
-    }
+    const why = cbUploadPrecheck(file);
+    if (why) { refused.push(`${file.name}：${why}`); continue; }
+    if (slots <= 0) { refused.push(`${file.name}：同一会话最多 ${CB_UPLOAD_LIMITS.maxFiles} 个附件`); continue; }
+    slots -= 1;
+    cbUploadKey += 1;
+    const u = { key: "up" + cbUploadKey, session, name: file.name, bytes: file.size || 0, loaded: 0, xhr: null, file, error: "", done: false };
+    cbUploadsPending.push(u);
+    queued.push(u);
+  }
+  if (refused.length) addStatus("未上传：" + refused.join("；"));
+  cbUploadPump();
+  /* 等这一批都有结果（成功、失败或被取消）再返回：调用方（拖拽 / 粘贴 / 选择器）不关心进度 */
+  await Promise.all(queued.map((u) => u.settled || Promise.resolve()));
+}
+
+/* 服务端的门槛（demo/uploads.py）在这里先问一遍：类型、单文件 20 MB、一个会话 12 个。
+   手机 4G 上传完 20 MB 才被告知"不支持 .pptx"是最伤人的一种失败。 */
+const CB_UPLOAD_LIMITS = { maxBytes: 20 * 1024 * 1024, maxFiles: 12,
+  ext: ["pdf", "docx", "xlsx", "txt", "md", "csv", "json", "log"] };
+const CB_UPLOAD_CONCURRENCY = 2;
+/* 进行中的上传：{ key, session, name, bytes, loaded, xhr, file, error, done } —— 和 state.attachments 一起画成 chip。 */
+const cbUploadsPending = [];
+let cbUploadKey = 0;
+
+function cbUploadPrecheck(file) {
+  const name = String(file.name || "");
+  const ext = (name.match(/\.([A-Za-z0-9]+)$/) || [, ""])[1].toLowerCase();
+  if (!CB_UPLOAD_LIMITS.ext.includes(ext)) return `不支持 .${ext || "?"}，只收 ${CB_UPLOAD_LIMITS.ext.map((e) => "." + e).join(" ")}`;
+  if (file.size > CB_UPLOAD_LIMITS.maxBytes) return `单文件不能超过 ${fmtBytes(CB_UPLOAD_LIMITS.maxBytes)}（这个 ${fmtBytes(file.size)}）`;
+  return "";
+}
+
+function cbUploadSlotsLeft(session) {
+  const have = state.attachments.filter((a) => !String(a.id || "").startsWith("job:")).length
+    + cbUploadsPending.filter((u) => u.session === session && !u.error).length;
+  return CB_UPLOAD_LIMITS.maxFiles - have;
+}
+
+function cbUploadDrop(u) {
+  const i = cbUploadsPending.indexOf(u);
+  if (i >= 0) cbUploadsPending.splice(i, 1);
+  if (u.resolve) u.resolve();
+}
+
+function cbUploadAbortAll(exceptSession) {
+  for (const u of cbUploadsPending.slice()) {
+    if (exceptSession && u.session === exceptSession) continue;
+    if (u.xhr) { u.xhr.abort(); u.xhr = null; }
+    cbUploadDrop(u);
+  }
+}
+
+function cbUploadPump() {
+  for (const u of cbUploadsPending) {
+    if (cbUploadsPending.filter((v) => v.xhr).length >= CB_UPLOAD_CONCURRENCY) break;
+    if (u.xhr || u.error || u.done) continue;
+    cbUploadStart(u);
   }
   cbAttachRender();
-  const tbl = state.attachments.some((a) =>
-    /\.(xlsx|xlsm|csv|tsv)$/i.test(String(a.name || ""))
-  );
-  if (tbl) addStatus(cbCapability("packing") === false
-    ? "表格已上传：可让岗位根据表格内容整理清单或草稿。"
-    : "表格已上传：说「装箱」即可按这张表算，柜数与坐标仍由 tools 计算。");
+}
+
+function cbUploadAccept(u, meta) {
+  /* /api/upload 回的是 {ok, files:[{id,name,bytes,...}]}，不是裸 meta。 */
+  const items = Array.isArray(meta && meta.files) ? meta.files : (meta && meta.id ? [meta] : []);
+  if (!items.length) return "工作台未返回附件信息，请重试上传。";
+  for (const item of items) {
+    if (item && item.id && !state.attachments.some((a) => a.id === item.id)) state.attachments.push(item);
+  }
+  return "";
+}
+
+function cbUploadFinish(u, err) {
+  u.xhr = null;
+  if (err) {
+    u.error = err;
+    addStatus("附件上传失败（" + u.name + "）：" + err);
+    if (u.resolve) u.resolve(); /* 调用方不等「重试」 */
+  } else {
+    u.done = true;
+    cbUploadDrop(u);
+  }
+  cbAttachRender();
+  cbUploadPump();
+}
+
+function cbUploadStart(u, retried) {
+  if (!u.settled) u.settled = new Promise((resolve) => { u.resolve = resolve; });
+  if (typeof XMLHttpRequest !== "function") { cbUploadStartFetch(u); return; }
+  const xhr = new XMLHttpRequest();
+  u.xhr = xhr; u.loaded = 0; u.error = "";
+  const fd = new FormData();
+  fd.append("session_id", u.session);
+  fd.append("file", u.file);
+  xhr.upload.onprogress = (ev) => {
+    if (ev.lengthComputable) u.loaded = ev.loaded;
+    cbAttachPaintProgress(u);
+  };
+  xhr.onload = async () => {
+    if (state.session !== u.session) { cbUploadDrop(u); cbAttachRender(); cbUploadPump(); return; }
+    if (xhr.status === 401 && !retried) {
+      if (await askToken("上传需要口令，填好后再传一次")) { cbUploadStart(u, true); return; }
+    }
+    if (xhr.status < 200 || xhr.status >= 300) {
+      let msg = "HTTP " + xhr.status;
+      try { const j = JSON.parse(xhr.responseText); if (typeof j.detail === "string") msg = j.detail; } catch (e) { /* 非 JSON */ }
+      cbUploadFinish(u, msg); return;
+    }
+    let meta = null;
+    try { meta = JSON.parse(xhr.responseText); } catch (e) { cbUploadFinish(u, "工作台未返回附件信息，请重试上传。"); return; }
+    cbUploadFinish(u, cbUploadAccept(u, meta));
+  };
+  xhr.onerror = () => cbUploadFinish(u, "网络错误，可点「重试」");
+  xhr.onabort = () => { u.xhr = null; cbAttachRender(); cbUploadPump(); };
+  xhr.open("POST", "/api/upload");
+  xhr.send(fd);
+  cbAttachRender();
+}
+
+/* 没有 XMLHttpRequest 的环境（自动化测试）：老的 fetch 通道，语义相同，只是没有进度。 */
+async function cbUploadStartFetch(u) {
+  u.xhr = { abort() {} };
+  const fd = new FormData();
+  fd.append("session_id", u.session);
+  fd.append("file", u.file);
+  try {
+    const r = await fetch("/api/upload", { method: "POST", body: fd });
+    if (state.session !== u.session) { cbUploadDrop(u); cbAttachRender(); cbUploadPump(); return; }
+    if (!r.ok) throw new Error(await apiError(r) || "HTTP " + r.status);
+    cbUploadFinish(u, cbUploadAccept(u, await r.json()));
+  } catch (e) {
+    if (state.session !== u.session) { cbUploadDrop(u); cbAttachRender(); cbUploadPump(); return; }
+    cbUploadFinish(u, (e && e.message) || String(e));
+  }
+}
+
+function cbAttachPaintProgress(u) {
+  if (!document.querySelector) return;
+  const bar = document.querySelector(`[data-upload="${u.key}"] .cb-att-bar > i`);
+  const pct = document.querySelector(`[data-upload="${u.key}"] .cb-att-pct`);
+  const ratio = u.bytes ? Math.min(1, u.loaded / u.bytes) : 0;
+  if (bar) bar.style.width = Math.round(ratio * 100) + "%";
+  if (pct) pct.textContent = Math.round(ratio * 100) + "%";
 }
 
 function cbAttachInit() {
@@ -452,6 +780,10 @@ function cbAttachInit() {
       composer.classList.add("drop");
     });
     composer.addEventListener("dragleave", () => composer.classList.remove("drop"));
+    composer.addEventListener("paste", (ev) => {
+      const items = ev.clipboardData && ev.clipboardData.files;
+      if (items && items.length) { ev.preventDefault(); cbAttachUpload(items); }
+    });
     composer.addEventListener("drop", async (ev) => {
       ev.preventDefault();
       composer.classList.remove("drop");
@@ -576,11 +908,12 @@ function cbNewLocalSession() {
   cbDetachActiveRun();
   cbRememberSession("");
   if ($("confirmOk")) $("confirmOk").value = "";
-  state.threadId = "";
   state.attachments = [];
   state.attachmentRoles = {};
-  cbAttachRender();
   state.session = cbSessionId();
+  cbUploadAbortAll(state.session);
+  cbAttachRender();
+  cbDraftRestore();
   state.history = [];
   cbContextReset();
   state.summoned.clear();
@@ -611,6 +944,30 @@ function cbContextReset() {
   if ($("ctxMemoryStatus")) $("ctxMemoryStatus").textContent = "";
   cbContextRebuildControls(false);
 }
+
+/* 输入到一半切去别的会话，回来时话还在：草稿按会话存 localStorage，发送后清掉。 */
+const CB_DRAFT_PREFIX = "cb_draft:";
+function cbDraftSave() {
+  const ta = $("input");
+  if (!ta || !state.session) return;
+  try {
+    if (ta.value.trim()) localStorage.setItem(CB_DRAFT_PREFIX + state.session, ta.value);
+    else localStorage.removeItem(CB_DRAFT_PREFIX + state.session);
+  } catch (e) { /* 存储不可用：不存 */ }
+}
+function cbDraftClear(sid) {
+  try { localStorage.removeItem(CB_DRAFT_PREFIX + (sid || state.session)); } catch (e) { /* 忽略 */ }
+}
+function cbDraftRestore() {
+  const ta = $("input");
+  if (!ta) return;
+  let v = "";
+  try { v = localStorage.getItem(CB_DRAFT_PREFIX + state.session) || ""; } catch (e) { /* 忽略 */ }
+  ta.value = v;
+  cbAutosize(ta);
+  cbSyncSend();
+}
+if ($("input")) $("input").addEventListener("input", cbDraftSave);
 
 /* ux(round14)：相对时间（参考图会话列表「名称 + 相对时间」；只抄线程 updated_at 字段） */
 function cbRelTime(ts) {
@@ -689,6 +1046,7 @@ async function loadThreads() {
       fetch("/api/sessions?limit=100").then((r) => (r.ok ? r.json() : null)),
     ]);
     if (!pj || !ss) throw new Error("no-projects-api");
+    cbBgObserve(ss.sessions);
     cbProj.projects = pj.projects || [];
     cbProj.inbox = pj.inbox || null;
     cbProj.sessions = ss.sessions || [];
@@ -776,8 +1134,10 @@ function cbProjRender() {
       const t2 = document.createElement("span");
       t2.className = "t-time";
       const running = s.running === true || cbBackgroundSessions.has(s.session_id);
-      t2.textContent = running ? "运行中" : cbRelTime(s.updated_at);
+      const stale = !running && s.turn_state === "stale";
+      t2.textContent = running ? "运行中" : stale ? "已中断" : cbRelTime(s.updated_at);
       if (running) t2.classList.add("t-running");
+      if (stale) { t2.classList.add("t-stale"); t2.title = "上一轮在服务重启时被中断"; }
       b.append(t1, t2);
       b.addEventListener("click", () => cbProjOpenSession(s));
       kidBox.appendChild(b);
@@ -848,13 +1208,14 @@ async function cbProjOpenSession(s) {
     cbRememberSession(d.session_id);
     cbClearServerHitl();
     if ($("confirmOk")) $("confirmOk").value = "";
-    state.threadId = "";
     state.attachments = Array.isArray(d.attachments) ? d.attachments.filter((file) =>
       file && typeof file.id === "string" && file.id && !file.id.startsWith("job:")) : [];
     state.attachmentRoles = Object.fromEntries(state.attachments.filter(file =>
       d.attachment_roles && ["tender", "response", "reference"].includes(d.attachment_roles[file.id]))
       .map(file => [file.id, d.attachment_roles[file.id]]));
+    cbUploadAbortAll(d.session_id);
     cbAttachRender();
+    cbDraftRestore();
     cbProj.cur = d.project_id || s.project_id || "";
     state.summoned.clear();
     const enabledExperts = new Set(state.experts.filter((expert) => expert && expert.enabled !== false).map((expert) => expert.id));
@@ -896,7 +1257,10 @@ async function cbProjOpenSession(s) {
     if (d.truncated) addStatus("列表只展示近期对话节选。可在「任务记忆与本地搜索」找回已保留的历史原文。");
     if (d.turn_state && d.turn_state.active) {
       addStatus("这个任务仍在后台运行，完成后会自动显示结果。");
-      cbWatchSession(d.session_id, { bodyEl: null });
+      cbAttachToTurn(d.session_id, "");
+    } else if (d.turn_state && d.turn_state.state === "stale") {
+      /* 服务重启时这一轮还在跑：它不会再有结果了，别让人以为还在等 */
+      addStatus("上一轮在服务重启时被中断，已有内容已保留；需要的话重新发送一次。");
     }
     if (d.context && (d.context.note || Number(d.context.limit) > 0)) paintContext(d.context);
     else paintContext(estimateLocalContext());
@@ -910,32 +1274,9 @@ async function cbProjOpenSession(s) {
 
 
 if ($("btnNewThread")) {
-  $("btnNewThread").addEventListener("click", async () => {
-    /* ux(round19) 客户端优先：Rust 工作台没有 /api/threads（只有 Python 参考实现有）。
-       原实现先 await fetch(...).then(r => r.json())，空 body 上抛在 cbResetToEmpty()
-       之前 —— 结果「+ 新建任务」在评委下载的 exe 上是**死键**，还留一条 unhandled
-       rejection。现在先做本地清空（任何后端都生效），再尝试登记远端线程。 */
-    cbNewLocalSession();
-    const request = cbSessionRequest;
-    const localSession = state.session;
-    try {
-      const r = await fetch("/api/threads", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ title: "新对话" }),
-      });
-      if (!r.ok) return;
-      const data = await r.json();
-      if (request !== cbSessionRequest || state.session !== localSession || state.history.length || cbActiveRun) return;
-      if (data && data.thread_id) {
-        state.threadId = data.thread_id;
-        state.session = data.session_id || data.thread_id;
-        await loadThreads();
-      }
-    } catch (e) {
-      /* 无 /api/threads 的后端：本地新会话已经生效，静默即可 */
-    }
-  });
+  /* 新建任务只在本地清屏：会话在第一条消息发出时由 /api/chat 建立，不再向服务端登记「线程」。
+     （ux(round19) 的教训仍然成立：任何后端上这个键都不能是死键。） */
+  $("btnNewThread").addEventListener("click", () => { cbNewLocalSession(); });
 }
 /* ux(round19)：并行任务逻辑从按钮里抽出来。原先 /bg 命令的实现是
    $("btnBg").click()，委托给按钮 —— 一旦按钮从界面移除，/bg 会变成静默空操作
@@ -946,22 +1287,33 @@ async function cbRunBackground(text) {
     addStatus("/bg 先写任务内容");
     return;
   }
+  if (cbCapability("background_turns") === false) {
+    addStatus("当前后端不支持并行任务（需要 background_turns 能力）");
+    return;
+  }
+  const sid = cbSessionId();
   try {
-    const r = await fetch("/api/threads", {
+    const r = await fetch("/api/chat", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
-        text: body,
+        message: body,
         background: true,
+        session_id: sid,
+        project_id: cbProj.cur || "",
+        expert_ids: [...state.summoned],
         confirm_ok: cbConfirmed(),
       }),
     });
-    if (!r.ok) throw new Error("HTTP " + r.status);
+    if (!r.ok) throw new Error(await apiError(r) || "HTTP " + r.status);
     const data = await r.json();
-    addStatus(`并行 thread ${data.thread_id} ${data.state || "running"}`);
+    const started = data.session_id || sid;
+    cbBackgroundSessions.add(started);
+    addStatus(`并行任务已开始（会话 ${started.slice(0, 8)}），完成后会提示；随时可在左栏打开查看进度。`);
     await loadThreads();
+    cbBgSchedule();
   } catch (e) {
-    addStatus("并行任务需要 Python 参考实现（当前后端没有 /api/threads）");
+    addStatus("并行任务未能开始：" + ((e && e.message) || e));
   }
 }
 
@@ -1323,6 +1675,7 @@ $("form").addEventListener("submit", async (ev) => {
   }
   state.lastSend = message; /* ux(round7)：重试=重放同 payload */
   $("input").value = "";
+  cbDraftClear();
   cbAutosize($("input"));
   cbSyncSend();
   cbAtClose();
@@ -1510,92 +1863,200 @@ async function streamChat(message, bodyEl, run) {
     throw new Error(await apiError(res));
   }
   /* ux(round3)：本条消息挂一条阶段时间线（完成后折叠为一行摘要）；ux(round5)：消息原文供审批卡「确认并重提」 */
-  const tl = cbTlCreate(bodyEl, message);
-  let acc = "";
-  let complete = false;
-  let recorded = false;
+  const v = cbTurnView(message, bodyEl, run);
+  run.view = v;
   try {
-    await CB_CHAT_STREAM.read(res.body, (eventName, dataLine) => {
-      if (cbActiveRun !== run || state.session !== run.session) return;
-      if (!["context", "status", "token", "error", "done", "collaboration"].includes(eventName)) return;
-      let data;
-      try { data = JSON.parse(dataLine); }
-      catch (_) { throw new Error("服务器返回了无法解析的回答事件，请重试。"); }
-      if (!data || typeof data !== "object" || Array.isArray(data)) {
-        throw new Error("服务器返回的回答事件格式不完整，请重试。");
+    await CB_CHAT_STREAM.read(res.body, cbTurnHandler(v), { signal: run.controller.signal });
+    if (!v.complete) {
+      /* 流断了（锁屏 / 切 App / 换网络）：服务端这一轮还在跑，并且每一帧都有编号——
+         从最后看到的编号往后续，跟到 done。没有这个能力的后端仍走轮询恢复。 */
+      if (cbCapability("event_log") === true) await cbResumeTurn(v);
+      if (!v.complete) {
+        const dropped = new Error("回答连接已中断，正在从服务端恢复结果…");
+        dropped.name = "StreamDroppedError";
+        throw dropped;
       }
-      if (eventName === "context") {
-        paintContext(data);
-      }
-      if (eventName === "status") {
-        cbEnableServerHitl(data);
-        if (data.phase === "routing" && data.route) cbTaskRoutePaint(data.route, bodyEl, message);
-        if (tl) tl.status(data);
-        if (data.phase === "summon") {
-          complete = false;
-          if (acc) {
-            if (!recorded) state.history.push({ role: "assistant", content: acc });
-            acc = "";
-            bodyEl = addMsg("assistant", skillWho(data.expert || "", "given"), "");
-            run.bodyEl = bodyEl;
-          }
-          recorded = false;
-          const who = bodyEl.parentElement && bodyEl.parentElement.querySelector(".who");
-          if (who && data.expert) who.textContent = skillWho(data.expert, data.skill_source || "");
-        }
-      }
-      if (eventName === "collaboration") cbCollaborationPaint(data, bodyEl);
-      if (eventName === "token") {
-        complete = false;
-        acc += data.text || "";
-        bodyEl.textContent = acc;
-        $("log").scrollTop = $("log").scrollHeight;
-      }
-      if (eventName === "error") {
-        throw new Error(data.text || "error");
-      }
-      if (eventName === "done") {
-        if (cbHitlPending(data)) cbEnableServerHitl(data);
-        else cbClearServerHitl();
-        if (data.route) cbTaskRoutePaint(data.route, bodyEl, message);
-        if (data.collaboration) cbCollaborationPaint(data.collaboration, bodyEl);
-        complete = true;
-        if (tl) {
-          if (cbHitlPending(data)) tl.finish(data);
-          else if (data.ok === false) tl.error(data.text || "工具未完成本轮任务");
-          else tl.finish(data);
-        }
-        if (data.ok !== false && !cbHitlPending(data)) cbObStep(2);
-        /* ux(round11)：流式收口才播报一行（只抄事件字段，不刷屏，附录 J） */
-        cbAnnounce(data.cancelled ? "任务已停止，已有结果已保留。" : cbHitlPending(data) ? "等待签认：请在审批卡键入完整签认句后确认。" : data.ok === false ? "本轮未完成：请查看时间线和工具结果。" : "回答完毕" + (Array.isArray(data.deliverables) && data.deliverables.length ? " · 文书 " + data.deliverables.length + " 份" : ""));
-        acc = data.text || acc;
-        bodyEl.textContent = acc;
-        const whoEl = bodyEl.parentElement && bodyEl.parentElement.querySelector(".who");
-        if (whoEl) whoEl.textContent = skillWho(data.skill || data.expert || "", data.skill_source || "");
-        if (acc && !recorded) {
-          state.history.push({ role: "assistant", content: acc });
-          recorded = true;
-        }
-        if (data.context) paintContext(data.context);
-        else paintContext(estimateLocalContext());
-        renderCites(data.citations || [], bodyEl);
-        cbLastDeliverables = Array.isArray(data.deliverables) ? data.deliverables : []; /* ux(round9)：/doc 最近交付物 */
-        appendDocCards(data.deliverables || [], bodyEl, { runs: data.deliverable_runs });
-        /* ux(round7)：缺数引导条——UNSPECIFIED/[A001] 徽章旁的「去补数」，预填草稿不自动发送 */
-        const miss = typeof CB_FIX !== "undefined" ? CB_FIX.classifyMissing(acc) : null;
-        if (miss) cbFixMount(bodyEl.parentElement, miss);
-        refreshAuditSoon(); /* ux(round6)：本轮完成 → 审计时间线增量刷新（含决策置顶） */
-      }
-    }, { signal: run.controller.signal });
-    if (!complete) {
-      const dropped = new Error("回答连接已中断，正在从服务端恢复结果…");
-      dropped.name = "StreamDroppedError";
-      throw dropped;
     }
     loadThreads().catch(() => {});
   } catch (err) {
-    if (cbActiveRun === run && tl) tl.error(err.name === "AbortError" ? "已停止接收回答" : String(err.message || err));
+    if (cbActiveRun === run && v.tl) v.tl.error(err.name === "AbortError" ? "已停止接收回答" : String(err.message || err));
     throw err;
+  }
+}
+
+/* 一轮回答在页面上的状态：首次的 /api/chat 流、断线后的 /events 续流、切回来时的全量回放，
+   三条路都喂同一个处理器。bodyEl 可以先空着（切回来的会话），第一帧正文到了再补气泡。 */
+function cbTurnView(message, bodyEl, run) {
+  return { message, bodyEl, run, tl: bodyEl ? cbTlCreate(bodyEl, message) : null,
+    acc: "", complete: false, recorded: false, lastSeq: Number(run.lastSeq) || 0 };
+}
+
+function cbTurnBubble(v, who) {
+  if (v.bodyEl) return v.bodyEl;
+  v.bodyEl = addMsg("assistant", who || namesOrPlain(), "");
+  v.run.bodyEl = v.bodyEl;
+  v.tl = cbTlCreate(v.bodyEl, v.message);
+  return v.bodyEl;
+}
+
+function cbTurnHandler(v) {
+  const run = v.run;
+  return (eventName, dataLine, id) => {
+    if (cbActiveRun !== run || state.session !== run.session) return;
+    const seq = Number(id);
+    if (seq > 0) {
+      if (seq <= v.lastSeq) return; // 续流时的重复帧
+      v.lastSeq = seq;
+      run.lastSeq = seq;
+    }
+    if (!["context", "status", "token", "error", "done", "collaboration"].includes(eventName)) return;
+    let data;
+    try { data = JSON.parse(dataLine); }
+    catch (_) { throw new Error("服务器返回了无法解析的回答事件，请重试。"); }
+    if (!data || typeof data !== "object" || Array.isArray(data)) {
+      throw new Error("服务器返回的回答事件格式不完整，请重试。");
+    }
+    if (eventName === "context") {
+      paintContext(data);
+    }
+    if (eventName === "status") {
+      cbEnableServerHitl(data);
+      if (data.phase === "routing" && data.route) cbTaskRoutePaint(data.route, cbTurnBubble(v), v.message);
+      if (v.tl) v.tl.status(data);
+      if (data.phase === "summon") {
+        v.complete = false;
+        if (v.acc) {
+          if (!v.recorded) state.history.push({ role: "assistant", content: v.acc });
+          v.acc = "";
+          v.bodyEl = addMsg("assistant", skillWho(data.expert || "", "given"), "");
+          run.bodyEl = v.bodyEl;
+        }
+        v.recorded = false;
+        const bodyEl = cbTurnBubble(v, skillWho(data.expert || "", "given"));
+        const who = bodyEl.parentElement && bodyEl.parentElement.querySelector(".who");
+        if (who && data.expert) who.textContent = skillWho(data.expert, data.skill_source || "");
+      }
+    }
+    if (eventName === "collaboration") cbCollaborationPaint(data, cbTurnBubble(v));
+    if (eventName === "token") {
+      v.complete = false;
+      v.acc += data.text || "";
+      cbTurnBubble(v).textContent = v.acc;
+      $("log").scrollTop = $("log").scrollHeight;
+    }
+    if (eventName === "error") {
+      throw new Error(data.text || "error");
+    }
+    if (eventName === "done") {
+      const bodyEl = cbTurnBubble(v);
+      if (cbHitlPending(data)) cbEnableServerHitl(data);
+      else cbClearServerHitl();
+      if (data.route) cbTaskRoutePaint(data.route, bodyEl, v.message);
+      if (data.collaboration) cbCollaborationPaint(data.collaboration, bodyEl);
+      v.complete = true;
+      if (v.tl) {
+        if (cbHitlPending(data)) v.tl.finish(data);
+        else if (data.ok === false) v.tl.error(data.text || "工具未完成本轮任务");
+        else v.tl.finish(data);
+      }
+      if (data.ok !== false && !cbHitlPending(data)) cbObStep(2);
+      /* ux(round11)：流式收口才播报一行（只抄事件字段，不刷屏，附录 J） */
+      cbAnnounce(data.cancelled ? "任务已停止，已有结果已保留。" : cbHitlPending(data) ? "等待签认：请在审批卡键入完整签认句后确认。" : data.ok === false ? "本轮未完成：请查看时间线和工具结果。" : "回答完毕" + (Array.isArray(data.deliverables) && data.deliverables.length ? " · 文书 " + data.deliverables.length + " 份" : ""));
+      v.acc = data.text || v.acc;
+      bodyEl.textContent = v.acc;
+      const whoEl = bodyEl.parentElement && bodyEl.parentElement.querySelector(".who");
+      if (whoEl) whoEl.textContent = skillWho(data.skill || data.expert || "", data.skill_source || "");
+      if (v.acc && !v.recorded) {
+        state.history.push({ role: "assistant", content: v.acc });
+        v.recorded = true;
+      }
+      if (data.context) paintContext(data.context);
+      else paintContext(estimateLocalContext());
+      renderCites(data.citations || [], bodyEl);
+      cbLastDeliverables = Array.isArray(data.deliverables) ? data.deliverables : []; /* ux(round9)：/doc 最近交付物 */
+      appendDocCards(data.deliverables || [], bodyEl, { runs: data.deliverable_runs });
+      /* ux(round7)：缺数引导条——UNSPECIFIED/[A001] 徽章旁的「去补数」，预填草稿不自动发送 */
+      const miss = typeof CB_FIX !== "undefined" ? CB_FIX.classifyMissing(v.acc) : null;
+      if (miss) cbFixMount(bodyEl.parentElement, miss);
+      refreshAuditSoon(); /* ux(round6)：本轮完成 → 审计时间线增量刷新（含决策置顶） */
+    }
+  };
+}
+
+/* 续流：GET /api/sessions/{sid}/events?after=N。连不上就退避重试（1 s 起，封顶 15 s），
+   直到 done / error 到手、用户点停止（AbortError 原样抛出）、或服务端说这一轮已经不在跑。 */
+async function cbResumeTurn(v) {
+  const run = v.run;
+  const sid = run.session;
+  let wait = 1000;
+  let announced = false;
+  while (!v.complete) {
+    if (run.controller.signal.aborted) { const e = new Error("aborted"); e.name = "AbortError"; throw e; }
+    if (cbActiveRun !== run || state.session !== sid) return;
+    let res = null;
+    try {
+      res = await fetch(`/api/sessions/${encodeURIComponent(sid)}/events?after=${v.lastSeq}`, { signal: run.controller.signal });
+    } catch (e) {
+      if (e && e.name === "AbortError") throw e;
+    }
+    if (res && res.ok) {
+      if (announced) { cbAnnounce("已重新连上，继续接收回答"); announced = false; }
+      try {
+        await CB_CHAT_STREAM.read(res.body, cbTurnHandler(v), { signal: run.controller.signal });
+      } catch (e) {
+        if (e && e.name === "AbortError") throw e;
+        if (!/中断|network|fetch|load/i.test(String(e && e.message || e))) throw e; // 服务端明确报错：不重试
+      }
+      if (v.complete) return;
+      wait = 1000;
+      /* 流正常结束却没有 done：问一下这一轮还在不在跑；不在了就没什么可等的 */
+      let detail = null;
+      try { const r = await fetch(`/api/sessions/${encodeURIComponent(sid)}`, { signal: run.controller.signal }); if (r.ok) detail = await r.json(); }
+      catch (e) { if (e && e.name === "AbortError") throw e; }
+      if (detail && detail.turn_state && !detail.turn_state.active) return;
+    } else if (res && (res.status === 404 || res.status === 400)) {
+      return; // 没有事件记录：交给轮询恢复
+    }
+    if (!announced) { cbAnnounce("连接中断，正在重连…"); announced = true; }
+    await new Promise((resolve) => setTimeout(resolve, wait));
+    wait = Math.min(wait * 2, 15000);
+  }
+}
+
+/* 切回一个还在跑的会话 / 锁屏回来：没有气泡、没有 run，从头回放这一轮再跟到底。
+   和发送时一样占住 cbActiveRun，停止按钮因此照常工作。 */
+async function cbAttachToTurn(sid, reason) {
+  if (cbCapability("event_log") !== true) { cbWatchSession(sid, { bodyEl: null, reason: reason || "" }); return; }
+  if (cbActiveRun || state.session !== sid) return;
+  cbReleaseWatch();
+  const run = { controller: new AbortController(), session: sid, bodyEl: null, lastSeq: 0, attached: true };
+  const v = cbTurnView("", null, run);
+  run.view = v;
+  cbActiveRun = run;
+  cbRunPaint(true);
+  try {
+    await cbResumeTurn(v);
+    if (!v.complete && cbActiveRun === run) {
+      cbActiveRun = null;
+      cbRunPaint(false);
+      cbWatchSession(sid, { bodyEl: v.bodyEl, reason: reason || "" });
+      return;
+    }
+    if (cbActiveRun === run) { cbBackgroundSessions.delete(sid); addStatus((reason || "") + "任务已在后台完成，结果已恢复。"); loadThreads().catch(() => {}); }
+  } catch (err) {
+    if (cbActiveRun !== run) return;
+    const stopped = err && err.name === "AbortError";
+    if (v.bodyEl) {
+      const note = document.createElement("p");
+      note.className = stopped ? "status-line" : "status-line err";
+      note.textContent = stopped ? "已停止接收回答。已有内容已保留。" : String(err.message || err);
+      v.bodyEl.parentElement.appendChild(note);
+    } else if (!stopped) addStatus(String(err.message || err));
+  } finally {
+    if (cbActiveRun === run) {
+      cbActiveRun = null;
+      cbRunPaint(false);
+    }
   }
 }
 
@@ -2064,11 +2525,22 @@ if ($("ctxQuery")) $("ctxQuery").addEventListener("keydown", event => {
   if (event.key === "Enter" && !event.isComposing) { event.preventDefault(); cbContextSearch(); }
 });
 
-function fileUrl(p, name) {
-  /* Rust canonicalize 返回 \\?\ verbatim 前缀；/api/file 对该形态 404——
+function fileUrl(f, nameOverride) {
+  /* 优先 session/run/file 形式：链接里不带服务器绝对路径，备份导入到另一台机器也还能点。
+     Rust 工作台（没有 file_ref 能力）和老卡片仍用 path=。
+     Rust canonicalize 返回 \\?\ verbatim 前缀；/api/file 对该形态 404——
      剥掉后端点自会 canonicalize（自测发现：此前侧栏下载链接全部 404）。
      name：卡片显示名，服务端据此写 Content-Disposition（手机端不认 download 属性）。 */
-  const q = `/api/file?path=${encodeURIComponent(String(p || "").replace(/^\\\\\?\\/, ""))}`;
+  const rec = f && typeof f === "object" ? f : { path: f };
+  const p = String(rec.path || "").replace(/^\\\\\?\\/, "");
+  const name = nameOverride || rec.name || "";
+  let q;
+  if (cbCapability("file_ref") === true && rec.run_id && state.session && p) {
+    const stored = p.split(/[\\/]/).pop();
+    q = `/api/file?session=${encodeURIComponent(state.session)}&run=${encodeURIComponent(rec.run_id)}&file=${encodeURIComponent(stored)}`;
+  } else {
+    q = `/api/file?path=${encodeURIComponent(p)}`;
+  }
   return name ? q + `&name=${encodeURIComponent(String(name))}` : q;
 }
 
@@ -2080,7 +2552,7 @@ async function openDeliverable(f) {
   cbObStep(3); /* ux(round10)：文书预览打开 → 引导第 3 步打勾 */
   try {
     await window.cbDocOpenUrl({
-      url: fileUrl(f.path),
+      url: fileUrl(f),
       title: f.name || f.title || "交付物文书",
       role: `岗位 · ${f.expert || "未指定"}`,
     });
@@ -2176,7 +2648,7 @@ function appendDocCards(files, bodyEl, opts) {
       for (const f of g.formats) {
         const a = document.createElement("a");
         a.className = "dl";
-        a.href = fileUrl(f.path, f.name);
+        a.href = fileUrl(f);
         a.setAttribute("download", f.name || "文书.md");
         a.textContent = "." + (cbDocExt(f.name) || "文件");
         a.title = "下载 " + (f.name || "");
@@ -4274,4 +4746,23 @@ if ($("railToggle")) {
     const open = rail.classList.toggle("mobile-open");
     $("railToggle").setAttribute("aria-expanded", open ? "true" : "false");
   });
+}
+
+/* 手机键盘：iOS Safari 弹出键盘时 layout viewport 不变、visualViewport 变矮，输入框会被键盘盖住。
+   窄屏且 visualViewport 明显低于窗口高度时把 body 压到 visualViewport 的高度并把对话滚到底；
+   键盘收起后恢复 100dvh。Android Chrome 走 interactive-widget=resizes-content，这里等于不动。 */
+if (window.visualViewport) {
+  const vv = window.visualViewport;
+  let raf = 0;
+  const fit = () => {
+    cancelAnimationFrame(raf);
+    raf = requestAnimationFrame(() => {
+      const narrow = window.matchMedia("(max-width: 768px)").matches;
+      const keyboard = narrow && window.innerHeight - vv.height > 120;
+      document.body.style.height = keyboard ? `${Math.round(vv.height)}px` : "";
+      if (keyboard && $("log")) $("log").scrollTop = $("log").scrollHeight;
+    });
+  };
+  vv.addEventListener("resize", fit);
+  vv.addEventListener("scroll", fit);
 }
