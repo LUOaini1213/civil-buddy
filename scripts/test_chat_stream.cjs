@@ -169,6 +169,64 @@ test("chat rejects truncated responses, keeps partial output and unlocks compose
   assert.match(h.errors[0], /连接已中断/);
 });
 
+const idFrame = (id, name, data) => "id: " + id + "\n" + frame(name, data);
+
+test("a dropped stream resumes from the last id via /events, skips repeats and completes", async () => {
+  const calls = [];
+  const h = ui(async (url) => {
+    calls.push(String(url));
+    if (String(url).startsWith("/api/chat")) {
+      return { ok: true, body: bytesStream(encoder.encode(idFrame(1, "context", {}) + idFrame(2, "token", { text: "已生成" }) + idFrame(3, "token", { text: "的一部分" }))) };
+    }
+    if (String(url).startsWith("/api/sessions/") && String(url).includes("/events?after=3")) {
+      // The server replays from after=3; a repeated frame 3 must be ignored, then the rest and done.
+      return { ok: true, body: bytesStream(encoder.encode(idFrame(3, "token", { text: "的一部分" }) + idFrame(4, "token", { text: "，剩下的" }) + idFrame(5, "done", { text: "已生成的一部分，剩下的" })), 4) };
+    }
+    return { ok: false, status: 500, statusText: "unexpected " + url };
+  });
+  h.evaluate('cbApplyHealth({ has_key: true, capabilities: { chat: true, event_log: true } })');
+  await h.submit("测试任务");
+  const answer = h.messages.find((m) => m.role === "assistant").body;
+  assert.equal(answer.textContent, "已生成的一部分，剩下的");
+  assert.equal(h.evaluate("state.history.length"), 2);
+  assert.equal(h.evaluate("state.history[1].content"), "已生成的一部分，剩下的");
+  assert.ok(calls.some((u) => u.includes("/events?after=3")), calls.join("\n"));
+  assert.equal(h.errors.length, 0, h.errors.join("\n"));
+  assert.equal(h.elements.form["aria-busy"], "false");
+});
+
+test("without the event_log capability a dropped stream still falls back to polling recovery", async () => {
+  const h = ui(async () => ({ ok: true, body: bytesStream(encoder.encode(idFrame(1, "token", { text: "已生成的一部分" }))) }));
+  h.evaluate('cbApplyHealth({ has_key: true, capabilities: { chat: true, event_log: false } })');
+  await h.submit("测试任务");
+  const answer = h.messages.find((m) => m.role === "assistant").body;
+  assert.equal(answer.textContent, "已生成的一部分");
+  assert.match(answer.parentElement.children[1].textContent, /连接已中断/);
+});
+
+test("stop during a resume aborts it and keeps the partial answer", async () => {
+  let resumeStarted;
+  const started = new Promise((resolve) => { resumeStarted = resolve; });
+  const h = ui(async (url, options) => {
+    if (String(url).startsWith("/api/chat")) return { ok: true, body: bytesStream(encoder.encode(idFrame(1, "token", { text: "一半" }))) };
+    if (String(url).includes("/events?after=1")) {
+      resumeStarted();
+      return new Promise((_, reject) => { options.signal.addEventListener("abort", () => { const e = new Error("aborted"); e.name = "AbortError"; reject(e); }); });
+    }
+    return { ok: false, status: 500, statusText: "unexpected " + url };
+  });
+  h.evaluate('cbApplyHealth({ has_key: true, capabilities: { chat: true, cancel: true, event_log: true } })');
+  const running = h.submit("测试任务");
+  await started;
+  assert.equal(h.elements.form["aria-busy"], "true");
+  h.evaluate("cbActiveRun.controller.abort()");
+  await running;
+  const answer = h.messages.find((m) => m.role === "assistant").body;
+  assert.equal(answer.textContent, "一半");
+  assert.match(answer.parentElement.children[1].textContent, /已停止/);
+  assert.equal(h.elements.form["aria-busy"], "false");
+});
+
 test("chat records each expert answer once and identifies an unfinished second expert", async () => {
   const response = frame("done", { text: "第一岗完成" }) +
     frame("status", { phase: "summon", expert: "quality" }) + frame("token", { text: "第二岗未完成" });

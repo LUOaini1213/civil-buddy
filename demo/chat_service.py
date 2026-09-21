@@ -357,6 +357,7 @@ def session_detail(root: Path, sid: str) -> dict:
     current = turn_control.status(sid)
     if not current["active"] and runs:
         current["state"] = runs[-1].get("state", "done")
+    current.update(live_seq(sid))
     detail["turn_state"] = current
     from session_context import detail as context_detail
     detail["context"] = context_detail(root, sid)["context"]
@@ -586,49 +587,162 @@ def _bound_detached_turn(control, finished: threading.Event):
 _LIVE_MAX_SESSIONS = 256
 _LIVE: dict[str, dict] = {}
 _LIVE_LOCK = threading.Lock()
+_LIVE_COND = threading.Condition(_LIVE_LOCK)
+# Everything the browser acts on gets a sequence number and a line in the log; the 0.5 s
+# heartbeat is transport noise and gets neither.
+_LOGGED_EVENTS = frozenset({"session", "context", "status", "token", "error", "done", "collaboration"})
 
 
-def _live_begin(sid: str) -> None:
-    with _LIVE_LOCK:
-        _LIVE.pop(sid, None)
+def _events_dir(root: Path, sid: str) -> Path:
+    return root / sid / "events"
+
+
+def _live_begin(root: Path, sid: str, turn_id: str) -> None:
+    """Open the event log of a new turn: memory for the followers, disk for the restart."""
+    folder = _events_dir(root, sid)
+    folder.mkdir(parents=True, exist_ok=True)
+    fh = open(folder / f"{turn_id}.jsonl", "a", encoding="utf-8")
+    with _LIVE_COND:
+        old = _LIVE.pop(sid, None)
+        if old and old.get("fh"):
+            old["fh"].close()
+            old["fh"] = None
         while len(_LIVE) >= _LIVE_MAX_SESSIONS:
-            _LIVE.pop(next(iter(_LIVE)))
-        _LIVE[sid] = {"seq": 0, "text": "", "status": "", "phase": "", "done": False}
+            gone = _LIVE.pop(next(iter(_LIVE)))
+            if gone.get("fh"):
+                gone["fh"].close()
+        _LIVE[sid] = {"turn_id": turn_id, "seq": 0, "events": [], "done": False, "fh": fh}
+        _LIVE_COND.notify_all()
+    (folder / "latest").write_text(turn_id, encoding="utf-8")
 
 
 def _live_note(sid: str, event: dict) -> None:
-    """Mirror what the browser would have seen: the text so far and the last status line."""
-    kind, data = event["event"], event["data"]
-    with _LIVE_LOCK:
+    """Number the event, keep it for followers, append it to the turn's log."""
+    if event["event"] not in _LOGGED_EVENTS:
+        return
+    with _LIVE_COND:
+        live = _LIVE.get(sid)
+        if live is None or live["done"]:
+            return
+        live["seq"] += 1
+        event["seq"] = live["seq"]
+        live["events"].append(event)
+        if event["event"] in {"done", "error"}:
+            live["done"] = True
+        fh = live.get("fh")
+        if fh:
+            try:
+                fh.write(json.dumps({"seq": event["seq"], "event": event["event"], "data": event["data"]},
+                                    ensure_ascii=False) + "\n")
+                fh.flush()
+            except OSError:
+                logger.exception("event log write failed for %s", sid)
+            if live["done"]:
+                fh.close()
+                live["fh"] = None
+        _LIVE_COND.notify_all()
+
+
+def _live_close(sid: str) -> None:
+    """The producer is gone: whatever it managed to say is final now."""
+    with _LIVE_COND:
         live = _LIVE.get(sid)
         if live is None:
             return
-        if kind == "token":
-            live["text"] += str(data.get("text") or "")
-        elif kind == "status":
-            live["status"] = str(data.get("text") or "")
-            live["phase"] = str(data.get("phase") or "")
-        elif kind in {"done", "error"}:
-            live["done"] = True
-            if kind == "done":
-                live["text"] = str(data.get("text") or live["text"])
-        else:
+        live["done"] = True
+        if live.get("fh"):
+            live["fh"].close()
+            live["fh"] = None
+        _LIVE_COND.notify_all()
+
+
+def live_seq(sid: str) -> dict:
+    """turn_id / seq / done of the session's current or last turn (for turn_state)."""
+    with _LIVE_COND:
+        live = _LIVE.get(sid)
+        if live is None:
+            return {"turn_id": "", "seq": 0, "log_done": False}
+        return {"turn_id": live["turn_id"], "seq": live["seq"], "log_done": live["done"]}
+
+
+def has_event_log(root: Path, sid: str) -> bool:
+    with _LIVE_COND:
+        if sid in _LIVE:
+            return True
+    return (_events_dir(root, sid) / "latest").is_file()
+
+
+def replay_events(root: Path, sid: str, after: int = 0, *, ping: float = 15.0):
+    """Yield the turn's events with seq > after; while the turn is still running, keep
+    yielding new ones as they come (a {"event": "ping"} every `ping` seconds of silence so the
+    connection stays alive). GET /api/sessions/{sid}/events is a thin wrapper.
+
+    From memory when the turn is current or recent; from events/<latest>.jsonl otherwise
+    (after a restart, or for an old turn the memory table evicted).
+    """
+    valid_session(sid)
+    with _LIVE_COND:
+        live = _LIVE.get(sid)
+    if live is None:
+        folder = _events_dir(root, sid)
+        latest = folder / "latest"
+        if not latest.is_file():
+            raise LookupError("no event log for this session")
+        path = folder / f"{latest.read_text(encoding='utf-8').strip()}.jsonl"
+        if not path.is_file():
+            raise LookupError("event log missing")
+        with open(path, encoding="utf-8") as fh:
+            for line in fh:
+                line = line.strip()
+                if not line:
+                    continue
+                try:
+                    row = json.loads(line)
+                except ValueError:
+                    continue
+                if int(row.get("seq") or 0) > after:
+                    yield row
+        return
+    i = 0
+    while True:
+        with _LIVE_COND:
+            if i >= len(live["events"]) and not live["done"]:
+                _LIVE_COND.wait(timeout=ping)
+            batch = live["events"][i:]
+            i = len(live["events"])
+            done = live["done"]
+        if not batch and not done:
+            yield {"event": "ping", "data": {}}
+            continue
+        for event in batch:
+            if event["seq"] > after:
+                yield event
+        if done and i >= len(live["events"]):
             return
-        live["seq"] += 1
 
 
 def live_state(sid: str) -> dict:
-    """What a detached turn has produced so far (GET /api/sessions/{sid}/live).
-
-    The browser that lost its stream polls this instead of staring at an empty bubble until
-    the turn ends. Only the current or last turn of a session is kept, in memory.
+    """What a detached turn has produced so far (GET /api/sessions/{sid}/live), derived from
+    the event log: text so far, last status line, seq. Kept for pages that poll instead of
+    following /events.
     """
     valid_session(sid)
     current = turn_control.status(sid)
-    with _LIVE_LOCK:
-        live = dict(_LIVE.get(sid) or {"seq": 0, "text": "", "status": "", "phase": "", "done": False})
-    live.update(session_id=sid, active=current["active"], state=current["state"])
-    return live
+    text, status, phase, seq, done, turn_id = "", "", "", 0, False, ""
+    with _LIVE_COND:
+        live = _LIVE.get(sid)
+        if live is not None:
+            seq, done, turn_id = live["seq"], live["done"], live["turn_id"]
+            for event in live["events"]:
+                kind, data = event["event"], event["data"]
+                if kind == "token":
+                    text += str(data.get("text") or "")
+                elif kind == "status":
+                    status, phase = str(data.get("text") or ""), str(data.get("phase") or "")
+                elif kind == "done":
+                    text = str(data.get("text") or text)
+    return {"session_id": sid, "active": current["active"], "state": current["state"], "turn_id": turn_id,
+            "seq": seq, "text": text, "status": status, "phase": phase, "done": done}
 
 
 def stream_turn(root: Path, turn: dict, *, key_available: bool, plain_runner, lease: SessionLease):
@@ -637,12 +751,15 @@ def stream_turn(root: Path, turn: dict, *, key_available: bool, plain_runner, le
     finished = threading.Event()
     detached = lease.detached
     lease.start()
-    _live_begin(turn["session_id"])
+    turn["turn_id"] = turn.get("turn_id") or uuid4().hex[:12]
+    _live_begin(root, turn["session_id"], turn["turn_id"])
 
     def produce():
         try:
             with turn_control.using(lease.control):
                 for event in _stream_turn(root, turn, key_available=key_available, plain_runner=plain_runner, lease=lease):
+                    if event["event"] in {"session", "context"}:
+                        event["data"].setdefault("turn_id", turn["turn_id"])
                     _live_note(turn["session_id"], event)
                     while not detached.is_set() and (not lease.control.event.is_set() or event["event"] in {"done", "error"}):
                         try:
@@ -652,6 +769,7 @@ def stream_turn(root: Path, turn: dict, *, key_available: bool, plain_runner, le
                             if lease.control.event.is_set():
                                 break
         finally:
+            _live_close(turn["session_id"])
             lease.finish()
             finished.set()
 

@@ -152,7 +152,7 @@ def health() -> dict:
                          "task_memory": True, "local_rag": True, "task_routing": True,
                          "expert_contracts": True, "tender_collaboration": True, "semantic_summary": True,
                          "asr": _asr_installed(), "auth": bool(auth_token()), "live_progress": True,
-                         "file_ref": True},
+                         "file_ref": True, "event_log": True},
         "deepseek": has_key(),
         "model": llm_model(),
         "context": policy(),
@@ -886,7 +886,33 @@ def chat(body: ChatIn) -> StreamingResponse:
 
 
 def _sse(ev: dict) -> str:
-    return f"event: {ev['event']}\ndata: {json.dumps(ev['data'], ensure_ascii=False)}\n\n"
+    head = f"id: {ev['seq']}\n" if ev.get("seq") else ""
+    return f"{head}event: {ev['event']}\ndata: {json.dumps(ev['data'], ensure_ascii=False)}\n\n"
+
+
+@app.get("/api/sessions/{sid}/events")
+def session_events(sid: str, request: Request, after: int = 0) -> StreamingResponse:
+    """Resume a turn's event stream from seq `after` (or the Last-Event-ID header): replays
+    what the browser missed, then follows the turn live until done. Same frames, same ids as
+    /api/chat, so the page runs one handler for both."""
+    from chat_service import has_event_log, replay_events, valid_session
+
+    try:
+        sid = valid_session(sid)
+    except ValueError as exc:
+        raise HTTPException(400, str(exc)) from exc
+    header = request.headers.get("last-event-id") or ""
+    if header.strip().isdigit():
+        after = max(after, int(header.strip()))
+    if not has_event_log(OUT_ROOT, sid):
+        raise HTTPException(404, "这个会话还没有事件记录")
+
+    def frames():
+        for ev in replay_events(OUT_ROOT, sid, after):
+            yield ": ping\n\n" if ev["event"] == "ping" else _sse(ev)
+
+    return StreamingResponse(frames(), media_type="text/event-stream",
+                             headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"})
 
 
 @app.get("/api/deliverables.zip")

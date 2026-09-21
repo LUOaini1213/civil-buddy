@@ -10,6 +10,7 @@
 
 from __future__ import annotations
 
+import json
 import sys
 import time
 from pathlib import Path
@@ -270,3 +271,88 @@ def test_live_progress_is_visible_while_detached(client, monkeypatch):
     final = client.get(f"/api/sessions/{sid}/live").json()
     assert final["done"] is True and final["active"] is False and "片段13" in final["text"]
     assert client.get("/api/sessions/bad%20id/live").status_code == 400
+
+
+def _read_sse(client, url, headers=None):
+    """Collect (id, event, data) triples from an SSE response until it closes."""
+    out, cur_id, cur_ev, cur_data = [], None, "message", []
+    with client.stream("GET", url, headers=headers or {}) as r:
+        assert r.status_code == 200, r.status_code
+        for raw in r.iter_lines():
+            line = raw if isinstance(raw, str) else raw.decode("utf-8")
+            if line == "":
+                if cur_data:
+                    out.append((cur_id, cur_ev, json.loads("\n".join(cur_data))))
+                cur_id, cur_ev, cur_data = None, "message", []
+                continue
+            if line.startswith(":"):
+                continue
+            field, _, value = line.partition(":")
+            value = value[1:] if value.startswith(" ") else value
+            if field == "id":
+                cur_id = int(value)
+            elif field == "event":
+                cur_ev = value
+            elif field == "data":
+                cur_data.append(value)
+    return out
+
+
+def test_turn_events_are_numbered_logged_and_resumable(client, monkeypatch):
+    """/api/chat 的每一帧带 id；断流后 GET /api/sessions/{sid}/events?after=N 把没看到的补回来并跟到 done；
+    日志落盘 events/<turn>.jsonl，进程重启（清内存表）后照样能回放。"""
+    import app
+    import chat_service
+
+    monkeypatch.setattr("app.has_key", lambda: True)
+    monkeypatch.setattr("app.run_plain", _slow_plain(n=16, dt=0.04))
+    sid = "resume-turn-01"
+    assert client.get("/api/health").json()["capabilities"]["event_log"] is True
+    lease = chat_service.SessionLease(sid)
+    turn = chat_service.prepare_turn(app.OUT_ROOT, {"session_id": sid, "message": "聊聊天气", "expert_ids": []})
+    gen = chat_service.stream_turn(app.OUT_ROOT, turn, key_available=True, plain_runner=app.run_plain, lease=lease)
+    seen, last_seq = [], 0
+    for ev in gen:
+        if ev["event"] == "heartbeat":
+            assert "seq" not in ev
+            continue
+        assert ev["seq"] == last_seq + 1, "每个业务事件递增编号"
+        last_seq = ev["seq"]
+        seen.append(ev)
+        if sum(1 for e in seen if e["event"] == "token") >= 3:
+            break
+    gen.close()  # 锁屏：流断了
+    assert [e["event"] for e in seen[:2]] == ["session", "context"] and seen[1]["data"]["turn_id"] == turn["turn_id"]
+    detail = client.get(f"/api/sessions/{sid}").json()
+    assert detail["turn_state"]["active"] is True and detail["turn_state"]["turn_id"] == turn["turn_id"]
+
+    # 续流：从 last_seq 之后开始，一直跟到 done
+    resumed = _read_sse(client, f"/api/sessions/{sid}/events?after={last_seq}")
+    ids = [i for i, _, _ in resumed]
+    assert ids and ids[0] == last_seq + 1 and ids == sorted(ids) and len(set(ids)) == len(ids)
+    assert resumed[-1][1] == "done" and "片段15" in resumed[-1][2]["text"]
+    assert all(ev != "heartbeat" for _, ev, _ in resumed)
+    assert _wait_idle(sid)
+
+    # Last-Event-ID 头等价于 ?after=
+    by_header = _read_sse(client, f"/api/sessions/{sid}/events", headers={"Last-Event-ID": str(last_seq)})
+    assert [i for i, _, _ in by_header] == ids
+
+    # 全量回放 == 断流前看到的 + 续上的
+    full = _read_sse(client, f"/api/sessions/{sid}/events?after=0")
+    assert [i for i, _, _ in full] == list(range(1, ids[-1] + 1))
+    assert [e for _, e, _ in full][:len(seen)] == [e["event"] for e in seen]
+
+    # 日志在盘上，重启（内存表清空）后回放一致
+    log = app.OUT_ROOT / sid / "events" / f"{turn['turn_id']}.jsonl"
+    assert log.is_file() and (app.OUT_ROOT / sid / "events" / "latest").read_text(encoding="utf-8") == turn["turn_id"]
+    rows = [json.loads(l) for l in log.read_text(encoding="utf-8").splitlines() if l.strip()]
+    assert [r["seq"] for r in rows] == list(range(1, ids[-1] + 1)) and rows[-1]["event"] == "done"
+    chat_service._LIVE.clear()
+    from_disk = _read_sse(client, f"/api/sessions/{sid}/events?after={last_seq}")
+    assert [(i, e) for i, e, _ in from_disk] == [(i, e) for i, e, _ in resumed]
+    assert from_disk[-1][2]["text"] == resumed[-1][2]["text"]
+
+    # 没有记录的会话 → 404；非法 id → 400
+    assert client.get("/api/sessions/never-ran-01/events").status_code == 404
+    assert client.get("/api/sessions/bad%20id/events").status_code == 400
