@@ -25,7 +25,7 @@ def client(tmp_path, monkeypatch):
     import uploads
 
     monkeypatch.setattr(app, "OUT_ROOT", tmp_path / "out")
-    monkeypatch.setattr(uploads, "UPLOAD_ROOT", tmp_path / "uploads")
+    monkeypatch.setattr(uploads, "UPLOAD_ROOT", tmp_path / "out")  # attachments live inside the session dir
     return TestClient(app.app)
 
 
@@ -77,3 +77,50 @@ def test_index_stamps_static_links_and_static_revalidates(client):
     assert s.status_code == 200
     assert s.headers["cache-control"] == "no-cache"
     assert "etag" in s.headers or "last-modified" in s.headers
+
+
+def test_uploads_live_in_the_session_dir_and_download_by_ref(client):
+    """附件和会话其它数据放在一起：<OUT_ROOT>/<sid>/uploads/；原件按 ?session=&upload=<id> 下载，不带路径。"""
+    import app
+
+    sid = "sess-up-01"
+    r = client.post("/api/upload", data={"session_id": sid}, files={"file": ("投标说明.txt", "第一章 总则：本项目位于某市，工期 180 天。\n".encode("utf-8"), "text/plain")})
+    assert r.status_code == 200, r.text
+    item = r.json()["files"][0]
+    stored = app.OUT_ROOT / sid / "uploads" / f"{item['id']}.bin"
+    assert stored.is_file(), sorted(p.name for p in (app.OUT_ROOT / sid).rglob("*"))
+    assert not (Path(app.__file__).parent / "data" / "uploads" / sid).exists()
+
+    d = client.get("/api/file", params={"session": sid, "upload": item["id"]})
+    assert d.status_code == 200 and d.content == "第一章 总则：本项目位于某市，工期 180 天。\n".encode("utf-8")
+    assert "%E6%8A%95%E6%A0%87%E8%AF%B4%E6%98%8E.txt" in d.headers["content-disposition"]  # 投标说明.txt
+    assert client.get("/api/file", params={"session": sid, "upload": "no-such-id"}).status_code == 404
+    assert client.get("/api/file", params={"session": sid, "upload": "../x"}).status_code == 400
+    # the session detail / attachment list still sees it
+    assert [f["id"] for f in client.get("/api/attachments", params={"session_id": sid}).json()["files"]] == [item["id"]]
+
+
+def test_legacy_uploads_are_adopted_into_the_session_dir(client, tmp_path, monkeypatch):
+    """老布局 <demo>/data/uploads/<sid> 在启动扫描或第一次访问时搬进 <OUT_ROOT>/<sid>/uploads。"""
+    import shutil
+
+    import app
+    import uploads
+
+    legacy_root = tmp_path / "legacy"
+    monkeypatch.setattr(uploads, "LEGACY_UPLOAD_ROOT", legacy_root)
+    for sid in ("old-a", "old-b"):
+        saved = uploads.save_upload(sid, "旧附件.md", "# 旧附件\n\n这是迁移前的一份说明，内容足够长。\n".encode("utf-8"))
+        assert saved["id"]
+        legacy_root.mkdir(exist_ok=True)
+        shutil.move(str(app.OUT_ROOT / sid / "uploads"), str(legacy_root / sid))  # 伪造旧布局
+        assert not (app.OUT_ROOT / sid / "uploads").exists() and (legacy_root / sid).is_dir()
+
+    # first touch adopts old-a
+    assert [f["name"] for f in uploads.list_uploads("old-a")] == ["旧附件.md"]
+    assert (app.OUT_ROOT / "old-a" / "uploads").is_dir() and not (legacy_root / "old-a").exists()
+    # startup migration adopts what is left
+    assert uploads.migrate_legacy_uploads() == 1
+    assert (app.OUT_ROOT / "old-b" / "uploads").is_dir() and not (legacy_root / "old-b").exists()
+    assert uploads.migrate_legacy_uploads() == 0
+    assert [f["name"] for f in client.get("/api/attachments", params={"session_id": "old-b"}).json()["files"]] == ["旧附件.md"]

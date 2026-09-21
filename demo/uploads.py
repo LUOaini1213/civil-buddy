@@ -19,7 +19,18 @@ from zipfile import ZipFile
 from packing_assistant.sandbox import assert_open, assert_write, guarded_write_bytes, guarded_write_text
 from packing_assistant.document_text import csv_text, docx_document_text, table_markdown
 
-UPLOAD_ROOT = Path(__file__).resolve().parent / "data" / "uploads"
+# A session's attachments live with the rest of that session: <OUT_ROOT>/<sid>/uploads/.
+# UPLOAD_ROOT is the session root (tests point it at their own tmp "out"); the pre-2026-09
+# layout <demo>/data/uploads/<sid>/ is adopted (moved) on startup or on first touch.
+try:  # demo/config.py when the demo dir is on sys.path; the same folder otherwise
+    from config import OUT_ROOT as _DEFAULT_OUT_ROOT  # noqa: E402
+except ImportError:  # pragma: no cover - scripts that import uploads as a bare module
+    _DEFAULT_OUT_ROOT = Path(__file__).resolve().parent / "out"
+
+UPLOAD_ROOT = _DEFAULT_OUT_ROOT
+UPLOAD_SUBDIR = "uploads"
+_DEFAULT_LEGACY_ROOT = Path(__file__).resolve().parent / "data" / "uploads"
+LEGACY_UPLOAD_ROOT = _DEFAULT_LEGACY_ROOT
 MAX_BYTES = 20 * 1024 * 1024
 MAX_REQUEST_BYTES = 25 * 1024 * 1024
 MAX_TEXT_CHARS = 200_000
@@ -63,7 +74,7 @@ def safe_filename(filename: str) -> str:
 def _directory(session: str) -> Path:
     sid = safe_session_id(session)
     root = UPLOAD_ROOT.resolve()
-    candidate = root / sid
+    candidate = root / sid / UPLOAD_SUBDIR
     resolved = candidate.resolve()
     if resolved != candidate:
         raise UploadError("附件会话目录不允许链接跳转")
@@ -71,7 +82,64 @@ def _directory(session: str) -> Path:
         resolved.relative_to(root)
     except ValueError as exc:
         raise UploadError("附件路径越界") from exc
+    _adopt_legacy(sid, resolved)
     return resolved
+
+
+def session_uploads_dir(session: str) -> Path:
+    """Where this session's attachments are (<OUT_ROOT>/<sid>/uploads), validated."""
+    return _directory(session)
+
+
+def _adopt_legacy(sid: str, target: Path) -> bool:
+    """Move <demo>/data/uploads/<sid> into the session directory the first time it is touched."""
+    legacy = LEGACY_UPLOAD_ROOT / sid
+    if target.exists() or not legacy.is_dir() or legacy.is_symlink():
+        return False
+    # Never pull the real data/uploads into a test's temporary root: adopt only when this is
+    # the real session root, or when the legacy root itself was pointed somewhere on purpose.
+    if UPLOAD_ROOT.resolve() != _DEFAULT_OUT_ROOT.resolve() and LEGACY_UPLOAD_ROOT == _DEFAULT_LEGACY_ROOT:
+        return False
+    import shutil
+
+    try:
+        target.parent.mkdir(parents=True, exist_ok=True)
+        shutil.move(str(legacy), str(target))
+    except OSError:
+        return False
+    return True
+
+
+def migrate_legacy_uploads() -> int:
+    """Startup: adopt every remaining <demo>/data/uploads/<sid> into <OUT_ROOT>/<sid>/uploads."""
+    moved = 0
+    if not LEGACY_UPLOAD_ROOT.is_dir():
+        return 0
+    for legacy in sorted(LEGACY_UPLOAD_ROOT.iterdir()):
+        if not legacy.is_dir() or legacy.is_symlink():
+            continue
+        try:
+            sid = safe_session_id(legacy.name)
+            root = UPLOAD_ROOT.resolve()
+            if _adopt_legacy(sid, root / sid / UPLOAD_SUBDIR):
+                moved += 1
+        except UploadError:
+            continue
+    return moved
+
+
+def upload_file(session: str, identifier: str) -> tuple[Path, str]:
+    """The stored original of one attachment and its shown name (for /api/file?session=&upload=)."""
+    directory = _directory(session)
+    if not re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9_-]{0,63}", identifier or ""):
+        raise UploadError("附件 id 无效")
+    meta = _metadata(directory, identifier)
+    if not meta:
+        raise UploadError("附件不存在")
+    path = _path(directory, f"{identifier}.bin")
+    if not path.is_file():
+        raise UploadError("附件原件不存在")
+    return path, meta["name"]
 
 
 def _path(directory: Path, filename: str) -> Path:

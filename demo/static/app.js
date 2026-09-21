@@ -562,10 +562,15 @@ function cbAttachRender() {
   for (const f of state.attachments) {
     const chip = document.createElement("span");
     chip.className = "cb-att-chip";
-    const nm = document.createElement("span");
+    const byRef = cbCapability("file_ref") === true && f.id && !String(f.id).startsWith("job:") && state.session;
+    const nm = document.createElement(byRef ? "a" : "span");
     nm.className = "cb-att-name";
     nm.textContent = f.name || f.id;
-    nm.title = f.name || f.id;
+    nm.title = byRef ? "下载原件 " + (f.name || f.id) : (f.name || f.id);
+    if (byRef) {
+      nm.href = `/api/file?session=${encodeURIComponent(state.session)}&upload=${encodeURIComponent(f.id)}&name=${encodeURIComponent(f.name || f.id)}`;
+      nm.setAttribute("download", f.name || f.id);
+    }
     chip.appendChild(nm);
     const role = document.createElement("select");
     role.className = "cb-att-role";

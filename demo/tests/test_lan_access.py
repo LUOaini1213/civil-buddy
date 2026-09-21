@@ -24,7 +24,7 @@ def client(tmp_path, monkeypatch):
     import uploads
 
     monkeypatch.setattr(app, "OUT_ROOT", tmp_path / "out")
-    monkeypatch.setattr(uploads, "UPLOAD_ROOT", tmp_path / "uploads")
+    monkeypatch.setattr(uploads, "UPLOAD_ROOT", tmp_path / "out")  # attachments live inside the session dir
     return TestClient(app.app)
 
 

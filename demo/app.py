@@ -31,8 +31,10 @@ from store import (
 async def _lifespan(_app: FastAPI):
     """Turns the previous process left "running" on disk are stale now; say so before any list is served."""
     from chat_service import sweep_stale
+    import uploads as _uploads
 
     sweep_stale(OUT_ROOT)
+    _uploads.migrate_legacy_uploads()
     yield
 
 
@@ -988,13 +990,24 @@ def deliverables_zip(session_id: str, run_id: str = "") -> Response:
 
 
 @app.get("/api/file")
-def file(path: str = "", name: str = "", session: str = "", run: str = "", file: str = "") -> FileResponse:
-    """One deliverable. Preferred form: ?session=&run=&file=<stored basename>&name=<shown name> —
-    no server path in the link, and the link survives a backup imported on another machine.
-    ?path=<absolute> is kept for the Rust workbench and old cards."""
+def file(path: str = "", name: str = "", session: str = "", run: str = "", file: str = "",
+         upload: str = "") -> FileResponse:
+    """One deliverable or attachment. Preferred forms: ?session=&run=&file=<stored basename>
+    (a deliverable) or ?session=&upload=<attachment id> (an uploaded original), plus
+    &name=<shown name> — no server path in the link, and the link survives a backup imported on
+    another machine. ?path=<absolute> is kept for the Rust workbench and old cards."""
     import re
 
-    if session or run or file:
+    if upload:
+        import uploads as _uploads
+
+        try:
+            target, stored_name = _uploads.upload_file(session, upload)
+        except _uploads.UploadError as exc:
+            raise HTTPException(404 if "不存在" in str(exc) else 400, str(exc)) from exc
+        name = name or stored_name
+        trusted_name = stored_name  # went through safe_filename at save time; the stored file is <id>.bin
+    elif session or run or file:
         from chat_service import valid_session
         try:
             sid = valid_session(session)
@@ -1027,4 +1040,10 @@ def file(path: str = "", name: str = "", session: str = "", run: str = "", file:
     from uploads import safe_filename
     shown = safe_filename(name) if name else ""
     download_name = shown if shown and Path(shown).suffix.lower() == target.suffix.lower() else target.name
+    if upload:
+        import mimetypes
+
+        download_name = safe_filename(shown or trusted_name) or trusted_name
+        media_type = mimetypes.guess_type(download_name)[0] or "application/octet-stream"
+        return FileResponse(target, filename=download_name, media_type=media_type, content_disposition_type="attachment")
     return FileResponse(target, filename=download_name, content_disposition_type="attachment")
