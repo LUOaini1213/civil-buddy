@@ -14,3 +14,7 @@
 @media(max-width:760px){.scan-grid{grid-template-columns:1fr}.scan-layers{max-height:170px}.dimension-grid{grid-template-columns:1fr}.drawing-tools{flex-wrap:wrap}.drawing-tools select{flex-basis:100%}.scan-footer{align-items:stretch;flex-direction:column}.group-actions input,.group-actions select{max-width:none;flex:1;min-width:130px}.operation-progress progress{width:50px}}
 @media(max-width:520px){.scan-bounds{grid-template-columns:1fr 1fr}.selection-actions button{flex:1}.dimension-bind-controls{grid-template-columns:1fr}.operation-progress{gap:7px}.operation-progress progress{width:30px}}
 #drawingSvg path:not(.material-fill){fill:none}.scan-layer-row input{flex:none}.dimension-panel .panel-heading h2,.scan-panel .panel-heading h2{white-space:normal}.scan-panel .panel-heading>div{min-width:0}.scan-panel .panel-heading>button{flex:none}
+:where(.section-property-card) { padding: 12px 0; border-bottom: 1px solid #31414f; }
+:where(.section-property-card) dl { display: grid; grid-template-columns: minmax(100px, .7fr) 1fr; gap: 6px 18px; margin-bottom: 5px; }
+:where(.section-property-card) dt { color: #a6bac8; }
+:where(.section-property-card) dd { margin: 0; overflow-wrap: anywhere; }

@@ -81,6 +81,7 @@ WRITE_TOOLS = frozenset({"run_skill", "pack_plan", "tender_compare"})
 CAD_TOOLS = [
     _tool("cad_inspect", "检查用户已选中的 CAD 项目、单位、参数和逐项实体报告。", {}, []),
     _tool("cad_suggest_layers", "建议图层用途；只提出建议，必须由用户在 CAD 页面确认。", {}, []),
+    _tool("cad_section_properties", "仅在用户明确要求计算截面性质时，对已确认选集计算面积、形心与惯性矩；不补尺寸、不写原项目。", {}, []),
     _tool("cad_build", "使用用户已经确认的图层和参数生成三维预览，不能自行补充尺寸。", {}, []),
     _tool("cad_modify", "只解析本轮用户原话修改尺寸或图层，并重新生成；不能传入你编写的指令或尺寸。", {}, []),
     _tool("cad_undo", "撤销至前一个已生成模型的参数，并重新生成。", {}, []),

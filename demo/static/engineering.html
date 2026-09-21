@@ -1,0 +1,38 @@
+<!doctype html>
+<html lang="zh-CN"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>工程计算 · Civil Buddy</title><link rel="icon" href="/static/icons/cb-icon.svg"><link rel="stylesheet" href="/static/engineering.css"><script src="/static/engineering.js" type="module"></script></head>
+<body>
+<header><a class="brand" href="/">CB <span>Civil Buddy</span></a><nav><a href="/cad">CAD 截面与建模</a><a href="/engineering/schedule">施工计划</a><a href="/">工作台</a></nav></header>
+<main>
+  <div class="heading"><div><p class="eyebrow">ENGINEERING WORKSPACE</p><h1>把参数，变成可核对的结果</h1><p>本地计算 · 输入留档 · 版本对比</p></div><span id="capability" role="status">正在检测工具</span></div>
+  <div id="notice" class="notice" role="status" aria-live="polite">选择工具，填写已确认参数，或使用明确标注的合成样例。</div>
+  <form id="auth" class="panel" hidden><label>访问口令 <input id="token" type="password" autocomplete="current-password" required></label><button>验证并继续</button></form>
+  <section class="projectbar panel" aria-label="分析项目"><label>项目名称<input id="projectName" placeholder="给本次分析起个名字" maxlength="100"></label><button id="save" disabled>保存结果</button><button id="saveCopy" disabled>另存副本</button><label>最近项目<select id="projects"><option value="">选择项目</option></select></label><button id="open">打开</button><label>版本历史<select id="versions"><option value="">当前版本</option></select></label><button id="restore">恢复查看</button><span id="projectState">未保存</span></section>
+  <nav class="tabs" aria-label="工程工具"><button data-mode="frame" aria-pressed="true">梁与框架</button><button data-mode="ifc_check" aria-pressed="false">IFC 信息检查</button><button data-mode="ifc_diff" aria-pressed="false">IFC 版本对比</button><a href="/cad">CAD 截面性质 ↗</a><a href="/engineering/schedule">施工甘特图 ↗</a></nav>
+  <div class="workspace">
+    <section class="panel inputs"><div id="frameFields">
+      <h2>线弹性梁与框架</h2><p class="muted">先明确支座、材料、截面和荷载。结果是结构分析，不包含规范验算。</p>
+      <div class="row"><button id="beamExample" type="button">合成简支梁</button><button id="frameExample" type="button">合成门架</button></div><p id="sampleLabel" class="sample" hidden>合成演示参数，不能套用于真实工程。</p>
+      <p id="beamTemplateNotice" class="muted">直梁表单只有应用后才成为计算输入；完整 JSON 是实际分析模型。</p>
+      <form id="beamForm"><div class="input-grid">
+        <label>跨度 L（m）<input name="length" type="number" min="0.000001" max="100000" step="any" required></label>
+        <label>均布荷载 q（N/m，向下）<input name="load" type="number" min="0" step="any" required></label>
+        <label>弹性模量 E（Pa）<input name="E" type="number" min="1000" max="10000000000000" step="any" required></label>
+        <label>泊松比 ν<input name="nu" type="number" min="0" max="0.4999" step="any" required></label>
+        <label>密度（kg/m³，不自动加自重）<input name="density" type="number" min="0" step="any" required></label>
+        <label>截面积 A（m²）<input name="A" type="number" min="0.000000000001" step="any" required></label>
+        <label>Iy（m⁴）<input name="Iy" type="number" min="0.000000000000000001" step="any" required></label>
+        <label>Iz（m⁴，竖向弯曲）<input name="Iz" type="number" min="0.000000000000000001" step="any" required></label>
+        <label>扭转常数 J（m⁴）<input name="J" type="number" min="0.000000000000000001" step="any" required></label>
+      </div><label class="check"><input name="supports" type="checkbox" required>确认左端坐标为 (0,0,0)，直梁沿全局 X 轴；左端约束 X/Y/Z 位移与绕 X 转动，右端约束 Y/Z 位移，其余转动自由。</label><button type="submit">将表单参数应用到分析模型</button><button id="discardForm" type="button" disabled>撤回未应用表单修改</button><p id="formPending" class="notice" hidden>表单有未应用修改，暂不能计算、保存或导出；请先应用或撤回。</p></form>
+      <details id="modelDetails"><summary>检查 / 编辑完整框架参数（SI 单位 JSON）</summary><p class="muted">长度 m、力 N、应力 Pa；rotation_deg 为截面转角（度），结果转角为 rad。只接受明确参数，不执行代码。节点、杆件、支座和组合均可编辑。</p><textarea id="frameModel" rows="18" spellcheck="false" aria-label="完整梁框架模型 JSON"></textarea><label><input id="sourceSynthetic" type="checkbox">这些输入是合成演示参数</label><input id="importFrame" type="file" accept=".json,application/json" aria-label="导入框架参数 JSON"></details>
+      <div class="row"><button id="undoInput" disabled>撤销参数修改</button></div>
+    </div>
+    <div id="sectionFields" hidden><h2>已保存的 CAD 截面分析</h2><p class="muted">本页恢复原截面计算输入与记录。修改图纸、孔洞选集或单位，请返回 <a href="/cad">CAD 截面工作台</a>。</p></div>
+    <div id="checkFields" hidden><h2>IFC 信息交付检查</h2><p class="muted">上传 IFC 与对应 IDS 要求，列出缺失属性及原构件编号。</p><label>IFC 文件（最多 8 MiB）<input id="checkIfc" type="file" accept=".ifc"></label><label>IDS 要求（最多 512 KiB）<input id="checkIds" type="file" accept=".ids"></label><button id="checkExample">使用合成缺项样例</button><p id="checkSources" class="muted">尚未选择文件</p></div>
+    <div id="diffFields" hidden><h2>IFC 版本对比</h2><p class="muted">按 GlobalId 对齐构件，比较属性、几何、类型及关系。两版应保持相同 IFC schema。</p><label>原版 IFC（最多 8 MiB）<input id="oldIfc" type="file" accept=".ifc"></label><label>新版 IFC（最多 8 MiB）<input id="newIfc" type="file" accept=".ifc"></label><button id="diffExample">使用合成变更样例</button><p id="diffSources" class="muted">尚未选择文件</p></div>
+    <div class="runbar"><button id="run" class="primary">开始计算</button><button id="cancel" hidden>取消</button></div><p id="inputState" class="muted">尚未计算</p>
+    </section>
+    <section class="panel output"><div class="row"><h2>分析结果</h2><span id="engine" class="muted"></span></div><p id="resultState" class="notice" hidden></p><div id="result"><div class="empty">计算完成后显示图表、构件编号和输入来源。</div></div><details id="rawResult" hidden><summary>完整计算记录</summary><pre id="resultJson"></pre></details><details class="export"><summary>导出计算记录</summary><p class="muted">保留工作台现有导出签认规则。导出文件包含计算来源，不构成签认结论。</p><label for="confirmation">完整输入：我明白，将由持证人员签认</label><input id="confirmation" autocomplete="off"><button id="export" disabled>导出 JSON 记录</button></details></section>
+  </div>
+  <footer>开源引擎：Pynite · sectionproperties · IfcOpenShell / IfcTester / IfcDiff · Frappe Gantt。<a href="/static/engineering-notices.txt">版本与开源声明</a></footer>
+</main></body></html>

@@ -181,6 +181,7 @@ export async function startCadApp(doc = document) {
   let analysisController = null, analysisSequence = 0, analysisTimer = null, analysisBusy = false;
   let drawingView = null, scanView = null, visibleGroup = null, diagnosticPoints = [], selectedDimensionId = null;
   let scanLayersSelected = new Set(), activeImportOperation = null, requestPhase = '';
+  let sectionRun = null, sectionKey = null, sectionDocument = null, sectionProject = null;
   const queryProjectId = new URLSearchParams(window.location?.search || '').get('project_id');
   let pendingProjectId = /^[a-f0-9]{32}$/i.test(queryProjectId || '') ? queryProjectId : null;
   const parameterInputs = new Map();
@@ -293,6 +294,12 @@ export async function startCadApp(doc = document) {
     $('resetSelection').disabled = !hasDoc || state.busy;
     $('undoSelection').disabled = !state.selectionHistory.length || state.busy;
     $('analyzeDrawing').disabled = !hasDoc || state.busy || analysisBusy || !ready;
+    if (sectionDocument !== state.documentId) { sectionRun = null; sectionProject = null; sectionKey = null; sectionDocument = state.documentId; $('sectionRecord').hidden = true; }
+    const sectionCurrent = !!sectionRun && sameConfig(sectionKey, analysisKey(state.config));
+    $('calculateSection').disabled = !hasDoc || state.busy || !ready || state.config?.mode !== 'section' || !state.config?.unit || !state.config?.confirmed_solid;
+    $('saveSection').disabled = !sectionCurrent || state.busy;
+    if (sectionCurrent) renderSectionResult(sectionRun);
+    else $('sectionProperties').replaceChildren(node('p', sectionRun ? '选集或单位已修改，请重新计算截面性质。已保存的历史记录保留。' : '确认截面模式、单位和实体材料后，可计算面积、形心和惯性矩；无需拉伸长度。', 'hint'));
     $('pickVisible').disabled = !hasDoc || state.busy; $('fitDrawing').disabled = !hasDoc;
     $('drawingInteraction').disabled = !hasDoc || state.busy;
     for (const id of ['showSelectionGroup', 'useSelectionGroup', 'deleteSelectionGroup']) $(id).disabled = !$('selectionGroups').value || state.busy;
@@ -426,6 +433,46 @@ export async function startCadApp(doc = document) {
       $('diagnosticList').append(button);
     }
     if (!result.diagnostics?.length) $('diagnosticList').append(node('p', result.contours?.length ? '轮廓检查通过。着色区域代表材料，内圈留白代表孔洞。高度 / 长度仍须单独确认。' : '当前选集没有可生成的材料区域。请检查图层用途及实体选择。', 'hint'));
+  }
+
+  function renderSectionResult(payload) {
+      const host = $('sectionProperties'); host.replaceChildren();
+      const n = (value) => Number.isFinite(value) ? Number(value.toPrecision(7)).toLocaleString('zh-CN', { maximumSignificantDigits: 7 }) : '无唯一方向';
+      for (const row of payload.result.regions) {
+        const card = node('div', undefined, 'section-property-card'); card.append(node('strong', `${row.layer} · ${row.outer_id} · ${row.hole_ids.length} 个孔洞`));
+        const list = node('dl');
+        for (const [label, value] of [['面积 A', `${n(row.area_mm2)} mm²`], ['形心（原图坐标）', `${row.centroid_source.map(n).join('，')} ${payload.result.unit}`], ['形心惯性矩 Ixx / Iyy', `${n(row.Ixx_mm4)} / ${n(row.Iyy_mm4)} mm⁴`], ['惯性积 Ixy', `${n(row.Ixy_mm4)} mm⁴`], ['主惯性矩 I11 / I22', `${n(row.I11_mm4)} / ${n(row.I22_mm4)} mm⁴`], ['主轴角', row.principal_angle_deg === null ? '无唯一方向' : `${n(row.principal_angle_deg)}°`], ['回转半径 rx / ry', `${n(row.rx_mm)} / ${n(row.ry_mm)} mm`]]) list.append(node('dt', label), node('dd', value));
+        card.append(list); host.append(card);
+      }
+      host.append(node('p', `${payload.result.engine} ${payload.result.engine_version} · ${payload.result.notes.join(' ')}`, 'hint'));
+  }
+
+  async function calculateSection() {
+    if (state.busy || !state.documentId) return;
+    const config = readConfig(), request = startRequest('正在计算截面面积、形心与惯性矩'), documentId = state.documentId;
+    const id = operationId(); activeImportOperation = id;
+    try {
+      const payload = await jsonRequest('/api/engineering/section', { method: 'POST', headers: { 'Content-Type': 'application/json', 'X-CAD-Operation-ID': id }, body: JSON.stringify({ document_id: documentId, config }), signal: request.signal });
+      if (!state.isCurrent(request.token) || documentId !== state.documentId) return;
+      sectionRun = payload; sectionKey = analysisKey(config); sectionDocument = documentId;
+      notice('截面性质计算完成。所有孔洞按当前选集保留；该计算不使用拉伸长度，也不推断构件尺寸。');
+    } catch (error) { if (state.isCurrent(request.token)) notice(errorMessage(error), 'error'); }
+    finally { if (activeImportOperation === id) activeImportOperation = null; state.finish(request.token); if (state.isCurrent(request.token)) refresh(); }
+  }
+
+  async function saveSection() {
+    if (!sectionRun || state.busy || !sameConfig(sectionKey, analysisKey(state.config))) return;
+    const request = startRequest('正在保存截面计算记录');
+    const id = operationId(); activeImportOperation = id;
+    const body = { run_id: sectionRun.run_id, name: `${(state.projectName || state.document.filename || 'CAD').slice(0, 80)} · 截面性质` };
+    if (sectionProject) { body.id = sectionProject.id; body.expected_revision = sectionProject.revision; }
+    try {
+      const payload = await jsonRequest('/api/engineering/projects', { method: 'POST', headers: { 'Content-Type': 'application/json', 'X-CAD-Operation-ID': id }, body: JSON.stringify(body), signal: request.signal });
+      if (!state.isCurrent(request.token)) return;
+      sectionProject = payload.project; $('sectionRecord').href = `/engineering?project_id=${payload.project.id}`; $('sectionRecord').hidden = false;
+      notice(`截面计算记录已保存为版本 ${payload.version}，可在工程计算页重开。`);
+    } catch (error) { if (state.isCurrent(request.token)) notice(errorMessage(error), 'error'); }
+    finally { if (activeImportOperation === id) activeImportOperation = null; state.finish(request.token); if (state.isCurrent(request.token)) refresh(); }
   }
 
   function focusPoints(points) {
@@ -957,6 +1004,8 @@ export async function startCadApp(doc = document) {
     drawingView = [point[0] + (drawingView[0] - point[0]) * factor, point[1] + (drawingView[1] - point[1]) * factor, drawingView[2] * factor, drawingView[3] * factor]; $('drawingSvg').setAttribute('viewBox', drawingView.join(' '));
   }, { passive: false });
   $('analyzeDrawing').addEventListener('click', () => { clearTimeout(analysisTimer); analyze(); });
+  $('calculateSection').addEventListener('click', calculateSection);
+  $('saveSection').addEventListener('click', saveSection);
   $('bindDimension').addEventListener('click', bindDimension);
   $('projectName').addEventListener('input', () => { state.projectName = $('projectName').value; refresh(); });
   $('saveDraft').addEventListener('click', () => saveProject(false));

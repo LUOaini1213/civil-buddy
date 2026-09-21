@@ -1,0 +1,75 @@
+Civil Buddy 工程工作台 — 第三方组件与来源说明
+核验日期：2026-09-21
+
+本轮接入方式
+------------
+Civil Buddy 自行实现参数校验、受限适配器、来源摘要、交互、版本保存、取消与验收测试。
+求解器和甘特控件来自下列项目。不得把第三方算法或控件声称为团队原创。
+仓库仅随包保存 Frappe Gantt 的已发布 JS/CSS、package.json、来源记录及原始许可证。
+Python 库通过 requirements-engineering.txt 安装；本轮未把这些库的全部源代码复制进仓库，也未修改它们。
+此说明是本轮重点组件清单，不是 Python 全部传递依赖的许可证物料清单。
+
+1. Frappe Gantt 1.2.2 — MIT
+   Copyright (c) 2024 Frappe Technologies Pvt. Ltd.
+   用途：日历任务条、拖动日期/进度及依赖箭头；不提供 CPM 或资源平衡。
+   上游：https://github.com/frappe/gantt
+   本仓库原始许可证：/static/vendor/frappe-gantt-1.2.2/license.txt
+   npm 来源、完整性值与未修改声明：/static/vendor/frappe-gantt-1.2.2/SOURCE.json
+   随分发文件保留原始 MIT 版权和许可文本。
+
+2. PyniteFEA 3.2.0 — MIT
+   Copyright (c) 2018 D. Craig Brinck
+   用途：显式 SI 模型的一阶弹性梁/框架分析。
+   上游：https://github.com/JWock82/Pynite
+   许可：https://github.com/JWock82/Pynite/blob/main/LICENSE
+   已安装包许可证：pynitefea-3.2.0.dist-info/licenses/LICENSE
+   重新分发时保留上游版权和 MIT 许可文本。
+
+3. sectionproperties 3.10.2 — MIT
+   Copyright © 2025 Robbie van Leeuwen
+   用途：确认 CAD 材料区与孔洞后计算面积、形心和截面惯性矩。
+   上游：https://github.com/robbievanleeuwen/section-properties
+   许可：https://github.com/robbievanleeuwen/section-properties/blob/master/LICENSE
+   已安装包许可证：sectionproperties-3.10.2.dist-info/licenses/LICENSE
+   主项目的 MIT 不替代下述网格依赖自身的条款。
+
+4. cytriangle 3.0.2 / Triangle — 需分别核对
+   cytriangle 包元数据及附带 LICENSE 声明 LGPL 3.0。
+   包装器：https://github.com/m-clare/cytriangle
+   LGPL 文本：https://github.com/m-clare/cytriangle/blob/main/LICENSE
+   Triangle 作者：Jonathan Richard Shewchuk。
+   Triangle 源文件另附作者版权与使用/分发条件：
+   https://github.com/m-clare/cytriangle/blob/main/src/c/triangle.c
+   作者说明：https://www.cs.cmu.edu/~quake/triangle.html
+   Triangle 可免费获得，但作者明确要求出售或纳入商业产品前取得许可。
+   本轮按用户说明用于学校非商业比赛；仍保留许可、作者致谢与相关来源。
+   非商业用途不等于免除源文件中的分发、修改或致谢条件。
+   后续商业化或打包安装环境交付时，先核对拟分发版本的完整条件及所需许可安排。
+
+5. IfcOpenShell / IfcTester / IfcDiff 0.8.5 — LGPL v3 or later
+   三者属于同一个 IfcOpenShell 生态，不是三个独立建模引擎。
+   本次安装的三包元数据为 LGPLv3+，IfcTester 源文件头也声明 LGPLv3+。
+   IfcTester 署名包括 Artur Tomczak、Thomas Krijnen、Dion Moult。
+   上游：https://github.com/IfcOpenShell/IfcOpenShell
+   许可：https://github.com/IfcOpenShell/IfcOpenShell/blob/v0.8.0/COPYING.LESSER
+   配套 GPL 文本：https://github.com/IfcOpenShell/IfcOpenShell/blob/v0.8.0/COPYING
+   文档：https://docs.ifcopenshell.org/ifctester.html
+         https://docs.ifcopenshell.org/ifcdiff.html
+   用途：IFC 读取、用户提供的 IDS 信息要求检查、按 GlobalId 的两个版本比较。
+   库通过 Python 安装导入。若将解释器/库一并再分发，应随准确版本保留适用许可、
+   版权、对应源码/修改记录和 LGPL 所需替换/重链接条件，不能用“独立进程”当作自动豁免。
+
+6. bcf-client 0.8.5 — 许可声明差异待澄清
+   本轮作为 IfcTester 的传递依赖安装，未接入 BCF 问题管理功能。
+   当前安装包 METADATA 分类为 GPLv3；同一安装包 bcf/__init__.py 文件头声明 LGPLv3+。
+   这是实际版本内的元数据/源码声明差异，本说明不据此判断整个包只能按 GPL 或 LGPL 使用。
+   上游：https://github.com/IfcOpenShell/IfcOpenShell/tree/v0.8.0/src/bcf
+   采用/再分发该包前，保留两项证据并向上游澄清所选发布版本的适用许可。
+
+比赛与数据
+----------
+“学校非商业”不取消许可证义务，也不代表已满足比赛的原创性、开源复用或 AI 辅助规则。
+比赛章程尚未提供，团队需按实际章程如实说明自研贡献与开源依赖。
+图纸、IFC、IDS、图片及其他输入数据另有授权；软件许可不自动授权分发这些数据。
+页面内自造算例应始终标注“合成演示”。未提供的设计尺寸、荷载、材料参数不得猜填。
+其余候选与数据授权要求见 docs/civil-buddy/open-source-integrate.md。

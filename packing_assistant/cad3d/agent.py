@@ -9,6 +9,7 @@ from __future__ import annotations
 from copy import deepcopy
 import io
 import json
+import os
 from pathlib import Path
 import re
 from uuid import uuid4
@@ -16,8 +17,9 @@ import zipfile
 
 CONFIRM = "我明白，将由持证人员签认"
 READ_TOOLS = frozenset({"cad_inspect", "cad_suggest_layers"})
+COMPUTE_TOOLS = frozenset({"cad_section_properties"})
 MUTATE_TOOLS = frozenset({"cad_build", "cad_modify", "cad_undo", "cad_export"})
-TOOL_NAMES = READ_TOOLS | MUTATE_TOOLS
+TOOL_NAMES = READ_TOOLS | COMPUTE_TOOLS | MUTATE_TOOLS
 
 
 def operation(text: str, context: dict) -> str:
@@ -29,6 +31,8 @@ def operation(text: str, context: dict) -> str:
         return "cad_inspect"
     if re.fullmatch(r"(?:请)?(?:建议|推荐|识别|解释)(?:一下)?(?:图层|图层用途|图层映射)", clean):
         return "cad_suggest_layers"
+    if re.fullmatch(r"(?:请)?(?:计算|重新计算)(?:一下)?(?:当前|已选)?截面(?:几何)?性质", clean):
+        return "cad_section_properties"
     if re.fullmatch(r"(?:请)?(?:生成|重新生成|建模|重建)(?:三维|3D)?(?:模型)?", clean, re.I):
         return "cad_build"
     if re.fullmatch(r"(?:请)?(?:撤销|撤回)(?:上一次|上次|刚才的)?(?:修改|操作)?", clean):
@@ -140,7 +144,7 @@ def execute(context: dict, name: str, args: dict, *, user_text: str, session_id:
     if name == "cad_export" and (not isinstance(args.get("format", "zip"), str) or args.get("format", "zip") not in {"glb", "json", "zip", "step"}):
         return {"ok": False, "error_code": "invalid_args", "reason": "只支持 GLB、STEP、JSON 或 ZIP 导出。"}
     allowed = operation(user_text, context)
-    if name in MUTATE_TOOLS and name != allowed:
+    if name in MUTATE_TOOLS | COMPUTE_TOOLS and name != allowed:
         return {"ok": False, "error_code": "read_only_intent", "reason": "本轮用户未请求这项 CAD 操作。"}
     if name in MUTATE_TOOLS and not load_config().allow_write():
         return {"ok": False, "error_code": "read_only", "reason": "当前为只读模式，不能修改或导出 CAD 项目。"}
@@ -153,6 +157,22 @@ def execute(context: dict, name: str, args: dict, *, user_text: str, session_id:
         return {"ok": True, "summary": "以下仅为图层用途建议，请返回 CAD 页确认后再生成。",
                 "suggestions": [{"layer": layer["name"], "suggested_role": layer.get("suggested_role", "ignore")}
                                 for layer in context["document"].get("layers", [])]}
+    if name == "cad_section_properties":
+        # Keep OS confinement intact: its single-process policy cannot launch
+        # the disposable engineering worker, and this adapter never bypasses it.
+        if os.environ.get("CIVIL_OS_SANDBOX_POLICY"):
+            return {"ok": False, "error_code": "sandbox_unavailable",
+                    "reason": "当前系统级沙箱禁止启动截面计算子进程，本轮未计算；未改变沙箱策略或原项目。"}
+        from packing_assistant.engineering.worker import run
+        try:
+            properties = run("section", {"document": context["document"], "config": context["draft_config"]})
+            cancel.check()
+            if not isinstance(properties, dict) or properties.get("kind") != "section" or not properties.get("regions"):
+                raise ValueError("截面工具未返回可用的材料区域结果。")
+        except (ImportError, TimeoutError, ValueError, OSError) as exc:
+            return {"ok": False, "error_code": "section_failed", "reason": str(exc)[:1500]}
+        return {"ok": True, "summary": f"已计算 {len(properties['regions'])} 个材料区域的截面几何性质；未改写或保存原项目。",
+                "section_properties": properties}
     if name == "cad_export":
         if not confirmed:
             return {"ok": False, "error_code": "approval_required", "reason": "模型导出需要本轮用户亲自输入签认确认句。"}
@@ -192,7 +212,7 @@ def execute(context: dict, name: str, args: dict, *, user_text: str, session_id:
 def reply_for(results: list[dict], context: dict) -> str:
     """Outcome text is grounded in tool results, never a model's success claim."""
     if not results:
-        return "本轮尚未执行 CAD 工具。可要求检查图纸、建议图层、生成模型、把墙高改成3.6米、撤销或导出模型。"
+        return "本轮尚未执行 CAD 工具。可要求检查图纸、建议图层、计算截面性质、生成模型、把墙高改成3.6米、撤销或导出模型。"
     lines = []
     for result in results:
         lines.append(str(result.get("summary") or result.get("reason") or "CAD 操作未完成。"))
@@ -203,6 +223,15 @@ def reply_for(results: list[dict], context: dict) -> str:
             lines.append(f"- {row['parameter']}：{row['before']} → {row['after']}")
         for row in result.get("suggestions", []):
             lines.append(f"- {row['layer']}：{row['suggested_role']}（待确认）")
+        properties = result.get("section_properties")
+        if result.get("ok") and properties:
+            for row in properties["regions"]:
+                cx, cy = row["centroid_source"]
+                lines.append(f"- {row['layer']} / {row['outer_id']}（孔洞 {len(row['hole_ids'])} 个）："
+                             f"面积 {row['area_mm2']:.7g} mm²；形心 ({cx:.7g}, {cy:.7g}) {properties['unit']}；"
+                             f"形心惯性矩 Ixx={row['Ixx_mm4']:.7g}、Iyy={row['Iyy_mm4']:.7g}、Ixy={row['Ixy_mm4']:.7g} mm⁴。")
+            lines.append(f"计算引擎：{properties['engine']} {properties['engine_version']}。"
+                         "曲线按当前离散误差计算；未推断拉伸长度，未计算扭转或强度，也不作规范合格结论。")
         for row in [r for r in result.get("report", []) if r.get("status") in {"failed", "unsupported", "invalid"}][:12]:
             lines.append(f"- 实体 {row.get('id')}（{row.get('layer')}）：{row.get('reason')}")
         for row in result.get("diagnostics", [])[:8]:

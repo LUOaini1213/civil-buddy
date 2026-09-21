@@ -16,3 +16,6 @@
 *.ttf  binary
 *.woff binary
 *.woff2 binary
+
+# Preserve the line endings of the bundled upstream Gantt sources.
+demo/static/vendor/frappe-gantt-1.2.2/* text eol=lf

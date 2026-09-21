@@ -40,6 +40,7 @@ jobs:
         run: |
           python -m pip install -U pip
           pip install -r requirements-dev.txt
+          pip install -r requirements-engineering.txt
           # 语音输入的解码守卫（协议白名单、采样率、时长上限）要真解码才能测；不下载模型
           pip install -r requirements-asr.txt
       - name: Workbench HTTP and knowledge-base tests

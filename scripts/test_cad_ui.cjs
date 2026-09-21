@@ -768,3 +768,29 @@ test('project package upload respects the advertised limit for preserved large s
     await waitFor(() => imported === 1 && !state.busy); assert.equal(state.project.id, project.id);
   }, () => json({ ok: true, available: true, max_project_bundle_bytes: 80 * 1024 * 1024 }));
 });
+
+
+test('section result returns when selection is undone and save carries a cancellable operation', async () => {
+  const payload = await restoredProject();
+  payload.draft_config.mode = 'section'; payload.draft_config.layers.WALL = 'section';
+  payload.draft_config.parameters.section = { height_m: null, base_m: 0 };
+  payload.applied_config = copy(payload.draft_config);
+  const section = { run_id: 'c'.repeat(32), result: { unit: 'mm', engine: 'sectionproperties', engine_version: 'test', notes: [], regions: [{ layer: 'WALL', outer_id: 'A', hole_ids: ['B'], area_mm2: 2640000, centroid_source: [2000, 1500], Ixx_mm4: 1, Iyy_mm4: 2, Ixy_mm4: 0, I11_mm4: 2, I22_mm4: 1, principal_angle_deg: 0, rx_mm: 1, ry_mm: 2 }] } };
+  const textOf = (node) => [node.textContent || '', ...node.children.map(textOf)].join(' ');
+  let saveOptions;
+  await withApp(async (url, options) => {
+    if (url === '/api/engineering/section') { assert.equal(JSON.parse(options.body).config.parameters.section.height_m, null); return json(section); }
+    if (url === '/api/engineering/projects') { saveOptions = options; return json({ project: { id: 'd'.repeat(32), revision: 1 }, version: 1 }); }
+    return json(payload);
+  }, async ({ document: doc, state }) => {
+    doc.ids.calculateSection.click(); await waitFor(() => !state.busy && !doc.ids.saveSection.disabled);
+    assert.match(textOf(doc.ids.sectionProperties), /2,640,000/);
+    entityPath(doc, 'A').click(); doc.ids.excludePicked.click();
+    assert.equal(doc.ids.saveSection.disabled, true); assert.match(textOf(doc.ids.sectionProperties), /重新计算/);
+    doc.ids.undoSelection.click();
+    assert.equal(doc.ids.saveSection.disabled, false); assert.match(textOf(doc.ids.sectionProperties), /2,640,000/);
+    doc.ids.saveSection.click(); await waitFor(() => !!saveOptions && !state.busy);
+    assert.match(saveOptions.headers['X-CAD-Operation-ID'], /^[0-9a-f]{32}$/);
+    assert.equal(doc.ids.sectionRecord.hidden, false);
+  }, undefined, projectOptions);
+});

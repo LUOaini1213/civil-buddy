@@ -46,6 +46,8 @@ app.mount("/static", StaticFiles(directory=STATIC), name="static")
 # CAD dependencies load only when this optional modeling workspace is used.
 from cad_api import router as cad_router
 app.include_router(cad_router)
+from engineering_api import router as engineering_router
+app.include_router(engineering_router)
 
 
 def auth_token() -> str:

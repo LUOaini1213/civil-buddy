@@ -21,6 +21,11 @@ STATIC = (
     "icons/cb-icon-192.png", "icons/cb-icon-512.png", "icons/cb-icon.svg",
     "vendor/marked.LICENSE.md", "vendor/marked.min.js",
     "cad.html", "cad.css", "cad.js", "cad-viewer.js",
+    "engineering.html", "engineering.css", "engineering.js", "engineering-notices.txt",
+    "engineering-schedule.html", "engineering-schedule.css", "engineering-schedule.js",
+    "engineering-schedule-state.js",
+    "vendor/frappe-gantt-1.2.2/frappe-gantt.css", "vendor/frappe-gantt-1.2.2/frappe-gantt.es.js",
+    "vendor/frappe-gantt-1.2.2/license.txt", "vendor/frappe-gantt-1.2.2/SOURCE.json", "vendor/frappe-gantt-1.2.2/package.json",
     "vendor/three/three.module.js", "vendor/three/three.core.js",
     "vendor/three/OrbitControls.js", "vendor/three/LICENSE.txt", "vendor/three/manifest.json",
 )
@@ -36,6 +41,8 @@ EXPLICIT = (
     # 语音输入：页面加载 voice.js；本机识别需要术语表，装依赖的说明在 requirements-asr.txt 里
     "demo/asr_lexicon.txt", "requirements-asr.txt", "docs/voice-input.md",
     "requirements-cad.txt", "docs/civil-buddy/cad-to-3d.md",
+    "requirements-analysis.txt", "requirements-engineering.txt", "docs/civil-buddy/engineering-workbench.md",
+    "docs/civil-buddy/open-source-integrate.md", "docs/civil-buddy/open-source-integrate.xlsx",
     "examples/cad-to-3d/synthetic-building-mm.dxf", "examples/cad-to-3d/synthetic-hollow-section-mm.dxf",
     "examples/cad-to-3d/README.md",
     "examples/cad-to-3d/EXTENDED-SAMPLES.md", "examples/cad-to-3d/generate_extended_samples.py",
@@ -128,7 +135,10 @@ def release_readme(version: str) -> str:
 开放式模型问答需在界面的模型设置中配置兼容 API；Key 不随包分发。
 CAD → 3D 建模可从首页进入；先用本包 Python 安装可选依赖：
 `python -m pip install -r requirements-cad.txt`。两份内置 DXF 为合成演示样例。
-图纸和预览只在服务内存缓存 30 分钟，重启后清空；需要保留时显式导出 GLB 与参数记录。
+临时图纸缓存约 30 分钟；使用“保存项目”持久保存原图、草稿和成功模型版本，重启后可从最近项目恢复。
+工程计算与计划从首页进入。截面性质、梁/杆系和 IFC 检查另需安装：
+`python -m pip install -r requirements-engineering.txt`；甘特图资源已随包提供。
+工程分析结果须点击保存；计划须点击保存计划。内置 DXF、梁和 IFC 均为合成测试数据，不代替真实工程验收。
 如使用环境文件，只编辑本包 `.env` 或 `demo/.env`；`.env.example` 只是样例。
 
 产物保存在本包 `demo/out/`，上传和本地目录配置保存在本包目录；升级前可在设置菜单备份各任务，再导入新包。任务备份不含模型 Key、全局知识库和外部作业目录。
