@@ -71,6 +71,7 @@ pub fn app(state: AppState) -> Router {
         )
         .route("/api/attachments", get(attachments))
         .route("/api/local", post(import_local))
+        .route("/api/upload-url", post(import_url))
         .route("/api/job", get(job_listing))
         .route("/api/firm/bid", post(firm_bid))
         .route("/api/architecture", get(architecture))
@@ -314,6 +315,7 @@ async fn health(State(st): State<Arc<AppState>>) -> Json<Value> {
         "task_routing": false,
         "expert_contracts": false,
         "tender_collaboration": false,
+        "upload_url": true,
         "semantic_summary": false,
         "asr": false,
         "auth": false,
@@ -724,6 +726,24 @@ async fn job_listing() -> Json<Value> {
         "files": files,
         "hint": "说「写一份」会自动抄作业根文件，不必再上传。",
     }))
+}
+
+#[derive(Deserialize)]
+struct UrlIn {
+    #[serde(default)]
+    session_id: String,
+    #[serde(default)]
+    url: String,
+}
+
+/// A tender named by its address: fetched here (public addresses only, 20 MB, documents only) and attached like an upload.
+async fn import_url(State(st): State<Arc<AppState>>, Json(body): Json<UrlIn>) -> Result<Json<Value>, ApiError> {
+    let (paths, session, url) = (st.paths.clone(), body.session_id.clone(), body.url.clone());
+    let files = tokio::task::spawn_blocking(move || attach::import_url(&paths, &session, &url))
+        .await
+        .map_err(|e| err(StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?
+        .map_err(|e| err(StatusCode::BAD_REQUEST, e))?;
+    Ok(Json(json!({"ok": true, "files": files})))
 }
 
 async fn import_local(State(st): State<Arc<AppState>>, Json(body): Json<LocalIn>) -> Result<Json<Value>, ApiError> {

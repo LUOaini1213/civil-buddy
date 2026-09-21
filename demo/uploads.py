@@ -240,6 +240,37 @@ def _xlsx_text(data: bytes) -> str:
         workbook.close()
 
 
+#: pages of a scan read on upload: about eight seconds a page, and the page waits for the answer
+OCR_UPLOAD_PAGES = 40
+
+
+def _ocr_pdf(data: bytes) -> str:
+    """A scan: read by OCR when the optional packages are there (pip install -e .[ocr]), "" when they are not - and
+    the caller says the file was not read. The first line marks the text as an OCR reading, as the job-folder path
+    does (office_job._ocr_pdf_text), so every draft made from it says so."""
+    try:
+        from packing_assistant.tools import ocr
+        from packing_assistant.tools.pdf_layout import pages_text
+    except ImportError:
+        return ""
+    if not ocr.available():
+        return ""
+    import tempfile
+
+    with tempfile.TemporaryDirectory(prefix="civil-ocr-") as folder:
+        scan = Path(folder) / "scan.pdf"
+        scan.write_bytes(data)
+        try:
+            pages = ocr.pdf_page_lines(scan, max_pages=OCR_UPLOAD_PAGES + 1)
+        except Exception:  # noqa: BLE001 - whatever the engine raised, the file was not read
+            return ""
+    cut = len(pages) > OCR_UPLOAD_PAGES
+    text = ocr.MARK + "\n" + pages_text("\n".join(lines) for lines in pages[:OCR_UPLOAD_PAGES])
+    if cut:
+        text += f"\n{CUT_NOTE}只识别了前 {OCR_UPLOAD_PAGES} 页；其余页请拆分后分别上传，或放进作业文件夹用 civil exec 解析"
+    return text if len(text.strip()) > len(ocr.MARK) + 8 else ""
+
+
 def _pdf_text(data: bytes) -> str:
     try:
         from pypdf import PdfReader
@@ -260,7 +291,7 @@ def _pdf_text(data: bytes) -> str:
         if used >= MAX_TEXT_CHARS * 2:
             break
     if not any(text.strip() for text in pages):
-        return ""
+        return _ocr_pdf(data)
     # paragraphs joined, tables rebuilt, every page under its marker - the same reading a job-folder PDF gets
     return pages_text(pages)
 
@@ -436,6 +467,116 @@ def save_uploads(session: str, files: Iterable[tuple[str, bytes]]) -> dict:
                     pass
             raise
     return {"ok": True, "files": saved}
+
+
+# ---------------------------------------------------------------------------
+# a document named by its address
+# ---------------------------------------------------------------------------
+URL_TIMEOUT = 60.0
+_URL_TYPES = {"application/pdf": "pdf", "application/vnd.openxmlformats-officedocument.wordprocessingml.document": "docx",
+              "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet": "xlsx"}
+
+
+def check_public_url(url: str) -> str:
+    """The URL when a fetch may go there: http(s), and every address the host resolves to is a public one - not this
+    machine, not the local network, not a link-local or metadata range. What the URL SAYS is not enough: a name
+    may resolve to 10.0.0.5."""
+    import ipaddress
+    import socket
+    from urllib.parse import urlsplit
+
+    parts = urlsplit((url or "").strip())
+    if parts.scheme not in ("http", "https") or not parts.hostname:
+        raise UploadError("只能取 http / https 地址上的文件")
+    if parts.username or parts.password:
+        raise UploadError("地址里不能带用户名或密码")
+    try:
+        found = socket.getaddrinfo(parts.hostname, parts.port or (443 if parts.scheme == "https" else 80), type=socket.SOCK_STREAM)
+    except OSError as exc:
+        raise UploadError("域名解析失败") from exc
+    for info in found:
+        ip = ipaddress.ip_address(info[4][0].split("%")[0])
+        mapped = getattr(ip, "ipv4_mapped", None)
+        ip = mapped or ip
+        if not ip.is_global or ip.is_multicast:
+            raise UploadError("拒绝访问本机或内网地址")
+    return parts.geturl()
+
+
+def _url_name(url: str, disposition: str, content_type: str) -> str:
+    from urllib.parse import unquote, urlsplit
+
+    named = re.search(r"""filename\*?=(?:UTF-8''|")?([^";]+)""", disposition or "", re.I)
+    name = unquote(named.group(1).strip()) if named else unquote(Path(urlsplit(url).path).name)
+    name = re.split(r"[\\/]", name)[-1].strip()
+    if Path(name).suffix.lower().lstrip(".") not in ALLOWED_EXT:
+        kind = next((ext for mime, ext in _URL_TYPES.items() if mime in (content_type or "").lower()), "txt")
+        name = f"{Path(name).stem or '网页'}.{kind}"      # a page: its text is what is kept
+    return name
+
+
+def fetch_document(url: str) -> tuple[str, bytes]:
+    """(file name, bytes) of a document on the web: public addresses only - also after every redirect -, no proxy, no
+    more than MAX_BYTES, nothing executed. A web PAGE comes back as its text (a 招标公告 is a page)."""
+    import urllib.error
+    import urllib.request
+
+    class _NoRedirect(urllib.request.HTTPRedirectHandler):
+        def redirect_request(self, *args, **kwargs):  # noqa: ANN002, ANN003
+            return None
+
+    opener = urllib.request.build_opener(urllib.request.ProxyHandler({}), _NoRedirect())
+    target = check_public_url(url)
+    for _hop in range(5):
+        request = urllib.request.Request(target, headers={"User-Agent": "Mozilla/5.0 CivilBuddy/0.7", "Accept": "*/*"})
+        try:
+            response = opener.open(request, timeout=URL_TIMEOUT)
+        except urllib.error.HTTPError as exc:
+            if exc.code in (301, 302, 303, 307, 308) and exc.headers.get("Location"):
+                from urllib.parse import urljoin
+
+                target = check_public_url(urljoin(target, exc.headers["Location"]))     # every hop is checked again
+                continue
+            raise UploadError(f"对方返回 {exc.code}") from exc
+        except (urllib.error.URLError, OSError, ValueError) as exc:
+            raise UploadError("取不到这个地址上的文件") from exc
+        with response:
+            length = response.headers.get("Content-Length")
+            if length and length.isdigit() and int(length) > MAX_BYTES:
+                raise UploadTooLarge("单个附件不能超过 20 MB")
+            data = response.read(MAX_BYTES + 1)
+            if len(data) > MAX_BYTES:
+                raise UploadTooLarge("单个附件不能超过 20 MB")
+            content_type = response.headers.get("Content-Type", "")
+            name = _url_name(target, response.headers.get("Content-Disposition", ""), content_type)
+        if name.endswith(".txt") and "html" in content_type.lower():
+            data = _html_text(data).encode("utf-8")
+        return name, data
+    raise UploadError("重定向太多")
+
+
+def _html_text(data: bytes) -> str:
+    """The text of a page: scripts and styles out, tags out, blocks on lines of their own."""
+    import html as html_lib
+
+    raw = None
+    for encoding in ("utf-8", "gb18030"):
+        try:
+            raw = data.decode(encoding)
+            break
+        except UnicodeDecodeError:
+            continue
+    raw = raw if raw is not None else data.decode("utf-8", "replace")
+    raw = re.sub(r"(?is)<(script|style|noscript)[^>]*>.*?</\1>", " ", raw)
+    raw = re.sub(r"(?i)<(?:br|/p|/div|/tr|/li|/h[1-6]|/table)[^>]*>", "\n", raw)
+    raw = re.sub(r"(?i)</t[dh]>", " | ", raw)
+    return html_lib.unescape(re.sub(r"<[^>]+>", "", raw))
+
+
+def fetch_upload(session: str, url: str) -> dict:
+    """A document fetched by its URL, saved the way an uploaded one is: same caps, same extraction, same records."""
+    name, data = fetch_document(url)
+    return save_uploads(session, [(name, data)])
 
 
 def save_upload(session: str, filename: str, data: bytes) -> dict:

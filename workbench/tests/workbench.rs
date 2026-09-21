@@ -4224,3 +4224,24 @@ async fn test_harness_tender_question_no_write() {
         .join("招标解析表.md")
         .is_file());
 }
+
+/// A tender named by its address is fetched by the workbench itself - but never from this machine or the local
+/// network, whatever the address says. No network is needed to see the refusal.
+#[tokio::test]
+async fn test_upload_url_refuses_inward_addresses() {
+    for url in ["http://127.0.0.1:8765/api/health", "http://localhost/a.pdf", "http://192.168.1.10/招标文件.pdf", "file:///C:/Windows/win.ini"] {
+        let body = serde_json::json!({"session_id": "url-refused", "url": url}).to_string();
+        let req = Request::builder()
+            .method("POST")
+            .uri("/api/upload-url")
+            .header("content-type", "application/json")
+            .body(Body::from(body))
+            .unwrap();
+        let (status, text) = send(state(), req).await;
+        assert_eq!(status, StatusCode::BAD_REQUEST, "{url}: {text}");
+    }
+    let (status, text) = send(state(), Request::builder().uri("/api/health").body(Body::empty()).unwrap()).await;
+    assert_eq!(status, StatusCode::OK);
+    let health: serde_json::Value = serde_json::from_str(&text).unwrap();
+    assert_eq!(health["capabilities"]["upload_url"], true);
+}

@@ -520,6 +520,12 @@ pub fn read_upload(paths: &Paths, session: &str, id: &str, offset: usize, limit:
     ))
 }
 
+/// A document fetched by its URL, saved the way an uploaded one is (same caps, same extraction, same records).
+pub fn import_url(paths: &Paths, session: &str, url: &str) -> Result<Vec<Value>, String> {
+    let (name, bytes) = crate::websearch::run_blocking(|| crate::websearch::fetch_document(url.trim()))?;
+    Ok(vec![save_upload(paths, session, &name, &bytes)?])
+}
+
 pub fn import_local(paths: &Paths, session: &str, raw: &str) -> Result<Vec<Value>, String> {
     let target = allow_local_path(paths, raw)?;
     if target.is_dir() {

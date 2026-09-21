@@ -160,7 +160,7 @@ def health() -> dict:
         "has_key": has_key(),
         "mode": "configured" if has_key() else "offline",
         "capabilities": {"chat": True, "drafts": True, "model_settings": True,
-                         "attachments": True, "audit": True, "packing": False,
+                         "attachments": True, "upload_url": True, "audit": True, "packing": False,
                          "session_backup": True, "cancel": True, "word_export": True,
                          "task_memory": True, "local_rag": True, "task_routing": True,
                          "expert_contracts": True, "tender_collaboration": True, "semantic_summary": True,
@@ -218,6 +218,29 @@ def llm_settings_update(body: LLMConfigIn) -> dict:
         return set_settings(body.model_dump(exclude_unset=True))
     except ValueError as exc:
         raise HTTPException(400, str(exc)) from exc
+
+
+class UploadUrlIn(BaseModel):
+    session_id: str = Field(default="", max_length=120)
+    url: str = Field(default="", max_length=2000)
+
+
+@app.post("/api/upload-url")
+async def upload_url(body: UploadUrlIn) -> dict:
+    """A tender named by its address: fetched here (public addresses only, 20 MB, documents only) and attached like
+    an upload - the page gets the same {ok, files} back."""
+    from starlette.concurrency import run_in_threadpool
+
+    from uploads import UploadError, UploadTooLarge, fetch_upload
+
+    try:
+        return await run_in_threadpool(fetch_upload, body.session_id, body.url)
+    except UploadTooLarge as exc:
+        raise HTTPException(413, str(exc)) from exc
+    except UploadError as exc:
+        raise HTTPException(400, str(exc)) from exc
+    except (OSError, PermissionError) as exc:
+        raise HTTPException(500, "无法保存附件，请检查工作台目录权限") from exc
 
 
 @app.post("/api/upload")
