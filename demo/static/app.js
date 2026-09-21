@@ -5,6 +5,7 @@ import { createToast } from "./modules/toast.js";
 import { createDrafts } from "./modules/drafts.js";
 import { createUploads } from "./modules/uploads.js";
 import { createTurnStream } from "./modules/turn-stream.js";
+import { createDeliverables } from "./modules/deliverables.js";
 
 const state = {
   experts: [],
@@ -2149,153 +2150,21 @@ if ($("ctxQuery")) $("ctxQuery").addEventListener("keydown", event => {
   if (event.key === "Enter" && !event.isComposing) { event.preventDefault(); cbContextSearch(); }
 });
 
-function fileUrl(f, nameOverride) {
-  /* 优先 session/run/file 形式：链接里不带服务器绝对路径，备份导入到另一台机器也还能点。
-     Rust 工作台（没有 file_ref 能力）和老卡片仍用 path=。
-     Rust canonicalize 返回 \\?\ verbatim 前缀；/api/file 对该形态 404——
-     剥掉后端点自会 canonicalize（自测发现：此前侧栏下载链接全部 404）。
-     name：卡片显示名，服务端据此写 Content-Disposition（手机端不认 download 属性）。 */
-  const rec = f && typeof f === "object" ? f : { path: f };
-  const p = String(rec.path || "").replace(/^\\\\\?\\/, "");
-  const name = nameOverride || rec.name || "";
-  let q;
-  if (cbCapability("file_ref") === true && rec.run_id && state.session && p) {
-    const stored = p.split(/[\\/]/).pop();
-    q = `/api/file?session=${encodeURIComponent(state.session)}&run=${encodeURIComponent(rec.run_id)}&file=${encodeURIComponent(stored)}`;
-  } else {
-    q = `/api/file?path=${encodeURIComponent(p)}`;
-  }
-  return name ? q + `&name=${encodeURIComponent(String(name))}` : q;
-}
+function fileUrl(f, nameOverride) { return deliverables.fileUrl(f, nameOverride); }
+async function openDeliverable(f) { return deliverables.openDeliverable(f); }
+function appendDocCards(files, bodyEl, opts) { return deliverables.appendDocCards(files, bodyEl, opts); }
 
-function isDocMd(f) {
-  return /\.(md|markdown)$/i.test(String(f && (f.name || f.path) || ""));
-}
-
-async function openDeliverable(f) {
-  cbObStep(3); /* ux(round10)：文书预览打开 → 引导第 3 步打勾 */
-  try {
-    await window.cbDocOpenUrl({
-      url: fileUrl(f),
-      title: f.name || f.title || "交付物文书",
-      role: `岗位 · ${f.expert || "未指定"}`,
-    });
-  } catch (e) {
-    addStatus(`预览失败 ${f.name || ""}：${(e && e.message) || e}`);
-  }
-}
-
-/* 聊天流内交付物卡片：点开即预览，另留 .md 下载 */
-/* 交付物卡片。files：扁平文件列表（done 事件 / 恢复）；runs：按轮分组（服务端
-   deliverable_runs，带 export_errors / docx_pending）。同一份文书的 md / docx / xlsx
-   折成一行：标题 + 预览 + 各格式下载；多文件的轮次给「打包下载」一个 zip。 */
-function cbDocStem(name) {
-  return String(name || "").replace(/\.(md|markdown|docx|xlsx|csv|pdf|txt|json)$/i, "");
-}
-function cbDocExt(name) {
-  const m = /\.([A-Za-z0-9]+)$/.exec(String(name || ""));
-  return m ? m[1].toLowerCase() : "";
-}
-function cbGroupDeliverables(files) {
-  const rows = new Map();
-  for (const f of files || []) {
-    if (!f || typeof f.path !== "string" || !f.path) continue;
-    const key = `${f.run_id || ""}|${cbDocStem(f.name || f.path)}`;
-    if (!rows.has(key)) rows.set(key, { stem: cbDocStem(f.name || f.path), expert: f.expert || "", run_id: f.run_id || "", formats: [] });
-    rows.get(key).formats.push(f);
-  }
-  for (const row of rows.values()) {
-    const order = { md: 0, markdown: 0, docx: 1, xlsx: 2 };
-    row.formats.sort((a, b) => (order[cbDocExt(a.name)] ?? 9) - (order[cbDocExt(b.name)] ?? 9));
-  }
-  return [...rows.values()];
-}
-function cbRunLabel(run) {
-  const when = run && run.mtime ? cbRelTime(Math.floor(Date.parse(run.mtime) / 1000)) : "";
-  return [run && run.expert, when].filter(Boolean).join(" · ");
-}
-function appendDocCards(files, bodyEl, opts) {
-  const options = opts || {};
-  const runs = Array.isArray(options.runs) && options.runs.length
-    ? options.runs
-    : [{ run_id: "", expert: "", deliverables: files || [], export_errors: options.export_errors || [], docx_pending: options.docx_pending }];
-  const host = bodyEl && bodyEl.parentElement ? bodyEl.parentElement : $("log");
-  let painted = 0;
-  for (const run of runs) {
-    const groups = cbGroupDeliverables(run.deliverables);
-    const notes = [];
-    if (run.docx_pending) notes.push("Word 稿待生成：本轮只有 Markdown，稍后可在「本会话交付物」里取 Word。");
-    for (const e of run.export_errors || []) notes.push(`${e}：只有 Markdown 稿可下载。`);
-    if (!groups.length && !notes.length) continue;
-    const card = document.createElement("div");
-    card.className = "cb-doc-card";
-    const head = document.createElement("div");
-    head.className = "cb-doc-card-head";
-    const tag = document.createElement("span");
-    tag.className = "cb-doc-card-tag";
-    tag.textContent = "交付物文书";
-    head.appendChild(tag);
-    const label = cbRunLabel(run);
-    if (label) {
-      const who = document.createElement("span");
-      who.className = "cb-doc-card-run";
-      who.textContent = label;
-      head.appendChild(who);
-    }
-    const nFiles = groups.reduce((n, g) => n + g.formats.length, 0);
-    if (nFiles > 1 && run.run_id && state.session) {
-      const zip = document.createElement("a");
-      zip.className = "dl cb-doc-card-zip";
-      zip.href = `/api/deliverables.zip?session_id=${encodeURIComponent(state.session)}&run_id=${encodeURIComponent(run.run_id)}`;
-      zip.setAttribute("download", `civil-docs-${run.run_id.slice(0, 8)}.zip`);
-      zip.textContent = `打包下载（${nFiles} 个文件）`;
-      zip.addEventListener("click", () => cbObStep(3));
-      head.appendChild(zip);
-    }
-    card.appendChild(head);
-    for (const g of groups) {
-      const row = document.createElement("div");
-      row.className = "cb-doc-row";
-      const t = document.createElement("span");
-      t.className = "cb-doc-card-t";
-      t.textContent = g.stem || "文书";
-      t.title = g.formats.map((f) => f.name).join(" / ");
-      row.appendChild(t);
-      const md = g.formats.find(isDocMd);
-      if (md) {
-        const b = document.createElement("button");
-        b.type = "button";
-        b.textContent = "预览";
-        b.addEventListener("click", () => openDeliverable(md));
-        row.appendChild(b);
-      }
-      for (const f of g.formats) {
-        const a = document.createElement("a");
-        a.className = "dl";
-        a.href = fileUrl(f);
-        a.setAttribute("download", f.name || "文书.md");
-        a.textContent = "." + (cbDocExt(f.name) || "文件");
-        a.title = "下载 " + (f.name || "");
-        a.addEventListener("click", () => cbObStep(3)); /* ux(round10)：下载 → 引导第 3 步打勾 */
-        row.appendChild(a);
-      }
-      card.appendChild(row);
-    }
-    for (const n of notes) {
-      const w = document.createElement("p");
-      w.className = "cb-doc-note";
-      w.textContent = n;
-      card.appendChild(w);
-    }
-    const k = document.createElement("span");
-    k.className = "cb-doc-card-k";
-    k.textContent = "AI 草稿 · 不签认";
-    card.appendChild(k);
-    host.appendChild(card);
-    painted += 1;
-  }
-  if (painted) $("log").scrollTop = $("log").scrollHeight;
-}
+/* 交付物（modules/deliverables.js）：按引用的下载链接、回答下方的文书卡片、预览。 */
+const deliverables = createDeliverables({
+  state,
+  capability: (name) => cbCapability(name),
+  obStep: (n) => cbObStep(n),
+  addStatus: (text) => addStatus(text),
+  openDoc: (spec) => window.cbDocOpenUrl(spec),
+  relTime: (ts) => cbRelTime(ts),
+  log: () => $("log"),
+  doc: document,
+});
 
 async function apiError(res) {
   const t = await res.text();
@@ -4394,4 +4263,4 @@ if (window.visualViewport) {
 /* 模块脚本没有全局：给旧的经典脚本（studio.js 调 reloadCatalog）和 e2e（scripts/e2e/ui_dom.cjs）
    一个明确的窗口面，而不是把几百个函数都挂到 window 上。 */
 window.reloadCatalog = reloadCatalog;
-window.__cb = Object.freeze({ state, runState, cbCapability, cbAttachUpload, cbProjOpenSession, cbNewLocalSession, uploads, drafts, turns });
+window.__cb = Object.freeze({ state, runState, cbCapability, cbAttachUpload, cbProjOpenSession, cbNewLocalSession, uploads, drafts, turns, deliverables });

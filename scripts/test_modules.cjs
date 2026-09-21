@@ -241,3 +241,57 @@ test("turn-stream: resume replays from the last id and completes; a 404 hands ov
   await t2.turns.attachToTurn("s1", "回来；");
   assert.deepEqual(t2.status, ["watch:s1"]);
 });
+
+/* ---- deliverables: link forms, grouping, and the card ---- */
+const { createDeliverables, groupDeliverables, docExt, docStem, isDocMd } = require("../demo/static/modules/deliverables.js");
+
+test("deliverables: fileUrl uses session/run/file when the backend has file_ref, path= otherwise, never the Rust verbatim prefix", () => {
+  const rec = { path: "C:\\Users\\LW\\demo\\out\\s1\\deliverables\\r9\\1-方案.md", name: "方案.md", run_id: "r9" };
+  const byRef = createDeliverables({ state: { session: "s1" }, capability: () => true });
+  assert.equal(byRef.fileUrl(rec), "/api/file?session=s1&run=r9&file=1-%E6%96%B9%E6%A1%88.md&name=%E6%96%B9%E6%A1%88.md");
+  const byPath = createDeliverables({ state: { session: "s1" }, capability: () => undefined });
+  assert.equal(byPath.fileUrl({ path: "\\\\?\\C:\\out\\x.md", name: "x.md" }), "/api/file?path=C%3A%5Cout%5Cx.md&name=x.md");
+  assert.equal(byPath.fileUrl("/srv/out/y.md"), "/api/file?path=%2Fsrv%2Fout%2Fy.md");
+  assert.equal(byRef.fileUrl({ path: "/srv/out/z.md", name: "z.md" }), "/api/file?path=%2Fsrv%2Fout%2Fz.md&name=z.md", "no run_id → the old form");
+});
+
+test("deliverables: one row per document, formats in md → docx → xlsx order, grouped by run", () => {
+  const rows = groupDeliverables([
+    { path: "/o/r1/2-方案.docx", name: "方案.docx", run_id: "r1", expert: "施工方案" },
+    { path: "/o/r1/1-方案.md", name: "方案.md", run_id: "r1", expert: "施工方案" },
+    { path: "/o/r2/1-方案.md", name: "方案.md", run_id: "r2" },
+    { path: "", name: "skipped" }, { name: "no-path" },
+  ]);
+  assert.equal(rows.length, 2);
+  assert.deepEqual(rows[0].formats.map((f) => docExt(f.name)), ["md", "docx"]);
+  assert.equal(rows[0].stem, "方案");
+  assert.equal(rows[0].expert, "施工方案");
+  assert.equal(rows[1].run_id, "r2");
+  assert.equal(docStem("清单.xlsx"), "清单");
+  assert.equal(isDocMd({ name: "a.markdown" }), true);
+  assert.equal(isDocMd({ path: "/x/b.docx" }), false);
+});
+
+test("deliverables: the card carries a preview, per-format downloads and a zip for a multi-file run; export errors become notes", () => {
+  const doc = fakeDoc();
+  const log = element("div");
+  const opened = [];
+  const steps = [];
+  const d = createDeliverables({ state: { session: "s1" }, capability: () => true, obStep: (n) => steps.push(n), addStatus() {},
+    openDoc: async (spec) => opened.push(spec), relTime: () => "刚刚", log: () => log, doc });
+  const bubble = element("div");
+  const msg = element("div");
+  msg.appendChild(bubble);
+  d.appendDocCards([], bubble, { runs: [{ run_id: "r1", expert: "施工方案", mtime: "2026-09-21T10:00:00Z", export_errors: ["Word 转换失败"],
+    deliverables: [{ path: "/o/r1/1-方案.md", name: "方案.md", run_id: "r1" }, { path: "/o/r1/2-方案.docx", name: "方案.docx", run_id: "r1" }] }] });
+  const card = msg.children.find((c) => c.className === "cb-doc-card");
+  assert.ok(card, "a card was appended next to the bubble");
+  const all = [];
+  (function walk(el) { all.push(el); for (const c of el.children || []) walk(c); })(card);
+  const links = all.filter((el) => el.tagName === "a").map((el) => el.href || "");
+  assert.ok(links.some((h) => h.includes("/api/deliverables.zip?session_id=s1&run_id=r1")), "zip link for a 2-file run");
+  assert.ok(links.some((h) => h.includes("file=1-%E6%96%B9%E6%A1%88.md")), "md download by ref");
+  assert.ok(links.some((h) => h.includes("file=2-%E6%96%B9%E6%A1%88.docx")), "docx download by ref");
+  assert.ok(all.some((el) => /Word 转换失败/.test(el.textContent)), "export error shown as a note");
+  assert.equal(log.scrollTop, log.scrollHeight);
+});

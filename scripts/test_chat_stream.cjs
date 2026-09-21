@@ -77,6 +77,7 @@ const modules = {
   drafts: require("../demo/static/modules/drafts.js"),
   uploads: require("../demo/static/modules/uploads.js"),
   turns: require("../demo/static/modules/turn-stream.js"),
+  deliverables: require("../demo/static/modules/deliverables.js"),
 };
 
 function section(start, end) {
@@ -119,7 +120,7 @@ function ui(fetcher) {
     /* app.js is an ES module now; the pieces it imports are real modules, handed in here. */
     createAuth: modules.auth.createAuth, createToast: modules.toast.createToast,
     createDrafts: modules.drafts.createDrafts, createUploads: modules.uploads.createUploads,
-    createTurnStream: modules.turns.createTurnStream,
+    createTurnStream: modules.turns.createTurnStream, createDeliverables: modules.deliverables.createDeliverables,
     AbortController, TextDecoder, FormData, URL, setTimeout, clearTimeout, CB_CHAT_STREAM: transport, fetch: fetcher,
     window: {}, cbProj: { cur: "", sessions: [] }, cbCmd: {}, cbCmdUpdate() {},
     localStorage: { getItem: (key) => stored.get(key) || null, setItem: (key, value) => stored.set(key, value), removeItem: (key) => stored.delete(key) },
