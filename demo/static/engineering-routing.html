@@ -1,0 +1,37 @@
+<!doctype html>
+<html lang="zh-CN"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>场内最短路线 · Civil Buddy</title><link rel="icon" href="/static/icons/cb-icon.svg"><link rel="stylesheet" href="/static/engineering-routing.css"><script type="module" src="/static/engineering-routing.js"></script></head>
+<body>
+<header><a class="brand" href="/">CB <span>Civil Buddy</span></a><nav><a href="/engineering/planning">施工排程</a><a href="/engineering">工程计算</a><a href="/">工作台</a></nav></header>
+<main>
+  <div class="heading"><div><p class="eyebrow">SITE ROUTING</p><h1>找到可通行的最短路线</h1><p>道路节点、通行方向、封路状态和明确边权，共同决定路线。</p></div><span class="tag">道路网络 · 与施工关键路径分开</span></div>
+  <div id="notice" class="notice" role="status" aria-live="polite">添加已知节点和道路，输入距离或通行时间；也可先使用合成样例。</div>
+  <form id="auth" class="panel" hidden><label>访问口令<input id="token" type="password" autocomplete="current-password" required></label><button>保存口令</button></form>
+  <div class="workspace">
+    <section class="panel editor" aria-label="路网输入">
+      <div class="row"><h2>路网输入</h2><button id="example" type="button">使用合成路网</button><button id="undo" type="button" disabled>撤销输入修改</button></div>
+      <p id="sample" class="sample" hidden>合成演示路网与数值，仅用于展示算法，不代表真实现场。</p>
+      <div class="input-grid" id="settings">
+        <label>最小化哪项数值<select id="metric"><option value="distance_m">总距离（m）</option><option value="travel_time_min">总通行时间（min）</option></select></label>
+        <label>起点<select id="origin" aria-label="路线起点"></select></label><label>终点<select id="destination" aria-label="路线终点"></select></label>
+        <label class="check"><input id="synthetic" type="checkbox">这些输入是合成演示参数</label>
+      </div>
+      <p class="muted">切换距离 / 时间会清空道路数值，请按新单位重新填写；可用“撤销”恢复。不从图上量距离，不自动假设车速。</p>
+      <div class="row"><h3>节点</h3><button id="addNode" type="button">添加节点</button></div>
+      <div class="table-scroll"><table><thead><tr><th>编号</th><th>位置名称</th><th>操作</th></tr></thead><tbody id="nodes"></tbody></table></div>
+      <div class="row"><h3>道路</h3><button id="addEdge" type="button">添加道路</button></div>
+      <p class="muted">未勾选“双向”时，只能按“从 → 到”通行。封路道路仍保留在图和输入中，计算时排除。</p>
+      <div class="table-scroll"><table class="roads"><thead><tr><th>道路</th><th>从</th><th>到</th><th id="weightTitle">距离 m</th><th>双向</th><th>封路</th><th>数值来源</th><th>操作</th></tr></thead><tbody id="edges"></tbody></table></div>
+      <details><summary>完整路网参数 JSON</summary><p class="muted">可粘贴已有路网。编辑后先应用或撤回 JSON，再计算；此处不执行代码。</p><textarea id="modelJson" rows="16" spellcheck="false" aria-label="完整路网参数 JSON"></textarea><div class="row"><button id="applyJson" type="button" disabled>应用 JSON</button><button id="discardJson" type="button" disabled>撤回 JSON 编辑</button></div></details>
+      <div class="row runbar"><button id="calculate" type="button" class="primary">计算最短路线</button><button id="cancel" type="button" hidden>取消计算</button><span id="inputState" class="muted">尚未计算</span></div>
+    </section>
+    <section class="panel output" aria-label="路线结果">
+      <div class="row"><h2>路网示意</h2><span id="engine" class="muted"></span></div>
+      <p class="schematic">示意布局 · 非测量坐标 · 非真实比例</p><p class="legend">灰色：可通行　虚线：封路　绿色：当前计算路线　箭头：允许方向</p>
+      <svg id="network" viewBox="0 0 800 490" role="img" aria-label="路网示意，布局不代表测量坐标"></svg>
+      <p id="resultState" class="notice" hidden></p><div id="result"><p class="empty">计算后查看分段来源与总距离 / 时间。</p></div>
+      <details id="raw" hidden><summary>完整路线计算记录</summary><pre id="resultJson"></pre></details>
+    </section>
+  </div>
+  <footer>NetworkX · Dijkstra。路线依据明确输入；同权重路线可能不唯一。</footer>
+</main>
+</body></html>

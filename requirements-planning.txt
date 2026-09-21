@@ -1,0 +1,7 @@
+# Optional deterministic planning engines; CPM itself uses the standard library.
+ortools==9.15.6755
+networkx==3.6.1
+openpyxl==3.1.5
+defusedxml==0.7.1
+mpxj==16.7.0
+JPype1==1.7.1

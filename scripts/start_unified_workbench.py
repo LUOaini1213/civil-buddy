@@ -57,7 +57,8 @@ def main():
     domain_env = {k: v for k, v in os.environ.items() if k.upper() in
                   {"PATH", "SYSTEMROOT", "WINDIR", "PATHEXT", "TEMP", "TMP", "APPDATA", "LOCALAPPDATA", "USERPROFILE", "LANG"}}
     domain_env.update(PYTHONUTF8="1", PYTHON_DOTENV_DISABLED="1", CIVIL_OUT_ROOT=str(args.state_root / "domains"),
-                      CIVIL_SANDBOX_ROOTS=str(args.state_root / "domains"))
+                      CIVIL_SANDBOX_ROOTS=str(args.state_root / "domains"),
+                      CIVIL_DOMAIN_WORKSPACE=str(args.state_root / "domains"))
     environment.update(CIVIL_PORT=str(args.port), CIVIL_DOMAIN_URL=f"http://127.0.0.1:{domain_port}",
                        CIVIL_STATE_ROOT=str(args.state_root), CIVIL_DEMO_ROOT=str(ROOT / "demo"),
                        CIVIL_PYTHON=str(Path(args.python).resolve()), CIVIL_UNIFIED_HOME="1")

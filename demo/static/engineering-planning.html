@@ -1,0 +1,81 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>施工计划与关键路径 · Civil Buddy</title>
+  <link rel="icon" href="/static/icons/cb-icon.svg">
+  <link rel="stylesheet" href="/static/vendor/frappe-gantt-1.2.2/frappe-gantt.css">
+  <link rel="stylesheet" href="/static/engineering-planning.css">
+  <script type="module" src="/static/engineering-planning.js"></script>
+</head>
+<body>
+  <header class="site-header"><a class="brand" href="/">CB <span>Civil Buddy</span></a><nav aria-label="工作台导航"><a href="/engineering">工程计算</a><a href="/cad">CAD 工作台</a><a href="/engineering/schedule">日期甘特图</a></nav></header>
+  <main>
+    <div class="hero"><div><p class="eyebrow">CONSTRUCTION PLANNING</p><h1>看清依赖，掌握下一步</h1><p class="muted">工作日排程 · 关键路径 · 资源与每周履约</p></div><span class="draft-badge">施工计划草稿</span></div>
+    <p id="notice" class="notice" role="status" aria-live="polite">从真实任务开始，或载入明确标注的合成示例。工期与资源用量由你确认。</p>
+    <form id="accessForm" class="panel access" hidden><label>工作台访问口令<input id="accessToken" type="password" autocomplete="current-password" required></label><button type="submit">验证并继续</button></form>
+
+    <section class="panel project-panel" aria-labelledby="projectTitle">
+      <div class="section-heading"><h2 id="projectTitle">计划与版本</h2><span id="projectStatus" class="status">尚未保存</span></div>
+      <div class="toolbar"><label class="grow">计划名称<input id="planName" maxlength="100" placeholder="输入本次计划名称"></label><button id="applyInputs">应用输入</button><button id="savePlan" class="primary">保存计划</button><button id="saveCopy">另存副本</button><button id="newPlan">新计划</button><button id="loadExample" class="quiet">合成演示</button></div>
+      <div id="sampleNotice" class="sample" hidden>合成演示：日期、工期、依赖与资源均为教学样例，不是实际施工安排。</div>
+      <details><summary>最近计划与版本历史</summary><div class="toolbar history-toolbar"><label class="grow">最近计划<select id="recentPlans"><option value="">选择计划</option></select></label><button id="openPlan">打开</button><button id="refreshPlans">刷新列表</button><label class="grow">历史版本<select id="revisions"><option value="">先打开已保存计划</option></select></label><button id="restoreRevision">载入为草稿</button><button id="undoSaved">撤销上次保存</button></div><p class="muted small">载入历史后可检查并保存为新修订；旧版本保留。未保存编辑不会被静默覆盖。</p></details>
+    </section>
+
+    <section class="panel" aria-labelledby="calendarTitle">
+      <div class="section-heading"><h2 id="calendarTitle">工作日历</h2><span class="muted small">工期按工作日计算 · 工期 0 为里程碑</span></div>
+      <div class="calendar-grid"><label>计划开始日期<input id="startDate" type="date" min="1900-01-01" max="2200-12-31"></label><fieldset class="weekdays"><legend>工作周</legend><div id="weekdays"></div></fieldset><label>停工日 / 节假日（每行一个日期）<textarea id="holidays" rows="2" placeholder="YYYY-MM-DD"></textarea></label></div>
+    </section>
+
+    <section class="panel task-panel" aria-labelledby="tasksTitle">
+      <div class="section-heading"><div><h2 id="tasksTitle">工作分解与任务</h2><p id="taskCount" class="muted small">0 项任务</p></div><div class="button-group"><button id="addTask">＋ 添加任务</button><button id="undoEdit" disabled>撤销编辑</button></div></div>
+      <p class="table-help">依赖格式 <code>T1:FS:0, T2:SS:2</code>；FS 完成后开始、SS 同起、FF 同终、SF 开始后完成。正 lag 为延后、负 lag 为提前。资源格式 <code>R1:2</code>，表示占用 2 个单位。父任务为 WBS 分组：工期填 0，不分配依赖、资源或实际日期；结果由子任务汇总。</p>
+      <div class="table-scroll" tabindex="0" aria-label="任务编辑表，可横向滚动"><table class="task-table"><thead><tr><th scope="col">编号</th><th scope="col">任务名称</th><th scope="col">父任务</th><th scope="col">工期 / 工作日</th><th scope="col">完成 %</th><th scope="col">前置任务 : 类型 : lag</th><th scope="col">资源 : 用量</th><th scope="col">实际开始</th><th scope="col">实际完成</th><th scope="col">操作</th></tr></thead><tbody id="taskRows"></tbody></table></div>
+      <div class="runbar"><div><button id="calculate" class="primary">计算关键路径</button><button id="cancelRequest" hidden>取消本次请求</button></div><p id="calculationState" class="muted small">尚未计算</p></div>
+    </section>
+
+    <section class="panel results-panel" aria-labelledby="resultsTitle">
+      <div class="section-heading"><h2 id="resultsTitle">排程结果</h2><span id="resultBadge" class="status">等待输入</span></div>
+      <div id="resultEmpty" class="empty"><span class="empty-symbol">↗</span><strong>先确定任务，再计算计划</strong><p>结果会显示关键任务、可用时差与完成日期。调整输入后保留上次结果，并提示重新计算。</p></div>
+      <div id="resultContent" hidden>
+        <div id="metrics" class="metrics"></div><p id="engineStatus" class="muted small"></p><ul id="warnings" class="warnings"></ul><details id="resourceDiagnostics" hidden><summary>查看资源用量与冲突区间</summary><div id="resourceReport" class="table-scroll"></div></details>
+        <div class="chart-toolbar"><nav class="view-tabs" aria-label="结果视图"><button data-view="gantt" aria-pressed="true">甘特图</button><button data-view="network" aria-pressed="false">依赖网络</button><button data-view="table" aria-pressed="false">日期与时差</button></nav><label id="scaleControl">时间尺度<select id="viewMode"><option value="Day">日</option><option value="Week" selected>周</option><option value="Month">月</option></select></label></div>
+        <p id="chartExplanation" class="muted small">红色为关键任务。时间条来自计算结果；修改上方输入后重新计算。甘特图只画 FS 箭头，全部关系见依赖网络。</p>
+        <div id="ganttView" class="chart-scroll"><div id="gantt" aria-label="计算结果甘特图"></div></div>
+        <div id="networkView" class="chart-scroll" hidden><div id="network" aria-label="任务依赖网络"></div></div>
+        <div id="tableView" class="table-scroll" hidden><table><thead><tr><th>任务</th><th>开始</th><th>完成</th><th>最早开始 / 完成</th><th>最迟开始 / 完成</th><th>总时差</th><th>关键</th></tr></thead><tbody id="resultRows"></tbody></table></div>
+      </div>
+    </section>
+
+    <div class="detail-grid">
+      <section class="panel" aria-labelledby="resourceTitle"><div class="section-heading"><h2 id="resourceTitle">资源容量</h2><button id="addResource">＋ 添加资源</button></div><p class="muted small">资源名称和每日容量须由项目提供。资源调整先展示变化，应用后才修改计划。</p><div class="table-scroll"><table><thead><tr><th>编号</th><th>资源名称</th><th>每日容量</th><th>操作</th></tr></thead><tbody id="resourceRows"></tbody></table></div><button id="optimize">预览资源调整</button><div id="optimization" hidden><p id="optimizationSummary"></p><div id="optimizationChanges" class="table-scroll"></div><div class="button-group"><button id="applyOptimization" class="primary">应用调整</button><button id="discardOptimization">放弃预览</button></div></div></section>
+      <section class="panel" aria-labelledby="baselineTitle"><div class="section-heading"><h2 id="baselineTitle">基线与实际</h2><button id="captureBaseline">将当前结果设为基线</button></div><p id="baselineState" class="muted small">基线记录确认时的计划日期，之后编辑不自动覆盖。</p><div class="table-scroll"><table><thead><tr><th>任务</th><th>基线完成</th><th>当前计划完成</th><th>实际完成</th><th>计划偏差 / 日历天</th></tr></thead><tbody id="baselineRows"></tbody></table></div></section>
+    </div>
+
+    <section class="panel" aria-labelledby="weeklyTitle"><div class="section-heading"><div><h2 id="weeklyTitle">每周承诺与履约</h2><p class="muted small">PPC = 已完成承诺数 ÷ 本周全部承诺数。进行中的承诺仍计入分母；完成事实由你记录。</p></div><span id="ppc" class="ppc">—</span></div><form id="promiseForm" class="toolbar"><label>周起始日（周一）<input id="promiseWeek" type="date" required></label><label class="grow">承诺任务<select id="promiseTask" required></select></label><button type="submit">添加承诺</button></form><div class="toolbar"><label>查看周<select id="weeklyFilter"><option value="">全部周</option></select></label><span id="ppcDetail" class="muted small">尚无承诺</span></div><div class="table-scroll"><table><thead><tr><th>周起始</th><th>任务</th><th>完成状态</th><th>未完成原因 / 备注</th><th>待解决制约</th><th>操作</th></tr></thead><tbody id="promiseRows"></tbody></table></div></section>
+
+    <section class="panel exchange-panel" aria-labelledby="exchangeTitle">
+      <div class="section-heading"><h2 id="exchangeTitle">导入与交接</h2><span class="muted small">保留原文件；导入产生本地草稿</span></div>
+      <div class="exchange-grid">
+        <div><label>计划文件<input id="importFile" type="file" accept=".json,.csv,.xlsx,.xml,.mpp,.xer,.pmxml"></label><button id="importPlan">检查导入文件</button><p id="importHint" class="muted small">JSON、CSV、XLSX、MS Project XML；MPP / P6（XER、PMXML）取决于服务器可用的转换组件。导入后先核对日历与依赖。</p></div>
+        <div><label>导出格式<select id="exportFormat"><option value="json">JSON 计划数据</option><option value="csv">CSV 任务表</option><option value="xlsx">Excel 工作簿</option><option value="xml">MS Project XML</option></select></label><label>签认提示：完整输入“我明白，将由持证人员签认”<input id="confirmation" autocomplete="off" placeholder="我明白，将由持证人员签认"></label><button id="exportPlan">导出当前计划</button><p class="muted small">交换文件包含计划输入与计算日期；基线、周承诺和原始文件请单独交接。</p></div>
+      </div>
+      <div id="importPreview" class="import-review" hidden>
+        <div class="section-heading"><h3>导入检查 · 等待确认</h3><span class="status stale">尚未应用到当前计划</span></div>
+        <div id="importSummary"></div>
+        <details><summary>查看完整 JSON 报告与原文件日期</summary><pre id="importReport"></pre></details>
+        <label class="check"><input id="confirmImport" type="checkbox">已核对导入报告，接受列出的差异</label>
+        <div class="button-group"><button id="applyImport" class="primary">应用为新计划草稿</button><button id="discardImport">取消导入</button></div>
+      </div>
+      <div id="sourcePanel" class="import-review" hidden>
+        <div class="section-heading"><h3>当前计划的导入来源</h3><span id="sourceState" class="status">来源记录</span></div>
+        <div id="sourceSummary"></div>
+        <p class="muted small">这里只记录来源与导入差异，原文件请自行保管。原文件日期不自动变成约束，计算日期按确认后的日历与依赖生成。</p>
+        <details><summary>查看完整来源 JSON 与原文件摘要</summary><pre id="sourceMetadata"></pre></details>
+        <details><summary>逐任务核对原文件日期与当前计算日期</summary><div id="sourceDateComparison" class="table-scroll"></div></details>
+      </div>
+    </section>
+    <footer>甘特显示：<a href="/static/vendor/frappe-gantt-1.2.2/SOURCE.json">Frappe Gantt 1.2.2</a> · <a href="/static/vendor/frappe-gantt-1.2.2/license.txt">MIT</a>。排程结果取决于已确认的输入、工作日历和依赖关系。</footer>
+  </main>
+</body>
+</html>

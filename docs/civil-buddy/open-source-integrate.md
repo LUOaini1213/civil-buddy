@@ -2,7 +2,7 @@
 
 更新日期：2026-09-21。学校比赛用途。Excel 与本文件已同步当前 6 张表的内容。
 
-[Excel 清单](open-source-integrate.xlsx) 保留全部历史及后续追加记录。主清单 45 条（18 条建议、13 条历史暂缓、14 条本轮新增/深化），包括同一生态功能和书签，不能视为 45 个独立开源项目。首批目标 4 项。“GitHub加深命中”15 条是检索证据，不重复计数。
+[Excel 清单](open-source-integrate.xlsx) 保留全部历史及后续追加记录。主清单 51 条（18 条建议、13 条历史暂缓、20 条新增/深化），包括同一生态功能和书签，包含自研模块与复用组件，不能视为 51 个独立开源项目。首批目标 4 项。“GitHub加深命中”15 条是检索证据，不重复计数。
 
 ## 首批交付与状态
 
@@ -10,12 +10,13 @@
 | --- | --- | --- | --- | --- | --- |
 | 首批 1 | 截面性质 | 现有 CAD 选集 → 有孔截面 A/形心/I → 保存报告 | 闭合轮廓与单位，长度可为空 | 已接入；离线/HTTP/浏览器真重启恢复通过；CAD Agent 已接；真实项目待验收 | sectionproperties 深化 / 确定性几何 |
 | 首批 2 | Pynite 梁分析 | 跨度/材料/截面/荷载表单 → 反力与内力挠度 | 真实输入或明确标为教学算例 | 已接入；离线/HTTP/浏览器改参、撤销、保存重开通过；真实项目待验收 | Pynite 受限参数适配器 |
-| 首批 3 | 施工甘特 | 添加任务与依赖 → 改日期 → 保存 → 重开 → 撤销 | 任务计划由参赛团队录入 | 已接入；离线与 HTTP 通过；浏览器拖动/撤销/保存刷新/390px 通过；真实项目待验收 | Frappe Gantt，首版无完整 CPM |
+| 首批 3 | 施工排程与日期甘特 | 明确工期/日历→CPM→资源预览→保存重启恢复→基线/周PPC | 团队录入明确任务、日历和整单位资源；真实计划尚未提供。 | 已接入；CPM8天、资源11天、基线8天、PPC50%；重启与390px通过。 | Frappe Gantt + 自研CPM/版本/PPC + OR-Tools；文件读取MPXJ。 |
 | 首批 4 | IFC 检查与差异 | IFC + IDS → 缺项列表；两版 IFC → 差异定位 | 授权 IFC、IDS 及两版稳定 GUID 模型 | 已接入；离线/HTTP/浏览器检查、差异、保存通过；真实项目待验收 | IfcTester / IfcDiff，复用已有生态 |
 | 后续 | 问题交换 / 边坡 / 管网 | 按候选页逐项验证，先建立一条完整算例 | 资料到位再进入开发 | 尚未实施 | BCF / PySlope / WNTR / PySWMM |
 | 后续 | 点云 / 交通 / 碳核算 | 每项独立 worker 与示例数据包 | 许可清楚的点云、流量和 LCA 数据 | 尚未实施 | PDAL + Potree / SUMO / Brightway |
+| 本轮深化 | 场内最短路线 | 明确道路→150m→封路180m→不可达 | 明确方向、权重和来源 | 已接入；离线8项、桌面浏览器通过，真实路网待验 | NetworkX，独立于施工关键路径 |
 
-运行方法与实际能力见 [工程工作台](engineering-workbench.md)，[第三方说明](../../demo/static/engineering-notices.txt) 记录实际安装版本和许可差异。
+运行方法与实际能力见 [工程工作台](engineering-workbench.md)、[施工排程工作台](planning-workbench.md)，[第三方说明](../../demo/static/engineering-notices.txt) 记录实际安装版本和许可差异。
 
 ## 四人分工
 
@@ -24,13 +25,13 @@
 | 你 / 集成负责人 | 主界面、项目保存、数据来源、受限 Agent 工具、演示串联 | 统一 project_id、单位、错误格式、取消、版本；汇总许可证 | 端到端演示及可重现环境；不承担其他人的全部模块实现 |
 | 同事 A / 结构计算 | 截面性质、Pynite 适配器、解析验算样例 | 与 CAD 保持实体 ID，参数表说明单位和输入依据 | 有孔截面 + 简支梁结果与解析一致 |
 | 同事 B / BIM 质量 | IFC 上传、IDS 检查、IfcDiff 对比和构件定位 | 输出 GUID、规则 ID、前后值及错误原因 | 至少一个缺项、一个新增、一个删除、一个修改可复现 |
-| 同事 C / 计划与演示 | Frappe 甘特、任务编辑、日期/依赖校验、截图与比赛材料 | 沿用项目存储和撤销，不另起第二套业务后台 | 计划改动保存重开一致；演示视频区分自研和复用 |
+| 同事 C / 计划与演示 | 施工日历/依赖、资源方案、基线周PPC、文件往返与比赛材料 | 沿用项目存储和撤销，不另起第二套业务后台 | 8/11天算例、MPP/P6读取、重启恢复；区分自研与复用、真实与合成。 |
 
 ## 使用和署名口径
 
 - **用途：** 学校比赛的选型与交付记录。更新日期 2026-09-21。非商业用途不自动免除开源许可义务。
 - **首批状态：** 四项首批按本轮离线、HTTP 与浏览器证据标注状态；真实项目未验收。其余候选不因安装了库就标为已接入。
-- **原始记录：** 保留全部当前 6 张表，包括后续补入的 8 条主表记录和 15 条检索命中。第 6 表多为重复来源，不重复计入主清单。
+- **原始记录：** 保留全部6张表与历史记录，追加本轮6项排程/路线/候选。第6表15条检索命中不重复计数。
 - **新旧优先级：** 历史 1–12 为原排序。当前 P0 首批、P1 后续、P2 拓展、P3 备选/暂缓；P0 不表示完成。
 - **原创性说明：** 比赛章程尚未提供，不能保证任何复用比例符合比赛规则。提交前核对开源复用、AI 辅助与成果署名要求。
 - **自研与复用：** 自研重点为统一项目/来源追溯、参数确认、受限工具调用、校验、撤销、界面和测试。求解器与控件如实署名。
@@ -69,15 +70,15 @@
 
 ### N03 Frappe Gantt
 
-- **优先级/状态：** P0 首批。已接入；离线与 HTTP 通过；浏览器拖动/撤销/保存刷新/390px 通过；真实项目待验收。
-- **功能：** 施工计划编辑。拖动任务日期、调整完成率和查看前后置关系，接入保存与撤销。
-- **岗位与接入：** plan-master / plan-lookahead。本地 JS 控件，date_change/progress_change 回写后端。
-- **许可与署名：** MIT 保留版权和 MIT 文本，页面关于或第三方清单列上游。
-- **数据：** 任务名称、日期、依赖及完成率；未填日期不自动假造工期。
-- **最小验收：** 修改任务后保存重开一致，撤销可还原，循环依赖被拒绝。
-- **限制：** 是甘特编辑控件，不自带完整 CPM、资源平衡或施工日历求解。
+- **优先级/状态：** P0 首批。已接入；拖动/撤销/重开通过；新排程页390px通过；真实计划待验。
+- **功能：** 日期甘特与排程结果展示。保留日期/进度拖动与撤销；新排程页展示自研CPM和资源方案。
+- **岗位与接入：** plan-master / plan-lookahead。本地1.2.2控件；日期页可编辑，排程页只读图配参数编辑。
+- **许可与署名：** MIT；保留版权与许可。
+- **数据：** 日期页录入明确日期；排程页录入工期与日历，不编造缺失参数。
+- **最小验收：** 旧日期手势可一次撤销；新页CPM8天/资源11天、保存重启恢复。
+- **限制：** 控件负责显示与日期编辑；CPM/资源求解来自本项目内核及OR-Tools。
 - **维护证据：** 本轮采用 npm 1.2.2；官方 tarball 完整性及许可见 vendor/SOURCE.json。早期 GitHub release 记录 v1.0.3。
-- **来源：** [官方仓库](https://github.com/frappe/gantt)；[文档](https://docs.frappe.io/gantt/config)；[许可来源](https://github.com/frappe/gantt/blob/master/license.txt)；[补充来源](https://registry.npmjs.org/frappe-gantt/1.2.2)、[补充来源2](https://github.com/frappe/gantt/releases/tag/v1.0.3)。
+- **来源：** [官方仓库](https://github.com/frappe/gantt)；[文档](https://docs.frappe.io/gantt/config)；[许可](https://github.com/frappe/gantt/blob/master/license.txt)；[版本包](https://registry.npmjs.org/frappe-gantt/1.2.2)。
 
 ### N04 IfcTester / IfcDiff
 
@@ -211,6 +212,78 @@
 - **维护证据：** 保留原 Markdown 记录，维护状态待复核。
 - **来源：** [官方仓库](https://www.cee.ed.tum.de/en/ccbe/research/research-fields/building-information-modeling-in-infrastructure/tum-open-infra-platform/)；[文档](https://www.cee.ed.tum.de/en/ccbe/research/research-fields/building-information-modeling-in-infrastructure/tum-open-infra-platform/)。
 
+### N15 Civil Buddy CPM / 基线 / 周 PPC
+
+- **优先级/状态：** P0 深化。已接入；核心15项、HTTP14项；浏览器真重启恢复资源11天。
+- **功能：** 施工排程与进度管理。工作日历、WBS、四类依赖、正负时距、关键任务、基线与周承诺。
+- **岗位与接入：** plan-master / plan-lookahead。本项目 Python 内核和版本存储；Frappe 展示计算结果。
+- **许可与署名：** 本项目 MIT；前端及求解器依赖分别署名。 说明自研范围，保留明确输入、结果版本与测试证据。
+- **数据：** 明确工期、工作日历、依赖、完成事实；不从名称猜工期。
+- **最小验收：** 合成 CPM 8天；基线8天、资源11天、PPC50%；重开一致。
+- **限制：** 统一日历、整工作日；实际日期仅记录；不是完整 MSP/P6 引擎。
+- **维护/验证证据：** 本轮本地实现及离线、HTTP、浏览器记录。
+- **来源：** [官方仓库](https://github.com/LUOaini1213/civil-buddy)；[本项目排程说明](planning-workbench.md)；[许可](https://github.com/LUOaini1213/civil-buddy/blob/main/LICENSE); 本轮变更在工作分支，公开默认分支可能尚未同步。。
+
+### N16 OR-Tools CP-SAT
+
+- **优先级/状态：** P0 深化。已接入；优化9项；单班组11天、双班组8天通过。
+- **功能：** 资源容量约束排程。明确班组/设备容量下求可行或最优日期，预览后应用，可撤销。
+- **岗位与接入：** plan-resource / plan-master。固定 Python worker；区间与累计资源约束；不执行模型代码。
+- **许可与署名：** Apache-2.0；传递依赖保留各自许可。 保留版本、LICENSE 与适用 NOTICE；区分自研适配和求解器。
+- **数据：** 整数工期、四类依赖、资源容量及工序明确需求。
+- **最小验收：** CPM8天→单班组11天→保存重启恢复；进度改动不静默降级。
+- **限制：** 统一日历、不可中断、整单位资源；OPTIMAL才证明最优；不算资源关键线路。
+- **维护/验证证据：** 已安装锁定 ortools 9.15.6755，实际求解通过。
+- **来源：** [官方仓库](https://github.com/google/or-tools)；[文档](https://developers.google.com/optimization/scheduling/job_shop)；[许可](https://github.com/google/or-tools/blob/v9.15/LICENSE); [补充来源](https://developers.google.com/optimization/cp/cp_solver)。
+
+### N17 MPXJ
+
+- **优先级/状态：** P0 深化。已接入；公开MPP16任务网页上传/保存刷新通过；P6合成往返通过。
+- **功能：** MPP / P6 计划文件读取。MPP、XER、PMXML 转受限 MSPDI；展示原日期与未映射报告，确认后应用。
+- **岗位与接入：** plan-master / 文件导入。MPXJ 16.7.0 + JPype1 1.7.1 + 便携 JRE21，固定子进程。
+- **许可与署名：** LGPL-2.1；JPype、JRE 与捆绑 Java 库另按各自条款。 保留准确版本许可、来源与摘要；分发时核对 LGPL 和捆绑库要求。
+- **数据：** 单项目文件，明确日历/工期；另行保存授权原始文件。
+- **最小验收：** 二进制MPP读入16任务/16原日期；XER/PMXML实际读取。
+- **限制：** 不写原生MPP/P6；不等于源排程引擎；部分资源占用明确拒绝。
+- **维护/验证证据：** 锁定 mpxj16.7.0；官方MPP固定提交文件与SHA256已核验。
+- **来源：** [官方仓库](https://github.com/joniles/mpxj)；[文档](https://www.mpxj.org/)；[许可](https://github.com/joniles/mpxj/blob/v16.7.0/LICENSE); [补充来源](https://github.com/joniles/mpxj/blob/c5e1320cde0acd404031495aa66c17639a57239b/junit/data/generated/task-links/task-links-project2000-mpp9.mpp)。
+
+### N18 NetworkX
+
+- **优先级/状态：** P0 深化。已接入；路线8项；桌面浏览器150m→封路180m→不可达。
+- **功能：** 场内最短路线。编辑明确道路权重、方向和封路状态，显示最短路线及分段来源。
+- **岗位与接入：** dispatch / municipal / routes。Python MultiDiGraph + Dijkstra，独立道路页面。
+- **许可与署名：** BSD-3-Clause。 保留版权、许可与版本；道路数据授权单独确认。
+- **数据：** 道路节点和每段明确距离(m)或固定通行时间(min)、数值来源。
+- **最小验收：** 单向/封路/不可达；平行边来源和单位核对。
+- **限制：** 道路最短路不是施工CPM；不猜车速，不做车辆调度；未接独立项目保存。
+- **维护/验证证据：** 已安装锁定 networkx3.6.1；实际算法与页面验证通过。
+- **来源：** [官方仓库](https://github.com/networkx/networkx)；[文档](https://networkx.org/documentation/stable/reference/algorithms/shortest_paths.html)；[许可](https://github.com/networkx/networkx/blob/networkx-3.6.1/LICENSE.txt); [补充来源](https://networkx.org/documentation/stable/reference/classes/multidigraph.html)。
+
+### N19 OpenProject
+
+- **优先级/状态：** P2 后续。后续候选，未安装、未接入、未验收。
+- **功能：** 项目协作平台候选。候选方向：多人工作包、责任人与项目协作；先做独立接口验证。
+- **岗位与接入：** plan-master / 协作候选。尚未接入；后续评估官方API与部署，不嵌入整套平台。
+- **许可与署名：** 官方主仓 LICENSE 为 GPLv3；选版及扩展功能另核。 采用前锁定版本及实际部署/复制范围，保留源码与许可证义务。
+- **数据：** 测试项目、用户/权限边界、实际协作需求。
+- **最小验收：** 采用前验证工作包读取/更新、权限、冲突与审计。
+- **限制：** 不将平台宣传等同当前工作台能力，不声称 Project/P6 无损互通。
+- **维护/验证证据：** 本轮只核官方仓库/许可入口；版本、维护及API验证待补。
+- **来源：** [官方仓库](https://github.com/opf/openproject)；[文档](https://www.openproject.org/docs/api/)；[许可](https://github.com/opf/openproject/blob/dev/LICENSE); [补充来源](https://www.openproject.org/docs/)。
+
+### N20 GanttProject
+
+- **优先级/状态：** P3 备选。后续候选，未安装、未接入、未验收。
+- **功能：** 桌面计划与互通候选。候选方向：桌面甘特流程参考与文件交换对照。
+- **岗位与接入：** plan-master / 互通候选。尚未接入；先核文件往返与可调用接口，不复制整套桌面应用。
+- **许可与署名：** 官方主仓 LICENSE 为 GPLv3；分发组件逐项核对。 采用前锁定版本及复制范围，保留许可、版权和对应源码要求。
+- **数据：** 授权计划文件、明确工期/日历/资源，源软件对照结果。
+- **最小验收：** 采用前验证实际日期、依赖、WBS和资源往返差异。
+- **限制：** 不能据README声称已兼容全部MSP/P6；当前主线仍为自研受限排程。
+- **维护/验证证据：** 本轮只核官方仓库/许可入口；具体版本能力待验证。
+- **来源：** [官方仓库](https://github.com/bardsoftware/ganttproject)；[文档](https://www.ganttproject.biz/)；[许可](https://github.com/bardsoftware/ganttproject/blob/master/LICENSE)。
+
 ## 历史记录与后续补充
 
 原许可证判断、命令、星标与数据逐格保留。新评估取代旧“AGPL 传染”“T040 专有写盘”或“一次只接一个 MCP”等口径。未经复核的后续补充不作为当前能力承诺。后续写入批次标注 2026-09-22（晚于本次核验日），日期及许可信息保留待核。
@@ -301,3 +374,11 @@
 - 对当前 6 表定点更新，除已列明状态、许可核验、数量范围和说明外，其余单元格值及公式保持一致。后续追加内容完整保留。
 - 首批 4 项、主清单 45 条经公式与独立计数核对；临时改变优先级，首批计数由 4 变 3 后恢复 4。
 - 重算、公式错误扫描、受影响范围渲染、导出重读均已执行。导出缓存另经文件结构检查，真实项目验收仍待输入资料。
+
+
+## 本轮排程深化检查记录
+
+- **本轮排程验收：** 最终npm check 108/108；提交边界专项3/3；核心15、优化9、交换19、路线8、UI18、HTTP14通过。浏览器资源11天重启仍11，基线8天，PPC50%。390px仅排程页；路线桌面验收。
+- **计划文件交接：** MPP公开合成文件16任务/16原日期，网页上传确认后保存刷新恢复。P6为合成XER/PMXML往返。JSON是计划交换文件，不含基线/周承诺/历史/原文件字节，非完整项目包。
+- **实现与候选边界：** Frappe、自研CPM/基线周PPC、OR-Tools、MPXJ、NetworkX已接入。OpenProject/GanttProject仍为后续候选。资源仅整单位，1对应XML1.0；50%占用拒绝。真实计划未提供。
+- **部署与证据：** 详见 docs/civil-buddy/planning-workbench.md。MPXJ使用项目本地便携JRE，不装系统Java；保留SHA256与许可。源Project/P6软件重开、跨电脑迁移及真实施工验收仍待补。

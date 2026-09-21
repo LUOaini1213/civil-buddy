@@ -56,6 +56,12 @@ CHECKS = (
     Check("host-worker", ("scripts/test_host_worker.py",)),
     Check("unified-acceptance-oracle", ("scripts/test_unified_acceptance.py",)),
     Check("ui-dom", ("scripts/e2e/ui_dom.cjs",), "node"),  # real page + real backend in jsdom
+    Check("engineering-planning", ("scripts/test_engineering_planning.py",)),
+    Check("planning-exchange", ("scripts/test_planning_exchange.py",)),
+    Check("planning-workbench", ("scripts/test_planning_workbench.py",), timeout=180),
+    Check("engineering-routing", ("scripts/test_engineering_routing.py",)),
+    Check("planning-ui", ("scripts/test_engineering_planning_ui.cjs",), "node"),
+    Check("planning-optimizer", ("scripts/test_planning_optimizer.py",)),
     Check("stack-parity", ("scripts/test_stack_parity.py",)),
     Check("expert-capabilities", ("scripts/test_expert_capabilities.py",)),
     Check("tool-contracts", ("scripts/test_tool_contracts.py",)),

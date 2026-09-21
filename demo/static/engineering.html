@@ -1,13 +1,13 @@
 <!doctype html>
 <html lang="zh-CN"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>工程计算 · Civil Buddy</title><link rel="icon" href="/static/icons/cb-icon.svg"><link rel="stylesheet" href="/static/engineering.css"><script src="/static/engineering.js" type="module"></script></head>
 <body>
-<header><a class="brand" href="/">CB <span>Civil Buddy</span></a><nav><a href="/cad">CAD 截面与建模</a><a href="/engineering/schedule">施工计划</a><a href="/">工作台</a></nav></header>
+<header><a class="brand" href="/">CB <span>Civil Buddy</span></a><nav><a href="/cad">CAD 截面与建模</a><a href="/engineering/planning">施工排程</a><a href="/engineering/routes">场内路线</a><a href="/">工作台</a></nav></header>
 <main>
   <div class="heading"><div><p class="eyebrow">ENGINEERING WORKSPACE</p><h1>把参数，变成可核对的结果</h1><p>本地计算 · 输入留档 · 版本对比</p></div><span id="capability" role="status">正在检测工具</span></div>
   <div id="notice" class="notice" role="status" aria-live="polite">选择工具，填写已确认参数，或使用明确标注的合成样例。</div>
   <form id="auth" class="panel" hidden><label>访问口令 <input id="token" type="password" autocomplete="current-password" required></label><button>验证并继续</button></form>
   <section class="projectbar panel" aria-label="分析项目"><label>项目名称<input id="projectName" placeholder="给本次分析起个名字" maxlength="100"></label><button id="save" disabled>保存结果</button><button id="saveCopy" disabled>另存副本</button><label>最近项目<select id="projects"><option value="">选择项目</option></select></label><button id="open">打开</button><label>版本历史<select id="versions"><option value="">当前版本</option></select></label><button id="restore">恢复查看</button><span id="projectState">未保存</span></section>
-  <nav class="tabs" aria-label="工程工具"><button data-mode="frame" aria-pressed="true">梁与框架</button><button data-mode="ifc_check" aria-pressed="false">IFC 信息检查</button><button data-mode="ifc_diff" aria-pressed="false">IFC 版本对比</button><a href="/cad">CAD 截面性质 ↗</a><a href="/engineering/schedule">施工甘特图 ↗</a></nav>
+  <nav class="tabs" aria-label="工程工具"><button data-mode="frame" aria-pressed="true">梁与框架</button><button data-mode="ifc_check" aria-pressed="false">IFC 信息检查</button><button data-mode="ifc_diff" aria-pressed="false">IFC 版本对比</button><a href="/cad">CAD 截面性质 ↗</a><a href="/engineering/planning">关键路径与资源排程 ↗</a><a href="/engineering/schedule">日期计划 ↗</a></nav>
   <div class="workspace">
     <section class="panel inputs"><div id="frameFields">
       <h2>线弹性梁与框架</h2><p class="muted">先明确支座、材料、截面和荷载。结果是结构分析，不包含规范验算。</p>

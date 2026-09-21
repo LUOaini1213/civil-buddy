@@ -48,6 +48,10 @@ from cad_api import router as cad_router
 app.include_router(cad_router)
 from engineering_api import router as engineering_router
 app.include_router(engineering_router)
+from planning_api import router as planning_router
+app.include_router(planning_router)
+from routing_api import router as routing_router
+app.include_router(routing_router)
 
 
 def auth_token() -> str:

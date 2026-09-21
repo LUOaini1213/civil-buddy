@@ -9,12 +9,15 @@ import sys
 import tempfile
 import time
 
-OPERATIONS = frozenset({"frame", "section", "ifc_check", "ifc_diff"})
+OPERATIONS = frozenset({"frame", "section", "ifc_check", "ifc_diff", "planning_optimize"})
 MAX_INPUT = 32 * 1024 * 1024
 MAX_OUTPUT = 12 * 1024 * 1024
 
 
 def dispatch(kind: str, payload: dict) -> dict:
+    if kind == "planning_optimize":
+        from .planning_optimize import optimize
+        return optimize(payload)
     if kind == "frame":
         from .frame import analyze_frame
         return analyze_frame(payload)

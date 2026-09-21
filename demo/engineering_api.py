@@ -66,7 +66,9 @@ def store():
 def schedule_store():
     from demo.config import REPO_ROOT
     from packing_assistant.engineering.schedule import ScheduleStore
-    return ScheduleStore(REPO_ROOT)
+    import os
+    from pathlib import Path
+    return ScheduleStore(Path(os.environ.get("CIVIL_DOMAIN_WORKSPACE", str(REPO_ROOT))))
 
 
 def storage_call(fn, *args, **kwargs):
