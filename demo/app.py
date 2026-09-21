@@ -7,7 +7,7 @@ from uuid import uuid4
 from pathlib import Path
 from urllib.parse import unquote
 
-from fastapi import FastAPI, HTTPException, Request
+from fastapi import Depends, FastAPI, HTTPException, Request
 from fastapi.responses import FileResponse, HTMLResponse, Response, StreamingResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field, StrictBool
@@ -57,6 +57,8 @@ except ImportError:
 app.include_router(planning_chat_router)
 from routing_api import router as routing_router
 app.include_router(routing_router)
+from logistics_api import router as logistics_router
+app.include_router(logistics_router)
 
 
 def auth_token() -> str:
@@ -96,10 +98,49 @@ class ChatIn(BaseModel):
     project_id: str = Field(default="", max_length=64)
     cad_project_id: str = Field(default="", pattern=r"^(?:[0-9a-f]{32})?$")
     planning_project_id: str = Field(default="", pattern=r"^(?:[0-9a-f]{32})?$")
+    logistics_project_id: str = Field(default="", pattern=r"^(?:[0-9a-f]{32})?$")
     attachments: list[str] = Field(default_factory=list, max_length=12)
     workflow_budget: dict | None = None
     attachment_roles: dict[str, str] = Field(default_factory=dict)
     background: bool = False  # run with no reader attached; the page follows it as a running session
+
+
+async def require_logistics_chat_access(request: Request, body: ChatIn):
+    """Protect both new bindings and continuation of a logistics session."""
+    from chat_service import session_uses_logistics
+    from logistics_api import local_request
+    from starlette.concurrency import run_in_threadpool
+    try:
+        restricted = bool(body.logistics_project_id) or await run_in_threadpool(session_uses_logistics, OUT_ROOT, body.session_id)
+    except ValueError as exc:
+        raise HTTPException(400, str(exc)) from exc
+    if restricted:
+        await local_request(request)
+
+
+async def require_logistics_session_access(request: Request, sid: str):
+    """Restoring a chat or its event stream must not bypass its project boundary."""
+    from chat_service import session_uses_logistics
+    from logistics_api import local_request
+    from starlette.concurrency import run_in_threadpool
+    try:
+        restricted = await run_in_threadpool(session_uses_logistics, OUT_ROOT, sid)
+    except ValueError as exc:
+        raise HTTPException(400, str(exc)) from exc
+    if restricted:
+        await local_request(request)
+
+
+async def can_read_logistics_sessions(request: Request) -> bool:
+    """Ordinary LAN sessions remain visible; only logistics previews are filtered."""
+    from logistics_api import local_request
+    try:
+        await local_request(request)
+        return True
+    except HTTPException as exc:
+        if exc.status_code == 403:
+            return False
+        raise
 
 
 class ExpertIn(BaseModel):
@@ -550,7 +591,7 @@ class MergeIn(BaseModel):
     into: str = ""
 
 
-@app.get("/api/sessions/{sid}/live")
+@app.get("/api/sessions/{sid}/live", dependencies=[Depends(require_logistics_session_access)])
 def session_live(sid: str) -> dict:
     """Text and status a running (or just finished) turn has produced so far."""
     from chat_service import live_state
@@ -573,12 +614,14 @@ def projects_merge(pid: str, body: MergeIn) -> dict:
 
 
 @app.get("/api/sessions")
-def sessions_list(project_id: str = "", q: str = "", limit: int = 0, offset: int = 0) -> dict:
+def sessions_list(project_id: str = "", q: str = "", limit: int = 0, offset: int = 0,
+                  include_logistics: bool = Depends(can_read_logistics_sessions)) -> dict:
     import projects as pj
     import turn_control
 
-    listing = pj.list_sessions(OUT_ROOT, project_id, q, limit or pj.DEFAULT_LIMIT, offset, recorded_only=True)
-    from chat_service import turn_status
+    from chat_service import public_session_listing, turn_status
+    listing = (pj.list_sessions(OUT_ROOT, project_id, q, limit or pj.DEFAULT_LIMIT, offset, recorded_only=True)
+               if include_logistics else public_session_listing(OUT_ROOT, project_id, q, limit or pj.DEFAULT_LIMIT, offset))
 
     for row in listing.get("sessions", []):
         # A turn detached from its browser keeps running; the list must say so. After a
@@ -589,7 +632,7 @@ def sessions_list(project_id: str = "", q: str = "", limit: int = 0, offset: int
     return listing
 
 
-@app.get("/api/sessions/{sid}")
+@app.get("/api/sessions/{sid}", dependencies=[Depends(require_logistics_session_access)])
 def session_get(sid: str) -> dict:
     from chat_service import session_detail
 
@@ -848,7 +891,7 @@ def studio_limit(body: LimitIn) -> dict:
     return {"kb_soft_limit_kb": set_soft_limit(body.kb_soft_limit_kb), "max_file_bytes": MAX_FILE_BYTES}
 
 
-@app.post("/api/chat")
+@app.post("/api/chat", dependencies=[Depends(require_logistics_chat_access)])
 def chat(body: ChatIn):
     from chat_service import SessionBusy, SessionLease, prepare_turn, start_background_turn, stream_turn, valid_session
 
@@ -891,7 +934,7 @@ def _sse(ev: dict) -> str:
     return f"{head}event: {ev['event']}\ndata: {json.dumps(ev['data'], ensure_ascii=False)}\n\n"
 
 
-@app.get("/api/sessions/{sid}/events")
+@app.get("/api/sessions/{sid}/events", dependencies=[Depends(require_logistics_session_access)])
 def session_events(sid: str, request: Request, after: int = 0) -> StreamingResponse:
     """Resume a turn's event stream from seq `after` (or the Last-Event-ID header): replays
     what the browser missed, then follows the turn live until done. Same frames, same ids as

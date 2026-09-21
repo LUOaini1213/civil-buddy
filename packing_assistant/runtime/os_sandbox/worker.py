@@ -113,6 +113,7 @@ def _model_tool(args: Dict[str, Any]) -> Dict[str, Any]:
     turn.cad_confirmed = args.get("cad_confirmed") is True
     turn.cad_mutation_done = args.get("cad_mutation_done") is True
     turn.planning_context = args.get("planning_context")
+    turn.logistics_context = args.get("logistics_context")
     try:
         result = model_loop._DISPATCH[name](turn, dict(args.get("arguments") or {}))
     except Exception as exc:  # noqa: BLE001 - same contract as the in-process dispatcher

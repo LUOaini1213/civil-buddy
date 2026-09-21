@@ -22,6 +22,7 @@ __pycache__/
 *$py.class
 *.egg-info/
 .venv/
+.venv-logistics/
 venv/
 .envrc
 .pytest_cache/

@@ -26,6 +26,7 @@ STATIC = (
     "engineering-schedule-state.js",
     "engineering-planning.html", "engineering-planning.css", "engineering-planning.js",
     "engineering-routing.html", "engineering-routing.css", "engineering-routing.js",
+    "logistics.html", "logistics.css", "logistics.js",
     "vendor/frappe-gantt-1.2.2/frappe-gantt.css", "vendor/frappe-gantt-1.2.2/frappe-gantt.es.js",
     "vendor/frappe-gantt-1.2.2/license.txt", "vendor/frappe-gantt-1.2.2/SOURCE.json", "vendor/frappe-gantt-1.2.2/package.json",
     "vendor/three/three.module.js", "vendor/three/three.core.js",
@@ -45,6 +46,9 @@ EXPLICIT = (
     "requirements-cad.txt", "docs/civil-buddy/cad-to-3d.md",
     "requirements-analysis.txt", "requirements-engineering.txt", "docs/civil-buddy/engineering-workbench.md",
     "requirements-planning.txt", "docs/civil-buddy/planning-workbench.md",
+    "requirements-logistics.txt", "requirements-logistics-ocr.txt",
+    "scripts/prepare_logistics_ocr.py", "scripts/smoke_logistics_ocr.py",
+    "docs/civil-buddy/logistics-workbench.md", "docs/civil-buddy/logistics-packing-list-agent-research.md",
     "docs/civil-buddy/open-source-integrate.md", "docs/civil-buddy/open-source-integrate.xlsx",
     "examples/cad-to-3d/synthetic-building-mm.dxf", "examples/cad-to-3d/synthetic-hollow-section-mm.dxf",
     "examples/cad-to-3d/README.md",
@@ -150,6 +154,9 @@ CPM 工作日排程使用标准库；资源容量排程、路线与计划文件�
 并用启动本包的同一解释器安装。MPP 导入还需要可用的 Java/JVM；本包不含 Java，
 不会自动安装系统 Java。当前可用格式以页面探测为准；原生 MPP 只读，导出使用 Project XML。
 工程分析结果须点击保存；计划须点击保存计划。内置 DXF、梁和 IFC 均为合成测试数据，不代替真实工程验收。
+物流材料在 `/logistics`，安装 `requirements-logistics.txt` 后可读取表格与数字 PDF。
+扫描件另需独立 OCR 环境及官方模型预热，步骤见 `docs/civil-buddy/logistics-workbench.md`；
+模型未就绪会明确提示。先核对来源和修订差异，再确认台账；完整 ZIP 项目包可交接原件与版本历史。
 如使用环境文件，只编辑本包 `.env` 或 `demo/.env`；`.env.example` 只是样例。
 
 产物保存在本包 `demo/out/`，上传和本地目录配置保存在本包目录；升级前可在设置菜单备份各任务，再导入新包。任务备份不含模型 Key、全局知识库和外部作业目录。

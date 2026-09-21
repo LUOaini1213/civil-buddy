@@ -31,6 +31,9 @@ from packing_assistant.understand import understand
 
 logger = logging.getLogger(__name__)
 _ACTIVE: set[str] = set()
+# A first background turn may expose status/events before its first run is saved.
+# Keep the local-only boundary for that interval and for later unbound turns.
+_LOGISTICS_SESSIONS: set[tuple[str, str]] = set()
 _LOCK = threading.Lock()
 
 
@@ -42,6 +45,59 @@ def valid_session(value: str) -> str:
     if projects.safe_session_id(value) != value or PureWindowsPath(value).is_reserved():
         raise ValueError("会话 id 无效")
     return value
+
+
+def session_uses_logistics(root: Path, sid: str) -> bool:
+    """History remains local-only even after the latest turn clears its binding."""
+    if not sid:
+        return False
+    valid_session(sid)
+    key = (str(root.resolve()), sid)
+    with _LOCK:
+        if key in _LOGISTICS_SESSIONS:
+            return True
+    # This is an authorization check, not an unbounded transcript/history load.
+    # Ambiguous, damaged or oversized metadata fails closed without exposing paths.
+    try:
+        directory = root / sid / "runs"
+        if not directory.resolve().is_relative_to(root.resolve()):
+            return True
+        total = 0
+        for index, path in enumerate(directory.glob("*/workbench.json")):
+            if index >= 512 or not path.resolve().is_relative_to(directory.resolve()):
+                return True
+            size = path.stat().st_size
+            total += size
+            if size > 128 * 1024 or total > 2 * 1024 * 1024:
+                return True
+            with path.open("rb") as stream:
+                data = stream.read(128 * 1024 + 1)
+            if len(data) > 128 * 1024:
+                return True
+            item = json.loads(data)
+            if not isinstance(item, dict):
+                return True
+            if item.get("logistics_project_id"):
+                with _LOCK:
+                    _LOGISTICS_SESSIONS.add(key)
+                return True
+        return False
+    except (OSError, ValueError, RuntimeError, RecursionError):
+        return True
+
+
+def public_session_listing(root: Path, project_id="", q="", limit=0, offset=0) -> dict:
+    """Filter before search/pagination so titles and matching counts do not leak."""
+    lim = max(1, min(int(limit or projects.DEFAULT_LIMIT), projects.MAX_LIMIT))
+    off = max(0, int(offset or 0))
+    # Share the existing bounded metadata-only index, without reading transcripts.
+    rows = projects._scan_rows(root, recorded_only=True)
+    needle = (q or "").strip().casefold()
+    visible = [row for row in rows if not session_uses_logistics(root, row["session_id"])
+               and (not project_id or row["project_id"] == project_id)
+               and (not needle or needle in row["title"].casefold() or needle in row["session_id"].casefold())]
+    return {"ok": True, "schema": projects.SCHEMA_SESSIONS, "total": len(visible), "limit": lim, "offset": off,
+            "sessions": visible[off:off + lim]}
 
 
 class SessionLease:
@@ -119,13 +175,18 @@ def prepare_turn(root: Path, body: dict) -> dict:
     route = route_task(message, ids)
     cad_project_id = body.get("cad_project_id") or ""
     planning_project_id = body.get("planning_project_id") or ""
+    logistics_project_id = body.get("logistics_project_id") or ""
+    if logistics_project_id and (not isinstance(logistics_project_id, str)
+                                 or not re.fullmatch(r"[0-9a-f]{32}", logistics_project_id)):
+        raise ValueError("箱单项目 id 无效")
     if planning_project_id and (not isinstance(planning_project_id, str)
                                 or not re.fullmatch(r"[0-9a-f]{32}", planning_project_id)):
         raise ValueError("施工计划项目 id 无效")
-    if cad_project_id and planning_project_id:
-        raise ValueError("一次对话只能绑定一个 CAD 或施工计划项目")
+    if sum(bool(value) for value in (cad_project_id, planning_project_id, logistics_project_id)) > 1:
+        raise ValueError("一次对话只能绑定一个 CAD、施工计划或箱单项目")
     cad_context = None
     planning_context = None
+    logistics_context = None
     if cad_project_id:
         from packing_assistant.cad3d.projects import CadProjectStore
         from packing_assistant.cad3d.agent import MUTATE_TOOLS, operation
@@ -158,6 +219,24 @@ def prepare_turn(root: Path, body: dict) -> dict:
         }
         route = {"intent": "chat", "expert_ids": [], "workflow": "", "ambiguous": False, "candidates": [],
                  "reason": "核对用户选中的施工计划：" + selected["name"] + "；修改须在排程页确认"}
+        ids = []
+    if logistics_project_id:
+        try:
+            import logistics_api
+        except ImportError:
+            from demo import logistics_api
+        try:
+            selected = logistics_api.store().open(logistics_project_id)
+        except OSError as exc:
+            raise ValueError("无法读取所选箱单，请重新打开项目后再试") from exc
+        logistics_context = {
+            "project": {key: selected.get(key) for key in ("id", "name", "revision", "can_undo", "confirmed")},
+            "document": selected["document"], "audit": selected["audit"], "summary": selected["summary"],
+        }
+        with _LOCK:
+            _LOGISTICS_SESSIONS.add((str(root.resolve()), sid))
+        route = {"intent": "chat", "expert_ids": [], "workflow": "", "ambiguous": False, "candidates": [],
+                 "reason": "核对用户选中的箱单：" + selected["name"] + "；修改须在物流页确认"}
         ids = []
     source = "given" if ids or resolve_mentions(message) else "matched" if route["expert_ids"] else ""
     ids = route["expert_ids"]
@@ -218,7 +297,8 @@ def prepare_turn(root: Path, body: dict) -> dict:
             "attachments": attachment_ids, "route": route,
             "workflow_sources": workflow_sources, "workflow_budget": body.get("workflow_budget"),
             "attachment_roles": roles, "cad_project_id": cad_project_id, "cad_context": cad_context,
-            "planning_project_id": planning_project_id, "planning_context": planning_context}
+            "planning_project_id": planning_project_id, "planning_context": planning_context,
+            "logistics_project_id": logistics_project_id, "logistics_context": logistics_context}
 
 
 def _event(kind: str, **data) -> dict:
@@ -347,6 +427,7 @@ def _record(root: Path, turn: dict, result: dict, deliverables: list[dict], node
     payload["attachment_roles"] = turn.get("attachment_roles", {})
     payload["cad_project_id"] = turn.get("cad_project_id", "")
     payload["planning_project_id"] = turn.get("planning_project_id", "")
+    payload["logistics_project_id"] = turn.get("logistics_project_id", "")
     if result.get("collaboration"):
         payload["collaboration"] = result["collaboration"]
     tmp = path.with_suffix(".tmp")
@@ -394,6 +475,7 @@ def session_detail(root: Path, sid: str) -> dict:
     detail["attachment_roles"] = runs[-1].get("attachment_roles", {}) if runs else {}
     detail["cad_project_id"] = runs[-1].get("cad_project_id", "") if runs else ""
     detail["planning_project_id"] = runs[-1].get("planning_project_id", "") if runs else ""
+    detail["logistics_project_id"] = runs[-1].get("logistics_project_id", "") if runs else ""
     detail["deliverables"] = [f for r in runs for f in r.get("deliverables", []) if Path(f["path"]).is_file()]
     detail["deliverable_runs"] = deliverable_runs(runs)
     # Restore only the last turn's selected attachments, not every uploaded file.
@@ -450,12 +532,14 @@ def _stream_turn(root: Path, turn: dict, *, key_available: bool, plain_runner, l
 
         chosen, _mode_notice = resolve_mode()
         routed_model = (
-            (chosen == "model" or bool(turn.get("cad_context")) or bool(turn.get("planning_context")))
+            (chosen == "model" or bool(turn.get("cad_context")) or bool(turn.get("planning_context"))
+             or bool(turn.get("logistics_context")))
             and not workflow
             and not turn["route"].get("ambiguous")
         )
         if routed_model:
-            status = ("施工计划：核对当前参数、形成待确认建议" if turn.get("planning_context") else
+            status = ("物流箱单：核对原文、汇总并形成待确认建议" if turn.get("logistics_context") else
+                      "施工计划：核对当前参数、形成待确认建议" if turn.get("planning_context") else
                       "CAD 项目：检查图纸、执行受限工具" if turn.get("cad_context") else
                       "模型驱动：选岗、调工具、出稿")
             yield _event("status", phase="deliver", text=status)
@@ -479,6 +563,7 @@ def _stream_turn(root: Path, turn: dict, *, key_available: bool, plain_runner, l
                 cancel_event=control.event,
                 cad_context=turn.get("cad_context"),
                 planning_context=turn.get("planning_context"),
+                logistics_context=turn.get("logistics_context"),
             )
             control.check()  # No project save or deliverable copy after cancellation.
             rid = uuid4().hex
@@ -508,6 +593,31 @@ def _stream_turn(root: Path, turn: dict, *, key_available: bool, plain_runner, l
                     result.update(ok=False, error_code="planning_proposal_failed")
                     reason = str(exc.detail) if isinstance(exc, HTTPException) else str(exc)
                     result["reply"] = str(result.get("reply") or "") + "\n\n建议未登记，当前计划未修改：" + reason
+            if (turn.get("logistics_context") and result.get("ok", True) and not result.get("cancelled")
+                    and (result.get("logistics_proposal") is not None or result.get("logistics_action") == "undo")):
+                control.check()
+                try:
+                    import logistics_api
+                except ImportError:
+                    from demo import logistics_api
+                from fastapi import HTTPException
+                from packing_assistant.runtime import cancel
+                try:
+                    with cancel.scope(event=control.event):
+                        proposal_id = logistics_api.register_proposal(
+                            turn["logistics_context"], proposal=result.get("logistics_proposal"),
+                            action=result.get("logistics_action"))
+                    control.check()
+                    if not isinstance(proposal_id, str) or not re.fullmatch(r"[0-9a-f]{32}", proposal_id):
+                        raise ValueError("建议编号无效")
+                    link = "/logistics?project_id=" + turn["logistics_project_id"] + "&proposal_id=" + proposal_id
+                    result["reply"] = str(result.get("reply") or "") + "\n\n[打开箱单，核对并确认建议](" + link + ")"
+                except cancel.RunCancelled:
+                    raise TurnCancelled("箱单建议已取消。") from None
+                except (ValueError, OSError, PermissionError, HTTPException) as exc:
+                    result.update(ok=False, error_code="logistics_proposal_failed")
+                    reason = str(exc.detail) if isinstance(exc, HTTPException) else str(exc)
+                    result["reply"] = str(result.get("reply") or "") + "\n\n建议未登记，箱单未修改：" + reason
             if turn.get("cad_context") and result.get("cad_changed") and not result.get("cancelled"):
                 control.check()
                 from packing_assistant.cad3d.projects import CadProjectStore
@@ -675,13 +785,14 @@ def _stream_turn(root: Path, turn: dict, *, key_available: bool, plain_runner, l
         # Say who stopped it: a turn nobody was connected to any more is stopped by the server.
         unattended = control.reason == "detached_timeout"
         stopped = "页面断开后一直没有回来，本轮已取消" if unattended else "本轮已取消"
-        if turn.get("planning_context"):
+        if turn.get("planning_context") or turn.get("logistics_context"):
             # A proposal link may already be in texts when cancellation wins
             # just after _record. It must not reach this reply, restored history,
             # or the interruption fallback if cancellation persistence fails.
             texts.clear()
             partial.clear()
-            text = f"{stopped}。施工计划未修改，本轮建议未发布。"
+            subject = "箱单" if turn.get("logistics_context") else "施工计划"
+            text = f"{stopped}。{subject}未修改，本轮建议未发布。"
         else:
             text = "\n\n".join(texts) or "".join(partial)
             text += f"\n\n[{stopped}，已完成的文件保留下载。]" if files else f"\n\n[{stopped}，回答可能不完整。]"

@@ -130,3 +130,60 @@ test('new local conversation clears planning binding and its URL before the next
   assert.equal(new URL(h.context.location.href).searchParams.has('planning_project_id'), false);
   assert.equal(h.storage.has('cb_active_session_v1'), false);
 });
+
+test('logistics binds exclusively, restores and clears without borrowing another project', () => {
+  const logistics = 'c'.repeat(32);
+  const h = harness('http://localhost/?logistics_project_id='+logistics);
+  assert.equal(h.state.logisticsProjectId, logistics);
+  assert.equal(h.context.cbRememberedSession(), '');
+  h.context.cbLogisticsProjectRender();
+  const banner = h.elements.get('logisticsProjectContext');
+  assert.equal(banner.children[0].href, '/logistics?project_id='+logistics);
+  h.context.cbRestoreProjectBindings({planning_project_id:plan});
+  assert.equal(h.state.logisticsProjectId, '');
+  assert.equal(h.elements.has('logisticsProjectContext'), false);
+  h.context.cbRestoreProjectBindings({logistics_project_id:logistics});
+  assert.equal(h.state.planningProjectId, '');
+  assert.equal(h.state.logisticsProjectId, logistics);
+  h.elements.get('logisticsProjectContext').children[2].listeners.click();
+  assert.equal(h.state.logisticsProjectId, '');
+  for (const query of ['logistics_project_id='+logistics+'&planning_project_id='+plan,
+                       'logistics_project_id='+logistics+'&cad_project_id='+cad]) {
+    const mixed = harness('http://localhost/?'+query);
+    assert.equal(mixed.state.logisticsProjectId, '');
+    assert.equal(mixed.state.planningProjectId, '');
+    assert.equal(mixed.state.cadProjectId, '');
+  }
+});
+
+test('logistics selection reaches foreground and background requests', async () => {
+  const logistics = 'c'.repeat(32);
+  const h = harness('http://localhost/?logistics_project_id='+logistics);
+  loadBetween(h.context, 'async function streamChat(', '\n/* 一轮回答在页面上的状态');
+  loadBetween(h.context, 'async function cbRunBackground(', '\nasync function handleSlash(');
+  h.state.history=[{role:'user',content:'检查箱单'}];
+  await assert.rejects(h.context.streamChat('检查箱单',null,{controller:{signal:undefined}}), /offline request captured/);
+  await h.context.cbRunBackground('检查箱单');
+  for (const request of h.requests) {
+    assert.equal(request.body.logistics_project_id, logistics);
+    assert.equal(request.body.planning_project_id, '');
+    assert.equal(request.body.cad_project_id, '');
+  }
+});
+
+test('switching saved sessions clears an old project launch link before refresh', () => {
+  for (const key of ['cad_project_id', 'planning_project_id', 'logistics_project_id']) {
+    const h = harness('http://localhost/?'+key+'='+plan+'&view=chat#messages');
+    h.context.cbRestoreProjectBindings({[key]:cad});
+    h.context.cbRememberSession('chosen-session');
+    const refreshed = harness(h.context.location.href);
+    refreshed.storage.set('cb_active_session_v1', 'chosen-session');
+    assert.equal(refreshed.context.cbRememberedSession(), 'chosen-session');
+    const url = new URL(h.context.location.href);
+    assert.equal(url.searchParams.has(key), false);
+    assert.equal(url.searchParams.get('view'), 'chat');
+    assert.equal(url.hash, '#messages');
+    refreshed.context.cbRestoreProjectBindings({[key]:cad});
+    assert.equal(refreshed.state[key.replace(/_([a-z])/g, (_, c) => c.toUpperCase())], cad);
+  }
+});

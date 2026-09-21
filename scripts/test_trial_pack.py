@@ -76,7 +76,9 @@ class TrialPackTests(unittest.TestCase):
         self.assertIn("voice.js", loaded)
         self.assertFalse(loaded - set(release.STATIC), sorted(loaded - set(release.STATIC)))
         included = release.release_inputs(self.root)
-        for name in ("demo/static/voice.js", "demo/asr_lexicon.txt", "requirements-asr.txt"):
+        for name in ("demo/static/voice.js", "demo/asr_lexicon.txt", "requirements-asr.txt",
+                     "requirements-logistics.txt", "requirements-logistics-ocr.txt",
+                     "scripts/prepare_logistics_ocr.py", "docs/civil-buddy/logistics-workbench.md"):
             self.assertIn(name, included)
 
     def test_actual_zip_contains_hidden_skills_and_verified_manifest(self) -> None:
