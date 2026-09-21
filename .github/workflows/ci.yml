@@ -42,6 +42,8 @@ jobs:
           pip install -r requirements-dev.txt
           # 语音输入的解码守卫（协议白名单、采样率、时长上限）要真解码才能测；不下载模型
           pip install -r requirements-asr.txt
+          # ui-dom（真页面 + 真后端跑在 jsdom 里）和它的打包器都是 devDependencies
+          npm ci --no-audit --no-fund
       - name: Workbench HTTP and knowledge-base tests
         env:
           PYTHON_DOTENV_DISABLED: "1"
