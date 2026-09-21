@@ -462,10 +462,22 @@ def read_material(path: Path, limit: int = JOB_FILE_CHARS) -> str:
     """``read_job_file`` plus PDFs (text layer only; a scanned PDF yields nothing and says so by being empty)."""
     target = _resolve_job_file(path)
     if target.suffix.lower() == ".pdf":
-        from packing_assistant.tools.packing_list_parser import extract_pdf_text
-
-        return extract_pdf_text(target)[: max(0, int(limit))]
+        return pdf_document_text(target)[: max(0, int(limit))]
     return read_job_file(target, limit)
+
+
+def pdf_document_text(source: Any) -> str:
+    """A PDF's text layer as a document again: pages under "〔第N页〕" markers, paragraphs joined, tables rebuilt
+    (tools/pdf_layout.py). ``source`` is a path or a binary stream. A scan has no text layer and gives ""."""
+    from pypdf import PdfReader
+
+    from packing_assistant.tools.pdf_layout import pages_text
+
+    reader = PdfReader(str(source) if isinstance(source, Path) else source)
+    texts = [(page.extract_text() or "") for page in reader.pages]
+    if not any(text.strip() for text in texts):
+        return ""
+    return pages_text(texts)
 
 
 #: In a blob of job files: the file named on the heading above gave no text. Why follows on the same line.

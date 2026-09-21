@@ -136,6 +136,18 @@ def _tender_sources(text: str) -> Optional[List[Dict[str, Any]]]:
     return _tender_materials(text)[0]
 
 
+def _names_both_sides(text: str) -> bool:
+    """The task names exactly one tender document and at least one document of ours (roles read off the file
+    names, as everywhere)."""
+    from packing_assistant.office_job import files_named_in
+
+    # by its full name, extension included: "招标文件要求工期60日历天" talks ABOUT the tender, it does not point at a file
+    names = [path.name.lower() for path in files_named_in(text, _DOCUMENT_EXTS) if path.name.lower() in (text or "").lower()]
+    tenders = [n for n in names if any(mark in n for mark in _TENDER_FILE)]
+    ours = [n for n in names if n not in tenders and any(mark in n for mark in _RESPONSE_FILE)]
+    return len(tenders) == 1 and bool(ours)
+
+
 def _draft_md(expert_id: str, tool: str, text: str) -> str:
     from packing_assistant.expert_roster import get_expert
     from packing_assistant.expert_turn import _draft_markdown
@@ -344,6 +356,11 @@ def run_agent(
                     "files": [f for c in children for f in c.get("files", [])],
                     "artifacts": [f for c in children for f in c.get("artifacts", [])]}
         from packing_assistant.runtime.expert_skills import match_skill
+        if not route["workflow"] and route["expert_ids"] == ["bid-compliance"] and intent != "chat" and _names_both_sides(text):
+            # "废标检查 招标文件.docx 投标函.docx": two documents to set against each other. The one-post path would
+            # paste the first 8 000 characters of each into one text with nobody's role on it.
+            route = {**route, "workflow": "tender-review", "expert_ids": ["bid-parse", "bid-tech", "bid-compliance"],
+                     "reason": route.get("reason", "") + " 点名了招标文件和我方文件：逐份整读、按角色对照，走全面核对流程。"}
         eid = (route["expert_ids"][0] if len(route["expert_ids"]) == 1 else "") or (match_skill(text) if not route["workflow"] else "") or ""
         skill_source = "matched" if eid else ""
     exp = get_expert(eid) if eid else None

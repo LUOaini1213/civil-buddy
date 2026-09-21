@@ -25,7 +25,7 @@ Every value is a literal stretch of the document; every piece carries ``ref`` - 
 from __future__ import annotations
 
 import re
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from typing import Dict, Iterable, List, Optional, Sequence, Tuple
 
 _CN = "一二三四五六七八九十百"
@@ -71,6 +71,7 @@ class Piece:
     line: int               # n-th non-empty line of the source, from 1
     kind: str               # "heading" | "text" | "row" | "header"
     header: Tuple[str, ...] = ()  # a row's column names
+    page: int = 0           # the PDF page it stands on; 0 when the source has no pages (Word, text)
 
     @property
     def chapter_no(self) -> str:
@@ -82,7 +83,8 @@ class Piece:
         where = "前附表 " if (self.kind == "row" and "前附表" in self.table) else ""
         parts = [self.chapter_no, (where + self.number).strip() or ""]
         shown = " ".join(p for p in parts if p)
-        return shown or f"L{self.line}"
+        where_page = f"第{self.page}页" if self.page else ""
+        return (f"{shown}（{where_page}）" if (shown and where_page) else shown or where_page) or f"L{self.line}"
 
 
 @dataclass
@@ -120,10 +122,20 @@ def read(text: str) -> Document:
     chapter = heading = number = table_heading = ""
     header: Optional[List[str]] = None
     line_no = 0
+    page = 0
+    first = len(doc.pieces)
     for raw in (text or "").splitlines():
         line = raw.strip()
         if not line:
             header = None
+            continue
+        marker = _PAGE_MARK.match(line)
+        if marker:
+            # a PDF read by office_job.pdf_document_text: what follows stands on this page
+            for index in range(first, len(doc.pieces)):
+                if not doc.pieces[index].page and page:
+                    doc.pieces[index] = _on_page(doc.pieces[index], page)
+            first, page = len(doc.pieces), int(marker.group(1))
             continue
         line_no += 1
         found = _CHAPTER.match(line)
@@ -176,8 +188,18 @@ def read(text: str) -> Document:
                 if sentence.strip():
                     doc.pieces.append(Piece(chapter, clause_number, heading, "", (), sentence.strip(), line_no, "text"))
         number = current
+    if page:
+        for index in range(first, len(doc.pieces)):
+            doc.pieces[index] = _on_page(doc.pieces[index], page)
     doc.lines = line_no
     return doc
+
+
+_PAGE_MARK = re.compile(r"^〔第(\d+)页〕$")
+
+
+def _on_page(piece: Piece, page: int) -> Piece:
+    return replace(piece, page=page)
 
 
 # ---------------------------------------------------------------------------
@@ -397,7 +419,7 @@ def rejections(doc: Document) -> List[Rejection]:
                 for number in _CITES.findall(sentence):
                     if number != p.number:
                         cited += [c for c in doc.pieces if c.number == number and c.kind == "text" and c is not p][:6]
-                piece = p if (p.kind == "text" and sentence == p.text) else Piece(p.chapter, p.number, p.heading, p.table, p.cells, sentence, p.line, p.kind)
+                piece = p if (p.kind == "text" and sentence == p.text) else replace(p, text=sentence)
                 out.append(Rejection(piece, tuple(cited), star))
                 if p.kind == "text" and not star and _LIST_LEAD.search(sentence):
                     at = doc.pieces.index(p)
@@ -409,7 +431,7 @@ def rejections(doc: Document) -> List[Rejection]:
                             continue
                         seen.add(_flat(item.text))
                         number = f"{p.number}{mark}" if p.number else mark
-                        out.append(Rejection(Piece(item.chapter, number, item.heading, "", (), item.text, item.line, "text"), (), False))
+                        out.append(Rejection(replace(item, number=number), (), False))
     return out
 
 
@@ -422,7 +444,7 @@ def obligations(doc: Document) -> List[Piece]:
         for part in re.split(r"[；;]", row.content):
             part = part.strip()
             if part and _OBLIGES.search(part) and _flat(part) not in rejected:
-                out.append(Piece(row.piece.chapter, row.number, row.name, row.piece.table, row.piece.cells, part, row.piece.line, "row"))
+                out.append(replace(row.piece, number=row.number, heading=row.name, text=part))
     # the notice lays down who may bid at all: "本次招标不接受联合体投标", "拟派项目经理须具备…"
     said = {_flat(p.text) for p in out}
     for p in doc.chapter("第一章"):
