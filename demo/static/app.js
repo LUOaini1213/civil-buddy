@@ -4,6 +4,7 @@ import { createAuth } from "./modules/auth.js";
 import { createToast } from "./modules/toast.js";
 import { createDrafts } from "./modules/drafts.js";
 import { createUploads } from "./modules/uploads.js";
+import { createTurnStream } from "./modules/turn-stream.js";
 
 const state = {
   experts: [],
@@ -1628,240 +1629,58 @@ function namesOrPlain() {
   return [...state.summoned].map((id) => skillWho(id, "given")).join(" / ");
 }
 
-async function streamChat(message, bodyEl, run) {
-  const confirmed = cbConfirmed();
-  cbClearServerHitl(); // Consume this turn's typed response; never reuse a server gate.
-  const res = await fetch("/api/chat", {
-    method: "POST",
-    signal: run.controller.signal,
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({
-      message,
-      // The server owns full history; this bounded fallback excludes this turn.
-      history: state.history.slice(-81, -1),
-      expert_ids: [...state.summoned],
-      confirm_ok: confirmed,
-      session_id: state.session,
-      project_id: cbProj.cur || "",
-      attachments: state.attachments
-        .filter((a) => !String(a.id || "").startsWith("job:"))
-        .map((a) => a.id),
-      attachment_roles: Object.fromEntries(state.attachments.filter(a => !String(a.id || "").startsWith("job:") &&
-        ["tender", "response", "reference"].includes(state.attachmentRoles[a.id])).map(a => [a.id, state.attachmentRoles[a.id]])),
-    }),
-  });
-  if (!res.ok) {
-    throw new Error(await apiError(res));
-  }
-  /* ux(round3)：本条消息挂一条阶段时间线（完成后折叠为一行摘要）；ux(round5)：消息原文供审批卡「确认并重提」 */
-  const v = cbTurnView(message, bodyEl, run);
-  run.view = v;
-  try {
-    try {
-      await CB_CHAT_STREAM.read(res.body, cbTurnHandler(v), { signal: run.controller.signal });
-    } catch (e) {
-      /* 真实浏览器里连接被掐是 reader.read() 直接 reject（TypeError），不是流悄悄结束：
-         同样按断流处理；用户停止（AbortError）和服务端明确报错（TurnError）原样上抛。 */
-      if (!e || e.name === "AbortError" || e.name === "TurnError") throw e;
-    }
-    if (!v.complete) {
-      /* 流断了（锁屏 / 切 App / 换网络）：服务端这一轮还在跑，并且每一帧都有编号——
-         从最后看到的编号往后续，跟到 done。没有这个能力的后端仍走轮询恢复。 */
-      if (cbCapability("event_log") === true) await cbResumeTurn(v);
-      if (!v.complete) {
-        const dropped = new Error("回答连接已中断，正在从服务端恢复结果…");
-        dropped.name = "StreamDroppedError";
-        throw dropped;
-      }
-    }
-    loadThreads().catch(() => {});
-  } catch (err) {
-    if (cbActiveRun === run && v.tl) v.tl.error(err.name === "AbortError" ? "已停止接收回答" : String(err.message || err));
-    throw err;
-  }
-}
+async function streamChat(message, bodyEl, run) { return turns.streamChat(message, bodyEl, run); }
+async function cbAttachToTurn(sid, reason) { return turns.attachToTurn(sid, reason); }
 
-/* 一轮回答在页面上的状态：首次的 /api/chat 流、断线后的 /events 续流、切回来时的全量回放，
-   三条路都喂同一个处理器。bodyEl 可以先空着（切回来的会话），第一帧正文到了再补气泡。 */
-function cbTurnView(message, bodyEl, run) {
-  return { message, bodyEl, run, tl: bodyEl ? cbTlCreate(bodyEl, message) : null,
-    acc: "", complete: false, recorded: false, lastSeq: Number(run.lastSeq) || 0 };
-}
-
-function cbTurnBubble(v, who) {
-  if (v.bodyEl) return v.bodyEl;
-  v.bodyEl = addMsg("assistant", who || namesOrPlain(), "");
-  v.run.bodyEl = v.bodyEl;
-  v.tl = cbTlCreate(v.bodyEl, v.message);
-  return v.bodyEl;
-}
-
-/* 服务端说的错（error 事件、格式错）和网络断掉不是一回事：前者不重连。 */
-function cbTurnError(text) {
-  const e = new Error(text);
-  e.name = "TurnError";
-  return e;
-}
-
-function cbTurnHandler(v) {
-  const run = v.run;
-  return (eventName, dataLine, id) => {
-    if (cbActiveRun !== run || state.session !== run.session) return;
-    const seq = Number(id);
-    if (seq > 0) {
-      if (seq <= v.lastSeq) return; // 续流时的重复帧
-      v.lastSeq = seq;
-      run.lastSeq = seq;
-    }
-    if (!["context", "status", "token", "error", "done", "collaboration"].includes(eventName)) return;
-    let data;
-    try { data = JSON.parse(dataLine); }
-    catch (_) { throw cbTurnError("服务器返回了无法解析的回答事件，请重试。"); }
-    if (!data || typeof data !== "object" || Array.isArray(data)) {
-      throw cbTurnError("服务器返回的回答事件格式不完整，请重试。");
-    }
-    if (eventName === "context") {
-      paintContext(data);
-    }
-    if (eventName === "status") {
-      cbEnableServerHitl(data);
-      if (data.phase === "routing" && data.route) cbTaskRoutePaint(data.route, cbTurnBubble(v), v.message);
-      if (v.tl) v.tl.status(data);
-      if (data.phase === "summon") {
-        v.complete = false;
-        if (v.acc) {
-          if (!v.recorded) state.history.push({ role: "assistant", content: v.acc });
-          v.acc = "";
-          v.bodyEl = addMsg("assistant", skillWho(data.expert || "", "given"), "");
-          run.bodyEl = v.bodyEl;
-        }
-        v.recorded = false;
-        const bodyEl = cbTurnBubble(v, skillWho(data.expert || "", "given"));
-        const who = bodyEl.parentElement && bodyEl.parentElement.querySelector(".who");
-        if (who && data.expert) who.textContent = skillWho(data.expert, data.skill_source || "");
-      }
-    }
-    if (eventName === "collaboration") cbCollaborationPaint(data, cbTurnBubble(v));
-    if (eventName === "token") {
-      v.complete = false;
-      v.acc += data.text || "";
-      cbTurnBubble(v).textContent = v.acc;
-      $("log").scrollTop = $("log").scrollHeight;
-    }
-    if (eventName === "error") {
-      throw cbTurnError(data.text || "error");
-    }
-    if (eventName === "done") {
-      const bodyEl = cbTurnBubble(v);
-      if (cbHitlPending(data)) cbEnableServerHitl(data);
-      else cbClearServerHitl();
-      if (data.route) cbTaskRoutePaint(data.route, bodyEl, v.message);
-      if (data.collaboration) cbCollaborationPaint(data.collaboration, bodyEl);
-      v.complete = true;
-      if (v.tl) {
-        if (cbHitlPending(data)) v.tl.finish(data);
-        else if (data.ok === false) v.tl.error(data.text || "工具未完成本轮任务");
-        else v.tl.finish(data);
-      }
-      if (data.ok !== false && !cbHitlPending(data)) cbObStep(2);
-      /* ux(round11)：流式收口才播报一行（只抄事件字段，不刷屏，附录 J） */
-      cbAnnounce(data.cancelled ? "任务已停止，已有结果已保留。" : cbHitlPending(data) ? "等待签认：请在审批卡键入完整签认句后确认。" : data.ok === false ? "本轮未完成：请查看时间线和工具结果。" : "回答完毕" + (Array.isArray(data.deliverables) && data.deliverables.length ? " · 文书 " + data.deliverables.length + " 份" : ""));
-      v.acc = data.text || v.acc;
-      bodyEl.textContent = v.acc;
-      const whoEl = bodyEl.parentElement && bodyEl.parentElement.querySelector(".who");
-      if (whoEl) whoEl.textContent = skillWho(data.skill || data.expert || "", data.skill_source || "");
-      if (v.acc && !v.recorded) {
-        state.history.push({ role: "assistant", content: v.acc });
-        v.recorded = true;
-      }
-      if (data.context) paintContext(data.context);
-      else paintContext(estimateLocalContext());
-      renderCites(data.citations || [], bodyEl);
-      cbLastDeliverables = Array.isArray(data.deliverables) ? data.deliverables : []; /* ux(round9)：/doc 最近交付物 */
-      appendDocCards(data.deliverables || [], bodyEl, { runs: data.deliverable_runs });
-      /* ux(round7)：缺数引导条——UNSPECIFIED/[A001] 徽章旁的「去补数」，预填草稿不自动发送 */
-      const miss = typeof CB_FIX !== "undefined" ? CB_FIX.classifyMissing(v.acc) : null;
-      if (miss) cbFixMount(bodyEl.parentElement, miss);
-      refreshAuditSoon(); /* ux(round6)：本轮完成 → 审计时间线增量刷新（含决策置顶） */
-    }
-  };
-}
-
-/* 续流：GET /api/sessions/{sid}/events?after=N。连不上就退避重试（1 s 起，封顶 15 s），
-   直到 done / error 到手、用户点停止（AbortError 原样抛出）、或服务端说这一轮已经不在跑。 */
-async function cbResumeTurn(v) {
-  const run = v.run;
-  const sid = run.session;
-  let wait = 1000;
-  let announced = false;
-  while (!v.complete) {
-    if (run.controller.signal.aborted) { const e = new Error("aborted"); e.name = "AbortError"; throw e; }
-    if (cbActiveRun !== run || state.session !== sid) return;
-    let res = null;
-    try {
-      res = await fetch(`/api/sessions/${encodeURIComponent(sid)}/events?after=${v.lastSeq}`, { signal: run.controller.signal });
-    } catch (e) {
-      if (e && e.name === "AbortError") throw e;
-    }
-    if (res && res.ok) {
-      if (announced) { cbAnnounce("已重新连上，继续接收回答"); announced = false; }
-      try {
-        await CB_CHAT_STREAM.read(res.body, cbTurnHandler(v), { signal: run.controller.signal });
-      } catch (e) {
-        if (e && (e.name === "AbortError" || e.name === "TurnError")) throw e; // 用户停止 / 服务端明确报错：不重试
-      }
-      if (v.complete) return;
-      wait = 1000;
-      /* 流正常结束却没有 done：问一下这一轮还在不在跑；不在了就没什么可等的 */
-      let detail = null;
-      try { const r = await fetch(`/api/sessions/${encodeURIComponent(sid)}`, { signal: run.controller.signal }); if (r.ok) detail = await r.json(); }
-      catch (e) { if (e && e.name === "AbortError") throw e; }
-      if (detail && detail.turn_state && !detail.turn_state.active) return;
-    } else if (res && (res.status === 404 || res.status === 400)) {
-      return; // 没有事件记录：交给轮询恢复
-    }
-    if (!announced) { cbAnnounce("连接中断，正在重连…"); announced = true; }
-    await new Promise((resolve) => setTimeout(resolve, wait));
-    wait = Math.min(wait * 2, 15000);
-  }
-}
-
-/* 切回一个还在跑的会话 / 锁屏回来：没有气泡、没有 run，从头回放这一轮再跟到底。
-   和发送时一样占住 cbActiveRun，停止按钮因此照常工作。 */
-async function cbAttachToTurn(sid, reason) {
-  if (cbCapability("event_log") !== true) { cbWatchSession(sid, { bodyEl: null, reason: reason || "" }); return; }
-  if (cbActiveRun || state.session !== sid) return;
-  cbReleaseWatch();
-  const run = { controller: new AbortController(), session: sid, bodyEl: null, lastSeq: 0, attached: true };
-  const v = cbTurnView("", null, run);
-  run.view = v;
-  cbActiveRun = run;
-  cbRunPaint(true);
-  try {
-    await cbResumeTurn(v);
-    if (!v.complete && cbActiveRun === run) {
-      cbActiveRun = null;
-      cbRunPaint(false);
-      cbWatchSession(sid, { bodyEl: v.bodyEl, reason: reason || "" });
-      return;
-    }
-    if (cbActiveRun === run) { cbBackgroundSessions.delete(sid); addStatus((reason || "") + "任务已在后台完成，结果已恢复。"); loadThreads().catch(() => {}); }
-  } catch (err) {
-    if (cbActiveRun !== run) return;
-    const stopped = err && err.name === "AbortError";
-    if (v.bodyEl) {
-      const note = document.createElement("p");
-      note.className = stopped ? "status-line" : "status-line err";
-      note.textContent = stopped ? "已停止接收回答。已有内容已保留。" : String(err.message || err);
-      v.bodyEl.parentElement.appendChild(note);
-    } else if (!stopped) addStatus(String(err.message || err));
-  } finally {
-    if (cbActiveRun === run) {
-      cbActiveRun = null;
-      cbRunPaint(false);
-    }
-  }
-}
+/* 一轮回答（modules/turn-stream.js）：首次流 / 断线续流 / 切回来的回放共用一个处理器。
+   它需要页面的这些手：都以闭包交出去，模块本身不读全局。 */
+const turns = createTurnStream({
+  state,
+  run: {
+    active: () => cbActiveRun,
+    setActive: (r) => { cbActiveRun = r; },
+    paint: (on) => cbRunPaint(on),
+    releaseWatch: () => cbReleaseWatch(),
+    watch: (sid, opts) => cbWatchSession(sid, opts),
+    background: cbBackgroundSessions,
+  },
+  ui: {
+    log: () => $("log"),
+    addMsg: (role, who, text) => addMsg(role, who, text),
+    addStatus: (text) => addStatus(text),
+    announce: (text) => cbAnnounce(text),
+    doc: document,
+  },
+  hitl: {
+    confirmed: () => cbConfirmed(),
+    clear: () => cbClearServerHitl(),
+    enable: (data) => cbEnableServerHitl(data),
+    pending: (data) => cbHitlPending(data),
+  },
+  turnUi: {
+    tlCreate: (bodyEl, message) => cbTlCreate(bodyEl, message),
+    routePaint: (route, bodyEl, message) => cbTaskRoutePaint(route, bodyEl, message),
+    collaborationPaint: (data, bodyEl) => cbCollaborationPaint(data, bodyEl),
+    obStep: (n) => cbObStep(n),
+    paintContext: (data) => paintContext(data),
+    estimateLocalContext: () => estimateLocalContext(),
+    renderCites: (cites, bodyEl) => renderCites(cites, bodyEl),
+    appendDocCards: (files, bodyEl, opts) => appendDocCards(files, bodyEl, opts),
+    fixMount: (host, card) => cbFixMount(host, card),
+    classifyMissing: (text) => (typeof CB_FIX !== "undefined" ? CB_FIX.classifyMissing(text) : null),
+    refreshAuditSoon: () => refreshAuditSoon(),
+    skillWho: (id, source) => skillWho(id, source),
+    namesOrPlain: () => namesOrPlain(),
+    setLastDeliverables: (files) => { cbLastDeliverables = files; },
+  },
+  projectId: () => cbProj.cur || "",
+  loadThreads: () => loadThreads(),
+  apiError: (res) => apiError(res),
+  capability: (name) => cbCapability(name),
+  stream: { read: (body, onEvent, opts) => CB_CHAT_STREAM.read(body, onEvent, opts) },
+  fetch: (url, init) => fetch(url, init),
+  AbortController,
+});
 
 /* ux(round19)：「依据」从常驻右栏改为**跟着那条回答走**的流内卡片（附录 P）。
    依据本来就是某一条回答的产物，堆在右栏等于把它和上下文剥离。
@@ -4573,4 +4392,4 @@ if (window.visualViewport) {
 /* 模块脚本没有全局：给旧的经典脚本（studio.js 调 reloadCatalog）和 e2e（scripts/e2e/ui_dom.cjs）
    一个明确的窗口面，而不是把几百个函数都挂到 window 上。 */
 window.reloadCatalog = reloadCatalog;
-window.__cb = Object.freeze({ state, cbCapability, cbAttachUpload, cbProjOpenSession, cbNewLocalSession, uploads, drafts });
+window.__cb = Object.freeze({ state, cbCapability, cbAttachUpload, cbProjOpenSession, cbNewLocalSession, uploads, drafts, turns });

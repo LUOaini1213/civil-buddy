@@ -16,6 +16,7 @@ function element(tag) {
     appendChild(c) { this.children.push(c); c.parentElement = this; return c; },
     setAttribute(k, v) { this[k] = v; }, addEventListener(n, f) { this.listeners[n] = f; } };
   Object.defineProperty(el, "innerHTML", { set(v) { if (v === "") el.children = []; }, get() { return ""; } });
+  el.querySelector = () => null;
   return el;
 }
 function fakeDoc() {
@@ -165,4 +166,78 @@ test("uploads: a session switch mid-upload drops the result instead of attaching
   await run;
   assert.deepEqual(state.attachments, []);
   assert.equal(uploads.pending.length, 0);
+});
+
+/* ---- turn-stream: the handler and the resume loop, with every dependency faked ---- */
+const { createTurnStream } = require("../demo/static/modules/turn-stream.js");
+const CB_CHAT_STREAM = require("../demo/static/chat-stream.js");
+
+function turnDeps(overrides = {}) {
+  const log = element("div");
+  const msgs = [];
+  const status = [];
+  let active = null;
+  const state = { session: "s1", history: [], summoned: [], attachments: [], attachmentRoles: {} };
+  const deps = {
+    state,
+    run: { active: () => active, setActive: (r) => { active = r; }, paint() {}, releaseWatch() {}, watch: (sid, opts) => status.push("watch:" + sid), background: new Set() },
+    ui: { log: () => log, addMsg: (role, who, text) => { const b = element("div"); b.textContent = text; const m = element("div"); m.appendChild(b); msgs.push({ role, who, body: b }); return b; },
+      addStatus: (t) => status.push(t), announce() {}, doc: { createElement: element } },
+    hitl: { confirmed: () => false, clear() {}, enable() {}, pending: () => false },
+    turnUi: { tlCreate: () => ({ status() {}, finish() {}, error() {} }), routePaint() {}, collaborationPaint() {}, obStep() {}, paintContext() {},
+      estimateLocalContext: () => ({}), renderCites() {}, appendDocCards() {}, fixMount() {}, classifyMissing: () => null, refreshAuditSoon() {},
+      skillWho: (id) => id || "岗位", namesOrPlain: () => "岗位", setLastDeliverables() {} },
+    projectId: () => "", loadThreads: async () => {}, apiError: async (r) => r.statusText || "", capability: () => true,
+    stream: CB_CHAT_STREAM, fetch: async () => { throw new Error("no fetch in this test"); }, AbortController,
+    ...overrides,
+  };
+  const turns = createTurnStream(deps);
+  return { turns, state, msgs, status, log, setActive: (r) => { active = r; }, deps };
+}
+const sse = (frames) => new ReadableStream({ start(c) { c.enqueue(new TextEncoder().encode(frames)); c.close(); } });
+const idFrame = (id, ev, data) => `id: ${id}\nevent: ${ev}\ndata: ${JSON.stringify(data)}\n\n`;
+
+test("turn-stream: the handler paints tokens, records the answer once on done, and skips repeated ids", () => {
+  const t = turnDeps();
+  const run = { controller: new AbortController(), session: "s1", bodyEl: null, lastSeq: 0 };
+  t.setActive(run);
+  const v = t.turns.turnView("问题", null, run);
+  const h = t.turns.turnHandler(v);
+  h("context", "{}", "1");
+  h("token", JSON.stringify({ text: "已生成" }), "2");
+  h("token", JSON.stringify({ text: "已生成" }), "2");       // a replayed frame: ignored
+  h("token", JSON.stringify({ text: "的一部分" }), "3");
+  assert.equal(v.bodyEl.textContent, "已生成的一部分");
+  assert.equal(t.msgs.length, 1, "the bubble was created on the first token");
+  assert.equal(v.lastSeq, 3);
+  h("done", JSON.stringify({ text: "已生成的一部分，完", deliverables: [] }), "4");
+  assert.equal(v.complete, true);
+  assert.deepEqual(t.state.history, [{ role: "assistant", content: "已生成的一部分，完" }]);
+  assert.throws(() => h("error", JSON.stringify({ text: "模型说不行" }), "5"), (e) => e.name === "TurnError" && /模型说不行/.test(e.message));
+  assert.throws(() => h("done", "not-json", "6"), (e) => e.name === "TurnError");
+  t.setActive(null);
+  h("token", JSON.stringify({ text: "晚到的" }), "7");
+  assert.equal(v.bodyEl.textContent, "已生成的一部分，完", "nothing paints after the run is no longer active");
+});
+
+test("turn-stream: resume replays from the last id and completes; a 404 hands over to polling", async () => {
+  const calls = [];
+  const t = turnDeps({ fetch: async (url) => {
+    calls.push(url);
+    if (url.includes("/events?after=2")) return new Response(sse(idFrame(2, "token", { text: "x" }) + idFrame(3, "token", { text: "，剩下的" }) + idFrame(4, "done", { text: "一半，剩下的" })), { status: 200 });
+    return new Response("", { status: 404 });
+  } });
+  const run = { controller: new AbortController(), session: "s1", bodyEl: null, lastSeq: 0 };
+  t.setActive(run);
+  const v = t.turns.turnView("问题", null, run);
+  t.turns.turnHandler(v)("token", JSON.stringify({ text: "一半" }), "2");
+  await t.turns.resumeTurn(v);
+  assert.equal(v.complete, true);
+  assert.equal(v.bodyEl.textContent, "一半，剩下的");
+  assert.deepEqual(calls, ["/api/sessions/s1/events?after=2"]);
+
+  // attach to a running session on a backend without the event log: polling recovery instead
+  const t2 = turnDeps({ capability: (n) => (n === "event_log" ? false : true) });
+  await t2.turns.attachToTurn("s1", "回来；");
+  assert.deepEqual(t2.status, ["watch:s1"]);
 });
