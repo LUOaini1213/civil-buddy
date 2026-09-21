@@ -14,11 +14,12 @@ MAX_ROWS = 5000
 MAX_JSON_BYTES = 12 * 1024 * 1024
 NUMERIC_FIELDS = ("package_count", "quantity", "units_per_package", "length_mm", "width_mm", "height_mm", "net_kg", "gross_kg")
 COUNT_FIELDS = ("package_count", "quantity", "units_per_package")
-TEXT_FIELDS = ("package_id", "material_id", "name", "spec", "unit", "dimension_scope", "weight_scope")
+TEXT_FIELDS = ("package_id", "container_id", "package_type", "material_id", "name", "spec", "unit", "dimension_scope", "weight_scope")
 FIELDS = TEXT_FIELDS + NUMERIC_FIELDS
-FIELD_LABELS = {"package_count": "箱数", "quantity": "货物数量", "units_per_package": "每箱件数",
+FIELD_LABELS = {"package_count": "包装数", "quantity": "货物数量", "units_per_package": "每箱件数",
                 "length_mm": "长度", "width_mm": "宽度", "height_mm": "高度", "net_kg": "净重", "gross_kg": "毛重",
-                "name": "品名", "dimension_scope": "尺寸口径", "weight_scope": "重量口径"}
+                "name": "品名", "container_id": "集装箱号", "package_type": "包装类型",
+                "dimension_scope": "尺寸口径", "weight_scope": "重量口径"}
 
 
 def _json(value, depth=0):
@@ -106,6 +107,37 @@ def validate_document(document: dict) -> dict:
             if not isinstance(evidence, dict) or not isinstance(evidence.get("raw", ""), str):
                 raise ValueError("字段证据原文无效")
             _location(evidence.get("source", {}))
+    by_id = {r["id"]: r for r in rows}
+    shared = {}
+    for row in rows:
+        for field, evidence in row["evidence"].items():
+            group = evidence.get("group")
+            if group is None:
+                continue
+            if (field not in FIELDS or not isinstance(group, dict)
+                    or set(group) != {"id", "row_ids", "anchor_row_id", "source"}
+                    or not isinstance(group["id"], str) or not re.fullmatch(r"[A-Za-z0-9_.:-]{1,128}", group["id"])
+                    or not isinstance(group["row_ids"], list) or not 2 <= len(group["row_ids"]) <= MAX_ROWS
+                    or any(not isinstance(i, str) or i not in ids for i in group["row_ids"])
+                    or len(set(group["row_ids"])) != len(group["row_ids"])
+                    or group["anchor_row_id"] != group["row_ids"][0] or row["id"] not in group["row_ids"]):
+                raise ValueError("共享单元格的范围或锚点无效")
+            _location(group["source"])
+            if "bbox" not in group["source"] or "page" not in group["source"]:
+                raise ValueError("共享单元格须有原件页码与合并区域")
+            key = (field, group["id"])
+            if key in shared and shared[key] != group:
+                raise ValueError("共享单元格的成员范围不一致")
+            shared[key] = group
+    for (field, _), group in shared.items():
+        for ident in group["row_ids"]:
+            member = by_id[ident]
+            if member["evidence"].get(field, {}).get("group") != group:
+                raise ValueError("共享单元格缺少成员证据")
+            if ident != group["anchor_row_id"] and member[field] != UNSPECIFIED:
+                raise ValueError("共享单元格不能复制数值到每个成员行")
+            if field in ("net_kg", "gross_kg") and member["weight_scope"] not in ("row", UNSPECIFIED):
+                raise ValueError("共享合并重量不能当成每件或每箱重量")
     totals = doc.setdefault("totals", [])
     if not isinstance(totals, list) or len(totals) > MAX_ROWS:
         raise ValueError("合计记录无效")
@@ -115,7 +147,8 @@ def validate_document(document: dict) -> dict:
         _location(total.get("source", {}))
         if any(k not in NUMERIC_FIELDS or type(v) not in (int, float) or not math.isfinite(v) or v < 0 for k, v in total["values"].items()):
             raise ValueError("合计数值无效")
-        if not isinstance(total.get("row_ids", []), list) or any(i not in ids for i in total.get("row_ids", [])):
+        if (not isinstance(total.get("row_ids", []), list) or any(not isinstance(i, str) or i not in ids for i in total.get("row_ids", []))
+                or len(set(total.get("row_ids", []))) != len(total.get("row_ids", []))):
             raise ValueError("合计引用了不存在的物料行")
     return doc
 
@@ -131,8 +164,12 @@ def row_total(row, field):
     if field in ("net_kg", "gross_kg"):
         scope = row.get("weight_scope")
         if scope == "package":
+            if row.get("evidence", {}).get("package_count", {}).get("group"):
+                return None  # Shared package counts cannot be allocated to one material row.
             multiplier = row.get("package_count")
         elif scope == "item":
+            if row.get("evidence", {}).get("quantity", {}).get("group"):
+                return None
             multiplier = row.get("quantity")
         elif scope == "row":
             multiplier = 1
@@ -161,6 +198,8 @@ def aggregate_rows(rows):
         quantities.setdefault(key, []).append(value if known(value) else None)
     quantities_by_unit = {u: sum(v) if all(n is not None for n in v) else UNSPECIFIED for u, v in quantities.items()}
     sums = {field: [] for field in ("package_count", "net_kg", "gross_kg")}
+    by_id = {r["id"]: r for r in rows}
+    seen_shared = set()
     for group in groups.values():
         first = group[0]
         repeated = len(group) > 1
@@ -175,10 +214,19 @@ def aggregate_rows(rows):
         for field in sums:
             if conflict:
                 sums[field].append(None)
-            elif field == "package_count":
-                sums[field].append(first[field] if known(first[field]) else None)
             else:
-                sums[field].append(row_total(first, field))
+                shared = first.get("evidence", {}).get(field, {}).get("group")
+                if shared:
+                    key = (field, shared["id"])
+                    if key in seen_shared:
+                        continue
+                    seen_shared.add(key)
+                    # A subset of a merged cell has no independently stated amount.
+                    complete = set(shared["row_ids"]).issubset(by_id) and not repeated
+                    anchor = by_id.get(shared["anchor_row_id"])
+                    sums[field].append(row_total(anchor, field) if complete and anchor else None)
+                else:
+                    sums[field].append(row_total(first, field))
     totals = {f: round(sum(values), 6) if values and all(v is not None for v in values) else UNSPECIFIED for f, values in sums.items()}
     totals["quantity"] = next(iter(quantities_by_unit.values())) if len(quantities_by_unit) == 1 and UNSPECIFIED not in quantities_by_unit else UNSPECIFIED
     return {"totals": totals, "quantities_by_unit": quantities_by_unit, "issues": issues}
@@ -198,13 +246,18 @@ def audit_document(document: dict) -> dict:
         issue("no_material_rows", "没有识别出具有明确表头的物料行；请提供表格或核对版式。")
     aggregate = aggregate_rows(doc["rows"])
     issues.extend(aggregate["issues"])
+    seen_shared = set()
     for row in doc["rows"]:
         check()
         rid = row["id"]
         for field in ("name", "quantity", "package_count"):
-            if row[field] == UNSPECIFIED:
+            if row[field] == UNSPECIFIED and not row["evidence"].get(field, {}).get("group"):
                 issue("missing_" + field, f"{FIELD_LABELS[field]}未确定，未填入默认值。", rid, field, "warning")
         for field, ev in row["evidence"].items():
+            group = ev.get("group")
+            if group and (field, group["id"]) not in seen_shared:
+                seen_shared.add((field, group["id"]))
+                issue("shared_cell", f"{FIELD_LABELS.get(field, field)}原表跨 {len(group['row_ids'])} 行合并，覆盖 {', '.join(group['row_ids'])}；合并值只汇总一次，不分配到每行或每箱。", group["anchor_row_id"], field, "warning")
             if ev.get("reason") and row.get(field) == UNSPECIFIED:
                 issue("unresolved_field", str(ev["reason"]), rid, field)
             if ev.get("ocr") and not ev.get("confirmed") and not ev.get("correction") and not ev.get("corrections"):
@@ -215,7 +268,9 @@ def audit_document(document: dict) -> dict:
         q, p, u = (row[f] for f in ("quantity", "package_count", "units_per_package"))
         if all(known(n) for n in (q, p, u)) and q != p * u:
             issue("quantity_mismatch", "货物件数不等于箱数 × 每箱件数。", rid, "quantity")
-        if all(known(row[f]) for f in ("net_kg", "gross_kg")) and row["gross_kg"] < row["net_kg"]:
+        same_range = (row["evidence"].get("net_kg", {}).get("group", {}).get("row_ids", [rid])
+                      == row["evidence"].get("gross_kg", {}).get("group", {}).get("row_ids", [rid]))
+        if same_range and all(known(row[f]) for f in ("net_kg", "gross_kg")) and row["gross_kg"] < row["net_kg"]:
             issue("gross_below_net", "毛重小于同范围净重。", rid, "gross_kg")
         for group, scope in ((("length_mm", "width_mm", "height_mm"), "dimension_scope"), (("net_kg", "gross_kg"), "weight_scope")):
             if any(known(row[f]) for f in group) and row[scope] == UNSPECIFIED:
@@ -225,18 +280,36 @@ def audit_document(document: dict) -> dict:
     if UNSPECIFIED in aggregate["quantities_by_unit"]:
         issue("unknown_quantity_unit", "部分数量单位未明确，不参与单一数量总计。", field="unit", severity="warning")
     by_id = {r["id"]: r for r in doc["rows"]}
+    checked_ranges = set()
+    for row in doc["rows"]:
+        for field in ("net_kg", "gross_kg"):
+            group = row["evidence"].get(field, {}).get("group")
+            if not group:
+                continue
+            members = tuple(group["row_ids"])
+            if members in checked_ranges:
+                continue
+            checked_ranges.add(members)
+            weight = aggregate_rows([by_id[i] for i in members])["totals"]
+            if all(known(weight[f]) for f in ("net_kg", "gross_kg")) and weight["gross_kg"] < weight["net_kg"]:
+                issue("group_gross_below_net", f"共享范围 {', '.join(members)} 的毛重 {weight['gross_kg']:g} kg 小于同范围净重 {weight['net_kg']:g} kg。", members[0], "gross_kg")
     for total in doc["totals"]:
         selected = [by_id[i] for i in total.get("row_ids", [])]
         selected_aggregate = aggregate_rows(selected)
         for field, expected in total["values"].items():
             actual = selected_aggregate["totals"].get(field, UNSPECIFIED)
-            if not known(actual):
+            if field == "quantity" and len(selected_aggregate["quantities_by_unit"]) > 1:
+                separated = "、".join(f"{v} {u}" for u, v in selected_aggregate["quantities_by_unit"].items())
+                issue("mixed_unit_source_total", f"{total.get('label','合计')}原数量 {expected:g} 涉及不同单位；分开为 {separated}，不把原值当作总件数。", field=field, severity="warning")
+            elif not known(actual):
                 issue("total_unverifiable", f"{total.get('label','合计')}的{FIELD_LABELS[field]}缺逐行明确值、单位或范围，不能校核。", field=field, severity="warning")
             elif not math.isclose(actual, expected, rel_tol=1e-8, abs_tol=0.01 if field.endswith("_kg") else 0):
                 issue("total_mismatch", f"{total.get('label','合计')}的{FIELD_LABELS[field]}原值 {expected} 与核对汇总 {actual:g} 不一致。", field=field)
     errors = sum(i["severity"] == "error" for i in issues)
     return {"ok": errors == 0 and bool(doc["rows"]), "issues": issues,
-            "counts": {"rows": len(doc["rows"]), "totals": len(doc["totals"]), "errors": errors, "warnings": len(issues) - errors}}
+            "counts": {"rows": len(doc["rows"]), "totals": len(doc["totals"]), "errors": errors,
+                       "warnings": sum(i["severity"] == "warning" for i in issues),
+                       "info": sum(i["severity"] == "info" for i in issues)}}
 
 
 def summarize(document: dict) -> dict:

@@ -61,6 +61,47 @@ def pdf_bytes(pages=2, blank=False):
     return out.getvalue()
 
 
+def business_pdf_bytes(titles=("PACKING LIST",), merged=True, cargo_name="Synthetic material A"):
+    """Generate geometry and changed values; never embed a customer document."""
+    from pypdf import PdfWriter
+    from pypdf.generic import NameObject, DictionaryObject, DecodedStreamObject
+    writer = PdfWriter()
+    for title in titles:
+        page = writer.add_blank_page(700, 800)
+        font = DictionaryObject({NameObject("/Type"): NameObject("/Font"), NameObject("/Subtype"): NameObject("/Type1"), NameObject("/BaseFont"): NameObject("/Helvetica")})
+        page[NameObject("/Resources")] = DictionaryObject({NameObject("/Font"): DictionaryObject({NameObject("/F1"): writer._add_object(font)})})
+        commands = []
+        xs = (30, 140, 300, 390, 470, 570, 670)
+        for x in xs:
+            commands.append(f"{x} 590 m {x} 710 l S")
+        for y in (590, 620, 680, 710):
+            commands.append(f"30 {y} m 670 {y} l S")
+        if merged:
+            for start, end in ((140, 300), (390, 470), (570, 670)):
+                commands.append(f"{start} 650 m {end} 650 l S")
+        else:
+            commands.append("30 650 m 670 650 l S")
+        def write(x, y, text, size=8):
+            for offset, line in enumerate(text.splitlines()):
+                escaped = line.replace("\\", "\\\\").replace("(", r"\(").replace(")", r"\)")
+                commands.append(f"BT /F1 {size} Tf {x} {y-offset*10} Td ({escaped}) Tj ET")
+        write(220, 760, title, 15)
+        headers = ["Container No", "Description", "Cases", "Quantity", "Total gross\nweight (kg)", "Total net\nweight (kg)"]
+        for x, header in zip(xs, headers):
+            write(x + 3, 698, header)
+        values = [
+            ["SYNTH-01", cargo_name, "3 crates", "4 pcs", "90", "30"],
+            ["" if merged else "SYNTH-02", "Synthetic material B", "" if merged else "2 crates", "5 pcs", "" if merged else "80", "40"],
+            ["Total", "", "3" if merged else "5", "9", "90" if merged else "170", "70"],
+        ]
+        for y, row in zip((667, 637, 607), values):
+            for x, value in zip(xs, row):
+                write(x + 3, y, value)
+        stream = DecodedStreamObject(); stream.set_data("\n".join(commands).encode("ascii"))
+        page[NameObject("/Contents")] = writer._add_object(stream)
+    out = BytesIO(); writer.write(out); return out.getvalue()
+
+
 class IntakeTests(unittest.TestCase):
     def test_native_csv_keeps_separate_quantities_and_net_gross(self):
         doc = parse_document(csv_bytes(), "synthetic.csv", "off")
@@ -188,7 +229,7 @@ class IntakeTests(unittest.TestCase):
         summary = summarize(doc)
         self.assertEqual(summary["totals"]["quantity"], UNSPECIFIED)
         self.assertEqual(summary["quantities_by_unit"], {"pcs": 10, "m": 10})
-        self.assertIn("total_unverifiable", [i["code"] for i in summary["audit"]["issues"]])
+        self.assertIn("mixed_unit_source_total", [i["code"] for i in summary["audit"]["issues"]])
 
     def test_ocr_environment_is_not_reported_ready_without_manifest(self):
         import tempfile
@@ -283,6 +324,89 @@ class IntakeTests(unittest.TestCase):
         self.assertEqual(doc["rows"][0]["material_id"], "MAT001")
         self.assertEqual(doc["rows"][0]["net_kg"], 100)
         self.assertEqual(doc["rows"][0]["gross_kg"], 110)
+
+    def test_bilingual_wrapped_headers_keep_container_and_box_ids_separate(self):
+        headers = ["集装箱号\nCtn.No", "货物名称及规格\nDescription", "包装总箱\n数Cases", "总数量\nQuantity", "总毛重\nGW.(KGS)", "总净重\nNW.(KGS)"]
+        doc = parse_document(csv_bytes(headers, [["SYNTH-123", "Synthetic steel", "7 铁框", "123 件", "950", "900"]]), "bilingual.csv")
+        row = doc["rows"][0]
+        self.assertEqual(row["container_id"], "SYNTH-123")
+        self.assertEqual(row["package_id"], UNSPECIFIED)
+        self.assertEqual((row["package_count"], row["package_type"]), (7, "铁框"))
+        self.assertEqual((row["quantity"], row["unit"]), (123, "件"))
+        self.assertEqual((row["gross_kg"], row["net_kg"], row["weight_scope"]), (950, 900, "row"))
+        self.assertEqual(row["evidence"]["package_type"]["raw"], "7 铁框")
+
+    def test_conflicting_header_translations_are_rejected(self):
+        doc = parse_document(csv_bytes(["品名\nDescription", "净重\nGross weight (kg)", "数量\nQuantity"], [["Synthetic", 90, "10 件"]]), "header-conflict.csv")
+        self.assertEqual(doc["rows"][0]["net_kg"], UNSPECIFIED)
+        self.assertEqual(doc["rows"][0]["gross_kg"], UNSPECIFIED)
+        self.assertIn("conflicting_header", [i["code"] for i in doc["report"]["issues"]])
+
+    def test_quantity_units_and_package_types_come_from_written_suffixes(self):
+        doc = parse_document(csv_bytes(["品名", "数量", "包装数"], [["Synthetic A", "15 卷", "2 木箱"], ["Synthetic B", "80 米", "5 扎"]]), "suffix.csv")
+        self.assertEqual([(r["quantity"], r["unit"], r["package_count"], r["package_type"]) for r in doc["rows"]], [(15, "卷", 2, "木箱"), (80, "米", 5, "扎")])
+        self.assertEqual(summarize(doc)["quantities_by_unit"], {"卷": 15, "米": 80})
+
+    def test_explicit_package_count_pieces_and_racks_are_not_renamed_boxes(self):
+        doc = parse_document(csv_bytes(["品名", "包装数"], [["Synthetic A", "17 铁架"], ["Synthetic B", "6 件"]]), "package-units.csv")
+        self.assertEqual([(r["package_count"], r["package_type"]) for r in doc["rows"]], [(17, "铁架"), (6, "件")])
+
+    def test_suffix_and_unit_column_conflict_is_not_silently_resolved(self):
+        doc = parse_document(csv_bytes(["name", "quantity", "unit"], [["Synthetic", "18 米", "pcs"]]), "unit-conflict.csv")
+        self.assertEqual(doc["rows"][0]["quantity"], UNSPECIFIED)
+        self.assertEqual(doc["rows"][0]["unit"], UNSPECIFIED)
+        self.assertIn("冲突", doc["rows"][0]["evidence"]["quantity"]["reason"])
+
+    def test_bilingual_totals_are_scoped_to_each_table(self):
+        def table(qty):
+            return {"rows": [[intake._cell(v) for v in row] for row in [["货物名称\nDescription", "数量\nQuantity"], ["Synthetic", f"{qty} 件"], ["总计\nTotal", qty]]]}
+        rows, totals = intake._table_rows([table(7), table(11)], [])
+        self.assertEqual([t["row_ids"] for t in totals], [["R00001"], ["R00002"]])
+        self.assertEqual([r["quantity"] for r in rows], [7, 11])
+
+    def test_explicit_invoice_and_contract_pages_are_excluded(self):
+        doc = parse_document(business_pdf_bytes(("INVOICE", "PACKING LIST", "CONTRACT")), "mixed-synthetic.pdf", "off")
+        self.assertEqual(len(doc["rows"]), 2)
+        self.assertEqual({r["evidence"]["name"]["source"]["page"] for r in doc["rows"]}, {2})
+        excluded = [i for i in doc["extraction"]["issues"] if i["code"] == "excluded_non_packing_page"]
+        self.assertEqual([i["page"] for i in excluded], [1, 3])
+
+    def test_invoice_word_inside_material_name_is_not_a_page_title(self):
+        doc = parse_document(business_pdf_bytes(cargo_name="INVOICE"), "cargo-word.pdf", "off")
+        self.assertEqual(len(doc["rows"]), 2)
+        self.assertEqual(doc["rows"][0]["name"], "INVOICE")
+
+    def test_unknown_page_in_mixed_pack_is_not_assumed_a_continuation(self):
+        doc = parse_document(business_pdf_bytes(("PACKING LIST", "APPENDIX")), "unknown-page.pdf", "off")
+        self.assertEqual(len(doc["rows"]), 2)
+        self.assertIn("ambiguous_document_page", [i["code"] for i in doc["extraction"]["issues"]])
+
+    def test_pdf_rowspan_has_one_value_and_shared_geometry_evidence(self):
+        doc = parse_document(business_pdf_bytes(), "merged-synthetic.pdf", "off")
+        first, second = doc["rows"]
+        self.assertEqual(first["package_count"], 3)
+        self.assertEqual(second["package_count"], UNSPECIFIED)
+        group = first["evidence"]["package_count"]["group"]
+        self.assertEqual(group["row_ids"], [first["id"], second["id"]])
+        self.assertEqual(group, second["evidence"]["package_count"]["group"])
+        self.assertEqual(group["anchor_row_id"], first["id"])
+        self.assertEqual(group["source"]["bbox"][1:4:2], [120, 180])
+        self.assertEqual(summarize(doc)["totals"]["gross_kg"], 90)
+        self.assertEqual(summarize(doc)["totals"]["package_count"], 3)
+
+    def test_empty_unmerged_cells_are_never_forward_filled(self):
+        tables, issues, _ = intake._pdf(business_pdf_bytes(merged=False), "none")
+        tables[0]["rows"][2][2]["raw"] = ""
+        rows, _ = intake._table_rows(tables, issues)
+        self.assertEqual(rows[1]["package_count"], UNSPECIFIED)
+        self.assertNotIn("group", rows[1]["evidence"]["package_count"])
+
+    def test_two_packing_pages_keep_separate_totals_and_source_groups(self):
+        doc = parse_document(business_pdf_bytes(("PACKING LIST", "PACKING LIST")), "two-packing-lists.pdf", "off")
+        self.assertEqual(len(doc["rows"]), 4)
+        self.assertEqual([t["row_ids"] for t in doc["totals"]], [["R00001", "R00002"], ["R00003", "R00004"]])
+        self.assertNotEqual(doc["rows"][0]["evidence"]["gross_kg"]["group"]["id"], doc["rows"][2]["evidence"]["gross_kg"]["group"]["id"])
+        self.assertNotIn("total_mismatch", [i["code"] for i in doc["report"]["issues"]])
 
 
 if __name__ == "__main__":

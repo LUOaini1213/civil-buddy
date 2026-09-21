@@ -58,6 +58,7 @@ CHECKS = (
     Check("planning-chat-ui", ("scripts/test_planning_chat_ui.cjs",), "node"),
     Check("planning-bundle", ("scripts/test_planning_bundle.py",), timeout=180),
     Check("logistics-intake", ("scripts/test_logistics_intake.py",)),
+    Check("logistics-groups", ("scripts/test_logistics_groups.py",)),
     Check("logistics-workbench", ("scripts/test_logistics_workbench.py",)),
     Check("logistics-chat", ("scripts/test_logistics_chat.py",)),
     Check("logistics-ui", ("scripts/test_logistics_ui.cjs",), "node"),

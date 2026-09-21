@@ -1,13 +1,13 @@
 const UNKNOWN = 'UNSPECIFIED';
 const SIGNOFF = '我明白，将由持证人员签认';
 export const FIELDS = [
-  ['package_id','箱号'],['material_id','物料编号'],['name','品名'],['spec','规格'],
-  ['package_count','箱数','integer'],['quantity','数量（原单位）','integer'],['units_per_package','每箱数量','integer'],['unit','原始单位'],
+  ['container_id','集装箱号'],['package_id','箱号'],['package_type','包装类型'],['material_id','物料编号'],['name','品名'],['spec','规格'],
+  ['package_count','包装数','integer'],['quantity','数量（原单位）','integer'],['units_per_package','每包装数量','integer'],['unit','原始单位'],
   ['length_mm','长度 mm','number'],['width_mm','宽度 mm','number'],['height_mm','高度 mm','number'],
   ['dimension_scope','尺寸口径','dimension'],['net_kg','净重 kg','number'],['gross_kg','毛重 kg','number'],['weight_scope','重量口径','weight'],
 ];
 const labels = Object.fromEntries(FIELDS.map(([key,label])=>[key,label]));
-const scopes = {dimension:[[UNKNOWN,'待确认'],['package','每箱外尺寸'],['item','单件材料尺寸']],weight:[[UNKNOWN,'待确认'],['package','每箱重量'],['item','单件重量'],['row','整行总重量']]};
+const scopes = {dimension:[[UNKNOWN,'待确认'],['package','每包装外尺寸'],['item','单件材料尺寸']],weight:[[UNKNOWN,'待确认'],['package','每包装重量'],['item','单件重量'],['row','整行总重量']]};
 const copy = value => JSON.parse(JSON.stringify(value));
 export function displayValue(value, field) {
   if (value === UNKNOWN || value === null || value === undefined || value === '') return '待确认';
@@ -22,7 +22,7 @@ export function parseEdit(field, raw) {
   if (kind === 'number' || kind === 'integer') {
     if (!/^(?:\d+(?:\.\d*)?|\.\d+)$/.test(value)) throw new Error(`${definition[1]}须为正有限数；未知请留空。`);
     const parsed = Number(value);
-    if (!Number.isFinite(parsed) || parsed<=0 || parsed > 1e12 || (kind === 'integer' && !Number.isInteger(parsed))) throw new Error(`${definition[1]}须为正数且在范围内，箱数与件数须为整数。`);
+    if (!Number.isFinite(parsed) || parsed<=0 || parsed > 1e12 || (kind === 'integer' && !Number.isInteger(parsed))) throw new Error(`${definition[1]}须为正数且在范围内，包装数与数量须为整数。`);
     return parsed;
   }
   if (scopes[kind] && !scopes[kind].some(([key])=>key===value)) throw new Error('请选择明确口径。');
@@ -64,7 +64,7 @@ export function startLogisticsApp(document, options={}) {
     $('openVersion').disabled=busy || !state.project || !$('versions').value;
     $('latestVersion').hidden=!state.historical;
     $('undoProject').disabled=busy || !write || !state.project?.can_undo || pending;
-    for(const node of document.querySelectorAll('[data-ledger-field]')) node.disabled=busy || !write;
+    for(const node of document.querySelectorAll('[data-ledger-field]')) node.disabled=busy || !write || node.dataset.shared==='true';
     for(const id of ['reviewEdits','discardEdits']) $(id).disabled=busy || !write || !pending;
     $('applyProposal').disabled=busy || !write || !state.proposal || !$('confirmProposal').checked;
     $('confirmProposal').disabled=busy || !write || !state.proposal;
@@ -88,7 +88,7 @@ export function startLogisticsApp(document, options={}) {
     $('historyBadge').hidden=!state.historical;
     $('historyBadge').textContent=state.historical?`正在只读查看版本 ${state.project.revision}，不允许用历史版本覆盖最新台账。回到最新版本后可撤销上次修改。`:'';
     $('agentLink').hidden=!writable();if(writable())$('agentLink').href=`/?logistics_project_id=${projectId()}`;
-    $('modeHelp').textContent=$('packingMode').value==='materials'?'裸材料模式需要单件材料尺寸、单件净重及明确数量，不能带有已包装箱号或箱数。包装采用引擎规则，须另行复核。':'已包装模式需要每箱外尺寸、每箱毛重、箱数及数量。缺项由服务报告，不猜测。';
+    $('modeHelp').textContent=$('packingMode').value==='materials'?'裸材料模式需要单件材料尺寸、单件净重及明确数量，不能带有已包装箱号或包装数。包装采用引擎规则，须另行复核。':'已包装模式需要每包装外尺寸、每包装毛重、包装数及数量。共享合并值不能拆成单行重量。缺项由服务报告，不猜测。';
   }
   function optionsIn(select,values,placeholder){const previous=select.value;select.replaceChildren(element('option',placeholder));select.children[0].value='';for(const [value,label] of values){const item=element('option',label);item.value=String(value);select.append(item);}select.value=values.some(([value])=>String(value)===previous)?previous:'';}
   function renderLedger(){
@@ -97,20 +97,22 @@ export function startLogisticsApp(document, options={}) {
     for(const row of rows.slice(state.page*30,(state.page+1)*30)){
       const tr=element('tr');tr.append(element('td',row.id));
       for(const [field,label,kind] of FIELDS){
-        const td=element('td'),key=`${row.id}:${field}`,raw=state.pending.has(key)?state.pending.get(key).raw:row[field];
+        const td=element('td'),key=`${row.id}:${field}`,raw=state.pending.has(key)?state.pending.get(key).raw:row[field],evidence=row.evidence?.[field],group=evidence?.group;
         const input=element(scopes[kind]?'select':'input');input.dataset.ledgerField=field;input.dataset.rowId=row.id;input.setAttribute('aria-label',`${row.id} ${label}`);
         if(scopes[kind])for(const [value,text]of scopes[kind]){const opt=element('option',text);opt.value=value;input.append(opt);}
         else{input.type='text';input.maxLength=500;if(kind)input.inputMode=kind==='integer'?'numeric':'decimal';input.placeholder='待确认';}
         input.value=raw===UNKNOWN || raw==null ? scopes[kind]?UNKNOWN:'' : String(raw);
+        if(group){input.dataset.shared='true';input.readOnly=true;input.setAttribute('aria-readonly','true');input.title='原图合并单元格跨多材料行，不能按单行修改。';if(scopes[kind])input.children[0].textContent='共享合并值';else input.placeholder='共享合并值';td.className='shared-field';}
         input.addEventListener(scopes[kind]?'change':'input',()=>edit(row.id,field,input.value,td));
         if(state.pending.has(key))td.className='pending';if(field==='name')td.className+=' name-field';td.append(input);
-        const evidence=row.evidence?.[field],source=element('button',evidence?.source?sourceLocation(evidence.source,true):'来源待补',`source-link${evidence?'':' missing'}`);source.type='button';source.setAttribute('aria-label',`${row.id} ${label} 来源`);source.addEventListener('click',()=>showSource(row.id,field));td.append(source);tr.append(td);
+        const location=group?.source || evidence?.source,source=element('button',group?'共享合并值 · 来源':location?sourceLocation(location,true):'来源待补',`source-link${evidence?'':' missing'}`);source.type='button';source.setAttribute('aria-label',`${row.id} ${label} 来源`);source.addEventListener('click',()=>showSource(row.id,field));td.append(source);tr.append(td);
       }$('ledgerRows').append(tr);
     }$('ledgerEmpty').hidden=rows.length>0;controls();
   }
   function edit(rowId,field,raw,cell){
     if(state.busy || !writable())return;
     const row=doc().rows.find(item=>item.id===rowId);if(!row)return;
+    if(row.evidence?.[field]?.group){notify('该字段来自跨材料行的共享合并单元格，不能按单行修改。请查看来源与覆盖范围。',true);return;}
     const key=`${rowId}:${field}`;let same=false;try{same=parseEdit(field,raw)===row[field];}catch{ /* Invalid draft remains visible for correction. */ }
     if(same)state.pending.delete(key);else state.pending.set(key,{row_id:rowId,field,raw});
     if(cell)cell.className=state.pending.has(key)?'pending':'';
@@ -118,11 +120,14 @@ export function startLogisticsApp(document, options={}) {
   }
   function renderSummary(){
     const summary=state.project?.summary || state.draft?.summary;
-    $('totals').replaceChildren();for(const [field,label,unit]of [['package_count','箱数','箱'],['net_kg','净重合计','kg'],['gross_kg','毛重合计','kg']]){const card=element('div',undefined,'metric');card.append(element('span',label),element('strong',displayValue(summary?.totals?.[field])),element('small',unit));$('totals').append(card);}
+    $('totals').replaceChildren();for(const [field,label,unit]of [['package_count','包装数','包装单位'],['net_kg','净重合计','kg'],['gross_kg','毛重合计','kg']]){const card=element('div',undefined,'metric');card.append(element('span',label),element('strong',displayValue(summary?.totals?.[field])),element('small',unit));$('totals').append(card);}
     const quantities=summary?.quantities_by_unit;
     if(quantities && Object.keys(quantities).length){for(const [unit,quantity]of Object.entries(quantities)){const card=element('div',undefined,'metric');card.append(element('span','数量分单位汇总'),element('strong',displayValue(quantity)),element('small',unit===UNKNOWN?'单位待确认':unit));$('totals').append(card);}}
     else{const card=element('div',undefined,'metric');card.append(element('span','数量'),element('strong','待确认'),element('small','等待分单位汇总'));$('totals').append(card);}
+    $('sourceTotalsRows').replaceChildren();const originalTotals=doc()?.totals || [];$('sourceTotals').hidden=!originalTotals.length;
+    for(const total of originalTotals.slice(0,50)){const card=element('div',undefined,'source-total');card.append(element('strong',sourceLocation(total.source || {})));for(const [field,value]of Object.entries(total.values || {}))card.append(element('p',`${labels[field] || field}：${displayValue(value)}${field==='quantity'?'（原表合计，单位与适用范围须核对）':''}`));if(total.row_ids?.length)card.append(element('p',`对应材料行：${total.row_ids.join('、')}`,'muted'));$('sourceTotalsRows').append(card);}
     $('issues').replaceChildren();const audit=state.project?.audit || state.draft?.audit;
+    $('sourceTotals').open=!!audit?.issues?.some(issue=>['mixed_quantity_units','total_unverifiable'].includes(issue.code));
     if(!audit){$('issues').append(element('p','读取文件后查看缺项与不一致。','empty'));return;}
     if(!audit.issues?.length)$('issues').append(element('p','当前规则未发现问题；仍需核对原件并确认台账。','muted'));
     for(const issue of (audit.issues || []).slice(0,100)){const card=element('div',undefined,`issue${issue.severity==='error'?' error':''}`);card.append(element('strong',issue.message),element('span',[issue.row_id,labels[issue.field] || issue.field,issue.code].filter(Boolean).join(' · '),'muted'));if(issue.row_id && issue.field){const button=element('button','查看来源');button.addEventListener('click',()=>showSource(issue.row_id,issue.field));card.append(button);}$('issues').append(card);}
@@ -137,15 +142,17 @@ export function startLogisticsApp(document, options={}) {
     else $('sourcePreview').append(element('p',url?'表格证据见下方；点击台账来源查看准确单元格，完整原表可下载。':'上传文件后显示原件。','empty'));
     $('sourceCells').replaceChildren();const seen=new Set();let count=0;
     for(const row of doc()?.rows || [])for(const [field,evidence]of Object.entries(row.evidence || {})){
-      if(!evidence.source?.sheet || count>=200)continue;
-      const location=sourceLocation(evidence.source),key=`${location}:${evidence.raw}`;if(seen.has(key))continue;seen.add(key);count++;
+      const originalSource=evidence.group?.source || evidence.source;if(!originalSource?.sheet || count>=200)continue;
+      const location=sourceLocation(originalSource),key=`${location}:${evidence.raw}`;if(seen.has(key))continue;seen.add(key);count++;
       const tr=element('tr'),td=element('td'),button=element('button',location);button.addEventListener('click',()=>showSource(row.id,field));td.append(button);tr.append(td,element('td',evidence.raw ?? ''));$('sourceCells').append(tr);
     }$('sourceTableDetails').hidden=count===0;
   }
   function showSource(rowId,field){
     const row=doc()?.rows.find(item=>item.id===rowId);if(!row)return;
-    const ev=row.evidence?.[field],location=ev?.source || {};state.selectedSource=[rowId,field];$('sourceDetail').hidden=false;$('sourceTitle').textContent=`${rowId} · ${labels[field] || field}`;$('sourceFacts').replaceChildren();
-    for(const [label,value]of [['当前值',displayValue(row[field],field)],['原始值',ev?.raw ?? '未提供原始证据'],['位置',sourceLocation(location)],['坐标单位',location.coordinate_system],['原表头',ev?.header],['核对说明',ev?.reason],['人工修订',ev?.corrections?JSON.stringify(ev.corrections):ev?.correction?typeof ev.correction==='string'?ev.correction:JSON.stringify(ev.correction):null]])if(value!==undefined && value!==null){$('sourceFacts').append(element('dt',label),element('dd',value));}
+    const ev=row.evidence?.[field],group=ev?.group,location=group?.source || ev?.source || {};state.selectedSource=[rowId,field];$('sourceDetail').hidden=false;$('sourceTitle').textContent=`${rowId} · ${labels[field] || field}`;$('sourceFacts').replaceChildren();
+    const shared=group && (row[field]===UNKNOWN || row[field]==null);
+    const anchor=group ? doc().rows.find(item=>item.id===group.anchor_row_id && item.evidence?.[field]?.group?.id===group.id) : null;
+    for(const [label,value]of [['当前值',shared?'共享合并值，未分摊到本行':displayValue(row[field],field)],['原始值',ev?.raw ?? '未提供原始证据'],['共享原文',group?(anchor?.evidence?.[field]?.raw || '待确认'):null],['共享值（不分摊）',group?displayValue(anchor?.[field],field):null],['共享组',group?.id],['覆盖材料行',group?.row_ids?.join('、')],['唯一记值行',group?.anchor_row_id],['共享口径',group?'原图合并值仅记录一次，不代表各行分别具有此值；该字段只读。':null],['位置',sourceLocation(location)],['坐标单位',location.coordinate_system],['原表头',ev?.header],['核对说明',ev?.reason],['人工修订',ev?.corrections?JSON.stringify(ev.corrections):ev?.correction?typeof ev.correction==='string'?ev.correction:JSON.stringify(ev.correction):null]])if(value!==undefined && value!==null){$('sourceFacts').append(element('dt',label),element('dd',value));}
     const ext=doc()?.source.filename.toLowerCase().split('.').pop(),url=sourceURL();
     if(ext==='pdf' && Number.isInteger(location.page) && $('sourcePreview').children[0])$('sourcePreview').children[0].src=`${url}#page=${location.page}`;
     // Bounding boxes are shown numerically unless the parser provides explicit coordinate dimensions.

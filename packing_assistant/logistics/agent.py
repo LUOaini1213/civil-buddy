@@ -9,11 +9,12 @@ from packing_assistant.runtime.cancel import check
 from .records import digest
 
 NUMERIC = {"package_count", "quantity", "units_per_package", "length_mm", "width_mm", "height_mm", "net_kg", "gross_kg"}
-TEXT = {"package_id", "material_id", "name", "spec", "unit", "dimension_scope", "weight_scope"}
+TEXT = {"package_id", "container_id", "package_type", "material_id", "name", "spec", "unit", "dimension_scope", "weight_scope"}
 ALIASES = {"箱数": "package_count", "包装数": "package_count", "件数": "quantity", "数量": "quantity", "每箱件数": "units_per_package",
            "长": "length_mm", "长度": "length_mm", "宽": "width_mm", "宽度": "width_mm", "高": "height_mm", "高度": "height_mm",
            "净重": "net_kg", "毛重": "gross_kg", "箱号": "package_id", "材料编号": "material_id", "名称": "name", "规格": "spec",
-           "单位": "unit", "尺寸口径": "dimension_scope", "重量口径": "weight_scope"}
+           "单位": "unit", "集装箱号": "container_id", "柜号": "container_id", "包装类型": "package_type",
+           "尺寸口径": "dimension_scope", "重量口径": "weight_scope"}
 
 
 def propose_changes(document, changes, reason):
@@ -34,6 +35,8 @@ def propose_changes(document, changes, reason):
             raise ValueError("只能修改已有台账行的受限字段。")
         if (ident, field) in seen:
             raise ValueError("同一字段不能重复修订。")
+        if rows[ident].get("evidence", {}).get(field, {}).get("group"):
+            raise ValueError("该字段属于原图跨行合并单元格，不能作为单行修改；请核对共享范围并提供拆分后的原件。")
         seen.add((ident, field))
         if value != "UNSPECIFIED":
             if field in NUMERIC and (type(value) not in (int, float) or not math.isfinite(value) or not 0 < value <= 1e12):
@@ -175,12 +178,16 @@ def execute(context, name, args, user_text):
             lines.extend(f"{i.get('row_id') or '整表'} / {FIELD_LABELS.get(i.get('field'), '检查')}：{i['message'][:300]}" for i in audit.get("issues", [])[:12])
         if name == "logistics_summarize":
             def value(v):
-                return "未确定" if v == "UNSPECIFIED" or v is None else f"{v:g}" if type(v) in (int, float) else str(v)
+                if v == "UNSPECIFIED" or v is None:
+                    return "未确定"
+                if type(v) in (int, float) and v == int(v):
+                    return str(int(v))
+                return str(v)
             totals = summary.get("totals", {})
-            lines.append(f"包装箱数：{value(totals.get('package_count'))}；净重：{value(totals.get('net_kg'))} kg；毛重：{value(totals.get('gross_kg'))} kg。")
+            lines.append(f"包装数：{value(totals.get('package_count'))}；净重：{value(totals.get('net_kg'))} kg；毛重：{value(totals.get('gross_kg'))} kg。")
             quantities = summary.get("quantities_by_unit", {})
             lines.append("货物数量按单位分别汇总：" + ("；".join(f"{value(count)} {unit[:100] if unit != 'UNSPECIFIED' else '（单位未明确）'}" for unit, count in list(quantities.items())[:20]) or "未确定") + "。")
-            unknown = {f: sum(r.get(f, "UNSPECIFIED") == "UNSPECIFIED" for r in doc["rows"]) for f in NUMERIC | {"dimension_scope", "weight_scope", "unit"}}
+            unknown = {f: sum(r.get(f, "UNSPECIFIED") == "UNSPECIFIED" and not r.get("evidence", {}).get(f, {}).get("group") for r in doc["rows"]) for f in NUMERIC | {"dimension_scope", "weight_scope", "unit"}}
             lines.append("待补字段：" + ("；".join(f"{FIELD_LABELS.get(f, f)} {count} 行" for f, count in sorted(unknown.items()) if count) or "本次汇总字段均有明确值") + "。")
         lines.append("本次仅检查台账，没有修改、装箱或导出。")
         selected = doc["rows"][:50]

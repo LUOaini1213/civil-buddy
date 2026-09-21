@@ -29,6 +29,10 @@ def prepare(project, mode, container_type, max_containers):
         ident = row["id"]
         required = ["length_mm", "width_mm", "height_mm", "gross_kg" if mode == "packaged" else "net_kg", "quantity"] + (["package_count"] if mode == "packaged" else [])
         missing = [f for f in required if not _positive(row.get(f), f in {"quantity", "package_count"})]
+        if any(row.get("evidence", {}).get(f, {}).get("group") for f in required):
+            missing.append("跨材料行共享数值未拆分为独立包装或构件，不能直接用于装载")
+        if mode == "materials" and str(row.get("unit", "")).strip().lower() not in {"pc", "pcs", "ea", "件", "个", "piece", "pieces"}:
+            missing.append("裸材料需要明确单件数量，不能把米、卷或套直接当构件件数")
         scope = "package" if mode == "packaged" else "item"
         if row.get("dimension_scope") != scope:
             missing.append("dimension_scope=" + scope)

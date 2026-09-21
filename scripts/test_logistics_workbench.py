@@ -281,7 +281,7 @@ class Workbench(unittest.TestCase):
         self.assertEqual(inspected["row_catalog"][0]["id"], "R00001")
         self.assertEqual(inspected["row_catalog"][0]["known_values"]["gross_kg"], 120)
         summary = agent.execute(context, "logistics_summarize", {}, "汇总")
-        self.assertIn("包装箱数：1", summary["reply"])
+        self.assertIn("包装数：1", summary["reply"])
         self.assertIn("毛重：120 kg", summary["reply"])
         self.assertNotIn('"source":', summary["reply"])
         self.assertNotIn("evidence", inspected["row_catalog"][0])
@@ -341,8 +341,10 @@ class Workbench(unittest.TestCase):
         project["document"]["rows"][0]["name"] = "=1+1"
         data, mime, filename = bundle.export_ledger(project, "xlsx")
         wb = load_workbook(io.BytesIO(data), data_only=False)
-        self.assertEqual(wb["台账"]["D2"].value, "=1+1")
-        self.assertEqual(wb["台账"]["D2"].data_type, "s")
+        columns = {cell.value: cell.column for cell in wb["台账"][1]}
+        name_cell = wb["台账"].cell(2, columns["name"])
+        self.assertEqual(name_cell.value, "=1+1")
+        self.assertEqual(name_cell.data_type, "s")
         self.assertIn("来源与修订", wb.sheetnames)
 
     def test_packaged_uses_loader_only_and_preserves_box_count(self):
