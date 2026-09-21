@@ -105,13 +105,20 @@ def measure(draft: str, gold: Dict) -> Dict:
     whole = flat(draft)
     result: Dict = {"fields": {}, "rejections": {}, "scores": {}, "specials": {}, "forms": {}}
     for key, item in gold["fields"].items():
-        mine = [row for row in rows if re.search(item["row"], next(iter(row.values()), ""))]
-        values = [flat(row.get("要求原文", "")) for row in mine if row.get("是否检出", "已检出") == "已检出"]
+        # the rows NAMED for the field: the first cell starts with one of its names ("工期", not "评分点 工期保证措施")
+        mine = [row for row in rows if "要求原文" in row and re.match(r"(?:" + item["row"] + r")", next(iter(row.values()), ""))]
+        groups: Dict[str, List[str]] = {}
+        for row in mine:
+            if row.get("是否检出", "已检出") == "已检出":
+                groups.setdefault(next(iter(row.values()), ""), []).append(flat(row.get("要求原文", "")))
+        values = [v for vs in groups.values() for v in vs]
         right = [v for v in values if flat(item["value"]) in v]
         bad = [w for w in gold["wrong"].get(key, []) if any(re.search(r"(?<![\d.])" + re.escape(flat(w)), v) and flat(item["value"]) not in v for v in values)]
-        others = [v for v in values if v and flat(item["value"]) not in v]
+        # ambiguous: the right value shares ONE row name with another value, and nothing tells them apart
+        others = [v for vs in groups.values() if any(flat(item["value"]) in x for x in vs) for v in vs if flat(item["value"]) not in v]
         state = ("wrong" if bad and not right else "ambiguous" if right and others else "right" if right else "missing")
-        clause = any(item["clause"].split()[-1] in str(row.get("来源页段", "")) for row in mine if flat(item["value"]) in flat(row.get("要求原文", "")))
+        clause = any(any(alt.split()[-1] in str(row.get("来源页段", "")) for alt in item["clause"].split("|"))
+                     for row in mine if flat(item["value"]) in flat(row.get("要求原文", "")))
         result["fields"][key] = {"state": state, "clause": bool(clause and right), "shown": [row.get("要求原文", "") for row in mine][:6]}
     table_text = flat("".join("".join(row.values()) for row in rows)) + flat("".join(l for l in draft.splitlines() if l.lstrip().startswith("- ")))
     for item in gold["rejections"]:

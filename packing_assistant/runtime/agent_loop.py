@@ -87,12 +87,16 @@ def _named_packing_list(text: str) -> str:
     return str(tables[0]) if len(tables) == 1 else ""
 
 
-def _with_named_documents(text: str) -> str:
-    """The task plus the full text of the job documents it names (the steps path reads what you point at)."""
-    from packing_assistant.office_job import files_named_in, named_files_blob, read_material
+def _with_named_documents(text: str, *, whole: bool = False) -> str:
+    """The task plus the text of the job documents it names (the steps path reads what you point at).
+
+    ``whole``: the caller parses the document itself (招标解析), so the file is read to its end instead of
+    to the 8 000 characters a prompt can spare - the first five pages of a tender are not the tender."""
+    from packing_assistant.office_job import DOCUMENT_FILE_CHARS, DOCUMENT_TOTAL_CHARS, files_named_in, named_files_blob, read_material
 
     named = files_named_in(text, _DOCUMENT_EXTS)
-    blob = named_files_blob(named, reader=read_material) if named else ""
+    limits = {"per_file": DOCUMENT_FILE_CHARS, "total": DOCUMENT_TOTAL_CHARS} if whole else {}
+    blob = named_files_blob(named, reader=read_material, **limits) if named else ""
     return f"{text}\n\n{blob}" if blob else text
 
 
@@ -105,7 +109,7 @@ def _tender_materials(text: str) -> Tuple[Optional[List[Dict[str, Any]]], List[D
     text. A file that could not be read used to be left out without a word, so a check that was handed
     a scanned 投标响应.pdf reported the response as never given.
     """
-    from packing_assistant.office_job import files_named_in, job_root, read_material_checked
+    from packing_assistant.office_job import DOCUMENT_FILE_CHARS, files_named_in, job_root, read_material_checked
 
     sources: List[Dict[str, Any]] = []
     unread: List[Dict[str, str]] = []
@@ -114,7 +118,7 @@ def _tender_materials(text: str) -> Tuple[Optional[List[Dict[str, Any]]], List[D
         name = path.name.lower()
         role = ("tender" if any(mark in name for mark in _TENDER_FILE)
                 else "response" if any(mark in name for mark in _RESPONSE_FILE) else "reference")
-        body, why = read_material_checked(path, 40000)
+        body, why = read_material_checked(path, DOCUMENT_FILE_CHARS)   # 40 000 used to be the cut: a quarter of a real tender
         if why:
             unread.append({"title": path.name, "role": role, "reason": why})
             continue
@@ -211,7 +215,7 @@ def _plan_calls(
             {
                 "name": "tender.parse",
                 "arguments": {
-                    "text": _with_named_documents(text),
+                    "text": _with_named_documents(text, whole=True),
                     "source": "agent-loop",
                     "project_name": project_name,
                     "p0_confirmed": p0_confirmed,

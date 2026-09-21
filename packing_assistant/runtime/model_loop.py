@@ -348,7 +348,7 @@ def _tender_compare(turn: _Turn, args: Dict[str, Any]) -> Dict[str, Any]:
     texts: Dict[str, str] = {}
     unread: List[Dict[str, str]] = []
     for role, path in paths.items():
-        body, why = read_material_checked(path, 40000, reader=_file_text)
+        body, why = read_material_checked(path, 2_000_000, reader=_file_text)
         if why:
             unread.append({"title": path.name, "role": role, "reason": why})
         else:

@@ -136,7 +136,7 @@ def _check_version(target: Path) -> Optional[Dict[str, Any]]:
     record_path, record = found
 
     def read_input(relative: str) -> Optional[str]:
-        body, why = read_material_checked(job_root().resolve() / relative, _FILE_CHARS)
+        body, why = read_material_checked(job_root().resolve() / relative, 2_000_000)   # the way the check read it
         return None if why else body
 
     def read_draft(relative: str) -> Optional[str]:

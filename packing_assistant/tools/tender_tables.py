@@ -81,7 +81,8 @@ def _with_lot(label: str, lot: str) -> str:
 
 def _source(item: Mapping[str, Any]) -> str:
     origin = str(item.get("origin") or "")
-    line = f"L{item.get('line')}" if item.get("line") else "—"
+    # a document's own locator ("第二章 前附表 3.4.1") is what a person can find again; a line number is not
+    line = str(item.get("ref") or item.get("locator") or "") or (f"L{item.get('line')}" if item.get("line") else "—")
     return f"{origin} {line}".strip() if origin else line
 
 
@@ -156,6 +157,15 @@ _PARSE_SECTIONS: Tuple[Tuple[str, Tuple[Tuple[str, str, bool, str], ...]], ...] 
         ("bond_validity", "保函有效期", False, ""),
     )),
 )
+#: rows only a document's front table lays down, by the section they belong to
+_DOCUMENT_ROWS: Dict[str, Tuple[Tuple[str, str], ...]] = {
+    "2 ": (("submit_place", "递交地点"), ("open_place", "开标地点")),
+    "3 ": (("consortium", "联合体投标"),),
+    "4 ": (("alternative", "备选投标方案"), ("subcontract", "分包"), ("deviation", "偏离")),
+    "5 ": (("candidates", "中标候选人"),),
+    "8 ": (("performance_bond", "履约担保"),),
+}
+_FORM_ROWS = (("signing", "签字盖章要求"), ("copies", "投标文件份数"), ("binding", "装订要求"))
 
 
 def _parse_rows(facts: Optional[Facts], topic: str, label: str, always: bool, advice: str) -> List[List[str]]:
@@ -164,6 +174,8 @@ def _parse_rows(facts: Optional[Facts], topic: str, label: str, always: bool, ad
     seen: set = set()
     for m in found:
         name = _with_lot(label, str(m.get("lot") or ""))
+        if m.get("role") and m.get("ref"):
+            name = f"{name}·{m['role']}"   # a document row with two parts: 履约担保·形式 / 履约担保·金额
         if m.get("not_given"):
             if m.get("origin"):
                 continue  # "补遗没提保证金": the addendum left it alone, the original row stands
@@ -207,10 +219,18 @@ def extract_table(parsed: Optional[Mapping[str, Any]], *, project_name: str = "�
     lots = _lots(facts)
     scopes = facts.get("lot_scopes") or {}
     day_line = ""
+    document = ho.get("document") or {}
+    if document:
+        lines += [f"> 按文件结构解析：全文 {document.get('chars')} 字、{document.get('chapters')} 章，前附表 {document.get('front_rows')} 行。"
+                  "字段取自前附表，其次是招标公告里带标签的行；正文里挨着关键词的数不当字段。「来源页段」是条款号。", ""]
+        if document.get("cut"):
+            lines += ["> **文件没有读完**：超过了单个文件的读取上限，后面的内容未参与解析。把文件按章拆开后分别解析。", ""]
     for title, topics in _PARSE_SECTIONS:
         rows: List[List[str]] = []
         for topic, label, always, advice in topics:
             rows += _parse_rows(facts, topic, label, always, advice)
+        for topic, label in _DOCUMENT_ROWS.get(title[:2], ()) if document else ():
+            rows += _parse_rows(facts, topic, label, False, "")
         if title.startswith("1 "):
             zone = _zone(facts)
             rows.append(["辖区", zone, "—", "已检出" if zone != "UNSPECIFIED" else "未检出", _ZONE_ADVICE])
@@ -220,17 +240,18 @@ def extract_table(parsed: Optional[Mapping[str, Any]], *, project_name: str = "�
             rows += [[_with_lot("标段内容", lot), _clip(scope), "—", "已检出", "—"] for lot, scope in scopes.items()]
             rows += [["未读出的文件" + (f" {n}" if len(unread) > 1 else ""), str(u["title"]).strip(), "—", "未读出", str(u.get("reason") or "—")]
                      for n, u in enumerate(unread, 1)]
-        if title.startswith("3 "):
+        if title.startswith("3 ") and not document:
             rows += _requirement_rows(p, {"qualification"}, facts)
         if title.startswith("4 "):
             days = p.get("duration_days")
             if days is not None and not any(r[0].startswith("工期") or r[0].startswith("交货期") for r in rows if r[3] == "已检出"):
                 rows.insert(0, ["工期", f"{days} 日历天", "—", "已检出", "—"])
             day_line = f"工期（招标方的日历天数，只抄原文）：{days} 日历天" if days is not None else ""
-            rows += _requirement_rows(p, {"reject", "validity", "quality", "warranty", "payment"}, facts, stars=True)
+            if not document:  # a document's clauses are listed one by one in section 11, not quoted under a theme
+                rows += _requirement_rows(p, {"reject", "validity", "quality", "warranty", "payment"}, facts, stars=True)
         if title.startswith("5 "):
             rows += _score_rows(p, facts)
-        if title.startswith("6 "):
+        if title.startswith("6 ") and not document:
             rows += _requirement_rows(p, {"price"}, facts)
         if title.startswith("7 "):
             rows += _special_rows(p, facts)
@@ -238,7 +259,11 @@ def extract_table(parsed: Optional[Mapping[str, Any]], *, project_name: str = "�
         lines += _table(PARSE_HEADER, rows) or [f"{MISSING}。", ""]
         if title.startswith("4 ") and day_line:
             lines += [day_line, ""]
+    if document:
+        lines += _document_sections(p, facts, document)
     lines += ["## 9 书面澄清与交接", ""]
+    split = [m for m in facts.get("mentions") or [] if "不一致" in str(m.get("origin") or "")]
+    lines += [f"- 招标公告与前附表不一致：{m.get('label')} 公告写「{_clip(m.get('value'), 30)}」（{m.get('ref')}），须书面提请澄清以哪个为准。" for m in split]
     gaps = [ln for ln in lines if ln.startswith("|") and ("| 未检出 |" in ln or NOT_WRITTEN in ln)]
     lines.append(f"- 上表 {len(gaps)} 项未检出或招标未写：逐项按「澄清建议」核对原文，需要时在澄清截止前书面提问。")
     wh = ", ".join(ho.get("workheads") or [])
@@ -251,6 +276,36 @@ def extract_table(parsed: Optional[Mapping[str, Any]], *, project_name: str = "�
     lines += ["", f"- 下一岗：{', '.join(ho.get('next_experts') or []) or '—'}", "",
               "P0 资格/废标/★须人工确认。系统不判定可投标。", ""]
     return "\n".join(lines)
+
+
+def _document_sections(parsed: Mapping[str, Any], facts: Facts, document: Mapping[str, Any]) -> List[str]:
+    """What only a document has: the formal requirements of its front table, every clause that gets a bid
+    rejected - one row each, with the clause it stands in - and the documents the bid must contain."""
+    out: List[str] = ["## 10 形式、签章与递交", ""]
+    rows: List[List[str]] = []
+    for topic, label in _FORM_ROWS:
+        rows += _parse_rows(facts, topic, label, False, "")
+    requirements = list(parsed.get("requirements") or [])
+    shown = {re.sub(r"\s+", "", str(r[1])) for r in rows}
+    for n, r in enumerate([r for r in requirements if r.get("item_kind") == "obligation"], 1):
+        text = _clip(r.get("exact_text"), 120)
+        if re.sub(r"\s+", "", text) not in shown:
+            rows.append([f"前附表要求 {n}", text, str(r.get("locator") or "—"), "已检出", "逐条自查：形式评审不符即被否决"])
+    out += _table(PARSE_HEADER, rows) or [f"{MISSING}。", ""]
+    out += ["## 11 否决与拒收条款（逐条）", "",
+            "每一条都是原文里会让投标被否决、被拒收或按无效处理的句子，一句一行。不代判是否触发，逐条自查。", ""]
+    rows = []
+    for n, r in enumerate([r for r in requirements if r.get("item_kind") in ("reject_clause", "star") and r.get("category") == "reject"], 1):
+        cited = "；".join(f"{c.get('locator')}：{_clip(c.get('text'), 60)}" for c in r.get("cited") or [])
+        name = f"★ 必须满足 {n}" if r.get("item_kind") == "star" else f"否决条款 {n}"
+        rows.append([name, _clip(r.get("exact_text"), 160), str(r.get("locator") or r.get("requirement_ref") or "—"), "已检出",
+                     ("所引条款 " + cited) if cited else "逐条自查"])
+    out += _table(PARSE_HEADER, rows) or ["全文未检出否决/拒收字样的条款——这本身不正常，请人工核对评标办法一章。", ""]
+    out += ["## 12 投标文件组成", ""]
+    rows = [[f"组成 {n}", str(f.get("name")), str(f.get("locator") or "—"), "已检出", "按投标文件格式一章编制，缺一份即可能被否决"]
+            for n, f in enumerate(document.get("forms") or [], 1)]
+    out += _table(PARSE_HEADER, rows) or [f"{MISSING}投标文件组成清单（投标人须知 3.1.1 / 投标文件格式目录）。", ""]
+    return out
 
 
 #: which fields say what a parser rule is about; a rule with no field of its own is always listed

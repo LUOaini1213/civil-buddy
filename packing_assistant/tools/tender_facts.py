@@ -48,6 +48,7 @@ _DATE = re.compile(r"\d{4}\s*[-/.年]\s*\d{1,2}\s*[-/.月]\s*\d{1,2}\s*[日号]?
                    r"|\d{1,2}(?:st|nd|rd|th)?\s+" + _MONTH + r"\.?,?\s+\d{4}|" + _MONTH + r"\.?\s+\d{1,2}(?:st|nd|rd|th)?,?\s+\d{4}"
                    r"|\d{1,2}/\d{1,2}/\d{4}", re.I)
 _CLOCK = re.compile(r"\d{1,2}[.:]\d{2}\s*(?:a\.?m\.?|p\.?m\.?)|\d{1,2}\s*(?:am|pm)\b|\d{4}\s*hrs?\b"
+                    r"|(?:上午|下午|晚上|中午)?\s*\d{1,2}\s*时(?:\s*\d{1,2}\s*分|整)?"
                     r"|(?:上午|下午|晚上|中午)?\s*(?:[01]?\d|2[0-3])\s*[:：]\s*[0-5]\d|(?:上午|下午|晚上|中午)\s*\d{1,2}\s*点(?:\s*半|\s*\d{1,2}\s*分)?"
                     r"|\d{1,2}\s*点(?:\s*半|\s*\d{1,2}\s*分)", re.I)
 _WORKHEAD = re.compile(r"(?<![A-Za-z0-9])(?:CW|CR|ME|SY|TR|MW|RW)\d{2}(?![A-Za-z0-9])"
@@ -126,6 +127,7 @@ _OBLIGES = re.compile(r"必须|须|应当|应具备|应具有|应提供|应满�
 
 #: office_job writes this under the heading of a job file it could not read. It is neither side speaking.
 UNREAD_MARK = "（读失败）"
+CUT_MARK = "（未读完）"  # office_job writes it under a file that was longer than what was read
 
 
 def is_task_talk(piece: str) -> bool:
@@ -285,7 +287,44 @@ TOPICS: Tuple[Topic, ...] = (
                               "预算员", "测量员", "试验员", "商务经理", "生产经理", "项目副经理", "执行经理", "法定代表人", "法人代表", "授权代表",
                               "委托代理人", "授权委托人", "联系人", "经办人", "BIM负责人", "机电负责人", "总监理工程师"), "person", "qualification"),
 )
-_TOPIC = {t.key: t for t in TOPICS}
+#: Fields only a document lays down, row by row in its front table. They are not looked for in typed text:
+#: nobody types "投标文件副本份数", and a keyword that is never typed can only steal a clause from another field.
+DOCUMENT_TOPICS: Tuple[Topic, ...] = (
+    Topic("consortium", "联合体投标", ("是否接受联合体投标", "联合体投标", "联合体"), "text", "qualification"),
+    Topic("copies", "投标文件份数", ("投标文件副本份数", "投标文件份数", "副本份数", "正本份数"), "text", "form"),
+    Topic("binding", "装订要求", ("装订要求", "装订"), "text", "form"),
+    Topic("signing", "签字盖章要求", ("签字或盖章要求", "签字盖章要求", "签章要求"), "text", "form"),
+    Topic("performance_bond", "履约担保", ("履约担保", "履约保证金", "履约保函"), "text", "bond"),
+    Topic("alternative", "备选投标方案", ("是否允许递交备选投标方案", "备选投标方案", "备选方案"), "text", "substantive"),
+    Topic("subcontract", "分包", ("分包",), "text", "substantive"),
+    Topic("deviation", "偏离", ("偏离",), "text", "substantive"),
+    Topic("open_place", "开标地点", ("开标地点", "开标时间和地点"), "text", "timeline"),
+    Topic("submit_place", "递交地点", ("递交投标文件地点", "投标文件递交地点", "递交地点"), "text", "timeline"),
+    Topic("candidates", "中标候选人", ("是否授权评标委员会确定中标人", "中标候选人"), "text", "scoring"),
+)
+_DOCUMENT_ALIASES: List[Tuple[str, str]] = sorted(
+    ((alias, topic.key) for topic in DOCUMENT_TOPICS for alias in topic.aliases), key=lambda pair: -len(pair[0]))
+_DEADLINE_QUERY_NAMES = ("提出问题的截止时间", "澄清招标文件的截止时间", "要求澄清招标文件的截止时间", "答疑截止时间", "提问截止时间")
+_TOPIC = {t.key: t for t in TOPICS + DOCUMENT_TOPICS}
+
+
+def document_topic(name: str) -> str:
+    """The field a front-table row (or a label inside its content) is about, by its name. The keyword has
+    to be what the name is about: 招标人书面澄清的时间 is not the 招标人."""
+    name = (name or "").strip()
+    for alias in _DEADLINE_QUERY_NAMES:
+        if alias in name:
+            return "deadline_query"
+    if "资质条件" in name:
+        return "qualification"
+    for alias, key in _DOCUMENT_ALIASES:
+        if alias in name and len(alias) * 2 >= len(name):
+            return key
+    for start, end, key in _topic_hits(name):
+        rest = name[:start] + name[end:]
+        if (end - start) * 2 >= len(name) or re.fullmatch(r"(?:投标人|的)?(?:要求|条件|时间|金额|标准|期限|资格|(?:和|及)地点)?", rest):
+            return key
+    return ""
 _ALWAYS_OURS = frozenset({"our_price", "evidence", "staff"})  # ours by nature (a named person is ours)
 _NO_SIDE = frozenset({"owner_person"})  # neither the tender's nor a response
 _STATEMENT_ONLY = frozenset({"poa", "seal"})  # what matters is what is said about them, not a value
@@ -344,6 +383,7 @@ class Mention:
     not_given: bool = False  # "限价还没公布": the text says the tender has not given this
     origin: str = ""  # "补遗1号" when the sentence speaks of an addendum, as written
     role: str = ""  # topic "staff" only: the post as written - "专职安全员"
+    ref: str = ""  # a document's own locator - "第二章 前附表 3.4.1"; "" for typed text, where the line is all there is
 
     @property
     def label(self) -> str:
@@ -398,7 +438,8 @@ class TenderFacts:
             "lots": list(self.lots),
             "lot_scopes": dict(self.lot_scopes),
             "mentions": [{"topic": m.topic, "label": m.label, "side": m.side, "lot": m.lot, "value": m.value,
-                          "note": m.note, "line": m.line, "not_given": m.not_given, "origin": m.origin, "role": m.role}
+                          "note": m.note, "line": m.line, "not_given": m.not_given, "origin": m.origin, "role": m.role,
+                          **({"ref": m.ref} if m.ref else {})}
                          for m in self.mentions],
             "scores": [vars(s) for s in self.scores],
             "specials": [vars(s) for s in self.specials],
@@ -604,11 +645,30 @@ def _lot_key(match: "re.Match[str]") -> str:
     return match.group(1)
 
 
+def _extract_document(text: str) -> TenderFacts:
+    """A tender document says where things are: tools/tender_document.py reads its structure, and the
+    fields come from the rows of its front table - not from whatever running text stands next to a keyword."""
+    from packing_assistant.jurisdiction import infer_jurisdiction
+    from packing_assistant.tools import tender_document
+
+    doc = tender_document.read(text)
+    facts = TenderFacts()
+    facts.mentions = list(tender_document.field_mentions(doc))
+    facts.scores = [ScorePoint(name, score, "", piece.text[:160], piece.line) for name, score, piece in tender_document.scores(doc)]
+    facts.specials = [Special(name, detail, "", piece.text[:160], piece.line) for name, detail, piece in tender_document.specials(doc)]
+    facts.jurisdiction = infer_jurisdiction(text)
+    return facts
+
+
 def extract(text: str, *, sides: str = "auto") -> TenderFacts:
     """``sides="none"`` when the caller already knows every word is the tender's (a file given the
     tender role): then no cue is looked for at all. ``"auto"`` reads the text as somebody talking,
     unless it looks like a pasted excerpt, where only first-person cues count."""
     from packing_assistant.jurisdiction import infer_jurisdiction
+    from packing_assistant.tools import tender_document
+
+    if sides != "ours" and tender_document.is_document(text or ""):
+        return _extract_document(text or "")
 
     facts = TenderFacts()
     facts.jurisdiction = infer_jurisdiction(text or "")
@@ -617,7 +677,7 @@ def extract(text: str, *, sides: str = "auto") -> TenderFacts:
     lot_forms: Dict[str, str] = {}
     seen_clauses: List[str] = []
     for line_no, raw_line, block_side in _segments(text, sides, tables=True):
-        if raw_line.lstrip().startswith(UNREAD_MARK):
+        if raw_line.lstrip().startswith((UNREAD_MARK, CUT_MARK)):
             continue
         # "标签：" at the start of a line governs the whole line: "已有证据：同类学校业绩一项，合同都在"
         line_topic: Optional[str] = None
@@ -895,7 +955,7 @@ def _line_sides(text: str, sides: str) -> List[Tuple[List[str], List[str]]]:
         ours: List[str] = []
         for stretch, side in grouped[line_no]:
             line = stretch.strip()
-            if not line or line.startswith(UNREAD_MARK):
+            if not line or line.startswith((UNREAD_MARK, CUT_MARK)):
                 continue
             if sides == "none" or side == "theirs":
                 theirs.append(line)

@@ -44,11 +44,11 @@
     "track_record": {
       "value": "8000万元",
       "clause": "1.4.1",
-      "row": "业绩"
+      "row": "类似业绩|业绩"
     },
     "deadline_query": {
       "value": "2026年10月18日17时",
-      "clause": "2.2.1",
+      "clause": "1.10.2|2.2.1",
       "row": "答疑|澄清|提问"
     },
     "deadline_bid": {
@@ -69,7 +69,7 @@
     "bond": {
       "value": "80万元",
       "clause": "3.4.1",
-      "row": "保证金"
+      "row": "投标保证金|保证金"
     },
     "warranty": {
       "value": "24个月",
@@ -84,7 +84,7 @@
     "copies": {
       "value": "正本1份，副本4份",
       "clause": "3.7.4",
-      "row": "份数|正本|副本"
+      "row": "投标文件份数|份数|正本|副本"
     },
     "performance_bond": {
       "value": "10%",

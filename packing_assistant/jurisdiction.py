@@ -4,7 +4,9 @@ from __future__ import annotations
 
 import re
 
-_CODES = re.compile(r"(?<![A-Za-z0-9_])(CN|SG|EU|DUAL)(?![A-Za-z0-9_])", re.IGNORECASE)
+#: a code standing alone. Inside a document number it is not one: "LJZB-2026-SG-0418" - SG is 施工, and nearly
+#: every Chinese construction tender number carries it.
+_CODES = re.compile(r"(?<![A-Za-z0-9_\-/.])(CN|SG|EU|DUAL)(?![A-Za-z0-9_\-/])", re.IGNORECASE)
 _CN_STANDARD = re.compile(r"(?<![A-Za-z])(?:JGJ(?:/T)?|GB(?:/T)?\s*\d{4,})", re.IGNORECASE)
 _CN_ORDER = re.compile(r"37\s*号令")
 _SG_AUTHORITY = re.compile(r"(?<![A-Za-z])(?:IRAS|PSSCOC|GeBIZ|BCA|MOM\s+WSH)(?![A-Za-z])", re.IGNORECASE)

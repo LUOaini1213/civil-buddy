@@ -21,6 +21,13 @@ JOB_EXTS = {".xlsx", ".csv", ".txt", ".md", ".json", ".docx", ".log"}
 JOB_MAX_FILES = 12
 JOB_FILE_CHARS = 8_000
 JOB_TOTAL_CHARS = 48_000
+#: A tender document is read whole. 8 000 characters are the first five pages of a hundred: the scoring
+#: table, the rejection clauses and the forms all lie behind them. These are the limits for the posts that
+#: parse a document themselves (no model context to fit into).
+DOCUMENT_FILE_CHARS = 2_000_000
+DOCUMENT_TOTAL_CHARS = 6_000_000
+#: in a blob: the file above was longer than what was read. Said, never silent.
+CUT = "（未读完）"
 DRAFT_PREFIX = "CB草稿"
 _OFFICE_CONTENT_ERRORS = (BadZipFile, ValueError, KeyError, SyntaxError)
 
@@ -557,19 +564,26 @@ def read_job_file(path: Path, limit: int = JOB_FILE_CHARS) -> str:
 _BLOB_HEADER = "## 作业根文件（授权文件夹，未再上传）"
 
 
-def named_files_blob(paths: Sequence[Path], *, reader: Optional[Callable[[Path, int], str]] = None) -> str:
-    """The same block ``job_files_blob`` builds, for files picked by name (sub-folders and PDFs included)."""
+def named_files_blob(paths: Sequence[Path], *, reader: Optional[Callable[[Path, int], str]] = None,
+                     per_file: int = JOB_FILE_CHARS, total: int = JOB_TOTAL_CHARS) -> str:
+    """The same block ``job_files_blob`` builds, for files picked by name (sub-folders and PDFs included).
+
+    ``per_file`` / ``total`` are the prompt-sized defaults; a post that parses the document itself passes
+    DOCUMENT_FILE_CHARS / DOCUMENT_TOTAL_CHARS. A file longer than what was read says so under its text."""
     chunks: List[str] = []
     used = 0
     for path in paths:
-        room = JOB_TOTAL_CHARS - used
+        room = total - used
         if room < 80:
             chunks.append(f"（还有 {path.name} 未贴全文）")
             continue
-        body, why = read_material_checked(path, min(JOB_FILE_CHARS, room), reader=reader or read_job_file)
+        limit = min(per_file, room)
+        body, why = read_material_checked(path, limit + 1, reader=reader or read_job_file)
         if why:
             chunks.append(f"### {path.name}\n{UNREAD}{why}")
             continue
+        if len(body) > limit:
+            body = body[:limit] + f"\n{CUT}只读了前 {limit} 个字符，后面的内容未参与解析"
         block = f"### {path.name}\n{body}"
         chunks.append(block)
         used += len(block)

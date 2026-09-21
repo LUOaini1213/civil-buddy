@@ -295,6 +295,47 @@ def _line_item(
     }
 
 
+def _squash(text: str) -> str:
+    return re.sub(r"[\s★☆＊]+", "", text or "")
+
+
+def _document_items(doc: Any) -> List[Dict[str, Any]]:
+    """Rejection clauses and front-table obligations of a document as requirements, one each."""
+    from packing_assistant.tools import tender_document
+
+    items: List[Dict[str, Any]] = []
+    issued: Dict[str, int] = {}
+
+    def rid(prefix: str, line: int) -> str:
+        base = f"{prefix}_L{line}"
+        issued[base] = issued.get(base, 0) + 1
+        return base if issued[base] == 1 else f"{base}_{issued[base]}"
+
+    for found in tender_document.rejections(doc):
+        piece = found.piece
+        item = _line_item(rid=rid("reject", piece.line), kind="star" if found.star else "reject_clause", cat="reject",
+                          title="★/必须满足项" if found.star else "否决/拒收条款", line=piece.text, idx=piece.line - 1,
+                          owner="legal", risk="critical", req_type="mandatory", must=True)
+        item["locator"] = piece.ref
+        if found.cited:
+            item["cited"] = [{"locator": c.ref, "text": c.text[:400]} for c in found.cited]
+        items.append(item)
+    for piece in tender_document.obligations(doc):
+        item = _line_item(rid=rid("oblige", piece.line), kind="obligation", cat="compliance", title=f"前附表要求：{piece.heading}",
+                          line=piece.text, idx=piece.line - 1, owner="commercial", risk="high", req_type="mandatory", must=True)
+        item["locator"] = piece.ref
+        items.append(item)
+    return items
+
+
+def _document_summary(doc: Any) -> Dict[str, Any]:
+    from packing_assistant.tools import tender_document
+
+    return {"schema": "tender.document.v1", **tender_document.summary(doc),
+            "cut": any(p.text.startswith("（未读完）") for p in doc.pieces),
+            "forms": [{"name": name, "locator": piece.ref} for name, piece in tender_document.forms(doc)]}
+
+
 def _extract_line_items(lines: List[str]) -> List[Dict[str, Any]]:
     """One row per ★ / scoring-point / special line (AutoRFP item-level matrix)."""
     items: List[Dict[str, Any]] = []
@@ -698,6 +739,24 @@ def parse_tender_text(text: str, *, source: str = "text", sides: str = "auto") -
         requirements.append(item)
         theme_ids.add(item["id"])
 
+    # A document says where things are (tools/tender_document.py): every clause that gets a bid rejected is a
+    # requirement of its own with the clause it stands in - a theme row with five snippets is no checklist.
+    from packing_assistant.tools import tender_document
+
+    document: Optional[Dict[str, Any]] = None
+    if tender_document.is_document(text or ""):
+        doc = tender_document.read(text or "")
+        document = _document_summary(doc)
+        for item in _document_items(doc):
+            twin = next((r for r in requirements if r.get("item_kind") == "star"
+                         and _squash(item["exact_text"]) in _squash(str(r.get("exact_text") or ""))), None)
+            if twin is not None:
+                twin["locator"] = item["locator"]   # the ★ line is already a row: it gains its clause
+                continue
+            if item["id"] not in theme_ids:
+                requirements.append(item)
+                theme_ids.add(item["id"])
+
     duration_days = _tender_duration(facts, lines)
     envelope = _detect_envelope(blob)
     eval_method = _detect_eval_method(blob)
@@ -717,6 +776,8 @@ def parse_tender_text(text: str, *, source: str = "text", sides: str = "auto") -
     unread = [{**item, "role": material_role(item["title"])} for item in unread_files(text or "")]
     if unread:
         handoff["unreadable"] = unread
+    if document is not None:
+        handoff["document"] = document
 
     return {
         "schema": "tender.parse.v1",
