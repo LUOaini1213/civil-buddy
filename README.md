@@ -31,34 +31,34 @@ python scripts/test_agent_middleware.py     # 同一剧本的断言版（CI 每�
 <details>
 <summary>四拍剧本的实际输出（2026-09-03 本机，无 API Key）</summary>
 
-```text
-==========================================================
-Civil Buddy · 策略引擎 + 失败恢复
-==========================================================
-两层 Runtime 中间件（不是五个平庸包装）
-  1. 策略引擎  谁 / 哪个工具 / 花多少 / 能否碰生产数据
-  2. 失败恢复  超时重试 → 降级 UNSPECIFIED → 审计链
-剧本：正常下单 → 越权被拒 → 工具挂掉自动恢复 → 成本超限熔断
-
-[1/4] 正常下单   ALLOW
-  原因  低风险岗 finance-tax 写作业根
-  结果  wrote=True  GST 9%=True  files=2  run=run-<id>
-
-[2/4] 越权被拒   DENY
-  原因  拒绝：岗 bid-parse 不能调 pack-ship__plan（exclusive 属于 pack-ship）。
-  弹窗  拒绝：岗 bid-parse 不能调 pack-ship__plan（exclusive 属于 pack-ship）。
-  密钥  拒绝：secret path denied: .env  文件未落地
-
-[3/4] 工具挂掉自动恢复   DEGRADE
-  原因  下游失败 timeout，工具 demo__downstream 降级，不编柜数/xyz。
-  动作  degrade  审计 ['call', 'retry', 'degrade']
-  结果  can_fit=UNSPECIFIED  不编柜数
-
-[4/4] 成本超限熔断   CIRCUIT
-  原因  熔断：session 成本超限 steps 1/1 tokens 32/32。
-  代码  circuit_open  已执行=False
-
-submit_blocked=true  secret_leak=false  禁止：可以投标 / 可以开工
+```text
+==========================================================
+Civil Buddy · 策略引擎 + 失败恢复
+==========================================================
+两层 Runtime 中间件（不是五个平庸包装）
+  1. 策略引擎  谁 / 哪个工具 / 花多少 / 能否碰生产数据
+  2. 失败恢复  超时重试 → 降级 UNSPECIFIED → 审计链
+剧本：正常下单 → 越权被拒 → 工具挂掉自动恢复 → 成本超限熔断
+
+[1/4] 正常下单   ALLOW
+  原因  低风险岗 finance-tax 写作业根
+  结果  wrote=True  GST 9%=True  files=2  run=run-<id>
+
+[2/4] 越权被拒   DENY
+  原因  拒绝：岗 bid-parse 不能调 pack-ship__plan（exclusive 属于 pack-ship）。
+  弹窗  拒绝：岗 bid-parse 不能调 pack-ship__plan（exclusive 属于 pack-ship）。
+  密钥  拒绝：secret path denied: .env  文件未落地
+
+[3/4] 工具挂掉自动恢复   DEGRADE
+  原因  下游失败 timeout，工具 demo__downstream 降级，不编柜数/xyz。
+  动作  degrade  审计 ['call', 'retry', 'degrade']
+  结果  can_fit=UNSPECIFIED  不编柜数
+
+[4/4] 成本超限熔断   CIRCUIT
+  原因  熔断：session 成本超限 steps 1/1 tokens 32/32。
+  代码  circuit_open  已执行=False
+
+submit_blocked=true  secret_leak=false  禁止：可以投标 / 可以开工
 ```
 
 </details>
@@ -71,7 +71,7 @@ submit_blocked=true  secret_leak=false  禁止：可以投标 / 可以开工
 
 | 证据 | 数字 | 复跑 |
 |---|---|---|
-| 66 岗诚实分级 | L1 知识库 66/66 · L2 工具写盘 36/66 · L3 引擎岗 1 | [docs/depth-ladder.md](docs/depth-ladder.md)（每级挂验收命令） |
+| 66 岗诚实分级 | L1 知识库 66/66 · L2 工具写盘 66/66 · L3 引擎岗 1 | [docs/depth-ladder.md](docs/depth-ladder.md)（每级挂验收命令） |
 | 自动化装箱评测 | **128** 次（16 并发 × 8 轮），2026-09-02 复跑 **128/128 PASS**。PASS 只表示流水线跑完并返回了柜数与 `can_fit`，不表示都装得下：其中 `can_fit=True` **71/128**，其余 57 次 `can_fit=False` 交回人改方案 | [留档](docs/eval/fanout16x8-2026-09-02/rollup.md)（128 条逐次记录）· `python scripts/fanout16x8_online_cargo.py`（联网抓公开货样约 4 分钟；`--skip-fetch` 用仓内 `data/external/fanout16x8/` 缓存可离线跑）· 本表数字由 `python scripts/render_eval_table.py --check README.md` 对留档核对（CI）· CI 每次提交跑 2 lane × 1 round 离线切片 |
 | steps 主路径 vs LLM 自主调工具 | 影子评测（steps 臂 vs `llm_toolcall` 臂），CI 每次提交都跑 tiny 一例 | `python scripts/eval_workteams_cli.py --tiny-only`。**CI 里没有 Key**：llm 臂的工具选择走 `policy_fallback`（`harness._path_honesty` 会标出），CI 证明的是链路与两臂一致性检查，不是真模型的表现 |
 | Agent 中间件四拍剧本 | 正常放行 → 越权被拒 → 工具故障重试降级 → 成本超限熔断 | `python scripts/demo_agent_middleware.py`（无需 Key）· 断言版 `python scripts/test_agent_middleware.py` 与 `npm run check` 在 CI 每次提交都跑 |
