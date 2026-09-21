@@ -2,7 +2,7 @@
 <html lang="zh-CN">
 <head>
   <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, interactive-widget=resizes-content" />
   <meta name="theme-color" content="#2563eb" />
   <link rel="manifest" href="/static/manifest.webmanifest" />
   <link rel="icon" href="/static/icons/cb-icon.svg" type="image/svg+xml" />
@@ -152,7 +152,7 @@
                那一排杂项（本机路径框 / 成套投标 / 5 个预填 chip）。
                图标用文字「附件」——符号纪律禁 U+2600-27BF 等区段，回形针 emoji 会红。 -->
           <input type="file" id="filePick" hidden multiple
-                 accept=".xlsx,.csv,.pdf,.docx,.txt,.md,.json,.log" />
+                 accept=".xlsx,.csv,.pdf,.docx,.txt,.md,.json,.log,application/pdf,application/vnd.openxmlformats-officedocument.wordprocessingml.document,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,text/plain,text/markdown,text/csv,application/json" />
           <!-- 语音输入（voice.js）：说完只回填文字、不自动发送。优先本机识别（/api/asr），
                不可用或出错时退回浏览器识别，首次使用前说明录音去向。图标用内联 SVG 画麦克风（符号纪律禁 emoji）。 -->
           <button type="button" id="btnVoice" class="composer-attach composer-voice"

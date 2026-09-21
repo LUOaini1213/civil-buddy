@@ -220,6 +220,7 @@ body[data-dock="open"] .layout { grid-template-columns: var(--cb-rail-w) minmax(
 .sess-row .t-name { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .sess-row .t-time { flex: none; font-size: 11px; color: #7d838d; }
 .sess-row .t-time.t-running { color: var(--cb-blue); font-weight: 600; }
+.sess-row .t-time.t-stale { color: var(--cb-red); }
 .sess-row:hover, .sess-row.on { background: #2a2d31; color: var(--rail-ink); }
 .sess-none { font-size: 11px; color: #6f747c; padding: 4px 10px; }
 /* ux(round19)：常驻名册（.skill-q / .cat / .exp*）随 renderWall 一并删除，
@@ -1187,6 +1188,12 @@ html.cb-large {
 }
 .cb-att-x:hover { background: var(--cb-panel); color: var(--cb-text); }
 .cb-att-x:focus-visible { outline: 2px solid var(--cb-focus); outline-offset: 1px; }
+/* 上传中的 chip：进度条 + 百分比 + ×；失败的变红并给「重试」 */
+.cb-att-chip.pending { border-style: dashed; }
+.cb-att-chip.err { border-color: var(--cb-red); color: var(--cb-red); }
+.cb-att-bar { flex: none; width: 64px; height: 6px; border-radius: 999px; background: var(--cb-line); overflow: hidden; }
+.cb-att-bar > i { display: block; height: 100%; width: 0; background: var(--cb-green); transition: width .15s linear; }
+.cb-att-pct { flex: none; min-width: 3ch; color: var(--cb-text-muted); font-variant-numeric: tabular-nums; }
 /* 拖拽反馈：round19 删拖拽是因为它当时看不见；现在有 chip 与这个高亮，不再是隐藏通道 */
 .composer.drop { outline: 2px dashed var(--cb-blue); outline-offset: -4px; }
 
@@ -1210,3 +1217,18 @@ html.cb-large {
 .cb-att-role { max-width: 100px; padding: 2px; font: inherit; color: var(--cb-text); background: var(--cb-panel); border: 1px solid var(--cb-line); border-radius: 4px; }
 .cb-att-chip:has(.cb-att-role) { max-width: min(420px, 100%); }
 .cb-att-role:focus-visible { outline: 2px solid var(--cb-focus); outline-offset: 1px; }
+
+/* 后台任务完成提示：底部一条，可点「查看」切过去 */
+.cb-toast {
+  position: fixed; left: 50%; bottom: calc(16px + env(safe-area-inset-bottom, 0px)); transform: translateX(-50%);
+  z-index: 60; max-width: min(92vw, 520px);
+  display: inline-flex; align-items: center; gap: 10px;
+  padding: 10px 14px; border-radius: 10px;
+  background: var(--cb-text); color: var(--cb-bg);
+  font-size: var(--cb-fs-sm); box-shadow: 0 6px 24px rgba(0, 0, 0, .25);
+}
+.cb-toast[hidden] { display: none; }
+.cb-toast button {
+  border: 0; border-radius: 6px; padding: 4px 10px; cursor: pointer; font: inherit;
+  background: var(--cb-green); color: var(--cb-on-accent);
+}

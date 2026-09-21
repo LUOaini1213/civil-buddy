@@ -792,6 +792,7 @@ def public_response(state: Dict[str, Any]) -> Dict[str, Any]:
             :20
         ],
         "materials_incomplete": bool(state.get("materials_incomplete")),
+        "needs_human": list(state.get("needs_human") or []),
         "error_banner": _error_banner(state),
         "multi_container": _multi_container_summary(state, plan),
         "strategy_decision": _strategy_decision_summary(state, plan),
@@ -1096,7 +1097,16 @@ def _error_banner(state: Dict[str, Any]) -> Dict[str, Any]:
     level = "ok"
     title = ""
     lines: List[str] = []
-    if incomplete or blocked_mode or any("missing_dims" in e.lower() or "缺尺寸" in e for e in errs):
+    asks = [r for r in (state.get("needs_human") or []) if r.get("reason") != "missing_dimensions"]
+    if asks:
+        # 缺重量 / 读不出件数：逐行说清问的是什么，不套「缺尺寸」那句
+        from packing_assistant.tools.pack_ship_solve import needs_human_sentences
+
+        level = "block"
+        title = f"⛔ {len(asks)} 行需要人工处理"
+        lines.extend(needs_human_sentences(asks, 6))
+        lines.append("已阻断成箱与出运；请改正这些行后重新上传，或剔除后重跑")
+    elif incomplete or blocked_mode or any("missing_dims" in e.lower() or "缺尺寸" in e for e in errs):
         level = "block"
         title = "⛔ 缺尺寸 / 材料不完整"
         lines.append("存在 L/W/H 为 0 的物料，已阻断成箱与出运（不会静默换成演示票）")

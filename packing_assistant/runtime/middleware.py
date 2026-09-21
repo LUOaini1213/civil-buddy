@@ -131,9 +131,22 @@ def live_script() -> Dict[str, Any]:
 
     recov = recover.get("recovery") or {}
     audit = recov.get("audit") or []
+    from packing_assistant.runtime.deadlock import demo_tax_pack_cycle
+
+    dl = demo_tax_pack_cycle()
     return {
         "schema": "civil.middleware.demo.v1",
         "chain": list(CHAIN),
+        "deadlock": {
+            "id": "deadlock",
+            "title": "多 Agent 死锁检测",
+            "policy": "DENY",
+            "error_code": dl.err,
+            "reason": dl.reason,
+            "cycle": list(dl.cycle),
+            "path": dl.path,
+            "executed": False,
+        },
         "beats": [
             {
                 "id": "order",

@@ -84,7 +84,7 @@ class WorkbenchFlowTests(unittest.TestCase):
             (workbench, "OUT_ROOT", self.root), (agent_loop, "_OUT", self.root),
             (memory, "_OUT", self.root), (expert_turn, "_OUT", self.root),
             (session_handoff, "_DIR", self.root), (session_packing, "_DIR", self.root),
-            (uploads, "UPLOAD_ROOT", self.root / "uploads"),
+            (uploads, "UPLOAD_ROOT", self.root),
             (store, "DATA", self.root / "catalog.json"), (chat_service, "_ACTIVE", set()),
             (llm, "_RUNTIME_LLM", {"api_key": "", "base_url": "http://127.0.0.1:1", "model": "offline-test"}),
         ):

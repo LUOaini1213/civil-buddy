@@ -366,6 +366,12 @@ async fn test_health_exposes_context_policy() {
     assert!(v["has_key"].is_boolean(), "{body}");
     assert_eq!(v["has_key"], v["deepseek"]);
     assert_eq!(v["harness"]["default_mode"].as_str(), Some("steps"));
+    // The shared page gates its buttons on these; a missing map meant 404s behind 上传 / 备份 / 停止.
+    assert_eq!(v["capabilities"]["chat"], Value::Bool(true), "{body}");
+    assert_eq!(v["capabilities"]["attachments"], Value::Bool(false), "{body}");
+    assert_eq!(v["capabilities"]["cancel"], Value::Bool(false), "{body}");
+    assert_eq!(v["capabilities"]["session_backup"], Value::Bool(false), "{body}");
+    assert!(v["capabilities"]["packing"].is_boolean(), "{body}");
     assert_eq!(v["harness"]["expert_runtime"].as_str(), Some("understand"));
     assert_eq!(v["harness"]["summoned_default"].as_str(), Some("chat"));
     assert_eq!(v["parse"]["policy"].as_str(), Some("auto"));

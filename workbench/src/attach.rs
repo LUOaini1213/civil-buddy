@@ -18,7 +18,18 @@ const ALLOWED_EXT: &[&str] = &["pdf", "docx", "xlsx", "txt", "md", "csv", "json"
 
 pub fn session_dir(paths: &Paths, session: &str) -> Result<PathBuf, String> {
     let sid = sanitize_session(session)?;
-    let dir = paths.data_dir.join("uploads").join(sid);
+    // A session's attachments live with the rest of it: <out_root>/<sid>/uploads (the Python
+    // workbench moved there on 2026-09-21 and adopts the old data/uploads/<sid> on startup).
+    let dir = paths.out_root.join(&sid).join("uploads");
+    if !dir.exists() {
+        let legacy = paths.data_dir.join("uploads").join(&sid);
+        if legacy.is_dir() {
+            if let Some(parent) = dir.parent() {
+                let _ = fs::create_dir_all(parent);
+            }
+            let _ = fs::rename(&legacy, &dir);
+        }
+    }
     fs::create_dir_all(&dir).map_err(|e| e.to_string())?;
     Ok(dir)
 }

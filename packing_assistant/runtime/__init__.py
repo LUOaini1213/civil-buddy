@@ -9,8 +9,16 @@ from packing_assistant.runtime.scheduler import (
     get_scheduler,
 )
 from packing_assistant.runtime.session_packing import load_packing_snapshot, save_packing_snapshot
+from packing_assistant.runtime.deadlock import (
+    DeadlockWatch,
+    demo_tax_pack_cycle,
+    get_watch,
+    reset_watch,
+)
 from packing_assistant.runtime.tool_engine import (
+    ERR_BUSY,
     ERR_CIRCUIT,
+    ERR_DEADLOCK,
     ERR_DENIED,
     ERR_INVALID,
     ERR_MAX_STEPS,
@@ -25,12 +33,18 @@ __all__ = [
     "FORBIDDEN",
     "LEGAL",
     "Bus",
+    "DeadlockWatch",
     "Scheduler",
+    "demo_tax_pack_cycle",
     "get_bus",
     "get_scheduler",
+    "get_watch",
+    "reset_watch",
     "load_packing_snapshot",
     "save_packing_snapshot",
+    "ERR_BUSY",
     "ERR_CIRCUIT",
+    "ERR_DEADLOCK",
     "ERR_DENIED",
     "ERR_INVALID",
     "ERR_MAX_STEPS",

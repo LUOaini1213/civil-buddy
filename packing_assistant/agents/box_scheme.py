@@ -298,6 +298,48 @@ def agent_box_scheme(state: PackingState) -> Dict[str, Any]:
         or "40HQ",
     )
 
+    # 缺重量 / 读不出件数：与 pack-ship 工具面同一套规则。材料解析已经拦过一次；这里兜住
+    # 不经过它的入口（保留材料的调整指令、graph 模式、直接调本节点）。缺尺寸仍走下面原有的阻断。
+    from packing_assistant.tools.pack_ship_solve import (
+        NEEDS_HUMAN_MISSING_DIMENSIONS,
+        needs_human_sentences,
+        rows_blocking_plan,
+    )
+
+    blocking = rows_blocking_plan(materials)
+    beyond_dims = [r for r in blocking if r["reason"] != NEEDS_HUMAN_MISSING_DIMENSIONS]
+    if beyond_dims:
+        asks = needs_human_sentences(beyond_dims, 6)
+        return {
+            "boxes": [],
+            "ship_ok": False,
+            "materials_incomplete": True,
+            "needs_human": blocking,
+            "team_a_summary": {
+                "pass": 0,
+                "fail": len(materials),
+                "packing_mode": "blocked_needs_human",
+            },
+            "structure_notes": ["材料有行缺重量或数量读不出件数，成箱阻断"],
+            "errors": ["box_scheme_blocked: materials_need_human"],
+            "agent_meta": {
+                "node": "box_scheme",
+                "capability": ["使用工具", "采取行动"],
+                "tools_used": ["box_scheme.block_needs_human"],
+                "artifacts": {"boxes": 0, "mode": "blocked_needs_human", "needs_human": len(blocking)},
+            },
+            "messages": [
+                {
+                    "role": "assistant",
+                    "content": (
+                        f"装箱阻断：{len(beyond_dims)} 行需要人工处理，拒绝按猜出来的件数或零重量成箱。"
+                        + "；".join(asks)
+                        + "｜tools=box_scheme.block_needs_human"
+                    ),
+                }
+            ],
+        }
+
     # 缺尺寸：禁止静默成箱出运
     if state.get("materials_incomplete") or _materials_missing_dims(materials):
         return {

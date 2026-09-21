@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import threading
 import time
+from contextvars import copy_context
 from dataclasses import dataclass, field
 from copy import deepcopy
 from typing import Any, Callable, Dict, List, Optional
@@ -19,6 +20,8 @@ ERR_TIMEOUT = "timeout"
 ERR_CIRCUIT = "circuit_open"
 ERR_UNSPECIFIED = "unspecified"
 ERR_MAX_STEPS = "max_steps"
+ERR_DEADLOCK = "deadlock"
+ERR_BUSY = "expert_busy"
 
 WRITE_TOOLS = frozenset(
     {
@@ -158,6 +161,8 @@ class ToolEngine:
         expert_id: str = "",
         intent: str = "run",
         cancelled: bool = False,
+        run_id: str = "",
+        wait_resources: Optional[List[str]] = None,
     ) -> Dict[str, Any]:
         t0 = time.perf_counter()
         args = {} if arguments is None else arguments
@@ -169,6 +174,22 @@ class ToolEngine:
             self.audit_log.append(Audit(name, ERR_INVALID, 0, expert_id))
             return {"ok": False, "error_code": ERR_INVALID, "name": name,
                     "reason": "工具参数不符合契约：" + problem}
+        if run_id and wait_resources:
+            from packing_assistant.runtime.deadlock import get_watch
+
+            for res in wait_resources:
+                d = get_watch().wait_for(run_id, res)
+                if not d.allow:
+                    rec = Audit(name=name, error_code=d.err, duration_ms=0, expert_id=expert_id)
+                    self.audit_log.append(rec)
+                    return {
+                        "ok": False,
+                        "error_code": d.err,
+                        "name": name,
+                        "reason": d.reason,
+                        "cycle": list(d.cycle),
+                        "deadlock": d.to_dict(),
+                    }
         from packing_assistant.runtime.policy import evaluate as policy_evaluate
 
         pol = policy_evaluate(
@@ -220,7 +241,8 @@ class ToolEngine:
             except Exception as e:  # noqa: BLE001 — surface as timeout/invalid, not invent numbers
                 box["err"] = e
 
-        th = threading.Thread(target=_run, daemon=True)
+        ctx = copy_context()
+        th = threading.Thread(target=ctx.run, args=(_run,), daemon=True)
         th.start()
         th.join(spec.timeout_s)
         ms = int((time.perf_counter() - t0) * 1000)

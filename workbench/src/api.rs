@@ -294,11 +294,36 @@ async fn health(State(st): State<Arc<AppState>>) -> Json<Value> {
     })
     .await
     .unwrap_or_else(|_| json!({"parse": null, "packing_agent": null}));
+    /* The page shared with demo/ only disables a button when capabilities[x] === false. With no
+       capabilities at all it showed 上传 / 备份 / 停止 here and the click ended in a 404. Say
+       plainly what this backend has; the missing routes are listed in
+       docs/civil-buddy/optimize-2026-09-18.md. */
+    let packing_up = probes["packing_agent"]["http"]["up"].as_bool().unwrap_or(false);
+    let capabilities = json!({
+        "chat": true,
+        "drafts": true,
+        "model_settings": true,
+        "audit": true,
+        "packing": packing_up,
+        "attachments": false,
+        "cancel": false,
+        "session_backup": false,
+        "word_export": false,
+        "task_memory": false,
+        "local_rag": false,
+        "task_routing": false,
+        "expert_contracts": false,
+        "tender_collaboration": false,
+        "semantic_summary": false,
+        "asr": false,
+        "auth": false,
+    });
     Json(json!({
         "ok": true,
         "has_key": keyed,
         "deepseek": keyed,
         "model": llm_model(),
+        "capabilities": capabilities,
         "context": crate::context::Policy::from_env().to_value(),
         "harness": crate::harness::architecture(),
         "parse": probes["parse"],

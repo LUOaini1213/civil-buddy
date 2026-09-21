@@ -306,7 +306,7 @@ def export_session(root: Path, sid: str) -> bytes:
             artifact.pop("path", None)
     attachment_rows = []
     for attachment in uploads.list_uploads(sid):
-        raw_path = uploads.UPLOAD_ROOT / sid / (attachment["id"] + ".bin")
+        raw_path = uploads.session_uploads_dir(sid) / (attachment["id"] + ".bin")
         attachment_rows.append({"id": attachment["id"], "name": attachment["name"],
                                 "blob": add(_read(raw_path, uploads.UPLOAD_ROOT, uploads.MAX_BYTES))})
     registry = projects.load_registry(root)
@@ -441,7 +441,7 @@ def import_session(root: Path, data: bytes) -> dict:
     manifest, content = _validated(data)  # Validate everything before creating a directory.
     sid = "import-" + uuid4().hex[:20]
     target = assert_write(root / sid)
-    if target.exists() or (uploads.UPLOAD_ROOT / sid).exists():
+    if target.exists():  # attachments live inside the session directory now
         raise BundleError("新任务目录冲突，请重试")
     target.mkdir(parents=True, exist_ok=False)
     try:
@@ -511,8 +511,8 @@ def import_session(root: Path, data: bytes) -> dict:
                 "project_name": meta["imported_project_name"], "confirmation_reset": True}
     except Exception:
         # Only the freshly reserved directories are removed, never an existing task.
-        for directory, base in ((target, root), (uploads.UPLOAD_ROOT / sid, uploads.UPLOAD_ROOT)):
-            if directory.resolve().parent == base.resolve() and directory.name == sid and not directory.is_symlink():
-                if directory.exists():
-                    shutil.rmtree(directory)
+        directory, base = target, root  # uploads/ is inside target
+        if directory.resolve().parent == base.resolve() and directory.name == sid and not directory.is_symlink():
+            if directory.exists():
+                shutil.rmtree(directory)
         raise

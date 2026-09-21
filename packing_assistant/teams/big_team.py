@@ -123,6 +123,9 @@ def iter_big_team_run(
     rid = str(state.get("run_id") or state.get("session_id") or "run")
     sid = str(state.get("session_id") or rid)
     seq = 0
+    from packing_assistant.runtime import cancel as _cancel
+
+    _cancel.clear(rid, sid)  # a new run of this session must not inherit an old cancel request
 
     def emit(ev: Dict[str, Any]) -> Dict[str, Any]:
         nonlocal seq
@@ -262,6 +265,31 @@ def iter_big_team_run(
     def run_one(node: str, title: str, fn: Any, *, team: str = "big"):
         nonlocal prev_node, state
         parent = None if node in ("intent", "orchestrator") else prev_node
+        if _cancel.is_cancelled(rid) or _cancel.is_cancelled(sid):
+            # cooperative cancel: the user asked to stop; skip this and every later agent
+            state["phase"] = "cancelled"
+            state["cancelled"] = True
+            state.setdefault("errors", []).append(f"{node}: cancelled by user")
+            step = _build_step(node, title, {}, 0, "cancelled by user", team=team)
+            step["status"] = "cancelled"
+            steps.append(step)
+            state["agent_steps"] = list(state.get("agent_steps") or []) + [step]
+            yield emit(
+                {
+                    "type": "agent_end",
+                    "node": node,
+                    "title": title,
+                    "team": team,
+                    "status": "cancelled",
+                    "duration_ms": 0,
+                    "parent_node": parent,
+                    "step": step,
+                    "phase": "cancelled",
+                    "run_id": rid,
+                }
+            )
+            prev_node = node
+            return
         yield emit(
             {
                 "type": "agent_start",
@@ -276,6 +304,7 @@ def iter_big_team_run(
         t0 = time.perf_counter()
         err: Optional[str] = None
         upd: Dict[str, Any] = {}
+        cancelled_inside = False
         try:
             with otel_span(
                 f"agent.{node}",
@@ -286,7 +315,8 @@ def iter_big_team_run(
                     "session_id": sid,
                     "replan_round": int(state.get("replan_round") or 0),
                 },
-            ):
+            ), _cancel.scope(rid, sid):
+                # tools call cancel.check() inside their loops → RunCancelled mid-agent
                 upd = fn(state) or {}
             _merge_update(upd)
             if node == "present_team_a" and enable_auto_confirm:
@@ -298,11 +328,19 @@ def iter_big_team_run(
                     container_type=state.get("container_type") or container_type,
                     max_containers=int(state.get("max_containers") or max_containers or 0),
                 )
+        except _cancel.RunCancelled as e:
+            cancelled_inside = True
+            err = str(e)
+            state["phase"] = "cancelled"
+            state["cancelled"] = True
+            state.setdefault("errors", []).append(f"{node}: {e}")
         except Exception as e:
             err = str(e)
             state.setdefault("errors", []).append(f"{node}: {e}")
         ms = int((time.perf_counter() - t0) * 1000)
         step = _build_step(node, title, upd, ms, err, team=team)
+        if cancelled_inside:
+            step["status"] = "cancelled"
         steps.append(step)
         state["agent_steps"] = list(state.get("agent_steps") or []) + [step]
         # tool 事件（供 smoke / 观测）

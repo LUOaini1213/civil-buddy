@@ -181,10 +181,10 @@ def decide_gate(
         return "go"
     if not c.allow_write():
         return "read_only"
+    if high_risk_unconfirmed(risk=risk, confirmed=confirmed):
+        return "hitl"
     if c.auto_confirm() or confirmed:
         return "go"
     if c.approval == "untrusted":
-        return "hitl"
-    if high_risk_unconfirmed(risk=risk, confirmed=confirmed):
         return "hitl"
     return "go"

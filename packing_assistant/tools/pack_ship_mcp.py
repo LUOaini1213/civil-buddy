@@ -119,7 +119,7 @@ def list_pack_ship_tools() -> List[Dict[str, Any]]:
             "name": TOOL_INGEST,
             "description": (
                 "读装箱表，只解析不装箱：返回行数、字段映射与缺字段台账。"
-                "缺重量的行会被列进 needs_human，必须人工补齐后才能出方案。"
+                "缺重量、缺尺寸或数量读不出件数的行会被列进 needs_human，必须人工补齐后才能出方案。"
             ),
             "inputSchema": {
                 "type": "object",
@@ -254,9 +254,9 @@ def ingest_tool(materials: Any = None, file_path: str = "") -> Dict[str, Any]:
     mats = loaded["materials"]
     needs = rows_blocking_plan(mats)
     if needs:
-        nxt = "先补齐 needs_human 里这些行缺的重量或尺寸，再调 pack-ship__plan。"
+        nxt = "先按 needs_human 逐行补齐缺的重量、尺寸，改正读不出件数的数量，再调 pack-ship__plan。"
     elif mats:
-        nxt = "全部行都有重量和尺寸，可以调 pack-ship__plan 出方案。"
+        nxt = "全部行都有重量、尺寸和可用的数量，可以调 pack-ship__plan 出方案。"
     else:
         nxt = "没有解析出任何行；确认表头与文件格式。"
     return {
