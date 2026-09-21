@@ -52,7 +52,7 @@ _DATE = re.compile(r"\d{4}\s*[-/.年]\s*\d{1,2}\s*[-/.月]\s*\d{1,2}\s*[日号]?
                    r"|\d{1,2}/\d{1,2}/\d{4}", re.I)
 _CLOCK = re.compile(r"\d{1,2}[.:]\d{2}\s*(?:a\.?m\.?|p\.?m\.?)|\d{1,2}\s*(?:am|pm)\b|\d{4}\s*hrs?\b"
                     r"|(?:上午|下午|晚上|中午)?\s*\d{1,2}\s*时(?:\s*\d{1,2}\s*分|整)?"
-                    r"|(?:上午|下午|晚上|中午)?\s*(?:[01]?\d|2[0-3])\s*[:：]\s*[0-5]\d|(?:上午|下午|晚上|中午)\s*\d{1,2}\s*点(?:\s*半|\s*\d{1,2}\s*分)?"
+                    r"|(?:上午|下午|晚上|中午)?\s*(?:[01]?\d|2[0-3])\s*[:：]\s*[0-5]\d(?:\s*[:：]\s*[0-5]\d)?|(?:上午|下午|晚上|中午)\s*\d{1,2}\s*点(?:\s*半|\s*\d{1,2}\s*分)?"
                     r"|\d{1,2}\s*点(?:\s*半|\s*\d{1,2}\s*分)", re.I)
 _WORKHEAD = re.compile(r"(?<![A-Za-z0-9])(?:CW|CR|ME|SY|TR|MW|RW)\d{2}(?![A-Za-z0-9])"
                        r"(?:\s*(?:grade\s*)?(?:[ABC]\d|L[1-6]|single\s+grade)(?![A-Za-z0-9]))?", re.I)
@@ -315,6 +315,14 @@ _DEADLINE_QUERY_NAMES = ("提出问题的截止时间", "澄清招标文件的�
 #: what the rows of a front table are called when the purchase is not a works tender (政府采购: 磋商 / 谈判 / 询价):
 #: 供应商 for 投标人, 响应文件 for 投标文件, 服务期限 for 工期
 _DOCUMENT_ROW_NAMES: Tuple[Tuple[str, str], ...] = (
+    # before "X人的资格要求" below: the person in charge is not the bidder
+    (r"(?:拟派|拟任|拟投入)?(?:项目负责人|项目经理)(?:的)?(?:任职|执业)?(?:资格)?(?:要求|条件|资格)?", "pm"),
+    (r"(?:拟派|拟任|拟投入)?(?:技术负责人|项目总工)(?:的)?(?:任职|执业)?(?:资格)?(?:要求|条件|资格)?", "tech_lead"),
+    (r"(?:响应文件)?开启时间|开标时间", "deadline_open"),
+    (r"评[分审标]方法(?:及标准)?|评审办法|定标方式", "eval_method"),
+    (r"质量保修期|保修期限?|质保期限?", "warranty"),
+    (r"[一-鿿]{2,8}文件(?:提交|递交)地点|(?:提交|递交)[一-鿿]{2,8}文件地点", "submit_place"),
+    (r"(?:项目)?预算金额(?:和|及)最高限价", "price_cap"),
     (r"(?:提交|递交)?备选[一-鿿/／]{0,8}方案", "alternative"),            # 是否允许提交备选投标/响应方案
     (r"第[一二三两]个?信封[一-鿿]{0,4}开标时间", "deadline_open"),
     (r"第[一二三两]个?信封[一-鿿]{0,4}开标地点", "open_place"),
@@ -364,6 +372,19 @@ def document_topic(name: str) -> str:
                 r"(?:投标人|供应商|拟派|拟任|拟投入|本项目|的)*(?:任职|执业)?(?:资格)?(?:要求|条件|时间|金额|标准|期限|资格|(?:和|及)地点)?", rest):
             return key
     return ""
+def loose_document_topic(name: str) -> str:
+    """The field a loosely worded name is about - "转包与分包", "磋商响应文件有效期为 90 天": any field word in it. Only
+    where a name HAS to be read this way (the one-cell rows of a two-column front table)."""
+    found = document_topic(name)
+    if found:
+        return found
+    for alias, key in _DOCUMENT_ALIASES:
+        if alias in name:
+            return key
+    hits = _topic_hits(name)
+    return hits[0][2] if hits else ""
+
+
 _ALWAYS_OURS = frozenset({"our_price", "evidence", "staff"})  # ours by nature (a named person is ours)
 _NO_SIDE = frozenset({"owner_person"})  # neither the tender's nor a response
 _STATEMENT_ONLY = frozenset({"poa", "seal"})  # what matters is what is said about them, not a value

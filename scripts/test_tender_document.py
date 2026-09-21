@@ -170,7 +170,9 @@ class TheRest(unittest.TestCase):
     def test_obligations_scores_specials_forms(self) -> None:
         doc = td.read(TENDER)
         self.assertIn("须采用胶装，不得使用活页夹", [p.text for p in td.obligations(doc)])
-        self.assertIn("2.2 本次招标不接受联合体投标。", [p.text for p in td.obligations(doc)])
+        # who may bid at all: a consortium's bid would be thrown out, so the sentence stands among the rejection clauses
+        self.assertIn("2.2 本次招标不接受联合体投标。", [r.piece.text for r in td.rejections(doc)])
+        self.assertNotIn("2.2 本次招标不接受联合体投标。", [p.text for p in td.obligations(doc)], "and not twice")
         self.assertEqual([(n, s) for n, s, _p in td.scores(doc)], [("工艺调试方案", "12分"), ("类似业绩", "8分")], "a points column of bare numbers")
         self.assertEqual([(n, d) for n, d, _p in td.specials(doc)], [("深基坑专项施工方案", "开挖深度7.5米")], "the figure stands in the clause before")
         self.assertEqual([n for n, _p in td.forms(doc)], ["投标函", "授权委托书"])
@@ -562,6 +564,204 @@ class RealShaped(unittest.TestCase):
         self.assertNotRegex(table, r"\| 评分点 L\d+|\| 专项 L\d+", "a line that merely holds 分 or 专项 is no scoring point of a document")
         self.assertIn("## 10A 初步评审标准（逐项）", table)
         self.assertIn("| 开标·第二个信封（报价文件） | 2028年6月13日10时00分 |", table)
+
+
+NEGOTIATION = """青石中学
+
+实验楼屋面防水翻修项目
+
+竞争性谈判文件
+
+项目编号：青中-2711
+
+采 购 人：青石中学
+
+第一章 竞争性谈判公告
+
+一、项目基本情况
+
+1.项目编号：青中-2711
+
+2.项目名称：青石中学实验楼屋面防水翻修项目
+
+4.预算金额：318000.00 元，最高限价：318000 元
+
+5.3 工期：45 日历天。
+
+6.本项目（不允许）接受联合体投标。
+
+二、申请人的资格要求：
+
+1.满足《中华人民共和国政府采购法》第二十二条规定；
+
+2.3 供应商具有行政主管部门核发的防水防腐保温工程专业承包贰级及以上资质，并具有有效的安全生产许可证；
+
+2.4 供应商拟派项目经理具有建筑工程专业贰级及以上注册建造师资格证书。
+
+三、获取谈判文件
+
+1.时间：2029 年 03 月 02 日至 2029 年 03 月 06 日。
+
+四、响应文件提交
+
+1.截止时间：2029-03-12 10:00:00（北京时间）
+
+五、响应文件开启
+
+1.开启时间：2029-03-12 10:00:00（北京时间）
+
+八、凡对本次采购提出询问，请按以下方式联系。
+
+1.采购人信息
+
+名    称：青石中学 地    址：青石市学苑路 9 号
+
+第二章 供应商须知
+
+| 序号 | 项目 | 内容 |
+| --- | --- | --- |
+| 1 | 采购人 | 名称：青石中学；地址：青石市学苑路 9 号 |
+| 5 | 资质要求 | 同谈判公告 |
+| 8 | 工期 | 45 日历天。 |
+| 10 | 质量保修期 | 工程验收合格后防水工程 5 年，其他工程 2 年。 |
+| 11 | 服务完成期限 | 自合同签订之日起，于当年11 月之前完成全部工作。 |
+| 15 | 谈判保证金 | 谈判保证金金额：6000元，人民币陆仟元整；保证金形式：银行转账 |
+| 16 | 谈判有效期 | 自首次响应文件提交截止时间起 60 日历日 |
+| 18 | 响应文件装订要求 | 响应文件的正本与副本应分别装订成册，并编制目录。左侧胶装，不得采用活页装订。 |
+| 28 | 履约担保 | 1、履约保证金为成交价的 5%。2、投标最高限价 318000元，超过的为无效响应。 |
+| 29 | 项目负责人的资格要求 | 同谈判公告 |
+
+附表：校内施工时段表
+
+| 序号 | 时段 | 说明 |
+| --- | --- | --- |
+| 1 | 周末 | 全天可施工 |
+
+1. 总则
+
+1.1 适用范围：本谈判文件仅适用于本项目。
+
+第三章 评审方法
+
+评审方法：最低评标价法
+
+1.资格评审
+
+| 序号 | 评审因素 | 评审标准 |
+| --- | --- | --- |
+| 1 | 资格证明文件 | 符合第二章“供应商须知”第 24 条规定。 |
+
+2.形式评审
+
+| 序号 | 评审因素 | 评审标准 |
+| --- | --- | --- |
+| 1 | 供应商名称 | 与营业执照一致。 |
+
+| 评分项目 | 分值区间 | 评分办法 |
+| --- | --- | --- |
+| 需求理解 | 0~20 | 根据理解的准确性酌情打分。 |
+
+| 条款号 | 评分因素与评分标准 |
+| --- | --- |
+| 2.2.4（1） | 施工组织设计 | 28.0分 | 总体施工布置及规划 | 4.0分 | 优得2-4分，差得0-1分。 |
+
+第四章 合同条款及格式
+
+合同条款略。
+""" + "\n\n" + FILLER
+
+TWO_COLUMN = """第一章 竞争性磋商公告
+
+项目名称：河湾街道居民满意度调查服务项目
+
+第二章 响应方须知
+
+前附表
+
+| 序号 | 内容及要求 |
+| --- | --- |
+| 1 | 项目名称及数量：详见《竞争性磋商采购公告》 |
+| 6 | 投标保证金金额：12,000 元；开户银行：河湾农商银行 |
+| 9 | 转包与分包：否；联合投标：不允许。 |
+| 17 | 磋商响应文件有效期为 90 天 |
+
+一、总 则
+
+（一）适用范围：仅适用于本次磋商。
+
+第三章 评审办法及评审标准
+
+综合评分法
+
+第四章 合同条款
+
+""" + FILLER + "\n\n" + FILLER.replace("承包人", "成交供应商")
+
+
+class HeldOutShapes(unittest.TestCase):
+    """What four real tenders nobody had fitted a rule to showed on their first run: three of them had a front table
+    the reader did not know for one, none had its review standards listed, and the notice's lines held more than one
+    label each. Made-up documents of the same shapes."""
+
+    @classmethod
+    def setUpClass(cls) -> None:
+        cls.doc = td.read(NEGOTIATION)
+        cls.facts = tf.extract(NEGOTIATION)
+
+    def values(self, topic: str, facts=None) -> list:
+        return [m.value for m in (facts or self.facts).of(topic) if m.side == "tender"]
+
+    def test_the_table_a_instructions_chapter_opens_with_is_its_front_table_whatever_its_columns_are_called(self) -> None:
+        rows = td.front_rows(self.doc)
+        self.assertEqual([r.number for r in rows if "评标办法" not in r.piece.table], ["1", "5", "8", "10", "11", "15", "16", "18", "28", "29"],
+                         "序号 | 项目 | 内容 - and not the appendix table behind it, headed the same way")
+        self.assertEqual(self.values("validity"), ["60 日历日"])
+
+    def test_a_front_table_of_two_columns_names_its_rows_in_the_cell(self) -> None:
+        facts = tf.extract(TWO_COLUMN)
+        self.assertEqual(self.values("bond", facts), ["12,000 元"])
+        self.assertEqual(self.values("validity", facts), ["90 天"], "磋商响应文件有效期为 90 天 - no colon at all")
+        self.assertEqual(self.values("subcontract", facts), ["否"])
+        self.assertEqual(self.values("eval_method", facts), ["综合评分法"])
+        self.assertEqual(self.values("project", facts), ["河湾街道居民满意度调查服务项目"], "详见《竞争性磋商采购公告》 lays no name down")
+
+    def test_see_the_notice_is_no_value_and_the_notice_is_read(self) -> None:
+        self.assertTrue(all("同谈判公告" not in v for v in self.values("qualification") + self.values("pm")))
+        self.assertTrue(any("防水防腐保温工程专业承包贰级及以上资质" in v for v in self.values("qualification")), "a sentence under 申请人的资格要求：")
+        self.assertTrue(any("贰级及以上注册建造师" in v for v in self.values("pm")), "项目负责人的资格要求 is about the 项目经理, not the bidder's 资质")
+
+    def test_one_notice_line_holds_several_labels(self) -> None:
+        self.assertEqual(self.values("budget"), ["318000.00 元"])
+        self.assertEqual({v.replace(" ", "") for v in self.values("price_cap")}, {"318000元"}, "the notice's and the row's are one value")
+        self.assertEqual(self.values("owner"), ["青石中学"], "名    称：青石中学 地    址：… - spaced out, and the address is not the name")
+        self.assertEqual(self.values("tender_no"), ["青中-2711"], "a number with Chinese in it, once (the cover says the same)")
+        self.assertEqual(self.values("consortium"), ["不允许"])
+
+    def test_clock_seconds_a_date_to_finish_by_and_two_periods(self) -> None:
+        self.assertEqual(self.values("deadline_bid"), ["2029-03-12 10:00:00"])
+        self.assertEqual(self.values("deadline_open"), ["2029-03-12 10:00:00"], "开启时间")
+        self.assertTrue(any("防水工程 5 年，其他工程 2 年" in v for v in self.values("warranty")), "the first period alone would mislead")
+        self.assertTrue(all(v != "11 月" for v in self.values("duration")), "于当年11 月之前完成 is no duration of eleven months")
+
+    def test_a_part_that_holds_the_rows_own_name_is_the_rows_field(self) -> None:
+        self.assertEqual(self.values("bond"), ["6000元"], "谈判保证金金额：… under 谈判保证金")
+        self.assertTrue(any("左侧胶装" in v for v in self.values("binding")), "how a bid is bound is the whole cell")
+
+    def test_the_cap_inside_another_row_and_the_method_the_chapter_names(self) -> None:
+        self.assertIn("318000元", [v.replace(" ", "") for v in self.values("price_cap")])
+        self.assertEqual(self.values("eval_method"), ["最低评标价法"])
+
+    def test_review_standards_under_a_heading_and_scores_of_every_shape(self) -> None:
+        found = [(group, factor) for group, factor, _, _ in td.review_standards(self.doc)]
+        self.assertEqual(found, [("资格评审", "资格证明文件"), ("形式评审", "供应商名称")])
+        scores = {name: value for name, value, _ in td.scores(self.doc)}
+        self.assertEqual(scores, {"需求理解": "0~20分", "施工组织设计": "28.0分", "总体施工布置及规划": "4.0分"})
+
+    def test_rejections_of_the_new_wordings(self) -> None:
+        # in the instructions chapter - behind the contract chapter they would be the contract's, and left out
+        more = NEGOTIATION.replace("1.1 适用范围：", "14.2 采购人拒绝接受通过电子交易平台以外任何形式提交的响应文件。\n\n3.5 本项目不接受联合体响应。\n\n1.1 适用范围：")
+        listed = [r.piece.text for r in td.rejections(td.read(more))]
+        self.assertTrue(any("拒绝接受" in t for t in listed) and any("不接受联合体响应" in t for t in listed))
 
 
 if __name__ == "__main__":

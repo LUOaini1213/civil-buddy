@@ -100,7 +100,8 @@ def score(md: str, gold: Dict, verbose: bool) -> Dict[str, object]:
     rows = rows_of(md)
     tally = {"right": 0, "wrong": 0, "missing": 0}
     for item in gold.get("fields", []):
-        shown = [r for r in rows if r.get("事项", "").startswith(item["label"]) and r.get("是否检出") == "已检出"]
+        # the row of that field: its label alone or with a part name behind it ("开标·第二个信封") - not 开标地点 for 开标
+        shown = [r for r in rows if re.fullmatch(re.escape(item["label"]) + r"(?:[·（(/ ].*)?", r.get("事项", "")) and r.get("是否检出") == "已检出"]
         if item.get("absent"):
             state = "wrong" if shown else "right"
         elif any(flat(item["expect"]) in flat(r.get("要求原文", "")) for r in shown):
@@ -112,7 +113,7 @@ def score(md: str, gold: Dict, verbose: bool) -> Dict[str, object]:
             print(f"  {state.upper():8s}{item['label']}: want {item.get('expect', '(nothing)')!r}  shown={[r.get('要求原文', '')[:50] for r in shown][:3]}")
     out: Dict[str, object] = {"fields": f"{tally['right']}/{len(gold.get('fields', []))}", "fields_wrong": tally["wrong"]}
     print(f"fields {out['fields']}  wrong {tally['wrong']}  missing {tally['missing']}")
-    for key, prefixes in (("rejections", ("否决条款", "★")), ("review", ("形式", "资格", "响应性", "符合性", "实质性")), ("forms", ("组成",))):
+    for key, prefixes in (("rejections", ("否决条款", "★")), ("review", ("形式", "资格", "响应", "符合", "实质", "初步")), ("forms", ("组成",))):
         wanted = gold.get(key) or []
         if not wanted:
             continue
