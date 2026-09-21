@@ -52,25 +52,32 @@ class WorkbenchConfirmationTests(unittest.TestCase):
         self.assertTrue(any(item["name"].endswith(".md") and Path(item["path"]).is_file()
                             for item in completed["deliverables"]))
 
-    def test_thread_entry_rejects_the_same_coercions_and_forwards_real_booleans(self) -> None:
-        from packing_assistant.runtime import threads
+    def test_background_entry_rejects_the_same_coercions_and_forwards_real_booleans(self) -> None:
+        """并行任务走 /api/chat background:true（没有单独的 thread 入口了）：同样的 StrictBool 门。"""
+        seen = []
 
-        with patch.object(threads, "run_on_thread", return_value={"ok": True}) as runner:
+        def fake_start(root, turn, *, lease, **_kw):
+            seen.append(turn["confirmed"])
+            lease.release()
+            return {"ok": True, "background": True, "session_id": turn["session_id"], "turn_id": "probe", "state": "done"}
+
+        with patch.object(flow.chat_service, "start_background_turn", side_effect=fake_start) as runner:
             for value in INVALID:
                 with self.subTest(value=value):
-                    response = self.client.post("/api/threads", json={
-                        "thread_id": "existing-probe", "text": "写一份消防专篇",
-                        "skill": "fire-protect", "confirm_ok": value,
+                    response = self.client.post("/api/chat", json={
+                        "session_id": "existing-probe", "message": "写一份消防专篇", "background": True,
+                        "expert_ids": ["fire-protect"], "confirm_ok": value,
                     })
                     self.assertEqual(422, response.status_code, response.text)
             runner.assert_not_called()
             for value in (False, True):
-                response = self.client.post("/api/threads", json={
-                    "thread_id": "existing-probe", "text": "写一份消防专篇",
-                    "skill": "fire-protect", "confirm_ok": value,
+                response = self.client.post("/api/chat", json={
+                    "session_id": "existing-probe", "message": "写一份消防专篇", "background": True,
+                    "expert_ids": ["fire-protect"], "confirm_ok": value,
                 })
-                self.assertEqual(200, response.status_code, response.text)
-                self.assertIs(value, runner.call_args.kwargs["confirm"])
+                self.assertEqual(202, response.status_code, response.text)
+                self.assertIs(value, seen[-1])
+        self.assertFalse(flow.chat_service._ACTIVE)
 
 
 class GatewayConfirmationTests(unittest.TestCase):

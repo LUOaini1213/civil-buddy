@@ -80,6 +80,7 @@ class ChatIn(BaseModel):
     attachments: list[str] = Field(default_factory=list, max_length=12)
     workflow_budget: dict | None = None
     attachment_roles: dict[str, str] = Field(default_factory=dict)
+    background: bool = False  # run with no reader attached; the page follows it as a running session
 
 
 class ExpertIn(BaseModel):
@@ -164,7 +165,7 @@ def health() -> dict:
                          "task_memory": True, "local_rag": True, "task_routing": True,
                          "expert_contracts": True, "tender_collaboration": True, "semantic_summary": True,
                          "asr": _asr_installed(), "auth": bool(auth_token()), "live_progress": True,
-                         "file_ref": True, "event_log": True},
+                         "file_ref": True, "event_log": True, "background_turns": True},
         "deepseek": has_key(),
         "model": llm_model(),
         "context": policy(),
@@ -734,48 +735,6 @@ def session_audit(sid: str) -> dict:
         raise HTTPException(400, str(exc)) from exc
 
 
-@app.get("/api/threads")
-def threads_list() -> dict:
-    from packing_assistant.runtime.threads import list_threads
-
-    rows = [t.to_dict() for t in list_threads()]
-    return {"ok": True, "n": len(rows), "threads": rows}
-
-
-class ThreadIn(BaseModel):
-    text: str = ""
-    title: str = ""
-    skill: str = ""
-    confirm_ok: StrictBool = False
-    background: bool = False
-    thread_id: str = ""
-
-
-@app.post("/api/threads")
-def threads_run(body: ThreadIn) -> dict:
-    from packing_assistant.runtime.threads import new_thread, run_on_thread, spawn
-
-    if body.background and body.text.strip():
-        return spawn(body.text, skill=body.skill, confirm=body.confirm_ok, title=body.title or body.text[:40])
-    tid = (body.thread_id or "").strip()
-    if not tid:
-        th = new_thread(body.title or body.text[:40] or "新对话", confirm=body.confirm_ok)
-        tid = th.thread_id
-        if not body.text.strip():
-            return {"ok": True, **th.to_dict()}
-    return run_on_thread(tid, body.text, skill=body.skill, confirm=body.confirm_ok, background=body.background)
-
-
-@app.get("/api/threads/{thread_id}")
-def thread_one(thread_id: str) -> dict:
-    from packing_assistant.runtime.threads import thread_status
-
-    got = thread_status(thread_id)
-    if not got.get("ok"):
-        raise HTTPException(404, "unknown thread")
-    return got
-
-
 @app.get("/api/catalog")
 def catalog() -> dict:
     return catalog_payload()
@@ -870,8 +829,8 @@ def studio_limit(body: LimitIn) -> dict:
 
 
 @app.post("/api/chat")
-def chat(body: ChatIn) -> StreamingResponse:
-    from chat_service import SessionBusy, SessionLease, prepare_turn, stream_turn, valid_session
+def chat(body: ChatIn):
+    from chat_service import SessionBusy, SessionLease, prepare_turn, start_background_turn, stream_turn, valid_session
 
     lease = None
     try:
@@ -889,6 +848,11 @@ def chat(body: ChatIn) -> StreamingResponse:
         if lease:
             lease.release()
         raise
+
+    if body.background:
+        # 并行任务：同一条 /api/chat，只是没有人在读。202 + session_id，页面从会话列表跟进。
+        started = start_background_turn(OUT_ROOT, turn, key_available=has_key(), plain_runner=run_plain, lease=lease)
+        return Response(json.dumps(started, ensure_ascii=False), status_code=202, media_type="application/json")
 
     def events():
         try:

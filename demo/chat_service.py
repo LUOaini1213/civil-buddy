@@ -870,6 +870,18 @@ def live_state(sid: str) -> dict:
             "seq": seq, "text": text, "status": status, "phase": phase, "done": done}
 
 
+def start_background_turn(root: Path, turn: dict, *, key_available: bool, plain_runner, lease: SessionLease) -> dict:
+    """Run a turn with no browser attached from the start: the same producer, event log, state
+    file and lease as a streamed turn — it is simply detached before anyone reads it. The page
+    sees it as a running session (list, /events, toast on completion); there is no separate
+    "thread" object any more."""
+    gen = stream_turn(root, turn, key_available=key_available, plain_runner=plain_runner, lease=lease)
+    next(gen, None)  # starts the producer thread; the first frame is the session event
+    gen.close()      # no reader: stream_turn's finally disconnects the lease, the turn keeps running
+    return {"ok": True, "background": True, "session_id": turn["session_id"], "turn_id": turn["turn_id"],
+            "state": turn_control.status(turn["session_id"])["state"]}
+
+
 def stream_turn(root: Path, turn: dict, *, key_available: bool, plain_runner, lease: SessionLease):
     """A turn owns its lease until persistence, even after the browser disconnects."""
     queue = Queue(maxsize=64)

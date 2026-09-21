@@ -485,12 +485,11 @@ test("session loads and remote thread registration cannot overwrite later naviga
   pending[0]({ ok: true, json: async () => ({ session_id: "first", transcript: [] }) });
   await first;
   assert.equal(h.evaluate("state.session"), "second");
-  const registration = h.elements.btnNewThread.listeners.click();
+  h.elements.btnNewThread.listeners.click();
   const local = h.evaluate("state.session");
   h.evaluate('state.history.push({ role: "user", content: "already sent" })');
-  pending[2]({ ok: true, json: async () => ({ thread_id: "delayed-remote" }) });
-  await registration;
   assert.equal(h.evaluate("state.session"), local);
+  assert.equal(pending.length, 2, "新建任务只在本地清屏，不再向服务端登记线程");
 });
 
 test("typed confirmation requires the exact phrase and is cleared on new sessions", () => {

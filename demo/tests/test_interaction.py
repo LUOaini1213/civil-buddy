@@ -416,3 +416,35 @@ def test_turn_state_is_on_disk_and_a_restart_marks_leftovers_stale(client, monke
         "started_at": "", "heartbeat_at": "", "finished_at": "", "seq": 0}), encoding="utf-8")
     assert chat_service.turn_status(app.OUT_ROOT, lazy)["state"] == "stale"
     assert json.loads((folder / "deadbeef0002.state.json").read_text(encoding="utf-8"))["state"] == "stale"
+
+
+def test_background_turn_is_just_a_session_with_no_reader(client, monkeypatch):
+    """并行任务 = POST /api/chat background:true：202 立即返回，会话在列表里是运行中，
+    事件日志照记，跑完能回放到 done；同一会话跑着的时候再发一条是 409。"""
+    import app
+    import chat_service
+
+    monkeypatch.setattr("app.has_key", lambda: True)
+    monkeypatch.setattr("app.run_plain", _slow_plain(n=12, dt=0.04))
+    assert client.get("/api/health").json()["capabilities"]["background_turns"] is True
+    r = client.post("/api/chat", json={"message": "并行算一下工期", "background": True, "session_id": "bg-turn-01"})
+    assert r.status_code == 202, r.text
+    started = r.json()
+    assert started["background"] is True and started["session_id"] == "bg-turn-01" and started["turn_id"]
+    assert started["state"] == "running"
+
+    detail = client.get("/api/sessions/bg-turn-01").json()
+    assert detail["turn_state"]["active"] is True and detail["turn_state"]["turn_id"] == started["turn_id"]
+    rows = {s["session_id"]: s for s in client.get("/api/sessions?limit=100").json()["sessions"]}
+    assert rows["bg-turn-01"]["running"] is True, "并行会话要在列表里显示运行中"
+    busy = client.post("/api/chat", json={"message": "再来一条", "session_id": "bg-turn-01"})
+    assert busy.status_code == 409
+
+    assert _wait_idle("bg-turn-01"), "并行轮次没有在后台跑完"
+    events = _read_sse(client, "/api/sessions/bg-turn-01/events?after=0")
+    assert events[-1][1] == "done" and "片段11" in events[-1][2]["text"]
+    detail = client.get("/api/sessions/bg-turn-01").json()
+    assert detail["turn_state"]["state"] == "done" and "片段11" in detail["transcript"][-1]["text"]
+    assert "bg-turn-01" not in chat_service._ACTIVE
+    # the workbench no longer has a separate thread API
+    assert client.get("/api/threads").status_code == 404

@@ -11,7 +11,6 @@ const state = {
   attachments: [],
   attachmentRoles: {},
   jobRoot: "",
-  threadId: "",
   lastSend: "", /* ux(round7)：纠偏卡「重试」重放同 payload */
   policy: { sandbox: "workspace-write", approval: "on-request" },
   context: {
@@ -909,7 +908,6 @@ function cbNewLocalSession() {
   cbDetachActiveRun();
   cbRememberSession("");
   if ($("confirmOk")) $("confirmOk").value = "";
-  state.threadId = "";
   state.attachments = [];
   state.attachmentRoles = {};
   state.session = cbSessionId();
@@ -1210,7 +1208,6 @@ async function cbProjOpenSession(s) {
     cbRememberSession(d.session_id);
     cbClearServerHitl();
     if ($("confirmOk")) $("confirmOk").value = "";
-    state.threadId = "";
     state.attachments = Array.isArray(d.attachments) ? d.attachments.filter((file) =>
       file && typeof file.id === "string" && file.id && !file.id.startsWith("job:")) : [];
     state.attachmentRoles = Object.fromEntries(state.attachments.filter(file =>
@@ -1277,32 +1274,9 @@ async function cbProjOpenSession(s) {
 
 
 if ($("btnNewThread")) {
-  $("btnNewThread").addEventListener("click", async () => {
-    /* ux(round19) 客户端优先：Rust 工作台没有 /api/threads（只有 Python 参考实现有）。
-       原实现先 await fetch(...).then(r => r.json())，空 body 上抛在 cbResetToEmpty()
-       之前 —— 结果「+ 新建任务」在评委下载的 exe 上是**死键**，还留一条 unhandled
-       rejection。现在先做本地清空（任何后端都生效），再尝试登记远端线程。 */
-    cbNewLocalSession();
-    const request = cbSessionRequest;
-    const localSession = state.session;
-    try {
-      const r = await fetch("/api/threads", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ title: "新对话" }),
-      });
-      if (!r.ok) return;
-      const data = await r.json();
-      if (request !== cbSessionRequest || state.session !== localSession || state.history.length || cbActiveRun) return;
-      if (data && data.thread_id) {
-        state.threadId = data.thread_id;
-        state.session = data.session_id || data.thread_id;
-        await loadThreads();
-      }
-    } catch (e) {
-      /* 无 /api/threads 的后端：本地新会话已经生效，静默即可 */
-    }
-  });
+  /* 新建任务只在本地清屏：会话在第一条消息发出时由 /api/chat 建立，不再向服务端登记「线程」。
+     （ux(round19) 的教训仍然成立：任何后端上这个键都不能是死键。） */
+  $("btnNewThread").addEventListener("click", () => { cbNewLocalSession(); });
 }
 /* ux(round19)：并行任务逻辑从按钮里抽出来。原先 /bg 命令的实现是
    $("btnBg").click()，委托给按钮 —— 一旦按钮从界面移除，/bg 会变成静默空操作
@@ -1313,22 +1287,33 @@ async function cbRunBackground(text) {
     addStatus("/bg 先写任务内容");
     return;
   }
+  if (cbCapability("background_turns") === false) {
+    addStatus("当前后端不支持并行任务（需要 background_turns 能力）");
+    return;
+  }
+  const sid = cbSessionId();
   try {
-    const r = await fetch("/api/threads", {
+    const r = await fetch("/api/chat", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
-        text: body,
+        message: body,
         background: true,
+        session_id: sid,
+        project_id: cbProj.cur || "",
+        expert_ids: [...state.summoned],
         confirm_ok: cbConfirmed(),
       }),
     });
-    if (!r.ok) throw new Error("HTTP " + r.status);
+    if (!r.ok) throw new Error(await apiError(r) || "HTTP " + r.status);
     const data = await r.json();
-    addStatus(`并行 thread ${data.thread_id} ${data.state || "running"}`);
+    const started = data.session_id || sid;
+    cbBackgroundSessions.add(started);
+    addStatus(`并行任务已开始（会话 ${started.slice(0, 8)}），完成后会提示；随时可在左栏打开查看进度。`);
     await loadThreads();
+    cbBgSchedule();
   } catch (e) {
-    addStatus("并行任务需要 Python 参考实现（当前后端没有 /api/threads）");
+    addStatus("并行任务未能开始：" + ((e && e.message) || e));
   }
 }
 
