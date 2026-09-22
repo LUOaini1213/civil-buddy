@@ -202,35 +202,91 @@ async fn test_health_flags_match_routes() {
     let rebuilt: Value = serde_json::from_str(&text).unwrap();
     let memory = rebuilt["memory_text"].as_str().expect("memory_text");
     assert!(memory.contains(marker), "{memory}");
-
-    let root = paths().out_root.join("ziptest01");
-    let run_dir = root.join("runs").join("runzip01");
-    std::fs::create_dir_all(&run_dir).unwrap();
-    let note = run_dir.join("note.md");
-    std::fs::write(&note, "pile-note").unwrap();
-    let record = json!({
-        "run_id": "runzip01",
-        "deliverables": [{"name": "note.md", "path": note.to_string_lossy()}]
-    });
-    std::fs::write(run_dir.join("workbench.json"), record.to_string()).unwrap();
-    let (status, bytes) = send_bytes(
+    let (status, text) = send(
         state(),
         Request::builder()
-            .uri("/api/deliverables.zip?session_id=ziptest01&run_id=runzip01")
+            .uri("/api/context?session_id=ctxmem01")
             .body(Body::empty())
             .unwrap(),
     )
     .await;
-    let _cleanup = std::fs::remove_dir_all(&root);
+    assert_eq!(status, StatusCode::OK, "{text}");
+    let loaded: Value = serde_json::from_str(&text).unwrap();
+    assert!(
+        loaded["memory_text"].as_str().unwrap_or("").contains(marker),
+        "{text}"
+    );
+    let (status, text) = send(
+        state(),
+        Request::builder()
+            .method("POST")
+            .uri("/api/context/search")
+            .header("content-type", "application/json")
+            .body(Body::from(
+                json!({"session_id":"ctxmem01","query":"memory marker"}).to_string(),
+            ))
+            .unwrap(),
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK, "{text}");
+    let found: Value = serde_json::from_str(&text).unwrap();
+    let cites = found["citations"].as_array().expect("citations");
+    assert!(
+        cites.iter().any(|c| c["snippet"].as_str().unwrap_or("").contains("memory marker")),
+        "{text}"
+    );
+
+    let stamp = "ZIPMARKER";
+    let (status, text) = send(
+        state(),
+        Request::builder()
+            .method("POST")
+            .uri("/api/harness/expert")
+            .header("content-type", "application/json")
+            .body(Body::from(
+                json!({
+                    "session_id": "zipexpert1",
+                    "expert_id": "pm-daily",
+                    "project_name": stamp,
+                    "jurisdiction": "CN",
+                    "brief": "写一份项目日报",
+                    "confirm_ok": true
+                })
+                .to_string(),
+            ))
+            .unwrap(),
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK, "{text}");
+    let run: Value = serde_json::from_str(&text).unwrap();
+    let run_id = run["run_id"].as_str().expect("run_id");
+    assert!(
+        run["files"].as_array().is_some_and(|files| !files.is_empty()),
+        "{text}"
+    );
+    let (status, bytes) = send_bytes(
+        state(),
+        Request::builder()
+            .uri(format!("/api/deliverables.zip?session_id=zipexpert1&run_id={run_id}"))
+            .body(Body::empty())
+            .unwrap(),
+    )
+    .await;
+    let _cleanup = std::fs::remove_dir_all(paths().out_root.join("zipexpert1"));
     assert_eq!(status, StatusCode::OK, "{}", String::from_utf8_lossy(&bytes));
     let mut archive = zip::ZipArchive::new(std::io::Cursor::new(bytes)).unwrap();
-    {
-        let mut found = String::new();
-        let mut file = archive.by_name("note.md").expect("zip missing note.md");
-        std::io::Read::read_to_string(&mut file, &mut found).unwrap();
-        assert_eq!(found, "pile-note");
+    let mut wrote = false;
+    for index in 0..archive.len() {
+        let mut file = archive.by_index(index).unwrap();
+        let name = file.name().to_string();
+        assert_ne!(name, "README.txt", "zip is only a stub readme");
+        let mut body = String::new();
+        std::io::Read::read_to_string(&mut file, &mut body).unwrap();
+        if body.contains(stamp) {
+            wrote = true;
+        }
     }
-    assert!(archive.by_name("README.txt").is_err());
+    assert!(wrote, "zip did not contain the file this run wrote");
     let (status, text) = send(
         state(),
         Request::builder()
