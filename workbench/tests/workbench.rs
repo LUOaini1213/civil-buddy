@@ -29,6 +29,28 @@ async fn send(st: AppState, req: Request<Body>) -> (StatusCode, String) {
 }
 
 #[tokio::test]
+async fn test_tool_pages_explain_missing_engine() {
+    let (st, body) = send(
+        state(),
+        Request::builder().uri("/cad").body(Body::empty()).unwrap(),
+    )
+    .await;
+    assert_eq!(st, StatusCode::NOT_FOUND);
+    assert!(body.contains("Python"), "{body}");
+    let (st, body) = send(
+        state(),
+        Request::builder().uri("/api/health").body(Body::empty()).unwrap(),
+    )
+    .await;
+    assert_eq!(st, StatusCode::OK);
+    let v: Value = serde_json::from_str(&body).unwrap();
+    assert_eq!(v["capabilities"]["cad"], false);
+    assert_eq!(v["capabilities"]["logistics"], false);
+    assert_eq!(v["capabilities"]["engineering"], false);
+    assert_eq!(v["capabilities"]["tender_collaboration"], false);
+}
+
+#[tokio::test]
 async fn test_index_and_static() {
     let (st, body) = send(
         state(),

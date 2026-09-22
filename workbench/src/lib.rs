@@ -14,6 +14,7 @@ pub mod mcp;
 pub mod packing_bridge;
 pub mod parse;
 pub mod projects;
+pub mod py_engine;
 pub mod packs;
 pub mod rag;
 pub mod store;

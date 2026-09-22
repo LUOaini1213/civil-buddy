@@ -11,11 +11,12 @@ use axum::response::sse::{Event, KeepAlive, Sse};
 use axum::response::{IntoResponse, Response};
 use axum::routing::{delete, get, post};
 use axum::{Json, Router};
-use serde::Deserialize;
+use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
 use std::collections::HashMap;
 use std::convert::Infallible;
 use std::path::PathBuf;
+use crate::py_engine::{chat_needs_python_tools, tool_route, PyEngine};
 use std::sync::Arc;
 use tokio::sync::mpsc;
 use tokio_stream::wrappers::ReceiverStream;
@@ -27,6 +28,8 @@ pub struct AppState {
     pub paths: Paths,
     pub llm: LlmMode,
     pub force_has_key: Option<bool>,
+    /// Python CAD / planning / logistics / tender engine. Tests leave this empty.
+    pub engine: Option<Arc<PyEngine>>,
 }
 
 impl AppState {
@@ -35,6 +38,7 @@ impl AppState {
             paths,
             llm: LlmMode::Live,
             force_has_key: None,
+            engine: None,
         }
     }
 
@@ -83,6 +87,7 @@ pub fn app(state: AppState) -> Router {
         .route("/api/harness/audit/{session}", get(harness_audit))
         .route("/api/file", get(file_get))
         .nest_service("/static", ServeDir::new(static_dir))
+        .fallback(engine_fallback)
         .with_state(Arc::new(state))
 }
 
@@ -90,6 +95,24 @@ type ApiError = (StatusCode, Json<Value>);
 
 fn err(status: StatusCode, msg: impl Into<String>) -> ApiError {
     (status, Json(json!({"detail": msg.into()})))
+}
+
+async fn engine_fallback(State(st): State<Arc<AppState>>, req: axum::extract::Request) -> Response {
+    let path = req.uri().path().to_string();
+    let query = req.uri().query().map(|q| format!("?{q}")).unwrap_or_default();
+    if !tool_route(&path) {
+        return (StatusCode::NOT_FOUND, "not found").into_response();
+    }
+    let Some(engine) = &st.engine else {
+        return (
+            StatusCode::NOT_FOUND,
+            "这个页面在 Python 工具引擎里。Rust 工作台没能启动它：在仓库根目录执行 python -m pip install -r requirements.txt 后重启。",
+        ).into_response();
+    };
+    let method = reqwest::Method::from_bytes(req.method().as_str().as_bytes()).unwrap_or(reqwest::Method::GET);
+    let ct = req.headers().get(axum::http::header::CONTENT_TYPE).and_then(|v| v.to_str().ok()).map(str::to_string);
+    let body = axum::body::to_bytes(req.into_body(), 20 * 1024 * 1024).await.unwrap_or_default();
+    engine.forward(method, &format!("{path}{query}"), ct.as_deref(), body.to_vec()).await
 }
 
 async fn index(State(st): State<Arc<AppState>>) -> Response {
@@ -319,6 +342,10 @@ async fn health(State(st): State<Arc<AppState>>) -> Json<Value> {
         "semantic_summary": false,
         "asr": false,
         "auth": false,
+        "cad": st.engine.is_some(),
+        "logistics": st.engine.is_some(),
+        "engineering": st.engine.is_some(),
+        "tender_collaboration": st.engine.is_some(),
     });
     Json(json!({
         "ok": true,
@@ -797,7 +824,7 @@ async fn firm_bid(State(st): State<Arc<AppState>>, Json(body): Json<FirmBidIn>) 
     Ok(Json(v))
 }
 
-#[derive(Deserialize)]
+#[derive(Deserialize, Serialize)]
 struct ChatIn {
     /* ux(round19)：前端「在某项目下新建会话」时带上，touch_session 据此 manual 归类 */
     #[serde(default)]
@@ -813,6 +840,14 @@ struct ChatIn {
     session_id: String,
     #[serde(default)]
     attachments: Vec<String>,
+    #[serde(default)]
+    cad_project_id: String,
+    #[serde(default)]
+    planning_project_id: String,
+    #[serde(default)]
+    logistics_project_id: String,
+    #[serde(default)]
+    attachment_roles: std::collections::HashMap<String, String>,
 }
 
 fn sse_offline_chat(text: String) -> Response {
@@ -840,6 +875,23 @@ fn sse_offline_chat(text: String) -> Response {
 }
 
 async fn chat(State(st): State<Arc<AppState>>, Json(body): Json<ChatIn>) -> Result<Response, ApiError> {
+    if let Some(engine) = &st.engine {
+        if chat_needs_python_tools(
+            &body.message,
+            &body.cad_project_id,
+            &body.planning_project_id,
+            &body.logistics_project_id,
+            body.attachment_roles.len(),
+        ) {
+            let payload = serde_json::to_vec(&body).unwrap_or_default();
+            return Ok(engine.forward(
+                reqwest::Method::POST,
+                "/api/chat",
+                Some("application/json"),
+                payload,
+            ).await);
+        }
+    }
     let intent = crate::agent::understand(&body.message);
     if !st.has_key() {
         if intent == crate::agent::Intent::Chat {
