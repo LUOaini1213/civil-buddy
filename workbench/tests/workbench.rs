@@ -65,7 +65,6 @@ async fn test_health_flags_match_routes() {
         ("skills", "/api/skills"),
         ("mcp", "/api/mcp/tools"),
         ("context", "/api/context?session_id=demo01"),
-        ("deliverables_zip", "/api/deliverables.zip?session_id=demo01"),
     ];
     for (flag, uri) in flags {
         assert_eq!(health["capabilities"][flag], true, "{flag} {body}");
@@ -109,6 +108,146 @@ async fn test_health_flags_match_routes() {
     .await;
     assert_ne!(status, StatusCode::NOT_FOUND, "{text}");
     assert!(!text.is_empty(), "{text}");
+    assert_eq!(health["capabilities"]["deliverables_zip"], true, "{body}");
+    let (status, text) = send(
+        state(),
+        Request::builder()
+            .method("POST")
+            .uri("/api/sessions/demo01/cancel")
+            .body(Body::empty())
+            .unwrap(),
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK, "{text}");
+    let idle: Value = serde_json::from_str(&text).unwrap();
+    assert_eq!(idle["cancel_requested"], false, "{text}");
+
+    let hold = AppState {
+        paths: paths(),
+        llm: LlmMode::Hold,
+        force_has_key: Some(true),
+        engine: None,
+    };
+    let hold_app = app(hold);
+    let chat = tokio::spawn(async move {
+        hold_app
+            .oneshot(
+                Request::builder()
+                    .method("POST")
+                    .uri("/api/chat")
+                    .header("content-type", "application/json")
+                    .body(Body::from(
+                        json!({"message":"hello","session_id":"holdturn1","expert_ids":[]}).to_string(),
+                    ))
+                    .unwrap(),
+            )
+            .await
+            .unwrap()
+    });
+    let mut saw = false;
+    for _ in 0..50 {
+        if civil_workbench::turns::is_active("holdturn1") {
+            saw = true;
+            break;
+        }
+        tokio::time::sleep(std::time::Duration::from_millis(20)).await;
+    }
+    assert!(saw, "chat never registered an in-flight turn");
+    let (status, text) = send(
+        state(),
+        Request::builder()
+            .method("POST")
+            .uri("/api/sessions/holdturn1/cancel")
+            .body(Body::empty())
+            .unwrap(),
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK, "{text}");
+    let stopped: Value = serde_json::from_str(&text).unwrap();
+    assert_eq!(stopped["cancel_requested"], true, "{text}");
+    let finished = tokio::time::timeout(std::time::Duration::from_secs(2), chat).await;
+    assert!(finished.is_ok(), "cancelled turn did not finish");
+
+    let marker = "hello memory marker";
+    let drafting = AppState {
+        paths: paths(),
+        llm: LlmMode::FakePlain { text: "内部草稿".into() },
+        force_has_key: Some(true),
+        engine: None,
+    };
+    let (status, text) = send(
+        drafting,
+        Request::builder()
+            .method("POST")
+            .uri("/api/chat")
+            .header("content-type", "application/json")
+            .body(Body::from(
+                json!({"message": marker, "session_id":"ctxmem01","expert_ids":[]}).to_string(),
+            ))
+            .unwrap(),
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK, "{text}");
+    let (status, text) = send(
+        state(),
+        Request::builder()
+            .method("POST")
+            .uri("/api/context/rebuild")
+            .header("content-type", "application/json")
+            .body(Body::from(json!({"session_id":"ctxmem01"}).to_string()))
+            .unwrap(),
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK, "{text}");
+    let rebuilt: Value = serde_json::from_str(&text).unwrap();
+    let memory = rebuilt["memory_text"].as_str().expect("memory_text");
+    assert!(memory.contains(marker), "{memory}");
+
+    let root = paths().out_root.join("ziptest01");
+    let run_dir = root.join("runs").join("runzip01");
+    std::fs::create_dir_all(&run_dir).unwrap();
+    let note = run_dir.join("note.md");
+    std::fs::write(&note, "pile-note").unwrap();
+    let record = json!({
+        "run_id": "runzip01",
+        "deliverables": [{"name": "note.md", "path": note.to_string_lossy()}]
+    });
+    std::fs::write(run_dir.join("workbench.json"), record.to_string()).unwrap();
+    let (status, bytes) = send_bytes(
+        state(),
+        Request::builder()
+            .uri("/api/deliverables.zip?session_id=ziptest01&run_id=runzip01")
+            .body(Body::empty())
+            .unwrap(),
+    )
+    .await;
+    let _cleanup = std::fs::remove_dir_all(&root);
+    assert_eq!(status, StatusCode::OK, "{}", String::from_utf8_lossy(&bytes));
+    let mut archive = zip::ZipArchive::new(std::io::Cursor::new(bytes)).unwrap();
+    {
+        let mut found = String::new();
+        let mut file = archive.by_name("note.md").expect("zip missing note.md");
+        std::io::Read::read_to_string(&mut file, &mut found).unwrap();
+        assert_eq!(found, "pile-note");
+    }
+    assert!(archive.by_name("README.txt").is_err());
+    let (status, text) = send(
+        state(),
+        Request::builder()
+            .uri("/api/deliverables.zip?session_id=emptyzip1&run_id=none")
+            .body(Body::empty())
+            .unwrap(),
+    )
+    .await;
+    assert_eq!(status, StatusCode::NOT_FOUND, "{text}");
+    assert!(text.contains("文书"), "{text}");
+}
+
+async fn send_bytes(st: AppState, req: Request<Body>) -> (StatusCode, Vec<u8>) {
+    let res = app(st).oneshot(req).await.unwrap();
+    let status = res.status();
+    let bytes = res.into_body().collect().await.unwrap().to_bytes();
+    (status, bytes.to_vec())
 }
 
 #[tokio::test]

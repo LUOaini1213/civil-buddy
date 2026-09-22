@@ -15,6 +15,8 @@ pub mod packing_bridge;
 pub mod parse;
 pub mod projects;
 pub mod py_engine;
+pub mod session_surface;
+pub mod turns;
 pub mod packs;
 pub mod rag;
 pub mod store;

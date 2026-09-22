@@ -289,11 +289,17 @@ async fn sessions_list(
 }
 
 fn zip_bytes(name: &str, bytes: &[u8]) -> Vec<u8> {
+    zip_named(&[(name.to_string(), bytes.to_vec())])
+}
+
+fn zip_named(files: &[(String, Vec<u8>)]) -> Vec<u8> {
     use std::io::{Cursor, Write};
     let mut cursor = Cursor::new(Vec::new());
     let mut zip = zip::ZipWriter::new(&mut cursor);
-    let _ = zip.start_file(name, zip::write::SimpleFileOptions::default());
-    let _ = zip.write_all(bytes);
+    for (name, bytes) in files {
+        let _ = zip.start_file(name, zip::write::SimpleFileOptions::default());
+        let _ = zip.write_all(bytes);
+    }
     let _ = zip.finish();
     cursor.into_inner()
 }
@@ -302,14 +308,32 @@ fn require_sid(sid: &str) -> Result<String, ApiError> {
     crate::projects::safe_session_id(sid).map_err(|e| err(StatusCode::BAD_REQUEST, e))
 }
 
-async fn session_cancel(AxPath(sid): AxPath<String>) -> Result<Json<Value>, ApiError> {
+async fn session_cancel(State(st): State<Arc<AppState>>, AxPath(sid): AxPath<String>) -> Result<Response, ApiError> {
     let sid = require_sid(&sid)?;
+    let requested = crate::turns::request(&sid);
+    if let Some(engine) = &st.engine {
+        let forwarded = engine
+            .forward(
+                reqwest::Method::POST,
+                &format!("/api/sessions/{sid}/cancel"),
+                None,
+                Vec::new(),
+            )
+            .await;
+        if !requested {
+            return Ok(forwarded);
+        }
+    }
     Ok(Json(json!({
         "ok": true,
         "session_id": sid,
-        "cancelled": false,
-        "detail": "当前没有进行中的回合",
-    })))
+        "cancel_requested": requested,
+        "cancelled": requested,
+        "active": requested,
+        "state": if requested { "cancelling" } else { "idle" },
+        "detail": if requested { "已请求停止本轮" } else { "当前没有进行中的回合" },
+    }))
+    .into_response())
 }
 
 async fn session_export(
@@ -361,15 +385,29 @@ async fn mcp_capabilities() -> Json<Value> {
     Json(json!({"ok": true, "capabilities": {"tools": {}, "resources": {}, "prompts": {}}}))
 }
 
-async fn context_get(Query(q): Query<SessionQ>) -> Result<Json<Value>, ApiError> {
+async fn context_get(State(st): State<Arc<AppState>>, Query(q): Query<SessionQ>) -> Result<Response, ApiError> {
     let sid = require_sid(&q.session_id)?;
+    if let Some(engine) = &st.engine {
+        return Ok(engine
+            .forward(
+                reqwest::Method::GET,
+                &format!("/api/context?session_id={sid}"),
+                None,
+                Vec::new(),
+            )
+            .await);
+    }
+    let memory_text = crate::session_surface::memory_text(&st.paths, &sid);
     Ok(Json(json!({
         "ok": true,
         "session_id": sid,
+        "memory_text": memory_text,
         "note": "",
         "limit": 0,
         "sources": [],
-    })))
+        "context": {"note": "", "limit": 0, "mode": "local"},
+    }))
+    .into_response())
 }
 
 #[derive(Deserialize)]
@@ -379,14 +417,51 @@ struct ContextBody {
     query: String,
 }
 
-async fn context_search(Json(body): Json<ContextBody>) -> Result<Json<Value>, ApiError> {
+async fn context_search(State(st): State<Arc<AppState>>, Json(body): Json<ContextBody>) -> Result<Response, ApiError> {
     let sid = require_sid(&body.session_id)?;
-    Ok(Json(json!({"ok": true, "session_id": sid, "query": body.query, "citations": []})))
+    if let Some(engine) = &st.engine {
+        let payload = serde_json::to_vec(&json!({"session_id": sid, "query": body.query})).unwrap_or_default();
+        return Ok(engine
+            .forward(
+                reqwest::Method::POST,
+                "/api/context/search",
+                Some("application/json"),
+                payload,
+            )
+            .await);
+    }
+    let citations = crate::session_surface::search_citations(&st.paths, &sid, &body.query);
+    Ok(Json(json!({
+        "ok": true,
+        "session_id": sid,
+        "query": body.query,
+        "citations": citations,
+    }))
+    .into_response())
 }
 
-async fn context_rebuild(Json(body): Json<ContextBody>) -> Result<Json<Value>, ApiError> {
+async fn context_rebuild(State(st): State<Arc<AppState>>, Json(body): Json<ContextBody>) -> Result<Response, ApiError> {
     let sid = require_sid(&body.session_id)?;
-    Ok(Json(json!({"ok": true, "session_id": sid, "rebuilt": false, "detail": "Rust 宿主只读当前会话，不改附件"})))
+    if let Some(engine) = &st.engine {
+        let payload = serde_json::to_vec(&json!({"session_id": sid})).unwrap_or_default();
+        return Ok(engine
+            .forward(
+                reqwest::Method::POST,
+                "/api/context/rebuild",
+                Some("application/json"),
+                payload,
+            )
+            .await);
+    }
+    let memory_text = crate::session_surface::memory_text(&st.paths, &sid);
+    Ok(Json(json!({
+        "ok": true,
+        "session_id": sid,
+        "memory_text": memory_text,
+        "note": "已重新整理任务记忆；原始对话、附件和交付物已保留，本次没有调用模型。",
+        "context": {"note": "任务记忆已从本会话原文整理。", "limit": 0, "mode": "local"},
+    }))
+    .into_response())
 }
 
 #[derive(Deserialize)]
@@ -396,16 +471,29 @@ struct SourceQ {
     source_id: String,
 }
 
-async fn context_source(Query(q): Query<SourceQ>) -> Result<Json<Value>, ApiError> {
+async fn context_source(State(st): State<Arc<AppState>>, Query(q): Query<SourceQ>) -> Result<Response, ApiError> {
     let sid = require_sid(&q.session_id)?;
+    if let Some(engine) = &st.engine {
+        return Ok(engine
+            .forward(
+                reqwest::Method::GET,
+                &format!("/api/context/source?session_id={sid}&source_id={}", q.source_id),
+                None,
+                Vec::new(),
+            )
+            .await);
+    }
+    let text = crate::session_surface::source_text(&st.paths, &sid, &q.source_id);
+    let end = text.chars().count();
     Ok(Json(json!({
         "ok": true,
         "session_id": sid,
         "source_id": q.source_id,
-        "text": "",
+        "text": text,
         "start": 0,
-        "end": 0,
-    })))
+        "end": end,
+    }))
+    .into_response())
 }
 
 #[derive(Deserialize)]
@@ -415,18 +503,33 @@ struct ZipQ {
     run_id: String,
 }
 
-async fn deliverables_zip(Query(q): Query<ZipQ>) -> Result<Response, ApiError> {
+async fn deliverables_zip(State(st): State<Arc<AppState>>, Query(q): Query<ZipQ>) -> Result<Response, ApiError> {
     let sid = require_sid(&q.session_id)?;
     if !q.run_id.is_empty()
         && !q.run_id.chars().all(|c| c.is_ascii_alphanumeric() || c == '-' || c == '_')
     {
         return Err(err(StatusCode::BAD_REQUEST, "run_id 无效"));
     }
-    let note = format!(
-        "session={sid} run={} files=0\nRust 宿主没有这份成稿。CAD / 计划 / 箱单的文件在 Python 工具引擎里。\n",
-        if q.run_id.is_empty() { "*".into() } else { q.run_id }
-    );
-    let bytes = zip_bytes("README.txt", note.as_bytes());
+    if let Some(engine) = &st.engine {
+        return Ok(engine
+            .forward(
+                reqwest::Method::GET,
+                &format!("/api/deliverables.zip?session_id={sid}&run_id={}", q.run_id),
+                None,
+                Vec::new(),
+            )
+            .await);
+    }
+    let files = crate::session_surface::deliverable_files(&st.paths, &sid, &q.run_id);
+    if files.is_empty() {
+        return Err(err(StatusCode::NOT_FOUND, "这轮没有可下载的文书"));
+    }
+    let mut packed = Vec::new();
+    for (name, path) in files {
+        let bytes = std::fs::read(&path).map_err(|_| err(StatusCode::NOT_FOUND, "文书文件已不在"))?;
+        packed.push((name, bytes));
+    }
+    let bytes = zip_named(&packed);
     Ok((
         [(axum::http::header::CONTENT_TYPE, "application/zip")],
         bytes,
@@ -1196,7 +1299,17 @@ async fn chat(State(st): State<Arc<AppState>>, Json(body): Json<ChatIn>) -> Resu
     let idx_project = body.project_id.clone();
     let reply_acc = std::sync::Arc::new(std::sync::Mutex::new(String::new()));
     let reply_send = reply_acc.clone();
+    let files_acc = std::sync::Arc::new(std::sync::Mutex::new(Vec::<Value>::new()));
+    let files_send = files_acc.clone();
+    let run_acc = std::sync::Arc::new(std::sync::Mutex::new(String::new()));
+    let run_send = run_acc.clone();
+    let (turn_flag, turn_notify) = crate::turns::begin(&session);
+    let turn_sid = session.clone();
     tokio::spawn(async move {
+        let _turn = crate::turns::Guard {
+            sid: turn_sid,
+            flag: turn_flag.clone(),
+        };
         let send = move |ev: agent::EventOut| {
             let (name, data) = ev;
             if name == "done" {
@@ -1205,10 +1318,23 @@ async fn chat(State(st): State<Arc<AppState>>, Json(body): Json<ChatIn>) -> Resu
                         *g = t.to_string();
                     }
                 }
+                if let Some(files) = data.get("deliverables").and_then(|v| v.as_array()) {
+                    if !files.is_empty() {
+                        if let Ok(mut g) = files_send.lock() {
+                            *g = files.clone();
+                        }
+                    }
+                }
+                if let Some(rid) = data.get("run_id").and_then(|v| v.as_str()) {
+                    if let Ok(mut g) = run_send.lock() {
+                        *g = rid.to_string();
+                    }
+                }
             }
             let payload = serde_json::to_string(&data).unwrap_or_else(|_| "{}".into());
             Event::default().event(name).data(payload)
         };
+        let tx_cancel = tx.clone();
         let result = async {
             let ctx_ev = (
                 "context".into(),
@@ -1323,8 +1449,15 @@ async fn chat(State(st): State<Arc<AppState>>, Json(body): Json<ChatIn>) -> Resu
                 }
             }
             Ok::<(), llm::LlmError>(())
-        }
-        .await;
+        };
+        let result = tokio::select! {
+            _ = crate::turns::cancelled(&turn_flag, &turn_notify) => {
+                let payload = json!({"cancelled": true, "ok": false, "text": "已停止，已有结果已保留。"}).to_string();
+                let _ = tx_cancel.send(Ok(Event::default().event("done").data(payload))).await;
+                Ok(())
+            }
+            result = result => result,
+        };
         if let Err(e) = result {
             let ev = Event::default()
                 .event("error")
@@ -1332,6 +1465,8 @@ async fn chat(State(st): State<Arc<AppState>>, Json(body): Json<ChatIn>) -> Resu
             let _ = tx.send(Ok(ev)).await;
         }
         let reply = reply_acc.lock().map(|g| g.clone()).unwrap_or_default();
+        let saved_files = files_acc.lock().map(|g| g.clone()).unwrap_or_default();
+        let saved_run = run_acc.lock().map(|g| g.clone()).unwrap_or_default();
         let _ = tokio::task::spawn_blocking(move || {
             crate::projects::touch_session(&idx_paths, &idx_session, &idx_user, &idx_project);
             if !idx_user.trim().is_empty() {
@@ -1339,6 +1474,14 @@ async fn chat(State(st): State<Arc<AppState>>, Json(body): Json<ChatIn>) -> Resu
             }
             if !reply.trim().is_empty() {
                 crate::projects::append_turn(&idx_paths, &idx_session, "assistant", &reply);
+            }
+            if !saved_files.is_empty() {
+                let rid = if saved_run.is_empty() {
+                    format!("chat{}", &Uuid::new_v4().simple().to_string()[..8])
+                } else {
+                    saved_run
+                };
+                crate::session_surface::record_run(&idx_paths, &idx_session, &rid, &saved_files);
             }
         })
         .await;

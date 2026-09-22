@@ -594,7 +594,7 @@ function card(sl, o) {
   sl.addText("每条要求 1.000 行", { x: M + 6.3, y: 4.5, w: 5.1, h: 0.28, isTextBox: true, margin: 0,
     fontFace: F.m, fontSize: 10.5, color: C.muted });
 
-  const stats = [["0.974", "链接召回（基线 0.615）"], ["1.000", "链接精确率"], ["9 / 9", "数字冲突全检出"]];
+  const stats = [["0.980", "链接召回（基线 0.615）"], ["1.000", "链接精确率"], ["14 / 14", "数字冲突全检出"]];
   stats.forEach((s, i) => {
     const x = M + i * 4.0;
     sl.addText(s[0], { x, y: 5.05, w: 3.7, h: 0.6, isTextBox: true, margin: 0,
@@ -602,7 +602,7 @@ function card(sl, o) {
     sl.addText(s[1], { x, y: 5.66, w: 3.7, h: 0.3, isTextBox: true, margin: 0,
       fontFace: F.b, fontSize: 11.5, color: C.muted });
   });
-  chip(sl, "eval_tender_response_match.py · 14 例人工标注 · 39 条金标链接", M, 6.15, 6.4, false);
+  chip(sl, "eval_tender_response_match.py · 现行 19 例 · 51 条金标链接 · 0.974 是更早的 14 例", M, 6.15, 8.6, false);
   notes(sl, 11);
 }
 

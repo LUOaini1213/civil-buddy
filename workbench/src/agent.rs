@@ -597,6 +597,8 @@ pub fn plain_system() -> &'static str {
 pub enum LlmMode {
     Live,
     FakePlain { text: String },
+    /// Test-only: the turn stays open until cancel drops this future.
+    Hold,
 }
 
 pub type EventOut = (String, Value);
@@ -615,6 +617,10 @@ pub async fn run_plain(history: Vec<Value>, mode: &LlmMode) -> Result<Vec<EventO
                 "done".into(),
                 json!({"mode": "plain", "text": text, "citations": [], "deliverables": [], "context": ctx.to_value()}),
             ));
+        }
+        LlmMode::Hold => {
+            std::future::pending::<()>().await;
+            unreachable!("hold ends only when the turn is cancelled");
         }
         LlmMode::Live => {
             let mut messages = vec![json!({"role": "system", "content": plain_system()})];
@@ -653,6 +659,10 @@ pub async fn run_expert(
         }),
     )];
 
+    if matches!(mode, LlmMode::Hold) {
+        std::future::pending::<()>().await;
+        unreachable!("hold ends only when the turn is cancelled");
+    }
     if let LlmMode::FakePlain { text } = mode {
         let ctx = context::inspect(&history, &[text]);
         events.push(("context".into(), ctx.to_value()));
