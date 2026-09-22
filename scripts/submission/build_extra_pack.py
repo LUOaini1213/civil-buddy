@@ -33,7 +33,7 @@ Civil Buddy（土木版 Codex：66 岗智能体工作台）· 第一届「海之
 - `civil-buddy-workbench-0.4.0.zip` —— Windows 免安装，解压后双击 `start-workbench.bat`，
   浏览器自动打开工作台。**不用装 Python，不用配环境。**
 - `.sha256` —— 校验码
-- `给试用的人.md` —— 三分钟上手，含试用包边界（不含装箱引擎，输入「装箱」出说明卡）
+- `TRY.md` —— 三分钟上手，含试用包边界（不含装箱引擎，输入「装箱」出说明卡）
 
 > 需要自备 API Key：启动后点右上角「设置 → 模型设置」填自己的（DeepSeek / z.ai 等），
 > 运行时生效、不落盘、不用重启。
@@ -74,7 +74,7 @@ FILES = [
     # (源, 包内路径)
     ("dist/civil-buddy-workbench-0.4.0.zip", "01-免安装试用包/civil-buddy-workbench-0.4.0.zip"),
     ("dist/civil-buddy-workbench-0.4.0.zip.sha256", "01-免安装试用包/civil-buddy-workbench-0.4.0.zip.sha256"),
-    ("给试用的人.md", "01-免安装试用包/给试用的人.md"),
+    ("TRY.md", "01-免安装试用包/TRY.md"),
     ("output/side_20260831_164936.png", "02-产品截图与引擎出图/06-引擎出图-40HQ拼柜布局.png"),
     ("docs/depth-ladder.md", "03-证据与口径/66岗诚实分级.md"),
     ("docs/competition-demo-script.md", "03-证据与口径/评委5分钟演示脚本.md"),

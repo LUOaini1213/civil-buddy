@@ -23,7 +23,7 @@ STATIC = (
 )
 EXPLICIT = (
     "LICENSE", "requirements.txt", ".env.example", "demo/.env.example",
-    "给试用的人.md", "docs/depth-ladder.md", "docs/civil-buddy/GETTING-STARTED.md",
+    "TRY.md", "docs/depth-ladder.md", "docs/civil-buddy/GETTING-STARTED.md",
     "docs/civil-buddy/PROTOCOL.md", "docs/civil-buddy/MCP.md", "docs/civil-buddy/SKILLS.md",
     "docs/civil-buddy/KB.md", "docs/civil-buddy/CONTEXT.md", "docs/civil-buddy/COLLABORATION.md",
     "docs/civil-buddy/task-routing.md", "docs/civil-buddy/product-plan.md", "docs/civil-buddy/product-completion-plan.md",
@@ -127,7 +127,7 @@ def release_readme(version: str) -> str:
 本包是 Python 工作台，不声称与历史 `civil-workbench.exe` Rust 试用包功能相同。
 `release-manifest.json` 列出逐文件 SHA-256；主包 SHA-256 在同名 `.zip.sha256` 中。
 
-包内文档：[试用说明](给试用的人.md)、[上手指南](docs/civil-buddy/GETTING-STARTED.md)、
+包内文档：[试用说明](TRY.md)、[上手指南](docs/civil-buddy/GETTING-STARTED.md)、
 [岗位深度](docs/depth-ladder.md)、[产品计划](docs/civil-buddy/product-plan.md)、
 [完成情况](docs/civil-buddy/product-completion-plan.md)、[协议](docs/civil-buddy/PROTOCOL.md)、
 [MCP](docs/civil-buddy/MCP.md)、[Skills](docs/civil-buddy/SKILLS.md)、[知识库](docs/civil-buddy/KB.md)。

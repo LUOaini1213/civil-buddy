@@ -8,14 +8,13 @@ Natural Language → Agent Routing → Deterministic Tools → HITL → Evaluati
 
 ![Civil Buddy workbench](docs/assets/workbench.png)
 
-**In one paragraph (EN)** — an agent workbench for civil / construction / tendering
-work: 66 job-post skills (16 categories), each an SOP the model drafts against.
-Hard numbers — coordinates, container counts, unit prices — come only from
-deterministic tools; the model routes and drafts. High-risk actions (qualification
-verdicts, bids, writes to disk) need a human confirmation. One skill, container
-packing (`pack-ship`), has a real engine behind it and a 128-run automated
-evaluation with its archive in the repo; the other 65 are SOP skills at the depth
-the ladder below states. Rust workbench + MCP entry, Python packing harness,
+**In one paragraph (EN)** — a civil / construction workbench whose one measured
+engine is container packing (`pack-ship`). Coordinates, counts and prices come
+only from that tool, and a 128-run evaluation is archived in the repo. CI on
+every push runs a 2×1 offline slice of that eval, not the full 128. The other
+65 job-post skills are SOPs the model drafts against, at the depth the ladder
+states — not 65 engines. High-risk actions (qualification, bids, disk writes)
+need a human confirmation. Rust workbench + MCP entry, Python packing harness,
 FastAPI gateway. MIT.
 
 **30 秒，无 Key** — 策略引擎 + 失败恢复的四拍剧本（正常放行 → 越权被拒 → 工具故障重试降级 → 成本超限熔断）：
@@ -31,39 +30,39 @@ python scripts/test_agent_middleware.py     # 同一剧本的断言版（CI 每�
 <details>
 <summary>四拍剧本的实际输出（2026-09-03 本机，无 API Key）</summary>
 
-```text
-==========================================================
-Civil Buddy · 策略引擎 + 失败恢复
-==========================================================
-两层 Runtime 中间件（不是五个平庸包装）
-  1. 策略引擎  谁 / 哪个工具 / 花多少 / 能否碰生产数据
-  2. 失败恢复  超时重试 → 降级 UNSPECIFIED → 审计链
-剧本：正常下单 → 越权被拒 → 工具挂掉自动恢复 → 成本超限熔断
-
-[1/4] 正常下单   ALLOW
-  原因  低风险岗 finance-tax 写作业根
-  结果  wrote=True  GST 9%=True  files=2  run=run-<id>
-
-[2/4] 越权被拒   DENY
-  原因  拒绝：岗 bid-parse 不能调 pack-ship__plan（exclusive 属于 pack-ship）。
-  弹窗  拒绝：岗 bid-parse 不能调 pack-ship__plan（exclusive 属于 pack-ship）。
-  密钥  拒绝：secret path denied: .env  文件未落地
-
-[3/4] 工具挂掉自动恢复   DEGRADE
-  原因  下游失败 timeout，工具 demo__downstream 降级，不编柜数/xyz。
-  动作  degrade  审计 ['call', 'retry', 'degrade']
-  结果  can_fit=UNSPECIFIED  不编柜数
-
-[4/4] 成本超限熔断   CIRCUIT
-  原因  熔断：session 成本超限 steps 1/1 tokens 32/32。
-  代码  circuit_open  已执行=False
-
-submit_blocked=true  secret_leak=false  禁止：可以投标 / 可以开工
+```text
+==========================================================
+Civil Buddy · 策略引擎 + 失败恢复
+==========================================================
+两层 Runtime 中间件（不是五个平庸包装）
+  1. 策略引擎  谁 / 哪个工具 / 花多少 / 能否碰生产数据
+  2. 失败恢复  超时重试 → 降级 UNSPECIFIED → 审计链
+剧本：正常下单 → 越权被拒 → 工具挂掉自动恢复 → 成本超限熔断
+
+[1/4] 正常下单   ALLOW
+  原因  低风险岗 finance-tax 写作业根
+  结果  wrote=True  GST 9%=True  files=2  run=run-<id>
+
+[2/4] 越权被拒   DENY
+  原因  拒绝：岗 bid-parse 不能调 pack-ship__plan（exclusive 属于 pack-ship）。
+  弹窗  拒绝：岗 bid-parse 不能调 pack-ship__plan（exclusive 属于 pack-ship）。
+  密钥  拒绝：secret path denied: .env  文件未落地
+
+[3/4] 工具挂掉自动恢复   DEGRADE
+  原因  下游失败 timeout，工具 demo__downstream 降级，不编柜数/xyz。
+  动作  degrade  审计 ['call', 'retry', 'degrade']
+  结果  can_fit=UNSPECIFIED  不编柜数
+
+[4/4] 成本超限熔断   CIRCUIT
+  原因  熔断：session 成本超限 steps 1/1 tokens 32/32。
+  代码  circuit_open  已执行=False
+
+submit_blocked=true  secret_leak=false  禁止：可以投标 / 可以开工
 ```
 
 </details>
 
-**是什么** — 面向土木 / 施工 / 投标的 **66 岗（16 大类）工作台**：66 份 SOP 技能，其中装箱岗 pack-ship 有确定性引擎，其余按下表分级。每岗一份 `SKILL.md` 按 SOP 出稿；**硬数字（坐标、柜数、单价）只由确定性工具算**，模型负责路由和起草；资格、投标、写盘这类高风险动作**须人确认**。产出是内部讨论草稿，不是签认件。
+**是什么** — 装箱引擎 `pack-ship` 已做评测；另外 65 岗是 SOP 技能，深度见下表，不是 65 个引擎。工作台覆盖土木 / 施工 / 投标 16 大类。每岗一份 `SKILL.md` 按 SOP 出稿；**硬数字（坐标、柜数、单价）只由确定性工具算**，模型负责路由和起草；资格、投标、写盘这类高风险动作**须人确认**。产出是内部讨论草稿，不是签认件。CI 每次提交只跑 2 lane × 1 round 离线切片，128 次全量评测是另一次留档复跑。
 
 **给谁用** — 物机 / 物流 / 投标岗的日常起草与装柜计算。装箱引擎 pack-ship 是其中一岗，也是前身独立仓 `packing-agent`（已并入本仓，旧链接自动跳转）。
 
@@ -78,7 +77,7 @@ submit_blocked=true  secret_leak=false  禁止：可以投标 / 可以开工
 | 端到端金线 | 8/8（R13 时点实测，需 playwright，未进 CI） | `python scripts/r13_golden_path_e2e.py` |
 
 **试用（零编译）** — 下载 [Releases](https://github.com/LUOaini1213/civil-buddy/releases) 的 **v0.4.0-workbench** zip → 双击 `start-workbench.bat`（浏览器自动打开 :8765）→「设置 → 模型设置」填自己的 Key（DeepSeek / z.ai / OpenAI 兼容任选，运行时生效）。
-试用包**不含装箱引擎**；要看真柜数需源码起装柜台：`pip install -r requirements.txt` → `uvicorn gateway.app:app --port 8000`。边界见 [给试用的人.md](给试用的人.md)。
+试用包**不含装箱引擎**；要看真柜数需源码起装柜台：`pip install -r requirements.txt` → `uvicorn gateway.app:app --port 8000`。边界见 [TRY.md](TRY.md)。
 
 **提交署名说明** — 仓内约 40% 的提交署名为 `Packing Assistant`：agent 起草并落盘的改动独立署名，经人审后合入 `main`。这是 HITL 流程的一部分，不是第二位作者。
 
@@ -93,7 +92,7 @@ submit_blocked=true  secret_leak=false  禁止：可以投标 / 可以开工
 
 | 入口 | 地址 | 用途 |
 |------|------|------|
-| **零编译试用** | Releases exe → :8765 | 双击即用；不含装箱引擎（边界见[给试用的人.md](给试用的人.md)） |
+| **零编译试用** | Releases exe → :8765 | 双击即用；不含装箱引擎（边界见[TRY.md](TRY.md)） |
 | **Civil Buddy 工作台** | http://127.0.0.1:8765 | 召唤专家、投标/施工草稿、装箱作业单 |
 | **主线 C · 投标应答 + 交付** | http://127.0.0.1:8000 | 招标要点 → 响应矩阵 → 装柜证据（草稿） |
 | **工程装柜台** | http://127.0.0.1:8000/workbench | 成箱 → HITL → 拼柜 3D / CoG |
