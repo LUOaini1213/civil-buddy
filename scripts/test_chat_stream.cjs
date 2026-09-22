@@ -95,7 +95,7 @@ function element() {
 
 function ui(fetcher) {
   const elements = Object.fromEntries(["input", "form", "send", "stop", "confirmOk", "log", "btnNewThread",
-    "keyBadge", "cbAvailability", "btnAttach", "cbPackSample", "cbEmptyModel", "cbLlmOpen", "cbLlm",
+    "keyBadge", "cbAvailability", "cbCadEntry", "btnAttach", "cbPackSample", "cbEmptyModel", "cbLlmOpen", "cbLlm",
     "cbLlmVendor", "cbLlmBase", "cbLlmModel", "cbLlmKey", "cbLlmSave", "cbLlmReset", "cbLlmModels", "cbLlmStatus",
     "cbBackupExport", "cbBackupImport", "cbBackupFile",
     "ctxMemory", "ctxMemoryStatus", "ctxRebuild", "ctxQuery", "ctxResults", "ctxSearchStatus", "ctxSearch", "ctxOpen", "ctxRefresh", "ctxBar", "ctxFill", "ctxText",
@@ -554,6 +554,48 @@ test("offline capability status enables usable tools without claiming a model is
   h.evaluate('cbApplyHealth({ has_key: true, mode: "configured", capabilities: { attachments: true } })');
   assert.equal(h.elements.keyBadge.textContent, "模型已配置");
   assert.equal(h.elements.btnAttach.disabled, false);
+});
+
+test("explicit CAD project URL binds chat without restoring an unrelated remembered task", async () => {
+  let payload;
+  const h = ui(async (_url, options) => {
+    payload = JSON.parse(options.body);
+    return { ok: true, body: bytesStream(encoder.encode(frame("done", { text: "已检查" }))) };
+  });
+  const id = "a".repeat(32);
+  h.evaluate(`globalThis.location = { href: "http://localhost/?cad_project_id=${id}" }; state.cadProjectId = cbCadProjectFromUrl(); cbRememberSession("old-task");`);
+  assert.equal(h.evaluate("cbRememberedSession()"), "");
+  await h.submit("检查图纸");
+  assert.equal(payload.cad_project_id, id);
+  assert.equal(payload.confirm_ok, false);
+  h.evaluate('globalThis.location.href = "http://localhost/?cad_project_id=../../other"');
+  assert.equal(h.evaluate("cbCadProjectFromUrl()"), "");
+  h.evaluate("cbNewLocalSession()");
+  assert.equal(h.evaluate("state.cadProjectId"), "");
+});
+
+test("saved task restores only its server-bound CAD selection and clears it for ordinary tasks", async () => {
+  const id = "b".repeat(32);
+  const h = ui(async (url) => response({ session_id: String(url).includes("cad-task") ? "cad-task" : "ordinary-task",
+    transcript: [], cad_project_id: String(url).includes("cad-task") ? id : "" }));
+  await h.evaluate('cbProjOpenSession({ session_id: "cad-task" })');
+  assert.equal(h.evaluate("state.cadProjectId"), id);
+  await h.evaluate('cbProjOpenSession({ session_id: "ordinary-task" })');
+  assert.equal(h.evaluate("state.cadProjectId"), "");
+});
+
+test("shared home exposes CAD only when the host explicitly advertises its routes", () => {
+  const h = ui(() => assert.fail("painting capabilities must not request network"));
+  h.evaluate('cbApplyHealth({ capabilities: { chat: true } })');
+  assert.equal(h.elements.cbCadEntry.hidden, true);
+  h.evaluate('cbApplyHealth({ capabilities: { cad: true } })');
+  assert.equal(h.elements.cbCadEntry.hidden, false);
+  h.evaluate('cbApplyHealth({ capabilities: { cad: false } })');
+  assert.equal(h.elements.cbCadEntry.hidden, true);
+  const home = fs.readFileSync(path.join(__dirname, "../demo/static/index.html"), "utf8");
+  assert.match(home, /<a\b[^>]*id="cbCadEntry"[^>]*\bhidden\b[^>]*>/);
+  const styles = fs.readFileSync(path.join(__dirname, "../demo/static/styles.css"), "utf8");
+  assert.match(styles, /\.cb-empty-card\[hidden\]\s*\{\s*display:\s*none;/);
 });
 
 test("explicitly unsupported task and upload capabilities do not send network requests", async () => {

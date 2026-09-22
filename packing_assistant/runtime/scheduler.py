@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import time
+from threading import RLock
 from dataclasses import dataclass, field
 from typing import Any, Dict, List, Optional  # Run.messages/tools keep mixed payloads
 from uuid import uuid4
@@ -88,6 +89,7 @@ class Scheduler:
     def __init__(self) -> None:
         self._runs: Dict[str, Run] = {}
         self._locks: Dict[str, bool] = {}
+        self._mutex = RLock()
 
     def create_run(
         self,
@@ -97,6 +99,10 @@ class Scheduler:
         intent: str = "chat",
         max_steps: int = 8,
     ) -> Run:
+        with self._mutex:
+            return self._create_run(session_id, expert_id=expert_id, intent=intent, max_steps=max_steps)
+
+    def _create_run(self, session_id: str, *, expert_id: str, intent: str, max_steps: int) -> Run:
         sid = session_id or "default"
         if self._locks.get(sid):
             run = Run(
@@ -122,12 +128,17 @@ class Scheduler:
         return run
 
     def release(self, session_id: str) -> None:
-        self._locks.pop(session_id or "default", None)
+        with self._mutex:
+            self._locks.pop(session_id or "default", None)
 
     def get(self, run_id: str) -> Optional[Run]:
         return self._runs.get(run_id)
 
     def transition(self, run: Run, dest: str) -> bool:
+        with self._mutex:
+            return self._transition(run, dest)
+
+    def _transition(self, run: Run, dest: str) -> bool:
         edge = (run.state, dest)
         if edge in FORBIDDEN or edge not in LEGAL:
             run.history.append({"from": run.state, "to": dest, "ok": "false", "error": "illegal_edge"})
@@ -148,12 +159,17 @@ class Scheduler:
         return True
 
     def cancel(self, run_id: str) -> bool:
-        run = self.get(run_id)
-        if not run or run.state in TERMINAL:
-            return False
-        ok = self.transition(run, "cancelled")
-        self.release(run.session_id)
-        return ok
+        with self._mutex:
+            run = self.get(run_id)
+            if not run or run.state in TERMINAL:
+                return False
+            ok = self.transition(run, "cancelled")
+            if ok:
+                from packing_assistant.runtime.cancel import request
+                request(run_id)
+            # Cancellation is cooperative. Only the owner may release after its
+            # actual work has exited; a state change is not thread termination.
+            return ok
 
 
 _SCHED: Optional[Scheduler] = None

@@ -1,0 +1,108 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="theme-color" content="#111923">
+  <title>CAD → 3D 建模助手 · Civil Buddy</title>
+  <link rel="icon" href="/static/icons/cb-icon.svg" type="image/svg+xml">
+  <link rel="stylesheet" href="/static/cad.css">
+  <script type="module" src="/static/cad.js"></script>
+</head>
+<body>
+  <header class="topbar">
+    <a class="brand" href="/" aria-label="返回 Civil Buddy 工作台"><span class="brand-mark">CB</span><span>Civil Buddy <small>工程工作台</small></span></a>
+    <nav aria-label="工作台导航"><a href="/engineering">工程计算</a><a href="/engineering/schedule">施工计划</a><a href="/">返回工作台</a><span class="top-tag">几何预览 · 内部讨论</span></nav>
+  </header>
+  <main>
+    <div class="page-heading"><div><p class="eyebrow">CAD → PARAMETRIC 3D</p><h1>从图纸，到可操作的模型</h1><p class="subtitle">确认二维实体轮廓，指定尺寸，再用一句话调整三维模型。</p></div><div class="service-controls"><span id="serviceStatus" class="service-status">正在连接建模工具</span><button id="retryService" type="button" hidden>重新检测</button></div></div>
+    <div id="notice" class="notice" role="status" aria-live="polite">先上传 DXF，或选择一个合成样例体验完整流程。</div>
+    <div id="operationProgress" class="operation-progress" hidden><progress id="operationMeter" aria-label="当前处理进度"></progress><span id="operationStage" role="status">正在处理</span><button id="cancelOperation" type="button">取消当前操作</button></div>
+    <section id="accessPanel" class="access-panel" aria-label="工作台访问口令" hidden>
+      <div><h2>此工作台需要访问口令</h2><p class="hint">请向启动工作台的人获取口令。验证后会保存在当前浏览器，已有图纸和参数会保留。</p></div>
+      <form id="accessForm"><label class="sr-only" for="accessToken">访问口令</label><input id="accessToken" type="password" autocomplete="current-password" placeholder="输入访问口令" required><button id="accessSubmit" class="button-primary" type="submit">验证并继续</button></form>
+    </section>
+    <section class="project-panel" aria-label="CAD 项目保存与恢复">
+      <div class="project-heading"><div><h2>项目与版本</h2><p class="hint">保存原图与建模参数，重启后继续；项目包可交给同事打开。</p></div><span id="projectStatus" class="hint" role="status">尚未保存项目</span></div>
+      <div class="project-actions"><label class="project-name" for="projectName">项目名称<input id="projectName" maxlength="100" placeholder="例如：单层建筑方案" autocomplete="off"></label><button id="saveDraft" type="button" disabled>保存草稿</button><button id="saveVersion" type="button" disabled>保存模型版本</button><button id="saveCopy" type="button" disabled>另存副本</button><a id="agentProjectLink" class="button-link" aria-disabled="true">在工作台用 Agent 继续 ↗</a></div>
+      <details class="project-library"><summary>最近项目、版本历史与项目包</summary><div class="project-library-grid"><div><label class="field-label" for="recentProjects">最近项目</label><div class="project-picker"><select id="recentProjects"><option value="">正在读取项目列表</option></select><button id="openProject" type="button" disabled>打开</button><button id="refreshProjects" type="button">刷新</button></div></div><div><label class="field-label" for="projectVersions">当前项目的模型版本</label><div class="project-picker"><select id="projectVersions" disabled><option value="">尚无已保存版本</option></select><button id="openVersion" type="button" disabled>载入版本</button></div></div></div><div class="project-package"><label class="button-link package-upload" for="projectPackage">导入项目包<input id="projectPackage" type="file" accept=".zip" aria-label="导入 CAD 项目包"></label><button id="exportProject" type="button" disabled>下载项目包</button><span class="hint">下载前请在页面底部填写签认提示。载入项目会替换当前画面，请先保存更改。</span></div></details>
+    </section>
+    <section id="scanPanel" class="scan-panel" aria-label="大图分阶段导入" hidden>
+      <div class="panel-heading"><div><h2>先选图层与范围，再读取建模轮廓</h2><p id="scanSummary" class="hint"></p></div><button id="closeScan" type="button">关闭扫描</button></div>
+      <div class="scan-grid"><div><label class="sr-only" for="scanLayerFilter">筛选扫描图层</label><input id="scanLayerFilter" placeholder="按图层名称筛选"><div class="scan-layer-actions"><button id="scanSelectAll" type="button">选全部图层</button><button id="scanSelectNone" type="button">清空图层</button></div><div id="scanLayers" class="scan-layers"></div></div><div><div class="drawing-tools"><label class="sr-only" for="scanInteraction">扫描预览交互方式</label><select id="scanInteraction"><option value="box">框选导入范围</option><option value="pan">平移预览</option></select><button id="fitScan" type="button">查看全图</button></div><svg id="scanSvg" role="img" aria-label="大图抽样范围预览" preserveAspectRatio="xMidYMid meet"></svg><p class="hint">滚轮缩放后拖框指定范围；仅保留完整实体，跨界轮廓会报告而不裁断。预览可能抽样，空白处不代表没有实体。</p><div class="scan-bounds"><label>最小 X<input id="scanMinX" type="number" step="any" aria-label="导入范围最小 X"></label><label>最小 Y<input id="scanMinY" type="number" step="any" aria-label="导入范围最小 Y"></label><label>最大 X<input id="scanMaxX" type="number" step="any" aria-label="导入范围最大 X"></label><label>最大 Y<input id="scanMaxY" type="number" step="any" aria-label="导入范围最大 Y"></label></div><div class="scan-layer-actions"><button id="resetScanBounds" type="button">不限范围</button><span class="hint">坐标使用原图单位；留空表示不限范围。</span></div></div></div>
+      <div class="scan-footer"><p id="scanWarnings" class="hint"></p><button id="importScanSelection" class="button-primary" type="button">读取所选图层与区域</button></div>
+    </section>
+    <div class="workspace">
+      <aside class="controls" aria-label="图纸与建模参数">
+        <section class="control-section">
+          <h2><span class="step">01</span> 选择图纸</h2>
+          <label class="dropzone" id="dropzone" for="cadFile"><span class="upload-symbol" aria-hidden="true">↥</span><strong>上传 DXF 图纸</strong><span>点击选择或拖入文件</span><small>闭合轮廓、圆弧与平面块 · DWG 请先转换</small><input id="cadFile" type="file" accept=".dxf" aria-label="上传 DXF 图纸"></label>
+          <label class="solid-confirm"><input id="scanFirst" type="checkbox"><span>先扫描图层与范围（超过 10 MiB 自动启用，最高 64 MiB）</span></label>
+          <div class="example-row"><span>试用样例</span><button type="button" data-example="building">墙 · 柱 · 板</button><button type="button" data-example="section">带孔截面</button></div>
+          <div class="file-meta" id="fileMeta" hidden><div><strong id="filename"></strong><small id="fileDetails"></small></div><button id="clearFile" class="icon-button" type="button" aria-label="清空图纸和模型">×</button></div>
+          <p class="hint" id="exampleHint" hidden>这是合成演示图纸。已填入的尺寸仅用于演示，请勿套用于实际项目。</p>
+        </section>
+        <fieldset id="configFields" disabled>
+          <section class="control-section">
+            <h2><span class="step">02</span> 确认建模对象</h2>
+            <div class="mode-switch" role="group" aria-label="建模模式"><button id="modeBuilding" type="button" data-mode="building" aria-pressed="true">建筑平面</button><button id="modeSection" type="button" data-mode="section" aria-pressed="false">构件截面</button></div>
+            <p class="hint" id="modeHint">墙、柱、板分别拉伸；请选实体占据的区域，不要把房间边界当成实心墙。</p>
+            <label class="field-label" for="drawingUnit">图纸坐标单位</label>
+            <select id="drawingUnit">
+              <option value="">请选择并确认单位</option>
+              <option value="mm">毫米 mm</option>
+              <option value="cm">厘米 cm</option>
+              <option value="m">米 m</option>
+              <option value="in">英寸 in</option>
+              <option value="ft">英尺 ft</option>
+            </select>
+            <p id="unitHint" class="hint">单位直接决定实际模型尺寸。</p>
+            <label class="field-label" for="curveTolerance">曲线弦高误差上限（毫米）</label><input id="curveTolerance" type="number" min="0.001" max="10" step="any" value="0.1" aria-describedby="curveToleranceHint"><p id="curveToleranceHint" class="hint">默认 0.1 mm；越小越精细。误差与单位随项目保存。</p>
+            <div class="section-label"><span>图层映射</span><span>实体数 / 用途</span></div>
+            <div id="layerList" class="layer-list"><p class="hint">上传后显示图层</p></div>
+            <label class="solid-confirm"><input id="solidConfirmed" type="checkbox"><span>我确认：选中的闭合轮廓表示实体区域，同层内圈表示孔洞。</span></label>
+          </section>
+          <section class="control-section">
+            <h2><span class="step">03</span> 指定建模尺寸</h2>
+            <p class="hint">所有输入均为米；高度 / 长度必须由你提供。</p>
+            <div class="parameter-head"><span>对象</span><span id="heightHeading">高度 / 厚度</span><span>底部标高</span></div>
+            <div id="parameterRows"></div>
+            <button type="button" id="buildModel" class="button-primary full-width">生成三维模型 <span aria-hidden="true">↗</span></button>
+          </section>
+        </fieldset>
+      </aside>
+      <div class="results">
+        <div class="preview-grid">
+          <section class="preview-panel drawing-panel" aria-label="二维图纸预览">
+            <div class="panel-heading"><h2><span class="panel-index">2D</span> 原图轮廓</h2><span id="entityCount" class="muted">等待图纸</span></div>
+            <div class="drawing-tools"><label class="sr-only" for="drawingInteraction">二维交互方式</label><select id="drawingInteraction"><option value="pick">点选 · Shift 多选</option><option value="box">框选完整轮廓</option><option value="pan">平移视图</option></select><button id="pickVisible" type="button">选可见区域</button><button id="fitDrawing" type="button">全图</button></div>
+            <div class="drawing-stage"><svg id="drawingSvg" role="img" aria-label="DXF 二维轮廓预览" preserveAspectRatio="xMidYMid meet"></svg><div id="drawingEmpty" class="empty-state"><span class="empty-glyph" aria-hidden="true">▱</span><strong>二维轮廓将在这里显示</strong><p>图层和原图实体编号始终保留</p></div></div>
+            <div class="panel-foot"><span><i class="legend-dot ready"></i> 实体材料</span><span>空白内圈 = 孔洞</span><span><i class="legend-dot invalid"></i> 诊断位置</span><span>滚轮缩放</span></div>
+          </section>
+          <section class="preview-panel model-panel" aria-label="三维模型预览">
+            <div class="panel-heading"><h2><span class="panel-index">3D</span> 参数化模型</h2><div class="view-tools"><button id="fitView" type="button" disabled title="将模型完整显示在视图中">适应视图</button><button id="toggleEdges" type="button" aria-pressed="true" disabled>边线</button></div></div>
+            <div id="modelStage" class="model-stage"><div id="modelEmpty" class="empty-state"><span class="empty-cube" aria-hidden="true">◇</span><strong>让图纸立起来</strong><p>确认图层和尺寸后，点击生成三维模型</p></div><div id="webglError" class="viewer-error" hidden></div><span id="modelBadge" class="model-badge" hidden></span></div>
+            <div class="panel-foot"><span>拖动旋转</span><span>滚轮缩放</span><span>右键平移</span><span class="axis-label">Z ↑</span></div>
+          </section>
+        </div>
+        <section class="selection-panel" aria-label="实体建模选集"><div class="project-heading"><div><h2>明确哪些实体参与建模</h2><p id="selectionSummary" class="hint">图层映射决定用途，实体选集决定范围。</p></div><button id="analyzeDrawing" type="button" disabled>检查轮廓与孔洞</button></div><div class="selection-actions"><button id="includePicked" type="button" disabled>仅建选中</button><button id="addPicked" type="button" disabled>加入选集</button><button id="excludePicked" type="button" disabled>排除选中</button><button id="resetSelection" type="button" disabled>恢复全部实体</button><button id="undoSelection" type="button" disabled>撤销选集编辑</button><span id="pickedSummary" class="hint">尚未点选实体</span></div><p class="hint">排除外部图框可保留内部构件；排除构件内边界可能填实孔洞，检查失败时不会生成。</p><details class="selection-groups"><summary>保存或查看实体分组</summary><div class="group-actions"><input id="selectionGroupName" placeholder="分组名称，例如：A区墙柱" maxlength="60" aria-label="实体分组名称"><button id="saveSelectionGroup" type="button" disabled>保存选中为分组</button><select id="selectionGroups" aria-label="已保存的实体分组"><option value="">选择分组</option></select><button id="showSelectionGroup" type="button" disabled>只查看此组</button><button id="useSelectionGroup" type="button" disabled>仅建此组</button><button id="showAllEntities" type="button">显示全图</button><button id="deleteSelectionGroup" type="button" disabled>删除分组</button></div><p class="hint">“只查看”不会改变建模选集；“仅建此组”会改变建模范围。分组随项目保存。</p></details></section>
+        <section class="diagnostic-panel" aria-label="轮廓诊断"><div class="panel-heading"><h2>轮廓与孔洞检查</h2><span id="analysisStatus" class="muted">确认单位与图层后检查</span></div><div id="diagnosticList" class="diagnostic-list"><p class="hint">开口、重复轮廓、相交和遗漏孔洞会显示在这里；点击记录定位原图。</p></div></section>
+        <section class="diagnostic-panel" aria-label="CAD 截面性质"><div class="panel-heading"><div><h2>截面性质</h2><p class="hint">确认截面材料与孔洞即可计算，不需要填写拉伸长度。</p></div><button id="calculateSection" type="button" disabled>计算截面性质</button></div><div id="sectionProperties" class="diagnostic-list"><p class="hint">切换到构件截面模式，确认单位、选集和实体区域。</p></div><div class="selection-actions"><button id="saveSection" type="button" disabled>保存截面计算记录</button><a id="sectionRecord" href="/engineering" hidden>打开计算记录与版本 ↗</a></div></section>
+        <section class="command-panel" aria-label="自然语言修改参数">
+          <div class="command-title"><span class="assistant-mark" aria-hidden="true">✦</span><div><h2>用一句话调整</h2><p id="commandHelp">例如：把墙高改成 3.6 米；把柱子标高改为 0.2 米。</p></div><button id="undoChange" type="button" disabled>↶ 撤销</button></div>
+          <form id="commandForm"><label class="sr-only" for="commandInput">参数修改指令</label><input id="commandInput" placeholder="把墙高改成 3.6 米" autocomplete="off" disabled maxlength="500"><button id="sendCommand" class="button-primary" type="submit" disabled>应用修改 <span aria-hidden="true">↑</span></button></form>
+          <p class="hint" id="commandResult">修改只作用于图层选择、高度、长度和标高；平面轮廓来自原图。</p>
+          <div id="commandDiff" class="command-diff" hidden><p id="commandDiffStatus" class="hint"></p><div id="commandDiffRows"></div></div>
+        </section>
+        <div class="detail-grid">
+          <section class="detail-panel"><div class="panel-heading"><h2>构件来源与参数</h2><span class="muted">点击模型选择</span></div><div id="objectInspector" class="object-inspector"><p class="hint">选择一个二维轮廓或三维构件，查看原始图层、实体编号与建模尺寸。</p></div></section>
+          <section class="detail-panel"><div class="panel-heading"><h2>处理记录</h2><span id="reportSummary" class="muted">尚未建模</span></div><div id="reportList" class="report-list"><p class="hint">成功、忽略和失败的实体会分别列出，孔洞也会保留处理记录。</p></div></section>
+        </div>
+        <section class="dimension-panel" aria-label="尺寸来源与绑定"><div class="panel-heading"><h2>尺寸来源：标注、测量与已确认参数</h2><span id="dimensionCount" class="muted">尚未读取标注</span></div><div class="dimension-grid"><div><div id="dimensionList" class="dimension-list"></div><p class="hint">原图标注可能描述平面宽高，不会自动作为三维高度或拉伸长度。</p></div><div><p id="dimensionDetails" class="hint">选择一条原图标注，核对原文和几何测量，再明确指定用途。</p><div class="dimension-bind-controls"><label>使用数值<select id="dimensionValueSource"><option value="annotation">标注文字中的数值</option><option value="measurement">标注关联几何的测量值</option></select></label><label>应用对象<select id="dimensionTarget"></select></label><label>目标参数<select id="dimensionParameter"><option value="height_m">高度 / 厚度 / 拉伸长度</option><option value="base_m">底部标高</option></select></label><button id="bindDimension" type="button" disabled>确认用途并绑定</button></div><div id="dimensionBindings" class="dimension-bindings"></div><p class="hint">已确认的三维参数显示在左侧输入框。手工改值或单位会解除对应绑定；原始标注始终保留。</p></div></div></section>
+        <section class="export-panel"><div><h2>导出模型与参数记录</h2><p class="hint">GLB 可在其他三维工具重新打开。预览模型不包含完整 BIM 语义。</p></div><label for="exportConfirmation">导出前请完整输入：<strong>我明白，将由持证人员签认</strong></label><input id="exportConfirmation" placeholder="我明白，将由持证人员签认" autocomplete="off" disabled><div class="export-actions"><button type="button" data-export="glb" disabled>下载 GLB 模型</button><button type="button" data-export="json" disabled>下载参数 JSON</button><button type="button" data-export="step" disabled>下载 STEP 实体</button><button type="button" data-export="zip" disabled>打包下载 ↓</button><span id="exportHint" class="hint">生成模型后可导出</span></div><p id="stepHint" class="hint"></p></section>
+      </div>
+    </div>
+    <footer>真实几何 · 可追溯来源 · 用户指定尺寸 <span>支持闭合 DXF 轮廓、曲线与受限平面块；未处理实体会明确列出。</span></footer>
+  </main>
+</body>
+</html>

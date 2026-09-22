@@ -1,0 +1,40 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>施工计划 · Civil Buddy</title>
+  <link rel="icon" href="/static/icons/cb-icon.svg" type="image/svg+xml">
+  <link rel="stylesheet" href="/static/vendor/frappe-gantt-1.2.2/frappe-gantt.css">
+  <link rel="stylesheet" href="/static/engineering-schedule.css">
+  <script type="module" src="/static/engineering-schedule.js"></script>
+</head>
+<body>
+  <header><a class="brand" href="/">CB <span>Civil Buddy</span></a><nav><a href="/engineering/planning">关键路径与资源排程</a><a href="/engineering">工程计算</a><a href="/">返回工作台</a></nav></header>
+  <main>
+    <div class="heading"><div><p class="eyebrow">CONSTRUCTION SCHEDULE</p><h1>让施工计划看得清，改得动</h1><p>填写任务日期、完成进度与依赖关系，保存后可以重新打开。</p></div><span class="tag">计划草稿</span></div>
+    <p id="notice" role="status" aria-live="polite">先新建任务，或载入明确标注的合成演示计划。</p>
+    <section id="accessPanel" hidden><h2>需要工作台访问口令</h2><form id="accessForm"><label>访问口令<input id="accessToken" type="password" autocomplete="current-password" required></label><button type="submit">验证并继续</button></form></section>
+    <section class="project-panel">
+      <div class="project-heading"><h2>项目与保存</h2><span id="projectStatus">尚未保存</span></div>
+      <div class="toolbar"><label class="grow">计划名称<input id="planName" maxlength="100" placeholder="例如：教学楼施工计划草稿"></label><button id="savePlan" class="primary">保存计划</button><button id="saveCopy">另存副本</button><button id="newPlan">新计划</button><button id="loadExample">载入合成演示</button></div>
+      <details><summary>最近计划与保存历史</summary><div class="toolbar"><label class="grow">最近计划<select id="recentPlans"><option value="">正在读取…</option></select></label><button id="openPlan">打开</button><button id="refreshPlans">刷新</button><button id="undoSaved" disabled>恢复上次保存内容</button></div><p id="versionHistory" class="muted">尚无保存历史。</p></details>
+    </section>
+    <div class="workspace">
+      <section class="editor"><div class="section-heading"><h2 id="editorTitle">添加任务</h2><button id="clearEditor" type="button">清空编辑</button></div>
+        <form id="taskForm"><fieldset id="taskFields">
+          <label>任务编号<input id="taskId" maxlength="64" pattern="[A-Za-z][A-Za-z0-9_-]{0,63}" placeholder="例如 T1" required></label>
+          <label>任务名称<input id="taskName" maxlength="100" placeholder="例如 基础施工" required></label>
+          <div class="pair"><label>开始日期<input id="taskStart" type="date" min="1900-01-01" max="2100-12-31" required></label><label>结束日期<input id="taskEnd" type="date" min="1900-01-01" max="2100-12-31" required></label></div>
+          <label>完成进度（%）<input id="taskProgress" type="number" min="0" max="100" step="any" value="0" required></label>
+          <label>依赖任务编号<input id="taskDependencies" placeholder="例如 T1, T2；没有依赖可留空" maxlength="16500"></label>
+          <p class="muted">依赖用于连接与核对；日期完全由你确定，不自动顺延任务。</p>
+          <button class="primary" type="submit" id="applyTask">添加到计划</button>
+        </fieldset></form>
+      </section>
+      <section class="tasks"><div class="section-heading"><div><h2>任务清单</h2><p id="taskSummary" class="muted">还没有任务</p></div><button id="undoEdit" disabled>撤销本地编辑</button></div><div class="table-wrap"><table><thead><tr><th>编号 / 任务</th><th>日期</th><th>进度</th><th>依赖</th><th>操作</th></tr></thead><tbody id="taskRows"></tbody></table></div><ul id="warnings" class="warnings"></ul></section>
+    </div>
+    <section class="chart-panel"><div class="section-heading"><div><h2>计划甘特图</h2><p class="muted">拖动时间条调整日期，拖动两端调整工期，拖动进度手柄修改完成率；也可使用上方表单。日期包含首尾两天，按日历天显示；不自动计算关键路径或资源平衡。</p></div><label>时间尺度<select id="viewMode"><option value="Day">日</option><option value="Week" selected>周</option><option value="Month">月</option></select></label></div><p id="chartEmpty" class="empty">添加任务后，这里显示时间条和依赖箭头。</p><div id="gantt" aria-label="施工计划甘特图"></div></section>
+    <footer>甘特图由 <a href="/static/vendor/frappe-gantt-1.2.2/SOURCE.json">Frappe Gantt 1.2.2</a> 提供，<a href="/static/vendor/frappe-gantt-1.2.2/license.txt">MIT 许可证</a>。计划日期与进度来自你的输入；演示样例不代表实际施工安排。</footer>
+  </main>
+</body>
+</html>

@@ -1,0 +1,55 @@
+<!doctype html>
+<html lang="zh-CN"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>箱单与装运 · Civil Buddy</title><link rel="icon" href="/static/icons/cb-icon.svg"><link rel="stylesheet" href="/static/logistics.css"><script type="module" src="/static/logistics.js"></script></head>
+<body>
+<header><a class="brand" href="/">CB <span>Civil Buddy</span></a><nav><a href="/engineering/planning">施工排程</a><a href="/engineering">工程计算</a><a href="/">工作台</a></nav></header>
+<main>
+  <div class="heading"><div><p class="eyebrow">LOGISTICS WORKBENCH</p><h1>从原始箱单到可核对的装运台账</h1><p>保留每个数值的来源，先核对台账，再计算装箱与拼柜。</p></div><span class="tag">原件 · 台账 · 受限操作</span></div>
+  <div id="notice" class="notice" role="status" aria-live="polite">上传原始文件开始；未知字段保持待确认，不自动补数。</div>
+  <form id="auth" class="panel auth" hidden><label>访问口令<input id="token" type="password" autocomplete="current-password" required></label><button>保存口令</button></form>
+  <section class="panel projectbar" aria-label="项目管理">
+    <label class="name">项目名称<input id="projectName" maxlength="100" placeholder="例如：幕墙材料发运箱单"></label><button id="saveProject" type="button" class="primary">保存项目</button>
+    <label class="recent">最近项目<select id="recentProjects"><option value="">选择已保存项目</option></select></label><button id="openProject" type="button">重新打开</button><button id="refreshProjects" type="button" aria-label="刷新最近项目">刷新</button>
+    <label class="history">版本历史<select id="versions"><option value="">当前版本</option></select></label><button id="openVersion" type="button">查看版本</button><button id="latestVersion" type="button" hidden>回到最新</button><button id="undoProject" type="button">撤销上次修改</button>
+    <span id="projectState" class="muted">尚未保存</span><button id="cancel" type="button" hidden>取消本次操作</button>
+  </section>
+  <p id="sampleBadge" class="sample" hidden>合成演示箱单，仅用于演示流程，不代表真实项目或现场数据。</p>
+  <p id="historyBadge" class="notice" hidden></p>
+  <div class="workspace">
+    <section class="panel source-panel" aria-label="原件与来源">
+      <div class="row"><h2><span class="step">01</span> 原件与来源</h2></div>
+      <label class="upload">上传箱单<input id="uploadFile" type="file" accept=".xlsx,.xlsm,.csv,.tsv,.pdf,.png,.jpg,.jpeg"></label>
+      <div class="row"><button id="upload" type="button" class="primary">读取文件</button><button id="example" type="button">合成样例</button></div>
+      <p id="capabilities" class="muted">支持 Excel、CSV、PDF 和图片，单文件最多 8 MB；识别能力以当前服务为准。</p>
+      <p id="sourceName" class="source-name">尚未上传原件</p><a id="sourceDownload" hidden download>下载原件</a>
+      <div id="sourcePreview" class="source-preview"><p class="empty">原文件保持不变。选择台账字段旁的“来源”，查看原值与位置。</p></div>
+      <section id="sourceDetail" class="source-detail" hidden aria-label="选中字段来源"><h3 id="sourceTitle">字段来源</h3><dl id="sourceFacts"></dl></section>
+      <details id="sourceTableDetails" hidden><summary>已识别字段的原始单元格</summary><p class="muted">展示前 200 条证据；完整原表请下载原件。</p><div class="table-scroll source-table"><table><thead><tr><th>位置</th><th>原始值</th></tr></thead><tbody id="sourceCells"></tbody></table></div></details>
+      <p class="muted">点击来源只定位原始证据；识别结果和人工修订均需核对。</p>
+    </section>
+    <section class="panel ledger-panel" aria-label="可编辑箱单台账">
+      <div class="row"><h2><span class="step">02</span> 箱单台账</h2><span id="ledgerState" class="badge">等待文件</span></div>
+      <div id="totals" class="totals"></div>
+      <p class="muted">集装箱号、箱号和包装类型分开记录；包装数不等于货物数量，数量保留原单位。共享合并值只记一次，点击来源查看覆盖范围；未提供的数值显示“待确认”。</p>
+      <details id="sourceTotals" hidden><summary>原件总计与核对范围</summary><p class="muted">以下保留原表声明的总计，独立核算结果见上方。不同数量单位不相加；范围或单位不明确时不判定一致。</p><div id="sourceTotalsRows"></div></details>
+      <div class="table-scroll ledger-scroll"><table id="ledgerTable"><thead id="ledgerHead"></thead><tbody id="ledgerRows"></tbody></table></div>
+      <div class="row"><button id="previousPage" type="button">上一页</button><span id="pageState" class="muted"></span><button id="nextPage" type="button">下一页</button></div>
+      <p id="ledgerEmpty" class="empty">上传文件后，在这里核对每一行。</p>
+      <div class="row edit-actions"><button id="reviewEdits" type="button">预览修改差异</button><button id="discardEdits" type="button">撤回未应用编辑</button><span id="editState" class="muted"></span></div>
+      <section id="proposalPanel" class="proposal" hidden aria-label="待确认修改"><div class="row"><h3>修改提案 · 尚未应用</h3><button id="dismissProposal" type="button">放弃提案</button></div><p id="proposalReason" class="muted"></p><div class="table-scroll"><table><thead><tr><th>行 / 字段</th><th>原值</th><th>新值</th></tr></thead><tbody id="proposalRows"></tbody></table></div><label class="check"><input id="confirmProposal" type="checkbox">我已核对以上差异，确认应用</label><button id="applyProposal" type="button" class="primary">应用这份提案</button></section>
+      <div class="confirmation-block"><label class="check"><input id="checkedLedger" type="checkbox">我已核对当前版本的台账与来源</label><button id="confirmLedger" type="button" class="primary">确认当前台账</button><p id="confirmationState" class="muted">确认后才可进入计算；应用修改会清除旧确认。</p></div>
+    </section>
+    <aside class="panel review-panel" aria-label="问题与对话">
+      <h2><span class="step">03</span> 核对与对话</h2><a id="agentLink" class="agent-link" hidden>转到统一 Agent 对话 →</a><h3>待处理问题</h3><div id="issues"><p class="empty">读取文件后查看缺项与不一致。</p></div>
+      <div class="row prompts"><button id="askSummary" type="button">汇总箱单</button><button id="askIssues" type="button">检查异常</button></div>
+      <div id="chatLog" class="chat-log" role="log" aria-live="polite"><p class="muted">先保存项目，再提问或提出明确修改。对话中的提案须单独确认。</p></div>
+      <form id="chatForm"><label>对话<textarea id="chatInput" rows="3" maxlength="4000" placeholder="例如：汇总包装数与数量；检查净重、毛重；把 R00001 的包装数改为 3"></textarea></label><button id="sendChat" type="submit" class="primary">发送</button></form>
+      <section class="comparison"><h3>与另一份台账对照</h3><label>已保存的对照项目<select id="compareProjects"><option value="">选择另一项目</option></select></label><button id="compareProject" type="button">按材料编号对照</button><p class="muted">只匹配明确且唯一的材料编号；无编号或重复编号会单独列出，不按品名猜测。</p><div id="comparisonResult" hidden></div></section>
+    </aside>
+  </div>
+  <section class="panel delivery" aria-label="计算与交接">
+    <div class="row"><h2>计算与交接</h2><span id="calculationState" class="muted">尚未计算</span></div>
+    <div class="delivery-grid"><div><div class="input-grid"><label>输入模式<select id="packingMode"><option value="packaged">已包装箱件 → 拼柜</option><option value="materials">裸材料 → 装箱与拼柜</option></select></label><label>柜型<select id="containerType"><option value="20GP">20GP</option><option value="40GP">40GP</option><option value="40HQ">40HQ</option><option value="45HQ">45HQ</option></select></label><label>最多柜数<input id="maxContainers" type="number" min="1" max="40" step="1" value="1"></label></div><p id="modeHelp" class="muted">已包装模式需要每包装外尺寸、每包装毛重、包装数及数量。共享合并值不能拆成单行重量。缺项由服务报告，不猜测。</p><label>计算 / 导出签认口令<input id="confirmation" placeholder="我明白，将由持证人员签认" autocomplete="off"></label><div class="row"><button id="calculate" type="button" class="primary">按已确认台账计算</button></div></div><div class="exports"><h3>导出与同事交接</h3><label>格式<select id="exportFormat"><option value="xlsx">台账 Excel</option><option value="json">台账 JSON</option><option value="zip">完整项目 ZIP</option></select></label><button id="exportProject" type="button">导出当前版本</button><label>导入项目包<input id="importFile" type="file" accept=".zip"></label><button id="importProject" type="button">导入为新项目</button><p class="muted">导入创建新副本，签认状态需重新确认。</p></div></div>
+    <div id="packingResult" class="packing-result"><p class="empty">计算成功后展示引擎返回的结果；失败不会标记为已完成。</p></div>
+  </section>
+  <footer>箱单解析、数值检查与装载计算共用确定性服务。原始文件、人工修订和计算结果分别留痕。</footer>
+</main></body></html>

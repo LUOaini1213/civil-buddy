@@ -54,6 +54,14 @@ def main() -> int:
     assert own.allow is True
     w2.end("r1")
 
+    # A failed extension must never release resources this run already owned.
+    rollback = DeadlockWatch()
+    rollback.begin("owner", holds=["original"])
+    rollback.begin("other", holds=["contended"])
+    denied = rollback.begin("owner", holds=["original", "new", "contended"])
+    assert denied.err == ERR_BUSY
+    assert rollback.snapshot()["holds"] == {"original": "owner", "contended": "other"}
+
     # three-node cycle
     w3 = DeadlockWatch()
     w3.begin("A", holds=["expert:finance-tax"], label="finance-tax")
@@ -101,6 +109,13 @@ def main() -> int:
     assert hooked.get("error_code") == ERR_DEADLOCK, hooked
     assert "死锁" in (hooked.get("reason") or "")
     reset_watch()
+
+    # Invalid/unauthorized tools cannot acquire resources before being denied.
+    from packing_assistant.runtime.tool_engine import ToolEngine
+    isolated_engine = ToolEngine()
+    invalid = isolated_engine.execute("missing", run_id="invalid", wait_resources=["free"])
+    assert invalid["ok"] is False
+    assert get_watch().snapshot()["holds"] == {}
 
     # exclusive expert: second begin without end → expert_busy
     gw = get_watch()

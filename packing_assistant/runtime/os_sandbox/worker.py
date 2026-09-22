@@ -107,12 +107,19 @@ def _model_tool(args: Dict[str, Any]) -> Dict[str, Any]:
     if name not in model_loop.CONFINED_TOOLS:
         return {"result": {"ok": False, "error_code": "unknown_tool", "reason": f"{name} 不在沙箱工作进程里执行"}}
     turn = model_loop._Turn(session_id=str(args.get("session_id") or ""), run_id=str(args.get("run_id") or ""),
-                            user_text=str(args.get("user_text") or ""), confirmed=args.get("confirmed") is True, approve=None)
+                            user_text=str(args.get("user_text") or ""), confirmed=args.get("confirmed") is True, approve=None,
+                            material=str(args.get("material") or ""), intent=str(args.get("intent") or ""))
+    turn.cad_context = args.get("cad_context")
+    turn.cad_confirmed = args.get("cad_confirmed") is True
+    turn.cad_mutation_done = args.get("cad_mutation_done") is True
+    turn.planning_context = args.get("planning_context")
+    turn.logistics_context = args.get("logistics_context")
     try:
         result = model_loop._DISPATCH[name](turn, dict(args.get("arguments") or {}))
     except Exception as exc:  # noqa: BLE001 - same contract as the in-process dispatcher
         result = {"ok": False, "error_code": "tool_failed", "reason": f"{type(exc).__name__}: {str(exc)[:200]}"}
-    return {"result": result, "files": turn.files, "skill": turn.skill, "hitl_pending": turn.hitl_pending, "wrote": turn.wrote}
+    return {"result": result, "files": turn.files, "skill": turn.skill, "hitl_pending": turn.hitl_pending, "wrote": turn.wrote,
+            "cad_context": turn.cad_context, "cad_changed": turn.cad_changed, "cad_mutation_done": turn.cad_mutation_done}
 
 
 def main() -> int:

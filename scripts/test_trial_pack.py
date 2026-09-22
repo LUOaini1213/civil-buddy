@@ -66,12 +66,19 @@ class TrialPackTests(unittest.TestCase):
         # forgets ships a dead button (voice.js was missed once). Read the real page, not the fixture.
         import re
 
-        html = (ROOT / "demo" / "static" / "index.html").read_text(encoding="utf-8")
-        loaded = {m.split("?", 1)[0] for m in re.findall(r'(?:src|href)="/static/([^"]+)"', html)}
+        # Inspect every actual product page, so newly routed tools cannot ship
+        # without their HTML, scripts, styles or local third-party notices.
+        loaded = set()
+        for page in (ROOT / "demo" / "static").glob("*.html"):
+            self.assertIn(page.name, release.STATIC, page.name)
+            html = page.read_text(encoding="utf-8")
+            loaded.update(m.split("?", 1)[0] for m in re.findall(r'(?:src|href)="/static/([^"]+)"', html))
         self.assertIn("voice.js", loaded)
         self.assertFalse(loaded - set(release.STATIC), sorted(loaded - set(release.STATIC)))
         included = release.release_inputs(self.root)
-        for name in ("demo/static/voice.js", "demo/asr_lexicon.txt", "requirements-asr.txt"):
+        for name in ("demo/static/voice.js", "demo/asr_lexicon.txt", "requirements-asr.txt",
+                     "requirements-logistics.txt", "requirements-logistics-ocr.txt",
+                     "scripts/prepare_logistics_ocr.py", "docs/civil-buddy/logistics-workbench.md"):
             self.assertIn(name, included)
 
     def test_actual_zip_contains_hidden_skills_and_verified_manifest(self) -> None:

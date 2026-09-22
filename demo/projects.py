@@ -195,7 +195,7 @@ def _serialized(fn):
     return run
 
 
-def _write_atomic(path: Path, text: str) -> None:
+def _write_atomic(path: Path, text: str, *, before_replace=None) -> None:
     """同目录的独有临时文件，失败只清理本次写入，保留旧文件。"""
     path.parent.mkdir(parents=True, exist_ok=True)
     tmp = None
@@ -210,6 +210,8 @@ def _write_atomic(path: Path, text: str) -> None:
         deadline = time.monotonic() + 2
         while True:
             try:
+                if before_replace is not None:
+                    before_replace()
                 tmp.replace(path)
                 break
             except PermissionError:

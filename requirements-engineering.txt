@@ -1,0 +1,7 @@
+# Optional school-competition engineering tools; all calculations stay local.
+-r requirements-analysis.txt
+-r requirements-planning.txt
+sectionproperties==3.10.2
+ifcopenshell==0.8.5
+ifctester==0.8.5
+ifcdiff==0.8.5

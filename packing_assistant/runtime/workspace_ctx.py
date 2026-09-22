@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import os
 import subprocess
+from contextlib import contextmanager
 from contextvars import ContextVar
 from pathlib import Path
 from typing import Optional
@@ -18,6 +19,16 @@ def repo_root() -> Path:
 
 def set_worktree(path: str) -> None:
     _WORKTREE.set((path or "").strip())
+
+
+@contextmanager
+def worktree_scope(path: str):
+    """Bind even an empty worktree and restore the caller on success or failure."""
+    token = _WORKTREE.set((path or "").strip())
+    try:
+        yield
+    finally:
+        _WORKTREE.reset(token)
 
 
 def current_worktree() -> str:

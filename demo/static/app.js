@@ -11,6 +11,9 @@ const state = {
   attachments: [],
   attachmentRoles: {},
   jobRoot: "",
+  cadProjectId: cbCadProjectFromUrl(),
+  planningProjectId: cbPlanningProjectFromUrl(),
+  logisticsProjectId: cbProjectFromUrl("logistics_project_id"),
   lastSend: "", /* ux(round7)：纠偏卡「重试」重放同 payload */
   policy: { sandbox: "workspace-write", approval: "on-request" },
   context: {
@@ -34,6 +37,147 @@ let cbCapabilityRequest = 0;
 let cbServerHitlInput = null;
 const CB_ACTIVE_SESSION_KEY = "cb_active_session_v1";
 
+function cbCadProjectFromUrl() {
+  return cbProjectFromUrl("cad_project_id", "planning_project_id");
+}
+
+function cbPlanningProjectFromUrl() {
+  return cbProjectFromUrl("planning_project_id", "cad_project_id");
+}
+
+function cbProjectFromUrl(key, other) {
+  try {
+    const params = new URL(globalThis.location.href).searchParams;
+    if (["cad_project_id", "planning_project_id", "logistics_project_id"].some((name) => name !== key && params.get(name))) return "";
+    const id = params.get(key) || "";
+    return /^[0-9a-f]{32}$/.test(id) ? id : "";
+  } catch (_) { return ""; }
+}
+
+function cbPlanningProjectRender() {
+  let banner = $("planningProjectContext");
+  if (!state.planningProjectId) {
+    if (banner) banner.remove();
+    try {
+      const url = new URL(globalThis.location.href);
+      if (url.searchParams.has("planning_project_id")) {
+        url.searchParams.delete("planning_project_id");
+        globalThis.history.replaceState(null, "", url);
+      }
+    } catch (_) { /* Non-browser render tests do not own navigation. */ }
+    return;
+  }
+  const composer = $("input") && $("input").parentElement;
+  if (!composer) return;
+  if (!banner) {
+    banner = document.createElement("div");
+    banner.id = "planningProjectContext";
+    banner.className = "status-line";
+    composer.prepend(banner);
+  }
+  banner.replaceChildren();
+  const link = document.createElement("a");
+  link.href = "/engineering/planning?project_id=" + state.planningProjectId;
+  link.textContent = "当前施工计划 · 返回排程核对";
+  banner.appendChild(link);
+  const notice = document.createElement("span");
+  notice.textContent = "对话生成建议，应用前须确认。";
+  banner.appendChild(notice);
+  const clear = document.createElement("button");
+  clear.type = "button";
+  clear.textContent = "取消选择";
+  clear.addEventListener("click", () => { state.planningProjectId = ""; cbPlanningProjectRender(); });
+  banner.appendChild(clear);
+}
+
+function cbRestoreProjectBindings(data) {
+  // The selected saved session owns its project, including after a refresh.
+  try {
+    const url = new URL(globalThis.location.href);
+    for (const key of ["cad_project_id", "planning_project_id", "logistics_project_id"]) url.searchParams.delete(key);
+    globalThis.history.replaceState(null, "", url);
+  } catch (_) { /* Session restoration also runs in non-browser tests. */ }
+  const cad = /^[0-9a-f]{32}$/.test(data.cad_project_id || "") ? data.cad_project_id : "";
+  const planning = /^[0-9a-f]{32}$/.test(data.planning_project_id || "") ? data.planning_project_id : "";
+  const logistics = /^[0-9a-f]{32}$/.test(data.logistics_project_id || "") ? data.logistics_project_id : "";
+  const exclusive = [cad, planning, logistics].filter(Boolean).length === 1;
+  state.cadProjectId = exclusive ? cad : "";
+  state.planningProjectId = exclusive ? planning : "";
+  state.logisticsProjectId = exclusive ? logistics : "";
+  cbCadProjectRender();
+  cbPlanningProjectRender();
+  cbLogisticsProjectRender();
+}
+
+function cbLogisticsProjectRender() {
+  let banner = $("logisticsProjectContext");
+  if (!state.logisticsProjectId) {
+    if (banner) banner.remove();
+    try {
+      const url = new URL(globalThis.location.href);
+      if (url.searchParams.has("logistics_project_id")) {
+        url.searchParams.delete("logistics_project_id");
+        globalThis.history.replaceState(null, "", url);
+      }
+    } catch (_) { /* Rendering without navigation is supported. */ }
+    return;
+  }
+  const composer = $("input") && $("input").parentElement;
+  if (!composer) return;
+  if (!banner) {
+    banner = document.createElement("div");
+    banner.id = "logisticsProjectContext";
+    banner.className = "status-line";
+    composer.prepend(banner);
+  }
+  banner.replaceChildren();
+  const link = document.createElement("a");
+  link.href = "/logistics?project_id=" + state.logisticsProjectId;
+  link.textContent = "当前箱单 · 返回物流材料核对";
+  banner.appendChild(link);
+  const notice = document.createElement("span");
+  notice.textContent = "对话只提出建议，修改须在箱单页确认。";
+  banner.appendChild(notice);
+  const clear = document.createElement("button");
+  clear.type = "button";
+  clear.textContent = "取消选择";
+  clear.addEventListener("click", () => { state.logisticsProjectId = ""; cbLogisticsProjectRender(); });
+  banner.appendChild(clear);
+}
+
+function cbCadProjectRender() {
+  let banner = $("cadProjectContext");
+  if (!state.cadProjectId) {
+    if (banner) banner.remove();
+    try {
+      const url = new URL(globalThis.location.href);
+      if (url.searchParams.has("cad_project_id")) {
+        url.searchParams.delete("cad_project_id");
+        globalThis.history.replaceState(null, "", url);
+      }
+    } catch (_) { /* Non-browser render tests do not own navigation. */ }
+    return;
+  }
+  const composer = $("input") && $("input").parentElement;
+  if (!composer) return;
+  if (!banner) {
+    banner = document.createElement("div");
+    banner.id = "cadProjectContext";
+    banner.className = "status-line";
+    composer.prepend(banner);
+  }
+  banner.replaceChildren();
+  const link = document.createElement("a");
+  link.href = "/cad?project_id=" + state.cadProjectId;
+  link.textContent = "当前 CAD 项目 · 返回三维模型";
+  banner.appendChild(link);
+  const clear = document.createElement("button");
+  clear.type = "button";
+  clear.textContent = "取消选择";
+  clear.addEventListener("click", () => { state.cadProjectId = ""; cbCadProjectRender(); });
+  banner.appendChild(clear);
+}
+
 function cbSessionId() {
   return (globalThis.crypto && typeof globalThis.crypto.randomUUID === "function"
     ? globalThis.crypto.randomUUID()
@@ -48,6 +192,7 @@ function cbRememberSession(id) {
 }
 
 function cbRememberedSession() {
+  if (state.cadProjectId || state.planningProjectId || state.logisticsProjectId) return ""; // Explicit project selection starts a separate task.
   try {
     const id = localStorage.getItem(CB_ACTIVE_SESSION_KEY) || "";
     return /^[A-Za-z0-9][A-Za-z0-9_-]{3,31}$/.test(id) ? id : "";
@@ -405,6 +550,9 @@ function cbApplyHealth(health) {
     if (element.disabled) element.title = title;
     else element.removeAttribute("title");
   }
+  // Other hosts share this HTML without exposing the optional CAD routes.
+  const cadEntry = $("cbCadEntry");
+  if (cadEntry) cadEntry.hidden = cbCapability("cad") !== true;
   if (health.model) state.modelName = health.model;
   cbSyncSend();
 }
@@ -909,7 +1057,13 @@ function cbNewLocalSession() {
   cbRememberSession("");
   if ($("confirmOk")) $("confirmOk").value = "";
   state.attachments = [];
-  state.attachmentRoles = {};
+    state.attachmentRoles = {};
+    state.cadProjectId = "";
+    state.planningProjectId = "";
+    state.logisticsProjectId = "";
+    cbCadProjectRender();
+    cbPlanningProjectRender();
+    cbLogisticsProjectRender();
   state.session = cbSessionId();
   cbUploadAbortAll(state.session);
   cbAttachRender();
@@ -1217,6 +1371,7 @@ async function cbProjOpenSession(s) {
     cbAttachRender();
     cbDraftRestore();
     cbProj.cur = d.project_id || s.project_id || "";
+    cbRestoreProjectBindings(d);
     state.summoned.clear();
     const enabledExperts = new Set(state.experts.filter((expert) => expert && expert.enabled !== false).map((expert) => expert.id));
     for (const id of Array.isArray(d.expert_ids) ? d.expert_ids : []) {
@@ -1301,6 +1456,9 @@ async function cbRunBackground(text) {
         background: true,
         session_id: sid,
         project_id: cbProj.cur || "",
+        cad_project_id: state.cadProjectId || "",
+        planning_project_id: state.planningProjectId || "",
+        logistics_project_id: state.logisticsProjectId || "",
         expert_ids: [...state.summoned],
         confirm_ok: cbConfirmed(),
       }),
@@ -1852,6 +2010,9 @@ async function streamChat(message, bodyEl, run) {
       confirm_ok: confirmed,
       session_id: state.session,
       project_id: cbProj.cur || "",
+      cad_project_id: state.cadProjectId || "",
+      planning_project_id: state.planningProjectId || "",
+      logistics_project_id: state.logisticsProjectId || "",
       attachments: state.attachments
         .filter((a) => !String(a.id || "").startsWith("job:"))
         .map((a) => a.id),
@@ -4766,3 +4927,6 @@ if (window.visualViewport) {
   vv.addEventListener("resize", fit);
   vv.addEventListener("scroll", fit);
 }
+cbCadProjectRender();
+cbPlanningProjectRender();
+cbLogisticsProjectRender();

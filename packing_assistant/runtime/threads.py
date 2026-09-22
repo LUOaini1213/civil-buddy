@@ -205,25 +205,25 @@ def _failed(th: CivilThread, exc: Exception, *, code: str) -> Dict[str, Any]:
 def _run_on_thread(th: CivilThread, text: str, *, skill: str, confirm: bool, approve: Any = None) -> Dict[str, Any]:
     try:
         from packing_assistant.runtime.turn import run_turn
-        from packing_assistant.runtime.workspace_ctx import set_worktree
+        from packing_assistant.runtime.workspace_ctx import worktree_scope
 
-        if th.worktree:
-            set_worktree(th.worktree)
-        out = run_turn(
-            text,
-            session_id=th.session_id,
-            skill=skill,
-            confirm=confirm is True or th.confirm is True,
-            history=load_rollout(th.thread_id),
-            approve=approve,
-        )
+        with worktree_scope(th.worktree):
+            out = run_turn(
+                text,
+                session_id=th.session_id,
+                skill=skill,
+                confirm=confirm is True or th.confirm is True,
+                history=load_rollout(th.thread_id),
+                approve=approve,
+            )
         th.skill = str(out.get("skill") or out.get("expert_id") or th.skill)
         th.last_reply = str(out.get("reply") or "")
         th.hitl_pending = bool(out.get("hitl_pending"))
         th.wrote = bool(out.get("wrote"))
         arts = out.get("artifacts") or out.get("files") or []
         th.artifacts = [str(a) for a in arts]
-        th.state = "waiting_hitl" if th.hitl_pending else ("done" if out.get("ok") else "failed")
+        th.state = ("cancelled" if out.get("cancelled") or out.get("state") == "cancelled" else
+                    "waiting_hitl" if th.hitl_pending else ("done" if out.get("ok") else "failed"))
         th.error = str(out.get("error") or out.get("error_code") or "")
         save_thread(th)
         append_rollout(th.thread_id, "user", text)
