@@ -20,6 +20,8 @@ Container type:
 
 ## Solver Result
 
+Historical partial run, kept so the addendum below can be checked against it. It is **not** the current result: it covered only part of the cargo. The current offline check is `python scripts/test_pack_ship_crates_structure.py` (9 boxes, `can_fit` true, 23800 kg conserved). The older MCP line `containers=7 n0=6 util=0.4043` is this partial run, not today's score.
+
 The representative packing case was executed using the real packing solver.
 
 Results:
@@ -52,7 +54,7 @@ Expected behavior:
 
 PASS
 
-The representative packing case successfully uses the real solver and produces a feasible 7 × 40HQ packing result. Invalid or missing weight data is blocked before packing and requires human handling.
+The representative packing case uses the real solver. The current result for this file is 9 boxes, `can_fit` true, and 23800 kg conserved (see the addendum). The 7 × 40HQ line above is the retired partial run. Invalid or missing weight data is blocked before packing and requires human handling.
 
 ## Addendum 2026-09-20 - the solver result above was computed on part of the cargo
 

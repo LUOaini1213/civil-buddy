@@ -9,7 +9,7 @@
 
 **Civil Buddy 是面向土木企业的"土木版 Codex"**：覆盖 16 大类 66 个岗位的 AI 工作台，每岗以"程序记忆（SOP）+ 岗位知识库 + 独有工具"起草内部交付物；策略引擎与失败恢复两层中间件护航；铁律 **"tools compute numbers; the model only routes"**——数字只由工具算，模型只做路由与组织语言。
 
-本次提交展示一条**深度证据链**：从招标解析、废标检查、技术标目录，到集装箱装柜出运（446t 单票对照 **25×40HQ**、mid50 **59.4%**、对外校准综合分 **8.85**），以及一张诚实的 **66 岗分级地图**（L1 知识库草稿 66/66、L2 工具写盘 66/66、L3 全链路引擎岗 1——pack-ship）。宽度是路线图，深度是可复跑证据；**缺数标 UNSPECIFIED 是产品特性，不是未完成**。L2=66 表示专属写盘栏位已覆盖，不表示 66 岗都有求解引擎。
+本次提交展示一条**深度证据链**：从招标解析、废标检查、技术标目录，到净仓可复跑的长框架装箱（9 箱、装得下、23800 kg 守恒），以及一张诚实的 **66 岗分级地图**（L1 知识库草稿 66/66、L2 工具写盘 66/66、L3 全链路引擎岗 1——pack-ship）。446 t 单票和 29→25 柜依赖未入库的客户文件，不能从本仓库复验；29 柜基线已废弃。对外校准综合分 **8.85** 仍是仓内校准，不是评审结论。宽度是路线图，深度是可复跑证据；**缺数标 UNSPECIFIED 是产品特性，不是未完成**。L2=66 表示专属写盘栏位已覆盖，不表示 66 岗都有求解引擎。
 
 **红线（产品设计与本申报共同的边界）**：不出签认件、不自动判定可投标、不承诺中标率、不代交任何官方系统。P0 资格/★/废标项与人身安全相关写盘一律人工确认（HITL），未确认时 `submit_blocked=true`。
 
@@ -42,7 +42,7 @@
 | 创新构思：土木版 Codex（IDE 隐喻搬进土木企业） | 技能一岗一份 `.agents/skills/<id>/SKILL.md`；任务选用 SOP；沙箱写盘 | `python -m packing_assistant.civil`（TUI）· `ide/README.md` |
 | 技术应用：NL→IntentSpec→确定性流水线（`agent_mode=steps`）→影子评测 | 引擎正例过 30 项结构校核；负例 `--preset structure_fail` 证明合规门是活的（REJECT=门生效） | `python main.py --demo` · `python main.py --demo --preset structure_fail` |
 | 工具整合：Rust 工作台 + Python 引擎 + MCP + KB 检索 + 前端 3D/CoG | 一个仓库三入口（:8765 工作台 / :8000 主线 C / TUI）；MCP stdio 工具表 | `npm run check`；`python scripts/test_mcp_stdio.py` |
-| 完成度：诚实分级 + 评测口径不注水 | L1 66/66、L2 66/66、L3 1；446t 单票对照 25×40HQ（mid50 0.594）；对外校准综合分 8.85（不报 10.0） | `python scripts/eval_competition_scorecard.py --skip-phase0`；大票对照 `python scripts/compare_446t_agent_vs_tool.py --full-agent`（依赖本地业务数据 `output/cases_446t/materials.json`，不进仓；冻结数字以 [docs/competition-evidence-one-pager.md](../competition-evidence-one-pager.md) 为准，不现场重跑） |
+| 完成度：诚实分级 + 评测口径不注水 | L1 66/66、L2 66/66、L3 1；净仓长框架 9 箱、装得下、23800 kg 守恒。446 t / 29→25 柜的客户文件不在仓库，不能复验；29 柜基线已废弃。对外校准综合分 8.85（不报 10.0） | `python scripts/test_pack_ship_crates_structure.py`；`python scripts/eval_competition_scorecard.py --skip-phase0` |
 | 技术应用：外部数据必须带得出出处（2026-09-20） | 四个只读数据源工具：不接受 URL、文件、SQL、命令或凭据入参，端点只由已注册的工具名决定，响应缺数据集版本、哈希或逐字证据一律拒收；系统级沙箱的能力按平台如实分级披露 | `python scripts/test_readonly_sources.py`（17 例，离线 fixture）· `npm run check` 中的 `os-sandbox` |
 | 完成度：每岗质量门禁可抽样复跑（R5） | 每岗记分卡四门禁（意图命中/KB 检索/交付物 schema/诚实度），试点 5 岗全 PASS、全离线零 Key | `python scripts/eval_post_scorecard.py --all-pilots`（产物 `output/posts/<岗>.json`） |
 

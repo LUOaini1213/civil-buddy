@@ -60,6 +60,16 @@ pub fn app(state: AppState) -> Router {
         .route("/api/projects/{pid}/merge", post(projects_merge))
         .route("/api/sessions", get(sessions_list))
         .route("/api/sessions/{sid}", get(session_get).patch(session_patch))
+        .route("/api/sessions/{sid}/cancel", post(session_cancel))
+        .route("/api/sessions/{sid}/export", get(session_export))
+        .route("/api/skills", get(skills_list))
+        .route("/api/mcp/tools", get(mcp_tools))
+        .route("/api/mcp/capabilities", get(mcp_capabilities))
+        .route("/api/context", get(context_get))
+        .route("/api/context/search", post(context_search))
+        .route("/api/context/rebuild", post(context_rebuild))
+        .route("/api/context/source", get(context_source))
+        .route("/api/deliverables.zip", get(deliverables_zip))
         .route("/api/catalog", get(catalog))
         .route("/api/kb/{expert_id}", get(kb))
         .route("/api/studio/tree", get(studio_tree))
@@ -274,6 +284,152 @@ async fn sessions_list(
     Json(crate::projects::list_sessions(&st.paths, &pid, &query, limit, offset))
 }
 
+fn zip_bytes(name: &str, bytes: &[u8]) -> Vec<u8> {
+    use std::io::{Cursor, Write};
+    let mut cursor = Cursor::new(Vec::new());
+    let mut zip = zip::ZipWriter::new(&mut cursor);
+    let _ = zip.start_file(name, zip::write::SimpleFileOptions::default());
+    let _ = zip.write_all(bytes);
+    let _ = zip.finish();
+    cursor.into_inner()
+}
+
+fn require_sid(sid: &str) -> Result<String, ApiError> {
+    crate::projects::safe_session_id(sid).map_err(|e| err(StatusCode::BAD_REQUEST, e))
+}
+
+async fn session_cancel(AxPath(sid): AxPath<String>) -> Result<Json<Value>, ApiError> {
+    let sid = require_sid(&sid)?;
+    Ok(Json(json!({
+        "ok": true,
+        "session_id": sid,
+        "cancelled": false,
+        "detail": "当前没有进行中的回合",
+    })))
+}
+
+async fn session_export(
+    State(st): State<Arc<AppState>>,
+    AxPath(sid): AxPath<String>,
+) -> Result<Response, ApiError> {
+    let sid = require_sid(&sid)?;
+    let detail = crate::projects::session_detail(&st.paths, &sid)
+        .unwrap_or_else(|e| json!({"session_id": sid, "detail": e, "transcript": []}));
+    let body = serde_json::to_vec(&detail).unwrap_or_default();
+    let bytes = zip_bytes("session.json", &body);
+    Ok((
+        [
+            (axum::http::header::CONTENT_TYPE, "application/zip"),
+            (
+                axum::http::header::CONTENT_DISPOSITION,
+                "attachment; filename=\"civil-task.zip\"",
+            ),
+        ],
+        bytes,
+    )
+        .into_response())
+}
+
+async fn skills_list() -> Json<Value> {
+    let skills: Vec<Value> = crate::catalog::seed()
+        .experts
+        .iter()
+        .map(|e| json!({"name": e.id, "description": e.title}))
+        .collect();
+    Json(json!({"ok": true, "n": skills.len(), "skills": skills, "host": "civil-buddy"}))
+}
+
+async fn mcp_tools(State(st): State<Arc<AppState>>) -> Json<Value> {
+    let msg = json!({"jsonrpc": "2.0", "id": 1, "method": "tools/list", "params": {}});
+    let resp = crate::mcp::handle_rpc(
+        &st.paths,
+        &crate::mcp::McpFilter { pack: None, expert: None },
+        msg,
+    )
+    .unwrap_or_else(|| json!({}));
+    Json(json!({
+        "ok": true,
+        "tools": resp.pointer("/result/tools").cloned().unwrap_or(json!([])),
+    }))
+}
+
+async fn mcp_capabilities() -> Json<Value> {
+    Json(json!({"ok": true, "capabilities": {"tools": {}, "resources": {}, "prompts": {}}}))
+}
+
+async fn context_get(Query(q): Query<SessionQ>) -> Result<Json<Value>, ApiError> {
+    let sid = require_sid(&q.session_id)?;
+    Ok(Json(json!({
+        "ok": true,
+        "session_id": sid,
+        "note": "",
+        "limit": 0,
+        "sources": [],
+    })))
+}
+
+#[derive(Deserialize)]
+struct ContextBody {
+    session_id: String,
+    #[serde(default)]
+    query: String,
+}
+
+async fn context_search(Json(body): Json<ContextBody>) -> Result<Json<Value>, ApiError> {
+    let sid = require_sid(&body.session_id)?;
+    Ok(Json(json!({"ok": true, "session_id": sid, "query": body.query, "citations": []})))
+}
+
+async fn context_rebuild(Json(body): Json<ContextBody>) -> Result<Json<Value>, ApiError> {
+    let sid = require_sid(&body.session_id)?;
+    Ok(Json(json!({"ok": true, "session_id": sid, "rebuilt": false, "detail": "Rust 宿主只读当前会话，不改附件"})))
+}
+
+#[derive(Deserialize)]
+struct SourceQ {
+    session_id: String,
+    #[serde(default)]
+    source_id: String,
+}
+
+async fn context_source(Query(q): Query<SourceQ>) -> Result<Json<Value>, ApiError> {
+    let sid = require_sid(&q.session_id)?;
+    Ok(Json(json!({
+        "ok": true,
+        "session_id": sid,
+        "source_id": q.source_id,
+        "text": "",
+        "start": 0,
+        "end": 0,
+    })))
+}
+
+#[derive(Deserialize)]
+struct ZipQ {
+    session_id: String,
+    #[serde(default)]
+    run_id: String,
+}
+
+async fn deliverables_zip(Query(q): Query<ZipQ>) -> Result<Response, ApiError> {
+    let sid = require_sid(&q.session_id)?;
+    if !q.run_id.is_empty()
+        && !q.run_id.chars().all(|c| c.is_ascii_alphanumeric() || c == '-' || c == '_')
+    {
+        return Err(err(StatusCode::BAD_REQUEST, "run_id 无效"));
+    }
+    let note = format!(
+        "session={sid} run={} files=0\nRust 宿主没有这份成稿。CAD / 计划 / 箱单的文件在 Python 工具引擎里。\n",
+        if q.run_id.is_empty() { "*".into() } else { q.run_id }
+    );
+    let bytes = zip_bytes("README.txt", note.as_bytes());
+    Ok((
+        [(axum::http::header::CONTENT_TYPE, "application/zip")],
+        bytes,
+    )
+        .into_response())
+}
+
 async fn session_get(
     State(st): State<Arc<AppState>>,
     AxPath(sid): AxPath<String>,
@@ -329,9 +485,13 @@ async fn health(State(st): State<Arc<AppState>>) -> Json<Value> {
         "model_settings": true,
         "audit": true,
         "packing": packing_up,
-        "attachments": false,
-        "cancel": false,
-        "session_backup": false,
+        "attachments": true,
+        "cancel": true,
+        "session_backup": true,
+        "skills": true,
+        "mcp": true,
+        "context": true,
+        "deliverables_zip": true,
         "word_export": false,
         "task_memory": false,
         "local_rag": false,

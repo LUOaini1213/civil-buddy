@@ -8,7 +8,7 @@
 |----------|----------|------------|
 | **场景创意价值** | 土木版 Codex：66 岗工作台，NL 一句话 pack 入口出真数字（tools 算柜数/坐标，模型只路由） | 起两个服务后在 :8765 聊天框输入 `pack test/sim_materials/small_one_container/materials.xlsx`（起法：Releases exe 双击，或 `cd demo && uvicorn app:app --port 8765`；引擎 `uvicorn gateway.app:app --port 8000`。只起 :8765 无引擎时会得到如实的说明卡，不出假数字） |
 | **AI 协同能力** | Agent Middleware 策略引擎+失败恢复：四拍纠偏剧本（正常下单 → 越权被拒 → 工具挂掉自动恢复 → 成本超限熔断）；HITL 人确认后才拼柜 | `python scripts/demo_agent_middleware.py` |
-| **技术创新** | 装箱引擎 NL→IntentSpec→白名单 tools→HITL→影子评测；446t 单票对照 29→25 柜（mid50 0.594，risk=WARN 口径）；本地校准综合分对外口径 **8.85** | `python main.py --demo` · `python main.py --eval` |
+| **技术创新** | 装箱引擎 NL→IntentSpec→白名单 tools→HITL→影子评测。净仓能复跑的长框架样例是 9 箱、`can_fit` 为真、净重 23800 kg 守恒（`scripts/test_pack_ship_crates_structure.py`）。446 t、29→25 柜的客户清单不在仓库里，不能当复验结果；29 柜基线已废弃 | `python main.py --demo` · `python scripts/test_pack_ship_crates_structure.py` |
 
 > **66 岗诚实分级**（L1 知识库 66/66 · L2 工具写盘 66/66 · L3 引擎岗 1，每级挂可复跑验收）：[docs/depth-ladder.md](docs/depth-ladder.md)。申报定位与三维度证据映射：[docs/submission/haizizhi-positioning.md](docs/submission/haizizhi-positioning.md)。
 >
@@ -22,7 +22,7 @@
 |------|----------|------------|
 | 工具真正接上引擎 | MCP 的 `ingest/plan/vgm/booking_draft` 由"投影已有快照"改为真实调用装箱引擎；PDF 装箱单可解析 | `python scripts/test_mcp_stdio.py` · `python scripts/test_packing_list_pdf.py` |
 | 表格读取的静默错误 | `L (mm)` 类表头 8 种写法补齐识别缺口；英寸/英尺/磅与合并尺寸格 16 种写法修正 12 种；空计划不再报成功 | `python scripts/test_table_mapper_unit.py` · `python scripts/test_pack_ship_dimension_gate.py` |
-| 招标响应逐行比对 | 一条招标要求只出一行，数字对不上会被指出来：精确率 0.857→1.000、召回 0.615→0.974、9 处数字冲突全检出 | `python scripts/eval_tender_response_match.py` |
+| 招标响应逐行比对 | 一条招标要求只出一行，数字对不上标待核、不下结论。现行 `--check`：19 例，链接精确率 1.000、链接召回 0.980、冲突 14/14 全检出。更早的 14 例召回 0.974、9/9 不是这次的分数 | `python scripts/eval_tender_response_match.py --check` |
 | 模型只路由，工具算数 | 模型驱动回合加确定性守卫：模型回复不得给出判定、复读收敛、数字必须指得回工具结果 | `npm run check` 中的 `model-loop` · `verdict-bench` · `number-provenance-bench` |
 | 运行边界 | 系统级沙箱（工具工作跑在受内核约束的 worker 里，能力按平台如实分级）、声明式插件（一个文件夹或 zip 就是一批岗位）、原生桌面应用 | `npm run check` 中的 `os-sandbox` · `plugins` · `desktop-app` |
 | 来源可追溯 | 四个只读数据源工具：响应缺数据集版本、哈希或逐字证据一律拒收 | `python scripts/test_readonly_sources.py`（17 例，离线 fixture） |

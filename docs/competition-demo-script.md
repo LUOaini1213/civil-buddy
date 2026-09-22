@@ -45,8 +45,8 @@ API Key 可选（自带，不必 DeepSeek）；无 Key 时 LLM 环节为 policy_
 
 | 数字 | 口径限定语（必须跟着说） |
 |------|--------------------------|
-| **29→25 柜**（446t 单票对照） | 旧基线 29 已废弃；现行全 Agent **25×40HQ**、`phase=done / risk=WARN / ship_ok=true`。出自 `scripts/compare_446t_agent_vs_tool.py --full-agent` 对照产物，**演示日不现场重跑** |
-| **mid50 0.594**（同一 446t 单票） | 贴 CTU 严格偏好 60% 线，风险 **WARN**；少柜 light 路径 mid≈0.17，**仅供参考、不作出运结论** |
+| **29→25 柜**（446t 单票对照） | 29 柜基线已废弃。446 t 客户清单 `output/cases_446t/materials.json` 不在仓库里，净仓不能复跑，不要当成今天的结果 |
+| **mid50 0.594**（同一 446t 单票） | 客户文件不在仓库，不能复验。不要把 0.594 当成净仓结果 |
 | **scorecard 8.85** | 本地校准综合分、**对外口径**；phase0 quick（n=12，pass_rate 1.0）封顶口径，**不报 10.0** |
 
 ---
@@ -77,7 +77,8 @@ python scripts/run_phase0_baseline.py --quick         # 同口径
 python scripts/eval_competition_scorecard.py --skip-phase0   # 综合分卡（对外 8.85）
 
 # 大票对照证据（上场前一天跑够即可）
-python scripts/compare_446t_agent_vs_tool.py --full-agent
+# 446 t 客户清单不在仓库，下面这条命令在净仓会失败，不要当成可复验结果。
+# python scripts/compare_446t_agent_vs_tool.py --full-agent
 
 # 每岗记分卡（R5，评委追问岗位质量时）
 python scripts/eval_post_scorecard.py --all-pilots
@@ -87,7 +88,7 @@ python scripts/eval_post_scorecard.py --all-pilots
 
 | 文件 | 用途 |
 |------|------|
-| [competition-evidence-one-pager.md](./competition-evidence-one-pager.md) | 一页证据（446t 对照 / 产品信任） |
+| [competition-evidence-one-pager.md](./competition-evidence-one-pager.md) | 一页证据。446 t 对照的客户文件不在仓库，不能复验 |
 | `output/competition/SCORECARD.md` | 分卡（8.85 与 hard gates 明细） |
 | `output/phase0/BASELINE_REPORT.md` | phase0 quick 基线报告 |
 | [ARCHITECTURE.md](./ARCHITECTURE.md) · [harness-design.md](./harness-design.md) | 架构 |

@@ -51,6 +51,54 @@ async fn test_tool_pages_explain_missing_engine() {
 }
 
 #[tokio::test]
+async fn test_health_flags_match_routes() {
+    let (_st, body) = send(
+        state(),
+        Request::builder().uri("/api/health").body(Body::empty()).unwrap(),
+    )
+    .await;
+    let health: Value = serde_json::from_str(&body).unwrap();
+    let flags = [
+        ("attachments", "/api/upload"),
+        ("cancel", "/api/sessions/demo01/cancel"),
+        ("session_backup", "/api/sessions/demo01/export"),
+        ("skills", "/api/skills"),
+        ("mcp", "/api/mcp/tools"),
+        ("context", "/api/context?session_id=demo01"),
+        ("deliverables_zip", "/api/deliverables.zip?session_id=demo01"),
+    ];
+    for (flag, uri) in flags {
+        assert_eq!(health["capabilities"][flag], true, "{flag} {body}");
+        let method = if uri.starts_with("/api/upload") || uri.contains("/cancel") {
+            "POST"
+        } else {
+            "GET"
+        };
+        let req = if method == "POST" && uri == "/api/upload" {
+            Request::builder()
+                .method("POST")
+                .uri(uri)
+                .header("content-type", "multipart/form-data; boundary=bound")
+                .body(Body::from(
+                    "--bound\r\nContent-Disposition: form-data; name=\"session_id\"\r\n\r\ndemo01\r\n--bound\r\nContent-Disposition: form-data; name=\"file\"; filename=\"note.txt\"\r\nContent-Type: text/plain\r\n\r\nhello\r\n--bound--\r\n",
+                ))
+                .unwrap()
+        } else if method == "POST" {
+            Request::builder()
+                .method("POST")
+                .uri(uri)
+                .body(Body::empty())
+                .unwrap()
+        } else {
+            Request::builder().uri(uri).body(Body::empty()).unwrap()
+        };
+        let (status, text) = send(state(), req).await;
+        assert_ne!(status, StatusCode::NOT_FOUND, "{flag} {uri} {text}");
+        assert!(!text.is_empty(), "{flag}");
+    }
+}
+
+#[tokio::test]
 async fn test_index_and_static() {
     let (st, body) = send(
         state(),
@@ -390,9 +438,9 @@ async fn test_health_exposes_context_policy() {
     assert_eq!(v["harness"]["default_mode"].as_str(), Some("steps"));
     // The shared page gates its buttons on these; a missing map meant 404s behind 上传 / 备份 / 停止.
     assert_eq!(v["capabilities"]["chat"], Value::Bool(true), "{body}");
-    assert_eq!(v["capabilities"]["attachments"], Value::Bool(false), "{body}");
-    assert_eq!(v["capabilities"]["cancel"], Value::Bool(false), "{body}");
-    assert_eq!(v["capabilities"]["session_backup"], Value::Bool(false), "{body}");
+    assert_eq!(v["capabilities"]["attachments"], Value::Bool(true), "{body}");
+    assert_eq!(v["capabilities"]["cancel"], Value::Bool(true), "{body}");
+    assert_eq!(v["capabilities"]["session_backup"], Value::Bool(true), "{body}");
     assert!(v["capabilities"]["packing"].is_boolean(), "{body}");
     assert_eq!(v["harness"]["expert_runtime"].as_str(), Some("understand"));
     assert_eq!(v["harness"]["summoned_default"].as_str(), Some("chat"));
