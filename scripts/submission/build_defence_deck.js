@@ -602,7 +602,7 @@ function card(sl, o) {
     sl.addText(s[1], { x, y: 5.66, w: 3.7, h: 0.3, isTextBox: true, margin: 0,
       fontFace: F.b, fontSize: 11.5, color: C.muted });
   });
-  chip(sl, "eval_tender_response_match.py · 现行 19 例 · 51 条金标链接 · 0.974 是更早的 14 例", M, 6.15, 8.6, false);
+  chip(sl, "eval_tender_response_match.py · 现行 19 例 · 召回 0.980 · 冲突 14/14 · 51 条金标链接", M, 6.15, 8.6, false);
   notes(sl, 11);
 }
 
