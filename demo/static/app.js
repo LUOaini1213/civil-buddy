@@ -531,6 +531,8 @@ function cbApplyHealth(health) {
     badge.title = configured ? "开放式问答使用当前配置；岗位工具按任务运行。" :
       offline ? "无需 API Key 即可使用当前离线岗位功能。" : "可浏览岗位与知识库，模型能力尚未配置。";
   }
+  const byUrl = $("btnAttachUrl");
+  if (byUrl) byUrl.hidden = cbCapability("upload_url") !== true;   /* health 到了才知道服务端能不能自己去取 */
   const availability = $("cbAvailability");
   if (availability) availability.textContent = offline
     ? "无需 API Key：先问岗位能力" + (cbCapability("drafts") === true ? "，或生成模板草稿。" : "。") + "开放式问答可在模型设置中配置。"
@@ -911,7 +913,32 @@ function cbAttachPaintProgress(u) {
   if (pct) pct.textContent = Math.round(ratio * 100) + "%";
 }
 
+/* 从网址取文件：服务端去取（demo/uploads.py fetch_upload / workbench attach::import_url），回来的形状与 /api/upload 相同。 */
+async function cbAttachFromUrl() {
+  const address = (window.prompt("招标文件或招标公告的网址（工作台去取；只取公网地址，20 MB 以内）：") || "").trim();
+  if (!address) return;
+  if (cbUploadSlotsLeft(state.session) <= 0) { addStatus(`同一会话最多 ${CB_UPLOAD_LIMITS.maxFiles} 个附件`); return; }
+  addStatus("正在从网址取文件…");
+  try {
+    const res = await fetch("/api/upload-url", { method: "POST", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ session_id: state.session, url: address }) });
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok) { addStatus("没有取到：" + (data.detail || data.error || res.status)); return; }
+    const why = cbUploadAccept(null, data);
+    if (why) { addStatus(why); return; }
+    cbAttachRender();
+    addStatus("已取回并作为附件：" + (data.files || []).map((f) => f.name).join("、"));
+  } catch (err) {
+    addStatus("没有取到：" + (err && err.message ? err.message : "网络错误"));
+  }
+}
+
 function cbAttachInit() {
+  const byUrl = $("btnAttachUrl");
+  if (byUrl) {
+    byUrl.hidden = cbCapability("upload_url") !== true;
+    byUrl.addEventListener("click", cbAttachFromUrl);
+  }
   const btn = $("btnAttach");
   const pick = $("filePick");
   if (btn && pick) {

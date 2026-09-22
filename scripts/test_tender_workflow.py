@@ -188,7 +188,9 @@ class TenderWorkflowTests(unittest.TestCase):
         self.assertLess(result["metrics"]["reserved_tokens"], result["metrics"]["limit"])
         self.assertTrue(any("60" in e["quote"] for e in result["children"][1]["evidence"]))
         extract = next(f["path"] for f in result["files"] if f["name"] == "tender-extract.md")
-        self.assertIn("60 日历天", Path(extract).read_text(encoding="utf-8"))
+        # 216 000 characters are a file, not a request: it is read as a document, and the 工期 row holds the literal
+        # "60日历天" of the sentence that states it (it used to be rebuilt as "60 日历天" from a day count)
+        self.assertIn("| 工期 | 60日历天 |", Path(extract).read_text(encoding="utf-8"))
 
     def test_two_bounded_model_workers_really_overlap_and_keep_context_isolated(self):
         barrier, captured = Barrier(2), []

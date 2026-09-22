@@ -115,9 +115,42 @@ def review_file(name: str) -> Dict[str, Any]:
         shown = target.relative_to(job_root().resolve()).as_posix()
     except ValueError:
         shown = target.name
-    clean = not numbers and not assertions
+    version = _check_version(target)
+    clean = not numbers and not assertions and not (version or {}).get("stale")
+    reply = _render(shown, sources, numbers, assertions)
+    if version is not None:
+        reply += "\n" + "\n".join(version.pop("lines"))
     return {"ok": True, "schema": "civil.review.v1", "file": shown, "clean": clean, "sources": sources,
-            "numbers": numbers, "assertions": assertions, "reply": _render(shown, sources, numbers, assertions)}
+            "numbers": numbers, "assertions": assertions, "check": version, "reply": reply}
+
+
+def _check_version(target: Path) -> Optional[Dict[str, Any]]:
+    """A bid check keeps a record of the texts it read (tools/bid_check_record.py). Is this draft still
+    the one that was written, and do the job files still read the same? None when the document has no record."""
+    from packing_assistant.office_job import job_root, read_material_checked
+    from packing_assistant.tools import bid_check_record as check_record
+
+    found = check_record.find_for(target)
+    if found is None:
+        return None
+    record_path, record = found
+
+    def read_input(relative: str) -> Optional[str]:
+        body, why = read_material_checked(job_root().resolve() / relative, 2_000_000)   # the way the check read it
+        return None if why else body
+
+    def read_draft(relative: str) -> Optional[str]:
+        try:
+            return (record_path.parent / relative).read_text(encoding="utf-8")
+        except (OSError, UnicodeError):
+            return None
+
+    try:
+        text: Optional[str] = target.read_text(encoding="utf-8")
+    except (OSError, UnicodeError):
+        text = None
+    result = check_record.verify(record, draft_text=text, draft_name=target.name, read_input=read_input, read_draft=read_draft)
+    return {**result, "record": record_path.name, "lines": check_record.verify_lines(result, record)}
 
 
 def _render(shown: str, sources: List[str], numbers: List[Dict[str, Any]], assertions: List[Dict[str, Any]]) -> str:

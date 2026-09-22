@@ -22,6 +22,7 @@ _TASK_PHRASES = {
     "admin-office": ("会务清单", "会议安排", "整理会务", "接待清单"),
     "method-hazard": ("危大识别", "危大判定", "是否危大", "危大工程"),
 }
+_DETERMINER = re.compile(r"(解析|分析|梳理|检查|核对)(?:一下|下)?(?:这份|这个|这一份|该份|该|此份|此|本|这)(?=招标|投标|磋商|谈判|采购|响应|技术标)")
 _AMBIGUOUS_REASONS = {
     "design-coord": "处理图纸会审、专业接口与设计变更技术事项",
     "variation": "整理变更签证的事实、依据与工程量栏",
@@ -211,11 +212,13 @@ def route_task(message: str, expert_ids: list[str] | None = None) -> dict:
         else:
             hits: dict[str, tuple[int, int]] = {}
             matched_labels: dict[str, set[str]] = {}
+            # "解析这份招标文件" asks what "解析招标文件" asks: a determiner between the verb and the document it names
+            matchable = _DETERMINER.sub(lambda found: found.group(1), text)
             for expert in roster.values():
                 phrases = set(_TASK_PHRASES.get(expert.id, ())) | {p for p in (expert.name, *expert.aliases) if len(p) >= 4}
                 for phrase in phrases:
-                    if phrase in text:
-                        hits[expert.id] = max(hits.get(expert.id, (0, 0)), (len(phrase), -text.index(phrase)))
+                    if phrase in matchable:
+                        hits[expert.id] = max(hits.get(expert.id, (0, 0)), (len(phrase), -matchable.index(phrase)))
                         matched_labels.setdefault(phrase, set()).add(expert.id)
             # A shared label alone cannot justify selecting two different duties.
             ambiguous = {eid for label, owners in matched_labels.items() if len(owners) > 1

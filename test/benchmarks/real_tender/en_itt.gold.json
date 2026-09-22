@@ -1,0 +1,100 @@
+{
+ "fields": [
+  {
+   "label": "项目名称",
+   "expect": "Proposed Upgrading of Covered Linkways and Drainage at Seletar North Estate"
+  },
+  {
+   "label": "招标人",
+   "expect": "Seletar North Town Council"
+  },
+  {
+   "label": "招标编号",
+   "expect": "TC-SNE-2029-044"
+  },
+  {
+   "label": "投标截止",
+   "expect": "14 August 2029"
+  },
+  {
+   "label": "踏勘",
+   "expect": "24 July 2029"
+  },
+  {
+   "label": "注册资格/工作类别",
+   "expect": "CW01"
+  },
+  {
+   "label": "工期",
+   "expect": "9 months"
+  },
+  {
+   "label": "投标有效期",
+   "expect": "120 days"
+  },
+  {
+   "label": "投标保证金",
+   "expect": "S$35,000"
+  },
+  {
+   "label": "履约担保",
+   "expect": "5% of the Contract Sum"
+  },
+  {
+   "label": "缺陷责任期",
+   "expect": "12 months"
+  },
+  {
+   "label": "联合体投标",
+   "expect": "Not permitted"
+  },
+  {
+   "label": "备选投标方案",
+   "expect": "Not permitted"
+  },
+  {
+   "label": "投标文件份数",
+   "expect": "One original and two copies"
+  },
+  {
+   "label": "评标办法",
+   "expect": "Price Quality Method"
+  },
+  {
+   "label": "项目经理",
+   "expect": "at least 8 years of relevant experience"
+  }
+ ],
+ "rejections": [
+  "Tenders received after the closing date and time shall be rejected",
+  "a tenderer who does not attend shall be disqualified",
+  "An unsigned Form of Tender shall render the tender invalid",
+  "A tender not accompanied by the Tender Deposit shall be rejected",
+  "A tender with a shorter validity shall be treated as non-responsive",
+  "canvasses any member of the Tender Evaluation Committee shall be disqualified"
+ ],
+ "scores": [
+  [
+   "Price",
+   "60"
+  ],
+  [
+   "Track record",
+   "15"
+  ],
+  [
+   "Method statement and programme",
+   "15"
+  ],
+  [
+   "Safety performance",
+   "10"
+  ]
+ ],
+ "forms": [
+  "Form of Tender",
+  "Schedule of Rates",
+  "Method Statement",
+  "Safety Track Record Declaration"
+ ]
+}

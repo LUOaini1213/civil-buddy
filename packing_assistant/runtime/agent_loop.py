@@ -9,7 +9,7 @@ from __future__ import annotations
 
 import json
 from pathlib import Path
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Optional, Tuple
 from uuid import uuid4
 
 from packing_assistant.runtime.bus import get_bus
@@ -88,8 +88,6 @@ def _explain(text: str, expert_id: str, prefix: str = "") -> str:
 
 _TABLE_EXTS = (".xlsx", ".csv", ".pdf")
 _DOCUMENT_EXTS = (".docx", ".pdf", ".txt", ".md")
-_TENDER_FILE = ("招标", "tender", "itt", "rfp", "rfq")
-_RESPONSE_FILE = ("响应", "应答", "投标", "response", "bid", "proposal")
 
 
 def _named_packing_list(text: str) -> str:
@@ -100,35 +98,62 @@ def _named_packing_list(text: str) -> str:
     return str(tables[0]) if len(tables) == 1 else ""
 
 
-def _with_named_documents(text: str) -> str:
-    """The task plus the full text of the job documents it names (the steps path reads what you point at)."""
-    from packing_assistant.office_job import files_named_in, named_files_blob, read_material
+def _with_named_documents(text: str, *, whole: bool = False) -> str:
+    """The task plus the text of the job documents it names (the steps path reads what you point at).
+
+    ``whole``: the caller parses the document itself (招标解析), so the file is read to its end instead of
+    to the 8 000 characters a prompt can spare - the first five pages of a tender are not the tender."""
+    from packing_assistant.office_job import DOCUMENT_FILE_CHARS, DOCUMENT_TOTAL_CHARS, files_named_in, named_files_blob, read_material
 
     named = files_named_in(text, _DOCUMENT_EXTS)
-    blob = named_files_blob(named, reader=read_material) if named else ""
+    limits = {"per_file": DOCUMENT_FILE_CHARS, "total": DOCUMENT_TOTAL_CHARS} if whole else {}
+    blob = named_files_blob(named, reader=read_material, **limits) if named else ""
     return f"{text}\n\n{blob}" if blob else text
 
 
-def _tender_sources(text: str) -> Optional[List[Dict[str, Any]]]:
-    """Named job documents as workflow sources, roles read off the file names.
+def _tender_materials(text: str) -> Tuple[Optional[List[Dict[str, Any]]], List[Dict[str, str]]]:
+    """Named job documents as workflow sources, roles read off the file names - and the named ones that
+    gave no text, each with why.
 
-    None unless exactly one file is recognisably the tender: which document is the tender is not
-    something to guess, and the workflow's own marker parsing still applies to pasted text.
+    The sources are None unless exactly one readable file is recognisably the tender: which document is
+    the tender is not something to guess, and the workflow's own marker parsing still applies to pasted
+    text. A file that could not be read used to be left out without a word, so a check that was handed
+    a scanned 投标响应.pdf reported the response as never given.
     """
-    from packing_assistant.office_job import files_named_in, read_material
+    from packing_assistant.office_job import DOCUMENT_FILE_CHARS, files_named_in, job_root, material_role, read_material_checked
 
     sources: List[Dict[str, Any]] = []
+    unread: List[Dict[str, str]] = []
+    root = job_root().resolve()
     for index, path in enumerate(files_named_in(text, _DOCUMENT_EXTS)):
-        name = path.name.lower()
-        role = ("tender" if any(mark in name for mark in _TENDER_FILE)
-                else "response" if any(mark in name for mark in _RESPONSE_FILE) else "reference")
-        try:
-            body = read_material(path, 40000)
-        except Exception:  # noqa: BLE001 - an unreadable file is left out, the run says what it used
+        role = material_role(path.name)     # one rule for what a file name says (技术标.docx, 养护方案.docx are ours too)
+        body, why = read_material_checked(path, DOCUMENT_FILE_CHARS)   # 40 000 used to be the cut: a quarter of a real tender
+        if why:
+            unread.append({"title": path.name, "role": role, "reason": why})
             continue
-        sources.append({"source_id": f"{role}-{index + 1}", "title": path.name, "text": body, "start": 0,
-                        "end": len(body), "role": role, "kind": "job_file"})
-    return sources if sum(1 for source in sources if source["role"] == "tender") == 1 else None
+        source = {"source_id": f"{role}-{index + 1}", "title": path.name, "text": body, "start": 0,
+                  "end": len(body), "role": role, "kind": "job_file"}
+        try:
+            source["path"] = path.resolve().relative_to(root).as_posix()   # so a later `civil review` can read it again
+        except ValueError:
+            pass
+        sources.append(source)
+    return (sources if sum(1 for source in sources if source["role"] == "tender") == 1 else None), unread
+
+
+def _tender_sources(text: str) -> Optional[List[Dict[str, Any]]]:
+    return _tender_materials(text)[0]
+
+
+def _names_both_sides(text: str) -> bool:
+    """The task names exactly one tender document and at least one document of ours (roles read off the file
+    names, as everywhere)."""
+    from packing_assistant.office_job import files_named_in, material_role
+
+    # by its full name, extension included: "招标文件要求工期60日历天" talks ABOUT the tender, it does not point at a file
+    names = [path.name.lower() for path in files_named_in(text, _DOCUMENT_EXTS) if path.name.lower() in (text or "").lower()]
+    roles = [material_role(n) for n in names]
+    return roles.count("tender") == 1 and "response" in roles
 
 
 def _draft_md(expert_id: str, tool: str, text: str) -> str:
@@ -210,7 +235,7 @@ def _plan_calls(
             {
                 "name": "tender.parse",
                 "arguments": {
-                    "text": _with_named_documents(text),
+                    "text": _with_named_documents(text, whole=True),
                     "source": "agent-loop",
                     "project_name": project_name,
                     "p0_confirmed": p0_confirmed,
@@ -339,6 +364,11 @@ def run_agent(
                     "files": [f for c in children for f in c.get("files", [])],
                     "artifacts": [f for c in children for f in c.get("artifacts", [])]}
         from packing_assistant.runtime.expert_skills import match_skill
+        if not route["workflow"] and route["expert_ids"] == ["bid-compliance"] and intent != "chat" and _names_both_sides(text):
+            # "废标检查 招标文件.docx 投标函.docx": two documents to set against each other. The one-post path would
+            # paste the first 8 000 characters of each into one text with nobody's role on it.
+            route = {**route, "workflow": "tender-review", "expert_ids": ["bid-parse", "bid-tech", "bid-compliance"],
+                     "reason": route.get("reason", "") + " 点名了招标文件和我方文件：逐份整读、按角色对照，走全面核对流程。"}
         eid = (route["expert_ids"][0] if len(route["expert_ids"]) == 1 else "") or (match_skill(text) if not route["workflow"] else "") or ""
         skill_source = "matched" if eid else ""
     exp = get_expert(eid) if eid else None
@@ -553,8 +583,19 @@ def run_agent(
                     out.update(ok=False, error_code="max_steps", reply="招标协作需要解析、两项检查与汇总，请提高步骤预算。")
                     sched.transition(run, "failed")
                     return _finish()
+                sources, unread = _tender_materials(text)
+                lost = [item for item in unread if item["role"] == "tender"]
+                if lost and sources is None:
+                    # the tender itself gave no text: there is nothing to compare against, and the sentence
+                    # that named the file is not a tender to parse instead
+                    names = "；".join(f"{item['title']}（{item['reason']}）" for item in lost)
+                    out.update(ok=False, error_code="tender_unreadable", wrote=False, unreadable=unread,
+                               reply=f"点名的招标文件没读出来：{names}。没有招标正文就无从对照，本轮未写盘。")
+                    sched.transition(run, "failed")
+                    messages.append({"role": "assistant", "content": out["reply"]})
+                    return _finish()
                 sched.transition(run, "acting")
-                result = run_tender_workflow(text, session_id=sid, output_root=_out_root(), sources=_tender_sources(text),
+                result = run_tender_workflow(text, session_id=sid, output_root=_out_root(), sources=sources, unreadable=unread,
                     confirmed=p0_confirmed, cancel_event=cancel_event)
                 out.update({key: value for key, value in result.items() if key not in {"run_id", "session_id", "schema", "state"}})
                 out["route"], out["collaboration"] = route, result

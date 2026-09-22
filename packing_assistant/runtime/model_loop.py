@@ -388,11 +388,23 @@ def _tender_compare(turn: _Turn, args: Dict[str, Any]) -> Dict[str, Any]:
     blocked = _gate(turn, risk="low", who="招标对照")
     if blocked:
         return blocked
-    texts = {role: _file_text(path, 40000) for role, path in paths.items()}
+    from packing_assistant.office_job import read_material_checked
+
+    texts: Dict[str, str] = {}
+    unread: List[Dict[str, str]] = []
+    for role, path in paths.items():
+        body, why = read_material_checked(path, 2_000_000, reader=_file_text)
+        if why:
+            unread.append({"title": path.name, "role": role, "reason": why})
+        else:
+            texts[role] = body
+    if "tender" not in texts:
+        return {"ok": False, "error_code": "unreadable", "unreadable": unread, "submit_blocked": True,
+                "reason": f"招标文件 {paths['tender'].name} 没读出来（{unread[0]['reason']}）。没有招标正文无从对照，未写盘。"}
     sources = [{"source_id": role + "-1", "title": paths[role].name, "text": texts[role], "start": 0,
-                "end": len(texts[role]), "role": role, "kind": "job_file"} for role in ("tender", "response")]
+                "end": len(texts[role]), "role": role, "kind": "job_file"} for role in ("tender", "response") if role in texts]
     result = run_tender_workflow(texts["tender"], session_id=turn.session_id, output_root=agent_loop._OUT,
-                                 sources=sources, confirmed=turn.confirmed, cancel_event=turn.cancel_event)
+                                 sources=sources, unreadable=unread, confirmed=turn.confirmed, cancel_event=turn.cancel_event)
     shown = turn.add_files(result.get("files"))
     review = result.get("review") or {}
     rows = [{"ref": row.get("requirement_ref"), "requirement": row.get("requirement"), "status": row.get("status"),
@@ -400,7 +412,7 @@ def _tender_compare(turn: _Turn, args: Dict[str, Any]) -> Dict[str, Any]:
              "notes": [c.get("note") for c in row.get("conflicts") or []]}
             for row in review.get("response_comparison") or []]
     return {"ok": bool(result.get("ok")), "error_code": result.get("error_code") or "", "submit_blocked": True,
-            "summary": str(result.get("reply") or ""), "rows": rows[:40],
+            "summary": str(result.get("reply") or ""), "rows": rows[:40], "unreadable": unread,
             "conflicts": [c.get("note") for c in review.get("conflicts") or []], "files": shown}
 
 

@@ -71,6 +71,7 @@ pub fn app(state: AppState) -> Router {
         )
         .route("/api/attachments", get(attachments))
         .route("/api/local", post(import_local))
+        .route("/api/upload-url", post(import_url))
         .route("/api/job", get(job_listing))
         .route("/api/firm/bid", post(firm_bid))
         .route("/api/architecture", get(architecture))
@@ -314,6 +315,7 @@ async fn health(State(st): State<Arc<AppState>>) -> Json<Value> {
         "task_routing": false,
         "expert_contracts": false,
         "tender_collaboration": false,
+        "upload_url": true,
         "semantic_summary": false,
         "asr": false,
         "auth": false,
@@ -726,6 +728,24 @@ async fn job_listing() -> Json<Value> {
     }))
 }
 
+#[derive(Deserialize)]
+struct UrlIn {
+    #[serde(default)]
+    session_id: String,
+    #[serde(default)]
+    url: String,
+}
+
+/// A tender named by its address: fetched here (public addresses only, 20 MB, documents only) and attached like an upload.
+async fn import_url(State(st): State<Arc<AppState>>, Json(body): Json<UrlIn>) -> Result<Json<Value>, ApiError> {
+    let (paths, session, url) = (st.paths.clone(), body.session_id.clone(), body.url.clone());
+    let files = tokio::task::spawn_blocking(move || attach::import_url(&paths, &session, &url))
+        .await
+        .map_err(|e| err(StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?
+        .map_err(|e| err(StatusCode::BAD_REQUEST, e))?;
+    Ok(Json(json!({"ok": true, "files": files})))
+}
+
 async fn import_local(State(st): State<Arc<AppState>>, Json(body): Json<LocalIn>) -> Result<Json<Value>, ApiError> {
     let path = if body.path.trim().is_empty() {
         std::env::var("CIVIL_JOB_ROOT").unwrap_or_default()
@@ -871,10 +891,25 @@ async fn chat(State(st): State<Arc<AppState>>, Json(body): Json<ChatIn>) -> Resu
             }
         }
     }
-    let user_text = if body.attachments.is_empty() {
+    // a task about a document whose address is in the message: the workbench fetches it (public addresses only, the
+    // same path the 网址 button takes) and the turn works on it like on any attachment
+    let mut attachment_ids = body.attachments.clone();
+    let mut fetch_notes: Vec<String> = Vec::new();
+    if intent != crate::agent::Intent::Chat && !attach::addresses_in(&body.message).is_empty() {
+        let (paths, sess, msg) = (st.paths.clone(), session.clone(), body.message.clone());
+        if let Ok((ids, notes)) = tokio::task::spawn_blocking(move || attach::import_addresses(&paths, &sess, &msg)).await {
+            for id in ids {
+                if !attachment_ids.contains(&id) {
+                    attachment_ids.push(id);
+                }
+            }
+            fetch_notes = notes;
+        }
+    }
+    let user_text = if attachment_ids.is_empty() {
         body.message.clone()
     } else {
-        attach::bundle_for_prompt(&st.paths, &session, &body.attachments, &body.message)
+        attach::bundle_for_prompt(&st.paths, &session, &attachment_ids, &body.message)
     };
     history.push(json!({"role": "user", "content": user_text}));
     let (history, ctx_report) = crate::context::prepare_history(history);
@@ -918,6 +953,12 @@ async fn chat(State(st): State<Arc<AppState>>, Json(body): Json<ChatIn>) -> Resu
                     "status".into(),
                     json!({"phase": "compress", "text": ctx_report.note()}),
                 );
+                if tx.send(Ok(send(ev))).await.is_err() {
+                    return Ok(());
+                }
+            }
+            for note in fetch_notes {
+                let ev = ("status".into(), json!({"phase": "fetch", "text": note}));
                 if tx.send(Ok(send(ev))).await.is_err() {
                     return Ok(());
                 }

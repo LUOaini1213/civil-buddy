@@ -48,8 +48,109 @@ def csv_text(text: str, limit: int) -> str:
     return table_markdown(csv.reader(StringIO(text), dialect), limit)
 
 
-def docx_document_text(document: ElementTree.Element, limit: int) -> str:
-    """Read paragraphs and tables in document order without flattening table cells."""
+_W = "{http://schemas.openxmlformats.org/wordprocessingml/2006/main}"
+_CN_DIGITS = "零一二三四五六七八九"
+
+
+def _chinese(number: int) -> str:
+    if number <= 0 or number >= 100:
+        return str(number)
+    tens, ones = divmod(number, 10)
+    return (_CN_DIGITS[ones] if not tens else ("十" if tens == 1 else _CN_DIGITS[tens] + "十") + (_CN_DIGITS[ones] if ones else ""))
+
+
+def _roman(number: int) -> str:
+    out = ""
+    for value, mark in ((1000, "M"), (900, "CM"), (500, "D"), (400, "CD"), (100, "C"), (90, "XC"), (50, "L"), (40, "XL"), (10, "X"),
+                        (9, "IX"), (5, "V"), (4, "IV"), (1, "I")):
+        while number >= value:
+            out, number = out + mark, number - value
+    return out
+
+
+def _numbered(number: int, fmt: str) -> str:
+    if fmt in ("chineseCounting", "chineseCountingThousand", "chineseLegalSimplified", "japaneseCounting", "ideographDigital"):
+        return _chinese(number)
+    if fmt == "upperLetter":
+        return chr(ord("A") + (number - 1) % 26)
+    if fmt == "lowerLetter":
+        return chr(ord("a") + (number - 1) % 26)
+    if fmt == "upperRoman":
+        return _roman(number)
+    if fmt == "lowerRoman":
+        return _roman(number).lower()
+    if fmt == "decimalZero":
+        return f"{number:02d}"
+    return str(number)
+
+
+def docx_numbering(numbering: ElementTree.Element | None) -> dict:
+    """``word/numbering.xml`` as {numId: {level: (format, text pattern, start)}}. A clause number that Word
+    generates - "3.4.2", "（一）", "第二条" - is a list number, not text: without this the extracted paragraph
+    has lost the very thing a person needs to find it again."""
+    if numbering is None:
+        return {}
+    abstract: dict = {}
+    for item in numbering.findall(_W + "abstractNum"):
+        levels = {}
+        for level in item.findall(_W + "lvl"):
+            fmt = level.find(_W + "numFmt")
+            text = level.find(_W + "lvlText")
+            start = level.find(_W + "start")
+            try:
+                first = int(start.get(_W + "val")) if start is not None else 1
+            except (TypeError, ValueError):
+                first = 1
+            levels[int(level.get(_W + "ilvl") or 0)] = ((fmt.get(_W + "val") if fmt is not None else "decimal") or "decimal",
+                                                       (text.get(_W + "val") if text is not None else "") or "", first)
+        abstract[item.get(_W + "abstractNumId")] = levels
+    result: dict = {}
+    for item in numbering.findall(_W + "num"):
+        ref = item.find(_W + "abstractNumId")
+        if ref is not None and ref.get(_W + "val") in abstract:
+            result[item.get(_W + "numId")] = abstract[ref.get(_W + "val")]
+    return result
+
+
+class _Counters:
+    """The running numbers of every list of a document, level by level."""
+
+    def __init__(self, definitions: dict) -> None:
+        self.definitions, self.counts = definitions, {}
+
+    def label(self, paragraph: ElementTree.Element) -> str:
+        props = paragraph.find(_W + "pPr")
+        num = props.find(_W + "numPr") if props is not None else None
+        if num is None:
+            return ""
+        ident, level = num.find(_W + "numId"), num.find(_W + "ilvl")
+        key = ident.get(_W + "val") if ident is not None else None
+        levels = self.definitions.get(key)
+        if not levels:
+            return ""
+        try:
+            depth = int(level.get(_W + "val")) if level is not None else 0
+        except (TypeError, ValueError):
+            depth = 0
+        if depth not in levels:
+            return ""
+        counts = self.counts.setdefault(key, {})
+        counts[depth] = counts.get(depth, levels[depth][2] - 1) + 1
+        for deeper in [d for d in counts if d > depth]:
+            del counts[deeper]
+        fmt, pattern, _start = levels[depth]
+        if fmt in ("bullet", "none") or not pattern:
+            return ""
+        out = pattern
+        for index in range(depth + 1):
+            value = counts.get(index, levels.get(index, ("decimal", "", 1))[2])
+            out = out.replace(f"%{index + 1}", _numbered(value, levels.get(index, (fmt, "", 1))[0] if index != depth else fmt))
+        return out.strip()
+
+
+def docx_document_text(document: ElementTree.Element, limit: int, numbering: ElementTree.Element | None = None) -> str:
+    """Read paragraphs and tables in document order without flattening table cells. With ``numbering``
+    (the root of word/numbering.xml) a paragraph that Word numbers gets its number back, as text."""
     ns = {"w": "http://schemas.openxmlformats.org/wordprocessingml/2006/main"}
     tag = "{" + ns["w"] + "}"
     body = document.find("w:body", ns)
@@ -57,9 +158,12 @@ def docx_document_text(document: ElementTree.Element, limit: int) -> str:
         return ""
     blocks: list[str] = []
     used = 0
+    counters = _Counters(docx_numbering(numbering))
 
     def paragraph_text(element: ElementTree.Element) -> str:
-        return "".join(node.text or "" for node in element.findall(".//w:t", ns))
+        text = "".join(node.text or "" for node in element.findall(".//w:t", ns))
+        label = counters.label(element) if text.strip() else ""
+        return f"{label} {text}" if label else text
 
     for element in body:
         if used >= limit:

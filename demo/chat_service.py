@@ -156,6 +156,48 @@ class SessionLease:
         self.release()
 
 
+_ADDRESS = re.compile(r"https?://[^\s<>\"'，。；、（）()【】]+", re.I)
+
+
+_TENDER_POSTS = frozenset({"bid-parse", "bid-tech", "bid-compliance"})
+
+
+def _whole_documents(sid: str, attachment_ids: list, message: str) -> str:
+    """What a tender post works on: the request and every selected attachment IN FULL, each under the file mark the
+    document reader knows ("### 招标文件.pdf"). A prefix of twenty thousand characters is a fifth of a real tender - and
+    a draft made from a fifth of it reads exactly like one made from all of it. A file longer than the upload cap was
+    cut when it was stored, and its stored text ends with the line that says so (uploads.CUT_NOTE) - a line the parser
+    reports in the draft."""
+    from uploads import extracted_documents
+
+    blocks = []
+    for doc in extracted_documents(sid, attachment_ids):
+        blocks.append(f"### {doc.get('name') or '附件'}\n{doc.get('text') or ''}")
+    return message.strip() + "\n\n## 本轮附件（全文）\n\n" + "\n\n".join(blocks)
+
+
+def _fetch_addresses(sid: str, message: str, attachment_ids: list) -> tuple:
+    """(attachment ids with what was fetched, a note for the person) - at most two addresses a turn."""
+    from uploads import UploadError, fetch_upload
+
+    notes = []
+    ids = list(attachment_ids)
+    for address in list(dict.fromkeys(_ADDRESS.findall(message or "")))[:2]:
+        try:
+            got = fetch_upload(sid, address.rstrip(".,;:!?"))
+        except UploadError as exc:
+            notes.append(f"网址没有取到（{exc}）：请下载后用「附件」上传。")
+            continue
+        except OSError:
+            notes.append("网址取回的文件没能保存，请检查工作台目录权限。")
+            continue
+        for item in got.get("files") or []:
+            if item.get("id") and item["id"] not in ids:
+                ids.append(item["id"])
+                notes.append(f"已从网址取回「{item.get('name')}」并作为本轮附件。")
+    return ids, " ".join(notes)
+
+
 def prepare_turn(root: Path, body: dict) -> dict:
     """Validate before opening an SSE stream; no business output is created here."""
     message = body["message"].strip()
@@ -256,6 +298,11 @@ def prepare_turn(root: Path, body: dict) -> dict:
     from uploads import list_uploads
 
     attachment_ids = list(dict.fromkeys(body.get("attachments") or []))
+    fetched_note = ""
+    if route["intent"] != "chat" or route.get("workflow"):
+        # a task about a document whose address is in the message: the workbench fetches it (uploads.fetch_upload -
+        # public addresses only, 20 MB, the same path an upload takes) and the turn works on it like on any attachment
+        attachment_ids, fetched_note = _fetch_addresses(sid, message, attachment_ids)
     available = {f["id"] for f in list_uploads(sid)} if attachment_ids else set()
     if any(identifier not in available for identifier in attachment_ids):
         raise ValueError("附件不存在，请重新选择当前会话的附件")
@@ -273,21 +320,27 @@ def prepare_turn(root: Path, body: dict) -> dict:
         context = max((r["context"] for r in requests.values()), key=lambda r: r["used"])
     else:
         material = session_context.draft_material(sid, attachment_ids, message, prepared)
+        if attachment_ids and ids and set(ids) <= _TENDER_POSTS:
+            material = _whole_documents(sid, attachment_ids, message)
         omitted = prepared.get("material_omitted")
         if omitted:
             context["note"] += (" 本轮资料超出预算，未加入：" + "、".join(omitted[:6])
                                 + (f" 等 {len(omitted)} 项" if len(omitted) > 6 else "") + "。")
+    if fetched_note:
+        context["note"] = f"{context.get('note', '')} {fetched_note}".strip()
     context = {**context, "history_count": prepared["history_count"],
                "indexed_history": prepared["indexed_history"], "attachments_indexed": prepared["attachments_indexed"],
                "retrieved": len(prepared["sources"]), "memory_saved": True}
     workflow_sources = []
+    workflow_unreadable = []
     roles = body.get("attachment_roles") or {}
     if any(key not in attachment_ids or role not in {"tender", "response", "reference"} for key, role in roles.items()):
         raise ValueError("资料用途只允许指定当前选择的附件")
     if route["workflow"]:
-        from workflow_service import selected_sources, budget_settings
+        from workflow_service import selected_sources, budget_settings, unreadable_attachments
         budget_settings(body.get("workflow_budget"))
         workflow_sources = selected_sources(root, sid, message, attachment_ids, roles)
+        workflow_unreadable = unreadable_attachments(sid)
     return {"session_id": sid, "message": message, "material": material,
             "ids": ids, "skill_source": source, "history": history, "context": context,
             "requests": requests, "prepared_context": prepared,
@@ -295,7 +348,8 @@ def prepare_turn(root: Path, body: dict) -> dict:
             "intent": intent, "project_id": project_id, "project_name": project_name,
             "confirmed": body.get("confirm_ok") is True or CONFIRM in message,
             "attachments": attachment_ids, "route": route,
-            "workflow_sources": workflow_sources, "workflow_budget": body.get("workflow_budget"),
+            "workflow_sources": workflow_sources, "workflow_unreadable": workflow_unreadable,
+            "workflow_budget": body.get("workflow_budget"),
             "attachment_roles": roles, "cad_project_id": cad_project_id, "cad_context": cad_context,
             "planning_project_id": planning_project_id, "planning_context": planning_context,
             "logistics_project_id": logistics_project_id, "logistics_context": logistics_context}

@@ -199,13 +199,70 @@ def _comparison_unresolved(row):
     return [row["requirement_ref"] + "：" + ("候选响应原文待人工核验" if row["response_evidence"] else "未检出对应响应证据")]
 
 
+def _unreadable(value):
+    """[{title, role, reason}]: files the caller was pointed at and got no text out of. Bounded like sources."""
+    if value is None:
+        return []
+    if not isinstance(value, list) or len(value) > 24 or any(not isinstance(item, dict) for item in value):
+        raise ValueError("未读出文件清单无效")
+    result = []
+    for item in value:
+        title, role = item.get("title"), item.get("role", "reference")
+        if not isinstance(title, str) or not title.strip() or role not in {"tender", "response", "reference"}:
+            raise ValueError("未读出文件清单无效")
+        entry = {"title": title.strip()[:120], "role": role, "reason": str(item.get("reason") or "未读出")[:120]}
+        if entry["title"] not in {r["title"] for r in result}:
+            result.append(entry)
+    return result
+
+
+def _properties_of(source):
+    """The document properties of a job file of ours (author, last modified by, company …); {} for pasted text, for a
+    file outside the job folder and for a file that holds none."""
+    path = str(source.get("path") or "")
+    if not path or source.get("kind") != "job_file":
+        return {}
+    from packing_assistant.office_job import job_root
+    from packing_assistant.tools import file_properties
+
+    root = job_root().resolve()
+    target = (root / path).resolve()
+    try:
+        target.relative_to(root)
+    except ValueError:
+        return {}
+    return file_properties.read(target) if target.is_file() else {}
+
+
+def _checked_entry(source):
+    """One source as the check record keeps it: the hash of the text as read, and the path of a job file so
+    that it can be read again."""
+    from packing_assistant.tools.bid_check_record import entry
+
+    return entry(str(source.get("title") or source["source_id"]), str(source.get("role") or "reference"), source["text"],
+                 kind=source.get("kind"), path=source.get("path"), source_id=source["source_id"])
+
+
+def _evidence_files(sources):
+    """Reference files count as evidence only beside a declared tender: without one, _source_roles reads
+    them as the tender text itself. What the user typed this turn is never an evidence file."""
+    if not any(s.get("role") == "tender" for s in sources):
+        return []
+    return [{"title": str(s.get("title") or s["source_id"]), "text": s["text"]} for s in sources
+            if s.get("role", "reference") == "reference" and s.get("kind") != "user"]
+
+
 def run_tender_workflow(text, *, session_id, output_root, sources=None, confirmed=False,
-                        cancel_event=None, model_runner=None, budget=None, parallel=True, on_event=None):
+                        cancel_event=None, model_runner=None, budget=None, parallel=True, on_event=None,
+                        unreadable=None):
     """Run an isolated workflow; model_runner(messages, *, max_tokens, cancel_event).
 
     A model runner returns a JSON string or {text: JSON-string, usage: {...}}.
     It must not perform tool calls or filesystem writes. Cancelled work is never
     resumed automatically; load_workflow truthfully recovers terminal artifacts.
+
+    ``unreadable`` lists files that were pointed at and gave no text. They take no part in the
+    comparison, and the drafts say so: a row they might have answered is 未能判断, not 未响应.
     """
     from packing_assistant.runtime.civil_config import CONFIRM, decide_gate, load_config
     from packing_assistant.tools.tender_parse import (parse_tender_text, build_response_matrix,
@@ -239,7 +296,12 @@ def run_tender_workflow(text, *, session_id, output_root, sources=None, confirme
             raise ValueError("来源角色无效")
         if type(source.get("start", 0)) is not int or source.get("start", 0) < 0:
             raise ValueError("来源位置无效")
+    unread = _unreadable(unreadable)
     tender_text, supplied = _source_roles(text, supplied)
+    # Sources that came with a role are documents: every word of the tender text is the tender's, and
+    # a document says "已经取得许可证的须提供复印件" without anybody of our side speaking. Only a request
+    # typed into one box is read clause by clause for whose words they are (tools/tender_facts.py).
+    declared = any(s.get("role") in {"tender", "response"} for s in supplied)
     lock, ledger = RLock(), SharedBudget(limits)
     started = time.monotonic()
     stop = _Stop(cancel_event, started + limits.timeout_s)
@@ -297,13 +359,17 @@ def run_tender_workflow(text, *, session_id, output_root, sources=None, confirme
         ledger.reserve("parse", tokens({"task": "本地解析当前选定招标资料", "sources": source_pointers}))
         state["state"] = "parsing"
         publish({"kind": "workflow", "state": "parsing"})
-        parsed = parse_tender_text(tender_text, source="workflow:" + rid)
+        parsed = parse_tender_text(tender_text, source="workflow:" + rid, sides="none" if declared else "auto")
         stop.check()
         requirements = parsed.get("requirements", [])
         if not requirements:
             raise ValueError("未从当前资料检出可解析招标要求")
         matrix = build_response_matrix(requirements)
         handoff = parsed["handoff"]
+        unread = _unreadable(list(handoff.get("unreadable") or []) + unread)
+        if unread:
+            handoff["unreadable"] = unread  # the three drafts read it off the handoff
+            state["unreadable"] = unread
         evidence = []
         for requirement in requirements:
             quote = str(requirement.get("exact_text") or "")
@@ -345,8 +411,19 @@ def run_tender_workflow(text, *, session_id, output_root, sources=None, confirme
                 data["response_sources"] = [s for s in source_pointers if s.get("role") == "response"]
             messages = worker_messages(skill, "按工具交接编制技术响应提纲" if skill == "bid-tech" else "逐项检查响应依据与缺项", data)
             contexts[skill] = messages
-            ledger.reserve(child["task_id"], tokens(messages) + 8 * len(messages) + 8,
-                limits.output_tokens if model_runner is not None else 0, model=model_runner is not None)
+            if model_runner is None:
+                # Nothing is sent anywhere: the drafts are made by tools, and a model's window is no limit for them.
+                # A real tender's handoff is several times the 32 768 a worker may hold - the check used to stop
+                # here with "子任务完整输入与输出预留超出预算" before a single draft was written.
+                ledger.reserve(child["task_id"], 0, 0, model=False)
+                continue
+            try:
+                ledger.reserve(child["task_id"], tokens(messages) + 8 * len(messages) + 8, limits.output_tokens, model=True)
+            except BudgetExceeded as exc:
+                # The material is never cut to fit a window. The tools still write their drafts; the model is
+                # not asked, and the child says why.
+                child["model_skipped"] = str(exc)
+                ledger.reserve(child["task_id"], 0, 0, model=False)
         publish({"kind": "workflow", "state": "running"})
 
         def worker(child):
@@ -368,22 +445,30 @@ def run_tender_workflow(text, *, session_id, output_root, sources=None, confirme
                     if not outline.get("from_extracted_scores"):
                         child["unresolved"].append("未提供明确评分点；技术响应范围待核")
                 else:
-                    markdown = _compliance_gaps_md(local["handoff"], local["matrix"])
-                    from packing_assistant.document_text import table_markdown
-                    rows = [["招标要求", "响应原文", "对照状态（非认定）"]]
-                    for row in local["response_comparison"]:
-                        rows.append([row["requirement"], "；".join(e["quote"] for e in row["response_evidence"]) or "未提供对应响应证据", _comparison_status_text(row)])
-                    table_limit = sum(sum(len(str(cell)) * 6 + 10 for cell in row) for row in rows) + 100
-                    markdown += "\n\n## 用户响应资料对照\n\n仅作原文候选对照，出现相同词不代表已实质响应，需人工核验。\n\n" + table_markdown(rows, table_limit)
+                    # One table. The response documents used to be compared in a second table appended
+                    # below a first one that knew nothing of them - "未响应" above, the candidate quote and
+                    # the numeric conflict below. The comparison now answers the rows themselves.
+                    markdown = _compliance_gaps_md(local["handoff"], local["matrix"], comparison=local["response_comparison"],
+                                                   evidence=_evidence_files(local["sources"]),
+                                                   checked=[_checked_entry(s) for s in local["sources"]],
+                                                   responses=[{"title": str(s.get("title") or s["source_id"]), "text": s["text"],
+                                                               "properties": _properties_of(s)}
+                                                              for s in local["sources"] if s.get("role") == "response"])
                     child["response_comparison"] = local["response_comparison"]
                     child["unresolved"] = [str(g.get("title") or g.get("req_id")) for g in gap_rows(local["matrix"])]
                     child["unresolved"].extend(item for row in local["response_comparison"] for item in _comparison_unresolved(row))
+                    missed = local["handoff"].get("unreadable") or []
+                    child["unresolved"].extend(f"{u['title']} 未读出（{u['reason']}）：其中内容未参与对照" for u in missed)
                     if not any(s.get("role") == "response" for s in local["sources"]):
-                        child["unresolved"].append("用户未明确提供投标响应资料，不能认定已响应")
+                        child["unresolved"].append("响应资料给了但未读出，不能认定未响应，也不能认定已响应"
+                                                   if any(u["role"] != "tender" for u in missed)
+                                                   else "用户未明确提供投标响应资料，不能认定已响应")
                     child["conclusions"] = [{"text": "已逐项整理响应缺项，未代判投标资格", "origin": "tool",
                                               "evidence_refs": sorted({e["source_id"] for e in child["evidence"]})}]
                 stop.check()
                 document(directory / child["task_id"], skill, markdown, child)
+                if child.get("model_skipped"):
+                    raise BudgetExceeded(child["model_skipped"])   # after the draft is on disk, not instead of it
                 if model_runner is not None:
                     ledger.start_model(child["task_id"])
                     answer, usage = _analysis(model_runner, contexts[skill], limits.output_tokens, stop)
@@ -411,9 +496,11 @@ def run_tender_workflow(text, *, session_id, output_root, sources=None, confirme
                 future.result()
         stop.check()
         combined = "\n".join(Path(item["path"]).read_text(encoding="utf-8") for child in state["children"] for item in child["files"] if item["path"].endswith(".md"))
+        # with no model there is no window the controller's summary has to fit into: on a real tender the list of
+        # open items alone is longer than a small budget, and the run would fail after all its work was done
         ledger.reserve("controller-review", tokens({"children": [
             {key: child[key] for key in ("skill", "status", "conclusions", "unresolved")}
-            for child in state["children"]]}))
+            for child in state["children"]]}) if model_runner is not None else 0)
         review = review_draft(draft=combined, matrix=snapshot["matrix"])
         conflicts = []
         categories = {}
@@ -434,15 +521,24 @@ def run_tender_workflow(text, *, session_id, output_root, sources=None, confirme
                            "conflicts": conflicts, "evidence_count": len(evidence),
                            "response_comparison": comparison,
                            "response_evidence_supplied": any(s.get("role") == "response" for s in supplied),
+                           "unreadable": unread, "evidence_files": [e["title"] for e in _evidence_files(supplied)],
                            "handoff_unchanged": hashlib.sha256(canonical(snapshot).encode()).hexdigest() == state["handoff_hash"]}
         state["review"].update(n_gaps=len(state["review"]["gaps"]), 缺项=state["review"]["gaps"])
         state["quality"] = {"requirements": len(requirements), "requirements_with_sources": len(requirements) - len(unmapped),
             "response_candidates": sum(bool(row["response_evidence"]) for row in comparison), "responses_verified": 0,
             "unresolved": sum(len(child["unresolved"]) for child in state["children"]), "conflicts": len(conflicts),
-            "forbidden_claims": len(review["forbidden_hits"]), "children_completed": sum(c["status"] == "done" for c in state["children"])}
+            "forbidden_claims": len(review["forbidden_hits"]), "children_completed": sum(c["status"] == "done" for c in state["children"]),
+            "unreadable_files": len(unread)}
         state["ok"] = all(c["status"] == "done" for c in state["children"]) and not review["forbidden_hits"]
+        if any(c.get("error_code") == "budget_exceeded" for c in state["children"]):
+            state["error_code"] = "budget_exceeded"
         state["state"] = "reviewing"
         state["reply"] = "招标协作已完成内部草稿；缺项与冲突待人工核对，不可递交。" if state["ok"] else "部分子任务未完成，已生成草稿和来源保留。"
+        skipped = next((c["model_skipped"] for c in state["children"] if c.get("model_skipped")), "")
+        if skipped:
+            state["reply"] = f"工具草稿已全部生成；模型分析未做（{skipped}）。资料不会为了塞进模型窗口而被截断。缺项与冲突待人工核对，不可递交。"
+        if unread:
+            state["reply"] += f" 有 {len(unread)} 份文件没读出来（{'、'.join(u['title'] for u in unread)}），相关行标为「未能判断」，不是「未响应」。"
         md = "# 招标协作汇总\n\nAI 草稿，不可递交；不代替资格、废标或签认判断。\n\n"
         md += f"交接SHA256：{state['handoff_hash']}\n\n| 子任务 | 状态 | 未解决项 |\n| --- | --- | --- |\n"
         for child in state["children"]:
@@ -451,8 +547,35 @@ def run_tender_workflow(text, *, session_id, output_root, sources=None, confirme
         md += "\n## 缺项与冲突\n\n" + "\n".join("- " + s for child in state["children"] for s in child["unresolved"])
         md += "\n" + "\n".join("- " + c["note"] for c in conflicts)
         md += "\n\n## 来源\n\n" + "\n".join("- [" + s["source_id"] + "] " + str(s.get("title", "")) for s in supplied)
-        ledger.reserve("controller-output", 0, tokens(md))
+        if unread:
+            md += "\n\n## 未读出的文件\n\n" + "\n".join(f"- {u['title']}（{u['role']}）：{u['reason']}" for u in unread)
+            md += "\n\n这些文件未参与解析和对照；相关行是「未能判断」，不是「未响应」。"
+        # Which texts this run read, and what moved since the last run of this task (tools/bid_check_record.py).
+        from packing_assistant.tools import bid_check_record as check_record
+
+        checked = [_checked_entry(s) for s in supplied]
+        gaps_md = next((Path(item["path"]).read_text(encoding="utf-8") for child in state["children"] if child["skill"] == "bid-compliance"
+                        for item in child["files"] if item["name"] == "bid-compliance.md"), "")
+        record = check_record.build(kind="workflow", session_id=session_id, inputs=checked, drafts=[], rows=check_record.rows_of(gaps_md),
+                                    unreadable=unread, run_id=rid, handoff_sha256=state["handoff_hash"])
+        earlier = [assert_open(p) for p in directory.parent.glob("wf-*/" + check_record.WORKFLOW_RECORD) if p.parent != directory]
+        previous = check_record.latest(earlier)
+        md += "\n\n## 核对对象\n\n" + "\n".join(check_record.inputs_table(checked))
+        md += "文字一改，sha256 就变：本次各表只对上面这些文字成立。\n"
+        if previous is not None:
+            md += "\n" + "\n".join(check_record.comparison_section(previous, record))
+            moved = check_record.compare(previous, record)
+            state["check"] = {"compared_with": previous.get("run_id"), "inputs_changed": [i["title"] for i in moved["inputs"]],
+                              "rows_changed": [r["label"] for r in moved["rows"]]}
+        ledger.reserve("controller-output", 0, tokens(md) if model_runner is not None else 0)
         document(directory, "collaboration-review", md)
+        record["drafts"] = [{"name": Path(item["path"]).name, "path": Path(item["path"]).relative_to(directory).as_posix(),
+                             "sha256": check_record.sha(Path(item["path"]).read_text(encoding="utf-8"))}
+                            for item in state["files"] if item["path"].endswith(".md")]
+        record_path = directory / check_record.WORKFLOW_RECORD
+        _atomic(record_path, record)
+        file_saved(record_path, "bid.check")
+        state.setdefault("check", {})["record"] = str(record_path)
         state["state"] = "done" if state["ok"] else "failed"
     except Exception as exc:
         state.update(ok=False, state="timed_out" if isinstance(exc, TimeoutError) else "cancelled" if isinstance(exc, InterruptedError) else "failed",

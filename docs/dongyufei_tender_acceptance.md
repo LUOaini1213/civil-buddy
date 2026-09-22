@@ -111,8 +111,10 @@ The workflow generated actual review artifacts including:
 - `handoff.json`
 - `tender-extract.md`
 - `tender-extract.docx`
+- `tender-extract.xlsx`
 - `worker-bid-tech/bid-tech.md`
 - `worker-bid-tech/bid-tech.docx`
+- `worker-bid-tech/bid-tech.xlsx`
 - `worker-bid-compliance/bid-compliance.md`
 - `worker-bid-compliance/bid-compliance.docx`
 - `worker-bid-compliance/bid-compliance.xlsx`
@@ -120,8 +122,12 @@ The workflow generated actual review artifacts including:
 - `collaboration-review.docx`
 - `collaboration-review.xlsx`
 
+_Updated 2026-09-20 (second time). 11 files became 13: the parse table and the technical outline are written as tables now (`事项｜要求原文｜来源页段｜是否检出｜澄清建议`, `评分点原文｜拟写章节｜已有证据｜缺项｜专项接口`), so each is exported as a workbook too. The compliance draft is one table: the uploaded response answers the rows themselves (`工期 | 60日历天 | 供应商自述工期999日历天。 | 未响应·数值不符 | …待人工核验`) instead of standing in a second table below a first that said "未提供". The status codes above are unchanged and still asserted on the JSON._
+
 ### Full Workflow Conclusion
 
 PASS
 
 The end-to-end workflow successfully generated review documents and compliance workbooks, preserved the original 60-day tender requirement, did not treat the supplier's 999-day statement as a tender requirement, identified unresolved compliance items, and retained human review before submission.
+
+_Updated 2026-09-21. 13 files became 14: the run also writes `check.json` - the sha256 of every text it read, of every draft it wrote, and the state of every compliance row - and `collaboration-review.md` lists those texts under 核对对象. A second run of the same task appends 与上次核对相比 (which input changed, which row moved). The compliance draft names what it read in section 1. The status codes above are unchanged and still asserted on the JSON._

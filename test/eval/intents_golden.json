@@ -9,6 +9,7 @@
     { "text": "什么是装箱？", "intent": "both", "skill": "pack-ship" },
     { "text": "写一份施工方案", "intent": "run", "skill": "construction" },
     { "text": "解析招标 xxx", "intent": "run", "skill": "bid-parse" },
+    { "text": "解析这份招标文件 https://example.org/notice/a.pdf", "intent": "run", "skill": "bid-parse" },
     { "text": "帮我装柜到小柜", "intent": "run", "skill": "pack-ship" },
     { "text": "pack 小票", "intent": "run", "skill": "pack-ship" },
     { "text": "能不能装柜", "intent": "both", "skill": "pack-ship" },

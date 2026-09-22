@@ -107,7 +107,11 @@ def main() -> int:
         assert result["quality"]["conflicts"] >= 1, result["quality"]
         directory = Path(result["directory"])
         compliance = (directory / "worker-bid-compliance" / "bid-compliance.md").read_text(encoding="utf-8")
-        assert "conflict_requires_review" in compliance and "999日历天" in compliance, compliance[-600:]
+        # 状态码是给机器的，留在 JSON 里；成稿给人看，写的是三态和那句「待人工核验」。此前成稿末尾另附一张
+        # 对照表印状态码，而它上面的逐项表对同一条要求写着「未响应·未提供」——两张表打架，现在合成一张。
+        assert any(r["status"] == "conflict_requires_review" for r in comparison), comparison
+        assert "未响应·数值不符" in compliance and "响应 999日历天 超过招标 60日历天，待人工核验" in compliance, compliance[-900:]
+        assert "用户未提供投标响应资料" not in compliance, "响应文件给了，成稿不能说没给"
         assert compliance.count("| 技术方案评分20分，须编制施工专项方案") == 1, "同一句招标原文在对照表里重复出现"
         summary = (directory / "collaboration-review.md").read_text(encoding="utf-8")
         assert "响应 999日历天 超过招标 60日历天" in summary, summary

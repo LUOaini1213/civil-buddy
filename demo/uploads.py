@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import json
 import re
+import time
 from io import BytesIO
 from pathlib import Path
 from threading import RLock
@@ -39,6 +40,10 @@ INJECT_CHARS = 60_000
 MAX_ARCHIVE_BYTES = 60 * 1024 * 1024
 MAX_ARCHIVE_ENTRIES = 4096
 ALLOWED_EXT = frozenset({"pdf", "docx", "xlsx", "txt", "md", "csv", "json", "log"})
+#: Refused attachments that gave no text, one JSON object per line. Not .json/.txt/.bin: those three are
+#: the attachment records themselves (strict_documents, the Rust workbench's listing).
+UNREADABLE_LOG = "unreadable.jsonl"
+MAX_UNREADABLE = 24
 _SESSION_RE = re.compile(r"[A-Za-z0-9-][A-Za-z0-9_-]{3,31}\Z")
 _ID_RE = re.compile(r"[a-f0-9]{12}\Z")
 _LOCK = RLock()
@@ -50,6 +55,16 @@ class UploadError(ValueError):
 
 class UploadTooLarge(UploadError):
     """An attachment/request limit failure suitable for a 413 response."""
+
+
+class UploadUnreadable(UploadError):
+    """A file of an accepted type that gave no usable text: damaged, encrypted, a scan with no text
+    layer, empty. Refused like any other bad upload - and remembered, because a bid check run later
+    must be able to say "投标文件.pdf was given and could not be read" instead of "no response given"."""
+
+    def __init__(self, message: str, *, name: str = "", kind: str = "", size: int = 0) -> None:
+        super().__init__(message)
+        self.name, self.kind, self.size = name, kind, size
 
 
 def safe_session_id(session: str) -> str:
@@ -149,19 +164,32 @@ def _path(directory: Path, filename: str) -> Path:
     return candidate
 
 
+#: under a text that was longer than the limit: the same words office_job writes under a job file it cut
+CUT_NOTE = "（未读完）只读了前 {n} 个字符，后面的内容未参与解析"
+
+
 def _collapse(text: str) -> str:
     lines: list[str] = []
     used = 0
+    cut = False
+    noted = MAX_TEXT_CHARS >= 1024   # a limit too small to hold the note (tests) keeps the bare cut
+    limit = MAX_TEXT_CHARS - 64 if noted else MAX_TEXT_CHARS   # room for the note: a cut attachment says so, in its own text
     for line in text.splitlines():
         line = line.strip()
         if not line and (not lines or not lines[-1]):
             continue
-        room = MAX_TEXT_CHARS - used
+        room = limit - used
         if room <= 0:
+            cut = True
             break
-        line = line[:max(0, room - 1)]
+        if len(line) > room - 1:
+            line, cut = line[:max(0, room - 1)], True
         lines.append(line)
         used += len(line) + 1
+        if cut:
+            break
+    if cut and noted:
+        lines.append(CUT_NOTE.format(n=used))
     return ("\n".join(lines) + ("\n" if lines else ""))[:MAX_TEXT_CHARS]
 
 
@@ -178,7 +206,9 @@ def _docx_text(data: bytes) -> str:
     _validate_archive(data)
     with ZipFile(BytesIO(data)) as archive:
         document = ElementTree.fromstring(archive.read("word/document.xml"))
-    return docx_document_text(document, MAX_TEXT_CHARS)
+        numbering = (ElementTree.fromstring(archive.read("word/numbering.xml"))
+                     if "word/numbering.xml" in archive.namelist() else None)   # clause numbers Word generates
+    return docx_document_text(document, MAX_TEXT_CHARS, numbering)
 
 
 def _xlsx_text(data: bytes) -> str:
@@ -210,6 +240,37 @@ def _xlsx_text(data: bytes) -> str:
         workbook.close()
 
 
+#: pages of a scan read on upload: about eight seconds a page, and the page waits for the answer
+OCR_UPLOAD_PAGES = 40
+
+
+def _ocr_pdf(data: bytes) -> str:
+    """A scan: read by OCR when the optional packages are there (pip install -e .[ocr]), "" when they are not - and
+    the caller says the file was not read. The first line marks the text as an OCR reading, as the job-folder path
+    does (office_job._ocr_pdf_text), so every draft made from it says so."""
+    try:
+        from packing_assistant.tools import ocr
+        from packing_assistant.tools.pdf_layout import pages_text
+    except ImportError:
+        return ""
+    if not ocr.available():
+        return ""
+    import tempfile
+
+    with tempfile.TemporaryDirectory(prefix="civil-ocr-") as folder:
+        scan = Path(folder) / "scan.pdf"
+        scan.write_bytes(data)
+        try:
+            pages = ocr.pdf_page_lines(scan, max_pages=OCR_UPLOAD_PAGES + 1)
+        except Exception:  # noqa: BLE001 - whatever the engine raised, the file was not read
+            return ""
+    cut = len(pages) > OCR_UPLOAD_PAGES
+    text = ocr.MARK + "\n" + pages_text("\n".join(lines) for lines in pages[:OCR_UPLOAD_PAGES])
+    if cut:
+        text += f"\n{CUT_NOTE}只识别了前 {OCR_UPLOAD_PAGES} 页；其余页请拆分后分别上传，或放进作业文件夹用 civil exec 解析"
+    return text if len(text.strip()) > len(ocr.MARK) + 8 else ""
+
+
 def _pdf_text(data: bytes) -> str:
     try:
         from pypdf import PdfReader
@@ -218,17 +279,21 @@ def _pdf_text(data: bytes) -> str:
     reader = PdfReader(BytesIO(data))
     if reader.is_encrypted:
         raise UploadError("暂不支持加密 PDF，请先解密后上传")
-    lines: list[str] = []
+    from packing_assistant.tools import pdf_grid
+    from packing_assistant.tools.pdf_layout import pages_text
+
+    pages: list[str] = []
     used = 0
-    for index, page in enumerate(reader.pages):
-        if index >= 400:
-            break
-        text = (page.extract_text() or "")[:MAX_TEXT_CHARS - used]
-        lines.append(text)
+    # tables that are DRAWN come back as rows (tools/pdf_grid.py), watermarks and page numbers are left out
+    for text in pdf_grid.document_texts(reader, max_pages=400):
+        pages.append(text)
         used += len(text) + 1
-        if used >= MAX_TEXT_CHARS:
+        if used >= MAX_TEXT_CHARS * 2:
             break
-    return "\n".join(lines)
+    if not any(text.strip() for text in pages):
+        return _ocr_pdf(data)
+    # paragraphs joined, tables rebuilt, every page under its marker - the same reading a job-folder PDF gets
+    return pages_text(pages)
 
 
 def extract_upload(filename: str, data: bytes) -> tuple[str, str, str]:
@@ -255,18 +320,24 @@ def extract_upload(filename: str, data: bytes) -> tuple[str, str, str]:
             if kind == "csv":
                 raw = csv_text(raw, MAX_TEXT_CHARS)
             engine = "builtin-text"
-    except UploadError:
+    except UploadTooLarge:
         raise
+    except UploadError as exc:
+        # encrypted, binary where text was promised, a parser that is not installed: our own wording
+        raise UploadUnreadable(str(exc), name=name, kind=kind, size=len(data)) from exc
     except Exception as exc:
         # Parser messages can echo document bytes; keep those out of responses.
-        raise UploadError(f"{kind} 文件无法解析，请检查文件是否损坏或格式与扩展名一致") from exc
+        raise UploadUnreadable(f"{kind} 文件无法解析，请检查文件是否损坏或格式与扩展名一致",
+                               name=name, kind=kind, size=len(data)) from exc
     text = _collapse(raw)
     if len(text.strip()) < 8:
         if kind == "pdf":
-            raise UploadError("PDF 里抽不出可用文字。扫描件需要先 OCR，或另存为 Word/文本")
-        if kind in {"docx", "xlsx"}:
-            raise UploadError(f"{kind} 文件里几乎没有文字内容（不足 8 个字符），请检查是否为空白文档")
-        raise UploadError("文件内容几乎为空（不足 8 个字符），请检查后重新上传")
+            message = "PDF 里抽不出可用文字。扫描件需要先 OCR，或另存为 Word/文本"
+        elif kind in {"docx", "xlsx"}:
+            message = f"{kind} 文件里几乎没有文字内容（不足 8 个字符），请检查是否为空白文档"
+        else:
+            message = "文件内容几乎为空（不足 8 个字符），请检查后重新上传"
+        raise UploadUnreadable(message, name=name, kind=kind, size=len(data))
     return kind, text, engine
 
 
@@ -305,6 +376,47 @@ def list_uploads(session: str) -> list[dict]:
     return sorted(result, key=lambda item: item["name"])
 
 
+def _unreadable_lines(path: Path) -> list[dict]:
+    try:
+        log = assert_open(path)
+        if not log.is_file() or log.stat().st_size > 64_000:
+            return []
+        rows = [json.loads(line) for line in log.read_text(encoding="utf-8").splitlines() if line.strip()]
+    except (OSError, ValueError, RuntimeError):
+        return []
+    return [row for row in rows if isinstance(row, dict) and isinstance(row.get("name"), str)
+            and isinstance(row.get("reason"), str)][-MAX_UNREADABLE:]
+
+
+def _remember_unreadable(session: str, failures: list[UploadUnreadable]) -> None:
+    """Best effort. The upload is refused either way; the note only lets a later check tell a file that
+    was given and not read from a file that was never given."""
+    try:
+        with _LOCK:
+            path = _path(_directory(session), UNREADABLE_LOG)
+            rows = _unreadable_lines(path) + [
+                {"name": exc.name, "kind": exc.kind, "bytes": exc.size, "reason": str(exc)[:200], "at": int(time.time())}
+                for exc in failures]
+            guarded_write_text(path, "".join(json.dumps(row, ensure_ascii=False) + "\n" for row in rows[-MAX_UNREADABLE:]))
+    except (OSError, ValueError, RuntimeError):
+        pass
+
+
+def unreadable_uploads(session: str) -> list[dict]:
+    """Files this task tried to attach that gave no text: the last attempt per name, without the names
+    that have been attached successfully since (the same file after OCR, say)."""
+    with _LOCK:
+        directory = assert_open(_directory(session))
+        if not directory.is_dir():
+            return []
+        attached = {item["name"] for item in list_uploads(session)}
+        latest: dict[str, dict] = {}
+        for row in _unreadable_lines(_path(directory, UNREADABLE_LOG)):
+            latest[row["name"]] = row
+    return [{"name": name, "kind": str(row.get("kind") or ""), "reason": row["reason"]}
+            for name, row in latest.items() if name not in attached]
+
+
 def save_uploads(session: str, files: Iterable[tuple[str, bytes]]) -> dict:
     directory = _directory(session)
     files = list(files)
@@ -314,7 +426,17 @@ def save_uploads(session: str, files: Iterable[tuple[str, bytes]]) -> dict:
         raise UploadError("同一会话最多 12 个附件")
     if sum(len(data) for _, data in files) > MAX_REQUEST_BYTES:
         raise UploadTooLarge("一次上传不能超过 25 MB")
-    prepared = [(safe_filename(name), data, extract_upload(name, data)) for name, data in files]
+    prepared = []
+    unreadable: list[UploadUnreadable] = []
+    for name, data in files:
+        try:
+            prepared.append((safe_filename(name), data, extract_upload(name, data)))
+        except UploadUnreadable as exc:
+            unreadable.append(exc)
+    if unreadable:
+        # still nothing of this batch is saved; what changes is that the refusal leaves a note
+        _remember_unreadable(session, unreadable)
+        raise unreadable[0]
     saved: list[dict] = []
     created: list[Path] = []
     with _LOCK:
@@ -345,6 +467,116 @@ def save_uploads(session: str, files: Iterable[tuple[str, bytes]]) -> dict:
                     pass
             raise
     return {"ok": True, "files": saved}
+
+
+# ---------------------------------------------------------------------------
+# a document named by its address
+# ---------------------------------------------------------------------------
+URL_TIMEOUT = 60.0
+_URL_TYPES = {"application/pdf": "pdf", "application/vnd.openxmlformats-officedocument.wordprocessingml.document": "docx",
+              "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet": "xlsx"}
+
+
+def check_public_url(url: str) -> str:
+    """The URL when a fetch may go there: http(s), and every address the host resolves to is a public one - not this
+    machine, not the local network, not a link-local or metadata range. What the URL SAYS is not enough: a name
+    may resolve to 10.0.0.5."""
+    import ipaddress
+    import socket
+    from urllib.parse import urlsplit
+
+    parts = urlsplit((url or "").strip())
+    if parts.scheme not in ("http", "https") or not parts.hostname:
+        raise UploadError("只能取 http / https 地址上的文件")
+    if parts.username or parts.password:
+        raise UploadError("地址里不能带用户名或密码")
+    try:
+        found = socket.getaddrinfo(parts.hostname, parts.port or (443 if parts.scheme == "https" else 80), type=socket.SOCK_STREAM)
+    except OSError as exc:
+        raise UploadError("域名解析失败") from exc
+    for info in found:
+        ip = ipaddress.ip_address(info[4][0].split("%")[0])
+        mapped = getattr(ip, "ipv4_mapped", None)
+        ip = mapped or ip
+        if not ip.is_global or ip.is_multicast:
+            raise UploadError("拒绝访问本机或内网地址")
+    return parts.geturl()
+
+
+def _url_name(url: str, disposition: str, content_type: str) -> str:
+    from urllib.parse import unquote, urlsplit
+
+    named = re.search(r"""filename\*?=(?:UTF-8''|")?([^";]+)""", disposition or "", re.I)
+    name = unquote(named.group(1).strip()) if named else unquote(Path(urlsplit(url).path).name)
+    name = re.split(r"[\\/]", name)[-1].strip()
+    if Path(name).suffix.lower().lstrip(".") not in ALLOWED_EXT:
+        kind = next((ext for mime, ext in _URL_TYPES.items() if mime in (content_type or "").lower()), "txt")
+        name = f"{Path(name).stem or '网页'}.{kind}"      # a page: its text is what is kept
+    return name
+
+
+def fetch_document(url: str) -> tuple[str, bytes]:
+    """(file name, bytes) of a document on the web: public addresses only - also after every redirect -, no proxy, no
+    more than MAX_BYTES, nothing executed. A web PAGE comes back as its text (a 招标公告 is a page)."""
+    import urllib.error
+    import urllib.request
+
+    class _NoRedirect(urllib.request.HTTPRedirectHandler):
+        def redirect_request(self, *args, **kwargs):  # noqa: ANN002, ANN003
+            return None
+
+    opener = urllib.request.build_opener(urllib.request.ProxyHandler({}), _NoRedirect())
+    target = check_public_url(url)
+    for _hop in range(5):
+        request = urllib.request.Request(target, headers={"User-Agent": "Mozilla/5.0 CivilBuddy/0.7", "Accept": "*/*"})
+        try:
+            response = opener.open(request, timeout=URL_TIMEOUT)
+        except urllib.error.HTTPError as exc:
+            if exc.code in (301, 302, 303, 307, 308) and exc.headers.get("Location"):
+                from urllib.parse import urljoin
+
+                target = check_public_url(urljoin(target, exc.headers["Location"]))     # every hop is checked again
+                continue
+            raise UploadError(f"对方返回 {exc.code}") from exc
+        except (urllib.error.URLError, OSError, ValueError) as exc:
+            raise UploadError("取不到这个地址上的文件") from exc
+        with response:
+            length = response.headers.get("Content-Length")
+            if length and length.isdigit() and int(length) > MAX_BYTES:
+                raise UploadTooLarge("单个附件不能超过 20 MB")
+            data = response.read(MAX_BYTES + 1)
+            if len(data) > MAX_BYTES:
+                raise UploadTooLarge("单个附件不能超过 20 MB")
+            content_type = response.headers.get("Content-Type", "")
+            name = _url_name(target, response.headers.get("Content-Disposition", ""), content_type)
+        if name.endswith(".txt") and "html" in content_type.lower():
+            data = _html_text(data).encode("utf-8")
+        return name, data
+    raise UploadError("重定向太多")
+
+
+def _html_text(data: bytes) -> str:
+    """The text of a page: scripts and styles out, tags out, blocks on lines of their own."""
+    import html as html_lib
+
+    raw = None
+    for encoding in ("utf-8", "gb18030"):
+        try:
+            raw = data.decode(encoding)
+            break
+        except UnicodeDecodeError:
+            continue
+    raw = raw if raw is not None else data.decode("utf-8", "replace")
+    raw = re.sub(r"(?is)<(script|style|noscript)[^>]*>.*?</\1>", " ", raw)
+    raw = re.sub(r"(?i)<(?:br|/p|/div|/tr|/li|/h[1-6]|/table)[^>]*>", "\n", raw)
+    raw = re.sub(r"(?i)</t[dh]>", " | ", raw)
+    return html_lib.unescape(re.sub(r"<[^>]+>", "", raw))
+
+
+def fetch_upload(session: str, url: str) -> dict:
+    """A document fetched by its URL, saved the way an uploaded one is: same caps, same extraction, same records."""
+    name, data = fetch_document(url)
+    return save_uploads(session, [(name, data)])
 
 
 def save_upload(session: str, filename: str, data: bytes) -> dict:

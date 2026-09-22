@@ -243,6 +243,30 @@ class ProvenanceTests(JobFolderCase):
         self.assertEqual(out["provenance"]["untraced"], [])
         self.assertTrue(any(f["name"].startswith("collaboration-review") for f in out["files"]), out["files"])
 
+    def test_tender_compare_says_which_file_gave_no_text(self):
+        from pypdf import PdfWriter
+
+        for name in ("response.pdf", "tender.pdf"):
+            writer = PdfWriter()
+            writer.add_blank_page(width=300, height=300)   # a page and no text layer: what a scanner makes
+            with (self.job / name).open("wb") as stream:
+                writer.write(stream)
+        script = Script([("tender_compare", {"tender_file": "tender.txt", "response_file": "response.pdf"})], "响应文件没读出来，需先 OCR。")
+        model_loop.run_model_agent("对照招标和我们的响应", session_id="civil-cli", complete=script)
+        result = json.loads(script.seen[1]["messages"][-1]["content"])
+        self.assertTrue(result["ok"], result)
+        self.assertEqual([(u["title"], u["role"]) for u in result["unreadable"]], [("response.pdf", "response")])
+        self.assertIn("未能判断", result["summary"])
+        self.assertEqual([row["status"] for row in result["rows"] if row["response"]], [], "nothing was read, nothing is quoted")
+
+        script = Script([("tender_compare", {"tender_file": "tender.pdf", "response_file": "response.txt"})], "招标文件没读出来。")
+        before = len(self.drafts())
+        model_loop.run_model_agent("对照招标和我们的响应", session_id="civil-cli", complete=script)
+        refused = json.loads(script.seen[1]["messages"][-1]["content"])
+        self.assertEqual((refused["ok"], refused["error_code"]), (False, "unreadable"))
+        self.assertIn("tender.pdf", refused["reason"])
+        self.assertEqual(len(self.drafts()), before, "no tender text, nothing written")
+
 
 class ApprovalTests(JobFolderCase):
     HIGH = "编一份临边防护安全交底，部位：东桥3号墩"

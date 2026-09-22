@@ -520,6 +520,62 @@ pub fn read_upload(paths: &Paths, session: &str, id: &str, offset: usize, limit:
     ))
 }
 
+/// A document fetched by its URL, saved the way an uploaded one is (same caps, same extraction, same records).
+pub fn import_url(paths: &Paths, session: &str, url: &str) -> Result<Vec<Value>, String> {
+    let (name, bytes) = crate::websearch::run_blocking(|| crate::websearch::fetch_document(url.trim()))?;
+    Ok(vec![save_upload(paths, session, &name, &bytes)?])
+}
+
+/// The http(s) addresses a message holds, in order, each once: up to the first blank or the first mark that ends an
+/// address in running Chinese text ("…见 https://example.org/a.pdf，请解析").
+pub fn addresses_in(message: &str) -> Vec<String> {
+    let mut out: Vec<String> = Vec::new();
+    let lower = message.to_lowercase();
+    let mut from = 0usize;
+    while let Some(at) = lower[from..].find("http") {
+        let start = from + at;
+        let rest = &message[start..];
+        let low = &lower[start..];
+        if !(low.starts_with("http://") || low.starts_with("https://")) {
+            from = start + 4;
+            continue;
+        }
+        let end = rest
+            .char_indices()
+            .find(|(_, c)| c.is_whitespace() || "<>\"'，。；、（）()【】".contains(*c))
+            .map(|(i, _)| i)
+            .unwrap_or(rest.len());
+        let url = rest[..end].trim_end_matches(|c: char| ".,;:!?".contains(c)).to_string();
+        if url.len() > 10 && !out.contains(&url) {
+            out.push(url);
+        }
+        from = start + end.max(4);
+    }
+    out
+}
+
+/// Addresses typed into the message of a task turn ("解析这份招标文件 https://…"): fetched the way the 网址 button
+/// fetches them, at most two a turn. Returns the new attachment ids and a note each for the person - a failure is a
+/// note too ("请下载后用附件上传"), never a silent skip.
+pub fn import_addresses(paths: &Paths, session: &str, message: &str) -> (Vec<String>, Vec<String>) {
+    let (mut ids, mut notes) = (Vec::new(), Vec::new());
+    for url in addresses_in(message).into_iter().take(2) {
+        match import_url(paths, session, &url) {
+            Ok(files) => {
+                for f in files {
+                    if let Some(id) = f.get("id").and_then(|v| v.as_str()) {
+                        ids.push(id.to_string());
+                        let name = f.get("name").and_then(|v| v.as_str()).unwrap_or("文件");
+                        notes.push(format!("已从网址取回「{name}」并作为本轮附件。"));
+                    }
+                }
+            }
+            Err(e) => notes.push(format!("网址没有取到（{e}）：请下载后用「附件」上传。")),
+        }
+    }
+    (ids, notes)
+}
+
 pub fn import_local(paths: &Paths, session: &str, raw: &str) -> Result<Vec<Value>, String> {
     let target = allow_local_path(paths, raw)?;
     if target.is_dir() {
@@ -623,6 +679,22 @@ mod tests {
     #[test]
     fn rejects_exe() {
         assert!(extract_text("x.exe", b"MZ").is_err());
+    }
+
+    #[test]
+    fn addresses_typed_into_a_message_are_found_once_each_without_the_marks_around_them() {
+        let found = addresses_in("解析这份招标文件 https://example.org/notice/a.pdf，另见（HTTP://example.org/b.docx）。再说一遍 https://example.org/notice/a.pdf");
+        assert_eq!(found, vec!["https://example.org/notice/a.pdf".to_string(), "HTTP://example.org/b.docx".to_string()]);
+        assert!(addresses_in("这个 httpd 配置怎么写？http 和 https 有什么区别").is_empty());
+    }
+
+    #[test]
+    fn an_address_that_points_inward_is_a_note_not_an_attachment() {
+        let paths = Paths::detect();      // refused before anything is written
+        let (ids, notes) = import_addresses(&paths, "s1", "解析招标 http://127.0.0.1:9/a.pdf");
+        assert!(ids.is_empty());
+        assert_eq!(notes.len(), 1);
+        assert!(notes[0].contains("请下载后用「附件」上传"), "{}", notes[0]);
     }
 
     #[test]

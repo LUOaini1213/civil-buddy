@@ -175,6 +175,10 @@
                   title="语音输入：说完先转成文字，核对后再发送（不会自动发送）。一段最长 20 秒"><svg class="cb-mic" viewBox="0 0 24 24" width="16" height="16" aria-hidden="true" focusable="false"><path fill="currentColor" d="M12 14a3 3 0 0 0 3-3V5a3 3 0 0 0-6 0v6a3 3 0 0 0 3 3zm5-3a5 5 0 0 1-10 0H5a7 7 0 0 0 6 6.92V21h2v-3.08A7 7 0 0 0 19 11h-2z"/></svg><span id="voiceLabel" class="cb-voice-label"></span></button>
           <button type="button" id="btnAttach" class="composer-attach"
                   aria-label="添加附件" title="添加材料附件（表格、PDF、Word 或文本）">附件</button>
+          <!-- 从网址取招标文件：工作台自己去取（只取公网地址、20 MB 以内、只要文档），取回来和上传的附件走同一条路。
+               服务端没有这项能力（capabilities.upload_url 不为 true）时不显示。 -->
+          <button type="button" id="btnAttachUrl" class="composer-attach" hidden
+                  aria-label="从网址添加附件" title="贴上招标文件或公告的网址，由工作台取回并作为附件（只取公网地址，20 MB 以内）">网址</button>
           <button type="submit" id="send" aria-label="发送" title="发送（Enter）">↑</button>
           <button type="button" id="stop" class="composer-attach" hidden title="停止本轮后台任务，保留已经生成的文件">停止</button>
         </div>

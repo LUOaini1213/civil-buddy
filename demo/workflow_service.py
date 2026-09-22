@@ -14,6 +14,19 @@ from context import policy
 from packing_assistant.sandbox import assert_open, assert_write, guarded_write_text
 
 
+def _role_of(name):
+    from packing_assistant.office_job import material_role
+
+    return ("response" if re.search(r"投标文件|投标响应|响应文件|技术标草稿|响应草稿", name) else
+            "tender" if re.search(r"招标|采购需求", name) else material_role(name))
+
+
+def unreadable_attachments(sid):
+    """Attachments this task was given and could not read, in the workflow's {title, role, reason}."""
+    return [{"title": item["name"], "role": _role_of(item["name"]), "reason": item["reason"]}
+            for item in uploads.unreadable_uploads(sid)]
+
+
 def selected_sources(root, sid, message, attachment_ids, roles=None):
     roles = roles or {}
     if not isinstance(roles, dict) or any(key not in attachment_ids or role not in {"tender", "response", "reference"}
@@ -24,10 +37,7 @@ def selected_sources(root, sid, message, attachment_ids, roles=None):
     for document in uploads.extracted_documents(sid, attachment_ids):
         hits = local_retrieval.search(root, sid, "", attachment_ids=[document["id"]], kind="attachment", limit=1)
         identifier = hits[0]["source_id"] if hits else "attachment-" + document["id"]
-        role = roles.get(document["id"])
-        if role is None:
-            role = ("response" if re.search(r"投标文件|投标响应|响应文件|技术标草稿|响应草稿", document["name"]) else
-                    "tender" if re.search(r"招标|采购需求", document["name"]) else "reference")
+        role = roles.get(document["id"]) or _role_of(document["name"])
         sources.append({"source_id": identifier, "title": document["name"], "text": document["text"],
                         "start": 0, "end": len(document["text"]), "kind": "attachment", "role": role})
     return sources
@@ -115,7 +125,8 @@ def events(root, turn, control, *, key_available):
     def execute():
         try:
             result = run_tender_workflow(turn["message"], session_id=turn["session_id"], output_root=root,
-                sources=turn["workflow_sources"], confirmed=turn["confirmed"], cancel_event=control.event,
+                sources=turn["workflow_sources"], unreadable=turn.get("workflow_unreadable"),
+                confirmed=turn["confirmed"], cancel_event=control.event,
                 model_runner=runner if key_available else None, budget=limits,
                 on_event=lambda data: queue.put({"event": "collaboration", "data": data}))
             if result.get("children"):

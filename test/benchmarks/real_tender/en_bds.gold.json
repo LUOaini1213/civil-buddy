@@ -1,0 +1,83 @@
+{
+ "fields": [
+  {
+   "label": "项目名称",
+   "expect": "Rehabilitation of the Kanda River Flood Embankment, Lot KR-2"
+  },
+  {
+   "label": "招标人",
+   "expect": "Ministry of Works, Kanda River Basin Office"
+  },
+  {
+   "label": "招标编号",
+   "expect": "MOW/KRB/2030/NCB-07"
+  },
+  {
+   "label": "投标截止",
+   "expect": "9 October 2030"
+  },
+  {
+   "label": "投标有效期",
+   "expect": "90 days"
+  },
+  {
+   "label": "投标保证金",
+   "expect": "USD 85,000"
+  },
+  {
+   "label": "履约担保",
+   "expect": "10 per cent of the Contract Price"
+  },
+  {
+   "label": "联合体投标",
+   "expect": "permitted"
+  },
+  {
+   "label": "备选投标方案",
+   "expect": "shall not be considered"
+  },
+  {
+   "label": "投标文件份数",
+   "expect": "three"
+  },
+  {
+   "label": "开标地点",
+   "expect": "Ministry of Works, Conference Room 2, Kanda"
+  },
+  {
+   "label": "类似业绩",
+   "expect": "at least two flood-protection contracts"
+  }
+ ],
+ "rejections": [
+  "shall be rejected by the Employer as non-responsive",
+  "Any bid not accompanied by a substantially responsive bid security shall be rejected",
+  "will be declared late, rejected, and returned unopened",
+  "shall result in the disqualification of its bid",
+  "A Bidder that does not meet this requirement shall be disqualified"
+ ],
+ "scores": [
+  [
+   "Construction methodology",
+   "40"
+  ],
+  [
+   "Key personnel",
+   "25"
+  ],
+  [
+   "Environmental and social management",
+   "20"
+  ],
+  [
+   "Work programme",
+   "15"
+  ]
+ ],
+ "forms": [
+  "Letter of Bid",
+  "Bid Security",
+  "Priced Bill of Quantities",
+  "Technical Proposal"
+ ]
+}

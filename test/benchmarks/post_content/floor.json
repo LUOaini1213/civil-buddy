@@ -1,0 +1,45 @@
+{
+  "_note": "改造前基线：65 岗 193 例 1529 个事实，placed 287（0.188 micro / 0.197 macro），misplaced 114（2026-09-20）。同日 bid-parse / bid-tech / bid-compliance 改造后：placed 350（0.229 / 0.241），misplaced 112；三岗开发集 67/67。heldout_bid / heldout_bid2 / heldout_bid3 是这三岗的三轮留出集（第三轮首跑 83/84），首跑 72/78 与 67/70（剔除 5 个同一个数在句子两边各出现一次、无法区分要求格与响应格的事实之后），各自的漏项驱动过改动之后算「见过」，这里记的是改动后的数，只作回归用——对外引用首跑数。门禁只拦回退；下调任何一个数都要在提交信息里写清楚新测得的数。2026-09-21：英文条款、项目名、其他人员之后写了第四轮留出集 heldout_bid4，首跑 68/86 = 0.791（对外引用这个数）；按漏项的「类」改过之后 85/86，算见过。同日把 workhead 那一行改名为「注册资格/工作类别」：第二轮留出集里的 CW01 从 misplaced 变成 placed，heldout_bid2 由 69 上调到 70。",
+  "sets": {
+    "cases": {
+      "placed": 350,
+      "forbidden": 0,
+      "misplaced": 112,
+      "per_post_default": 0.0,
+      "per_post": {
+        "warehouse": 1.0,
+        "bid-parse": 1.0,
+        "bid-tech": 1.0,
+        "bid-compliance": 1.0
+      }
+    },
+    "heldout_bid": {
+      "placed": 78,
+      "forbidden": 0,
+      "misplaced": 0,
+      "per_post_default": 0.95,
+      "per_post": {}
+    },
+    "heldout_bid2": {
+      "placed": 70,
+      "forbidden": 0,
+      "misplaced": 0,
+      "per_post_default": 0.95,
+      "per_post": {}
+    },
+    "heldout_bid3": {
+      "placed": 84,
+      "forbidden": 0,
+      "misplaced": 0,
+      "per_post_default": 0.95,
+      "per_post": {}
+    },
+    "heldout_bid4": {
+      "placed": 85,
+      "forbidden": 0,
+      "misplaced": 0,
+      "per_post_default": 0.95,
+      "per_post": {}
+    }
+  }
+}

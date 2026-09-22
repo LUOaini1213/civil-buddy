@@ -2367,44 +2367,48 @@ def _equip_md(text: str) -> str:
     return "\n".join(lines)
 
 
-def _parse_wh_rows(blob: str) -> List[tuple]:
-    rows: List[tuple] = []
-    for piece in (blob or "").replace("；", "\n").replace(";", "\n").splitlines():
-        t = piece.strip()
-        t = re.sub(r"^写一份\S*\s*", "", t).strip()
-        if not t or t in _WH_SKIP:
-            continue
-        if t.startswith("#") or t.startswith("内部"):
-            continue
-        if t in {"JGJ", "SAC", "CN", "SG", "DUAL"}:
-            continue
-        inbound = "TBD"
-        outbound = "TBD"
-        m = _RES_QTY.search(t)
-        qty = f"{m.group('qty')}{m.group('unit')}" if m else ""
-        name = t
-        if m:
-            name = (t[: m.start()] + t[m.end() :]).strip(" ，,;；") or t
-        for key in ("入库", "进场", "出库", "领料", "盘点", "实存"):
-            name = name.replace(key, "")
-        name = re.sub(r"\s+", " ", name).strip() or t[:80]
-        if len(name) > 80:
-            name = name[:80]
-        if "出库" in t or "领料" in t:
-            outbound = qty or "TBD"
-        elif "入库" in t or "进场" in t:
-            inbound = qty or "TBD"
-        elif qty:
-            inbound = qty
-        rows.append((name, inbound, outbound))
+_WH_COLUMNS = {
+    "inbound": ("入库", "进场", "到货", "进货", "收料"),
+    "outbound": ("出库", "领用", "领料", "发料", "领走", "发出"),
+    "returned": ("退库", "退料", "退回"),
+    "opening": ("期初结存", "上期结存", "期初"),
+    "balance": ("账面结存", "结存", "库存"),
+    "variance": ("盘点差异", "盘点差", "盘亏", "盘盈", "差异"),
+    "counted": ("盘点实存", "实盘", "实存", "盘点"),
+    "price": ("单价",),
+}
+_WH_LABELS = {
+    "doc": ("来源单据号", "入库单号", "送货单号", "领料单号", "出库单号", "单据号", "单号"),
+    "batch": ("炉批号", "批次号", "批号", "批次"),
+    "supplier": ("供应商", "供货单位", "供货商", "厂家"),
+    "location": ("库位", "库区", "堆放位置", "存放位置"),
+}
+_WH_KEEPERS = ("仓库管理员", "仓管员", "保管员", "库管员", "材料员", "库管", "仓管", "经办人", "验收人", "盘点人", "经办")
+
+
+def _parse_wh_rows(blob: str) -> List[Dict[str, str]]:
+    """One row per material the user named, each figure from its own clause; see post_facts.object_rows."""
+    from packing_assistant import post_facts
+
+    rows = post_facts.object_rows(blob, _WH_COLUMNS, drop=("台账", "收发存"))
+    for row in rows:
+        found = post_facts.labelled(row["source"], _WH_LABELS)
+        row.update({key: value for key, value in found.items() if key not in row})
+        units = [q.unit for q in post_facts.quantities(row["source"]) if q.unit]
+        if units:
+            row["unit"] = units[0]
     return rows
 
 
 def _warehouse_md(text: str) -> str:
+    from packing_assistant import post_facts
+
     blob = text or ""
     zone = _mix_zone(blob)
     rows = _parse_wh_rows(blob)
-    has_count = any(k in blob for k in ("盘点", "实存"))
+    keeper = post_facts.person_for(blob, _WH_KEEPERS)
+    period = next((row["period"] for row in rows if row.get("period")), "")
+    has_count = any(k in blob for k in ("盘点", "实存", "实盘"))
     if not rows:
         short = (
             "| 物资 | 入库 | 出库 | 结存 | 备注 |\n"
@@ -2417,17 +2421,28 @@ def _warehouse_md(text: str) -> str:
             "| 待填物资 | 待填 | 待填 | TBD | TBD | TBD | TBD | TBD | TBD | 待填 | TBD |\n"
         )
     else:
+        def cell(row: Dict[str, str], key: str, missing: str = "TBD") -> str:
+            return post_facts.table_cell(row.get(key) or missing)
+
         short = (
             "| 物资 | 入库 | 出库 | 结存 | 备注 |\n"
             "| --- | --- | --- | --- | --- |\n"
-            + "".join(f"| {n} | {inn} | {out} | TBD | 待填 |\n" for n, inn, out in rows)
+            + "".join(
+                f"| {post_facts.table_cell(' '.join(filter(None, (row['name'], row.get('spec')))))} | {cell(row, 'inbound')} | "
+                f"{cell(row, 'outbound')} | {cell(row, 'balance')} | "
+                f"{post_facts.table_cell('；'.join(filter(None, (row.get('location'), row.get('supplier')))) or '待填')} |\n"
+                for row in rows
+            )
         )
         full = (
             "| 物资 | 规格批次 | 单位 | 期初 | 入库 | 出库 | 账面结存 | 盘点实存 | 差异 | 来源单据号 | 单价 |\n"
             "| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |\n"
             + "".join(
-                f"| {n} | 待填 | 待填 | TBD | {inn} | {out} | TBD | TBD | TBD | 待填 | TBD |\n"
-                for n, inn, out in rows
+                f"| {cell(row, 'name')} | {post_facts.table_cell(' '.join(filter(None, (row.get('spec'), row.get('batch')))) or '待填')} | "
+                f"{cell(row, 'unit', '待填')} | {cell(row, 'opening')} | {cell(row, 'inbound')} | {cell(row, 'outbound')} | "
+                f"{cell(row, 'balance')} | {cell(row, 'counted')} | {cell(row, 'variance')} | {cell(row, 'doc', '待填')} | "
+                f"{cell(row, 'price')} |\n"
+                for row in rows
             )
         )
     count_note = (
@@ -2443,6 +2458,8 @@ def _warehouse_md(text: str) -> str:
         "内部讨论，不替代正式入库单签认，不替代财务记账，不给材料合格结论。",
         "",
         f"- 辖区：{zone}",
+        f"- 台账期间：{period or '待填'}",
+        f"- 仓管 / 经办：{keeper or '待填'}",
         "",
         "## 用户原文",
         "",
@@ -3796,51 +3813,21 @@ _COVERED = frozenset({"covered", "ok", "done"})
 _OPEN = frozenset({"gap", "pending", "missing", "uncovered", "open", "partial", "human_required", "review"})
 
 
-def _compliance_gaps_md(handoff: Optional[Dict[str, Any]], matrix: Optional[Dict[str, Any]]) -> str:
-    rows = (matrix or {}).get("rows") or []
-    responded: List[str] = []
-    unresponded: List[str] = []
-    absent: List[str] = []
-    if not rows and not handoff:
-        absent.append("本会话无 tender.handoff.json，招标未提供可对照正文。")
-    for r in rows:
-        if not isinstance(r, dict):
-            continue
-        title = str(r.get("title") or r.get("exact_text") or r.get("req_id") or "").strip()
-        if not title:
-            continue
-        st = str(r.get("status") or "")
-        line = title[:180]
-        if st in _COVERED:
-            responded.append(line)
-        else:
-            unresponded.append(line)
-    if handoff and not rows:
-        for key, label in (("star_items", "★项"), ("scoring_points", "评分点"), ("specials", "专项")):
-            items = handoff.get(key) or []
-            for it in items:
-                text = str((it or {}).get("text") or "")[:180]
-                if text:
-                    unresponded.append(f"{label}：{text}")
-        if not (handoff.get("scoring_points") or handoff.get("star_items") or handoff.get("specials")):
-            absent.append("交接在，但未抽出评分点/★/专项；招标未提供这些栏位的正文。")
-    lines = [
-        "# 废标检查岗 · 三列对照",
-        "",
-        DISCLAIMER,
-        "",
-        "不代判废标。须持证人员按招标文件确认。submit_blocked=true。",
-        "",
-        "## 已响应",
-        "",
-    ]
-    lines.extend([f"- {x}" for x in responded] or ["- （空）"])
-    lines.extend(["", "## 未响应", ""])
-    lines.extend([f"- {x}" for x in unresponded] or ["- （空）"])
-    lines.extend(["", "## 招标未提供", ""])
-    lines.extend([f"- {x}" for x in absent] or ["- （本轮无「招标未提供」栏）"])
-    lines.extend(["", "条款号 UNSPECIFIED。不判定可投标。", ""])
-    return "\n".join(lines)
+def _compliance_gaps_md(handoff: Optional[Dict[str, Any]], matrix: Optional[Dict[str, Any]], *,
+                        ours: Optional[Dict[str, Any]] = None, comparison: Optional[List[Dict[str, Any]]] = None,
+                        unreadable: Optional[List[Dict[str, Any]]] = None,
+                        evidence: Optional[List[Dict[str, Any]]] = None,
+                        checked: Optional[List[Dict[str, Any]]] = None,
+                        responses: Optional[List[Dict[str, Any]]] = None) -> str:
+    """响应缺口对照：七节 + 「事项｜招标要求｜响应原文或证据｜三态｜缺口｜责任人」。
+
+    招标要求来自交接里的字段层（handoff["facts"]）和解析器的要求行；我方说法来自 ``ours``（本轮
+    文本的字段层）与 ``comparison``（tender_response_match.compare_responses）。三态只描述
+    「给没给、对不对得上」，不写合格 / 废标。成稿见 tools/tender_tables.compliance_gaps。"""
+    from packing_assistant.tools.tender_tables import compliance_gaps
+
+    return compliance_gaps(handoff, matrix, ours=ours, comparison=comparison, disclaimer=DISCLAIMER,
+                           unreadable=unreadable, evidence=evidence, checked=checked, responses=responses)
 
 
 def _draft_markdown(expert: ExpertRec, tool: str, text: str) -> str:
@@ -3896,10 +3883,22 @@ def _attach_office(out: Dict[str, Any]) -> Dict[str, Any]:
     return out
 
 
+def _printable(markdown: str) -> str:
+    """A draft carries no control characters, whatever the user pasted in.
+
+    They arrive with text copied out of a PDF, a terminal or another workbook, they are invisible,
+    and no deliverable format takes them: the Word exporter refuses the draft outright and openpyxl
+    used to raise from inside the Excel export and take the whole turn down with it. Dropping them
+    changes nothing a person can read.
+    """
+    return "".join(ch for ch in (markdown or "") if ch in "\t\n" or ord(ch) >= 32)
+
+
 def _save_drafts(out_dir: Path, drafts: List[tuple[str, str]], reply: str) -> Dict[str, Any]:
     """Validate all drafts before writing; report only artifacts actually saved."""
     from packing_assistant.tools.tender_review import forbidden_hits
 
+    drafts = [(tool, _printable(markdown)) for tool, markdown in drafts]
     result: Dict[str, Any] = {
         "wrote": False, "hitl_pending": False, "files": [], "tools_run": [],
         "submit_blocked": True,
@@ -4048,18 +4047,59 @@ def _run_exclusive_body(
         from packing_assistant.runtime.session_handoff import load_handoff, save_handoff
         from packing_assistant.tools.tender_parse import run_tender_pipeline
 
+        from packing_assistant.tools.tender_facts import extract as extract_facts, split_sides
+        from packing_assistant.tools.tender_response_match import compare_responses
+
         ho = load_handoff(session_id)
         matrix = None
+        ours = extract_facts(text or "").to_dict()
+        comparison: List[Dict[str, Any]] = []
+        turn_asks = False
         if text and len(text.strip()) > 40:
             pipe = run_tender_pipeline(text, source="expert-compliance", project_name=expert.name)
-            matrix = pipe.get("matrix") if isinstance(pipe.get("matrix"), dict) else None
-            if isinstance(pipe.get("handoff"), dict) and pipe.get("handoff"):
-                ho = pipe["handoff"]
-                save_handoff(session_id, ho)
-        md = _compliance_gaps_md(ho, matrix)
+            said = (pipe.get("handoff") or {}).get("facts") or {}
+            asks = bool((pipe.get("parse") or {}).get("requirements")) or any(
+                m.get("side") == "tender" for m in said.get("mentions") or []) or bool(said.get("scores") or said.get("specials"))
+            # 本轮说了招标要求就以本轮为准；只说了我方情况（"保函开好了，工期改成360天"）则沿用本会话
+            # 已解析的招标要求，把这一轮当作响应去对照——否则一句补充就把上一轮的解析冲掉了。
+            if asks or not ho:
+                turn_asks = True
+                matrix = pipe.get("matrix") if isinstance(pipe.get("matrix"), dict) else None
+                if isinstance(pipe.get("handoff"), dict) and pipe.get("handoff"):
+                    ho = pipe["handoff"]
+                    save_handoff(session_id, ho)
+                _theirs, mine = split_sides(text)
+                sources = [{"source_id": "user-ours", "role": "response", "text": mine, "start": 0}] if mine else []
+                comparison = compare_responses((pipe.get("parse") or {}).get("requirements") or [], sources)
+        # a job file this turn named and could not read: said in the draft even when the requirements
+        # are the ones an earlier turn parsed
+        from packing_assistant.office_job import material_role, unread_files
+
+        unread = [{**item, "role": material_role(item["title"])} for item in unread_files(text or "")]
+        # Which texts this check is about (tools/bid_check_record.py). When the turn held the tender's
+        # words and ours, the two are hashed apart: "工期改成365天" then shows as our side changing.
+        from packing_assistant.runtime.worker_context import canonical
+        from packing_assistant.tools import bid_check_record as check_record
+
+        if turn_asks:
+            theirs, mine = split_sides(text or "")
+            checked = [check_record.entry("招标方的话（本轮）", "tender", theirs), check_record.entry("我方的话（本轮）", "response", mine)]
+        else:
+            checked = [check_record.entry("招标要求（本会话此前解析）", "tender", canonical(ho or {})),
+                       check_record.entry("本轮文本", "response", text or "")]
+        md = _compliance_gaps_md(ho, matrix, ours=ours, comparison=comparison, unreadable=unread, checked=checked)
         path = out_dir / "bid-compliance__gaps.md"
+        record_path = out_dir / ("bid-compliance__gaps" + check_record.RECORD_SUFFIX)
+        record = check_record.build(kind="post", session_id=session_id, inputs=checked, drafts=[],
+                                    rows=check_record.rows_of(md), unreadable=unread)
+        previous = check_record.load(record_path)
+        if previous is not None:
+            md += "\n" + "\n".join(check_record.comparison_section(previous, record))
         guarded_write_text(path, md)
+        record["drafts"] = [{"name": path.name, "sha256": check_record.sha(md)}]
+        guarded_write_text(record_path, check_record.dumps(record))
         files.append({"name": path.name, "path": str(path), "tool": "bid-compliance__gaps"})
+        files.append({"name": record_path.name, "path": str(record_path), "tool": "bid-compliance__check"})
         ran.append("bid-compliance__gaps")
         return {
             "wrote": True,
@@ -4077,10 +4117,17 @@ def _run_exclusive_body(
         from packing_assistant.tools.tender_parse import build_tech_outline_from_handoff, run_tender_pipeline
 
         ho = load_handoff(session_id)
-        if (not ho) and text and len(text.strip()) > 40:
+        if text and len(text.strip()) > 40:
             pipe = run_tender_pipeline(text, source="expert-tech", project_name=expert.name)
-            if isinstance(pipe.get("handoff"), dict) and pipe.get("handoff"):
-                ho = pipe["handoff"]
+            fresh = pipe.get("handoff") if isinstance(pipe.get("handoff"), dict) else {}
+            said = fresh.get("facts") or {}
+            # 这一轮自己带了评分点 / 专项 / 工程情况，就按这一轮排目录。此前只要会话里有旧交接就不看
+            # 本轮文字：换了一份招标文件再问，出来的还是上一份的目录。只有「出一份技术标目录」这种
+            # 不带内容的话才沿用本会话 bid-parse 落下的交接。
+            carries = bool(fresh.get("scoring_points") or fresh.get("specials") or said.get("scores")
+                           or said.get("specials") or said.get("mentions"))
+            if fresh and (carries or not ho):
+                ho = fresh
                 save_handoff(session_id, ho)
         outline = build_tech_outline_from_handoff(ho or {}, project_name=expert.name)
         md = str(outline.get("markdown") or "")

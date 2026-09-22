@@ -1,0 +1,26 @@
+{
+  "_note": "Held-out set B for the bid check. Written 2026-09-21 with the rules frozen at commit d767927, before it was run. Our own files for cn_municipal.md. Planted: a price over the cap written in 万元 in the bid letter and in 元 in the price table (the same amount - not an inconsistency), a validity shorter than required, a duration in the price table that exceeds the tender's and differs from the bid letter's, one named 危大 item missing. Synthetic.",
+  "tender": "cn_municipal",
+  "request": "全面检查投标响应：招标文件.docx 投标函.docx 投标文件-报价一览表.docx 投标文件-施工组织设计.docx",
+  "files": {
+    "投标函.docx": "# 投标函\n\n致：安澜区城市管理和综合执法局\n\n我方已仔细研究了安澜区2026年市政道路提升改造工程（二期）招标文件的全部内容，愿意以人民币叁仟叁佰万元整（¥3,300.00万元）的投标总报价，工期180日历天，按合同约定实施和完成承包工程，质量标准：合格。\n\n投标有效期：自投标截止之日起60天。\n\n投标保证金人民币贰拾万元整（¥200,000.00）已通过银行转账缴纳。\n\n质量保修期：道路工程2年，管网工程2年。\n\n投标人：安澜市政建设集团有限公司（公章）\n\n法定代表人或授权代表：（签字）\n\n日期：2026年10月26日\n",
+    "投标文件-报价一览表.docx": "# 报价一览表\n\n| 项目名称 | 投标总报价（元） | 工期（日历天） | 质量标准 | 项目负责人 |\n| --- | --- | --- | --- | --- |\n| 安澜区2026年市政道路提升改造工程（二期） | 33,000,000.00 | 200 | 合格 | 韩志刚 |\n\n投标人：安澜市政建设集团有限公司（公章）\n",
+    "投标文件-施工组织设计.docx": "# 施工组织设计\n\n## 一、施工总体部署及进度计划\n\n本工程对安澜大道、锦川路等6条市政道路实施提升改造，分三个工区平行施工。项目负责人韩志刚，市政公用工程专业贰级注册建造师。\n\n## 二、交通组织与保通方案\n\n施工期间保持道路半幅通行，设置交通导改标志和围挡。\n\n## 三、管网改造专项施工方案\n\n雨污水管网改造沟槽开挖深度最大5.2米，编制沟槽支护专项施工方案，采用钢板桩支护。\n\n## 四、质量保证措施\n\n建立三级质量检查制度，工程质量标准：合格。\n\n## 五、安全文明施工及扬尘治理\n\n现场设置洗车台、雾炮及扬尘在线监测设备。\n"
+  },
+  "expect": [
+    {"kind": "exceeds", "row": "最高限价", "value": "3,300.00万元", "file": "投标函.docx"},
+    {"kind": "exceeds", "row": "投标有效期", "value": "60天", "file": "投标函.docx"},
+    {"kind": "exceeds", "row": "工期", "value": "200日历天", "file": "投标文件-报价一览表.docx"},
+    {"kind": "inconsistent", "label": "工期", "values": ["180日历天", "200日历天"]},
+    {"kind": "missing_special", "name": "顶管"},
+    {"kind": "no_response", "row": "资质"},
+    {"kind": "ok", "row": "投标保证金", "value": "200,000.00"},
+    {"kind": "ok", "row": "质量标准", "value": "合格"},
+    {"kind": "ok", "row": "缺陷责任期", "value": "2年"},
+    {"kind": "ok", "row": "项目经理", "value": "韩志刚"},
+    {"kind": "present_special", "name": "沟槽支护"},
+    {"kind": "not_inconsistent", "label": "项目经理"},
+    {"kind": "not_inconsistent", "label": "我方报价"},
+    {"kind": "not_inconsistent", "label": "质量标准"}
+  ]
+}

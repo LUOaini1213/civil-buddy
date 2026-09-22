@@ -21,6 +21,13 @@ JOB_EXTS = {".xlsx", ".csv", ".txt", ".md", ".json", ".docx", ".log"}
 JOB_MAX_FILES = 12
 JOB_FILE_CHARS = 8_000
 JOB_TOTAL_CHARS = 48_000
+#: A tender document is read whole. 8 000 characters are the first five pages of a hundred: the scoring
+#: table, the rejection clauses and the forms all lie behind them. These are the limits for the posts that
+#: parse a document themselves (no model context to fit into).
+DOCUMENT_FILE_CHARS = 2_000_000
+DOCUMENT_TOTAL_CHARS = 6_000_000
+#: in a blob: the file above was longer than what was read. Said, never silent.
+CUT = "（未读完）"
 DRAFT_PREFIX = "CB草稿"
 _OFFICE_CONTENT_ERRORS = (BadZipFile, ValueError, KeyError, SyntaxError)
 
@@ -87,11 +94,24 @@ def tables_from_md(md: str) -> List[Tuple[str, List[List[str]]]]:
     return out
 
 
+def _sheet_text(value: Any) -> Any:
+    """Text a worksheet will accept.
+
+    A cell's text reaches us from the user - pasted out of a terminal, a PDF or another workbook -
+    and may carry control characters that the file format does not allow. openpyxl raises on them,
+    which used to fail the whole export and with it the turn. They are not information: they are
+    dropped, and the visible text is written.
+    """
+    if not isinstance(value, str):
+        return value
+    return "".join(ch for ch in value if ch in "\t\n\r" or ord(ch) >= 32)
+
+
 def _write_rows(worksheet: Any, rows: List[List[str]]) -> None:
     """Draft tables contain text, including strings that look like formulas."""
     for r_i, row in enumerate(rows, 1):
         for c_i, value in enumerate(row, 1):
-            cell = worksheet.cell(r_i, c_i, value)
+            cell = worksheet.cell(r_i, c_i, _sheet_text(value))
             if isinstance(value, str):
                 cell.data_type = "s"
 
@@ -442,10 +462,108 @@ def read_material(path: Path, limit: int = JOB_FILE_CHARS) -> str:
     """``read_job_file`` plus PDFs (text layer only; a scanned PDF yields nothing and says so by being empty)."""
     target = _resolve_job_file(path)
     if target.suffix.lower() == ".pdf":
-        from packing_assistant.tools.packing_list_parser import extract_pdf_text
-
-        return extract_pdf_text(target)[: max(0, int(limit))]
+        return pdf_document_text(target)[: max(0, int(limit))]
     return read_job_file(target, limit)
+
+
+def pdf_document_text(source: Any) -> str:
+    """A PDF's text layer as a document again: pages under "〔第N页〕" markers, paragraphs joined, tables rebuilt
+    (tools/pdf_layout.py). ``source`` is a path or a binary stream. A scan has no text layer and gives ""."""
+    from pypdf import PdfReader
+
+    from packing_assistant.tools import pdf_grid
+    from packing_assistant.tools.pdf_layout import pages_text
+
+    reader = PdfReader(str(source) if isinstance(source, Path) else source)
+    texts = pdf_grid.document_texts(reader)
+    if any(len(text.strip()) >= _MIN_TEXT for text in texts):
+        return pages_text(texts)
+    return _ocr_pdf_text(source) if isinstance(source, Path) else ""
+
+
+def _ocr_pdf_text(path: Path) -> str:
+    """A scan, read by OCR when the optional packages are installed (tools/ocr.py) - "" when they are not, and the
+    caller says the file was not read. The reading is kept beside the job (keyed by the file's sha256): a hundred
+    pages take minutes, and the same scan is read once. The first line marks the text as an OCR reading."""
+    import hashlib
+
+    from packing_assistant.tools import ocr
+    from packing_assistant.tools.pdf_layout import pages_text
+
+    if not ocr.available():
+        return ""
+    digest = hashlib.sha256(path.read_bytes()).hexdigest()
+    cache = (job_root() / ".civil-buddy" / "cache" / "ocr" / f"{digest}.txt") if job_root_granted() else None
+    if cache is not None and cache.is_file():
+        return cache.read_text(encoding="utf-8")
+    def progress(done: int, total: int) -> None:
+        if done == 1 or done % 5 == 0 or done == total:   # minutes of silence look like a hang
+            import sys
+
+            print(f"OCR {path.name}：第 {done}/{total} 页", file=sys.stderr, flush=True)
+
+    pages = ocr.pdf_page_lines(path, on_page=progress)
+    text = ocr.MARK + "\n" + pages_text("\n".join(lines) for lines in pages)
+    if cache is not None:
+        try:
+            from packing_assistant.sandbox import guarded_write_text
+
+            guarded_write_text(cache, text)
+        except (OSError, RuntimeError):
+            pass  # the reading is still returned; it is only not kept
+    return text
+
+
+#: In a blob of job files: the file named on the heading above gave no text. Why follows on the same line.
+UNREAD = "（读失败）"
+_MIN_TEXT = 8  # the floor demo/uploads.py uses too: fewer characters than this is not a document
+_UNREAD_BLOCK = re.compile(r"^###[ \t]+(?P<name>[^\n]+)\n（读失败）(?P<reason>[^\n]*)", re.M)
+
+
+# ... and what the buyer issues AFTER the tender is the tender's too: 补遗书第1号.pdf, 澄清答疑纪要.docx
+_TENDER_NAME = ("招标", "补遗", "澄清", "答疑", "修改通知", "变更通知", "更正公告", "tender", "itt", "rfp", "rfq", "addend", "clarif", "corrigend")
+# a bid is many files, and few of them carry 投标 in their name: 技术标.docx, 施工组织设计.docx, 养护方案.docx, 报价文件.docx
+_RESPONSE_NAME = ("响应", "应答", "投标", "技术标", "商务标", "经济标", "资信标", "报价", "施工组织设计", "方案", "承诺", "偏离表", "授权委托",
+                  "资格审查资料", "项目管理机构", "response", "bid", "proposal", "method statement")
+
+
+def material_role(name: str) -> str:
+    """tender / response / reference, read off a file name - and never guessed past that."""
+    low = (name or "").lower()
+    return ("tender" if any(mark in low for mark in _TENDER_NAME)
+            else "response" if any(mark in low for mark in _RESPONSE_NAME) else "reference")
+
+
+def unread_reason(path: Path, body: Optional[str]) -> str:
+    """Why nothing usable came out of ``path`` - "" when something did. ``body`` is None when the reader
+    raised. The parser's own message is never passed on: it can echo bytes of the document."""
+    if body is None:
+        return "打不开，或内容与扩展名不符"
+    if len(body.strip()) >= _MIN_TEXT:
+        return ""
+    if path.suffix.lower() == ".pdf":
+        return "PDF 没有文字层（多半是扫描件）：先 OCR，或另存为 Word、文本；也可装上 OCR 组件（pip install -e .[ocr]）后重试"
+    return "里面几乎没有文字"
+
+
+def read_material_checked(path: Path, limit: int = JOB_FILE_CHARS, *,
+                          reader: Optional[Callable[[Path, int], str]] = None) -> Tuple[str, str]:
+    """``(text, "")`` for a file that could be read, ``("", why)`` for one that could not.
+
+    A file somebody pointed at and nothing came out of is not the same as no file: a check that was
+    given 投标响应.pdf and could not read it has not found the response missing."""
+    try:
+        body = (reader or read_material)(path, limit)
+    except Exception:  # noqa: BLE001 - whatever the parser raised, the file was not read
+        return "", unread_reason(path, None)
+    reason = unread_reason(path, body)
+    return ("", reason) if reason else (body, "")
+
+
+def unread_files(text: str) -> List[Dict[str, str]]:
+    """The files a blob of job files says it could not read: ``[{title, reason}]``."""
+    return [{"title": m.group("name").strip(), "reason": m.group("reason").strip()}
+            for m in _UNREAD_BLOCK.finditer((text or "").replace("\r\n", "\n"))]
 
 
 def _read_xlsx_text(path: Path, limit: int) -> str:
@@ -471,8 +589,9 @@ def _read_docx_text(path: Path, limit: int) -> str:
 
     with zipfile.ZipFile(path) as z:
         xml = z.read("word/document.xml")
+        numbering = z.read("word/numbering.xml") if "word/numbering.xml" in z.namelist() else None
     root_el = ET.fromstring(xml)
-    return docx_document_text(root_el, limit)
+    return docx_document_text(root_el, limit, ET.fromstring(numbering) if numbering else None)
 
 
 def read_job_file(path: Path, limit: int = JOB_FILE_CHARS) -> str:
@@ -495,20 +614,26 @@ def read_job_file(path: Path, limit: int = JOB_FILE_CHARS) -> str:
 _BLOB_HEADER = "## 作业根文件（授权文件夹，未再上传）"
 
 
-def named_files_blob(paths: Sequence[Path], *, reader: Optional[Callable[[Path, int], str]] = None) -> str:
-    """The same block ``job_files_blob`` builds, for files picked by name (sub-folders and PDFs included)."""
+def named_files_blob(paths: Sequence[Path], *, reader: Optional[Callable[[Path, int], str]] = None,
+                     per_file: int = JOB_FILE_CHARS, total: int = JOB_TOTAL_CHARS) -> str:
+    """The same block ``job_files_blob`` builds, for files picked by name (sub-folders and PDFs included).
+
+    ``per_file`` / ``total`` are the prompt-sized defaults; a post that parses the document itself passes
+    DOCUMENT_FILE_CHARS / DOCUMENT_TOTAL_CHARS. A file longer than what was read says so under its text."""
     chunks: List[str] = []
     used = 0
     for path in paths:
-        room = JOB_TOTAL_CHARS - used
+        room = total - used
         if room < 80:
             chunks.append(f"（还有 {path.name} 未贴全文）")
             continue
-        try:
-            body = (reader or read_job_file)(path, min(JOB_FILE_CHARS, room))
-        except (OSError, RuntimeError, *_OFFICE_CONTENT_ERRORS):
-            chunks.append(f"### {path.name}\n（读失败）")
+        limit = min(per_file, room)
+        body, why = read_material_checked(path, limit + 1, reader=reader or read_job_file)
+        if why:
+            chunks.append(f"### {path.name}\n{UNREAD}{why}")
             continue
+        if len(body) > limit:
+            body = body[:limit] + f"\n{CUT}只读了前 {limit} 个字符，后面的内容未参与解析"
         block = f"### {path.name}\n{body}"
         chunks.append(block)
         used += len(block)
@@ -532,10 +657,9 @@ def job_files_blob(query: str = "") -> str:
         if room < 80:
             chunks.append(f"（还有 {f['name']} 未贴全文）")
             continue
-        try:
-            body = read_job_file(Path(f["path"]), min(JOB_FILE_CHARS, room))
-        except (OSError, RuntimeError, *_OFFICE_CONTENT_ERRORS):
-            chunks.append(f"### {f['name']}\n（读失败）")
+        body, why = read_material_checked(Path(f["path"]), min(JOB_FILE_CHARS, room), reader=read_job_file)
+        if why:
+            chunks.append(f"### {f['name']}\n{UNREAD}{why}")
             continue
         block = f"### {f['name']}\n{body}"
         chunks.append(block)
