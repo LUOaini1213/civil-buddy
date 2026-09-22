@@ -40,7 +40,7 @@
 - **成箱页 + HITL 同屏「建议柜数 N0\*」**（`hitl_summary` 现算 booking）  
 - 诊断：`python scripts/diag_multi_container.py`  
 
-## 利用率提升（446t util raise）
+## 利用率提升（446t util raise；客户文件不在仓库，不能复验；29 柜基线已废弃）
 
 | 改动 | 作用 |
 |------|------|
@@ -60,7 +60,7 @@ UI/API: strategy_decision + 候选表
 ```
 
 **硬规则**：`light_lb_fallback` / `min_bins_light` 不得作为出运策略（CoG 未保证）。  
-对照：`scripts/compare_446t_agent_vs_tool.py` · `output/cases_446t/REPORT_agent_util_visibility.md` 
+对照命令依赖客户文件 `output/cases_446t/materials.json`。该文件不在仓库，不能复验；29 柜基线已废弃。净仓能复跑的是 `python scripts/test_pack_ship_crates_structure.py`（9 箱、装得下、23800 kg 守恒）。 
 
 ## 产品话术（给评委）
 

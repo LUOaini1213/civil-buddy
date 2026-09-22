@@ -30,13 +30,13 @@
 
 | 路径 | used | mid50 | wt | strategy | light 参考 | 说明 |
 |------|------|-------|-----|----------|------------|------|
-| **Tool 捷径** | **25** | **0.594** | 0.643 | soft_budget_cog_soft | 21 · mid 0.176 · ref only | 不出运 light |
-| **全 Agent** | **25** | **0.594** | 0.643 | **tight_budget_cog** | 24 · mid 0.168 · ref only | phase=**done** · risk=**WARN** · **ship_ok=true** |
-| 旧基线 | 29 | ~0.57 | 0.59 | — | — | 已废弃口播 |
+| **Tool 捷径** | **25** | **0.594** | 0.643 | soft_budget_cog_soft | 21 · mid 0.176 · ref only | 旧档。客户文件不在仓库，不能复验。不出运 light |
+| **全 Agent** | **25** | **0.594** | 0.643 | **tight_budget_cog** | 24 · mid 0.168 · ref only | 旧档。客户文件不在仓库，不能复验。29 柜基线已废弃 |
+| 旧基线 | 29 | ~0.57 | 0.59 | — | — | 29 柜基线已废弃。客户文件不在仓库 |
 | 假 light | 21 | **0.16** | 0.77 | light | — | **禁止当出运** |
 
-- N0\*=35（wt/vol/floor/slot 取 max）；3D 实装 25（相对 N0\* −10）  
-- verdict 标签可能为 `block`（mid 59% &lt; 严格 60% 偏好），与 **ship_ok=true** 并存——口播用 ship_ok + WARN，见 trust notes  
+- 上面的 25 柜、mid50 0.594 是旧档。客户文件 `output/cases_446t/materials.json` 不在仓库，不能复验。29 柜基线已废弃。
+- 不要把这组旧档当今天的口播。净仓口播用长框架：9 箱、装得下、23800 kg 守恒。  
 
 ---
 

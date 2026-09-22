@@ -29,5 +29,5 @@ INDEX：`test/sim_materials/ns_INDEX.json`
 ## 延期
 
 - 每票全 pipeline pack 批量  
-- 与 446t 级大票混编  
+- 与 446t 级大票混编（客户文件不在仓库，不能复验；29 柜基线已废弃）  
 - 真项目提料导入（仍用仿真）  
