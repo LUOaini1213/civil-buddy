@@ -98,3 +98,4 @@ data/civilbuddy.db
 data/civilbuddy.db-wal
 data/civilbuddy.db-shm
 data/backup/
+/node_modules/

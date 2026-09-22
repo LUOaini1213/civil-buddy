@@ -29,6 +29,8 @@ CHECKS = (
     Check("js-syntax", ("scripts/test_js_syntax.py",)),
     Check("vue-bindings", ("scripts/test_vue_bindings.py",)),
     Check("chat-stream", ("scripts/test_chat_stream.cjs",), "node"),
+    Check("ui-modules", ("scripts/test_modules.cjs",), "node"),
+    Check("ui-dom", ("scripts/e2e/ui_dom.cjs",), "node"),
     Check("cad-geometry", ("scripts/test_cad_geometry.py",)),
     Check("cad-selection", ("scripts/test_cad_selection.py",)),
     Check("cad-imports", ("scripts/test_cad_imports.py",)),
