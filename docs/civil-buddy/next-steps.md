@@ -151,7 +151,7 @@
     `scripts/civil-buddy-desktop.ps1` 起本机工作台并用 Edge/Chrome `--app` 开窗口。不是腾讯桌面壳、不是 IM 遥控。禁止 `D:\layout`。主链头指针仍 **T039 pm-daily**。行业总判仍 **部分合格**。
 
 49. **T068 可下载试用** ✅ 2026-08-20  
-    历史 T068 记录已由 2026-09-12 的 Python 源码分发包取代：MIT LICENSE、启动器与依赖安装、无 Key 本地起草；[给试用的人.md](../../给试用的人.md) 写明安装与使用边界。旧 Rust exe 不代表当前 Python 工作台；本轮未发布 GitHub Release。主链头指针仍 **T039 pm-daily**。行业总判仍 **部分合格**。
+    历史 T068 记录已由 2026-09-12 的 Python 源码分发包取代：MIT LICENSE、启动器与依赖安装、无 Key 本地起草；[TRY.md](../../TRY.md) 写明安装与使用边界。旧 Rust exe 不代表当前 Python 工作台；本轮未发布 GitHub Release。主链头指针仍 **T039 pm-daily**。行业总判仍 **部分合格**。
 
 50. **T039 pm-daily 一岗（T039 批次完）** ✅ 2026-08-20  
     pm-daily__log 出天气待填｜部位｜形象（不编百分比）｜出勤待填。不是监理日志、不是施工日志签认件。主链头指针改为 **T040**（hr-recruit 先）。T040–T047 不得一行勾完。行业总判仍 **部分合格**。

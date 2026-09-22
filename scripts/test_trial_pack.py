@@ -96,7 +96,7 @@ class TrialPackTests(unittest.TestCase):
             readme = output.read("README.md").decode("utf-8")
             self.assertIn("无需 API Key", readme)
             self.assertIn("Python 3.10", readme)
-            self.assertIn("给试用的人.md", output.namelist())
+            self.assertIn("TRY.md", output.namelist())
 
     def test_failed_archive_creation_preserves_previous_zip(self) -> None:
         archive, _ = release.build_release(self.root, "1.2.3")

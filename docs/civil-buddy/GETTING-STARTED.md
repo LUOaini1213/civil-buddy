@@ -17,7 +17,7 @@ TUI 斜杠：`/skills` `/new` `/bg` `/threads` `/resume` `/approvals` `/sandbox`
 配置：`civil.toml.example` → `civil.toml`。IDE：`ide/README.md`。
 
 全量规划：[product-plan.md](product-plan.md)。切片：[product-completion-plan.md](product-completion-plan.md)。  
-试用（Python 分发包，无 Key 可本地起草）：仓库根 [给试用的人.md](../../给试用的人.md)。
+试用（Python 分发包，无 Key 可本地起草）：仓库根 [TRY.md](../../TRY.md)。
 必读链：本文 → [PROTOCOL.md](PROTOCOL.md) · [MCP.md](MCP.md) · [SKILLS.md](SKILLS.md) · [KB.md](KB.md)。Skill = 怎么写；MCP = 能调什么。
 
 ## 1. 启动工作台
@@ -66,7 +66,7 @@ cd C:\Users\LW\civil-buddy
 
 召唤专家后：提问不写盘；说「写一份」才出内部讨论草稿。可上传广联达/Excel 导出的 `xlsx`/`csv` 和招标 `docx`/`txt`，缺价标 `UNSPECIFIED`。
 
-文书会另存可编辑的 `.docx`，有表格的岗同时另存 `.xlsx`。可从文书卡下载 Word 或 Excel；设置菜单支持单任务 ZIP 备份和导入，导入始终创建新任务，操作步骤见 [试用说明](../../给试用的人.md)。要把稿落到工程文件夹、并让专家**直接读该夹里的 Word/Excel**（不必再点上传）：
+文书会另存可编辑的 `.docx`，有表格的岗同时另存 `.xlsx`。可从文书卡下载 Word 或 Excel；设置菜单支持单任务 ZIP 备份和导入，导入始终创建新任务，操作步骤见 [试用说明](../../TRY.md)。要把稿落到工程文件夹、并让专家**直接读该夹里的 Word/Excel**（不必再点上传）：
 
 ```powershell
 $env:CIVIL_JOB_ROOT = "C:\Users\LW\Documents\某工地"
