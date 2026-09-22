@@ -96,6 +96,19 @@ async fn test_health_flags_match_routes() {
         assert_ne!(status, StatusCode::NOT_FOUND, "{flag} {uri} {text}");
         assert!(!text.is_empty(), "{flag}");
     }
+    // session_backup also turns on the import button, which posts here.
+    let (status, text) = send(
+        state(),
+        Request::builder()
+            .method("POST")
+            .uri("/api/session-import")
+            .header("content-type", "application/zip")
+            .body(Body::from("nope"))
+            .unwrap(),
+    )
+    .await;
+    assert_ne!(status, StatusCode::NOT_FOUND, "{text}");
+    assert!(!text.is_empty(), "{text}");
 }
 
 #[tokio::test]
@@ -345,6 +358,7 @@ async fn test_chat_plain_when_no_explicit_summon() {
             text: "PLAIN".into(),
         },
         force_has_key: Some(true),
+        engine: None,
     };
     let (code, body) = send(
         st,

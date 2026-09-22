@@ -12,12 +12,14 @@
 | ship_ok | 可讨论出运（can_fit + 风险非 hard block） | WARN 仍可为 true |
 | verdict.level | 展示标签（含严格 CoG 门槛） | 可能 `block` 而 ship_ok 仍 true |
 
-### 446t 现场诚实读法
+### 446t 旧档（客户文件不在仓库，不能从净仓复验；29 柜基线已废弃）
 
-- used=**25** · mid50=**59.4%** · strategy=**tight_budget_cog** · phase=**done**  
-- risk decision=**WARN** · **ship_ok=true**  
-- `verdict.level=block` 因「严格 mid50≥60%」贴线（摘要含「宜≥60%」）  
-- **口播**：可出运讨论 + 绑扎复核；不把 59% 说成完美 60%+；绝不把 light 21 柜当结论  
+客户文件 `output/cases_446t/materials.json` 不在仓库里，下面的柜数不是这次可复跑的结果。29 柜基线已废弃。
+
+- 旧档曾记下 used=**25** · mid50=**59.4%** · strategy=**tight_budget_cog** · phase=**done**
+- risk decision=**WARN** · **ship_ok=true**
+- `verdict.level=block` 因「严格 mid50≥60%」贴线（摘要含「宜≥60%」）
+- 这些数只属于那份未入库清单。净仓能复跑的装箱例子是长框架 9 箱、装得下、23800 kg 守恒。  
 
 ## 2. Lateral（横向偏心）
 
@@ -54,6 +56,7 @@
 ```bash
 python scripts/test_mid50_cog.py
 python scripts/test_hitl_resume_competition.py
-python scripts/compare_446t_agent_vs_tool.py --full-agent
+# 446 t 客户文件 output/cases_446t/materials.json 不在仓库里，下面这条在净仓会失败，不要当成可复验结果。29 柜基线已废弃。
+# python scripts/compare_446t_agent_vs_tool.py --full-agent  # 客户文件不在仓库，不能复验；29 柜基线已废弃
 # t30/t80 样例见 output/competition/mid_ticket_regression.json 的生成方式（harness pipeline）
 ```

@@ -34,7 +34,7 @@ Results:
 - containers used: `7`
 - container type: `40HQ`
 - `can_fit: true`
-- utilization: `0.4043`
+- utilization: `0.4043` (this partial run only, not today's score)
 - floor utilization average: `0.7038`
 - weight utilization: `0.0781`
 - `n0: 6`

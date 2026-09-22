@@ -21,12 +21,12 @@
 
 ---
 
-## A · 大票对照 446t（不能从净仓复验）
+## A · 大票对照 446t（客户文件不在仓库，不能从净仓复验；29 柜基线已废弃）
 
 客户文件 `output/cases_446t/materials.json` 不在仓库里。29 柜基线已废弃。下面若还留着冻结口播数，只是旧档，不是这次可复跑的结果。净仓能复跑的是长框架样例：9 箱、`can_fit` 为真、23800 kg 守恒（`python scripts/test_pack_ship_crates_structure.py`）。
 
 命令（本机有那份未入库文件时才跑得了）：`python scripts/compare_446t_agent_vs_tool.py --full-agent`  
-产物：`output/cases_446t/result_compare_live.json`
+产物同样不在仓库，不能复验：`output/cases_446t/result_compare_live.json`
 
 | 路径 | used | mid50 | wt | strategy | light 参考 | 说明 |
 |------|------|-------|-----|----------|------------|------|
@@ -74,6 +74,6 @@
 2. 满载或钢件 → HITL 箱表 + N0\*  
 3. 确认拼柜 → used / mid50 / 策略卡  
 4. agent_steps 点 tools 轨迹  
-5. 若问大票：25 柜 · mid≈59% · light 不是出运  
+5. 若问 446 t 大票：客户文件 `output/cases_446t/materials.json` 不在仓库里，不能复验；29 柜基线已废弃。当场改报净仓长框架：9 箱、装得下、23800 kg 守恒。  
 
 详稿：`docs/competition-demo-script.md`

@@ -62,6 +62,10 @@ pub fn app(state: AppState) -> Router {
         .route("/api/sessions/{sid}", get(session_get).patch(session_patch))
         .route("/api/sessions/{sid}/cancel", post(session_cancel))
         .route("/api/sessions/{sid}/export", get(session_export))
+        .route(
+            "/api/session-import",
+            post(session_import).layer(DefaultBodyLimit::max(128 * 1024 * 1024)),
+        )
         .route("/api/skills", get(skills_list))
         .route("/api/mcp/tools", get(mcp_tools))
         .route("/api/mcp/capabilities", get(mcp_capabilities))
@@ -430,6 +434,61 @@ async fn deliverables_zip(Query(q): Query<ZipQ>) -> Result<Response, ApiError> {
         .into_response())
 }
 
+fn zip_entry(bytes: &[u8], name: &str) -> Result<Vec<u8>, String> {
+    let mut archive = zip::ZipArchive::new(std::io::Cursor::new(bytes))
+        .map_err(|_| "不是任务备份压缩包".to_string())?;
+    let mut file = archive
+        .by_name(name)
+        .map_err(|_| format!("压缩包里没有 {name}"))?;
+    let mut limited = std::io::Read::take(&mut file, 8 * 1024 * 1024 + 1);
+    let mut out = Vec::new();
+    std::io::Read::read_to_end(&mut limited, &mut out).map_err(|_| "备份读取失败".to_string())?;
+    if out.len() > 8 * 1024 * 1024 {
+        return Err("备份里的会话记录过大".into());
+    }
+    Ok(out)
+}
+
+async fn session_import(
+    State(st): State<Arc<AppState>>,
+    body: axum::body::Bytes,
+) -> Result<Json<Value>, ApiError> {
+    if body.is_empty() {
+        return Err(err(StatusCode::BAD_REQUEST, "备份包是空的"));
+    }
+    let raw = zip_entry(&body, "session.json").map_err(|e| err(StatusCode::BAD_REQUEST, e))?;
+    let detail: Value = serde_json::from_slice(&raw)
+        .map_err(|_| err(StatusCode::BAD_REQUEST, "session.json 不是 JSON"))?;
+    let transcript = detail
+        .get("transcript")
+        .and_then(|v| v.as_array())
+        .cloned()
+        .unwrap_or_default();
+    let hex = Uuid::new_v4().simple().to_string();
+    let sid = format!("imp{}", &hex[..12]);
+    let title = detail
+        .get("title")
+        .and_then(|v| v.as_str())
+        .map(str::trim)
+        .filter(|s| !s.is_empty())
+        .unwrap_or("导入的任务")
+        .to_string();
+    crate::projects::set_session_meta(&st.paths, &sid, None, Some(title.as_str()))
+        .map_err(|e| err(StatusCode::BAD_REQUEST, e))?;
+    for turn in transcript {
+        let role = turn.get("role").and_then(|v| v.as_str()).unwrap_or("");
+        if role != "user" && role != "assistant" {
+            continue;
+        }
+        let text = turn.get("text").and_then(|v| v.as_str()).unwrap_or("");
+        if text.trim().is_empty() {
+            continue;
+        }
+        crate::projects::append_turn(&st.paths, &sid, role, text);
+    }
+    Ok(Json(json!({"ok": true, "session_id": sid, "title": title})))
+}
+
 async fn session_get(
     State(st): State<Arc<AppState>>,
     AxPath(sid): AxPath<String>,
@@ -474,10 +533,9 @@ async fn health(State(st): State<Arc<AppState>>) -> Json<Value> {
     })
     .await
     .unwrap_or_else(|_| json!({"parse": null, "packing_agent": null}));
-    /* The page shared with demo/ only disables a button when capabilities[x] === false. With no
-       capabilities at all it showed 上传 / 备份 / 停止 here and the click ended in a 404. Say
-       plainly what this backend has; the missing routes are listed in
-       docs/civil-buddy/optimize-2026-09-18.md. */
+    /* The shared page disables a button only when capabilities[x] === false. A flag is
+       true only when this process registers that route. CAD, planning and the packing
+       ledger stay on the Python tool engine. */
     let packing_up = probes["packing_agent"]["http"]["up"].as_bool().unwrap_or(false);
     let capabilities = json!({
         "chat": true,
@@ -497,7 +555,6 @@ async fn health(State(st): State<Arc<AppState>>) -> Json<Value> {
         "local_rag": false,
         "task_routing": false,
         "expert_contracts": false,
-        "tender_collaboration": false,
         "upload_url": true,
         "semantic_summary": false,
         "asr": false,

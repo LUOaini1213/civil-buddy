@@ -11,10 +11,10 @@
 | **L2 工具写盘岗** | 该岗有自己的成稿栏位/写盘函数（非通用 `_draft_markdown` 骨架句） | **66/66** | 依据 product-plan §3.2/§7.2 逐岗字段和测试证据；T044–T047 新增 20 岗，真实 Markdown 与 Excel 的四组回归共 105 项通过；新分发包另做本地验收 |
 | **L3 引擎岗** | 硬数字走本仓引擎：NL→IntentSpec→白名单 tools→HITL→影子评测 | **1**（pack-ship） | `python scripts/demo_one_shot.py` → ALL_PASS；`python scripts/eval_competition_scorecard.py --skip-phase0` → 综合分 **8.85**（本地校准、对外口径）门禁全 PASS |
 
-**L3 pack-ship 证据链（冻结口径，演示日不现场重跑大票对照）：**
+**L3 pack-ship 证据链（净仓能复跑的是长框架样例）：**
 
-- 446t 单票：现行全 Agent **25×40HQ**（`phase=done / risk=WARN / ship_ok=true`），命令 `python scripts/compare_446t_agent_vs_tool.py --full-agent`。**注意**：该命令依赖本地业务数据 `output/cases_446t/materials.json`（客户衍生清单，按本仓 local-only 政策不进仓），净仓环境跑不了属预期；冻结数字以 [docs/competition-evidence-one-pager.md](competition-evidence-one-pager.md) 存档记录为准，演示/评审不现场重跑。早期的「29 柜」基线已废弃，README 与本页均不再引用；可在净仓复跑的公开货样评测是 `docs/eval/fanout16x8-2026-09-02/`
-- **mid50 0.594**：同一对照产物，贴 CTU 严格偏好 60% 线，风险 WARN；少柜 light 路径 mid≈0.17 仅参考、不作出运结论
+- 净仓复跑：`python scripts/test_pack_ship_crates_structure.py`。长框架样例 9 箱、`can_fit` 为真、23800 kg 守恒。公开货样另见 `docs/eval/fanout16x8-2026-09-02/`。
+- 446 t 单票上曾经记下的 25×40HQ、mid50 0.594 依赖客户文件 `output/cases_446t/materials.json`。该文件不在仓库里，净仓不能复跑，不能当成这次的结果。29 柜基线已废弃。
 - 综合分 **8.85**：本地校准评分卡，phase0 quick（n=12，pass_rate 1.0）封顶口径，**不报 10.0**
 
 **UNSPECIFIED 是特性，不是未完成。** 每岗成稿缺数处一律写 `[A001]` / `UNSPECIFIED` / `TBD`，不编造数字、不冒充签认件——这是产品纪律（tools compute numbers; the model only routes）的直接体现，也是 L1 验收闸（gaps=66）的一部分。

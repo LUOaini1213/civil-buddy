@@ -78,7 +78,7 @@ python scripts/eval_competition_scorecard.py --skip-phase0   # 综合分卡（�
 
 # 大票对照证据（上场前一天跑够即可）
 # 446 t 客户清单不在仓库，下面这条命令在净仓会失败，不要当成可复验结果。
-# python scripts/compare_446t_agent_vs_tool.py --full-agent
+# python scripts/compare_446t_agent_vs_tool.py --full-agent  # 客户文件不在仓库，不能复验；29 柜基线已废弃
 
 # 每岗记分卡（R5，评委追问岗位质量时）
 python scripts/eval_post_scorecard.py --all-pilots
