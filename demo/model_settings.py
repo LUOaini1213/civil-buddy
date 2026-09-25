@@ -30,6 +30,17 @@ def _public_base(base: str) -> str:
         return ""
 
 
+def _target(base: str) -> tuple:
+    """Where a key would go; credentials, case, a default port and a trailing slash do not move it."""
+    try:
+        parts = urlsplit(base)
+        scheme = parts.scheme.lower()
+        return (scheme, (parts.hostname or "").lower(), parts.port or {"http": 80, "https": 443}.get(scheme),
+                parts.path.rstrip("/"))
+    except ValueError:
+        return (base,)
+
+
 def get_settings() -> dict:
     from context import policy, semantic_summary_enabled
     with _LOCK:
@@ -104,12 +115,16 @@ def set_settings(payload: dict) -> dict:
             set_semantic_summary(None)
         else:
             config = llm.llm_config()
+            stored = _target(config["base_url"])
             for name in ("api_key", "base_url", "model"):
                 value = _text(payload, name)
                 if value:
                     config[name] = value
             config["base_url"] = config["base_url"].rstrip("/")
             _validate(config)
+            # The page re-posts the current base on every save; only a real move needs the key again.
+            if _target(config["base_url"]) != stored and config["api_key"] and not _text(payload, "api_key"):
+                raise ValueError("更换 Base URL 需要重新填写 API Key（已存的 Key 不会发往新地址）")
             # All submitted fields have been validated before any setting moves.
             if limits is not None:
                 set_runtime_policy(limits)

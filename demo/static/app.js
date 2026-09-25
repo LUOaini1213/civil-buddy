@@ -199,8 +199,13 @@ function cbRememberSession(id) { return nav.rememberSession(id); }
 function cbRememberedSession() { return nav.rememberedSession(); }
 async function cbResumeSession(id, request) { return nav.resumeSession(id, request); }
 
+function cbConfirmText() {
+  const input = $("confirmOk");
+  return input && input.value === "我明白，将由持证人员签认" ? input.value : "";
+}
+
 function cbConfirmed() {
-  return !!($("confirmOk") && $("confirmOk").value === "我明白，将由持证人员签认");
+  return !!cbConfirmText();
 }
 
 function cbHitlPending(data) {
@@ -908,6 +913,7 @@ async function cbRunBackground(text) {
         logistics_project_id: state.logisticsProjectId || "",
         expert_ids: [...state.summoned],
         confirm_ok: cbConfirmed(),
+        confirm_text: cbConfirmText(),
       }),
     });
     if (!r.ok) throw new Error(await apiError(r) || "HTTP " + r.status);
@@ -1466,6 +1472,7 @@ const turns = createTurnStream({
   },
   hitl: {
     confirmed: () => cbConfirmed(),
+    typed: () => cbConfirmText(),
     clear: () => cbClearServerHitl(),
     enable: (data) => cbEnableServerHitl(data),
     pending: (data) => cbHitlPending(data),
@@ -3711,7 +3718,7 @@ function cbTlCreate(bodyEl, sourceMessage) {
         stateChip.textContent = "已确认 · 已重新提交";
         setStage("hitl", "done", "已确认 · 已重新提交（续跑见新时间线）");
         addLine("hitl", "hitl.confirm", "用户确认 · 键入签认句并重新提交", "ok");
-        decidedBody.textContent = "已确认 · 已重新提交本条任务（confirm_ok=true）。本时间线定格为历史，续跑进度见新时间线。";
+        decidedBody.textContent = "已确认 · 已重新提交本条任务（附本人键入的确认句）。本时间线定格为历史，续跑进度见新时间线。";
       } else {
         card.classList.add("is-rejected");
         stateChip.hidden = false;

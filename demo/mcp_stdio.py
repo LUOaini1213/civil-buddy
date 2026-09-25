@@ -67,7 +67,7 @@ def handle(msg: dict[str, Any], *, pack: str | None = None, expert: str | None =
         if params.get("arguments") is not None and not isinstance(params["arguments"], dict):
             return err(-32602, "arguments must be an object")
         args = params.get("arguments") or {}
-        out = call_tool(name, args, expert_id=expert or eid or None, pack=pack)
+        out = call_tool(name, args, expert_id=expert, pack=pack)  # --pack alone is a pack scope, not a pinned post
         text = json.dumps(out, ensure_ascii=False, default=str)
         return ok({"content": [{"type": "text", "text": text}], "isError": not out.get("ok", True)})
     if method == "resources/list":

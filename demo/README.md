@@ -18,7 +18,7 @@ python serve.py            # 读 .env 里的 CIVIL_HOST / CIVIL_PORT；等价于
 
 ### 手机 / 局域网
 
-1. `.env` 里加 `CIVIL_HOST=0.0.0.0`，再加 `CIVIL_TOKEN=随便一串`（工作室能读写这台电脑的知识库，开给局域网就得有口令）。手机第一次打开会弹一次口令输入，之后存在 cookie 里，下载链接和上传都自动带；脚本用 `Authorization: Bearer <口令>`。没设口令就开到 0.0.0.0，`serve.py` 会在启动时警告。
+1. `.env` 里加 `CIVIL_HOST=0.0.0.0`，再加 `CIVIL_TOKEN=随便一串`（工作室能读写这台电脑的知识库，开给局域网就得有口令）。手机第一次打开会弹一次口令输入，之后存在 cookie 里，下载链接和上传都自动带；脚本用 `Authorization: Bearer <口令>`（`?token=` 只用来设 cookie，不能直接调 /api）。没设口令就开到 0.0.0.0，`serve.py` 会拒绝启动（确实要不设口令开放局域网，设 `CIVIL_ALLOW_OPEN_LAN=1`）。口令另行告诉同事，由各自打开一次 `http://<电脑IP>:8765/?token=<口令>`，就换成 HttpOnly cookie，地址栏里不再带口令（带口令的链接会留在浏览器历史里，别转发）。和网关同机时两边用同一个 `CIVIL_TOKEN`。
 2. 手机同一 Wi-Fi 打开 `http://<电脑IP>:8765`。窄屏时侧栏变成顶栏「栏目」按钮拉出的抽屉；弹出键盘时输入框保持在键盘之上。
 3. 成稿期间锁屏 / 切后台 / 断网回来：服务端继续跑完（`CIVIL_DETACHED_TURN_SECONDS`，默认 600 s 内），页面回来后从 `GET /api/sessions/{sid}` 拉回结果。只有点「停止」才真的取消。
 4. 模型慢：`CIVIL_LLM_READ_TIMEOUT`（两段输出之间最长等多久，默认 180 s）、`CIVIL_LLM_CONNECT_TIMEOUT`（默认 15 s）。

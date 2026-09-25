@@ -81,7 +81,7 @@ pack-ship 岗 **不是第二套装箱**。给装箱单时它调用本仓 solver�
 ### 1.4 锁死的数字与句子
 
 - 岗 **66**，大类 **16**（`workbench/seed.json`）。  
-- 确认句：`我明白，将由持证人员签认`。闸是 `confirm_ok` / `p0_confirmed` **布尔**，只挡 **high** 写盘；不是从用户正文抽句。  
+- 确认句：`我明白，将由持证人员签认`。闸只认本人在**本轮**键入的这句（HTTP 为 `confirm_text`），只挡 **high** 写盘；`confirm_ok` / `p0_confirmed` 布尔不能代替，MCP 调用方不能确认。  
 - GST：先核对用户提供的辖区、税率、来源和适用期；未知值为 `UNSPECIFIED`。抓门户失败不能推断税率，也不把历史 KB 升格为本轮已核验证据。
 - GeBIZ **不是**评分办法。Fire Code **2023**。CTU Code **2014** 非强制（权威句在 `demo/kb/company/web-portals.md`；pack-ship 岗页链同一句）。  
 - CORENET X 2026-10-01 强制范围以 APPBCA-2026-12 为准（GFA≥5,000 m²）。  
@@ -106,7 +106,7 @@ pack-ship 岗 **不是第二套装箱**。给装箱单时它调用本仓 solver�
 
 1. 问「什么是 GST」→ `chat`、不写盘、解释概念且不默认税率。
 2. 「解析招标…」→ 矩阵行有 `exact_text`，`submit_blocked=true`。  
-3. 选岗 `construction`，勾选 `confirm_ok`（不是把确认句糊进正文）→ 十一章 md，无「可以开工」。未勾选 0 份稿。  
+3. 选岗 `construction`，在确认栏键入确认句 → 十一章 md，无「可以开工」。未键入 0 份稿。  
 4. pack-ship 无会话 `packing_summary` → 四字段 `UNSPECIFIED`；有注入/落盘快照则原样抄，`xyz` 永不编。先 delivery 再抄的 HTTP 联测见 T052。  
 5. MCP **必须** `--pack bid` 或 `--expert`：list 到 `search_kb`/`tender.parse`，看不见 `pack-ship__plan`。裸起 stdio 会看见 pack-ship。  
 6. `kb://<大类>/<兄弟id>/…` 与跨大类 `kb://construction/method-hazard/…`（bid-parse）→ 正文以「拒绝」开头，不是空 404（T023 ✅）。
@@ -226,7 +226,7 @@ xyz 只抄 solver。分页/订阅 = 有真 Host list/call 稳定之后（horizon
 ### 5.5 运行时与主线 C
 
 - `POST /api/agent` 完整循环；`POST /api/turn` 兼容。  
-- 高风险且 `p0_confirmed`/`confirm_ok` 非真 → `waiting_hitl`。UI 确认句原文见上；服务端不抽用户正文。  
+- 高风险且本轮没有 `confirm_text` 确认句 → `waiting_hitl`；`p0_confirmed`/`confirm_ok` 为真 → 422。确认句原文见上；网关不从用户正文抽句。  
 - 招标 ingest：**拒绝一切 PDF**（含数字 PDF）。工作台附件可选 MinerU CLI（`CIVIL_PARSE=auto`），未装则 builtin 文字层，失败即拒。GETTING-STARTED 须钉一句（T050）。  
 - delivery 可 `save_packing_snapshot`；pack-ship 只抄。  
 - 再审不填业绩、不改 `can_fit`。

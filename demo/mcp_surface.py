@@ -98,6 +98,9 @@ _COMMON = (
     ("read_kb", "读取 kb:// 或相对路径。越权拒绝。"),
     ("list_kb", "列出当前岗可见知识文件。"),
 )
+# The caller on MCP is a model: it may ask for a high-risk write, never approve one.
+_PERSON_ONLY = ("confirm_ok", "p0_confirmed")
+_NEEDS_PERSON = "高风险写盘须由本人在工作台、终端或桌面端键入确认句；MCP 调用方不能代为确认。本次未写盘。"
 
 
 def _scope(expert_id: str | None, pack: str | None):
@@ -127,6 +130,8 @@ def _spec(name: str, description: str, extra: dict | None = None) -> dict[str, A
     schema = deepcopy(spec.input_schema) if spec and spec.input_schema else contract["input_schema"]
     if extra:
         schema["properties"].update(extra)
+    for key in _PERSON_ONLY:
+        (schema.get("properties") or {}).pop(key, None)
     return {"name": name, "description": description, "inputSchema": schema,
             "outputSchema": deepcopy(spec.output_schema) if spec and spec.output_schema else contract["output_schema"]}
 
@@ -289,6 +294,45 @@ def _visible_names(expert_id: str | None, pack: str | None) -> set[str]:
     return {str(t.get("name") or "") for t in list_tools(expert_id=expert_id, pack=pack)}
 
 
+def _needs_person(out: dict[str, Any]) -> dict[str, Any]:
+    """A write waiting for the sentence is not a success the host may report as done."""
+    if out.get("hitl_pending"):
+        return {**out, "ok": False, "error_code": "approval_required", "reason": _NEEDS_PERSON}
+    return out
+
+
+def _turn_expert(asked: str, expert_id: str | None, pack: str | None, eid: str, cat: str) -> str | None:
+    """The post civil.turn may run: --expert pins that post, --pack its posts; None = outside the launch scope."""
+    if (expert_id or "").strip():
+        return eid if asked in {"", eid} else None
+    if (pack or "").strip():
+        from packing_assistant.expert_roster import get_expert
+
+        rec = get_expert(asked) if asked else None
+        if asked and not (rec and rec.category == cat):
+            return None
+        return (rec.id if rec else eid) or None
+    return asked
+
+
+def _write_needs_person(tool: str, risk: str, intent: str) -> dict[str, Any] | None:
+    """The approval_required answer when the gate holds this write for a person; None when it may run."""
+    from packing_assistant.runtime.civil_config import decide_gate
+    from packing_assistant.runtime.tool_engine import get_engine
+
+    spec = get_engine().tools.get(tool)
+    if spec is None or not spec.writes or decide_gate(intent=intent, risk=risk, confirmed=False) != "hitl":
+        return None
+    return _needs_person({"name": tool, "wrote": False, "files": [], "hitl_pending": True, "submit_blocked": True})
+
+
+def _engine_call(tool: str, args: dict[str, Any], *, expert_id: str, risk: str, intent: str) -> dict[str, Any]:
+    from packing_assistant.runtime.tool_engine import get_engine
+
+    held = _write_needs_person(tool, risk, intent)
+    return held or _needs_person(get_engine().execute(tool, args, expert_id=expert_id, intent=intent))
+
+
 def call_tool(
     name: str,
     arguments: dict | None = None,
@@ -311,6 +355,9 @@ def call_tool(
         return {"ok": False, "error": f"未知工具 {name}", "content": []}
     if tool not in visible:
         return {"ok": False, "error": "拒绝：当前专家看不见该工具", "content": []}
+    if any(key in args for key in _PERSON_ONLY):
+        return {"ok": False, "error_code": "invalid_args", "error": "confirm_ok / p0_confirmed 不接受：" + _NEEDS_PERSON,
+                "content": []}
     schema = next((s["inputSchema"] for s in list_tools(expert_id=expert_id, pack=pack) if s["name"] == tool), {})
     problem = validate(args, schema)
     if problem:
@@ -319,17 +366,25 @@ def call_tool(
     if tool in {"civil.turn", "agent.turn"}:
         from packing_assistant.runtime.agent_loop import run_agent
 
+        asked = str(args.get("skill") or args.get("expert_id") or "").strip()
+        post = _turn_expert(asked, expert_id, pack, eid, cat)
+        if post is None:
+            return {"ok": False, "error_code": "permission_denied",
+                    "error": f"拒绝：本 MCP 服务的启动范围看不见岗位 {asked or '（未点名）'}", "content": []}
         sid = str(args.get("session_id") or "mcp-turn")
-        return run_agent(
-            str(args.get("text") or args.get("task") or ""),
-            session_id=sid,
-            expert_id=str(args.get("skill") or args.get("expert_id") or eid or ""),
-            p0_confirmed=args.get("confirm_ok") is True or args.get("p0_confirmed") is True,
-        )
+        return _needs_person(run_agent(str(args.get("text") or args.get("task") or ""), session_id=sid,
+                                       expert_id=post, p0_confirmed=False))
 
     if tool in TOOL_NAMES:
         if rec and rec.id not in {"pack-ship", ""} and cat != "plant":
             return {"ok": False, "error": "拒绝：当前专家看不见该工具", "content": []}
+        from packing_assistant.runtime.tool_engine import get_engine
+
+        # 与其他工具同一道契约 + 策略闸；不走 execute、也不读熔断：缺重量这类业务上的 ok=False 不该把全进程的工具熔断。
+        _, refused = get_engine().admit(tool, args, expert_id="pack-ship", intent=intent, circuit=False)
+        held = refused or _write_needs_person(tool, rec.risk if rec else "low", intent)
+        if held:
+            return held
         out = _pack(tool, args)
         return {"ok": bool(out.get("ok", True)), "name": tool, **out}
 
@@ -354,17 +409,19 @@ def call_tool(
         return {"ok": ok, "name": tool, "text": text}
 
     if tool in {"tender.parse", "tender.review", "write_deliverable"}:
-        from packing_assistant.runtime.tool_engine import get_engine
+        from packing_assistant.expert_roster import list_experts
 
-        return get_engine().execute(tool, args, expert_id=eid or "", intent=intent)
+        risk = rec.risk if rec else "low"
+        # A --pack scope writes for every post in it, so it is gated at the riskiest one, not the default post.
+        if not (expert_id or "").strip() and cat and any(e.risk == "high" for e in list_experts() if e.category == cat):
+            risk = "high"
+        return _engine_call(tool, args, expert_id=eid or "", risk=risk, intent=intent)
     if tool.endswith("__scan_forbidden") or tool == "scan_forbidden":
         from packing_assistant.tools.tender_review import forbidden_hits
 
         hits = forbidden_hits(str(args.get("text") or args.get("draft") or ""))
         return {"ok": True, "name": tool, "hits": hits, "n": len(hits)}
     if rec and tool in rec.exclusive:
-        from packing_assistant.runtime.tool_engine import get_engine
-
         args.setdefault("session_id", "mcp")
-        return get_engine().execute(tool, args, expert_id=rec.id, intent=intent)
+        return _engine_call(tool, args, expert_id=rec.id, risk=rec.risk, intent=intent)
     return {"ok": False, "error": f"未知工具 {name}", "content": []}

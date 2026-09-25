@@ -34,7 +34,7 @@ class DraftContextIntegrityTests(unittest.TestCase):
         projects.append_turn(self.root, self.sid, "user", text)
 
     def draft(self, text, expert="steel"):
-        done, _ = self.post(text, expert_ids=[expert], confirm_ok=True)
+        done, _ = self.post(text, expert_ids=[expert], confirm_text="我明白，将由持证人员签认")
         self.assertTrue(done["ok"] and done["wrote"], done)
         markdown = next(Path(f["path"]).read_text(encoding="utf-8") for f in done["deliverables"] if f["path"].endswith(".md"))
         workbook_path = next(f["path"] for f in done["deliverables"] if f["path"].endswith(".xlsx"))

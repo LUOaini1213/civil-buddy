@@ -8,16 +8,25 @@
 所以这里不走函数调用，而是按 `openclaw mcp add` 的方式起一个真实子进程，
 用 JSON-RPC over stdio 说话，断言 plan 返回的是真柜数。
 """
+import atexit
 import json
+import os
+import shutil
 import subprocess
 import sys
+import tempfile
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
 
 SERVER = ROOT / "demo" / "mcp_stdio.py"
-SAMPLE = ROOT / "test" / "benchmarks" / "excel" / "case_b_long_frames_40hq.xlsx"
+FIXTURE = ROOT / "test" / "benchmarks" / "excel" / "case_b_long_frames_40hq.xlsx"
+# 宿主给的是授权作业文件夹（civil -C / CIVIL_JOB_ROOT）；夹外的表 pack-ship 不读。
+JOB = Path(tempfile.mkdtemp(prefix="civil-mcp-job-"))
+atexit.register(shutil.rmtree, JOB, True)
+os.environ["CIVIL_JOB_ROOT"] = str(JOB)
+SAMPLE = JOB / FIXTURE.name
 
 
 def rpc(calls, args=("--expert", "pack-ship"), timeout=300):
@@ -53,7 +62,8 @@ def payload_of(message):
 
 
 def main():
-    assert SAMPLE.exists(), f"缺少样例装箱表: {SAMPLE}"
+    assert FIXTURE.exists(), f"缺少样例装箱表: {FIXTURE}"
+    shutil.copyfile(FIXTURE, SAMPLE)
     got = rpc([
         {"jsonrpc": "2.0", "id": 1, "method": "initialize",
          "params": {"protocolVersion": "2025-03-26", "capabilities": {},

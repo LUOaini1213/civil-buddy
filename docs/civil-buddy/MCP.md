@@ -70,4 +70,6 @@ python demo/mcp_stdio.py --expert pack-ship
 | `pack-ship__list/ingest/plan/vgm/booking_draft/export/health` | 仅 pack-ship / plant |
 | `*__scan_forbidden` | 本大类 |
 
+pack-ship 的 `file_path` 只读作业文件夹与沙箱目录里的表：`python -m packing_assistant.civil -C <作业文件夹> mcp --expert pack-ship`，或在宿主配置里设 `CIVIL_JOB_ROOT`。夹外路径、`.env` / `*.pem` / 含 secret、api_key 字样的路径返回 `permission_denied`，不解析。只读沙箱（`--sandbox read-only`）下 `plan` / `export` 与 steps 路径一样按写工具拒绝，`ingest` / `vgm` / `booking_draft` 照常。
+
 `kb://` 越权返回「拒绝：…」，不装成空库。chat 调写盘 → `permission_denied`。xyz 只抄 solver 或 `UNSPECIFIED`。岗独有（`survey__record` 等）是 ToolEngine 工具名，Host `tools/call` 走同一鉴权，不是 `write_deliverable` 贴标签。

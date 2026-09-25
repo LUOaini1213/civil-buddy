@@ -77,11 +77,12 @@ def assemble_context(
     p0_confirmed: bool = False,
     compressed: Optional[bool] = None,
 ) -> Dict[str, Any]:
-    """Merge this request onto disk slots. Sticky: project, p0 True, compressed True."""
+    """Merge this request onto disk slots. Sticky: project, compressed True. p0 is this request's alone."""
     prev = load_summary(session_id) or {}
     jur = infer_jurisdiction(text, str(prev.get("jurisdiction") or ""))
     project = _real_project(project_name) or _real_project(str(prev.get("project") or "")) or "UNSPECIFIED"
-    p0 = p0_confirmed is True or prev.get("p0_confirmed") is True
+    # 确认句只管本轮：上一轮打过，不等于这一轮的高风险写盘也有人签认。
+    p0 = p0_confirmed is True
     comp = bool(prev.get("compressed")) if compressed is None else bool(compressed)
     note = str(prev.get("dropped_note") or "")
     if comp and not note:

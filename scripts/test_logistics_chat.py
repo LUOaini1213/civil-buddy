@@ -21,6 +21,9 @@ from packing_assistant.logistics.ledger import audit_document, summarize
 from packing_assistant.runtime import model_loop
 from packing_assistant.runtime.turn import run_turn
 
+# The LAN door is the token; the logistics project boundary is still loopback-only on top of it.
+LAN_TOKEN = "synthetic-lan-token"
+BEARER = {"Authorization": "Bearer " + LAN_TOKEN}
 DATA = ("package_id,material_id,name,package_count,quantity,units_per_package,unit,"
         "package length mm,package width mm,package height mm,net weight per package kg,gross weight per package kg\n"
         "BOX-A,MAT-A,Synthetic panel,2,10,5,PCS,1200,800,100,100,110\n").encode()
@@ -121,7 +124,7 @@ class LogisticsHostTests(unittest.TestCase):
         root = Path(tmp.name).resolve()
         self.stack = ExitStack()
         self.addCleanup(self.stack.close)
-        self.stack.enter_context(patch.dict(os.environ, {"CIVIL_JOB_ROOT": "", "CIVIL_TOKEN": "", "CIVIL_AGENT_MODE": "steps",
+        self.stack.enter_context(patch.dict(os.environ, {"CIVIL_JOB_ROOT": "", "CIVIL_TOKEN": LAN_TOKEN, "CIVIL_AGENT_MODE": "steps",
                                                        "CIVIL_SANDBOX": "workspace-write", "CIVIL_APPROVAL": "on-request"}))
         for module, key, value in ((app, "OUT_ROOT", root / "chat"), (agent_loop, "_OUT", root / "chat"),
             (memory, "_OUT", root / "chat"), (expert_turn, "_OUT", root / "chat"),
@@ -134,11 +137,11 @@ class LogisticsHostTests(unittest.TestCase):
         self.store = LogisticsStore(root)
         self.stack.enter_context(patch.object(logistics_api, "store", return_value=self.store))
         self.project = self.store.create("Synthetic", parse_document(DATA, "synthetic.csv", ocr_backend="none"), DATA)
-        self.client = self.stack.enter_context(TestClient(app.app))
+        self.client = self.stack.enter_context(TestClient(app.app, headers=BEARER))
 
     def remote_client(self):
         from fastapi.testclient import TestClient
-        return self.stack.enter_context(TestClient(self.app.app, base_url="http://remote.invalid", client=("192.0.2.1", 12345)))
+        return self.stack.enter_context(TestClient(self.app.app, base_url="http://remote.invalid", client=("192.0.2.1", 12345), headers=BEARER))
 
     def post(self, message):
         response = self.client.post("/api/chat", json={"message": message, "session_id": "logistics-chat-offline",

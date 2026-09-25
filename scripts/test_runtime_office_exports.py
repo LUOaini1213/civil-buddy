@@ -42,7 +42,7 @@ class RuntimeOfficeExportsTests(unittest.TestCase):
     post = flow.WorkbenchFlowTests.post
 
     def draft(self, eid):
-        return self.post(REQUESTS[eid], expert_ids=[eid], confirm_ok=True)[0]
+        return self.post(REQUESTS[eid], expert_ids=[eid], confirm_text="我明白，将由持证人员签认")[0]
 
     def fresh_session(self):
         self.sid = "office-" + uuid4().hex[:16]
@@ -166,7 +166,7 @@ class RuntimeOfficeExportsTests(unittest.TestCase):
                     return completed
 
                 with ThreadPoolExecutor(max_workers=1) as pool, patch.object(expert_turn, "_attach_office", side_effect=paused) as attach:
-                    future = pool.submit(self.post, REQUESTS[eid], expert_ids=[eid, "pm-daily"], confirm_ok=True)
+                    future = pool.submit(self.post, REQUESTS[eid], expert_ids=[eid, "pm-daily"], confirm_text="我明白，将由持证人员签认")
                     self.assertTrue(entered.wait(4))
                     try:
                         cancelled = self.client.post(f"/api/sessions/{self.sid}/cancel").json()

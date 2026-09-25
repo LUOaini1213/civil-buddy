@@ -1,6 +1,7 @@
 # Civil Buddy packing engine (gateway)
-# usage: docker compose up --build
-# open:  http://localhost:8000
+# usage: CIVIL_TOKEN=<长随机串> docker compose up --build
+# open:  http://localhost:8000/?token=<口令>（只需一次，之后是 HttpOnly cookie）
+# 服务器上前面有 Caddy/nginx 做 HTTPS 时，把端口改成 "127.0.0.1:8000:8000"，只放行 80/443
 services:
   gateway:
     build: .
@@ -8,6 +9,7 @@ services:
     ports:
       - "8000:8000"
     environment:
+      - CIVIL_TOKEN=${CIVIL_TOKEN:?请先设置 CIVIL_TOKEN（访问口令）}
       - SKJOLBER_URL=${SKJOLBER_URL:-}
       - PACKING_OTEL=${PACKING_OTEL:-0}
       - PACKING_LANGFUSE=${PACKING_LANGFUSE:-0}

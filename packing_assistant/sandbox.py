@@ -127,6 +127,8 @@ def _norm(path: Union[str, Path]) -> Path:
         return p.expanduser().resolve()
     except OSError:
         return p.expanduser()
+    except ValueError:      # an embedded NUL: never resolved, so _inside_roots refuses it
+        return p
 
 
 def _is_secret(path: Path, profile: SandboxProfile) -> Optional[str]:
@@ -145,6 +147,9 @@ def _is_secret(path: Path, profile: SandboxProfile) -> Optional[str]:
 
 
 def _inside_roots(path: Path, roots: Sequence[Path]) -> bool:
+    # 只有解析过的路径可比：relative_to 是字面比较，<root>/../x 与带 NUL 的路径会被当成在根内。
+    if not path.is_absolute() or ".." in path.parts or "\x00" in str(path):
+        return False
     for root in roots:
         try:
             path.relative_to(root)

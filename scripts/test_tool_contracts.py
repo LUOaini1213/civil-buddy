@@ -57,7 +57,7 @@ class ToolContractsTests(unittest.TestCase):
     def test_mcp_discovery_and_string_confirmation_validation(self):
         tools = mcp_surface.list_tools(expert_id="construction")
         scheme = next(t for t in tools if t["name"] == "construction__scheme_draft")
-        self.assertEqual(scheme["inputSchema"]["properties"]["confirm_ok"]["type"], "boolean")
+        self.assertNotIn("confirm_ok", scheme["inputSchema"]["properties"])    # a model on MCP cannot approve
         self.assertIn("files", scheme["outputSchema"]["properties"])
         with patch("packing_assistant.runtime.agent_loop.run_agent") as runner:
             result = mcp_surface.call_tool("civil.turn", {"text": "draft", "confirm_ok": "false"}, expert_id="construction")

@@ -45,7 +45,7 @@ def main() -> int:
     )
     assert second.get("wrote") is False
     assert (second.get("context") or {}).get("project") == "滨河路"
-    assert (second.get("context") or {}).get("p0_confirmed") is True
+    assert (second.get("context") or {}).get("p0_confirmed") is False    # a confirmation is not remembered into the next turn
     assert "UNSPECIFIED" in (second.get("reply") or "")
     assert "9%" not in (second.get("reply") or "")
     sticky = load_summary("mem-sticky")

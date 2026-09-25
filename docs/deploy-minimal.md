@@ -23,13 +23,14 @@
 5. **Environment**（可选）：
    | Key | 示例 | 说明 |
    |-----|------|------|
+   | `CIVIL_TOKEN` | 长随机串 | **必填**：访问口令；不设则容器拒绝启动 |
    | `PACKING_SKIP_SKJOLBER` | `1` | 默认即可 |
    | `DEEPSEEK_API_KEY` 或 `OPENAI_API_KEY` | 你的 Key | 不要也可跑 steps |
    | `OPENAI_BASE_URL` | DeepSeek 时填对应 base | 可选 |
 6. **Create Web Service** → 等 Build / Deploy 变绿
 
 ### 2. 访问
-- 公网：`https://<你的服务名>.onrender.com`
+- 公网：`https://<你的服务名>.onrender.com/?token=<口令>`（打开一次即换成 HttpOnly cookie）
 - 健康：`https://<你的服务名>.onrender.com/api/health`  
   期望：`gateway: UP`、`agent_count: 13`
 
@@ -49,12 +50,14 @@ curl -fsSL https://get.docker.com | sh
 git clone https://github.com/LUOaini1213/packing-agent.git
 cd packing-agent
 
-# 3. 构建并后台跑
+# 3. 访问口令（必填；docker compose 没有它会直接报错）
+echo "CIVIL_TOKEN=$(python3 -c 'import secrets;print(secrets.token_urlsafe(32))')" >> .env
+
+# 4. 构建并后台跑
 docker compose up -d --build
 
-# 4. 本机/安全组放行 8000
-# 访问 http://<公网IP>:8000
-# 建议前面加 Nginx + HTTPS（或 Cloudflare 橙云代理）
+# 5. 访问 http://<公网IP>:8000/?token=<口令>
+# 正式对外请按下面「AWS Lightsail」一节加 HTTPS，不要直接放行 8000
 ```
 
 可选环境变量（写 `.env` 或 `docker compose` 的 environment）：
@@ -63,6 +66,30 @@ docker compose up -d --build
 PACKING_SKIP_SKJOLBER=1
 DEEPSEEK_API_KEY=sk-xxx
 ```
+
+### AWS Lightsail（一台公司服务器 + 员工浏览器）
+
+1. **口令必填**：`CIVIL_TOKEN` 用上面的随机串，只放服务器 `.env`，不进仓库。换口令 = 改值后重启，旧 cookie 会收到 401 并被清掉。**不要**设 `CIVIL_ALLOW_OPEN_LAN`。
+2. **只经 HTTPS 进来**：`docker-compose.yml` 的端口改成 `"127.0.0.1:8000:8000"`；Lightsail 防火墙只开 80/443，不开 8000。
+3. **前面放 Caddy 或 nginx**。nginx 需要：
+   ```nginx
+   location / {
+       proxy_pass http://127.0.0.1:8000;
+       proxy_http_version 1.1;
+       proxy_set_header Host $host;
+       proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+       proxy_set_header X-Forwarded-Proto $scheme;
+       proxy_set_header Upgrade $http_upgrade;      # /ws/
+       proxy_set_header Connection "upgrade";
+   }
+   ```
+   带转发头或走 HTTP/1.0 的请求按"非本机"处理；口令对本机回环也同样必需，所以代理怎么配都不会绕过口令；`X-Forwarded-Proto: https` 会让 cookie 带 `Secure`。不要把 uvicorn 的 `FORWARDED_ALLOW_IPS` 设成 `*`。
+4. **员工第一次**打开 `https://<域名>/?token=<口令>`，服务器 303 跳回不带口令的地址并种 HttpOnly、SameSite=Strict 的 cookie；这条链接会在代理日志和浏览器历史里出现一次，别转发。脚本用 `Authorization: Bearer <口令>`。
+5. 密钥只放环境变量；服务器仓库根和 `output/` 下不要放 `deepseek api.txt` 之类的文件（`/api/artifact` 只读 `output/`、`PACKING_OUTPUT_DIR` 和 runs 目录）。
+6. `PACKING_TMS_MODE` 不设（stub）；请求体里的 `mode` 已不能切到真实 TMS。
+7. 镜像里只有网关（没有 `demo/`）。要把员工工作台也放上去，用 `CIVIL_HOST=0.0.0.0 CIVIL_TOKEN=<同一口令> python demo/serve.py`，同样只经代理对外；没口令 `serve.py` 拒绝启动。两个应用必须用同一个口令：cookie 同名且不分端口，口令不同会互相清掉对方的 cookie。
+8. 应用挂在域名根路径（`location /`）。挂在子路径下时，`?token=` 的 303 会跳回域名根。
+9. 没设口令时，不加转发头的 HTTP/1.1 代理（Host 改成 127.0.0.1）和任何 TCP 端口转发（socat、netsh portproxy、`ssh -R`）都会让远程请求看起来像本机：没口令的实例绝不要这样转出去。
 
 ---
 
@@ -100,4 +127,4 @@ pip install -r requirements.txt
 uvicorn gateway.app:app --host 127.0.0.1 --port 8000
 ```
 
-云上是同一套 `gateway.app:app`，只是 `--host 0.0.0.0` + 公网域名。
+云上是同一套 `gateway.app:app`，只是 `--host 0.0.0.0` + 公网域名 + `CIVIL_TOKEN`（没口令监听 0.0.0.0 会拒绝启动）。
