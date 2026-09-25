@@ -5,7 +5,6 @@ import os
 from contextlib import asynccontextmanager
 from uuid import uuid4
 from pathlib import Path
-from urllib.parse import unquote
 
 from fastapi import Depends, FastAPI, HTTPException, Request
 from fastapi.responses import FileResponse, HTMLResponse, Response, StreamingResponse
@@ -15,6 +14,7 @@ from starlette.background import BackgroundTask
 from starlette.datastructures import UploadFile
 
 from agent import run_plain
+from packing_assistant import access_guard
 from catalog import catalog_payload, get_expert, resolve_mentions
 from config import DEMO_ROOT, OUT_ROOT, llm_model
 from kbio import MAX_FILE_BYTES, create_file, delete_file, format_bytes, read_text, write_text
@@ -34,6 +34,7 @@ async def _lifespan(_app: FastAPI):
     from chat_service import sweep_stale
     import uploads as _uploads
 
+    access_guard.check_startup_bind()
     sweep_stale(OUT_ROOT)
     _uploads.migrate_legacy_uploads()
     yield
@@ -61,39 +62,17 @@ from logistics_api import router as logistics_router
 app.include_router(logistics_router)
 
 
-def auth_token() -> str:
-    """Shared secret for /api/* when the workbench is bound to a LAN address (CIVIL_TOKEN). Empty = open."""
-    return (os.environ.get("CIVIL_TOKEN") or "").strip()
-
-
-def _token_presented(request: Request) -> str:
-    auth = request.headers.get("authorization") or ""
-    if auth.startswith("Bearer "):
-        return auth[7:].strip()
-    q = request.query_params.get("token")
-    if q:
-        return q
-    # Both workbench pages use encodeURIComponent for cookie-safe tokens.
-    return unquote(request.cookies.get("cb_token") or "").strip()
-
-
-@app.middleware("http")
-async def require_token(request: Request, call_next):
-    expected = auth_token()
-    path = request.url.path
-    # "/" and /static stay open so the page can load and ask for the token; /api/health says auth is on
-    if expected and path.startswith("/api/") and path != "/api/health" and _token_presented(request) != expected:
-        from fastapi.responses import JSONResponse
-
-        return JSONResponse({"detail": "需要访问口令（CIVIL_TOKEN）"}, status_code=401)
-    return await call_next(request)
+# Pages and their static files load before the token so the page can ask for it; /api/health says auth is on.
+_PUBLIC = {"/", "/sw.js", "/api/health", "/cad", "/logistics", "/engineering", "/engineering/schedule",
+           "/engineering/planning", "/engineering/routes"}
 
 
 class ChatIn(BaseModel):
     message: str = Field(min_length=1, max_length=40_000)
     history: list[dict] = Field(default_factory=list, max_length=80)
     expert_ids: list[str] = Field(default_factory=list, max_length=8)
-    confirm_ok: StrictBool = False
+    confirm_ok: StrictBool = False  # still sent for the Rust workbench that serves the same page; never approves here
+    confirm_text: str = Field(default="", max_length=64)
     session_id: str = Field(default="", max_length=32)
     project_id: str = Field(default="", max_length=64)
     cad_project_id: str = Field(default="", pattern=r"^(?:[0-9a-f]{32})?$")
@@ -215,10 +194,11 @@ async def static_revalidates(request: Request, call_next):
 
 
 @app.get("/api/health")
-def health() -> dict:
+def health(request: Request) -> dict:
     from context import policy
     from packing_assistant.office_job import job_root, job_root_granted, list_job_files
 
+    authorised = access_guard.authorised(request.scope)
     return {
         "ok": True,
         "product": "civil-codex",
@@ -231,7 +211,8 @@ def health() -> dict:
                          "session_backup": True, "cancel": True, "word_export": True,
                          "task_memory": True, "local_rag": True, "task_routing": True,
                          "expert_contracts": True, "tender_collaboration": True, "semantic_summary": True,
-                         "asr": _asr_installed(), "auth": bool(auth_token()), "live_progress": True,
+                         "asr": _asr_installed(), "live_progress": True,
+                         "auth": bool(access_guard.configured_token()) and not authorised,
                          "file_ref": True, "event_log": True, "background_turns": True,
                          "cad": True},
         "deepseek": has_key(),
@@ -239,7 +220,7 @@ def health() -> dict:
         "context": policy(),
         "job": {
             "granted": job_root_granted(),
-            "root": str(job_root()) if job_root_granted() else "",
+            "root": str(job_root()) if job_root_granted() and authorised else "",
             "n": len(list_job_files()),
         },
     }
@@ -1140,3 +1121,6 @@ def file(path: str = "", name: str = "", session: str = "", run: str = "", file:
         media_type = mimetypes.guess_type(download_name)[0] or "application/octet-stream"
         return FileResponse(target, filename=download_name, media_type=media_type, content_disposition_type="attachment")
     return FileResponse(target, filename=download_name, content_disposition_type="attachment")
+
+
+app.add_middleware(access_guard.AccessGuard, public=lambda path: path in _PUBLIC or path.startswith("/static/"))

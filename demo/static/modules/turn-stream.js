@@ -11,7 +11,7 @@
  *   state            { session, history, summoned, attachments, attachmentRoles }
  *   run              { active(), setActive(r), paint(bool), releaseWatch(), watch(sid, opts), background: Set }  (bound as `runs`)
  *   ui               { log(), addMsg(role, who, text), addStatus(text), announce(text), doc }
- *   hitl             { confirmed(), clear(), enable(data), pending(data) }
+ *   hitl             { confirmed(), typed(), clear(), enable(data), pending(data) }
  *   turnUi           { tlCreate, routePaint, collaborationPaint, obStep, paintContext, estimateLocalContext,
  *                      renderCites, appendDocCards, fixMount, classifyMissing, refreshAuditSoon, skillWho,
  *                      namesOrPlain, setLastDeliverables }
@@ -22,6 +22,7 @@ export function createTurnStream(deps) {
 
   async function streamChat(message, bodyEl, run) {
     const confirmed = hitl.confirmed();
+    const typed = hitl.typed();
     hitl.clear(); // Consume this turn's typed response; never reuse a server gate.
     const res = await deps.fetch("/api/chat", {
       method: "POST",
@@ -32,7 +33,8 @@ export function createTurnStream(deps) {
         // The server owns full history; this bounded fallback excludes this turn.
         history: state.history.slice(-81, -1),
         expert_ids: [...state.summoned],
-        confirm_ok: confirmed,
+        confirm_ok: confirmed, // the Rust workbench serving this page still reads the flag
+        confirm_text: typed,
         session_id: state.session,
         project_id: deps.projectId() || "",
         cad_project_id: state.cadProjectId || "",

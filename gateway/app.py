@@ -22,7 +22,7 @@ from typing import Any, Dict, List, Optional
 import asyncio
 import queue as queue_mod
 
-from fastapi import FastAPI, File, Form, HTTPException, UploadFile, WebSocket, WebSocketDisconnect
+from fastapi import FastAPI, File, Form, HTTPException, Request, UploadFile, WebSocket, WebSocketDisconnect
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse, StreamingResponse
 from fastapi.staticfiles import StaticFiles
@@ -49,6 +49,7 @@ if (os.getenv("PACKING_SKIP_SKJOLBER") or "").strip() == "":
     # 未显式配置时：若 URL 指向本机 8080 且我们偏好稳 UI，默认 skip（可用 PACKING_SKIP_SKJOLBER=0 打开）
     os.environ.setdefault("PACKING_SKIP_SKJOLBER", "1")
 
+from packing_assistant import access_guard  # noqa: E402
 from packing_assistant.config import HARNESS_VERSION, PRODUCT_NAME  # noqa: E402
 from packing_assistant.harness import (  # noqa: E402
     apply_user_confirmation,
@@ -106,17 +107,24 @@ def _get_session(session_id: str) -> Optional[Dict[str, Any]]:
 
 
 app = FastAPI(title="Civil Buddy Gateway", version=HARNESS_VERSION)
+# Same-machine pages only (the :8765 workbench probes /api/health); no cookies cross origins.
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
-    allow_credentials=True,
+    allow_origin_regex=r"https?://(localhost|127[.]0[.]0[.]1|\[::1\])(:[0-9]+)?",
     allow_methods=["*"],
     allow_headers=["*"],
 )
+app.add_middleware(access_guard.AccessGuard,
+                   public=lambda path: path in {"/", "/workbench", "/api/health"} or path.startswith("/static/"))
 
 FRONTEND_DIR = ROOT / "frontend"
 if FRONTEND_DIR.exists():
     app.mount("/static", StaticFiles(directory=str(FRONTEND_DIR)), name="static")
+
+
+@app.on_event("startup")
+def _refuse_open_bind() -> None:
+    access_guard.check_startup_bind()
 
 
 @app.on_event("startup")
@@ -468,19 +476,27 @@ def api_understand(body: dict = None):
     return {"ok": True, "intent": intent, "wrote": False, "schema": "civil.understand.v1"}
 
 
+def _typed(value: Any) -> bool:
+    from packing_assistant.runtime.civil_config import CONFIRM
+
+    if type(value) is not str:
+        raise HTTPException(422, "confirm_text 必须是文本")
+    return value.strip() == CONFIRM
+
+
 def _json_confirmation(body: dict, *fields: str) -> bool:
-    """A string or number must never be promoted into a human confirmation."""
+    """Only the sentence the person typed in this request approves; a flag any client can set never does."""
     for field in fields:
-        if field in body and type(body[field]) is not bool:
-            raise HTTPException(422, f"{field} 必须是 JSON 布尔值 true 或 false")
-    return any(body.get(field) is True for field in fields)
+        if field in body and body[field] is not False:
+            raise HTTPException(422, f"{field} 不能代替确认：请在 confirm_text 原样键入确认句")
+    return _typed(body.get("confirm_text", ""))
 
 
-def _form_confirmation(value: str) -> bool:
-    # Multipart fields are text; accept only the two documented boolean literals.
-    if value not in {"true", "false"}:
-        raise HTTPException(422, "p0_confirmed 必须是 true 或 false")
-    return value == "true"
+def _form_confirmation(value: str, typed: str) -> bool:
+    # Multipart fields are text; an old page may still send p0_confirmed=false, never an approval.
+    if value != "false":
+        raise HTTPException(422, "p0_confirmed 不能代替确认：请在 confirm_text 原样键入确认句")
+    return _typed(typed)
 
 
 @app.post("/api/turn")
@@ -686,10 +702,11 @@ def api_tender_parse(body: dict = None):
 async def api_tender_parse_file(
     file: UploadFile = File(...),
     p0_confirmed: str = Form("false"),
+    confirm_text: str = Form(""),
     project_name: str = Form("幕墙项目投标应答（草稿）"),
 ):
     """Upload one ITT excerpt: txt/md/csv/docx/xlsx. No scanned-PDF vision."""
-    confirmed = _form_confirmation(p0_confirmed)
+    confirmed = _form_confirmation(p0_confirmed, confirm_text)
     raw = await file.read()
     ingested = _tender_ingest_from_uploads([{"filename": file.filename, "bytes": raw}])
     out = _tender_parse_via_engine(
@@ -711,10 +728,11 @@ async def api_tender_parse_file(
 async def api_tender_parse_files(
     files: list[UploadFile] = File(...),
     p0_confirmed: str = Form("false"),
+    confirm_text: str = Form(""),
     project_name: str = Form("幕墙项目投标应答（草稿）"),
 ):
     """Several excerpts (须知 + 评分表 + …) → one matrix. Still not a bid book."""
-    confirmed = _form_confirmation(p0_confirmed)
+    confirmed = _form_confirmation(p0_confirmed, confirm_text)
     if not files:
         raise HTTPException(400, "没有收到文件")
     if len(files) > 8:
@@ -748,14 +766,19 @@ def api_mcp_tools(expert_id: str = ""):
 
 @app.post("/api/mcp/tools/call")
 def api_mcp_tool_call(body: dict = None):
-    from packing_assistant.tools.pack_ship_mcp import call_tool
+    from packing_assistant.runtime.tool_engine import get_engine
+    from packing_assistant.tools.pack_ship_mcp import call_tool, normalize_tool_name
 
     body = body or {}
-    name = str(body.get("name") or "")
+    name = normalize_tool_name(str(body.get("name") or ""))
     expert_id = str(body.get("expert_id") or "pack-ship")
     if expert_id and expert_id not in {"pack-ship"}:
         raise HTTPException(403, "拒绝：当前专家看不见该工具")
-    out = call_tool(name, body.get("arguments") or {})
+    args = body.get("arguments") or {}
+    _, refused = get_engine().admit(name, args, expert_id="pack-ship", intent="run", circuit=False)
+    if refused:
+        raise HTTPException(403 if refused.get("error_code") == "permission_denied" else 400, refused["reason"])
+    out = call_tool(name, args)
     return {"ok": bool(out.get("ok", True)), **out}
 
 
@@ -916,7 +939,8 @@ def api_tms_booking_submit(body: dict):
         raise HTTPException(400, "需要 session_id 或 state")
     result = submit_booking(
         st,
-        mode=body.get("mode"),
+        # 请求只能降级到 stub；真实 TMS 只由服务器 PACKING_TMS_MODE 决定
+        mode="stub" if body.get("mode") == "stub" else None,
         dry_run=bool(body.get("dry_run")),
     )
     if result.get("ok") and not body.get("dry_run") and sid:
@@ -1464,8 +1488,29 @@ def _table_needs_human(result: Dict[str, Any]) -> Dict[str, Any]:
     return result
 
 
+def _table_path(raw: str, request: Request) -> Path:
+    """path= as the parser will open it. Only this machine, with no token set, may name any table it can read
+    (the tokenless Rust exe posts Desktop paths); anyone else stays inside the sandbox roots, refused before
+    existence is told. With a token set a proxy makes every request look local, so is_local proves nothing."""
+    p = Path(raw.strip())
+    if not p.is_absolute():
+        p = ROOT / p
+    if access_guard.configured_token() or not access_guard.is_local(request.scope):
+        from packing_assistant.runtime.policy import READ_HINT
+        from packing_assistant.sandbox import check_open
+
+        decision = check_open(p)
+        if not decision.allowed:
+            raise HTTPException(403, f"拒绝：{decision.reason}。{READ_HINT}")
+        p = Path(decision.path)
+    if not p.exists():
+        raise HTTPException(404, f"table not found: {raw}")
+    return p
+
+
 @app.post("/api/table/parse")
 async def api_table_parse(
+    request: Request,
     file: Optional[UploadFile] = File(None),
     session_id: str = Form(""),
     store_session: str = Form("0"),
@@ -1484,12 +1529,7 @@ async def api_table_parse(
             raw = await file.read()
             result = parse_table_bytes(raw, filename=file.filename or "upload.csv")
         elif (path or "").strip():
-            p = Path(path.strip())
-            if not p.is_absolute():
-                p = ROOT / p
-            if not p.exists():
-                raise HTTPException(404, f"table not found: {path}")
-            result = parse_table_file(p)
+            result = parse_table_file(_table_path(path, request))
         else:
             result = {
                 "ok": False,
@@ -1554,19 +1594,14 @@ async def api_table_parse(
 
 
 @app.post("/api/table/parse/json")
-def api_table_parse_json(body: TableParseJsonBody):
+def api_table_parse_json(body: TableParseJsonBody, request: Request):
     """JSON 入口：path 或 rows → materials（与 multipart 同一 mapper）。"""
     from packing_assistant.tools.table_mapper import parse_table_file, parse_table_rows
 
     if body.rows:
         result = parse_table_rows(body.rows, source="api_json_rows")
     elif (body.path or "").strip():
-        p = Path(body.path.strip())
-        if not p.is_absolute():
-            p = ROOT / p
-        if not p.exists():
-            raise HTTPException(404, f"table not found: {body.path}")
-        result = parse_table_file(p)
+        result = parse_table_file(_table_path(body.path, request))
     else:
         raise HTTPException(400, "need path or rows")
 
@@ -2834,19 +2869,23 @@ _ARTIFACT_TEXT_SUFFIXES = {".md", ".markdown", ".json", ".txt", ".jsonl"}
 def api_artifact(path: str = ""):
     """ux(round4)：读取落盘文书文本供前端文书预览（cbDocOpen）。
 
-    边界：仅仓库 ROOT 内、仅 UTF-8 文本扩展名（.md/.markdown/.json/.txt/.jsonl）。
+    边界：仅 output/、PACKING_OUTPUT_DIR 与 runs 目录内（仓库根可能放着密钥文本），
+    仅 UTF-8 文本扩展名（.md/.markdown/.json/.txt/.jsonl）。
     数字与内容原文返回——预览只是渲染，不改写（tools compute numbers; the model only routes）。
     """
+    from packing_assistant import config as packing_config, run_artifacts
+
     if not path:
         raise HTTPException(400, "path required")
-    target = Path(path)
     try:
-        target = target.resolve()
-        target.relative_to(ROOT.resolve())
-    except ValueError:
-        raise HTTPException(403, "not an artifact")
+        target = Path(path)
+        target = (target if target.is_absolute() else ROOT / target).resolve()
+        roots = (ROOT / "output", Path(packing_config.OUTPUT_DIR), run_artifacts.RUNS_DIR)
+        inside = any(target.is_relative_to(root.resolve()) for root in roots)
     except Exception:
         raise HTTPException(400, "bad path")
+    if not inside:
+        raise HTTPException(403, "not an artifact")
     if target.suffix.lower() not in _ARTIFACT_TEXT_SUFFIXES:
         raise HTTPException(403, "type not allowed")
     if not target.is_file():
@@ -2875,8 +2914,8 @@ def api_run_pdf(body: PdfRunRequest):
     test_dir = ROOT / "test"
     path = None
     if body.filename:
-        cand = test_dir / body.filename
-        if cand.exists():
+        cand = test_dir / Path(body.filename).name     # a name in test/, never a path out of it
+        if cand.is_file():      # '..' / '.' name a directory
             path = cand
     if path is None:
         pdfs = sorted(test_dir.glob("*.pdf"))

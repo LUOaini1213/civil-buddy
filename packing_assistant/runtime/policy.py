@@ -27,6 +27,7 @@ CODE_UNKNOWN = "deny_unknown"
 CODE_BUDGET = "deny_budget"
 CODE_CIRCUIT = "circuit_open"
 CODE_CANCEL = "deny_cancelled"
+READ_HINT = "要读的文件须在作业文件夹或沙箱目录内（civil -C <文件夹>，或设 CIVIL_JOB_ROOT）。"
 
 ERR_MAP = {
     CODE_ALLOW: "ok",
@@ -168,8 +169,15 @@ def evaluate(
             cost,
             extra={"ledger": snap},
         )
-    from packing_assistant.sandbox import check_write, request_spawn
+    from packing_assistant.sandbox import check_open, check_write, request_spawn
 
+    source = str(args.get("file_path") or "")
+    if source:
+        decision = check_open(source)
+        if not decision.allowed:
+            code = CODE_SECRET if "secret" in (decision.reason or "") else CODE_SANDBOX
+            return PolicyDecision(False, code, f"拒绝：{decision.reason}。{READ_HINT}", ERR_DENIED, cost,
+                                  sandbox=decision.to_dict())
     path = _write_path(args)
     if writes and path:
         if _production_path(path):

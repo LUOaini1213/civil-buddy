@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Human-confirmation types at the real workbench and gateway HTTP boundaries."""
+"""Human confirmation at the real workbench and gateway HTTP boundaries: the typed sentence, never a flag."""
 
 from __future__ import annotations
 
@@ -16,9 +16,15 @@ os.environ["PYTHON_DOTENV_DISABLED"] = "1"
 
 from fastapi.testclient import TestClient
 from pydantic import ValidationError
+from packing_assistant.runtime.civil_config import CONFIRM
 from scripts import test_workbench_flow as flow
 
-INVALID = ("true", "yes", "false", 1, 0, None, [], {})
+# A client-set flag, in any shape, is never a person's confirmation.
+FLAGS = (True, "true", "yes", 1, 0, None, [], {})
+COERCIONS = FLAGS[1:]
+# Only the exact sentence: text that merely quotes it (a refusal, a question) approves nothing.
+QUOTED = ("不同意：" + CONFIRM, CONFIRM + "吗？")
+NOT_THE_SENTENCE = ("", "我明白", "我已核对 P0", CONFIRM[:-1], *QUOTED)
 
 
 class WorkbenchConfirmationTests(unittest.TestCase):
@@ -28,32 +34,34 @@ class WorkbenchConfirmationTests(unittest.TestCase):
         self.addCleanup(self.flow.doCleanups)
         self.client = self.flow.client
 
-    def test_chat_rejects_nonboolean_values_before_any_high_risk_execution(self) -> None:
+    def test_chat_refuses_a_flag_before_any_high_risk_execution(self) -> None:
         with patch.object(flow.agent_loop, "run_agent") as runner:
-            for value in INVALID:
-                with self.subTest(value=value):
-                    response = self.client.post("/api/chat", json={
-                        "message": "写一份消防专篇", "expert_ids": ["fire-protect"],
-                        "session_id": self.flow.sid, "confirm_ok": value,
-                    })
-                    self.assertEqual(422, response.status_code, response.text)
+            for field, values in (("confirm_ok", COERCIONS), ("confirm_text", (True, 1, [], {}))):
+                for value in values:
+                    with self.subTest(field=field, value=value):
+                        response = self.client.post("/api/chat", json={
+                            "message": "写一份消防专篇", "expert_ids": ["fire-protect"],
+                            "session_id": self.flow.sid, field: value,
+                        })
+                        self.assertEqual(422, response.status_code, response.text)
             runner.assert_not_called()
         self.assertFalse(flow.chat_service._ACTIVE)
         self.assertFalse(list(self.flow.root.rglob("*.md")))
 
-    def test_chat_false_waits_and_true_writes_an_actual_high_risk_draft(self) -> None:
-        waiting, _ = self.flow.post("写一份消防专篇，缺失内容待填", expert_ids=["fire-protect"], confirm_ok=False)
-        self.assertTrue(waiting["hitl_pending"], waiting)
-        self.assertFalse(waiting["wrote"])
-        completed, _ = self.flow.post("写一份消防专篇，缺失内容待填", expert_ids=["fire-protect"], confirm_ok=True)
+    def test_only_the_typed_sentence_writes_an_actual_high_risk_draft(self) -> None:
+        # confirm_ok is still sent by the shared page for the Rust workbench; here true alone approves nothing.
+        for typed in NOT_THE_SENTENCE:
+            waiting, _ = self.flow.post("写一份消防专篇，缺失内容待填", expert_ids=["fire-protect"], confirm_ok=True, confirm_text=typed)
+            self.assertTrue(waiting["hitl_pending"], (typed, waiting))
+            self.assertFalse(waiting["wrote"])
+        self.assertFalse(list(self.flow.root.rglob("*.md")))
+        completed, _ = self.flow.post("写一份消防专篇，缺失内容待填", expert_ids=["fire-protect"], confirm_text=CONFIRM)
         self.assertFalse(completed["hitl_pending"], completed)
-        self.assertTrue(completed["ok"], completed)
-        self.assertTrue(completed["wrote"], completed)
+        self.assertTrue(completed["ok"] and completed["wrote"], completed)
         self.assertTrue(any(item["name"].endswith(".md") and Path(item["path"]).is_file()
                             for item in completed["deliverables"]))
 
-    def test_background_entry_rejects_the_same_coercions_and_forwards_real_booleans(self) -> None:
-        """并行任务走 /api/chat background:true（没有单独的 thread 入口了）：同样的 StrictBool 门。"""
+    def test_background_entry_refuses_flags_and_forwards_only_the_sentence(self) -> None:
         seen = []
 
         def fake_start(root, turn, *, lease, **_kw):
@@ -61,22 +69,16 @@ class WorkbenchConfirmationTests(unittest.TestCase):
             lease.release()
             return {"ok": True, "background": True, "session_id": turn["session_id"], "turn_id": "probe", "state": "done"}
 
+        body = {"session_id": "existing-probe", "message": "写一份消防专篇", "background": True, "expert_ids": ["fire-protect"]}
         with patch.object(flow.chat_service, "start_background_turn", side_effect=fake_start) as runner:
-            for value in INVALID:
+            for value in COERCIONS:
                 with self.subTest(value=value):
-                    response = self.client.post("/api/chat", json={
-                        "session_id": "existing-probe", "message": "写一份消防专篇", "background": True,
-                        "expert_ids": ["fire-protect"], "confirm_ok": value,
-                    })
-                    self.assertEqual(422, response.status_code, response.text)
+                    self.assertEqual(422, self.client.post("/api/chat", json={**body, "confirm_ok": value}).status_code)
             runner.assert_not_called()
-            for value in (False, True):
-                response = self.client.post("/api/chat", json={
-                    "session_id": "existing-probe", "message": "写一份消防专篇", "background": True,
-                    "expert_ids": ["fire-protect"], "confirm_ok": value,
-                })
+            for typed, expected in (*((t, False) for t in NOT_THE_SENTENCE), (CONFIRM, True)):
+                response = self.client.post("/api/chat", json={**body, "confirm_text": typed, "confirm_ok": True})
                 self.assertEqual(202, response.status_code, response.text)
-                self.assertIs(value, seen[-1])
+                self.assertIs(expected, seen[-1])
         self.assertFalse(flow.chat_service._ACTIVE)
 
 
@@ -85,11 +87,10 @@ class GatewayConfirmationTests(unittest.TestCase):
         from gateway import app as gateway
 
         self.gateway = gateway
-        # Do not run storage maintenance or packing engines for type-boundary tests.
         self.client = TestClient(gateway.app)
         self.addCleanup(self.client.close)
 
-    def test_json_routes_reject_nonboolean_confirmation_without_running_tools(self) -> None:
+    def test_json_routes_refuse_flags_and_take_only_the_typed_sentence(self) -> None:
         routes = (
             ("/api/turn", "packing_assistant.product_turn.run_turn", ("p0_confirmed", "confirm_ok")),
             ("/api/agent", "packing_assistant.runtime.agent_loop.run_agent", ("p0_confirmed", "confirm_ok")),
@@ -99,40 +100,47 @@ class GatewayConfirmationTests(unittest.TestCase):
         for route, target, fields in routes:
             with self.subTest(route=route), patch(target, return_value={"ok": True}) as runner:
                 for field in fields:
-                    for value in INVALID:
-                        response = self.client.post(route, json={"text": "写一份消防专篇", field: value})
+                    for value in FLAGS:
+                        response = self.client.post(route, json={"text": "写一份消防专篇", field: value, "confirm_text": CONFIRM})
                         self.assertEqual(422, response.status_code, (route, field, value, response.text))
+                for value in (1, [], {}, None):
+                    self.assertEqual(422, self.client.post(route, json={"text": "x", "confirm_text": value}).status_code)
                 runner.assert_not_called()
-                for field in fields:
-                    for value in (False, True):
-                        response = self.client.post(route, json={"text": "写一份消防专篇", field: value})
-                        self.assertEqual(200, response.status_code, response.text)
-                        self.assertIs(value, runner.call_args.kwargs["p0_confirmed"])
+                for body, expected in (({}, False), ({fields[0]: False}, False), ({"confirm_text": "我明白"}, False),
+                                       ({"text": "写一份消防专篇。" + CONFIRM}, False),    # the sentence counts only in confirm_text
+                                       *(({"confirm_text": t}, False) for t in QUOTED),
+                                       ({"confirm_text": " " + CONFIRM + " "}, True), ({fields[0]: False, "confirm_text": CONFIRM}, True)):
+                    response = self.client.post(route, json={"text": "写一份消防专篇", **body})
+                    self.assertEqual(200, response.status_code, response.text)
+                    self.assertIs(expected, runner.call_args.kwargs["p0_confirmed"], (route, body))
 
-    def test_multipart_accepts_only_canonical_text_booleans(self) -> None:
+    def test_multipart_takes_only_the_typed_sentence(self) -> None:
         for route, field in (("/api/tender/parse/file", "file"), ("/api/tender/parse/files", "files")):
             with self.subTest(route=route), ExitStack() as stack:
                 ingest = stack.enter_context(patch.object(self.gateway, "_tender_ingest_from_uploads", return_value={"text": "招标节选材料"}))
                 runner = stack.enter_context(patch.object(self.gateway, "_tender_parse_via_engine", return_value={"ok": True}))
-                for value in ("yes", "1", "0", "True", "False", " true "):
-                    response = self.client.post(route, data={"p0_confirmed": value}, files={field: ("input.txt", b"fixture excerpt")})
+                for value in ("true", "yes", "1", "0", "True", "False", " true "):
+                    response = self.client.post(route, data={"p0_confirmed": value, "confirm_text": CONFIRM},
+                                                files={field: ("input.txt", b"fixture excerpt")})
                     self.assertEqual(422, response.status_code, (value, response.text))
                 runner.assert_not_called()
                 ingest.assert_not_called()
-                for value in ("false", "true"):
-                    response = self.client.post(route, data={"p0_confirmed": value}, files={field: ("input.txt", b"fixture excerpt")})
+                for data, expected in (({}, False), ({"p0_confirmed": "false"}, False), ({"confirm_text": "我明白"}, False),
+                                       *(({"confirm_text": t}, False) for t in QUOTED), ({"confirm_text": CONFIRM}, True)):
+                    response = self.client.post(route, data=data, files={field: ("input.txt", b"fixture excerpt")})
                     self.assertEqual(200, response.status_code, response.text)
-                    self.assertIs(value == "true", runner.call_args.kwargs["p0_confirmed"])
+                    self.assertIs(expected, runner.call_args.kwargs["p0_confirmed"], data)
 
     def test_packing_confirmation_models_do_not_coerce_flags_or_checklist_items(self) -> None:
+        invalid = ("true", "yes", "false", 1, 0, None, [], {})
         for model in (self.gateway.DemoRequest, self.gateway.PipelineRequest,
                       self.gateway.ProfilePipelineRequest, self.gateway.TraceRequest):
-            for value in INVALID:
+            for value in invalid:
                 with self.subTest(model=model.__name__, value=value), self.assertRaises(ValidationError):
                     model(enable_auto_confirm=value)
             for value in (False, True):
                 self.assertIs(value, model(enable_auto_confirm=value).enable_auto_confirm)
-        for value in INVALID:
+        for value in invalid:
             with self.assertRaises(ValidationError):
                 self.gateway.ConfirmRequest(action="confirm", checklist_checked={"fixture": value})
             with self.assertRaises(ValidationError):

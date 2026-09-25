@@ -99,7 +99,7 @@ class CollaborationFlowTests(unittest.TestCase):
             self.assertFalse(waiting["wrote"])
             self.assertEqual(waiting["collaboration"]["state"], "waiting_hitl")
             self.assertFalse(list((self.root / self.sid / "workflows").glob("*/workflow.json")))
-            allowed, _ = self.post("全面检查投标响应并汇总缺项。", attachments=[tender["id"], response["id"]], confirm_ok=True)
+            allowed, _ = self.post("全面检查投标响应并汇总缺项。", attachments=[tender["id"], response["id"]], confirm_text="我明白，将由持证人员签认")
         self.assertTrue(allowed["ok"] and allowed["wrote"], allowed)
         self.assertFalse(allowed["hitl_pending"])
         self.assertTrue(allowed["submit_blocked"])

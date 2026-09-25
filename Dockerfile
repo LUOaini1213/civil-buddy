@@ -25,5 +25,5 @@ COPY README.md ./
 RUN mkdir -p /app/output/runs /app/output/traces
 
 EXPOSE 8000
-# Cloud platforms inject $PORT — bind 0.0.0.0 so public URL works
+# Cloud platforms inject $PORT — bind 0.0.0.0 so public URL works; without CIVIL_TOKEN the gateway refuses to start
 CMD ["sh", "-c", "python -m uvicorn gateway.app:app --host 0.0.0.0 --port ${PORT:-8000}"]

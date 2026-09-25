@@ -10,6 +10,7 @@ Never invents xyz / N0 / 条款号. The model never packs; the engine does.
 
 from __future__ import annotations
 
+from pathlib import Path
 from typing import Any, Dict, Iterable, List, Optional
 
 UNSPECIFIED = "UNSPECIFIED"
@@ -306,9 +307,29 @@ def normalize_tool_name(name: str) -> str:
     return _ALIASES.get(raw, raw)
 
 
+def _readable(file_path: str) -> tuple[str, Optional[Dict[str, Any]]]:
+    """The packing list as the sandbox resolved it, or why it is not read. What is parsed is the path checked."""
+    from packing_assistant.runtime.policy import READ_HINT
+    from packing_assistant.sandbox import check_open
+
+    decision = check_open(file_path)
+    if not decision.allowed:
+        return "", {"ok": False, "error_code": "permission_denied", "error": "file_outside_sandbox",
+                    "reason": f"拒绝：{decision.reason}。{READ_HINT}", "sandbox": decision.to_dict()}
+    if not Path(decision.path).is_file():
+        return "", {"ok": False, "error_code": "invalid_args", "error": "file_not_found",
+                    "reason": "装箱表不存在或不是文件。"}
+    return decision.path, None
+
+
 def call_tool(name: str, arguments: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
     args = arguments or {}
     tool = normalize_tool_name(name)
+    if args.get("file_path"):
+        checked, refused = _readable(str(args["file_path"]))
+        if refused:
+            return {**refused, "tool": tool}
+        args = {**args, "file_path": checked}
     solver = args.get("solver")
     if solver is not None and not isinstance(solver, dict):
         solver = None

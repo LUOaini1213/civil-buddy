@@ -285,7 +285,7 @@ class CadWorkbenchTests(unittest.TestCase):
             turn_control.cancel(kwargs["session_id"])
             return result
         with patch.object(turn, "run_turn", side_effect=cancelled), patch("chat_service._deliverables") as publish:
-            _, done, _ = self._stream({"message": "导出GLB", "confirm_ok": True,
+            _, done, _ = self._stream({"message": "导出GLB", "confirm_text": "我明白，将由持证人员签认",
                 "cad_project_id": self.project["id"]}, mode="steps", key=False)
         self.assertTrue(done["cancelled"], done)
         publish.assert_not_called()

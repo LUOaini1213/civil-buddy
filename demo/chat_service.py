@@ -346,7 +346,7 @@ def prepare_turn(root: Path, body: dict) -> dict:
             "requests": requests, "prepared_context": prepared,
             "local_sources": [session_context.citation(sid, s["hit"]) for s in prepared["sources"]],
             "intent": intent, "project_id": project_id, "project_name": project_name,
-            "confirmed": body.get("confirm_ok") is True or CONFIRM in message,
+            "confirmed": str(body.get("confirm_text") or "").strip() == CONFIRM or CONFIRM in message,
             "attachments": attachment_ids, "route": route,
             "workflow_sources": workflow_sources, "workflow_unreadable": workflow_unreadable,
             "workflow_budget": body.get("workflow_budget"),

@@ -171,18 +171,18 @@ class ToolEngine:
             return ERR_CIRCUIT
         return None
 
-    def execute(
+    def admit(
         self,
         name: str,
-        arguments: Optional[Dict[str, Any]] = None,
+        arguments: Any = None,
         *,
         expert_id: str = "",
         intent: str = "run",
         cancelled: bool = False,
-        run_id: str = "",
-        wait_resources: Optional[List[str]] = None,
-    ) -> Dict[str, Any]:
-        t0 = time.perf_counter()
+        circuit: bool = True,
+    ) -> tuple[Any, Optional[Dict[str, Any]]]:
+        """Contract, then policy: (decision, None) or (None, refusal). Also for callers that run the handler themselves;
+        those never feed the fail streak, so they pass circuit=False rather than inherit a latch they cannot reset."""
         args = {} if arguments is None else arguments
         spec = self.tools.get(name)
         from packing_assistant.runtime.tool_contracts import validate
@@ -190,8 +190,8 @@ class ToolEngine:
                    validate(args, spec.input_schema) if spec and spec.input_schema else None)
         if problem:
             self.audit_log.append(Audit(name, ERR_INVALID, 0, expert_id))
-            return {"ok": False, "error_code": ERR_INVALID, "name": name,
-                    "reason": "工具参数不符合契约：" + problem}
+            return None, {"ok": False, "error_code": ERR_INVALID, "name": name,
+                          "reason": "工具参数不符合契约：" + problem}
         from packing_assistant.runtime.policy import evaluate as policy_evaluate
 
         pol = policy_evaluate(
@@ -202,7 +202,7 @@ class ToolEngine:
             args=args,
             cancelled=cancelled,
             ledger=self.ledger,
-            fail_streak=self._fail_streak.get(name, 0),
+            fail_streak=self._fail_streak.get(name, 0) if circuit else 0,
             circuit_threshold=self.circuit_threshold,
         )
         if not pol.allow:
@@ -218,8 +218,27 @@ class ToolEngine:
             if pol.sandbox:
                 out["sandbox"] = pol.sandbox
                 out["detail"] = pol.reason
-            return out
-        assert spec is not None
+            return None, out
+        return pol, None
+
+    def execute(
+        self,
+        name: str,
+        arguments: Optional[Dict[str, Any]] = None,
+        *,
+        expert_id: str = "",
+        intent: str = "run",
+        cancelled: bool = False,
+        run_id: str = "",
+        wait_resources: Optional[List[str]] = None,
+    ) -> Dict[str, Any]:
+        t0 = time.perf_counter()
+        args = {} if arguments is None else arguments
+        pol, refused = self.admit(name, args, expert_id=expert_id, intent=intent, cancelled=cancelled)
+        if refused is not None:
+            return refused
+        spec = self.tools[name]
+        from packing_assistant.runtime.tool_contracts import validate
         for key in spec.schema_keys:
             if key not in args:
                 rec = Audit(name=name, error_code=ERR_INVALID, duration_ms=0, expert_id=expert_id)
@@ -454,6 +473,8 @@ def default_engine() -> ToolEngine:
     eng.register("pack-ship__health", _pack_handler("pack-ship__health"), expert_id="pack-ship", writes=False)
     eng.register("pack-ship__plan", _pack_handler("pack-ship__plan"), expert_id="pack-ship", writes=True)
     eng.register("pack-ship__export", _pack_handler("pack-ship__export"), expert_id="pack-ship", writes=True)
+    for name in ("pack-ship__ingest", "pack-ship__vgm", "pack-ship__booking_draft"):
+        eng.register(name, _pack_handler(name), expert_id="pack-ship", writes=False)
     eng.register("tender.parse", _tender_parse, writes=True)
     eng.register("tender.review", _tender_review, writes=False)
     eng.register(

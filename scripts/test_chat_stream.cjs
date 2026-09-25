@@ -578,6 +578,7 @@ test("chat keeps the backend confirmation protocol and does not accept a checked
     h.elements.confirmOk.value = confirmed ? "我明白，将由持证人员签认" : "";
     await h.submit("测试任务");
     assert.equal(payload.confirm_ok, confirmed);
+    assert.equal(payload.confirm_text, confirmed ? "我明白，将由持证人员签认" : "");
   }
 });
 
@@ -786,11 +787,13 @@ test("server gate confirmation is sent once and ordinary responses do not enable
   h.elements.confirmOk.value = "我明白，将由持证人员签认";
   await h.submit("整理日报");
   assert.equal(payloads[1].confirm_ok, true);
+  assert.equal(payloads[1].confirm_text, "我明白，将由持证人员签认");
   assert.equal(h.elements.confirmOk.disabled, true);
   assert.equal(h.elements.confirmOk.placeholder, "普通岗位无需填写");
   assert.equal(h.elements.confirmOk.value, "");
   await h.submit("整理另一天日报");
   assert.equal(payloads[2].confirm_ok, false);
+  assert.equal(payloads[2].confirm_text, "");
   assert.equal(h.elements.confirmOk.disabled, true);
   h.evaluate('cbEnableServerHitl({hitl_pending:"true"}); cbEnableServerHitl({phase:"routing"});');
   assert.equal(h.elements.confirmOk.disabled, true);

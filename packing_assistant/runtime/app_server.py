@@ -59,6 +59,7 @@ def dispatch(method: str, params: Dict[str, Any]) -> Any:
     from packing_assistant.runtime.expert_skills import catalog, format_catalog_listing
     from packing_assistant.runtime.threads import (
         list_threads,
+        load_thread,
         new_thread,
         run_on_thread,
         thread_status,
@@ -73,7 +74,8 @@ def dispatch(method: str, params: Dict[str, Any]) -> Any:
     if method in {"config/get", "config.get"}:
         return load_config().to_dict()
     if method in {"thread/start", "thread.start"}:
-        th = new_thread(str(params.get("title") or params.get("text") or ""), confirm=params.get("confirm") is True)
+        # A program drives this protocol: a thread never starts pre-approved; each turn carries its own sentence.
+        th = new_thread(str(params.get("title") or params.get("text") or ""), confirm=False)
         return th.to_dict()
     if method in {"thread/list", "thread.list"}:
         return {"threads": [t.to_dict() for t in list_threads()]}
@@ -84,14 +86,19 @@ def dispatch(method: str, params: Dict[str, Any]) -> Any:
         text = str(params.get("text") or params.get("input") or "").strip()
         if not text:
             raise ValueError("turn/start 需要 text")
+        if params.get("confirm", False) is not False:
+            raise ValueError("confirm 不能代替确认：请在 confirm_text 原样键入确认句")
         tid = str(params.get("thread_id") or "")
         if not tid:
-            tid = new_thread(text[:40], confirm=params.get("confirm") is True).thread_id
+            tid = new_thread(text[:40], confirm=False).thread_id
+        elif getattr(load_thread(tid), "confirm", False) is True:
+            # 终端/桌面端签认过的线程会把确认带进每一轮；程序驱动的 serve 不能借用这份签认。
+            raise ValueError("该线程带着终端或桌面端的签认，civil serve 不能沿用：请 thread/start 新开线程，并在 confirm_text 原样键入确认句")
         return run_on_thread(
             tid,
             text,
             skill=str(params.get("skill") or ""),
-            confirm=params.get("confirm") is True,
+            confirm=str(params.get("confirm_text") or "").strip() == CONFIRM,
             background=bool(params.get("background")),
         )
     raise ValueError(f"unknown method {method}")

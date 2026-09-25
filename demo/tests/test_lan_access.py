@@ -1,7 +1,8 @@
 """Opening the workbench to a phone on the LAN (CIVIL_HOST=0.0.0.0) needs a door:
 
-- CIVIL_TOKEN turns every /api/* route into 401 unless the token comes as Bearer, ?token= or
-  the cb_token cookie; "/" , /static and /api/health stay open so the page can load and ask.
+- CIVIL_TOKEN turns every /api/* route into 401 unless the token comes as Bearer or the cb_token
+  cookie (?token= only sets that cookie and redirects); "/" , /static and /api/health stay open
+  so the page can load and ask. scripts/test_access_guard.py covers the rest of the door.
 - /api/health.capabilities.auth tells the page to ask for the token before its first call.
 - Model timeouts are split by phase and CIVIL_LLM_READ_TIMEOUT sets the slow one.
 """
