@@ -1,0 +1,653 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" width="2000" height="1432" viewBox="0 0 2000 1432" font-family="Segoe UI, Helvetica, Arial, 'Microsoft YaHei', sans-serif" role="img" aria-labelledby="t d">
+<title id="t">civil-buddy — one-company zero-trust agent platform</title>
+<desc id="d">Architecture of civil-buddy framed as a one-company zero-trust agent platform: a control plane, an entry gateway, an agent runtime, a model gateway and a tool gateway, with touch-points, a model pool, the company's data and engines, an improvement loop and the six rules. Every box carries a status badge: LIVE, OPT-IN, BEFORE DEMO, ROADMAP or NOT NEEDED.</desc>
+<rect x="0" y="0" width="2000" height="1432" fill="#ffffff"/>
+<text x="24.0" y="46.0" font-size="34" fill="#0f172a" font-weight="700">civil-buddy — one-company zero-trust agent platform</text>
+<text x="24.0" y="75.0" font-size="18" fill="#475569">Control plane + 3 gateways, sized for an SME on one AWS server</text>
+<rect x="24.0" y="87.5" width="96.2" height="17" rx="8.5" fill="#f5a623" stroke="#f5a623" stroke-width="1"/>
+<text x="72.1" y="99.7" font-size="10.5" fill="#3a2500" font-weight="700" text-anchor="middle" letter-spacing="0.4">BEFORE DEMO</text>
+<text x="130.2" y="100.5" font-size="14" fill="#334155">Target: one AWS Lightsail instance per company, staff in a browser. Not yet running at d3ada11 (2026-09-26).</text>
+<rect x="1204" y="10" width="776" height="98" rx="8" fill="#f8fafc" stroke="#cbd5e1" stroke-width="1"/>
+<rect x="1216.0" y="20.5" width="38.5" height="17" rx="8.5" fill="#1e7e34" stroke="#1e7e34" stroke-width="1"/>
+<text x="1235.3" y="32.7" font-size="10.5" fill="#ffffff" font-weight="700" text-anchor="middle" letter-spacing="0.4">LIVE</text>
+<text x="1262.5" y="33.5" font-size="12.5" fill="#334155">on main, on by default</text>
+<rect x="1466.7" y="20.5" width="52.4" height="17" rx="8.5" fill="#00838f" stroke="#00838f" stroke-width="1"/>
+<text x="1492.9" y="32.7" font-size="10.5" fill="#ffffff" font-weight="700" text-anchor="middle" letter-spacing="0.4">OPT-IN</text>
+<text x="1527.1" y="33.5" font-size="12.5" fill="#334155">on main, off by default</text>
+<rect x="1717.3" y="20.5" width="96.2" height="17" rx="8.5" fill="#f5a623" stroke="#f5a623" stroke-width="1"/>
+<text x="1765.4" y="32.7" font-size="10.5" fill="#3a2500" font-weight="700" text-anchor="middle" letter-spacing="0.4">BEFORE DEMO</text>
+<text x="1821.5" y="33.5" font-size="12.5" fill="#334155">planned by 2026-10-10</text>
+<rect x="1216.0" y="47.5" width="70.6" height="17" rx="8.5" fill="#6b7280" stroke="#6b7280" stroke-width="1"/>
+<text x="1251.3" y="59.7" font-size="10.5" fill="#ffffff" font-weight="700" text-anchor="middle" letter-spacing="0.4">ROADMAP</text>
+<text x="1294.6" y="60.5" font-size="12.5" fill="#334155">later</text>
+<rect x="1466.7" y="47.5" width="86.4" height="17" rx="8.5" fill="#ffffff" stroke="#9ca3af" stroke-width="1" stroke-dasharray="3 2"/>
+<text x="1509.9" y="59.7" font-size="10.5" fill="#6b7280" font-weight="700" text-anchor="middle" letter-spacing="0.4">NOT NEEDED</text>
+<text x="1561.1" y="60.5" font-size="12.5" fill="#334155">multi-tenant only</text>
+<path d="M1216.0,83.0 L1262.0,83.0" fill="none" stroke="#37474f" stroke-width="2.6"/>
+<polygon points="1272.0,83.0 1261.0,77.0 1261.0,89.0" fill="#37474f"/>
+<text x="1280.0" y="87.5" font-size="12.5" fill="#334155">data flow</text>
+<path d="M1466.7,83.0 L1512.7,83.0" fill="none" stroke="#3949ab" stroke-width="2.0" stroke-dasharray="8 6"/>
+<polygon points="1522.7,83.0 1511.7,77.0 1511.7,89.0" fill="#3949ab"/>
+<text x="1530.7" y="87.5" font-size="12.5" fill="#334155">policy / config distribution</text>
+<rect x="1717.3" y="47.0" width="4" height="18" rx="2" fill="#1e7e34"/>
+<text x="1729.3" y="60.5" font-size="12.5" fill="#334155">bar and badge = box status</text>
+<rect x="20.0" y="114.0" width="1960.0" height="172.0" rx="10" fill="#eef0fa" stroke="#3949ab" stroke-width="1.3"/>
+<path d="M20.0,144.0 V124.0 Q20.0,114.0 30.0,114.0 H1970.0 Q1980.0,114.0 1980.0,124.0 V144.0 Z" fill="#3949ab"/>
+<text x="34.0" y="134.5" font-size="14" fill="#ffffff" font-weight="700" letter-spacing="0.6">CONTROL PLANE</text>
+<text x="173.8" y="134.5" font-size="12.5" fill="#ffffff" fill-opacity="0.85">registry · policy · approval · release gate · budgets</text>
+<rect x="29.0" y="159.0" width="234.0" height="118.0" rx="7" fill="#ffffff" stroke="#c9d1dc" stroke-width="1"/>
+<rect x="34.0" y="167.0" width="4" height="102.0" rx="2" fill="#1e7e34"/>
+<text x="45.0" y="198.0" font-size="15" fill="#111827" font-weight="700">Post and tool registry</text>
+<text x="45.0" y="216.0" font-size="13" fill="#4b5563">66 posts, 19 of them high-risk;</text>
+<text x="45.0" y="232.0" font-size="13" fill="#4b5563">unknown tool refused; plugins</text>
+<text x="45.0" y="248.0" font-size="13" fill="#4b5563">trusted by content SHA-256</text>
+<rect x="214.5" y="150.5" width="38.5" height="17" rx="8.5" fill="#1e7e34" stroke="#1e7e34" stroke-width="1"/>
+<text x="233.7" y="162.7" font-size="10.5" fill="#ffffff" font-weight="700" text-anchor="middle" letter-spacing="0.4">LIVE</text>
+<rect x="273.0" y="159.0" width="234.0" height="118.0" rx="7" fill="#ffffff" stroke="#c9d1dc" stroke-width="1"/>
+<rect x="278.0" y="167.0" width="4" height="102.0" rx="2" fill="#1e7e34"/>
+<text x="289.0" y="190.0" font-size="15" fill="#111827" font-weight="700">Policy as code</text>
+<text x="289.0" y="208.0" font-size="13" fill="#4b5563">policy.evaluate before every</text>
+<text x="289.0" y="224.0" font-size="13" fill="#4b5563">registered tool (default path,</text>
+<text x="289.0" y="240.0" font-size="13" fill="#4b5563">MCP, gateway tool route); each</text>
+<text x="289.0" y="256.0" font-size="13" fill="#4b5563">refusal carries a reason</text>
+<rect x="458.5" y="150.5" width="38.5" height="17" rx="8.5" fill="#1e7e34" stroke="#1e7e34" stroke-width="1"/>
+<text x="477.7" y="162.7" font-size="10.5" fill="#ffffff" font-weight="700" text-anchor="middle" letter-spacing="0.4">LIVE</text>
+<rect x="517.0" y="159.0" width="234.0" height="118.0" rx="7" fill="#ffffff" stroke="#c9d1dc" stroke-width="1"/>
+<rect x="522.0" y="167.0" width="4" height="102.0" rx="2" fill="#1e7e34"/>
+<text x="533.0" y="190.0" font-size="15" fill="#111827" font-weight="700">Typed human sign-off</text>
+<text x="533.0" y="208.0" font-size="13" fill="#4b5563">19 high-risk posts: no typed</text>
+<text x="533.0" y="224.0" font-size="13" fill="#4b5563">sentence, nothing is written;</text>
+<text x="533.0" y="240.0" font-size="13" fill="#4b5563">desktop, TUI, workbench and</text>
+<text x="533.0" y="256.0" font-size="13" fill="#4b5563">gateway check it in code</text>
+<rect x="702.5" y="150.5" width="38.5" height="17" rx="8.5" fill="#1e7e34" stroke="#1e7e34" stroke-width="1"/>
+<text x="721.7" y="162.7" font-size="10.5" fill="#ffffff" font-weight="700" text-anchor="middle" letter-spacing="0.4">LIVE</text>
+<rect x="761.0" y="159.0" width="234.0" height="118.0" rx="7" fill="#ffffff" stroke="#c9d1dc" stroke-width="1"/>
+<rect x="766.0" y="167.0" width="4" height="102.0" rx="2" fill="#1e7e34"/>
+<text x="777.0" y="182.0" font-size="15" fill="#111827" font-weight="700">Human-only approval</text>
+<text x="777.0" y="200.0" font-size="13" fill="#4b5563">MCP and HTTP callers cannot</text>
+<text x="777.0" y="216.0" font-size="13" fill="#4b5563">send an approval flag; only the</text>
+<text x="777.0" y="232.0" font-size="13" fill="#4b5563">typed sentence, for one turn</text>
+<text x="777.0" y="248.0" font-size="13" fill="#4b5563">(not the undeployed Rust MCP</text>
+<text x="777.0" y="264.0" font-size="13" fill="#4b5563">or Rust workbench)</text>
+<rect x="946.5" y="150.5" width="38.5" height="17" rx="8.5" fill="#1e7e34" stroke="#1e7e34" stroke-width="1"/>
+<text x="965.7" y="162.7" font-size="10.5" fill="#ffffff" font-weight="700" text-anchor="middle" letter-spacing="0.4">LIVE</text>
+<rect x="1005.0" y="159.0" width="234.0" height="118.0" rx="7" fill="#ffffff" stroke="#c9d1dc" stroke-width="1"/>
+<rect x="1010.0" y="167.0" width="4" height="102.0" rx="2" fill="#f5a623"/>
+<text x="1021.0" y="190.0" font-size="15" fill="#111827" font-weight="700">Accounts and roles</text>
+<text x="1021.0" y="208.0" font-size="13" fill="#4b5563">admin, engineer, licensed</text>
+<text x="1021.0" y="224.0" font-size="13" fill="#4b5563">approver; approver named on</text>
+<text x="1021.0" y="240.0" font-size="13" fill="#4b5563">each sign-off (today a fixed</text>
+<text x="1021.0" y="256.0" font-size="13" fill="#4b5563">'local user')</text>
+<rect x="1132.8" y="150.5" width="96.2" height="17" rx="8.5" fill="#f5a623" stroke="#f5a623" stroke-width="1"/>
+<text x="1180.9" y="162.7" font-size="10.5" fill="#3a2500" font-weight="700" text-anchor="middle" letter-spacing="0.4">BEFORE DEMO</text>
+<rect x="1249.0" y="159.0" width="234.0" height="118.0" rx="7" fill="#ffffff" stroke="#c9d1dc" stroke-width="1"/>
+<rect x="1254.0" y="167.0" width="4" height="102.0" rx="2" fill="#1e7e34"/>
+<text x="1265.0" y="190.0" font-size="15" fill="#111827" font-weight="700">Offline release gate</text>
+<text x="1265.0" y="208.0" font-size="13" fill="#4b5563">142 offline checks in CI on every</text>
+<text x="1265.0" y="224.0" font-size="13" fill="#4b5563">PR and push to main; 142/142</text>
+<text x="1265.0" y="240.0" font-size="13" fill="#4b5563">on CI at d3ada11 (§5.3); keys</text>
+<text x="1265.0" y="256.0" font-size="13" fill="#4b5563">stripped; deterministic path only</text>
+<rect x="1434.5" y="150.5" width="38.5" height="17" rx="8.5" fill="#1e7e34" stroke="#1e7e34" stroke-width="1"/>
+<text x="1453.7" y="162.7" font-size="10.5" fill="#ffffff" font-weight="700" text-anchor="middle" letter-spacing="0.4">LIVE</text>
+<rect x="1493.0" y="159.0" width="234.0" height="118.0" rx="7" fill="#ffffff" stroke="#c9d1dc" stroke-width="1"/>
+<rect x="1498.0" y="167.0" width="4" height="102.0" rx="2" fill="#1e7e34"/>
+<text x="1509.0" y="190.0" font-size="15" fill="#111827" font-weight="700">Turn budgets and stop</text>
+<text x="1509.0" y="208.0" font-size="13" fill="#4b5563">model turn: 10 steps, 1500 output</text>
+<text x="1509.0" y="224.0" font-size="13" fill="#4b5563">tokens per call; tender team:</text>
+<text x="1509.0" y="240.0" font-size="13" fill="#4b5563">2 model calls, 30 s; cancel per</text>
+<text x="1509.0" y="256.0" font-size="13" fill="#4b5563">run; read-only freezes writes</text>
+<rect x="1678.5" y="150.5" width="38.5" height="17" rx="8.5" fill="#1e7e34" stroke="#1e7e34" stroke-width="1"/>
+<text x="1697.7" y="162.7" font-size="10.5" fill="#ffffff" font-weight="700" text-anchor="middle" letter-spacing="0.4">LIVE</text>
+<rect x="1737.0" y="159.0" width="234.0" height="118.0" rx="7" fill="#ffffff" stroke="#c9d1dc" stroke-width="1"/>
+<rect x="1742.0" y="167.0" width="4" height="102.0" rx="2" fill="#6b7280"/>
+<text x="1753.0" y="190.0" font-size="15" fill="#111827" font-weight="700">Cost ledger and usage</text>
+<text x="1753.0" y="208.0" font-size="13" fill="#4b5563">provider token usage per turn;</text>
+<text x="1753.0" y="224.0" font-size="13" fill="#4b5563">session cost fuse on the product</text>
+<text x="1753.0" y="240.0" font-size="13" fill="#4b5563">path (today the fuse is wired</text>
+<text x="1753.0" y="256.0" font-size="13" fill="#4b5563">only in a demo script)</text>
+<rect x="1890.4" y="150.5" width="70.6" height="17" rx="8.5" fill="#6b7280" stroke="#6b7280" stroke-width="1"/>
+<text x="1925.7" y="162.7" font-size="10.5" fill="#ffffff" font-weight="700" text-anchor="middle" letter-spacing="0.4">ROADMAP</text>
+<rect x="46.0" y="324.0" width="228.0" height="746.0" rx="10" fill="#f1f4f6" stroke="#546e7a" stroke-width="1.3"/>
+<path d="M46.0,354.0 V334.0 Q46.0,324.0 56.0,324.0 H264.0 Q274.0,324.0 274.0,334.0 V354.0 Z" fill="#546e7a"/>
+<text x="60.0" y="344.5" font-size="14" fill="#ffffff" font-weight="700" letter-spacing="0.6">TOUCH-POINTS</text>
+<rect x="55.0" y="369.0" width="210.0" height="99.2" rx="7" fill="#ffffff" stroke="#c9d1dc" stroke-width="1"/>
+<rect x="60.0" y="377.0" width="4" height="83.2" rx="2" fill="#1e7e34"/>
+<text x="71.0" y="398.6" font-size="15" fill="#111827" font-weight="700">Browser workbench</text>
+<text x="71.0" y="416.6" font-size="13" fill="#4b5563">FastAPI + page on port 8765;</text>
+<text x="71.0" y="432.6" font-size="13" fill="#4b5563">binds 127.0.0.1 unless</text>
+<text x="71.0" y="448.6" font-size="13" fill="#4b5563">CIVIL_HOST is set</text>
+<rect x="216.5" y="360.5" width="38.5" height="17" rx="8.5" fill="#1e7e34" stroke="#1e7e34" stroke-width="1"/>
+<text x="235.7" y="372.7" font-size="10.5" fill="#ffffff" font-weight="700" text-anchor="middle" letter-spacing="0.4">LIVE</text>
+<rect x="55.0" y="481.2" width="210.0" height="99.2" rx="7" fill="#ffffff" stroke="#c9d1dc" stroke-width="1"/>
+<rect x="60.0" y="489.2" width="4" height="83.2" rx="2" fill="#1e7e34"/>
+<text x="71.0" y="510.8" font-size="15" fill="#111827" font-weight="700">CLI and desktop app</text>
+<text x="71.0" y="528.8" font-size="13" fill="#4b5563">civil CLI + TUI in a job folder;</text>
+<text x="71.0" y="544.8" font-size="13" fill="#4b5563">Tk desktop app; sign-off typed</text>
+<text x="71.0" y="560.8" font-size="13" fill="#4b5563">in terminal or dialog</text>
+<rect x="216.5" y="472.7" width="38.5" height="17" rx="8.5" fill="#1e7e34" stroke="#1e7e34" stroke-width="1"/>
+<text x="235.7" y="484.9" font-size="10.5" fill="#ffffff" font-weight="700" text-anchor="middle" letter-spacing="0.4">LIVE</text>
+<rect x="55.0" y="593.3" width="210.0" height="147.2" rx="7" fill="#ffffff" stroke="#c9d1dc" stroke-width="1"/>
+<rect x="60.0" y="601.3" width="4" height="131.2" rx="2" fill="#1e7e34"/>
+<text x="71.0" y="622.9" font-size="15" fill="#111827" font-weight="700">MCP server</text>
+<text x="71.0" y="640.9" font-size="13" fill="#4b5563">stdio MCP for VS Code and</text>
+<text x="71.0" y="656.9" font-size="13" fill="#4b5563">Cursor (+ REST mirror); tools</text>
+<text x="71.0" y="672.9" font-size="13" fill="#4b5563">filtered by post; civil.turn</text>
+<text x="71.0" y="688.9" font-size="13" fill="#4b5563">kept to the --expert / --pack</text>
+<text x="71.0" y="704.9" font-size="13" fill="#4b5563">scope when set; no approval</text>
+<text x="71.0" y="720.9" font-size="13" fill="#4b5563">field offered</text>
+<rect x="216.5" y="584.8" width="38.5" height="17" rx="8.5" fill="#1e7e34" stroke="#1e7e34" stroke-width="1"/>
+<text x="235.7" y="597.0" font-size="10.5" fill="#ffffff" font-weight="700" text-anchor="middle" letter-spacing="0.4">LIVE</text>
+<rect x="55.0" y="753.5" width="210.0" height="115.2" rx="7" fill="#ffffff" stroke="#c9d1dc" stroke-width="1"/>
+<rect x="60.0" y="761.5" width="4" height="99.2" rx="2" fill="#1e7e34"/>
+<text x="71.0" y="783.1" font-size="15" fill="#111827" font-weight="700">Packing gateway</text>
+<text x="71.0" y="801.1" font-size="13" fill="#4b5563">pack-ship HTTP API + UI,</text>
+<text x="71.0" y="817.1" font-size="13" fill="#4b5563">Docker image; behind the</text>
+<text x="71.0" y="833.1" font-size="13" fill="#4b5563">access guard; container</text>
+<text x="71.0" y="849.1" font-size="13" fill="#4b5563">needs CIVIL_TOKEN to start</text>
+<rect x="216.5" y="745.0" width="38.5" height="17" rx="8.5" fill="#1e7e34" stroke="#1e7e34" stroke-width="1"/>
+<text x="235.7" y="757.2" font-size="10.5" fill="#ffffff" font-weight="700" text-anchor="middle" letter-spacing="0.4">LIVE</text>
+<rect x="55.0" y="881.7" width="210.0" height="83.2" rx="7" fill="#ffffff" stroke="#c9d1dc" stroke-width="1"/>
+<rect x="60.0" y="889.7" width="4" height="67.2" rx="2" fill="#00838f"/>
+<text x="71.0" y="911.3" font-size="15" fill="#111827" font-weight="700">Voice input</text>
+<text x="71.0" y="929.3" font-size="13" fill="#4b5563">local faster-whisper,</text>
+<text x="71.0" y="945.3" font-size="13" fill="#4b5563">optional install</text>
+<rect x="202.6" y="873.2" width="52.4" height="17" rx="8.5" fill="#00838f" stroke="#00838f" stroke-width="1"/>
+<text x="228.8" y="885.4" font-size="10.5" fill="#ffffff" font-weight="700" text-anchor="middle" letter-spacing="0.4">OPT-IN</text>
+<rect x="55.0" y="977.8" width="210.0" height="83.2" rx="7" fill="#ffffff" stroke="#c9d1dc" stroke-width="1"/>
+<rect x="60.0" y="985.8" width="4" height="67.2" rx="2" fill="#6b7280"/>
+<text x="71.0" y="1007.4" font-size="15" fill="#111827" font-weight="700">IM and schedules</text>
+<text x="71.0" y="1025.4" font-size="13" fill="#4b5563">IM approval push; scheduled</text>
+<text x="71.0" y="1041.4" font-size="13" fill="#4b5563">civil exec runs</text>
+<rect x="184.4" y="969.3" width="70.6" height="17" rx="8.5" fill="#6b7280" stroke="#6b7280" stroke-width="1"/>
+<text x="219.7" y="981.5" font-size="10.5" fill="#ffffff" font-weight="700" text-anchor="middle" letter-spacing="0.4">ROADMAP</text>
+<rect x="302.0" y="324.0" width="240.0" height="746.0" rx="10" fill="#edf1f6" stroke="#1e3a5f" stroke-width="1.3"/>
+<path d="M302.0,354.0 V334.0 Q302.0,324.0 312.0,324.0 H532.0 Q542.0,324.0 542.0,334.0 V354.0 Z" fill="#1e3a5f"/>
+<circle cx="326.0" cy="339.0" r="10" fill="#ffffff"/>
+<text x="326.0" y="343.4" font-size="13" fill="#1e3a5f" font-weight="700" text-anchor="middle">1</text>
+<text x="344.0" y="344.5" font-size="14" fill="#ffffff" font-weight="700" letter-spacing="0.6">ENTRY GATEWAY</text>
+<rect x="311.0" y="369.0" width="222.0" height="87.7" rx="7" fill="#ffffff" stroke="#c9d1dc" stroke-width="1"/>
+<rect x="316.0" y="377.0" width="4" height="71.7" rx="2" fill="#1e7e34"/>
+<text x="327.0" y="392.9" font-size="15" fill="#111827" font-weight="700">Loopback by default</text>
+<text x="327.0" y="410.9" font-size="13" fill="#4b5563">civil app + workbench bind</text>
+<text x="327.0" y="426.9" font-size="13" fill="#4b5563">127.0.0.1; CI blocks external</text>
+<text x="327.0" y="442.9" font-size="13" fill="#4b5563">URLs in shipped assets</text>
+<rect x="484.5" y="360.5" width="38.5" height="17" rx="8.5" fill="#1e7e34" stroke="#1e7e34" stroke-width="1"/>
+<text x="503.7" y="372.7" font-size="10.5" fill="#ffffff" font-weight="700" text-anchor="middle" letter-spacing="0.4">LIVE</text>
+<rect x="311.0" y="469.7" width="222.0" height="87.7" rx="7" fill="#ffffff" stroke="#c9d1dc" stroke-width="1"/>
+<rect x="316.0" y="477.7" width="4" height="71.7" rx="2" fill="#00838f"/>
+<text x="327.0" y="493.6" font-size="15" fill="#111827" font-weight="700">Shared access token</text>
+<text x="327.0" y="511.6" font-size="13" fill="#4b5563">CIVIL_TOKEN for both apps;</text>
+<text x="327.0" y="527.6" font-size="13" fill="#4b5563">if set, required from everyone,</text>
+<text x="327.0" y="543.6" font-size="13" fill="#4b5563">loopback too; HttpOnly cookie</text>
+<rect x="470.6" y="461.2" width="52.4" height="17" rx="8.5" fill="#00838f" stroke="#00838f" stroke-width="1"/>
+<text x="496.8" y="473.4" font-size="10.5" fill="#ffffff" font-weight="700" text-anchor="middle" letter-spacing="0.4">OPT-IN</text>
+<rect x="311.0" y="570.4" width="222.0" height="103.7" rx="7" fill="#ffffff" stroke="#c9d1dc" stroke-width="1"/>
+<rect x="316.0" y="578.4" width="4" height="87.7" rx="2" fill="#1e7e34"/>
+<text x="327.0" y="594.3" font-size="15" fill="#111827" font-weight="700">Fail-closed network</text>
+<text x="327.0" y="612.3" font-size="13" fill="#4b5563">no token: only true local calls;</text>
+<text x="327.0" y="628.3" font-size="13" fill="#4b5563">a non-loopback bind is refused</text>
+<text x="327.0" y="644.3" font-size="13" fill="#4b5563">(one explicit env opt-out);</text>
+<text x="327.0" y="660.3" font-size="13" fill="#4b5563">CORS without credentials</text>
+<rect x="484.5" y="561.9" width="38.5" height="17" rx="8.5" fill="#1e7e34" stroke="#1e7e34" stroke-width="1"/>
+<text x="503.7" y="574.1" font-size="10.5" fill="#ffffff" font-weight="700" text-anchor="middle" letter-spacing="0.4">LIVE</text>
+<rect x="311.0" y="687.1" width="222.0" height="71.7" rx="7" fill="#ffffff" stroke="#c9d1dc" stroke-width="1"/>
+<rect x="316.0" y="695.1" width="4" height="55.7" rx="2" fill="#f5a623"/>
+<text x="327.0" y="711.0" font-size="15" fill="#111827" font-weight="700">TLS reverse proxy</text>
+<text x="327.0" y="729.0" font-size="13" fill="#4b5563">HTTPS on the Lightsail instance;</text>
+<text x="327.0" y="745.0" font-size="13" fill="#4b5563">apps stay on 127.0.0.1</text>
+<rect x="426.8" y="678.6" width="96.2" height="17" rx="8.5" fill="#f5a623" stroke="#f5a623" stroke-width="1"/>
+<text x="474.9" y="690.8" font-size="10.5" fill="#3a2500" font-weight="700" text-anchor="middle" letter-spacing="0.4">BEFORE DEMO</text>
+<rect x="311.0" y="771.9" width="222.0" height="71.7" rx="7" fill="#ffffff" stroke="#c9d1dc" stroke-width="1"/>
+<rect x="316.0" y="779.9" width="4" height="55.7" rx="2" fill="#1e7e34"/>
+<text x="327.0" y="795.7" font-size="15" fill="#111827" font-weight="700">Session turn lock</text>
+<text x="327.0" y="813.7" font-size="13" fill="#4b5563">one turn per session at a time</text>
+<text x="327.0" y="829.7" font-size="13" fill="#4b5563">(SessionBusy → HTTP 409)</text>
+<rect x="484.5" y="763.4" width="38.5" height="17" rx="8.5" fill="#1e7e34" stroke="#1e7e34" stroke-width="1"/>
+<text x="503.7" y="775.6" font-size="10.5" fill="#ffffff" font-weight="700" text-anchor="middle" letter-spacing="0.4">LIVE</text>
+<rect x="311.0" y="856.6" width="222.0" height="119.7" rx="7" fill="#ffffff" stroke="#c9d1dc" stroke-width="1"/>
+<rect x="316.0" y="864.6" width="4" height="103.7" rx="2" fill="#1e7e34"/>
+<text x="327.0" y="880.4" font-size="15" fill="#111827" font-weight="700">Input isolation</text>
+<text x="327.0" y="898.4" font-size="13" fill="#4b5563">attachments are reference data;</text>
+<text x="327.0" y="914.4" font-size="13" fill="#4b5563">a sign-off the model writes is</text>
+<text x="327.0" y="930.4" font-size="13" fill="#4b5563">scrubbed; no Python MCP or</text>
+<text x="327.0" y="946.4" font-size="13" fill="#4b5563">web-app caller can assert</text>
+<text x="327.0" y="962.4" font-size="13" fill="#4b5563">approval; no injection detector</text>
+<rect x="484.5" y="848.1" width="38.5" height="17" rx="8.5" fill="#1e7e34" stroke="#1e7e34" stroke-width="1"/>
+<text x="503.7" y="860.3" font-size="10.5" fill="#ffffff" font-weight="700" text-anchor="middle" letter-spacing="0.4">LIVE</text>
+<rect x="311.0" y="989.3" width="222.0" height="71.7" rx="7" fill="#ffffff" stroke="#c9d1dc" stroke-width="1"/>
+<rect x="316.0" y="997.3" width="4" height="55.7" rx="2" fill="#6b7280"/>
+<text x="327.0" y="1013.1" font-size="15" fill="#111827" font-weight="700">PII masking</text>
+<text x="327.0" y="1031.1" font-size="13" fill="#4b5563">mask before cloud calls; today:</text>
+<text x="327.0" y="1047.1" font-size="13" fill="#4b5563">local Ollama for sensitive files</text>
+<rect x="452.4" y="980.8" width="70.6" height="17" rx="8.5" fill="#6b7280" stroke="#6b7280" stroke-width="1"/>
+<text x="487.7" y="993.0" font-size="10.5" fill="#ffffff" font-weight="700" text-anchor="middle" letter-spacing="0.4">ROADMAP</text>
+<rect x="570.0" y="324.0" width="480.0" height="746.0" rx="10" fill="#f6eff9" stroke="#6a1b9a" stroke-width="1.3"/>
+<path d="M570.0,354.0 V334.0 Q570.0,324.0 580.0,324.0 H1040.0 Q1050.0,324.0 1050.0,334.0 V354.0 Z" fill="#6a1b9a"/>
+<circle cx="594.0" cy="339.0" r="10" fill="#ffffff"/>
+<text x="594.0" y="343.4" font-size="13" fill="#6a1b9a" font-weight="700" text-anchor="middle">2</text>
+<text x="612.0" y="344.5" font-size="14" fill="#ffffff" font-weight="700" letter-spacing="0.6">AGENT RUNTIME</text>
+<text x="747.9" y="344.5" font-size="12.5" fill="#ffffff" fill-opacity="0.85">one session per job: pipelines first</text>
+<rect x="579.0" y="369.0" width="226.0" height="121.6" rx="7" fill="#ffffff" stroke="#c9d1dc" stroke-width="1"/>
+<rect x="584.0" y="377.0" width="4" height="105.6" rx="2" fill="#1e7e34"/>
+<text x="595.0" y="409.8" font-size="15" fill="#111827" font-weight="700">Deterministic pipelines</text>
+<text x="595.0" y="427.8" font-size="13" fill="#4b5563">default agent_mode=steps: code</text>
+<text x="595.0" y="443.8" font-size="13" fill="#4b5563">writes every deliverable; no key</text>
+<text x="595.0" y="459.8" font-size="13" fill="#4b5563">and no model call on CLI path</text>
+<rect x="756.5" y="360.5" width="38.5" height="17" rx="8.5" fill="#1e7e34" stroke="#1e7e34" stroke-width="1"/>
+<text x="775.7" y="372.7" font-size="10.5" fill="#ffffff" font-weight="700" text-anchor="middle" letter-spacing="0.4">LIVE</text>
+<rect x="815.0" y="369.0" width="226.0" height="121.6" rx="7" fill="#ffffff" stroke="#c9d1dc" stroke-width="1"/>
+<rect x="820.0" y="377.0" width="4" height="105.6" rx="2" fill="#1e7e34"/>
+<text x="831.0" y="409.8" font-size="15" fill="#111827" font-weight="700">Workflow before loop</text>
+<text x="831.0" y="427.8" font-size="13" fill="#4b5563">tender review: parse → tech and</text>
+<text x="831.0" y="443.8" font-size="13" fill="#4b5563">compliance in parallel → merge;</text>
+<text x="831.0" y="459.8" font-size="13" fill="#4b5563">open loop only if none matches</text>
+<rect x="992.5" y="360.5" width="38.5" height="17" rx="8.5" fill="#1e7e34" stroke="#1e7e34" stroke-width="1"/>
+<text x="1011.7" y="372.7" font-size="10.5" fill="#ffffff" font-weight="700" text-anchor="middle" letter-spacing="0.4">LIVE</text>
+<rect x="579.0" y="503.6" width="226.0" height="137.6" rx="7" fill="#ffffff" stroke="#c9d1dc" stroke-width="1"/>
+<rect x="584.0" y="511.6" width="4" height="121.6" rx="2" fill="#1e7e34"/>
+<text x="595.0" y="544.4" font-size="15" fill="#111827" font-weight="700">Evidence-bound checkers</text>
+<text x="595.0" y="562.4" font-size="13" fill="#4b5563">two, in parallel, isolated contexts;</text>
+<text x="595.0" y="578.4" font-size="13" fill="#4b5563">cited conclusions only; numbers</text>
+<text x="595.0" y="594.4" font-size="13" fill="#4b5563">must sit in the cited quote;</text>
+<text x="595.0" y="610.4" font-size="13" fill="#4b5563">model used only with a key</text>
+<rect x="756.5" y="495.1" width="38.5" height="17" rx="8.5" fill="#1e7e34" stroke="#1e7e34" stroke-width="1"/>
+<text x="775.7" y="507.3" font-size="10.5" fill="#ffffff" font-weight="700" text-anchor="middle" letter-spacing="0.4">LIVE</text>
+<rect x="815.0" y="503.6" width="226.0" height="137.6" rx="7" fill="#ffffff" stroke="#c9d1dc" stroke-width="1"/>
+<rect x="820.0" y="511.6" width="4" height="121.6" rx="2" fill="#00838f"/>
+<text x="831.0" y="544.4" font-size="15" fill="#111827" font-weight="700">Bounded model loop</text>
+<text x="831.0" y="562.4" font-size="13" fill="#4b5563">agent_mode=model: fixed tool</text>
+<text x="831.0" y="578.4" font-size="13" fill="#4b5563">menu (8 tools in general), max</text>
+<text x="831.0" y="594.4" font-size="13" fill="#4b5563">10 steps; model text never</text>
+<text x="831.0" y="610.4" font-size="13" fill="#4b5563">reaches a deliverable</text>
+<rect x="978.6" y="495.1" width="52.4" height="17" rx="8.5" fill="#00838f" stroke="#00838f" stroke-width="1"/>
+<text x="1004.8" y="507.3" font-size="10.5" fill="#ffffff" font-weight="700" text-anchor="middle" letter-spacing="0.4">OPT-IN</text>
+<rect x="579.0" y="654.2" width="226.0" height="121.6" rx="7" fill="#ffffff" stroke="#c9d1dc" stroke-width="1"/>
+<rect x="584.0" y="662.2" width="4" height="105.6" rx="2" fill="#00838f"/>
+<text x="595.0" y="695.0" font-size="15" fill="#111827" font-weight="700">Number and verdict guards</text>
+<text x="595.0" y="713.0" font-size="13" fill="#4b5563">reply numbers traced to evidence;</text>
+<text x="595.0" y="729.0" font-size="13" fill="#4b5563">forbidden verdicts rewritten;</text>
+<text x="595.0" y="745.0" font-size="13" fill="#4b5563">same guards behind civil review</text>
+<rect x="742.6" y="645.7" width="52.4" height="17" rx="8.5" fill="#00838f" stroke="#00838f" stroke-width="1"/>
+<text x="768.8" y="657.9" font-size="10.5" fill="#ffffff" font-weight="700" text-anchor="middle" letter-spacing="0.4">OPT-IN</text>
+<rect x="815.0" y="654.2" width="226.0" height="121.6" rx="7" fill="#ffffff" stroke="#c9d1dc" stroke-width="1"/>
+<rect x="820.0" y="662.2" width="4" height="105.6" rx="2" fill="#1e7e34"/>
+<text x="831.0" y="695.0" font-size="15" fill="#111827" font-weight="700">Session + project memory</text>
+<text x="831.0" y="713.0" font-size="13" fill="#4b5563">task memory + session-local</text>
+<text x="831.0" y="729.0" font-size="13" fill="#4b5563">FTS5 index, never other sessions;</text>
+<text x="831.0" y="745.0" font-size="13" fill="#4b5563">layered CIVIL.md instructions</text>
+<rect x="992.5" y="645.7" width="38.5" height="17" rx="8.5" fill="#1e7e34" stroke="#1e7e34" stroke-width="1"/>
+<text x="1011.7" y="657.9" font-size="10.5" fill="#ffffff" font-weight="700" text-anchor="middle" letter-spacing="0.4">LIVE</text>
+<rect x="579.0" y="788.8" width="226.0" height="153.6" rx="7" fill="#ffffff" stroke="#c9d1dc" stroke-width="1"/>
+<rect x="584.0" y="796.8" width="4" height="137.6" rx="2" fill="#1e7e34"/>
+<text x="595.0" y="837.6" font-size="15" fill="#111827" font-weight="700">Durable approval pause</text>
+<text x="595.0" y="855.6" font-size="13" fill="#4b5563">page runs: Team A → gate →</text>
+<text x="595.0" y="871.6" font-size="13" fill="#4b5563">restart → Team B resumes</text>
+<text x="595.0" y="887.6" font-size="13" fill="#4b5563">(SqliteSaver); API calls</text>
+<text x="595.0" y="903.6" font-size="13" fill="#4b5563">auto-confirm by default</text>
+<rect x="756.5" y="780.3" width="38.5" height="17" rx="8.5" fill="#1e7e34" stroke="#1e7e34" stroke-width="1"/>
+<text x="775.7" y="792.5" font-size="10.5" fill="#ffffff" font-weight="700" text-anchor="middle" letter-spacing="0.4">LIVE</text>
+<rect x="815.0" y="788.8" width="226.0" height="153.6" rx="7" fill="#ffffff" stroke="#c9d1dc" stroke-width="1"/>
+<rect x="820.0" y="796.8" width="4" height="137.6" rx="2" fill="#00838f"/>
+<text x="831.0" y="829.6" font-size="15" fill="#111827" font-weight="700">OS sandbox worker</text>
+<text x="831.0" y="847.6" font-size="13" fill="#4b5563">per-turn confined worker for CLI</text>
+<text x="831.0" y="863.6" font-size="13" fill="#4b5563">and desktop turns in a job folder;</text>
+<text x="831.0" y="879.6" font-size="13" fill="#4b5563">Linux: Landlock + seccomp;</text>
+<text x="831.0" y="895.6" font-size="13" fill="#4b5563">Windows: Low-IL, network</text>
+<text x="831.0" y="911.6" font-size="13" fill="#4b5563">not blocked</text>
+<rect x="978.6" y="780.3" width="52.4" height="17" rx="8.5" fill="#00838f" stroke="#00838f" stroke-width="1"/>
+<text x="1004.8" y="792.5" font-size="10.5" fill="#ffffff" font-weight="700" text-anchor="middle" letter-spacing="0.4">OPT-IN</text>
+<rect x="579.0" y="955.4" width="462.0" height="105.6" rx="7" fill="#ffffff" stroke="#c9d1dc" stroke-width="1"/>
+<rect x="584.0" y="963.4" width="4" height="89.6" rx="2" fill="#6b7280"/>
+<text x="595.0" y="996.2" font-size="15" fill="#111827" font-weight="700">Per-user sessions</text>
+<text x="595.0" y="1014.2" font-size="13" fill="#4b5563">owner check on every session route;</text>
+<text x="595.0" y="1030.2" font-size="13" fill="#4b5563">today every token holder sees all sessions</text>
+<rect x="960.4" y="946.9" width="70.6" height="17" rx="8.5" fill="#6b7280" stroke="#6b7280" stroke-width="1"/>
+<text x="995.7" y="959.1" font-size="10.5" fill="#ffffff" font-weight="700" text-anchor="middle" letter-spacing="0.4">ROADMAP</text>
+<rect x="1096.0" y="324.0" width="452.0" height="306.4" rx="10" fill="#edf1f6" stroke="#1e3a5f" stroke-width="1.3"/>
+<path d="M1096.0,354.0 V334.0 Q1096.0,324.0 1106.0,324.0 H1538.0 Q1548.0,324.0 1548.0,334.0 V354.0 Z" fill="#1e3a5f"/>
+<circle cx="1120.0" cy="339.0" r="10" fill="#ffffff"/>
+<text x="1120.0" y="343.4" font-size="13" fill="#1e3a5f" font-weight="700" text-anchor="middle">3</text>
+<text x="1138.0" y="344.5" font-size="14" fill="#ffffff" font-weight="700" letter-spacing="0.6">MODEL GATEWAY</text>
+<rect x="1105.0" y="369.0" width="212.0" height="102.1" rx="7" fill="#ffffff" stroke="#c9d1dc" stroke-width="1"/>
+<rect x="1110.0" y="377.0" width="4" height="86.1" rx="2" fill="#1e7e34"/>
+<text x="1121.0" y="400.1" font-size="15" fill="#111827" font-weight="700">One wire protocol</text>
+<text x="1121.0" y="418.1" font-size="13" fill="#4b5563">OpenAI-compatible Chat</text>
+<text x="1121.0" y="434.1" font-size="13" fill="#4b5563">Completions via one config;</text>
+<text x="1121.0" y="450.1" font-size="13" fill="#4b5563">not one egress (four clients)</text>
+<rect x="1268.5" y="360.5" width="38.5" height="17" rx="8.5" fill="#1e7e34" stroke="#1e7e34" stroke-width="1"/>
+<text x="1287.7" y="372.7" font-size="10.5" fill="#ffffff" font-weight="700" text-anchor="middle" letter-spacing="0.4">LIVE</text>
+<rect x="1327.0" y="369.0" width="212.0" height="102.1" rx="7" fill="#ffffff" stroke="#c9d1dc" stroke-width="1"/>
+<rect x="1332.0" y="377.0" width="4" height="86.1" rx="2" fill="#1e7e34"/>
+<text x="1343.0" y="392.1" font-size="15" fill="#111827" font-weight="700">Key stays on host</text>
+<text x="1343.0" y="410.1" font-size="13" fill="#4b5563">key only in the host's outbound</text>
+<text x="1343.0" y="426.1" font-size="13" fill="#4b5563">header (opt-in sandbox worker</text>
+<text x="1343.0" y="442.1" font-size="13" fill="#4b5563">inherits it); UI gets key_masked;</text>
+<text x="1343.0" y="458.1" font-size="13" fill="#4b5563">runtime settings not on disk</text>
+<rect x="1490.5" y="360.5" width="38.5" height="17" rx="8.5" fill="#1e7e34" stroke="#1e7e34" stroke-width="1"/>
+<text x="1509.7" y="372.7" font-size="10.5" fill="#ffffff" font-weight="700" text-anchor="middle" letter-spacing="0.4">LIVE</text>
+<rect x="1105.0" y="484.1" width="212.0" height="70.1" rx="7" fill="#ffffff" stroke="#c9d1dc" stroke-width="1"/>
+<rect x="1110.0" y="492.1" width="4" height="54.1" rx="2" fill="#1e7e34"/>
+<text x="1121.0" y="507.2" font-size="15" fill="#111827" font-weight="700">Settings key lock</text>
+<text x="1121.0" y="525.2" font-size="13" fill="#4b5563">a new base_url needs the key</text>
+<text x="1121.0" y="541.2" font-size="13" fill="#4b5563">again; stored key never moves</text>
+<rect x="1268.5" y="475.6" width="38.5" height="17" rx="8.5" fill="#1e7e34" stroke="#1e7e34" stroke-width="1"/>
+<text x="1287.7" y="487.8" font-size="10.5" fill="#ffffff" font-weight="700" text-anchor="middle" letter-spacing="0.4">LIVE</text>
+<rect x="1327.0" y="484.1" width="212.0" height="70.1" rx="7" fill="#ffffff" stroke="#c9d1dc" stroke-width="1"/>
+<rect x="1332.0" y="492.1" width="4" height="54.1" rx="2" fill="#00838f"/>
+<text x="1343.0" y="507.2" font-size="15" fill="#111827" font-weight="700">Steps fallback</text>
+<text x="1343.0" y="525.2" font-size="13" fill="#4b5563">agent_mode=auto: model down</text>
+<text x="1343.0" y="541.2" font-size="13" fill="#4b5563">→ deterministic steps</text>
+<rect x="1476.6" y="475.6" width="52.4" height="17" rx="8.5" fill="#00838f" stroke="#00838f" stroke-width="1"/>
+<text x="1502.8" y="487.8" font-size="10.5" fill="#ffffff" font-weight="700" text-anchor="middle" letter-spacing="0.4">OPT-IN</text>
+<rect x="1105.0" y="567.3" width="434.0" height="54.1" rx="7" fill="#ffffff" stroke="#c9d1dc" stroke-width="1"/>
+<rect x="1110.0" y="575.3" width="4" height="38.1" rx="2" fill="#6b7280"/>
+<text x="1121.0" y="590.4" font-size="15" fill="#111827" font-weight="700">Single egress and metering</text>
+<text x="1121.0" y="608.4" font-size="13" fill="#4b5563">one client, provider usage per turn, second-model failover</text>
+<rect x="1458.4" y="558.8" width="70.6" height="17" rx="8.5" fill="#6b7280" stroke="#6b7280" stroke-width="1"/>
+<text x="1493.7" y="571.0" font-size="10.5" fill="#ffffff" font-weight="700" text-anchor="middle" letter-spacing="0.4">ROADMAP</text>
+<rect x="1576.0" y="324.0" width="404.0" height="306.4" rx="10" fill="#f6f1ef" stroke="#6d4c41" stroke-width="1.3"/>
+<path d="M1576.0,354.0 V334.0 Q1576.0,324.0 1586.0,324.0 H1970.0 Q1980.0,324.0 1980.0,334.0 V354.0 Z" fill="#6d4c41"/>
+<text x="1590.0" y="344.5" font-size="14" fill="#ffffff" font-weight="700" letter-spacing="0.6">MODEL POOL</text>
+<rect x="1585.0" y="369.0" width="188.0" height="127.7" rx="7" fill="#ffffff" stroke="#c9d1dc" stroke-width="1"/>
+<rect x="1590.0" y="377.0" width="4" height="111.7" rx="2" fill="#00838f"/>
+<text x="1601.0" y="404.9" font-size="15" fill="#111827" font-weight="700">Cloud endpoints</text>
+<text x="1601.0" y="422.9" font-size="13" fill="#4b5563">OpenRouter, DeepSeek or</text>
+<text x="1601.0" y="438.9" font-size="13" fill="#4b5563">any compatible API;</text>
+<text x="1601.0" y="454.9" font-size="13" fill="#4b5563">needs a key, none by</text>
+<text x="1601.0" y="470.9" font-size="13" fill="#4b5563">default</text>
+<rect x="1710.6" y="360.5" width="52.4" height="17" rx="8.5" fill="#00838f" stroke="#00838f" stroke-width="1"/>
+<text x="1736.8" y="372.7" font-size="10.5" fill="#ffffff" font-weight="700" text-anchor="middle" letter-spacing="0.4">OPT-IN</text>
+<rect x="1783.0" y="369.0" width="188.0" height="127.7" rx="7" fill="#ffffff" stroke="#c9d1dc" stroke-width="1"/>
+<rect x="1788.0" y="377.0" width="4" height="111.7" rx="2" fill="#f5a623"/>
+<text x="1799.0" y="396.9" font-size="15" fill="#111827" font-weight="700">Amazon Bedrock</text>
+<text x="1799.0" y="414.9" font-size="13" fill="#4b5563">Chat Completions on</text>
+<text x="1799.0" y="430.9" font-size="13" fill="#4b5563">bedrock-runtime + API key;</text>
+<text x="1799.0" y="446.9" font-size="13" fill="#4b5563">Singapore: gpt-oss not</text>
+<text x="1799.0" y="462.9" font-size="13" fill="#4b5563">listed; never run from</text>
+<text x="1799.0" y="478.9" font-size="13" fill="#4b5563">this repo, so unproven</text>
+<rect x="1864.8" y="360.5" width="96.2" height="17" rx="8.5" fill="#f5a623" stroke="#f5a623" stroke-width="1"/>
+<text x="1912.9" y="372.7" font-size="10.5" fill="#3a2500" font-weight="700" text-anchor="middle" letter-spacing="0.4">BEFORE DEMO</text>
+<rect x="1585.0" y="509.7" width="188.0" height="111.7" rx="7" fill="#ffffff" stroke="#c9d1dc" stroke-width="1"/>
+<rect x="1590.0" y="517.7" width="4" height="95.7" rx="2" fill="#00838f"/>
+<text x="1601.0" y="537.6" font-size="15" fill="#111827" font-weight="700">Local Ollama</text>
+<text x="1601.0" y="555.6" font-size="13" fill="#4b5563">127.0.0.1:11434/v1,</text>
+<text x="1601.0" y="571.6" font-size="13" fill="#4b5563">any non-empty key;</text>
+<text x="1601.0" y="587.6" font-size="13" fill="#4b5563">small-model text tool</text>
+<text x="1601.0" y="603.6" font-size="13" fill="#4b5563">calls accepted</text>
+<rect x="1710.6" y="501.2" width="52.4" height="17" rx="8.5" fill="#00838f" stroke="#00838f" stroke-width="1"/>
+<text x="1736.8" y="513.4" font-size="10.5" fill="#ffffff" font-weight="700" text-anchor="middle" letter-spacing="0.4">OPT-IN</text>
+<rect x="1783.0" y="509.7" width="188.0" height="111.7" rx="7" fill="#ffffff" stroke="#c9d1dc" stroke-width="1"/>
+<rect x="1788.0" y="517.7" width="4" height="95.7" rx="2" fill="#00838f"/>
+<text x="1799.0" y="545.6" font-size="15" fill="#111827" font-weight="700">Local helper models</text>
+<text x="1799.0" y="563.6" font-size="13" fill="#4b5563">faster-whisper speech,</text>
+<text x="1799.0" y="579.6" font-size="13" fill="#4b5563">PaddleOCR; optional</text>
+<text x="1799.0" y="595.6" font-size="13" fill="#4b5563">installs</text>
+<rect x="1908.6" y="501.2" width="52.4" height="17" rx="8.5" fill="#00838f" stroke="#00838f" stroke-width="1"/>
+<text x="1934.8" y="513.4" font-size="10.5" fill="#ffffff" font-weight="700" text-anchor="middle" letter-spacing="0.4">OPT-IN</text>
+<rect x="1096.0" y="648.4" width="452.0" height="421.6" rx="10" fill="#edf1f6" stroke="#1e3a5f" stroke-width="1.3"/>
+<path d="M1096.0,678.4 V658.4 Q1096.0,648.4 1106.0,648.4 H1538.0 Q1548.0,648.4 1548.0,658.4 V678.4 Z" fill="#1e3a5f"/>
+<circle cx="1120.0" cy="663.4" r="10" fill="#ffffff"/>
+<text x="1120.0" y="667.8" font-size="13" fill="#1e3a5f" font-weight="700" text-anchor="middle">4</text>
+<text x="1138.0" y="668.9" font-size="14" fill="#ffffff" font-weight="700" letter-spacing="0.6">TOOL GATEWAY</text>
+<rect x="1105.0" y="693.4" width="212.0" height="102.1" rx="7" fill="#ffffff" stroke="#c9d1dc" stroke-width="1"/>
+<rect x="1110.0" y="701.4" width="4" height="86.1" rx="2" fill="#1e7e34"/>
+<text x="1121.0" y="716.5" font-size="15" fill="#111827" font-weight="700">Single execution point</text>
+<text x="1121.0" y="734.5" font-size="13" fill="#4b5563">admit (contract → policy), then</text>
+<text x="1121.0" y="750.5" font-size="13" fill="#4b5563">run → record; MCP/gateway</text>
+<text x="1121.0" y="766.5" font-size="13" fill="#4b5563">pack-ship admitted, no shared</text>
+<text x="1121.0" y="782.5" font-size="13" fill="#4b5563">circuit; model loop: some direct</text>
+<rect x="1268.5" y="684.9" width="38.5" height="17" rx="8.5" fill="#1e7e34" stroke="#1e7e34" stroke-width="1"/>
+<text x="1287.7" y="697.1" font-size="10.5" fill="#ffffff" font-weight="700" text-anchor="middle" letter-spacing="0.4">LIVE</text>
+<rect x="1327.0" y="693.4" width="212.0" height="102.1" rx="7" fill="#ffffff" stroke="#c9d1dc" stroke-width="1"/>
+<rect x="1332.0" y="701.4" width="4" height="86.1" rx="2" fill="#1e7e34"/>
+<text x="1343.0" y="724.5" font-size="15" fill="#111827" font-weight="700">Registered tools only</text>
+<text x="1343.0" y="742.5" font-size="13" fill="#4b5563">unknown tool refused with a</text>
+<text x="1343.0" y="758.5" font-size="13" fill="#4b5563">reason; declarative plugins</text>
+<text x="1343.0" y="774.5" font-size="13" fill="#4b5563">cannot shadow built-in posts</text>
+<rect x="1490.5" y="684.9" width="38.5" height="17" rx="8.5" fill="#1e7e34" stroke="#1e7e34" stroke-width="1"/>
+<text x="1509.7" y="697.1" font-size="10.5" fill="#ffffff" font-weight="700" text-anchor="middle" letter-spacing="0.4">LIVE</text>
+<rect x="1105.0" y="808.6" width="212.0" height="86.1" rx="7" fill="#ffffff" stroke="#c9d1dc" stroke-width="1"/>
+<rect x="1110.0" y="816.6" width="4" height="70.1" rx="2" fill="#1e7e34"/>
+<text x="1121.0" y="831.6" font-size="15" fill="#111827" font-weight="700">Write-path checks</text>
+<text x="1121.0" y="849.6" font-size="13" fill="#4b5563">writes only in allowed roots;</text>
+<text x="1121.0" y="865.6" font-size="13" fill="#4b5563">secret files, prod paths and</text>
+<text x="1121.0" y="881.6" font-size="13" fill="#4b5563">non-allowlisted spawns refused</text>
+<rect x="1268.5" y="800.1" width="38.5" height="17" rx="8.5" fill="#1e7e34" stroke="#1e7e34" stroke-width="1"/>
+<text x="1287.7" y="812.3" font-size="10.5" fill="#ffffff" font-weight="700" text-anchor="middle" letter-spacing="0.4">LIVE</text>
+<rect x="1327.0" y="808.6" width="212.0" height="86.1" rx="7" fill="#ffffff" stroke="#c9d1dc" stroke-width="1"/>
+<rect x="1332.0" y="816.6" width="4" height="70.1" rx="2" fill="#1e7e34"/>
+<text x="1343.0" y="831.6" font-size="15" fill="#111827" font-weight="700">Pack-ship read guard</text>
+<text x="1343.0" y="849.6" font-size="13" fill="#4b5563">policy checks every file_path</text>
+<text x="1343.0" y="865.6" font-size="13" fill="#4b5563">against the sandbox roots;</text>
+<text x="1343.0" y="881.6" font-size="13" fill="#4b5563">the parser opens that path</text>
+<rect x="1490.5" y="800.1" width="38.5" height="17" rx="8.5" fill="#1e7e34" stroke="#1e7e34" stroke-width="1"/>
+<text x="1509.7" y="812.3" font-size="10.5" fill="#ffffff" font-weight="700" text-anchor="middle" letter-spacing="0.4">LIVE</text>
+<rect x="1105.0" y="907.7" width="212.0" height="86.1" rx="7" fill="#ffffff" stroke="#c9d1dc" stroke-width="1"/>
+<rect x="1110.0" y="915.7" width="4" height="70.1" rx="2" fill="#1e7e34"/>
+<text x="1121.0" y="930.8" font-size="15" fill="#111827" font-weight="700">Public-URL fetch only</text>
+<text x="1121.0" y="948.8" font-size="13" fill="#4b5563">user-given http(s) URLs; private</text>
+<text x="1121.0" y="964.8" font-size="13" fill="#4b5563">and metadata ranges refused;</text>
+<text x="1121.0" y="980.8" font-size="13" fill="#4b5563">every redirect re-checked</text>
+<rect x="1268.5" y="899.2" width="38.5" height="17" rx="8.5" fill="#1e7e34" stroke="#1e7e34" stroke-width="1"/>
+<text x="1287.7" y="911.4" font-size="10.5" fill="#ffffff" font-weight="700" text-anchor="middle" letter-spacing="0.4">LIVE</text>
+<rect x="1327.0" y="907.7" width="212.0" height="86.1" rx="7" fill="#ffffff" stroke="#c9d1dc" stroke-width="1"/>
+<rect x="1332.0" y="915.7" width="4" height="70.1" rx="2" fill="#1e7e34"/>
+<text x="1343.0" y="930.8" font-size="15" fill="#111827" font-weight="700">Per-run records</text>
+<text x="1343.0" y="948.8" font-size="13" fill="#4b5563">workbench.json per run; steps</text>
+<text x="1343.0" y="964.8" font-size="13" fill="#4b5563">path records real ok; tool</text>
+<text x="1343.0" y="980.8" font-size="13" fill="#4b5563">events not persisted yet</text>
+<rect x="1490.5" y="899.2" width="38.5" height="17" rx="8.5" fill="#1e7e34" stroke="#1e7e34" stroke-width="1"/>
+<text x="1509.7" y="911.4" font-size="10.5" fill="#ffffff" font-weight="700" text-anchor="middle" letter-spacing="0.4">LIVE</text>
+<rect x="1105.0" y="1006.9" width="434.0" height="54.1" rx="7" fill="#ffffff" stroke="#c9d1dc" stroke-width="1"/>
+<rect x="1110.0" y="1014.9" width="4" height="38.1" rx="2" fill="#1e7e34"/>
+<text x="1121.0" y="1029.9" font-size="15" fill="#111827" font-weight="700">KB over MCP</text>
+<text x="1121.0" y="1047.9" font-size="13" fill="#4b5563">three-layer KB per post, served as MCP resources</text>
+<rect x="1490.5" y="998.4" width="38.5" height="17" rx="8.5" fill="#1e7e34" stroke="#1e7e34" stroke-width="1"/>
+<text x="1509.7" y="1010.6" font-size="10.5" fill="#ffffff" font-weight="700" text-anchor="middle" letter-spacing="0.4">LIVE</text>
+<rect x="1576.0" y="648.4" width="404.0" height="421.6" rx="10" fill="#f6f1ef" stroke="#6d4c41" stroke-width="1.3"/>
+<path d="M1576.0,678.4 V658.4 Q1576.0,648.4 1586.0,648.4 H1970.0 Q1980.0,648.4 1980.0,658.4 V678.4 Z" fill="#6d4c41"/>
+<text x="1590.0" y="668.9" font-size="14" fill="#ffffff" font-weight="700" letter-spacing="0.6">DATA AND ENGINES</text>
+<text x="1751.0" y="668.9" font-size="12.5" fill="#ffffff" fill-opacity="0.85">the company's own, on the server</text>
+<rect x="1585.0" y="693.4" width="386.0" height="82.1" rx="7" fill="#ffffff" stroke="#c9d1dc" stroke-width="1"/>
+<rect x="1590.0" y="701.4" width="4" height="66.1" rx="2" fill="#1e7e34"/>
+<text x="1601.0" y="722.5" font-size="15" fill="#111827" font-weight="700">Job folder</text>
+<text x="1601.0" y="740.5" font-size="13" fill="#4b5563">the SME's own tenders, packing lists and drawings;</text>
+<text x="1601.0" y="756.5" font-size="13" fill="#4b5563">the only business data source</text>
+<rect x="1922.5" y="684.9" width="38.5" height="17" rx="8.5" fill="#1e7e34" stroke="#1e7e34" stroke-width="1"/>
+<text x="1941.7" y="697.1" font-size="10.5" fill="#ffffff" font-weight="700" text-anchor="middle" letter-spacing="0.4">LIVE</text>
+<rect x="1585.0" y="788.6" width="386.0" height="82.1" rx="7" fill="#ffffff" stroke="#c9d1dc" stroke-width="1"/>
+<rect x="1590.0" y="796.6" width="4" height="66.1" rx="2" fill="#1e7e34"/>
+<text x="1601.0" y="817.6" font-size="15" fill="#111827" font-weight="700">Post knowledge base</text>
+<text x="1601.0" y="835.6" font-size="13" fill="#4b5563">346 Markdown docs across 66 posts (+90 packing KB);</text>
+<text x="1601.0" y="851.6" font-size="13" fill="#4b5563">SQLite FTS5 search, no vectors by design</text>
+<rect x="1922.5" y="780.1" width="38.5" height="17" rx="8.5" fill="#1e7e34" stroke="#1e7e34" stroke-width="1"/>
+<text x="1941.7" y="792.3" font-size="10.5" fill="#ffffff" font-weight="700" text-anchor="middle" letter-spacing="0.4">LIVE</text>
+<rect x="1585.0" y="883.7" width="386.0" height="82.1" rx="7" fill="#ffffff" stroke="#c9d1dc" stroke-width="1"/>
+<rect x="1590.0" y="891.7" width="4" height="66.1" rx="2" fill="#1e7e34"/>
+<text x="1601.0" y="912.8" font-size="15" fill="#111827" font-weight="700">Deterministic engines</text>
+<text x="1601.0" y="930.8" font-size="13" fill="#4b5563">packing solver, tender parser and post writers</text>
+<text x="1601.0" y="946.8" font-size="13" fill="#4b5563">compute every number</text>
+<rect x="1922.5" y="875.2" width="38.5" height="17" rx="8.5" fill="#1e7e34" stroke="#1e7e34" stroke-width="1"/>
+<text x="1941.7" y="887.4" font-size="10.5" fill="#ffffff" font-weight="700" text-anchor="middle" letter-spacing="0.4">LIVE</text>
+<rect x="1585.0" y="978.9" width="386.0" height="82.1" rx="7" fill="#ffffff" stroke="#c9d1dc" stroke-width="1"/>
+<rect x="1590.0" y="986.9" width="4" height="66.1" rx="2" fill="#1e7e34"/>
+<text x="1601.0" y="1007.9" font-size="15" fill="#111827" font-weight="700">SQLite store</text>
+<text x="1601.0" y="1025.9" font-size="13" fill="#4b5563">WAL, schema migrations, VACUUM INTO backups;</text>
+<text x="1601.0" y="1041.9" font-size="13" fill="#4b5563">gateway: backup at start if &gt; 24 h old, keep 7</text>
+<rect x="1922.5" y="970.4" width="38.5" height="17" rx="8.5" fill="#1e7e34" stroke="#1e7e34" stroke-width="1"/>
+<text x="1941.7" y="982.6" font-size="10.5" fill="#ffffff" font-weight="700" text-anchor="middle" letter-spacing="0.4">LIVE</text>
+<rect x="20.0" y="1102.0" width="1228.0" height="140.0" rx="10" fill="#fbeff4" stroke="#ad1457" stroke-width="1.3"/>
+<path d="M20.0,1132.0 V1112.0 Q20.0,1102.0 30.0,1102.0 H1238.0 Q1248.0,1102.0 1248.0,1112.0 V1132.0 Z" fill="#ad1457"/>
+<text x="34.0" y="1122.5" font-size="14" fill="#ffffff" font-weight="700" letter-spacing="0.6">IMPROVEMENT LOOP</text>
+<text x="202.8" y="1122.5" font-size="12.5" fill="#ffffff" fill-opacity="0.85">measure → attribute → fix → re-gate</text>
+<rect x="29.0" y="1147.0" width="234.0" height="86.0" rx="7" fill="#ffffff" stroke="#c9d1dc" stroke-width="1"/>
+<rect x="34.0" y="1155.0" width="4" height="70.0" rx="2" fill="#1e7e34"/>
+<text x="45.0" y="1170.0" font-size="15" fill="#111827" font-weight="700">Offline eval gate</text>
+<text x="45.0" y="1188.0" font-size="13" fill="#4b5563">142 checks; ground-truth benches:</text>
+<text x="45.0" y="1204.0" font-size="13" fill="#4b5563">intent, verdicts (held-out); number</text>
+<text x="45.0" y="1220.0" font-size="13" fill="#4b5563">provenance, tender response (dev)</text>
+<rect x="214.5" y="1138.5" width="38.5" height="17" rx="8.5" fill="#1e7e34" stroke="#1e7e34" stroke-width="1"/>
+<text x="233.7" y="1150.7" font-size="10.5" fill="#ffffff" font-weight="700" text-anchor="middle" letter-spacing="0.4">LIVE</text>
+<rect x="273.0" y="1147.0" width="234.0" height="86.0" rx="7" fill="#ffffff" stroke="#c9d1dc" stroke-width="1"/>
+<rect x="278.0" y="1155.0" width="4" height="70.0" rx="2" fill="#1e7e34"/>
+<text x="289.0" y="1170.0" font-size="15" fill="#111827" font-weight="700">Manual attribution</text>
+<text x="289.0" y="1188.0" font-size="13" fill="#4b5563">ablation benches (--variant);</text>
+<text x="289.0" y="1204.0" font-size="13" fill="#4b5563">structured tool error codes;</text>
+<text x="289.0" y="1220.0" font-size="13" fill="#4b5563">fixes land as PR + bench</text>
+<rect x="458.5" y="1138.5" width="38.5" height="17" rx="8.5" fill="#1e7e34" stroke="#1e7e34" stroke-width="1"/>
+<text x="477.7" y="1150.7" font-size="10.5" fill="#ffffff" font-weight="700" text-anchor="middle" letter-spacing="0.4">LIVE</text>
+<rect x="517.0" y="1147.0" width="234.0" height="86.0" rx="7" fill="#ffffff" stroke="#c9d1dc" stroke-width="1"/>
+<rect x="522.0" y="1155.0" width="4" height="70.0" rx="2" fill="#1e7e34"/>
+<text x="533.0" y="1178.0" font-size="15" fill="#111827" font-weight="700">Trace store</text>
+<text x="533.0" y="1196.0" font-size="13" fill="#4b5563">packing SQLite trace, exportable;</text>
+<text x="533.0" y="1212.0" font-size="13" fill="#4b5563">per-run snapshot</text>
+<rect x="702.5" y="1138.5" width="38.5" height="17" rx="8.5" fill="#1e7e34" stroke="#1e7e34" stroke-width="1"/>
+<text x="721.7" y="1150.7" font-size="10.5" fill="#ffffff" font-weight="700" text-anchor="middle" letter-spacing="0.4">LIVE</text>
+<rect x="761.0" y="1147.0" width="234.0" height="86.0" rx="7" fill="#ffffff" stroke="#c9d1dc" stroke-width="1"/>
+<rect x="766.0" y="1155.0" width="4" height="70.0" rx="2" fill="#00838f"/>
+<text x="777.0" y="1170.0" font-size="15" fill="#111827" font-weight="700">OTel spans</text>
+<text x="777.0" y="1188.0" font-size="13" fill="#4b5563">PACKING_OTEL=1 + extra install;</text>
+<text x="777.0" y="1204.0" font-size="13" fill="#4b5563">3 span sites; not installed</text>
+<text x="777.0" y="1220.0" font-size="13" fill="#4b5563">by default</text>
+<rect x="932.6" y="1138.5" width="52.4" height="17" rx="8.5" fill="#00838f" stroke="#00838f" stroke-width="1"/>
+<text x="958.8" y="1150.7" font-size="10.5" fill="#ffffff" font-weight="700" text-anchor="middle" letter-spacing="0.4">OPT-IN</text>
+<rect x="1005.0" y="1147.0" width="234.0" height="86.0" rx="7" fill="#ffffff" stroke="#c9d1dc" stroke-width="1"/>
+<rect x="1010.0" y="1155.0" width="4" height="70.0" rx="2" fill="#6b7280"/>
+<text x="1021.0" y="1178.0" font-size="15" fill="#111827" font-weight="700">Judge and auto-attribution</text>
+<text x="1021.0" y="1196.0" font-size="13" fill="#4b5563">LLM-as-judge on real model runs;</text>
+<text x="1021.0" y="1212.0" font-size="13" fill="#4b5563">automatic failure classes</text>
+<rect x="1158.4" y="1138.5" width="70.6" height="17" rx="8.5" fill="#6b7280" stroke="#6b7280" stroke-width="1"/>
+<text x="1193.7" y="1150.7" font-size="10.5" fill="#ffffff" font-weight="700" text-anchor="middle" letter-spacing="0.4">ROADMAP</text>
+<rect x="1262.0" y="1102.0" width="718.0" height="140.0" rx="10" fill="#f5f5f5" stroke="#757575" stroke-width="1.3"/>
+<path d="M1262.0,1132.0 V1112.0 Q1262.0,1102.0 1272.0,1102.0 H1970.0 Q1980.0,1102.0 1980.0,1112.0 V1132.0 Z" fill="#757575"/>
+<text x="1276.0" y="1122.5" font-size="14" fill="#ffffff" font-weight="700" letter-spacing="0.6">NOT NEEDED AT ONE-COMPANY SCALE</text>
+<rect x="1881.6" y="1108.5" width="86.4" height="17" rx="8.5" fill="#ffffff" stroke="#9ca3af" stroke-width="1" stroke-dasharray="3 2"/>
+<text x="1924.8" y="1120.7" font-size="10.5" fill="#6b7280" font-weight="700" text-anchor="middle" letter-spacing="0.4">NOT NEEDED</text>
+<circle cx="1281.0" cy="1147.5" r="2.6" fill="#9ca3af"/>
+<text x="1290.0" y="1152.0" font-size="13" fill="#374151">microVM / browser sandbox fleets</text>
+<circle cx="1511.0" cy="1147.5" r="2.6" fill="#9ca3af"/>
+<text x="1520.0" y="1152.0" font-size="13" fill="#374151">Kubernetes orchestration</text>
+<circle cx="1741.0" cy="1147.5" r="2.6" fill="#9ca3af"/>
+<text x="1750.0" y="1152.0" font-size="13" fill="#374151">GPU / NPU clusters</text>
+<circle cx="1281.0" cy="1165.5" r="2.6" fill="#9ca3af"/>
+<text x="1290.0" y="1170.0" font-size="13" fill="#374151">Lakehouse analytics</text>
+<circle cx="1511.0" cy="1165.5" r="2.6" fill="#9ca3af"/>
+<text x="1520.0" y="1170.0" font-size="13" fill="#374151">A2A federation (outbound)</text>
+<circle cx="1741.0" cy="1165.5" r="2.6" fill="#9ca3af"/>
+<text x="1750.0" y="1170.0" font-size="13" fill="#374151">Tenant isolation and billing</text>
+<circle cx="1281.0" cy="1183.5" r="2.6" fill="#9ca3af"/>
+<text x="1290.0" y="1188.0" font-size="13" fill="#374151">IdP delegation tokens</text>
+<circle cx="1511.0" cy="1183.5" r="2.6" fill="#9ca3af"/>
+<text x="1520.0" y="1188.0" font-size="13" fill="#374151">Batch inference API</text>
+<circle cx="1741.0" cy="1183.5" r="2.6" fill="#9ca3af"/>
+<text x="1750.0" y="1188.0" font-size="13" fill="#374151">Self-trained models</text>
+<text x="1278.0" y="1210.0" font-size="12.5" fill="#4b5563" font-style="italic">Why: one company on one server; the product never runs model-written code; the model is a</text>
+<text x="1278.0" y="1227.0" font-size="12.5" fill="#4b5563" font-style="italic">hosted endpoint or one Ollama machine; other agents come in over MCP, none are called out.</text>
+<rect x="20.0" y="1254.0" width="1960.0" height="170.0" rx="10" fill="#f3f5f7" stroke="#263238" stroke-width="1.3"/>
+<path d="M20.0,1284.0 V1264.0 Q20.0,1254.0 30.0,1254.0 H1970.0 Q1980.0,1254.0 1980.0,1264.0 V1284.0 Z" fill="#263238"/>
+<text x="34.0" y="1274.5" font-size="14" fill="#ffffff" font-weight="700" letter-spacing="0.6">SIX RULES — WHERE CIVIL-BUDDY STANDS</text>
+<text x="1966.0" y="1274.5" font-size="12.5" fill="#ffffff" text-anchor="end" fill-opacity="0.85">status at d3ada11 (main), 2026-09-26</text>
+<rect x="29.0" y="1299.0" width="315.3" height="116.0" rx="7" fill="#ffffff" stroke="#c9d1dc" stroke-width="1"/>
+<rect x="34.0" y="1307.0" width="4" height="100.0" rx="2" fill="#1e7e34"/>
+<rect x="263.7" y="1290.5" width="70.6" height="17" rx="8.5" fill="#6b7280" stroke="#6b7280" stroke-width="1"/>
+<text x="299.0" y="1302.7" font-size="10.5" fill="#ffffff" font-weight="700" text-anchor="middle" letter-spacing="0.4">ROADMAP</text>
+<rect x="220.1" y="1290.5" width="38.5" height="17" rx="8.5" fill="#1e7e34" stroke="#1e7e34" stroke-width="1"/>
+<text x="239.4" y="1302.7" font-size="10.5" fill="#ffffff" font-weight="700" text-anchor="middle" letter-spacing="0.4">LIVE</text>
+<circle cx="54.0" cy="1316.0" r="10" fill="#263238"/>
+<text x="54.0" y="1320.4" font-size="13" fill="#ffffff" font-weight="700" text-anchor="middle">1</text>
+<text x="70.0" y="1321.0" font-size="14.5" fill="#111827" font-weight="700">One way in, one way out</text>
+<text x="45.0" y="1338.0" font-size="12.5" fill="#1e7e34" font-weight="700">Holds for registered tools (default path,</text>
+<text x="45.0" y="1354.0" font-size="12.5" fill="#1e7e34" font-weight="700">MCP, gateway tool route)</text>
+<text x="45.0" y="1371.0" font-size="12.5" fill="#4b5563">admit (contract + policy) first; gateway packing</text>
+<text x="45.0" y="1387.0" font-size="12.5" fill="#4b5563">routes check paths themselves; not the Rust</text>
+<text x="45.0" y="1403.0" font-size="12.5" fill="#4b5563">civil-mcp; 4 model clients, no single egress yet</text>
+<rect x="354.3" y="1299.0" width="315.3" height="116.0" rx="7" fill="#ffffff" stroke="#c9d1dc" stroke-width="1"/>
+<rect x="359.3" y="1307.0" width="4" height="100.0" rx="2" fill="#1e7e34"/>
+<rect x="621.1" y="1290.5" width="38.5" height="17" rx="8.5" fill="#1e7e34" stroke="#1e7e34" stroke-width="1"/>
+<text x="640.4" y="1302.7" font-size="10.5" fill="#ffffff" font-weight="700" text-anchor="middle" letter-spacing="0.4">LIVE</text>
+<circle cx="379.3" cy="1316.0" r="10" fill="#263238"/>
+<text x="379.3" y="1320.4" font-size="13" fill="#ffffff" font-weight="700" text-anchor="middle">2</text>
+<text x="395.3" y="1321.0" font-size="14.5" fill="#111827" font-weight="700">Decide apart from execute</text>
+<text x="370.3" y="1338.0" font-size="12.5" fill="#1e7e34" font-weight="700">Holds on default path, MCP and HTTP</text>
+<text x="370.3" y="1355.0" font-size="12.5" fill="#4b5563">decide_gate is code; only the typed sentence</text>
+<text x="370.3" y="1371.0" font-size="12.5" fill="#4b5563">approves, for one turn; model text never reaches</text>
+<text x="370.3" y="1387.0" font-size="12.5" fill="#4b5563">a deliverable; Rust civil-mcp and Rust workbench</text>
+<text x="370.3" y="1403.0" font-size="12.5" fill="#4b5563">still take a flag</text>
+<rect x="679.7" y="1299.0" width="315.3" height="116.0" rx="7" fill="#ffffff" stroke="#c9d1dc" stroke-width="1"/>
+<rect x="684.7" y="1307.0" width="4" height="100.0" rx="2" fill="#1e7e34"/>
+<rect x="914.4" y="1290.5" width="70.6" height="17" rx="8.5" fill="#6b7280" stroke="#6b7280" stroke-width="1"/>
+<text x="949.7" y="1302.7" font-size="10.5" fill="#ffffff" font-weight="700" text-anchor="middle" letter-spacing="0.4">ROADMAP</text>
+<rect x="870.8" y="1290.5" width="38.5" height="17" rx="8.5" fill="#1e7e34" stroke="#1e7e34" stroke-width="1"/>
+<text x="890.1" y="1302.7" font-size="10.5" fill="#ffffff" font-weight="700" text-anchor="middle" letter-spacing="0.4">LIVE</text>
+<circle cx="704.7" cy="1316.0" r="10" fill="#263238"/>
+<text x="704.7" y="1320.4" font-size="13" fill="#ffffff" font-weight="700" text-anchor="middle">3</text>
+<text x="720.7" y="1321.0" font-size="14.5" fill="#111827" font-weight="700">Everything registered and versioned</text>
+<text x="695.7" y="1338.0" font-size="12.5" fill="#1e7e34" font-weight="700">Registration holds; versioning planned</text>
+<text x="695.7" y="1355.0" font-size="12.5" fill="#4b5563">unknown tools refused; plugins pinned by SHA-256;</text>
+<text x="695.7" y="1371.0" font-size="12.5" fill="#4b5563">prompts, skills, policy in git behind 142 checks;</text>
+<text x="695.7" y="1387.0" font-size="12.5" fill="#4b5563">no per-tool version, no model name in run records</text>
+<rect x="1005.0" y="1299.0" width="315.3" height="116.0" rx="7" fill="#ffffff" stroke="#c9d1dc" stroke-width="1"/>
+<rect x="1010.0" y="1307.0" width="4" height="100.0" rx="2" fill="#f5a623"/>
+<rect x="1214.2" y="1290.5" width="96.2" height="17" rx="8.5" fill="#f5a623" stroke="#f5a623" stroke-width="1"/>
+<text x="1262.2" y="1302.7" font-size="10.5" fill="#3a2500" font-weight="700" text-anchor="middle" letter-spacing="0.4">BEFORE DEMO</text>
+<circle cx="1030.0" cy="1316.0" r="10" fill="#263238"/>
+<text x="1030.0" y="1320.4" font-size="13" fill="#ffffff" font-weight="700" text-anchor="middle">4</text>
+<text x="1046.0" y="1321.0" font-size="14.5" fill="#111827" font-weight="700">Two identities, least privilege</text>
+<text x="1021.0" y="1338.0" font-size="12.5" fill="#9a5b00" font-weight="700">Planned: accounts and roles before the demo</text>
+<text x="1021.0" y="1355.0" font-size="12.5" fill="#4b5563">per-post least privilege: cross-post refused;</text>
+<text x="1021.0" y="1371.0" font-size="12.5" fill="#4b5563">no user identity yet: caller declares the post;</text>
+<text x="1021.0" y="1387.0" font-size="12.5" fill="#4b5563">sign-off operator fixed as 'local user'</text>
+<rect x="1330.3" y="1299.0" width="315.3" height="116.0" rx="7" fill="#ffffff" stroke="#c9d1dc" stroke-width="1"/>
+<rect x="1335.3" y="1307.0" width="4" height="100.0" rx="2" fill="#00838f"/>
+<rect x="1565.0" y="1290.5" width="70.6" height="17" rx="8.5" fill="#6b7280" stroke="#6b7280" stroke-width="1"/>
+<text x="1600.3" y="1302.7" font-size="10.5" fill="#ffffff" font-weight="700" text-anchor="middle" letter-spacing="0.4">ROADMAP</text>
+<rect x="1507.6" y="1290.5" width="52.4" height="17" rx="8.5" fill="#00838f" stroke="#00838f" stroke-width="1"/>
+<text x="1533.8" y="1302.7" font-size="10.5" fill="#ffffff" font-weight="700" text-anchor="middle" letter-spacing="0.4">OPT-IN</text>
+<circle cx="1355.3" cy="1316.0" r="10" fill="#263238"/>
+<text x="1355.3" y="1320.4" font-size="13" fill="#ffffff" font-weight="700" text-anchor="middle">5</text>
+<text x="1371.3" y="1321.0" font-size="14.5" fill="#111827" font-weight="700">A session is a sandbox</text>
+<text x="1346.3" y="1338.0" font-size="12.5" fill="#00707a" font-weight="700">Planned; confined worker is opt-in today</text>
+<text x="1346.3" y="1355.0" font-size="12.5" fill="#4b5563">default backend=app; worker only for CLI/desktop</text>
+<text x="1346.3" y="1371.0" font-size="12.5" fill="#4b5563">turns in a job folder; the workbench skips it;</text>
+<text x="1346.3" y="1387.0" font-size="12.5" fill="#4b5563">worker inherits the full environment, keys too</text>
+<rect x="1655.7" y="1299.0" width="315.3" height="116.0" rx="7" fill="#ffffff" stroke="#c9d1dc" stroke-width="1"/>
+<rect x="1660.7" y="1307.0" width="4" height="100.0" rx="2" fill="#6b7280"/>
+<rect x="1890.4" y="1290.5" width="70.6" height="17" rx="8.5" fill="#6b7280" stroke="#6b7280" stroke-width="1"/>
+<text x="1925.7" y="1302.7" font-size="10.5" fill="#ffffff" font-weight="700" text-anchor="middle" letter-spacing="0.4">ROADMAP</text>
+<circle cx="1680.7" cy="1316.0" r="10" fill="#263238"/>
+<text x="1680.7" y="1320.4" font-size="13" fill="#ffffff" font-weight="700" text-anchor="middle">6</text>
+<text x="1696.7" y="1321.0" font-size="14.5" fill="#111827" font-weight="700">Telemetry and cost built in</text>
+<text x="1671.7" y="1338.0" font-size="12.5" fill="#4b5563" font-weight="700">Planned</text>
+<text x="1671.7" y="1355.0" font-size="12.5" fill="#4b5563">per-turn caps; model and tool call counts recorded;</text>
+<text x="1671.7" y="1371.0" font-size="12.5" fill="#4b5563">no token or money cost yet; OTel off, not installed;</text>
+<text x="1671.7" y="1387.0" font-size="12.5" fill="#4b5563">SessionLedger fuse only in a demo script</text>
+<path d="M276.0,697.0 L290.0,697.0" fill="none" stroke="#37474f" stroke-width="2.6"/>
+<polygon points="300.0,697.0 289.0,691.0 289.0,703.0" fill="#37474f"/>
+<path d="M544.0,697.0 L558.0,697.0" fill="none" stroke="#37474f" stroke-width="2.6"/>
+<polygon points="568.0,697.0 557.0,691.0 557.0,703.0" fill="#37474f"/>
+<path d="M422.0,288.0 L422.0,312.0" fill="none" stroke="#3949ab" stroke-width="2.0" stroke-dasharray="8 6"/>
+<polygon points="422.0,322.0 416.0,311.0 428.0,311.0" fill="#3949ab"/>
+<path d="M810.0,288.0 L810.0,312.0" fill="none" stroke="#3949ab" stroke-width="2.0" stroke-dasharray="8 6"/>
+<polygon points="810.0,322.0 804.0,311.0 816.0,311.0" fill="#3949ab"/>
+<path d="M1322.0,288.0 L1322.0,312.0" fill="none" stroke="#3949ab" stroke-width="2.0" stroke-dasharray="8 6"/>
+<polygon points="1322.0,322.0 1316.0,311.0 1328.0,311.0" fill="#3949ab"/>
+<path d="M1067.0,288.0 L1067.0,690.4 L1084.0,690.4" fill="none" stroke="#3949ab" stroke-width="2.0" stroke-dasharray="8 6"/>
+<polygon points="1094.0,690.4 1083.0,684.4 1083.0,696.4" fill="#3949ab"/>
+<text x="822.0" y="309.5" font-size="12.5" fill="#3949ab" font-style="italic">policy, registry, sign-off rules, budgets</text>
+<path d="M1052.0,477.2 L1084.0,477.2" fill="none" stroke="#ffffff" stroke-width="9"/>
+<path d="M1052.0,477.2 L1084.0,477.2" fill="none" stroke="#37474f" stroke-width="2.6"/>
+<polygon points="1094.0,477.2 1083.0,471.2 1083.0,483.2" fill="#37474f"/>
+<path d="M1052.0,859.2 L1084.0,859.2" fill="none" stroke="#37474f" stroke-width="2.6"/>
+<polygon points="1094.0,859.2 1083.0,853.2 1083.0,865.2" fill="#37474f"/>
+<path d="M1550.0,477.2 L1564.0,477.2" fill="none" stroke="#37474f" stroke-width="2.6"/>
+<polygon points="1574.0,477.2 1563.0,471.2 1563.0,483.2" fill="#37474f"/>
+<path d="M1550.0,859.2 L1564.0,859.2" fill="none" stroke="#37474f" stroke-width="2.6"/>
+<polygon points="1574.0,859.2 1563.0,853.2 1563.0,865.2" fill="#37474f"/>
+<path d="M810.0,1072.0 L810.0,1090.0" fill="none" stroke="#37474f" stroke-width="2.6"/>
+<polygon points="810.0,1100.0 804.0,1089.0 816.0,1089.0" fill="#37474f"/>
+<text x="822.0" y="1090.5" font-size="12.5" fill="#37474f" font-style="italic">run records, traces, eval results</text>
+<path d="M31.0,1100.0 L31.0,298.0" fill="none" stroke="#3949ab" stroke-width="2.0" stroke-dasharray="8 6"/>
+<polygon points="31.0,288.0 25.0,299.0 37.0,299.0" fill="#3949ab"/>
+<text x="43.0" y="1090.5" font-size="12.5" fill="#3949ab" font-style="italic">fixes land as PR + bench, then pass the release gate</text>
+</svg>

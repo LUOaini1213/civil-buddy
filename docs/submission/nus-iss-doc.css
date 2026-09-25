@@ -1,0 +1,406 @@
+/* Print stylesheet for the two NUS-ISS PDFs: the Technical Document (docs/submission/nus-iss-technical.md,
+ * body class "doc-technical") and the Business Proposal (nus-iss-business.md, body class "doc-business flow").
+ *
+ * Built by scripts/submission/build_nus_docs.py: pandoc makes a standalone HTML page with this file
+ * embedded, headless Chrome prints it to A4 PDF, and pypdf stamps the running header and the page
+ * numbers. The stamp is done in Python because @page margin boxes (@top-left, @bottom-center ...)
+ * only print from Chrome 131 on; older Chrome ignores them.
+ *
+ * The build script wraps every [TEAM TO FILL ...] / [TEAM TO VERIFY ...] in span.placeholder, and a leading
+ * "Draft for the team" note in blockquote.draft-note; both print as a yellow, red-bordered warning.
+ */
+
+:root {
+  --ink: #1f2328;
+  --muted: #57606a;
+  --rule: #c9d1dc;
+  --rule-strong: #56606e;
+  --head: #14264a;
+  --accent: #1a56db;
+  --code-bg: #f3f5f7;
+  --group-bg: #eef2f7;
+}
+
+@page {
+  size: A4;
+  margin: 20mm;
+}
+
+/* The architecture figure gets its own landscape page so its 2000 x 1432 canvas prints as large as it can. */
+@page figure {
+  size: A4 landscape;
+  margin: 10mm 10mm 9mm;
+}
+
+html {
+  -webkit-print-color-adjust: exact;
+  print-color-adjust: exact;
+}
+
+body {
+  margin: 0;
+  background: #ffffff;
+  color: var(--ink);
+  font-family: "Segoe UI", "Helvetica Neue", Arial, "Microsoft YaHei", "PingFang SC", "Noto Sans CJK SC", sans-serif;
+  font-size: 10.5pt;
+  line-height: 1.38;
+  text-rendering: optimizeLegibility;
+}
+
+p {
+  margin: 0 0 5pt;
+  orphans: 3;
+  widows: 3;
+}
+
+/* A paragraph that is only a bold label ("Pipeline.", "Measured.") or that introduces a list stays with what
+   follows it. */
+p:has(> strong:only-child),
+p:has(+ ul),
+p:has(+ ol) {
+  break-after: avoid;
+  page-break-after: avoid;
+}
+
+a {
+  color: var(--accent);
+  text-decoration: none;
+}
+
+/* Bare URLs (references, evidence table) break anywhere rather than run off the page. */
+a.uri {
+  overflow-wrap: anywhere;
+  word-break: break-all;
+}
+
+strong {
+  font-weight: 600;
+  color: #111827;
+}
+
+/* ---------------------------------------------------------------- title block and contents */
+
+#title-block-header {
+  margin: 6mm 0 7mm;
+  padding-bottom: 6mm;
+  border-bottom: 1.5pt solid var(--head);
+}
+
+#title-block-header .title {
+  margin: 0 0 4pt;
+  font-size: 26pt;
+  line-height: 1.15;
+  color: var(--head);
+  letter-spacing: -0.2pt;
+}
+
+#title-block-header .subtitle {
+  margin: 0 0 10pt;
+  font-size: 14pt;
+  color: #334155;
+}
+
+#title-block-header .author,
+#title-block-header .date {
+  margin: 0;
+  font-size: 10.5pt;
+  color: var(--muted);
+}
+
+nav#TOC {
+  margin: 0 0 7mm;
+  padding: 5pt 0 6pt;
+  border-bottom: 0.5pt solid var(--rule);
+}
+
+nav#TOC > h2#toc-title {
+  break-before: auto;
+  margin: 0 0 4pt;
+  padding: 0;
+  border: none;
+  font-size: 12pt;
+  color: var(--head);
+}
+
+nav#TOC ul {
+  margin: 0;
+  padding-left: 0;
+  list-style: none;
+}
+
+nav#TOC > ul {
+  columns: 2;
+  column-gap: 14pt;
+  font-size: 9.3pt;
+  line-height: 1.32;
+}
+
+nav#TOC > ul > li {
+  margin: 0 0 3pt;
+  font-weight: 600;
+  break-inside: avoid;
+}
+
+nav#TOC ul ul {
+  margin: 1pt 0 0;
+  padding-left: 12pt;
+  font-weight: 400;
+}
+
+nav#TOC ul ul li {
+  margin: 0;
+}
+
+nav#TOC a {
+  color: var(--ink);
+}
+
+/* ---------------------------------------------------------------- headings */
+
+h1, h2, h3, h4 {
+  color: var(--head);
+  line-height: 1.25;
+  break-after: avoid;
+  page-break-after: avoid;
+}
+
+h2 {
+  break-before: page;
+  page-break-before: always;
+  margin: 0 0 8pt;
+  padding-bottom: 3pt;
+  border-bottom: 1pt solid var(--rule-strong);
+  font-size: 16pt;
+}
+
+/* The Business Proposal runs its sections on; only the first one starts a page, after the contents. */
+body.flow h2 {
+  break-before: auto;
+  page-break-before: auto;
+  margin-top: 16pt;
+}
+
+body.flow > h2:first-of-type {
+  break-before: page;
+  page-break-before: always;
+  margin-top: 0;
+}
+
+h3 {
+  margin: 10pt 0 4pt;
+  font-size: 12.5pt;
+}
+
+h4 {
+  margin: 10pt 0 4pt;
+  font-size: 11pt;
+}
+
+/* ---------------------------------------------------------------- lists */
+
+ul, ol {
+  margin: 0 0 6pt;
+  padding-left: 18pt;
+}
+
+li {
+  margin: 0 0 1.5pt;
+}
+
+li > p {
+  margin: 0 0 2pt;
+}
+
+/* ---------------------------------------------------------------- notes, draft box and placeholders */
+
+blockquote {
+  margin: 6pt 0 10pt;
+  padding: 5pt 9pt;
+  border-left: 3pt solid var(--rule-strong);
+  background: #f6f8fa;
+  color: #374151;
+  break-inside: avoid;
+}
+
+blockquote > p:last-child {
+  margin-bottom: 0;
+}
+
+/* Unfinished text must be impossible to miss: yellow highlight, red border, dark red bold text. */
+span.placeholder,
+blockquote.draft-note {
+  background: #ffe24d;
+  color: #7a0000;
+  border: 1pt solid #c62828;
+}
+
+span.placeholder {
+  font-weight: 700;
+  border-radius: 2pt;
+  padding: 0 2pt;
+  -webkit-box-decoration-break: clone;
+  box-decoration-break: clone;
+}
+
+blockquote.draft-note {
+  border-left-width: 4pt;
+}
+
+blockquote.draft-note strong,
+span.placeholder strong {
+  color: inherit;
+}
+
+/* ---------------------------------------------------------------- tables */
+
+table {
+  width: 100%;
+  margin: 4pt 0 10pt;
+  border-collapse: collapse;
+  border-top: 1pt solid var(--rule-strong);
+  border-bottom: 1pt solid var(--rule-strong);
+  font-size: 8.8pt;
+  line-height: 1.33;
+}
+
+table col {
+  width: auto !important;
+}
+
+thead {
+  display: table-header-group;
+}
+
+th {
+  text-align: left;
+  font-weight: 600;
+  color: #111827;
+  background: #f6f8fa;
+  border-bottom: 0.8pt solid var(--rule-strong);
+  padding: 3pt 4.5pt;
+  vertical-align: bottom;
+}
+
+td {
+  border-bottom: 0.5pt solid var(--rule);
+  padding: 2.6pt 4.5pt;
+  vertical-align: top;
+}
+
+tr {
+  break-inside: avoid;
+  page-break-inside: avoid;
+}
+
+/* Short tables (up to 8 body rows) move to the next page whole instead of leaving a few rows behind. */
+table:not(:has(tbody > tr:nth-child(9))) {
+  break-inside: avoid;
+  page-break-inside: avoid;
+}
+
+/* Region rows in the status table: a bold label in the first cell and empty cells after it. */
+tr:has(> td:first-child > strong:only-child):has(> td:nth-child(2):empty) td {
+  background: var(--group-bg);
+  border-top: 0.8pt solid var(--rule-strong);
+  padding-top: 4pt;
+  color: var(--head);
+}
+
+td code,
+th code {
+  overflow-wrap: anywhere;
+}
+
+/* ---------------------------------------------------------------- code */
+
+code {
+  font-family: Consolas, "Cascadia Mono", "Courier New", "Microsoft YaHei", monospace;
+  font-size: 0.9em;
+  background: var(--code-bg);
+  border-radius: 2pt;
+  padding: 0 1.5pt;
+}
+
+pre {
+  margin: 4pt 0 10pt;
+  padding: 6pt 8pt;
+  background: #f6f8fa;
+  border: 0.5pt solid var(--rule);
+  border-radius: 3pt;
+  font-size: 8.4pt;
+  line-height: 1.4;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  break-inside: avoid;
+}
+
+pre code {
+  font-size: inherit;
+  background: none;
+  padding: 0;
+}
+
+/* Status tags (LIVE, OPT-IN ...) are marked up by the build script with the diagram's colours. */
+code.tag {
+  display: inline-block;
+  padding: 0 4pt;
+  border-radius: 6pt;
+  font-family: "Segoe UI", Arial, sans-serif;
+  font-size: 7.4pt;
+  font-weight: 700;
+  line-height: 1.5;
+  letter-spacing: 0.2pt;
+  white-space: nowrap;
+  color: #ffffff;
+  overflow-wrap: normal;
+}
+
+code.tag-live { background: #1e7e34; }
+code.tag-opt-in { background: #00838f; }
+code.tag-before-demo { background: #f5a623; color: #3a2500; }
+code.tag-roadmap { background: #6b7280; }
+code.tag-not-needed { background: #ffffff; color: #4b5563; border: 0.6pt dashed #6b7280; }
+
+/* ---------------------------------------------------------------- the architecture figure */
+
+img {
+  max-width: 100%;
+}
+
+p.figure-image,
+p:has(> img[src^="data:image/svg+xml"]) {
+  page: figure;
+  break-before: page;
+  margin: 0;
+  text-align: center;
+  line-height: 0;
+}
+
+p.figure-image img,
+p:has(> img[src^="data:image/svg+xml"]) img {
+  width: 100%;
+  height: auto;
+  max-height: 183mm;
+  object-fit: contain;
+}
+
+p.figure-caption,
+p:has(> img[src^="data:image/svg+xml"]) + p {
+  page: figure;
+  margin: 2pt 0 0;
+  text-align: center;
+  font-size: 8.5pt;
+  color: var(--muted);
+}
+
+@media screen {
+  body {
+    max-width: 180mm;
+    margin: 0 auto;
+    padding: 12mm 16px;
+  }
+  p.figure-image,
+  p:has(> img[src^="data:image/svg+xml"]) {
+    max-width: none;
+  }
+}
