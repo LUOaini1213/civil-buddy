@@ -48,8 +48,8 @@ PILOTS: dict[str, dict] = {
         "exclusive": "bid-parse__extract",
         "g3_args": {"text": "某学校教学楼项目施工总承包招标，总承包一级资质，工期540天。"},
         "kb_queries": ["招标解析", "评分点"],
-        "required_bars": ["评分点", "资质", "工期", "必须编制的专项"],
-        "bars_trace": "评分点→评分点表 / 资质→投标人资格 / 工期→时间轴 / 专项→必须编制的专项 / 危大",
+        "required_bars": ["评分点", "资质", "工期", "专项触发"],
+        "bars_trace": "评分点→评分点表 / 资质→投标人资格 / 工期→时间轴 / 专项触发→必须编制的专项 / 危大（SKILL.md 第 7 节）",
     },
     "bid-compliance": {
         "category": "bid",

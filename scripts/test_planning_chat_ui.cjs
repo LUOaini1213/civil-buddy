@@ -6,13 +6,18 @@ const { test } = require('node:test');
 const fs = require('node:fs');
 const path = require('node:path');
 const vm = require('node:vm');
-const source = fs.readFileSync(path.join(__dirname, '../demo/static/app.js'), 'utf8');
+// The whole page, as in test_chat_stream.cjs: app.js and the modules it imports run as classic scripts, without boot().
+const read = file => fs.readFileSync(path.join(__dirname, '../demo/static', file), 'utf8');
+const classic = src => src.replace(/^export /mg, '').replace(/^import .*$/mg, '');
+const app = read('app.js'), modules = [...app.matchAll(/^import .* from "\.\/(modules\/[\w-]+\.js)";$/mg)].map(m => m[1]);
+assert.ok(modules.includes('modules/session-nav.js') && modules.includes('modules/turn-stream.js'), modules.join());
+const page = [...modules.map(read), app.replace(/^boot\(\);\s*$/m, '')].map(classic);
 const plan = 'a'.repeat(32), cad = 'b'.repeat(32);
 
 function harness(url = 'http://localhost/') {
   const elements = new Map(), storage = new Map([['cb_active_session_v1', 'saved-session']]);
   class Element {
-    constructor(tag) { this.tagName = tag; this.children = []; this.listeners = {}; }
+    constructor(tag) { this.tagName = tag; this.children = []; this.listeners = {}; this.dataset = {}; this.style = {}; }
     set id(value) { this._id = value; elements.set(value, this); }
     get id() { return this._id; }
     prepend(child) { this.children.unshift(child); child.parentElement = this; }
@@ -20,27 +25,26 @@ function harness(url = 'http://localhost/') {
     replaceChildren() { this.children = []; }
     addEventListener(type, callback) { this.listeners[type] = callback; }
     remove() { elements.delete(this.id); if (this.parentElement) this.parentElement.children = this.parentElement.children.filter(x => x !== this); }
+    getAttribute() { return null; }
+    hasAttribute() { return false; }
   }
   const composer = new Element('div'), input = new Element('textarea');
-  input.id = 'input'; input.parentElement = composer;
+  input.id = 'input'; input.parentElement = composer; new Element('form').id = 'form';
   const requests = [], statuses = [];
   const context = vm.createContext({
-    URL, console, location: { href: url }, document: { getElementById: id => elements.get(id), createElement: tag => new Element(tag) },
+    URL, console, AbortController, location: { href: url }, window: {}, navigator: {}, getComputedStyle: () => ({}),
+    document: { getElementById: id => elements.get(id), createElement: tag => new Element(tag), addEventListener() {},
+      querySelector: () => null, querySelectorAll: () => [], body: new Element('body'), documentElement: new Element('html') },
     crypto: { randomUUID: () => 'offline-session-id' },
     localStorage: { getItem: key => storage.get(key), setItem: (k,v) => storage.set(k,v), removeItem: key => storage.delete(key) },
     history: { replaceState: (_a,_b,href) => { context.location.href = String(href); } },
     fetch: async (url, options) => { requests.push({url, body: JSON.parse(options.body)}); return {ok:false, status:409}; },
-    apiError: async () => 'offline request captured', addStatus: text => statuses.push(text),
-    cbProj: {cur:'ordinary-project'}, cbConfirmed: () => false, cbClearServerHitl: () => {}, cbCapability: () => true,
   });
-  vm.runInContext(source.slice(0, source.indexOf('async function cbResumeSession')), context);
-  return {context, elements, requests, statuses, storage, state:vm.runInContext('state',context), composer};
-}
-
-function loadBetween(context, start, next) {
-  const begin = source.indexOf(start), end = source.indexOf(next, begin + start.length);
-  assert.ok(begin >= 0 && end > begin, start);
-  vm.runInContext(source.slice(begin, end), context);
+  for (const code of page) vm.runInContext(code, context);
+  Object.assign(context, { apiError: async () => 'offline request captured', addStatus: text => statuses.push(text) });
+  const proj = vm.runInContext('cbProj', context);
+  proj.cur = 'ordinary-project';
+  return {context, elements, requests, statuses, storage, state:vm.runInContext('state',context), proj, composer};
 }
 
 test('explicit planning URL binds and bypasses unrelated remembered session', () => {
@@ -74,10 +78,8 @@ test('boot never restores the old session over an explicit planning URL', async 
     for (const name of ['cbApplyHealth','paintContext','reloadCatalog','loadJobRoot','loadPolicy','loadThreads']) h.context[name]=async()=>{};
     h.context.estimateLocalContext=()=>({}); h.context.cbPackTrialFrom=()=>false;
     h.context.cbEmptyDownShow=error=>{throw error;};
-    h.context.cbProj.sessions=[{session_id:'saved-session'}];
+    h.proj.sessions=[{session_id:'saved-session'}];
     h.context.cbProjOpenSession=async()=>{restored++;h.state.planningProjectId='';h.state.session='saved-session';};
-    loadBetween(h.context, 'async function cbResumeSession(', '\nfunction cbConfirmed(');
-    loadBetween(h.context, 'async function boot()', '\nasync function loadPolicy(');
     assert.equal(await h.context.boot(), true);
     assert.equal(restored, explicit ? 0 : 1);
     assert.equal(h.state.planningProjectId, explicit ? plan : '');
@@ -102,8 +104,6 @@ test('restoring a planning session replaces CAD binding and can later clear it',
 
 test('foreground and background chat send the selected planning ID separately from workspace project', async () => {
   const h = harness('http://localhost/?planning_project_id='+plan);
-  loadBetween(h.context, 'async function streamChat(', '\n/* 一轮回答在页面上的状态');
-  loadBetween(h.context, 'async function cbRunBackground(', '\nasync function handleSlash(');
   h.state.history = [{role:'user',content:'当前消息'}];
   await assert.rejects(h.context.streamChat('检查计划', null, {controller:{signal:undefined}}), /offline request captured/);
   await h.context.cbRunBackground('检查计划');
@@ -121,7 +121,6 @@ test('new local conversation clears planning binding and its URL before the next
   const h = harness('http://localhost/?planning_project_id='+plan);
   for (const name of ['cbDetachActiveRun','cbUploadAbortAll','cbAttachRender','cbDraftRestore','cbContextReset','renderSummon','cbResetToEmpty','paintContext']) h.context[name]=()=>{};
   h.context.estimateLocalContext=()=>({});
-  loadBetween(h.context, 'function cbNewLocalSession()', '\nfunction cbContextReset(');
   h.context.cbPlanningProjectRender();
   h.context.cbNewLocalSession();
   assert.equal(h.state.planningProjectId, '');
@@ -159,8 +158,6 @@ test('logistics binds exclusively, restores and clears without borrowing another
 test('logistics selection reaches foreground and background requests', async () => {
   const logistics = 'c'.repeat(32);
   const h = harness('http://localhost/?logistics_project_id='+logistics);
-  loadBetween(h.context, 'async function streamChat(', '\n/* 一轮回答在页面上的状态');
-  loadBetween(h.context, 'async function cbRunBackground(', '\nasync function handleSlash(');
   h.state.history=[{role:'user',content:'检查箱单'}];
   await assert.rejects(h.context.streamChat('检查箱单',null,{controller:{signal:undefined}}), /offline request captured/);
   await h.context.cbRunBackground('检查箱单');
