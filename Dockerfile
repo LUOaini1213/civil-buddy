@@ -7,22 +7,19 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
     PACKING_OUTPUT_DIR=/app/output \
     PACKING_TRACE_DIR=/app/output/traces \
     PACKING_SKIP_SKJOLBER=1 \
+    CB_DB_PATH=/app/output/db/civilbuddy.db \
     PORT=8000
 
 COPY requirements.txt ./
 RUN pip install --no-cache-dir -r requirements.txt \
     && pip install --no-cache-dir fastapi "uvicorn[standard]" python-dotenv openpyxl python-multipart
 
-COPY packing_assistant ./packing_assistant
-COPY gateway ./gateway
-COPY frontend ./frontend
-COPY knowledge ./knowledge
-COPY knowledge_base ./knowledge_base
-COPY scripts ./scripts
-COPY docs ./docs
-COPY README.md ./
+# Everything the gateway reads at startup and per request (contract/, workbench/seed.json,
+# demo/kb, knowledge_base/, examples/ ...). .dockerignore keeps out .git, venvs, output/,
+# databases, .env*, *.local.json, keys and build dirs.
+COPY . .
 
-RUN mkdir -p /app/output/runs /app/output/traces
+RUN mkdir -p /app/output/runs /app/output/traces /app/output/db
 
 EXPOSE 8000
 # Cloud platforms inject $PORT — bind 0.0.0.0 so public URL works; without CIVIL_TOKEN the gateway refuses to start

@@ -15,6 +15,9 @@ services:
       - PACKING_LANGFUSE=${PACKING_LANGFUSE:-0}
       - PACKING_OUTPUT_DIR=/app/output
       - PACKING_TRACE_DIR=/app/output/traces
+      # SQLite (sessions, runs, audit, LangGraph checkpoints) lives in the volume, so a rebuild
+      # or `docker compose down` keeps it; only `docker compose down -v` deletes it.
+      - CB_DB_PATH=/app/output/db/civilbuddy.db
     volumes:
       - packing_output:/app/output
     healthcheck:
