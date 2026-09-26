@@ -261,6 +261,24 @@ class Link(unittest.TestCase):
         self.assertNotIn("Delivery packing was **not run**", book)
         self.assertTrue(out["submit_blocked"])
 
+    def test_the_english_bidbook_reads_in_english_and_says_it_is_synthetic(self):
+        book = self.link()["bidbook_markdown"]
+        lines = book.splitlines()
+        self.assertEqual([line for line in lines if re.search(r"[㐀-鿿]", line)], [])      # no Chinese row left
+        self.assertEqual(lines[0], "# Contractor's Proposal (Draft) — SYNTHETIC EXAMPLE - Facade Works Subcontract for "
+                                   "Synthetic Office Tower")                                     # not "INVITATION TO TENDER"
+        self.assertIn("> **SYNTHETIC.** The tender this draft answers is marked SYNTHETIC", book)
+        for raw in ("can_fit =", "n0 =", "N0", "mid50", "type_source", "clause_names", "readiness:", "human_required"):
+            self.assertNotIn(raw, book)
+        self.assertIn("| Specialist method statement named in the tender |", book)
+        self.assertIn("pending detailed design", book)
+        self.assertIn("lower bound 6; 24 pieces; 10,800 kg net", book)
+        self.assertEqual((book.count("[TO FILL]"), book.count("S$ [TO FILL]")), (50, 12))       # qualifications and price
+        from packing_assistant.bidbook.sg_facade import build_sg_facade_bidbook
+        real = build_sg_facade_bidbook(tender_text="# INVITATION TO TENDER\n# Facade Works for Harbour Tower\n")
+        self.assertNotIn("SYNTHETIC", real["markdown"])                    # the banner follows the tender, not the demo
+        self.assertEqual((real["project_title"], real["synthetic"]), ("Facade Works for Harbour Tower", False))
+
     # stay linked -----------------------------------------------------------------------------------------------
     def test_changed_panel_list_names_the_stale_statements(self):
         first = self.link()

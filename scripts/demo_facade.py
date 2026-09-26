@@ -137,7 +137,7 @@ class Demo:
             return (f"heaviest container {f.get('max_gross_kg'):,} kg gross ({f.get('max_cargo_kg'):,} cargo + {f.get('container_tare_kg'):,} tare)"
                     f" vs limit {f.get('limit_kg'):,.0f} kg" + (f", margin {f.get('margin_kg'):,}" if f.get("margin_kg") is not None else ""))
         if kind == "crate_structure":
-            return f"{f.get('pending_design')} of {f.get('n_boxes')} crates pending detailed design (待详设)"
+            return f"{f.get('pending_design')} of {f.get('n_boxes')} crates pending detailed design"
         return f"not modelled -> {statement.get('owner')}"
 
     def link_turn(self, text: str, label: str) -> Dict[str, Any]:
@@ -258,7 +258,7 @@ class Demo:
             self.say(f"    conservation (list -> crates): pieces {cons.get('pieces_in')} -> {cons.get('pieces_out')} · "
                      f"kg {cons.get('kg_in')} -> {cons.get('kg_out')} · {'ok' if cons.get('ok') else 'FAILED'}")
             self.say(f"    crate structure: pass {structure.get('pass')} · reinforce {structure.get('needs_reinforcement')} · fail "
-                     f"{structure.get('fail')} · 待详设 {structure.get('pending_design')} (the engine does not invent a pass)")
+                     f"{structure.get('fail')} · pending detailed design {structure.get('pending_design')} (the engine does not invent a pass)")
             plans[name] = plan
         control = self.without_notes(self.job / "inputs" / "facade_panels.xlsx")
         out = self.turn("packing", f"按 {control.name} 装柜，柜型 40HQ", "pack-ship", session=SESSION + "-control")

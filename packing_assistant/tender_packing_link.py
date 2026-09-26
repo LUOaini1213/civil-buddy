@@ -309,7 +309,7 @@ def build_checks(clauses: Sequence[Dict[str, Any]], decision: Dict[str, Any], pl
     per = (plan or {}).get("per_container") or []
     placed = sum(int(item.get("boxes") or 0) for item in per)
     no_fit_why = (f"the loading plan does not fit: {len(per)} x {ctype} containers hold {placed} of the {plan.get('n_boxes')} "
-                  f"crates (tool lower bound N0 = {plan.get('n0')}, binding constraint {plan.get('binding_constraint')})"
+                  f"crates (the planner's lower bound is {plan.get('n0')}, binding constraint {plan.get('binding_constraint')})"
                   if solved and not fits else "")
     if decision.get("source") == "request" and decision.get("type"):
         type_source = "the request"
@@ -374,7 +374,7 @@ def build_checks(clauses: Sequence[Dict[str, Any]], decision: Dict[str, Any], pl
             checks.append(_check("containers_used", count_clause, "gap", text, figures, "the plan does not fit", True))
         else:
             text = (f"{where}he loading plan places the {cons.get('pieces_in')} items ({_kg(cons.get('kg_in'))} kg net) of panel list "
-                    f"{panel_list} in {n} x {ctype} containers (tool lower bound N0 = {n0}); every piece and kilogram on the list is "
+                    f"{panel_list} in {n} x {ctype} containers (the planner's lower bound is {n0}); every piece and kilogram on the list is "
                     f"in a crate (conservation check {cons.get('pieces_in')} -> {cons.get('pieces_out')} pieces).")
             status, note, placeholder = "covered", "count from the loading plan", False
             if decision.get("type") and ctype != decision["type"]:
@@ -458,9 +458,10 @@ def build_checks(clauses: Sequence[Dict[str, Any]], decision: Dict[str, Any], pl
         terms = ", ".join(clause.get("securing_terms") or [])
         figures = {"mid50": (plan or {}).get("mid50") if solved else None}
         checks.append(_check("securing", clause, "human_required",
-                             _placeholder("a competent person", f"cargo securing / lashing ({terms}) to Clause {clause['clause']}. "
+                             _placeholder("a competent person", f"cargo securing / lashing to Clause {clause['clause']}"
+                                                                 + (f" (the clause's terms: {terms})" if terms else "") + ". "
                                                                  "Not modelled by the planner: the lashing plan is designed and signed "
-                                                                 "separately (the plan's mid50 is the centre of gravity only)"),
+                                                                 "separately (the plan gives the centre of gravity only)"),
                              figures, "not modelled", True))
     for clause in handling:
         words = ", ".join(clause.get("unmodelled") or [])
@@ -502,7 +503,7 @@ def build_checks(clauses: Sequence[Dict[str, Any]], decision: Dict[str, Any], pl
         else:
             checks.append(_check("crate_structure", crate_clause, "human_required",
                                  _placeholder("the packing designer", f"crate structure - of {st.get('n_boxes')} crates, "
-                                              f"{st.get('pending_design')} are pending detailed design (待详设), "
+                                              f"{st.get('pending_design')} are pending detailed design, "
                                               f"{st.get('needs_reinforcement')} need reinforcement, {st.get('fail')} fail"),
                                  figures, "detailed design", True))
     order = {kind: i for i, kind in enumerate(KINDS)}
@@ -607,13 +608,42 @@ def _cell(value: Any) -> str:
     return str(value if value is not None else "—").replace("|", "/").replace("\n", " ")
 
 
+# How a plan figure reads in the bid-book and the report: words, not the record's keys (the keys stay in the JSON).
+_FIGURE_LABEL = {
+    "clause_names": "clause names {}", "plan_container_type": "plan made in {}", "type_source": "type from {}",
+    "source": "type source: {}", "containers_used": "{} containers used", "container_type": "type {}",
+    "n0": "lower bound {}", "pieces": "{} pieces", "cargo_net_kg": "{} kg net", "panel_list": "panel list {}",
+    "crates": "{} crates", "limit_kg": "limit {} kg", "limit_basis": "limit on {} mass",
+    "heaviest_container_no": "heaviest is container {}", "max_cargo_kg": "{} kg cargo", "container_tare_kg": "{} kg tare",
+    "max_gross_kg": "{} kg gross", "containers": "of {} containers", "margin_kg": "{} kg margin",
+    "mid50": "CTU mid-length mass share {}", "asks_for": "the clause asks for {}", "n_boxes": "{} crates checked",
+    "pass": "{} pass", "needs_reinforcement": "{} need reinforcement", "fail": "{} fail",
+    "pending_design": "{} pending detailed design", "rows_per_container": "rows by container: {}",
+}
+
+
+def _figure_value(key: str, value: Any) -> str:
+    if key == "can_fit":
+        return "all crates placed" if value is True else "NOT all crates placed"
+    if key == "mid50" and isinstance(value, (int, float)) and not isinstance(value, bool) and value <= 1:
+        return f"{value * 100:.0f}%"
+    return str(_kg(value) if isinstance(value, (int, float)) and not isinstance(value, bool) else value)
+
+
 def _figure_text(figures: Dict[str, Any]) -> str:
-    return "; ".join(f"{k} = {_kg(v) if isinstance(v, (int, float)) and not isinstance(v, bool) else v}"
-                     for k, v in figures.items() if v not in (None, "", [], {})) or "—"
+    parts = []
+    for k, v in figures.items():
+        if v in (None, "", [], {}):
+            continue
+        text = _figure_value(k, v)
+        parts.append(text if k == "can_fit" else _FIGURE_LABEL.get(k, k.replace("_", " ") + " {}").format(text))
+    return "; ".join(parts) or "—"
 
 
 def logistics_section(record: Dict[str, Any]) -> str:
     """Chapter 6 of the English bid-book, written from the plan. Each statement cites its clause and figure."""
+    from packing_assistant.bidbook.templates_en import STATUS_EN
+
     inputs = record["inputs"]
     decision = record["container"]
     lines = ["## 6. Logistics & Packing (linked to the loading plan)", "",
@@ -630,7 +660,8 @@ def logistics_section(record: Dict[str, Any]) -> str:
         lines += [f"> **Changed since the previous run ({changes.get('previous_generated_at')}):** {changes['summary']}.", ""]
     lines += ["| Stmt | ITT clause | Check | Status | Plan figure |", "|---|---|---|---|---|"]
     for s in record["statements"]:
-        lines.append(f"| {s['id']} | {_cell(s['clause'])} | {KIND_TITLE[s['kind']]} | {s['status']} | {_cell(_figure_text(s['figures']))} |")
+        status = STATUS_EN.get(s["status"], s["status"])
+        lines.append(f"| {s['id']} | {_cell(s['clause'])} | {KIND_TITLE[s['kind']]} | {status} | {_cell(_figure_text(s['figures']))} |")
     lines.append("")
     for s in record["statements"]:
         lines.append(f"**{s['id']} ({'Clause ' + s['clause'] if s['clause'] else 'no clause'}).** {s['text']}")
@@ -643,8 +674,13 @@ def _annex_a(record: Dict[str, Any]) -> str:
     lines = ["## Annex A — Loading plan summary", ""]
     if not plan:
         return "\n".join(lines + ["No loading plan was made; see §6.", ""])
-    for key in ("container_type", "containers_used", "n0", "can_fit", "n_boxes", "utilization", "weight_utilization", "mid50"):
-        lines.append(f"- `{key}`: {plan.get(key)}")
+    for key, label in (("container_type", "Container type"), ("containers_used", "Containers used"),
+                       ("n0", "Lower bound (planner)"), ("can_fit", "All crates placed"), ("n_boxes", "Crates"),
+                       ("utilization", "Volume utilisation"), ("weight_utilization", "Weight utilisation"),
+                       ("mid50", "CTU mid-length mass share")):
+        value = plan.get(key)
+        lines.append(f"- {label}: " + ({True: "yes", False: "no"}[value] if isinstance(value, bool) else
+                                       _figure_value(key, value) if key == "mid50" and value is not None else str(value)))
     for item in plan.get("per_container") or []:
         lines.append(f"- container {item.get('container_no')}: {item.get('boxes')} crates, {_kg(item.get('cargo_kg'))} kg cargo "
                      f"(panels + crates), rows {', '.join(f'{r} x {n}' for r, n in (item.get('rows') or {}).items())}")
