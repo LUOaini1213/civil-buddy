@@ -1,6 +1,8 @@
 #!/usr/bin/env python3
-"""scripts/demo_facade.py on the SYNTHETIC façade pack: the three flows run offline and say what they found.
+"""scripts/demo_facade.py on the SYNTHETIC façade pack: the flows run offline and say what they found.
 
+  linked     one run reads the ITT's logistics clauses, plans the panel list in the clause's 40HQ and writes the
+             statements with their clause and plan figure; the rev B list re-run names the statements that changed
   tender     CR16, 420 calendar days, 90-day validity, the 10% bond and the 12-month DLP land in their rows;
              the two bid posts write from the same session's hand-off
   packing    24 panels / 10,800 kg in the list are 24 / 10,800 kg in the crates, and the plan fits
@@ -108,6 +110,21 @@ class FacadeDemo(unittest.TestCase):
         self.assertTrue(self.result["bid_compliance"]["written"])
         self.assertTrue((self.job / ".civil-buddy" / "out" / "civil-cli" / "bid-parse" / "tender.parse.md").is_file())
 
+    def test_linked_run_ties_statements_to_clause_and_plan(self):
+        linked = self.result["linked"]
+        first = {s["kind"]: s for s in linked["first"]["statements"]}
+        self.assertEqual(linked["first"]["container"]["clause"], "4.8")
+        self.assertEqual(linked["first"]["plan"]["container_type"], "40HQ")
+        self.assertEqual((first["containers_used"]["clause"], first["containers_used"]["figures"]["containers_used"]), ("4.8", 6))
+        self.assertEqual((first["gross_mass"]["clause"], first["gross_mass"]["figures"]["max_gross_kg"]), ("4.9", 6472.8))
+        for kind in ("securing", "handling", "delivery_sequence", "crate_structure"):
+            self.assertEqual(first[kind]["status"], "human_required", kind)
+        self.assertEqual(linked["rev_b"]["plan"]["containers_used"], 8)
+        self.assertEqual(linked["changes"]["needs_reconfirmation"], ["S2", "S3", "S6", "S7"])
+        self.assertTrue(linked["submit_blocked"])
+        self.assertTrue(Path(linked["record"]).is_file())
+        self.assertIn("since the previous run: panel list (facade_panels.xlsx -> facade_panels_rev_b.xlsx) changed", self.out.getvalue())
+
     def test_panels_are_conserved_and_fit(self):
         packing = self.result["packing"]
         cons = packing["conservation"]
@@ -145,7 +162,7 @@ class FacadeDemo(unittest.TestCase):
         for name in ("facade_itt_doc.md", "daily_report_input.txt", "wah_briefing_input.txt", "README.md"):
             head = (demo.FIXTURES / name).read_text(encoding="utf-8")[:400]
             self.assertRegex(head, r"SYNTHETIC|合成示例", name)
-        for name in ("facade_panels.xlsx", "facade_panels_zh.xlsx"):
+        for name in ("facade_panels.xlsx", "facade_panels_zh.xlsx", "facade_panels_rev_b.xlsx"):
             wb = openpyxl.load_workbook(demo.FIXTURES / name, read_only=True)
             try:
                 self.assertEqual(wb.sheetnames, ["materials", "README"])

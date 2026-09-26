@@ -98,6 +98,37 @@ def _named_packing_list(text: str) -> str:
     return str(tables[0]) if len(tables) == 1 else ""
 
 
+def _named_container_type(text: str, *files: Any) -> List[str]:
+    """Container types the request names ("按 X.xlsx 装柜，柜型 20GP"), read with the tender parser's own rule
+    (tender_parse._container_codes), the named files' own names left out. Unknown ones are passed on as named:
+    run_plan refuses them (unknown_container_type) instead of planning in another type."""
+    from packing_assistant.tools.tender_parse import _container_codes
+
+    rest = text or ""
+    for name in files:
+        if name:
+            rest = rest.replace(Path(str(name)).name, " ")
+    return sorted(_container_codes(rest))
+
+
+def _link_inputs(text: str) -> Any:
+    """(tender, panel list) for a tender <-> packing link request, a sentence saying what is missing, or None when
+    the request is not one. Only a request that asks for the link gets it: a tender named beside a bill of
+    quantities is still a plain 招标解析."""
+    from packing_assistant.office_job import files_named_in
+    from packing_assistant.runtime.task_router import wants_link
+
+    if not wants_link(text):
+        return None
+    tables = files_named_in(text, (".xlsx", ".xlsm", ".xls", ".csv"))
+    documents = [p for p in files_named_in(text, (".docx", ".pdf", ".txt", ".md")) if p not in tables]
+    if len(tables) == 1 and len(documents) == 1:
+        return documents[0], tables[0]
+    return ("Linking the tender to the packing needs exactly one tender document (.docx / .pdf / .md / .txt) and one "
+            f"panel list (.xlsx / .csv) named in the request; this one names {len(documents)} document(s) and "
+            f"{len(tables)} table(s). 招标与装柜联动需要在任务里各点名一份招标文件和一份装箱单。Nothing was written.")
+
+
 def _with_named_documents(text: str, *, whole: bool = False) -> str:
     """The task plus the text of the job documents it names (the steps path reads what you point at).
 
@@ -206,7 +237,13 @@ def _plan_calls(
 
     if exp and exp.id == "pack-ship" and packing_list:
         # 任务点名了文件夹里的装箱单：真算。柜数与利用率出自装箱引擎，不再只抄快照。
-        calls.append({"name": "pack-ship__plan", "arguments": {"file_path": packing_list}, "tool_label": "pack-ship__plan"})
+        # 柜型照任务里写的算（「柜型 20GP」以前被丢掉，一律按 40HQ）；没写才是 40HQ，写了两种就问。
+        codes = _named_container_type(text, packing_list)
+        if len(codes) > 1:
+            return {"hitl": False, "calls": [], "stop_code": "ambiguous_container_type",
+                    "stop": f"任务里写了不止一种柜型（{'、'.join(codes)}）；装箱引擎一次只算一种柜型 × N：请只写一种。本轮未出方案。"}
+        arguments = {"file_path": packing_list, **({"container_type": codes[0]} if codes else {})}
+        calls.append({"name": "pack-ship__plan", "arguments": arguments, "tool_label": "pack-ship__plan"})
         return {"hitl": False, "calls": calls, "connected": True, "snap": None, "packing_list": packing_list}
 
     if exp and exp.id == "pack-ship":
@@ -230,6 +267,26 @@ def _plan_calls(
         )
         return {"hitl": False, "calls": calls, "connected": connected, "snap": snap}
 
+    if exp is not None and exp.id == "bid-parse":
+        linked = _link_inputs(text)
+        if isinstance(linked, str):
+            return {"hitl": False, "calls": [], "stop": linked, "stop_code": "link_inputs"}
+        if linked is not None:
+            # 招标 + 装箱单一次跑完：条款 → 按条款柜型真算 → 逐条应答与联动记录（tender_packing_link.py）
+            from packing_assistant.tender_packing_link import LINK_FILE
+
+            tender, table = linked
+            # a type typed in the request is a person's choice (the ITT names none, several, or a size only)
+            codes = _named_container_type(text, tender, table)
+            if len(codes) > 1:
+                return {"hitl": False, "calls": [], "stop_code": "ambiguous_container_type",
+                        "stop": f"The request names more than one container type ({', '.join(codes)}); the planner plans one "
+                                f"type x N at a time: name one. 任务里写了不止一种柜型（{'、'.join(codes)}），请只写一种。Nothing was written."}
+            calls.append({"name": "tender.packing_link", "tool_label": "tender.packing_link",
+                          "arguments": {"tender_path": str(tender), "packing_list": str(table),
+                                        "previous_path": str(out_dir / LINK_FILE),
+                                        **({"container_type": codes[0]} if codes else {})}})
+            return {"hitl": False, "calls": calls, "out_dir": str(out_dir), "link": True}
     if exp is None or exp.id == "bid-parse":
         calls.append(
             {
@@ -651,6 +708,12 @@ def run_agent(
             )
             if _cancel_requested():
                 return _finish_cancelled()
+            if planned.get("stop"):
+                out.update(ok=False, wrote=False, error_code=str(planned.get("stop_code") or "stopped"), reply=str(planned["stop"]))
+                run.error_code = out["error_code"]
+                sched.transition(run, "failed")
+                messages.append({"role": "assistant", "content": out["reply"]})
+                return _finish()
             if planned.get("handoff"):
                 out["handoff"] = planned["handoff"]
             if planned.get("hitl"):
@@ -675,6 +738,8 @@ def run_agent(
             plan_record = ""
             export_name = "pack-ship__export"
             last_extract = ""
+            link_data: Dict[str, Any] = {}
+            link_writes: List[Dict[str, Any]] = []
 
             for call in planned.get("calls") or []:
                 if _cancel_requested():
@@ -777,6 +842,23 @@ def run_agent(
                         for t in data["tools_run"]:
                             if t not in out["tools_run"]:
                                 out["tools_run"].append(t)
+                if name == "tender.packing_link" and result.get("ok"):
+                    link_data = data if isinstance(data, dict) else {}
+                    link_dir = Path(str(planned.get("out_dir") or ""))
+                    for item in link_data.get("deliverables") or []:
+                        link_writes.append({"name": "write_deliverable", "tool_label": "tender.packing_link",
+                                            "arguments": {"path": str(link_dir / item["name"]), "text": item["text"]}})
+                    for key in ("matrix", "bidbook_markdown"):
+                        if link_data.get(key) is not None:
+                            out[key] = link_data[key]
+                    ho = link_data.get("handoff")
+                    if isinstance(ho, dict) and ho:       # bid-tech / bid-compliance read it next, as after 招标解析
+                        from packing_assistant.runtime.session_handoff import save_handoff
+
+                        hp = save_handoff(sid, ho)
+                        if hp:
+                            out["artifacts"].append(str(hp))
+                            out["files"].append({"name": hp.name, "path": str(hp), "tool": "tender.handoff"})
                 if name == "tender.parse" and result.get("ok"):
                     _merge_pipe(out, result)
                     data = result.get("data") if isinstance(result.get("data"), dict) else result
@@ -808,7 +890,7 @@ def run_agent(
                     return _finish_cancelled()
 
             # Follow-on writes (still through the engine + sandbox).
-            follow: List[Dict[str, Any]] = list(planned.get("follow") or [])
+            follow: List[Dict[str, Any]] = list(planned.get("follow") or []) + link_writes
             office_reply = ""
             out_dir = _out_root() / _safe_sid(sid) / (exp.id if exp else "ops")
             if last_export_md:
@@ -945,7 +1027,15 @@ def run_agent(
             if _cancel_requested():
                 return _finish_cancelled()
 
-            if pack_ship:
+            if link_data:
+                record = link_data.get("record") or {}
+                out["tender_packing_link"] = {
+                    "container": record.get("container"), "inputs": record.get("inputs"), "clauses": record.get("clauses"),
+                    "statements": record.get("statements"), "plan": record.get("plan"), "plan_refusal": record.get("plan_refusal"),
+                    "changes_since_previous": record.get("changes_since_previous"), "confirmed_by_person": False}
+                out["wrote"] = True
+                out["reply"] = str(link_data.get("reply") or "")
+            elif pack_ship:
                 plan = pack_ship.get("plan") or {}
                 connected = bool(planned.get("connected"))
                 out["pack_ship"] = {

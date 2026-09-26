@@ -40,7 +40,7 @@ def contract_for(name: str, *, exclusive: bool = False) -> dict:
     properties = deepcopy(COMMON)
     output = obj({"ok": BOOL}, extra=True)
     required = ()
-    if exclusive and not name.startswith("pack-ship__"):
+    if exclusive and not name.startswith("pack-ship__") and name != "tender.packing_link":
         properties.update({key: deepcopy(MATERIAL) for key in MATERIAL_FIELDS})
         properties["has_trial_data"] = BOOL
         output = obj({"wrote": BOOL, "files": FILES, "submit_blocked": {"const": True},
@@ -66,6 +66,12 @@ def contract_for(name: str, *, exclusive: bool = False) -> dict:
         required = ("text",)
         output = obj({"handoff": MAP, "matrix": MAP, "parse": MAP, "submit_blocked": {"const": True}},
                      ("handoff", "matrix", "parse", "submit_blocked"), extra=True)
+    elif name == "tender.packing_link":
+        properties.update(tender_path={"type": "string", "minLength": 1}, packing_list={"type": "string", "minLength": 1},
+                          previous_path=TEXT, project_name=TEXT, container_type=TEXT)
+        required = ("tender_path", "packing_list")
+        output = obj({"ok": BOOL, "statements": {"type": "array"}, "record": MAP, "deliverables": {"type": "array"},
+                      "submit_blocked": {"const": True}}, ("ok", "statements", "record", "deliverables", "submit_blocked"), extra=True)
     elif name == "tender.review":
         properties.update(draft=TEXT, matrix={"type": ["object", "null"]},
                           tech_outline={"type": ["object", "null"]}, bidbook_markdown=TEXT)
