@@ -121,6 +121,7 @@ CHECKS = (
     Check("example-plugin", ("-m", "packing_assistant.civil", "plugin", "validate", "examples/plugins/site-forms")),
     Check("task-intent-bench", ("scripts/eval_task_intent.py", "--check")),
     Check("english-intents", ("scripts/test_english_intents.py",)),
+    Check("link-routing-bench", ("scripts/eval_link_routing.py", "--check")),
     Check("verdict-bench", ("scripts/eval_verdicts.py", "--check")),
     Check("number-provenance-bench", ("scripts/eval_number_provenance.py", "--check")),
     Check("runtime-threads", ("scripts/test_runtime_threads.py",)),

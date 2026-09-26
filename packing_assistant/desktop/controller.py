@@ -12,7 +12,7 @@ import os
 from pathlib import Path
 from typing import Any, Callable, Dict, List, Optional
 
-CONFIRM = "我明白，将由持证人员签认"
+from packing_assistant.runtime.civil_config import CONFIRM, CONFIRM_EN, contains_confirmation  # noqa: E402,F401  (one definition)
 Progress = Callable[[str], None]
 Approve = Callable[[Dict[str, Any]], bool]
 
@@ -139,8 +139,8 @@ class DesktopController:
         def turn(confirmed: bool) -> Dict[str, Any]:
             return with_progress(lambda: run_on_thread(self.thread_id, task, confirm=confirmed, approve=ask), on_progress or (lambda _line: None))
 
-        out = turn(self.confirmed or CONFIRM in task)
-        if out.get("hitl_pending") and not asked and ask({"name": out.get("expert_name") or "本次写盘", "risk": "high", "confirm_sentence": CONFIRM}):
+        out = turn(self.confirmed or contains_confirmation(task))
+        if out.get("hitl_pending") and not asked and ask({"name": out.get("expert_name") or "本次写盘", "risk": "high", "confirm_sentence": CONFIRM, "confirm_sentence_en": CONFIRM_EN}):
             out = turn(True)        # steps mode stops first; agreed on the spot, the same words run again
         if any(asked):
             self.confirmed = True

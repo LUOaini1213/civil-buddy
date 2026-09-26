@@ -6,7 +6,7 @@ import os
 import sys
 from typing import Any, Dict, List, Optional
 
-from packing_assistant.runtime.civil_config import CONFIRM, APPROVAL_MODES, SANDBOX_MODES, load_config
+from packing_assistant.runtime.civil_config import CONFIRM, CONFIRM_EN, APPROVAL_MODES, SANDBOX_MODES, contains_confirmation, is_confirmation, load_config
 
 HELP = """/help              本页
 /status            作业文件夹 · CIVIL.md · sandbox · approval · 模型 · thread · 会话槽
@@ -29,7 +29,7 @@ HELP = """/help              本页
 /quit              退出
 
 任务直接回车。显式 skill： $construction  或  @施工方案
-高风险写盘确认句：""" + CONFIRM
+高风险写盘确认句：""" + CONFIRM + "\nSign-off sentence (English): " + CONFIRM_EN
 
 
 def _enable_vt() -> None:
@@ -101,7 +101,7 @@ def _print_out(out: Dict[str, Any]) -> None:
         bits.append(f"approval {out.get('approval')}")
     print(_c("2", " · ".join(bits)))
     if out.get("hitl_pending"):
-        print(_c("33", f"approval 须确认句：{CONFIRM}"))
+        print(_c("33", f"approval 须确认句：{CONFIRM}  |  or type: {CONFIRM_EN}"))
     print(out.get("reply") or "")
     from packing_assistant.civil import _file_paths, display_path
 
@@ -266,11 +266,12 @@ def ask_approval(request: Dict[str, Any], *, read=input) -> bool:
     """Codex asks before a risky command runs; civil asks before a high-risk post writes."""
     print(_c("33", f"approval {request.get('name') or ''}（risk={request.get('risk')}）要写盘。"))
     print(_c("33", f"  同意就原样输入确认句：{CONFIRM}"))
+    print(_c("33", f"  To approve, type exactly: {CONFIRM_EN}"))
     try:
         answer = read(_c("33", "  approve> ")).strip()
     except (EOFError, KeyboardInterrupt):
         return False
-    return CONFIRM in answer
+    return is_confirmation(answer)       # the approve> prompt asks for the sentence alone: exactly one of the two
 
 
 def run_tui() -> int:
@@ -297,7 +298,7 @@ def run_tui() -> int:
                 print(msg)
                 print()
             continue
-        confirm = st.confirm or CONFIRM in line
+        confirm = st.confirm or contains_confirmation(line)
         granted: List[bool] = []
 
         def approve(request: Dict[str, Any]) -> bool:
