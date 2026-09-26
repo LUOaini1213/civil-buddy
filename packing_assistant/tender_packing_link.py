@@ -154,7 +154,8 @@ _REF_RE = re.compile(r"^\s*(?:(?P<part>(?:Part|Section|Appendix|Annex|Schedule|V
 # a lettered sub-item: "(a) ...", "b) ...", "(iv) ..."
 _LETTER_RE = re.compile(r"^\s*\(?((?:[a-z]{1,2}|[ivx]{1,5}|\d{1,2}))\)\s+(?=\S)")
 _SECTION_LINE_RE = re.compile(r"^\s*#|^\s*(?:SECTION|PART|CHAPTER|APPENDIX|ANNEX|SCHEDULE|VOLUME)\b", re.I)
-_TABLE_LABEL_RE = re.compile(r"^\s*((?:Table|Schedule|Appendix|Annex)\s+[\w.\-–]+)", re.I)
+# "Table 4-1", "Schedule 3", "Appendix B" - a label with a number or a letter, not "APPENDIX TO THE INSTRUCTIONS"
+_TABLE_LABEL_RE = re.compile(r"^\s*((?i:Table|Schedule|Appendix|Annex)\s+(?:\d[\w.\-–]*|[A-Z](?:[.\-–]?\d[\w.\-–]*)?|[IVX]{1,5}))(?![A-Za-z])")
 _ROW_REF_RE = re.compile(r"\d+(?:\.\d+){0,3}(?:\([a-z0-9]{1,3}\))*|[A-Z]\d{0,2}(?:\.\d+)*")
 # a container size with no type code ("20-foot containers", "40' containers", "40尺柜"): 40 ft is a GP or an HQ, and
 # the planner needs the type, so a clause like this is read as naming a container but not a type to plan in
