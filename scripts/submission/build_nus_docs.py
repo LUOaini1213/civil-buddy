@@ -29,6 +29,7 @@ The header and page numbers are stamped with pypdf because @page margin boxes on
 from __future__ import annotations
 
 import argparse
+import json
 import os
 import re
 import shutil
@@ -94,6 +95,16 @@ TAGS = ["LIVE", "OPT-IN", "BEFORE DEMO", "ROADMAP", "NOT NEEDED"]
 
 # [TEAM TO FILL], [TEAM TO FILL: ...], [TEAM TO VERIFY with BCA: ...] and so on.
 PLACEHOLDER = re.compile(r"\[TEAM TO (FILL|VERIFY)\b")
+# The SME partner is named only in the PDFs sent to the organisers, never in the public repo:
+# {{SME_NAME}} and friends come from this untracked file; a missing value becomes a TEAM TO FILL.
+PRIVATE = Path(__file__).resolve().parents[2] / "docs" / "submission" / "sme.local.json"
+TOKEN = re.compile(r"\{\{([A-Z][A-Z0-9_]*)\}\}")
+
+
+def fill_private(text: str) -> str:
+    values = json.loads(PRIVATE.read_text(encoding="utf-8")) if PRIVATE.is_file() else {}
+    return TOKEN.sub(lambda m: str(values.get(m[1]) or "").strip()
+                     or f"[TEAM TO FILL: {m[1]} in docs/submission/sme.local.json]", text)
 
 MM = 72 / 25.4
 # Helvetica advance widths (1/1000 em) for the characters of "Page N of M".
@@ -239,7 +250,7 @@ def mark_placeholders(text: str, source: str) -> tuple[str, Counter, list[str]]:
 # ---------------------------------------------------------------- HTML and PDF
 
 def build_html(pandoc: str, doc: Doc, html_out: Path) -> Counter:
-    text = (SRC_DIR / doc.source).read_text(encoding="utf-8")
+    text = fill_private((SRC_DIR / doc.source).read_text(encoding="utf-8"))
     marked, counts, problems = mark_placeholders(text, doc.source)
     for p in problems:
         print(f"  warning: {p}", file=sys.stderr)
