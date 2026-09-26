@@ -87,6 +87,8 @@ CHECKS = (
     Check("facade-demo", ("scripts/test_facade_demo.py",)),
     # the partner's problem: tender and packing as one run that stays linked (tender_packing_link.py)
     Check("tender-packing-link", ("scripts/test_tender_packing_link.py",), timeout=600),
+    # how the link reads clauses: nothing silently dropped, per-package limits apart, cites as written, the DEV set floors
+    Check("tender-link-clauses", ("scripts/test_tender_link_clauses.py",), timeout=600),
     Check("real-tender", ("scripts/test_real_tender.py",), timeout=1200),
     # Offline, model-free, a second or two each - and until 2026-09-20 run by nothing: not by ci.yml,
     # not by this registry, not by the acceptance glob. They pin the parser the three bid posts stand on.
