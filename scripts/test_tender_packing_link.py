@@ -2,7 +2,11 @@
 """The tender and the packing as one linked run (packing_assistant/tender_packing_link.py), on SYNTHETIC files.
 
   container   the plan is made in the type the tender's clause names (40HQ, and 40GP for a variant), 40HQ by default
-              when it names none (said so); a type the planner cannot model gets no plan and goes to a person
+              when it names none (said so); a type the planner cannot model (40OT, 40FR), a size with no type
+              ("40-foot") or a type in a sentence that also says "not" gets no plan and goes to a person, who may name
+              the type in the request (planned as asked; a clause naming another type is then never covered)
+  no fit      24 panels in 20GP do not fit (18 of 24 crates placed): no statement is covered, no count or mass stated
+  gates       a blank weight or a "10/12" quantity stops the plan and the row is named in the statements
   mass        a per-container mass clause is checked against the plan's per-container figures: within the limit,
               over it (gap), and on a cargo-only basis
   never       securing / lashing (CTU Code), A-frame stillages / upright / no stacking and delivery sequencing are never
@@ -72,9 +76,25 @@ class Link(unittest.TestCase):
             "itt_payload.md": variant(mass="4.9 Container payload: the maximum payload of each loaded container shall not exceed 2,500 kg."),
             "itt_plain.md": variant(handling="4.7 Packing: panels shall be packed in crates."),
             "itt_no_sequence.md": variant(sequence="4.11 Deliveries shall be notified to the Main Contractor in advance."),
+            "itt_20gp.md": variant(container=CONTAINER_CLAUSE.replace("40HQ (40 ft high cube)", "20GP")),
+            "itt_40fr.md": variant(container=CONTAINER_CLAUSE.replace("40HQ (40 ft high cube)", "40FR")),
+            "itt_size_only.md": variant(container=CONTAINER_CLAUSE.replace("40HQ (40 ft high cube)", "40-foot")),
+            "itt_not_stacked.md": variant(container="4.8 Containers: panels shall be shipped in 40HQ containers and shall not be stacked."),
         }
         for name, text in variants.items():
             (cls.job / name).write_text(text, encoding="utf-8")
+        import openpyxl
+
+        head = ["id", "name", "quantity", "weight_kg", "total_weight_kg", "length_mm", "width_mm", "height_mm", "note"]
+        good = ["P01", "Unitised panel L5 (SYNTHETIC)", 6, 450, 2700, 4200, 1500, 250, "glass"]
+        for name, bad in (("panels_blank_weight.xlsx", ["P02", "Unitised panel L6 (SYNTHETIC)", 6, None, None, 4200, 1500, 250, "glass"]),
+                          ("panels_qty_10_12.xlsx", ["P02", "Unitised panel L6 (SYNTHETIC)", "10/12", 450, None, 4200, 1500, 250, "glass"])):
+            wb = openpyxl.Workbook()
+            ws = wb.active
+            ws.title = "materials"
+            for row in (head, good, bad):
+                ws.append(row)
+            wb.save(cls.job / name)
         (cls.job / "CIVIL.md").write_text("# CIVIL.md\n\n- 项目：合成示例办公楼幕墙分包\n- 辖区：SG\n", encoding="utf-8")
         cls.cwd = Path.cwd()
         home = patch.object(Path, "home", return_value=Path(cls.tmp.name) / "no-home")
@@ -91,10 +111,10 @@ class Link(unittest.TestCase):
         os.chdir(cls.cwd)
         cls.tmp.cleanup()
 
-    def link(self, tender: str = "facade_itt_doc.md", panels: str = "facade_panels.xlsx", previous=None):
+    def link(self, tender: str = "facade_itt_doc.md", panels: str = "facade_panels.xlsx", previous=None, container_type=None):
         from packing_assistant.tender_packing_link import run_link
 
-        return run_link(str(self.job / tender), str(self.job / panels), previous=previous)
+        return run_link(str(self.job / tender), str(self.job / panels), previous=previous, container_type=container_type)
 
     @staticmethod
     def by_kind(out):
@@ -116,7 +136,7 @@ class Link(unittest.TestCase):
     def test_no_type_in_the_tender_is_the_default_said_so(self):
         out = self.link("itt_no_type.md")
         self.assertEqual(out["record"]["container"]["source"], "default")
-        self.assertIn("names no container type", out["record"]["container"]["reason"])
+        self.assertIn("No container type (20GP / 40GP / 40HQ / 45HQ / OT / FR) was found in the ITT", out["record"]["container"]["reason"])
         row = self.by_kind(out)["container_type"]
         self.assertEqual(row["status"], "human_required")
         self.assertIn("planner's default", row["text"])
@@ -134,6 +154,60 @@ class Link(unittest.TestCase):
         self.assertTrue(self.by_kind(out)["containers_used"]["placeholder"])
         self.assertIn("No plan", out["reply"])
         self.assertNotIn("pack-plan.json", [d["name"] for d in out["deliverables"]])
+        self.assertIsNone(self.link("itt_40fr.md")["plan"])                  # 40FR: the planner has no flat rack
+
+    def test_a_plan_that_does_not_fit_evidences_nothing(self):
+        # 24 panels in 20GP: the engine stops at 9 containers holding 18 of 24 crates (N0 = 12), can_fit False.
+        # Before the review fix S1 read "covered" and S2 said every piece was placed in 9 x 20GP.
+        out = self.link("itt_20gp.md")
+        self.assertIs(out["plan"]["can_fit"], False)
+        kinds = self.by_kind(out)
+        self.assertEqual(kinds["container_type"]["status"], "gap")
+        self.assertEqual(kinds["containers_used"]["status"], "gap")
+        self.assertTrue(kinds["containers_used"]["text"].startswith("[TO CONFIRM"), kinds["containers_used"]["text"])
+        self.assertIn("hold 18 of the 24 crates", kinds["containers_used"]["text"])
+        self.assertNotIn("places the", kinds["containers_used"]["text"])
+        self.assertEqual(kinds["gross_mass"]["status"], "human_required")
+        self.assertNotIn("max_gross_kg", kinds["gross_mass"]["figures"])
+        self.assertFalse([s for s in out["statements"] if s["status"] == "covered"], out["statements"])
+        self.assertIn("DOES NOT FIT", out["reply"])
+
+    def test_a_size_or_a_negated_sentence_is_not_a_type_to_plan_in(self):
+        size = self.link("itt_size_only.md")
+        self.assertIsNone(size["plan"])
+        self.assertIn("40 ft containers without the type", size["record"]["container"]["reason"])
+        self.assertEqual(self.by_kind(size)["container_type"]["clause"], "4.8")      # not "the ITT names no type"
+        negated = self.link("itt_not_stacked.md")
+        self.assertIsNone(negated["plan"])
+        self.assertIn("does not decide whether that allows or excludes it", negated["record"]["container"]["reason"])
+        for out in (size, negated):
+            self.assertFalse([s for s in out["statements"] if s["status"] == "covered"])
+
+    def test_a_type_named_in_the_request_is_planned_and_never_covers_another_clause(self):
+        chosen = self.link("itt_size_only.md", container_type="40HQ")
+        self.assertEqual((chosen["plan"]["container_type"], chosen["record"]["container"]["source"]), ("40HQ", "request"))
+        kinds = self.by_kind(chosen)
+        self.assertEqual(kinds["container_type"]["status"], "human_required")     # the clause says 40 ft, not 40HQ
+        self.assertEqual(kinds["containers_used"]["status"], "human_required")
+        self.assertIn("[TO CONFIRM", kinds["containers_used"]["text"])
+        same = self.link(container_type="40HQ")                                   # the request agrees with Clause 4.8
+        self.assertEqual(self.by_kind(same)["container_type"]["status"], "covered")
+        self.assertEqual(self.by_kind(same)["containers_used"]["clause"], "4.8")
+        other = self.link(container_type="40GP")                                  # the request overrides Clause 4.8
+        self.assertEqual(other["plan"]["container_type"], "40GP")
+        self.assertEqual(self.by_kind(other)["container_type"]["status"], "human_required")
+        self.assertIsNone(self.link(container_type="40FR")["plan"])
+
+    def test_needs_human_rows_stop_the_plan_and_are_named(self):
+        for panels, reason in (("panels_blank_weight.xlsx", "missing_weight"), ("panels_qty_10_12.xlsx", "invalid_quantity")):
+            out = self.link(panels=panels)
+            self.assertIsNone(out["record"]["plan"], panels)
+            self.assertEqual((out["plan"]["source"], out["record"]["plan_refusal"]["error"]), ("needs_human", reason))
+            self.assertNotIn("pack-plan.json", [d["name"] for d in out["deliverables"]])
+            kinds = self.by_kind(out)
+            self.assertIn(f"P02 ({reason})", kinds["containers_used"]["text"])
+            self.assertEqual(kinds["crate_structure"]["status"], "human_required")   # still one row, no plan behind it
+            self.assertFalse([s for s in out["statements"] if s["status"] == "covered"], panels)
 
     # mass ----------------------------------------------------------------------------------------------------
     def test_mass_clause_is_checked_per_container(self):
@@ -207,7 +281,16 @@ class Link(unittest.TestCase):
         dropped = self.link("itt_no_sequence.md", previous=first["record"])["record"]["changes_since_previous"]
         self.assertEqual([i["input"] for i in dropped["inputs_changed"]], ["tender"])
         self.assertEqual([w["key"] for w in dropped["withdrawn"]], ["delivery_sequence@4.11"])
-        self.assertIn("withdrawn", dropped["summary"])
+        self.assertIn("withdrawn (remove from the bid): earlier S7 (Delivery sequence, Clause 4.11)", dropped["summary"])
+        retyped = self.link("itt_20gp.md", previous=first["record"])["record"]["changes_since_previous"]    # tender: 40HQ -> 20GP
+        self.assertEqual([i["input"] for i in retyped["inputs_changed"]], ["tender", "plan"])
+        s1 = next(c for c in retyped["changed"] if c["key"] == "container_type@4.8")
+        self.assertTrue(s1["clause_changed"])
+        self.assertEqual(s1["status"], ["covered", "gap"])
+        blocked = self.link(panels="panels_blank_weight.xlsx", previous=first["record"])["record"]["changes_since_previous"]
+        self.assertEqual(blocked["withdrawn"], [])          # no plan now: every earlier statement is changed, none vanishes
+        self.assertEqual(len(blocked["changed"]), 7 - len(blocked["unchanged"]))
+        self.assertIn("S2", blocked["needs_reconfirmation"])
 
     def test_record_binds_statement_clause_figures_and_hashes(self):
         import hashlib
@@ -269,6 +352,12 @@ class Link(unittest.TestCase):
         self.assertIn("bidbook.en.docx", changes["stale_exports"])     # the old Word copy is named, not left silent
         missing = run_task("Link the tender facade_itt_doc.md to the packing list and write the logistics response", session_id="link-miss")
         self.assertEqual((missing["ok"], missing["error_code"], missing["wrote"]), (False, "link_inputs", False))
+        ask = "Link the tender itt_size_only.md to the packing list facade_panels.xlsx and write the logistics response in "
+        chosen = run_task(ask + "40HQ", session_id="link-size")        # the ITT says "40-foot"; the person names the type
+        self.assertEqual((chosen["tender_packing_link"]["plan"]["container_type"], chosen["tender_packing_link"]["container"]["source"]),
+                         ("40HQ", "request"), chosen.get("reply"))
+        two = run_task(ask + "40HQ or 40GP", session_id="link-two")
+        self.assertEqual((two["ok"], two["error_code"], two["wrote"]), (False, "ambiguous_container_type", False))
 
     def test_pack_ship_takes_the_container_type_typed_in_the_request(self):
         from packing_assistant.civil import run_task
@@ -306,6 +395,11 @@ class Gateway(unittest.TestCase):
         self.assertEqual(given["materials_source"], "request")
         self.assertEqual(given["packing_summary"]["container_type_requested"], "40HQ")
         self.assertNotIn("SAMPLE MATERIALS", given["bidbook_markdown"])
+        flat = client.post("/api/tender/delivery", json={"text": "三、采用 40FR 集装箱海运。\n", "run_delivery": True,
+                                                         "session_id": "link-gw3"}).json()
+        self.assertIsNone(flat["packing_summary"])            # the planner has no flat rack: packing is not run
+        self.assertIsNone(flat["materials_source"])           # and nothing, sample or not, was packed
+        self.assertEqual(flat["container_decision"]["named"], "40FR")
 
 
 class Demo(unittest.TestCase):

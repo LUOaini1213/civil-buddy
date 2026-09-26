@@ -16,7 +16,8 @@ On a re-run the new record is compared with the previous one: every earlier stat
 unchanged or withdrawn, and the inputs that moved are named. No statement is carried forward silently.
 
 Not modelled, and so never "covered": securing / lashing to the CTU Code, A-frame stillages, upright transport,
-no-stacking rules, delivery sequencing. A-frame stillage sizes and masses are not guessed. A person confirms the
+no-stacking rules, delivery sequencing. A-frame stillage sizes and masses are not guessed. A plan that does not fit
+(can_fit is not true: crates left out of the containers) evidences no type, count or mass. A person confirms the
 plan before any booking; submit_blocked stays true.
 """
 from __future__ import annotations
@@ -69,6 +70,10 @@ _HANDLING_LABELS = ((r"a[\s-]?frame|stillage", "A-frame stillages"), (r"upright|
                     (r"stack|堆叠|叠放|堆码", "no stacking"), (r"protect|防护", "face protection"), (r"fragile|易碎", "fragile handling"),
                     (r"防潮|防雨", "weather protection"), (r"熏蒸", "fumigation"))
 _CLAUSE_NO_RE = re.compile(r"^\s*(?:clause\s+)?(\d+(?:\.\d+){1,3})(?=[\s.:)])", re.I)
+# a container size with no type code ("20-foot containers", "40' containers", "40尺柜"): 40 ft is a GP or an HQ, and
+# the planner needs the type, so a clause like this is read as naming a container but not a type to plan in
+_SIZE_ONLY_RE = re.compile(r"(?<![\w.])(20|40|45)\s*-?\s*(?:ft|foot|feet|['’]|尺|英尺)\.?(?:\s*[A-Za-z]+){0,2}?\s*(?:containers?|集装箱|柜)",
+                           re.I)
 
 
 # ---------------------------------------------------------------------------------------------------------
@@ -118,7 +123,7 @@ def _mass_values(text: str) -> List[float]:
 
 def logistics_clauses(text: str) -> List[Dict[str, Any]]:
     """Every clause of the tender that sets a logistics requirement, with its kinds and what it states."""
-    from packing_assistant.tools.tender_parse import _LASHING_RE, _PACK_UNMODELLED_RE, _REFUSE_RE, _container_codes
+    from packing_assistant.tools.tender_parse import _CONTAINER_RE, _LASHING_RE, _PACK_UNMODELLED_RE, _REFUSE_RE, _container_codes
 
     found: List[Dict[str, Any]] = []
     for unit in _clause_units(text):
@@ -129,13 +134,16 @@ def logistics_clauses(text: str) -> List[Dict[str, Any]]:
         kinds: List[str] = []
         detail: Dict[str, Any] = {}
         codes = _container_codes(body)
-        if codes:
+        sizes = sorted({f"{m.group(1)} ft" for m in _SIZE_ONLY_RE.finditer(_CONTAINER_RE.sub(" ", body))})
+        if codes or sizes:
             refused = set()
+            # a code in a sentence that also says not / no / excluded: the sentence may refuse it ("20GP containers are
+            # not accepted") or not ("40HQ containers, which shall not be stacked"); the tool does not decide which
             for sentence in re.split(r"(?<=[.;。；])\s*", body):
                 if _REFUSE_RE.search(sentence):
                     refused |= _container_codes(sentence)
             kinds.append("container_type")
-            detail.update(named=sorted(codes), refused=sorted(refused), allowed=sorted(codes - refused))
+            detail.update(named=sorted(codes), refused=sorted(refused), allowed=sorted(codes - refused), sizes=sizes)
         masses = _mass_values(body)
         if _GROSS_RE.search(body) and masses and context:
             kinds.append("gross_mass")
@@ -158,22 +166,41 @@ def logistics_clauses(text: str) -> List[Dict[str, Any]]:
     return found
 
 
-def container_decision(clauses: Sequence[Dict[str, Any]], known: Optional[Sequence[str]] = None) -> Dict[str, Any]:
-    """Which container type the plan is made for, and why: the tender's clause, else 40HQ by default - said so.
+_CHOOSE = "a person chooses the type and names it in the request (e.g. 'in 40HQ')"
 
-    A type the planner cannot model, several allowed types, or a clause that only refuses types: no plan, a person
-    decides. The planner's own list of types is the only list (pack_ship_solve.known_container_types)."""
+
+def container_decision(clauses: Sequence[Dict[str, Any]], known: Optional[Sequence[str]] = None,
+                       requested: Optional[str] = None) -> Dict[str, Any]:
+    """Which container type the plan is made for, and why: the type the request names, else the tender's clause,
+    else 40HQ by default - said so.
+
+    A type the planner cannot model, several types, a size with no type ("40 ft containers") or a code in a sentence
+    that also says not / no: no plan, a person decides - and says the type in the request. The planner's own list of
+    types is the only list (pack_ship_solve.known_container_types)."""
     if known is None:
         from packing_assistant.tools.pack_ship_solve import known_container_types
 
         known = known_container_types()
+    if requested:
+        code = str(requested).strip().upper()
+        tender = container_decision(clauses, known)
+        if code not in known:
+            return {"type": None, "source": "request", "clause": None, "named": code, "tender": tender,
+                    "reason": f"The request names {code}; the planner can only model {', '.join(known)}. No plan was made."}
+        same = tender.get("type") == code
+        return {"type": code, "source": "request", "clause": tender.get("clause") if same else None, "tender": tender,
+                "reason": f"Container type {code} named in the request"
+                          + (f"; Clause {tender['clause']} names the same type." if same and tender.get("clause")
+                             else f" (the ITT: {tender['reason']})")}
     naming = [c for c in clauses if "container_type" in c["kinds"]]
     if not naming:
         return {"type": DEFAULT_CONTAINER, "source": "default", "clause": None,
-                "reason": f"The ITT names no container type; the plan uses {DEFAULT_CONTAINER}, the planner's default."}
+                "reason": f"No container type (20GP / 40GP / 40HQ / 45HQ / OT / FR) was found in the ITT; the plan uses "
+                          f"{DEFAULT_CONTAINER}, the planner's default."}
     allowed = sorted({code for c in naming for code in c.get("allowed") or []})
+    sizes = sorted({size for c in naming for size in c.get("sizes") or []})
     refs = ", ".join(c["clause"] for c in naming)
-    if len(allowed) == 1:
+    if len(allowed) == 1 and not sizes:
         code = allowed[0]
         clause = next(c["clause"] for c in naming if code in (c.get("allowed") or []))
         if code not in known:
@@ -182,12 +209,20 @@ def container_decision(clauses: Sequence[Dict[str, Any]], known: Optional[Sequen
                               "a person plans this container type."}
         return {"type": code, "source": "tender_clause", "clause": clause,
                 "reason": f"Container type {code} taken from Clause {clause}."}
+    if not allowed and sizes:
+        refused = sorted({code for c in naming for code in c.get("refused") or []})
+        return {"type": None, "source": "tender_clause", "clause": refs, "named": ", ".join(sizes + refused),
+                "reason": f"Clause {refs} names {' / '.join(sizes)} containers without the type (GP or HQ) the planner needs. "
+                          f"No plan was made: {_CHOOSE}."}
     if not allowed:
         refused = sorted({code for c in naming for code in c.get("refused") or []})
         return {"type": None, "source": "tender_clause", "clause": refs, "named": ", ".join(refused),
-                "reason": f"Clause {refs} only excludes {', '.join(refused)} and names no type to use. No plan was made: a person chooses."}
-    return {"type": None, "source": "tender_clause", "clause": refs, "named": ", ".join(allowed),
-            "reason": f"Clause {refs} allows {', '.join(allowed)}; which one to plan for is a person's choice. No plan was made."}
+                "reason": f"Clause {refs} names {', '.join(refused)} in a sentence that also says not / no / excluded; the tool "
+                          f"does not decide whether that allows or excludes it. No plan was made: {_CHOOSE}."}
+    options = allowed + [s for s in sizes]
+    return {"type": None, "source": "tender_clause", "clause": refs, "named": ", ".join(options),
+            "reason": f"Clause {refs} names {', '.join(options)}; which one to plan for is a person's choice. No plan was made: "
+                      f"{_CHOOSE}."}
 
 
 # ---------------------------------------------------------------------------------------------------------
@@ -255,37 +290,63 @@ def build_checks(clauses: Sequence[Dict[str, Any]], decision: Dict[str, Any], pl
     """The rows of the logistics response. Never "covered" without a plan figure that shows it."""
     checks: List[Dict[str, Any]] = []
     solved = bool(plan and plan.get("ok") and plan.get("source") == "solver")
+    # a plan that does not fit (can_fit is not true) leaves crates unplaced: it evidences no type, count or mass
+    fits = solved and plan.get("can_fit") is True
     by_kind = {kind: [c for c in clauses if kind in c["kinds"]] for kind in ("container_type", "gross_mass", "securing",
                                                                               "handling", "crating", "delivery_sequence")}
     handling = by_kind["handling"]
     stillage_words = list(dict.fromkeys(w for c in handling for w in c.get("unmodelled") or []))
     unmodelled_packing = bool(handling)
-    no_plan_why = (decision.get("reason") if decision.get("type") is None
-                   else f"no plan ({(plan or {}).get('error') or 'not run'}): {(plan or {}).get('detail') or ''}".strip(": "))
+    if decision.get("type") is None:
+        no_plan_why = decision.get("reason")
+    else:
+        rows = [f"{r.get('id') or r.get('name')} ({r.get('reason')})" for r in (plan or {}).get("needs_human") or [] if isinstance(r, dict)]
+        no_plan_why = (f"no plan ({(plan or {}).get('error') or 'not run'}): {(plan or {}).get('detail') or ''}".strip(": ")
+                       + (f"; panel-list rows a person must fix first: {', '.join(rows[:6])}" + (" ..." if len(rows) > 6 else "")
+                          if rows else ""))
     ctype = (plan or {}).get("container_type") if solved else decision.get("type")
     cons = (plan or {}).get("conservation") or {}
+    per = (plan or {}).get("per_container") or []
+    placed = sum(int(item.get("boxes") or 0) for item in per)
+    no_fit_why = (f"the loading plan does not fit: {len(per)} x {ctype} containers hold {placed} of the {plan.get('n_boxes')} "
+                  f"crates (tool lower bound N0 = {plan.get('n0')}, binding constraint {plan.get('binding_constraint')})"
+                  if solved and not fits else "")
+    if decision.get("source") == "request" and decision.get("type"):
+        type_source = "the request"
+    elif decision.get("source") == "tender_clause" and decision.get("type"):
+        type_source = f"Clause {decision['clause']}"
+    else:
+        type_source = None
 
     # container type: one row per clause that names one; a default is its own row
     deciding = next((c for c in by_kind["container_type"] if c["clause"] == decision.get("clause")), None)
     for clause in by_kind["container_type"] or [None]:
-        named = ", ".join(clause.get("named") or []) if clause else ""
+        named = ", ".join((clause.get("named") or []) + (clause.get("sizes") or [])) if clause else ""
         if clause is None:
-            figures = {"container_type": ctype, "source": "default"}
+            figures = {"container_type": ctype, "source": decision.get("source")}
             if solved:
+                why = (f"The ITT names no container type. The loading plan uses {ctype}, "
+                       + ("the type named in the request. " if decision.get("source") == "request" else "the planner's default. "))
                 checks.append(_check("container_type", None, "human_required",
-                                     f"The ITT names no container type. The loading plan uses {ctype}, the planner's default. "
-                                     + _placeholder("logistics", "container type to be offered"), figures,
-                                     decision["reason"], True))
+                                     why + _placeholder("logistics", "container type to be offered"
+                                                        + (f"; {no_fit_why}" if no_fit_why else "")),
+                                     figures, decision["reason"], True))
             else:
                 checks.append(_check("container_type", None, "human_required",
                                      _placeholder("logistics", f"container type; {no_plan_why}"), figures, no_plan_why, True))
             continue
-        figures = {"clause_names": named, "plan_container_type": ctype if solved else None,
-                   "type_source": f"Clause {decision['clause']}" if decision.get("source") == "tender_clause" and decision.get("type") else None}
-        if solved and ctype in (clause.get("allowed") or []) and decision.get("type") == ctype:
+        figures = {"clause_names": named, "plan_container_type": ctype if solved else None, "type_source": type_source,
+                   "can_fit": plan.get("can_fit") if solved else None}
+        if solved and not fits:
+            checks.append(_check("container_type", clause, "gap",
+                                 _placeholder("logistics", f"container type (Clause {clause['clause']} names {named}): {no_fit_why}; "
+                                                           "re-plan before the type is offered"),
+                                 figures, no_fit_why, True))
+        elif solved and ctype in (clause.get("allowed") or []) and decision.get("type") == ctype:
             checks.append(_check("container_type", clause, "covered",
                                  f"Clause {clause['clause']}: the panels will be shipped in {ctype} containers. The loading plan "
-                                 f"was computed for {ctype}, the type taken from Clause {decision['clause']}.",
+                                 f"was computed for {ctype}, the type taken from {type_source}"
+                                 + ("." if type_source == f"Clause {clause['clause']}" else f", which Clause {clause['clause']} also names."),
                                  figures, "plan container_type equals the type the clause names", False))
         elif solved:
             why = (f"Clause {clause['clause']} names {named}; the plan was made in {ctype}"
@@ -305,26 +366,36 @@ def build_checks(clauses: Sequence[Dict[str, Any]], decision: Dict[str, Any], pl
                    "cargo_net_kg": cons.get("kg_in"), "panel_list": panel_list, "crates": plan.get("n_boxes"),
                    "can_fit": plan.get("can_fit")}
         where = f"Clause {count_clause['clause']}: t" if count_clause else "T"
-        text = (f"{where}he loading plan places the {cons.get('pieces_in')} items ({_kg(cons.get('kg_in'))} kg net) of panel list "
-                f"{panel_list} in {n} x {ctype} containers (tool lower bound N0 = {n0}); every piece and kilogram on the list is "
-                f"in a crate (conservation check {cons.get('pieces_in')} -> {cons.get('pieces_out')} pieces).")
-        status, note = ("covered" if count_clause else "human_required"), "count from the loading plan"
-        if plan.get("can_fit") is not True:
-            status, note = "gap", "the plan does not fit"
-            text += " " + _placeholder("logistics", "the plan does not fit (can_fit is not true): re-plan before any count is stated")
-        elif decision.get("type") and ctype != decision["type"]:
-            status, note = "human_required", f"plan made in {ctype}, not the {decision['type']} the clause names"
-            text += " " + _placeholder("logistics", note)
-        elif unmodelled_packing:
-            refs = ", ".join(c["clause"] for c in handling)
-            text += (f" The count rests on the planner's own crate model ({plan.get('n_boxes')} crates, {len(types)} crate "
-                     f"type{'s' if len(types) != 1 else ''}, listed in {PLAN_FILE}); "
-                     + _placeholder("logistics", f"re-confirm the count once the packaging of Clause {refs} "
-                                                 f"({', '.join(stillage_words)}) is sized - it is not modelled"))
-            status, note = "partial", f"crate model, not the packaging Clause {refs} asks for"
-        elif not count_clause:
-            note = "no clause names a container type; the count answers no clause"
-        checks.append(_check("containers_used", count_clause, status, text, figures, note, False))
+        if not fits:
+            # crates are left out of the containers: no count is stated, only why
+            text = _placeholder("logistics", f"number of containers for the {cons.get('pieces_in')} items "
+                                             f"({_kg(cons.get('kg_in'))} kg net) of panel list {panel_list}: {no_fit_why}; "
+                                             "re-plan before any count is stated")
+            checks.append(_check("containers_used", count_clause, "gap", text, figures, "the plan does not fit", True))
+        else:
+            text = (f"{where}he loading plan places the {cons.get('pieces_in')} items ({_kg(cons.get('kg_in'))} kg net) of panel list "
+                    f"{panel_list} in {n} x {ctype} containers (tool lower bound N0 = {n0}); every piece and kilogram on the list is "
+                    f"in a crate (conservation check {cons.get('pieces_in')} -> {cons.get('pieces_out')} pieces).")
+            status, note, placeholder = "covered", "count from the loading plan", False
+            if decision.get("type") and ctype != decision["type"]:
+                status, note = "human_required", f"plan made in {ctype}, not the {decision['type']} asked for"
+                text += " " + _placeholder("logistics", note)
+                placeholder = True
+            else:
+                if unmodelled_packing:
+                    refs = ", ".join(c["clause"] for c in handling)
+                    text += (f" The count rests on the planner's own crate model ({plan.get('n_boxes')} crates, {len(types)} crate "
+                             f"type{'s' if len(types) != 1 else ''}, listed in {PLAN_FILE}); "
+                             + _placeholder("logistics", f"re-confirm the count once the packaging of Clause {refs} "
+                                                         f"({', '.join(stillage_words)}) is sized - it is not modelled"))
+                    status, note = "partial", f"crate model, not the packaging Clause {refs} asks for"
+                if not count_clause:
+                    # the type came from the request or the default, not from a clause the count could satisfy
+                    status, note = "human_required", "no clause names the planned container type; the count answers no clause"
+                    text += " " + _placeholder("logistics", f"the ITT does not name {ctype}; confirm the container type before "
+                                                            "this count is stated")
+                    placeholder = True
+            checks.append(_check("containers_used", count_clause, status, text, figures, note, placeholder))
     else:
         checks.append(_check("containers_used", count_clause, "human_required",
                              _placeholder("logistics", f"number of containers. {no_plan_why}"), {"containers_used": None}, no_plan_why, True))
@@ -333,11 +404,11 @@ def build_checks(clauses: Sequence[Dict[str, Any]], decision: Dict[str, Any], pl
     for clause in by_kind["gross_mass"]:
         limits = clause.get("limits_kg") or []
         basis = clause.get("basis")
-        per = (plan or {}).get("per_container") or []
-        if not solved or not per:
+        if not fits or not per:
+            why = no_plan_why if not solved else no_fit_why or "the plan has no per-container figures"
             checks.append(_check("gross_mass", clause, "human_required",
-                                 _placeholder("logistics", f"gross mass per container (Clause {clause['clause']}). {no_plan_why if not solved else 'the plan has no per-container figures'}"),
-                                 {"limit_kg": limits[0] if len(limits) == 1 else limits}, "no per-container figures", True))
+                                 _placeholder("logistics", f"gross mass per container (Clause {clause['clause']}). {why}"),
+                                 {"limit_kg": limits[0] if len(limits) == 1 else limits}, why, True))
             continue
         heaviest = max(per, key=lambda item: float(item.get("cargo_kg") or 0))
         cargo = float(heaviest.get("cargo_kg") or 0)
@@ -408,11 +479,24 @@ def build_checks(clauses: Sequence[Dict[str, Any]], decision: Dict[str, Any], pl
                              figures, "not modelled", True))
 
     # crate structure: the plan's own verdict per crate; a pending design is a person's job, never a pass
-    if solved:
+    # (always one row, so a re-run without a plan names this statement as changed, not withdrawn)
+    crate_clause = (by_kind["crating"] or handling or [None])[0]
+    if not solved:
+        checks.append(_check("crate_structure", crate_clause, "human_required",
+                             _placeholder("the packing designer", f"crate structure. {no_plan_why}"),
+                             {"n_boxes": None}, no_plan_why, True))
+    else:
         st = plan.get("structure") or {}
-        crate_clause = (by_kind["crating"] or handling or [None])[0]
         figures = {k: st.get(k) for k in ("n_boxes", "pass", "needs_reinforcement", "fail", "pending_design")}
-        if st.get("n_boxes") and st.get("pass") == st.get("n_boxes"):
+        if st.get("n_boxes") and st.get("pass") == st.get("n_boxes") and unmodelled_packing:
+            # the check is on the planner's own crates; the tender asks for packaging the planner does not model
+            refs = ", ".join(c["clause"] for c in handling)
+            checks.append(_check("crate_structure", crate_clause, "partial",
+                                 f"All {st.get('n_boxes')} crates of the planner's own crate model pass its structural check. "
+                                 + _placeholder("the packing designer", f"the packaging Clause {refs} asks for "
+                                                                        f"({', '.join(stillage_words)}) is not modelled or checked"),
+                                 figures, f"planner's crates pass; packaging of Clause {refs} not modelled", False))
+        elif st.get("n_boxes") and st.get("pass") == st.get("n_boxes"):
             checks.append(_check("crate_structure", crate_clause, "covered",
                                  f"All {st.get('n_boxes')} crates pass the planner's structural check.", figures, "structure check", False))
         else:
@@ -475,19 +559,24 @@ def compare(previous: Optional[Dict[str, Any]], current: Dict[str, Any],
                         "status": [old.get("status"), new.get("status")]})
     for key, old in old_by.items():
         if key not in new_by:
-            withdrawn.append({"id": old.get("id"), "key": key, "text": old.get("text")})
+            withdrawn.append({"id": old.get("id"), "key": key, "text": old.get("text"),
+                              "label": f"earlier {old.get('id')} ({KIND_TITLE.get(old.get('kind'), old.get('kind'))}, "
+                                       + (f"Clause {old.get('clause')})" if old.get("clause") else "no clause)")})
     headline_keys = ("containers_used", "max_cargo_kg", "max_gross_kg", "pieces", "cargo_net_kg", "container_type", "limit_kg")
     figure_line = "; ".join(f"{k.replace('_', ' ')} {_kg(a)} -> {_kg(b)}" for k, (a, b) in moved.items() if k in headline_keys)
     recheck = [c["id"] for c in changed] + [a["id"] for a in added]
+    # statement ids are renumbered per run: where one moved, say which earlier statement it answers
+    named = [c["id"] + (f" (was {c['previous_id']})" if c.get("previous_id") and c["previous_id"] != c["id"] else "")
+             for c in changed] + [f"{a['id']} (new)" for a in added]
     if not inputs:
         summary = f"no input changed since the previous run; {len(unchanged)} statements re-derived with the same figures"
     else:
         summary = ", ".join(i["label"] + " changed" for i in inputs)
         if figure_line:
             summary += f": {figure_line}"
-        summary += ("; statements " + ", ".join(recheck) + " need re-confirmation") if recheck else "; no statement changed"
+        summary += ("; statements " + ", ".join(named) + " need re-confirmation") if named else "; no statement changed"
         if withdrawn:
-            summary += "; withdrawn (remove from the bid): " + ", ".join(str(w["id"]) for w in withdrawn)
+            summary += "; withdrawn (remove from the bid): " + ", ".join(w["label"] for w in withdrawn)
         if earlier_exports:
             summary += "; earlier Word copies " + ", ".join(earlier_exports) + " still hold the previous statements - do not send them"
     return {"previous_generated_at": previous.get("generated_at"), "inputs_changed": inputs, "changed": changed,
@@ -590,11 +679,12 @@ def report_markdown(record: Dict[str, Any]) -> str:
         lines.append(f"- {changes['summary']}")
         for c in changes["changed"]:
             diffs = "; ".join(f"{k} {_kg(a)} -> {_kg(b)}" for k, (a, b) in c["figures"].items()) or "wording"
-            lines.append(f"- {c['id']} changed ({diffs}){' - its clause text changed' if c['clause_changed'] else ''}: re-confirm")
+            was = f" (was {c['previous_id']})" if c.get("previous_id") and c["previous_id"] != c["id"] else ""
+            lines.append(f"- {c['id']}{was} changed ({diffs}){' - its clause text changed' if c['clause_changed'] else ''}: re-confirm")
         for c in changes["new"]:
             lines.append(f"- {c['id']} is new: confirm")
         for c in changes["withdrawn"]:
-            lines.append(f"- {c['id']} withdrawn: remove it from the bid ({c['text'][:120]})")
+            lines.append(f"- {c.get('label') or c['id']} withdrawn: remove it from the bid ({str(c.get('text') or '')[:120]})")
         if changes["unchanged"]:
             lines.append("- re-derived with the same figures: " + ", ".join(c["id"] for c in changes["unchanged"]))
     return "\n".join(lines) + "\n"
@@ -622,8 +712,12 @@ def earlier_exports(folder: str) -> List[str]:
 
 
 def run_link(tender_path: str, packing_list: str, *, previous: Optional[Dict[str, Any]] = None,
-             project_name: str = "", now: Optional[str] = None, exports: Sequence[str] = ()) -> Dict[str, Any]:
-    """ITT + panel list -> clauses, plan, matrix rows, statements, bid-book, link record (and what changed)."""
+             project_name: str = "", now: Optional[str] = None, exports: Sequence[str] = (),
+             container_type: Optional[str] = None) -> Dict[str, Any]:
+    """ITT + panel list -> clauses, plan, matrix rows, statements, bid-book, link record (and what changed).
+
+    ``container_type``: the type the request names, when a person chose it (the ITT names none, several, or a size
+    only). It is planned as asked; a clause that names another type then reads human_required, never covered."""
     from packing_assistant.bidbook.sg_facade import build_sg_facade_bidbook
     from packing_assistant.tools.pack_ship_solve import plan_record_json, run_plan
     from packing_assistant.tools.tender_parse import (_count_by, _readiness_score, build_response_matrix, open_actions,
@@ -635,7 +729,7 @@ def run_link(tender_path: str, packing_list: str, *, previous: Optional[Dict[str
     tender, table = _resolve_job_file(Path(tender_path)), _resolve_job_file(Path(packing_list))
     text = _read_tender(tender)
     clauses = logistics_clauses(text)
-    decision = container_decision(clauses)
+    decision = container_decision(clauses, requested=container_type)
     plan: Optional[Dict[str, Any]] = None
     if decision["type"]:
         plan = run_plan(file_path=str(table), container_type=decision["type"])
@@ -683,7 +777,9 @@ def run_link(tender_path: str, packing_list: str, *, previous: Optional[Dict[str
     reply = (f"Linked {tender.name} and {table.name}: {len(clauses)} logistics clauses, {len(checks)} statements "
              f"({counts['covered']} covered by the plan, {counts['partial']} partial, {counts['gap']} gap, "
              f"{counts['human_required']} for a person). "
-             + (f"Plan {plan.get('containers_used')} x {plan.get('container_type')} ({decision['reason']}) " if solved
+             + (f"Plan {plan.get('containers_used')} x {plan.get('container_type')} ({decision['reason']}) "
+                + ("" if plan.get("can_fit") is True else "DOES NOT FIT (can_fit is not true): no count or mass is stated. ")
+                if solved
                 else f"No plan: {decision['reason'] if not decision['type'] else (plan or {}).get('error')}. ")
              + (f"Since the previous run: {record['changes_since_previous']['summary']}. " if record["changes_since_previous"] else "")
              + "Internal draft, submit_blocked=true; a person confirms the plan before booking.")

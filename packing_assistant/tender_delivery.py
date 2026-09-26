@@ -126,6 +126,8 @@ def run_tender_delivery_pipeline(
 
             decision = container_decision(logistics_clauses(text or ""))
             ctype = decision["type"] or ""
+        if not ctype:
+            materials_source = None          # packing is not run: no materials were packed, sample or not
     if run_delivery and ctype:
         from packing_assistant.teams.big_team import run_big_team
 

@@ -39,7 +39,10 @@ civil exec "按招标 facade_itt_doc.md 和装箱单 facade_panels.xlsx 出投�
 ```
 
 It reads the ITT's logistics clauses, takes the container type from Clause 4.8 (40HQ; a tender that names none
-gets 40HQ by default and says so; a type the planner cannot model gets no plan and goes to a person), plans the
+gets 40HQ by default and says so; a type the planner cannot model, several types, a size with no type such as
+"40-foot", or a type in a sentence that also says *not* gets no plan and goes to a person, who can name the type in
+the request, e.g. `... write the logistics response in 40HQ`; a plan that does not fit states no type, count or
+mass), plans the
 panel list through the same `run_plan` path as the packing flow (conservation check, needs-human gates) and writes,
 in `.civil-buddy/out/<session>/bid-parse/`:
 

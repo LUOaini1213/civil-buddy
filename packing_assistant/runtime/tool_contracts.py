@@ -68,7 +68,7 @@ def contract_for(name: str, *, exclusive: bool = False) -> dict:
                      ("handoff", "matrix", "parse", "submit_blocked"), extra=True)
     elif name == "tender.packing_link":
         properties.update(tender_path={"type": "string", "minLength": 1}, packing_list={"type": "string", "minLength": 1},
-                          previous_path=TEXT, project_name=TEXT)
+                          previous_path=TEXT, project_name=TEXT, container_type=TEXT)
         required = ("tender_path", "packing_list")
         output = obj({"ok": BOOL, "statements": {"type": "array"}, "record": MAP, "deliverables": {"type": "array"},
                       "submit_blocked": {"const": True}}, ("ok", "statements", "record", "deliverables", "submit_blocked"), extra=True)

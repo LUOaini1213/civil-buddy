@@ -430,7 +430,8 @@ def _tender_packing_link(args: Dict[str, Any]) -> Any:
     previous = str(args.get("previous_path") or "")
     return run_link(str(args.get("tender_path") or ""), str(args.get("packing_list") or ""),
                     previous=load_previous(previous), project_name=str(args.get("project_name") or ""),
-                    exports=earlier_exports(str(Path(previous).parent)) if previous else ())
+                    exports=earlier_exports(str(Path(previous).parent)) if previous else (),
+                    container_type=str(args.get("container_type") or "") or None)
 
 
 def _tender_review(args: Dict[str, Any]) -> Any:

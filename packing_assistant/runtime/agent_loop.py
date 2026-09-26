@@ -98,15 +98,16 @@ def _named_packing_list(text: str) -> str:
     return str(tables[0]) if len(tables) == 1 else ""
 
 
-def _named_container_type(text: str, packing_list: str) -> List[str]:
+def _named_container_type(text: str, *files: Any) -> List[str]:
     """Container types the request names ("按 X.xlsx 装柜，柜型 20GP"), read with the tender parser's own rule
-    (tender_parse._container_codes), the named file's own name left out. Unknown ones are passed on as named:
+    (tender_parse._container_codes), the named files' own names left out. Unknown ones are passed on as named:
     run_plan refuses them (unknown_container_type) instead of planning in another type."""
     from packing_assistant.tools.tender_parse import _container_codes
 
     rest = text or ""
-    if packing_list:
-        rest = rest.replace(Path(packing_list).name, " ")
+    for name in files:
+        if name:
+            rest = rest.replace(Path(str(name)).name, " ")
     return sorted(_container_codes(rest))
 
 
@@ -275,9 +276,16 @@ def _plan_calls(
             from packing_assistant.tender_packing_link import LINK_FILE
 
             tender, table = linked
+            # a type typed in the request is a person's choice (the ITT names none, several, or a size only)
+            codes = _named_container_type(text, tender, table)
+            if len(codes) > 1:
+                return {"hitl": False, "calls": [], "stop_code": "ambiguous_container_type",
+                        "stop": f"The request names more than one container type ({', '.join(codes)}); the planner plans one "
+                                f"type x N at a time: name one. 任务里写了不止一种柜型（{'、'.join(codes)}），请只写一种。Nothing was written."}
             calls.append({"name": "tender.packing_link", "tool_label": "tender.packing_link",
                           "arguments": {"tender_path": str(tender), "packing_list": str(table),
-                                        "previous_path": str(out_dir / LINK_FILE)}})
+                                        "previous_path": str(out_dir / LINK_FILE),
+                                        **({"container_type": codes[0]} if codes else {})}})
             return {"hitl": False, "calls": calls, "out_dir": str(out_dir), "link": True}
     if exp is None or exp.id == "bid-parse":
         calls.append(
