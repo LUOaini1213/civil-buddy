@@ -34,7 +34,7 @@ DISCLAIMER = (
     "本文件由 Civil Buddy 根据用户输入生成，仅供内部讨论与起草。"
     "不构成设计文件、法定专项施工方案、交底签认件、监理指令、专家论证材料或开工/竣工验收依据。"
 )
-CONFIRM = "我明白，将由持证人员签认"
+from packing_assistant.runtime.civil_config import CONFIRM, CONFIRM_EN  # noqa: E402,F401  (one definition)
 FORBIDDEN = ("可以投标", "可以开工", "中标率")
 
 
@@ -3994,6 +3994,7 @@ def _run_exclusive_body(
 ) -> Dict[str, Any]:
     tools = _write_tools(expert)
     from packing_assistant.runtime.civil_config import high_risk_unconfirmed, hitl_reply, load_config
+    from packing_assistant.runtime.reply_language import english_request
 
     if not load_config().allow_write():
         return {
@@ -4008,7 +4009,7 @@ def _run_exclusive_body(
             "hitl_pending": True,
             "files": [],
             "tools_run": [],
-            "reply": hitl_reply(expert.name),
+            "reply": hitl_reply(expert.name, english=english_request(text)),
             "submit_blocked": True,
         }
     out_dir = _out_root() / session_id / expert.id

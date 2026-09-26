@@ -199,9 +199,12 @@ function cbRememberSession(id) { return nav.rememberSession(id); }
 function cbRememberedSession() { return nav.rememberedSession(); }
 async function cbResumeSession(id, request) { return nav.resumeSession(id, request); }
 
+// The two sign-off sentences (packing_assistant/runtime/civil_config.py CONFIRM_SENTENCES); the server decides.
+const CB_SIGNOFF = ["我明白，将由持证人员签认", "I understand; a licensed person will sign this off."];
+
 function cbConfirmText() {
   const input = $("confirmOk");
-  return input && input.value === "我明白，将由持证人员签认" ? input.value : "";
+  return input && CB_SIGNOFF.includes(input.value) ? input.value : "";
 }
 
 function cbConfirmed() {
@@ -3684,7 +3687,7 @@ function cbTlCreate(bodyEl, sourceMessage) {
       '<span class="cb-apr-chip is-warn">签认 <b>未确认</b> · 本岗未出稿</span>' +
       "</div>" +
       '<div class="cb-apr-block" data-cb-approval-blockers="true">输入下方完整签认句后，才能重新提交这条任务并生成内部讨论草稿。</div>' +
-      '<label class="cb-apr-ack">请键入：我明白，将由持证人员签认' +
+      '<label class="cb-apr-ack">请键入：我明白，将由持证人员签认（或 / or: I understand; a licensed person will sign this off.）' +
       '<input class="cb-apr-ack-input" type="text" autocomplete="off" spellcheck="false" /></label>' +
       '<div class="cb-apr-actions" data-cb-approval-actions="true">' +
       '<button type="button" class="cb-apr-confirm" disabled aria-label="确认并重提（须完整键入签认句）">确认并重提</button>' +
@@ -3701,7 +3704,7 @@ function cbTlCreate(bodyEl, sourceMessage) {
     const acknowledgment = card.querySelector(".cb-apr-ack-input");
     const approve = card.querySelector(".cb-apr-confirm");
     acknowledgment.addEventListener("input", () => {
-      approve.disabled = acknowledgment.value !== "我明白，将由持证人员签认";
+      approve.disabled = !CB_SIGNOFF.includes(acknowledgment.value);
     });
 
     function settle(kind, reason) {
@@ -3735,7 +3738,7 @@ function cbTlCreate(bodyEl, sourceMessage) {
     }
 
     card.querySelector(".cb-apr-confirm").addEventListener("click", () => {
-      if (state.decided || acknowledgment.value !== "我明白，将由持证人员签认") return;
+      if (state.decided || !CB_SIGNOFF.includes(acknowledgment.value)) return;
       if (runState.active) {
         cbAnnounce("请等待当前回答结束后，再确认重提");
         return;

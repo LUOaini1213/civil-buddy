@@ -32,7 +32,7 @@ def _out_root() -> Path:
     return _OUT
 
 
-CONFIRM = "我明白，将由持证人员签认"
+from packing_assistant.runtime.civil_config import CONFIRM, CONFIRM_EN  # noqa: E402,F401  (one definition)
 FORBIDDEN = ("可以投标", "可以开工", "中标率")
 _PIPE_KEYS = (
     "matrix",
@@ -224,12 +224,13 @@ def _plan_calls(
 
     exp = get_expert(expert_id) if expert_id else None
     from packing_assistant.runtime.civil_config import high_risk_unconfirmed, hitl_reply
+    from packing_assistant.runtime.reply_language import english_request
 
     if exp and high_risk_unconfirmed(risk=exp.risk, confirmed=p0_confirmed):
         return {
             "hitl": True,
             "calls": [],
-            "reply": hitl_reply(exp.name),
+            "reply": hitl_reply(exp.name, english=english_request(text)),
         }
     sid = _safe_sid(session_id)
     out_dir = _out_root() / sid / (exp.id if exp else "ops")
@@ -438,7 +439,8 @@ def run_agent(
             "wrote": False,
             "submit_blocked": True,
         }
-    from packing_assistant.runtime.civil_config import CONFIRM, decide_gate, load_config
+    from packing_assistant.runtime.civil_config import CONFIRM, CONFIRM_EN, decide_gate, load_config
+    from packing_assistant.runtime.reply_language import english_request
 
     packing_list = _named_packing_list(text) if exp and exp.id == "pack-ship" else ""
     if packing_list and intent == "chat" and force_intent not in {"chat", "run", "both"}:
@@ -689,7 +691,9 @@ def run_agent(
             if gate == "hitl":
                 sched.transition(run, "waiting_hitl")
                 who = f"{exp.name} " if exp else ""
-                reply = f"approval={cfg.approval}：{who}写盘须确认句「{CONFIRM}」。本轮未写盘。"
+                reply = (f"approval={cfg.approval}: {who or 'this post '}writes only after a person types the sign-off sentence "
+                         f"\"{CONFIRM_EN}\" (or 「{CONFIRM}」) in this turn. Nothing was written."
+                         if english_request(text) else f"approval={cfg.approval}：{who}写盘须确认句「{CONFIRM}」。本轮未写盘。")
                 messages.append({"role": "assistant", "content": reply})
                 bus.emit(run.run_id, "hitl", {"required": True})
                 out["reply"] = reply

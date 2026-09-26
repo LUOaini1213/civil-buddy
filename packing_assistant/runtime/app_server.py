@@ -11,7 +11,7 @@ import sys
 from typing import Any, Dict, Optional
 
 PROTOCOL = "civil-app-server/v1"
-CONFIRM = "我明白，将由持证人员签认"
+from packing_assistant.runtime.civil_config import CONFIRM, CONFIRM_EN, is_confirmation  # noqa: E402  (one definition)
 
 
 def initialize() -> Dict[str, Any]:
@@ -30,6 +30,7 @@ def initialize() -> Dict[str, Any]:
         "host": "civil-buddy",
         "submit_blocked": True,
         "confirm_sentence": CONFIRM,
+        "confirm_sentence_en": CONFIRM_EN,
         "sandbox": cfg.sandbox,
         "approval": cfg.approval,
         "job_root": root,
@@ -98,7 +99,7 @@ def dispatch(method: str, params: Dict[str, Any]) -> Any:
             tid,
             text,
             skill=str(params.get("skill") or ""),
-            confirm=str(params.get("confirm_text") or "").strip() == CONFIRM,
+            confirm=is_confirmation(str(params.get("confirm_text") or "")),
             background=bool(params.get("background")),
         )
     raise ValueError(f"unknown method {method}")
