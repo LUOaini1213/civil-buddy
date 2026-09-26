@@ -224,3 +224,59 @@ jobs:
           assert r["all_green"] and r["total_pass"] == r["total_runs_expected"] == 2, r
           print("slice", r["total_pass"], "/", r["total_runs_expected"], "wall", r["wall_s"], "s")
           PY
+
+  # The Docker image a judge or operator starts with `docker compose up`. Until this job it was
+  # never started in CI, and it did not start at all (contract/ and workbench/seed.json were not
+  # copied; the database sat outside the volume). Build with the GitHub layer cache, then run
+  # scripts/docker_smoke.sh (refuses without CIVIL_TOKEN, 401/200 on the token, parses the
+  # synthetic ITT, database survives a container re-create) and the compose file itself.
+  docker-smoke:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: docker/setup-buildx-action@v3
+      - name: Build image (layer cache)
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          load: true
+          tags: civil-buddy-gateway:smoke
+          cache-from: type=gha,scope=docker-smoke
+          cache-to: type=gha,scope=docker-smoke,mode=max
+      - name: Image size
+        run: docker image ls civil-buddy-gateway:smoke
+      - name: Container smoke (token guard, tender parse, database persistence)
+        run: bash scripts/docker_smoke.sh civil-buddy-gateway:smoke
+      - name: docker compose up / down / up keeps the session
+        run: |
+          set -euo pipefail
+          if docker compose config >/dev/null 2>&1; then
+            echo "FAIL: compose accepted a missing CIVIL_TOKEN"; exit 1
+          fi
+          echo "ok   compose refuses to start without CIVIL_TOKEN"
+          export CIVIL_TOKEN="$(python3 -c 'import secrets; print(secrets.token_urlsafe(32))')"
+          docker tag civil-buddy-gateway:smoke "$(docker compose config --images)"
+          up() {
+            docker compose up -d --no-build
+            for _ in $(seq 1 150); do curl -fs -o /dev/null http://127.0.0.1:8000/api/health && return 0; sleep 0.2; done
+            echo "FAIL: compose service not healthy"; exit 1
+          }
+          code() { curl -s -o /dev/null -w '%{http_code}' "$@"; }
+          up
+          test "$(code http://127.0.0.1:8000/api/tools)" = 401
+          test "$(code -H "Authorization: Bearer $CIVIL_TOKEN" http://127.0.0.1:8000/api/tools)" = 200
+          echo "ok   compose: 401 without token, 200 with it"
+          test "$(code -H "Authorization: Bearer $CIVIL_TOKEN" -H 'content-type: application/json' \
+                 --data '{"session_id":"compose-smoke"}' http://127.0.0.1:8000/api/demo)" = 200
+          docker compose down
+          up
+          curl -fs -H "Authorization: Bearer $CIVIL_TOKEN" http://127.0.0.1:8000/api/audit \
+            | python3 -c 'import json,sys; ids=[s["session_id"] for s in json.load(sys.stdin)["sessions"]]; assert "compose-smoke" in ids, ids'
+          echo "ok   compose: session survived docker compose down + up"
+      - name: Compose logs on failure
+        if: failure()
+        run: docker compose logs --no-color || true
+      - name: Clean up
+        if: always()
+        run: docker compose down -v || true
