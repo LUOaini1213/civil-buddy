@@ -307,7 +307,7 @@ class Demo:
                                 "rows": {k: cells.get(k, [""])[0] for k in DAILY_ROWS}}
 
     def briefing(self) -> None:
-        from packing_assistant.civil import CONFIRM
+        from packing_assistant.civil import CONFIRM, CONFIRM_EN
 
         brief_text = (self.job / "inputs" / "wah_briefing_input.txt").read_text(encoding="utf-8").strip()
         out = self.turn("briefing", brief_text, "safety-brief", command="- < inputs/wah_briefing_input.txt")
@@ -315,7 +315,7 @@ class Demo:
         if not refused:
             self.errors.append("briefing: the high-risk post wrote without the sign-off sentence")
         self.say(f"  SIGN-OFF NEEDED HERE: 安全交底 is a high-risk post. It wrote nothing: a licensed person must type"
-                 f" 「{CONFIRM}」 (civil desktop / TUI dialog, or `civil exec --confirm` run by that person).")
+                 f" 「{CONFIRM}」 or \"{CONFIRM_EN}\" (civil desktop / TUI dialog, or `civil exec --confirm` run by that person).")
         brief = {"refused_without_sentence": refused, "written": False}
         if not self.sign:
             self.say("  This demo does not supply the sentence. To see the draft, the person reruns with --sign and types it.")
@@ -386,10 +386,11 @@ def main(argv: Optional[List[str]] = None) -> int:
     parser.add_argument("--sign", default="", help="the licensed person types the sign-off sentence here; never filled in for you")
     args = parser.parse_args(argv)
     sys.path.insert(0, str(ROOT))
-    from packing_assistant.civil import CONFIRM
+    from packing_assistant.civil import CONFIRM, CONFIRM_EN
+    from packing_assistant.runtime.civil_config import is_confirmation
 
-    if args.sign and args.sign.strip() != CONFIRM:
-        print(f"--sign must be the sentence exactly: {CONFIRM}", file=sys.stderr)
+    if args.sign and not is_confirmation(args.sign):
+        print(f"--sign must be one of the two sentences exactly: {CONFIRM} | {CONFIRM_EN}", file=sys.stderr)
         return 2
     try:
         result = run_demo(Path(args.job).expanduser().absolute() if args.job else None, sign=args.sign.strip())
