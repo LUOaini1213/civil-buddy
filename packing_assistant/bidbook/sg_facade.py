@@ -119,7 +119,14 @@ def _logistics_chapter(packing_summary: Optional[Dict[str, Any]]) -> str:
             "",
         ]
         return "\n".join(lines)
+    if pack.get("materials_source") == "sample":
+        lines += [
+            "> **SAMPLE MATERIALS.** No panel list was given: the figures below were computed on the tool's built-in "
+            "sample materials (`materials_source = sample`), not on this project's packing list. They support no bid statement.",
+            "",
+        ]
     lines += [
+        f"- **materials source:** {pack.get('materials_source') or '—'}",
         f"- **can_fit:** {pack.get('can_fit')}",
         f"- **container type:** {pack.get('container_type') or '—'}",
         f"- **containers used:** {pack.get('containers_used')}",
@@ -219,8 +226,13 @@ def build_sg_facade_bidbook(
     open_actions: Optional[List[Dict[str, Any]]] = None,
     project_title: Optional[str] = None,
     p0_confirmed: bool = False,
+    logistics_section: Optional[str] = None,
+    annex_a: Optional[str] = None,
 ) -> Dict[str, Any]:
-    """Deterministic English bid-book. Returns markdown + meta."""
+    """Deterministic English bid-book. Returns markdown + meta.
+
+    ``logistics_section`` / ``annex_a``: chapter 6 and Annex A written elsewhere from a loading plan, clause by clause
+    (tender_packing_link.py). Without them the chapter prints the packing summary as before."""
     parsed = parsed or {}
     matrix = matrix or {}
     bidder = DEMO_BIDDER
@@ -265,13 +277,13 @@ def build_sg_facade_bidbook(
         "",
         T.METHOD.format(**ctx).rstrip(),
         "",
-        _logistics_chapter(packing_summary).rstrip(),
+        (logistics_section or _logistics_chapter(packing_summary)).rstrip(),
         "",
         T.WSH.format(**ctx).rstrip(),
         "",
         T.RESOURCES.format(**ctx).rstrip(),
         "",
-        _annex_a(packing_summary).rstrip(),
+        (annex_a or _annex_a(packing_summary)).rstrip(),
         "",
         _annex_b(actions).rstrip(),
         "",

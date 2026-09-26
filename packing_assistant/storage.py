@@ -135,8 +135,14 @@ def repo_root() -> Path:
 
 
 def default_db_path() -> Path:
-    """data/civilbuddy.db（相对 repo 根，与 cwd 无关——sidecar cwd 漂移免疫）。"""
-    return repo_root() / "data" / "civilbuddy.db"
+    """CB_DB_PATH if set, else data/civilbuddy.db (repo-relative, immune to cwd drift).
+
+    Honouring the env var here (not only in Storage) keeps the LangGraph checkpointer and the
+    startup backup on the same file as the business tables — the Docker image points it into
+    its persisted volume.
+    """
+    raw = (os.getenv("CB_DB_PATH") or "").strip()
+    return Path(raw) if raw else repo_root() / "data" / "civilbuddy.db"
 
 
 def storage_mode() -> str:

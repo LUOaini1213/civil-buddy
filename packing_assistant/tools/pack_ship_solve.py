@@ -345,6 +345,37 @@ def structure_summary(boxes: Sequence[Dict[str, Any]]) -> Dict[str, Any]:
     return {**counts, "n_boxes": len(boxes or []), "failing": failing}
 
 
+def per_container_figures(plan: Dict[str, Any], boxes: Sequence[Dict[str, Any]]) -> List[Dict[str, Any]]:
+    """Each loaded container as the engine placed it: its crates, the cargo mass in it (goods + crates, from the
+    engine's own per-container load), the crate types and which packing-list rows went into it. A clause that
+    limits the mass of each loaded container is checked against these figures, not against the plan's total or
+    its payload ratio."""
+    where = {str(item.get("box_id")): item.get("container_no") for item in plan.get("layout") or [] if isinstance(item, dict)}
+    rows: Dict[Any, Dict[str, int]] = {}
+    types: Dict[Any, Dict[str, int]] = {}
+    for box in boxes or []:
+        number = where.get(str(box.get("box_id")))
+        if number is None:
+            continue
+        kinds = types.setdefault(number, {})
+        kind = str(box.get("box_type") or "")
+        kinds[kind] = kinds.get(kind, 0) + 1
+        bucket = rows.setdefault(number, {})
+        for item in box.get("contents") or []:
+            row = str(item.get("source_material_id") or item.get("material_id") or "")
+            if row:
+                bucket[row] = bucket.get(row, 0) + int(item.get("quantity") or 1)
+    out: List[Dict[str, Any]] = []
+    for item in plan.get("per_container") or []:
+        if not isinstance(item, dict):
+            continue
+        number = item.get("container_no")
+        out.append({"container_no": number, "boxes": item.get("boxes"), "cargo_kg": item.get("load_kg"),
+                    "box_types": dict(sorted((types.get(number) or {}).items())),
+                    "rows": dict(sorted((rows.get(number) or {}).items()))})
+    return out
+
+
 def _no_boxes(n_rows: int) -> Dict[str, Any]:
     return {
         "ok": False,
@@ -440,6 +471,8 @@ def run_plan(
         "floor_utilization_avg": plan.get("floor_utilization_avg", UNSPECIFIED),
         "n_materials": len(mats),
         "n_boxes": len(boxes),
+        # 每个柜：箱数、柜内货重（货 + 箱，引擎自己的逐柜载重）与装进去的装箱单行
+        "per_container": per_container_figures(plan, boxes),
         # 逐箱结构验算结论；can_fit 不含这一项
         "structure": structure_summary(boxes),
         # 每次求解后独立核对过的账：装箱单上的件数与净重，全部在箱里
@@ -521,7 +554,7 @@ def plan_report_md(result: Dict[str, Any], file_name: str) -> str:
 
 _RECORD_KEYS = ("ok", "source", "error", "n_rows", "can_fit", "containers_used", "container_type", "n0", "utilization",
                 "weight_utilization", "floor_utilization_avg", "binding_constraint", "mid50", "n_materials", "n_boxes",
-                "conservation", "structure", "custom_section_boxes", "detail", "cargo_feasibility",
+                "per_container", "conservation", "structure", "custom_section_boxes", "detail", "cargo_feasibility",
                 "container_mix_supported", "elapsed_s")
 
 

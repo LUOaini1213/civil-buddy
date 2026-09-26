@@ -66,4 +66,12 @@ SECTION 4 PARTICULAR SPECIFICATION - FACADE
 
 4.7 Packing and delivery: unitised panels shall be transported upright on steel A-frame stillages with the glass faces protected; glazed panels shall not be stacked.
 
-4.8 Insurance: the Subcontractor shall maintain Contractor's All Risks and Work Injury Compensation insurance.
+4.8 Containers: panels fabricated overseas shall be shipped and delivered to site in 40HQ (40 ft high cube) containers.
+
+4.9 Container gross mass: the gross mass of each loaded container, including the container tare, shall not exceed 20,000 kg to suit the site hoisting and road haulage arrangements.
+
+4.10 Cargo securing: cargo shall be packed and secured in each container in accordance with the IMO/ILO/UNECE Code of Practice for Packing of Cargo Transport Units (CTU Code).
+
+4.11 Delivery sequence: deliveries shall be sequenced to the approved installation programme, floor by floor, and each delivery shall be notified to the Main Contractor 48 hours in advance.
+
+4.12 Insurance: the Subcontractor shall maintain Contractor's All Risks and Work Injury Compensation insurance.

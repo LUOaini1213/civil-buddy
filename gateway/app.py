@@ -837,7 +837,7 @@ def api_tender_delivery(body: dict = None):
         str(body.get("text") or body.get("tender_text") or ""),
         run_delivery=bool(body.get("run_delivery", True)),
         materials=materials,
-        container_type=str(body.get("container_type") or "40HQ"),
+        container_type=str(body.get("container_type") or "") or None,   # none given: the tender's clause, else 40HQ
         max_containers=int(body.get("max_containers") or 2),
         user_input=str(body.get("user_input") or "投标交付：按招标运输包装要求装柜"),
         session_id=str(body.get("session_id") or "tender-delivery"),
@@ -857,7 +857,7 @@ def api_tender_bidbook(body: dict = None):
     out = run_tender_delivery_pipeline(
         str(body.get("text") or body.get("tender_text") or ""),
         run_delivery=bool(body.get("run_delivery", False)),
-        container_type=str(body.get("container_type") or "40HQ"),
+        container_type=str(body.get("container_type") or "") or None,
         max_containers=int(body.get("max_containers") or 2),
         project_name=str(body.get("project_name") or "幕墙项目投标应答（草稿）"),
     )
@@ -869,6 +869,7 @@ def api_tender_bidbook(body: dict = None):
         "open_actions": out.get("open_actions"),
         "matrix": out.get("matrix"),
         "packing_summary": out.get("packing_summary"),
+        "materials_source": out.get("materials_source"),
     }
 
 

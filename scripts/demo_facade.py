@@ -1,9 +1,12 @@
 #!/usr/bin/env python3
-"""Façade demo: one curtain-wall subcontractor's three jobs, run on the SYNTHETIC files in examples/facade-demo.
+"""Façade demo: one curtain-wall subcontractor's jobs, run on the SYNTHETIC files in examples/facade-demo.
 
-  1 tender     解析招标 facade_itt_doc.md, then 技术标 and 废标检查 read the same session's hand-off
-  2 packing    按 facade_panels_zh.xlsx 装柜 (and the English list): container plan + the conservation line
-  3 site docs  项目日报 from daily_report_input.txt; 安全交底 from wah_briefing_input.txt, a high-risk post
+  1 linked     the tender and the packing as ONE run: the ITT's logistics clauses, a loading plan from the panel
+               list under the clause's container type, the English statements tied to clause and plan figure, and
+               the link record; then a revised panel list (rev B) re-run, and the statements that changed are named
+  2 tender     解析招标 facade_itt_doc.md, then 技术标 and 废标检查 read the same session's hand-off
+  3 packing    按 facade_panels_zh.xlsx 装柜 (and the English list): container plan + the conservation line
+  4 site docs  项目日报 from daily_report_input.txt; 安全交底 from wah_briefing_input.txt, a high-risk post
                that writes nothing until a licensed person types the sign-off sentence. This script never
                types it: pass --sign "<the sentence>" yourself, the way `civil exec --confirm` is yours to pass.
 
@@ -27,16 +30,21 @@ from typing import Any, Dict, List, Optional
 sys.dont_write_bytecode = True          # not even __pycache__ outside the job folder
 ROOT = Path(__file__).resolve().parents[1]
 FIXTURES = ROOT / "examples" / "facade-demo"
-INPUTS = ("facade_itt_doc.md", "facade_panels.xlsx", "facade_panels_zh.xlsx", "daily_report_input.txt", "wah_briefing_input.txt")
+INPUTS = ("facade_itt_doc.md", "facade_panels.xlsx", "facade_panels_zh.xlsx", "facade_panels_rev_b.xlsx", "daily_report_input.txt",
+          "wah_briefing_input.txt")
 PROJECT = "合成示例办公楼幕墙分包"
 SESSION = "civil-cli"
 TENDER_ROWS = ("招标编号", "注册资格/工作类别", "投标截止", "工期", "投标有效期", "履约担保", "缺陷责任期/质保期", "备选投标方案")
 # Section 4 of the ITT, and two appendix rows, by a token only that clause carries.
 FACADE_CLAUSES = (("PMU mock-up", "PMU"), ("VMU mock-up", "VMU"), ("heat soak", "14179"), ("site water test", "hose"),
                   ("PE-endorsed calcs/shop drawings", "Professional Engineer"), ("warranty", "water tightness"),
-                  ("A-frame delivery", "A-frame"), ("insurance", "All Risks"))
+                  ("A-frame delivery", "A-frame"), ("40HQ containers", "high cube"), ("container gross mass", "gross mass"),
+                  ("CTU Code securing", "CTU Code"), ("delivery sequence", "installation programme"), ("insurance", "All Risks"))
 APPENDIX_ROWS = (("liquidated damages", "per day of delay"), ("retention", "progress payment"))
 PANELS = ("facade_panels_zh.xlsx", "facade_panels.xlsx")
+LINK_SESSION = "civil-link"
+LINK_ASK = "Link the tender facade_itt_doc.md to the packing list facade_panels.xlsx and write the logistics response"
+LINK_REV_B = "招标装柜联动：按招标 facade_itt_doc.md 和改版装箱单 facade_panels_rev_b.xlsx 重出物流应答"
 DAILY_ROWS = ("日期", "天气", "部位", "形象进度", "出勤", "机械材料", "安全质量记事", "明日计划")
 
 
@@ -115,8 +123,89 @@ class Demo:
         return md
 
     # 1 ---------------------------------------------------------------------------------------------
+    @staticmethod
+    def figure(statement: Dict[str, Any]) -> str:
+        """The plan figure a statement rests on, in one line."""
+        f = statement.get("figures") or {}
+        kind = statement.get("kind")
+        if kind == "container_type":
+            return f"clause names {f.get('clause_names') or '-'}; plan made in {f.get('plan_container_type') or f.get('container_type')}"
+        if kind == "containers_used" and f.get("containers_used") is not None:
+            return (f"{f.get('containers_used')} x {f.get('container_type')} (N0 {f.get('n0')}) for {f.get('pieces')} pieces / "
+                    f"{f.get('cargo_net_kg'):,.0f} kg net from {f.get('panel_list')}")
+        if kind == "gross_mass" and f.get("max_gross_kg") is not None:
+            return (f"heaviest container {f.get('max_gross_kg'):,} kg gross ({f.get('max_cargo_kg'):,} cargo + {f.get('container_tare_kg'):,} tare)"
+                    f" vs limit {f.get('limit_kg'):,.0f} kg" + (f", margin {f.get('margin_kg'):,}" if f.get("margin_kg") is not None else ""))
+        if kind == "crate_structure":
+            return f"{f.get('pending_design')} of {f.get('n_boxes')} crates pending detailed design (待详设)"
+        return f"not modelled -> {statement.get('owner')}"
+
+    def link_turn(self, text: str, label: str) -> Dict[str, Any]:
+        out = self.turn("linked", text, "bid-parse", session=LINK_SESSION)
+        link = out.get("tender_packing_link") or {}
+        if not (out.get("ok") and link.get("statements")):
+            self.errors.append(f"linked ({label}): no linked response (ok={out.get('ok')}, error={out.get('error_code')})")
+            return {}
+        record = next((Path(f["path"]) for f in out.get("files") or [] if str(f.get("path", "")).endswith("tender-packing-link.json")), None)
+        if record is None or not record.is_file():
+            self.errors.append(f"linked ({label}): no link record written")
+        inputs = link.get("inputs") or {}
+        self.say(f"    container type: {(link.get('container') or {}).get('reason')}")
+        self.say("    inputs: " + " · ".join(f"{k} {(inputs.get(k) or {}).get('name')} sha256 {str((inputs.get(k) or {}).get('sha256'))[:12]}"
+                                            for k in ("tender", "panel_list", "plan")))
+        for s in link["statements"]:
+            self.say(f"    {s['id']} Clause {s.get('clause') or '-'} · {s['kind']} · {s['status']} · {self.figure(s)}")
+        if record is not None:
+            self.say(f"    link record: {self.rel(record)} (statement -> clause -> plan figures -> sha256 of tender, list, plan)")
+        return {"out": out, "link": link, "record": record}
+
+    def linked(self) -> None:
+        from packing_assistant.tender_packing_link import KIND_TITLE
+
+        self.say("\n== 1 Tender <-> packing, linked: the ITT's logistics clauses, the plan under them, the English statements")
+        first = self.link_turn(LINK_ASK, "first run")
+        if not first:
+            return
+        link = first["link"]
+        clauses = link.get("clauses") or []
+        self.say("    logistics clauses read from the ITT: " + "; ".join(f"{c['clause']} {'/'.join(c['kinds'])}" for c in clauses))
+        by_kind = {s["kind"]: s for s in link["statements"]}
+        plan = link.get("plan") or {}
+        clause_type = next((c for c in clauses if "container_type" in c["kinds"]), None)
+        named = str((by_kind.get("container_type") or {}).get("figures", {}).get("clause_names") or "").split(", ")
+        if clause_type and plan.get("container_type") not in named:
+            self.errors.append(f"linked: plan in {plan.get('container_type')}, the ITT's Clause {clause_type['clause']} names {named}")
+        for kind in ("securing", "handling", "delivery_sequence"):
+            if by_kind.get(kind, {}).get("status") == "covered":
+                self.errors.append(f"linked: {kind} marked covered, the plan does not model it")
+        s2 = by_kind.get("containers_used") or {}
+        self.say(f"    {KIND_TITLE['containers_used']} as the English bid-book states it ({s2.get('id')}): {s2.get('text')}")
+        bidbook = next((self.rel(f["path"]) for f in first["out"].get("files") or [] if str(f.get("path", "")).endswith("bidbook.en.md")), "")
+        self.say(f"    English bid-book (qualifications and price stay [TO FILL] for people): {bidbook}")
+
+        self.say("  A revised panel list arrives (rev B: level L9 added, L8 panels heavier). Same request, new list:")
+        second = self.link_turn(LINK_REV_B, "rev B")
+        if not second:
+            return
+        changes = second["link"].get("changes_since_previous") or {}
+        self.say(f"    since the previous run: {changes.get('summary')}")
+        for item in changes.get("changed") or []:
+            moved = "; ".join(f"{k} {a} -> {b}" for k, (a, b) in item["figures"].items() if k != "rows_per_container")
+            self.say(f"      {item['id']} changed: {moved or 'rows per container moved'} -> re-confirm")
+        if changes.get("unchanged"):
+            self.say("      re-derived with the same figures: " + ", ".join(c["id"] for c in changes["unchanged"]))
+        if not changes.get("needs_reconfirmation"):
+            self.errors.append("linked: the revised panel list changed no statement")
+        self.result["linked"] = {"first": {k: first["link"].get(k) for k in ("container", "inputs", "statements", "plan")},
+                                 "rev_b": {k: second["link"].get(k) for k in ("container", "inputs", "statements", "plan")},
+                                 "changes": changes, "record": str(second["record"]) if second.get("record") else "",
+                                 "submit_blocked": second["out"].get("submit_blocked")}
+        self.say("  sign-off: nothing here is booked or submitted (submit_blocked stays true). A person confirms the loading plan"
+                 " before booking, and re-confirms every statement the re-run names.")
+
+    # 2 ---------------------------------------------------------------------------------------------
     def tender(self) -> None:
-        self.say("\n== 1 Tender review: parse the ITT, then the bid posts read its hand-off")
+        self.say("\n== 2 Tender review: parse the ITT, then the bid posts read its hand-off")
         out = self.turn("tender", "解析招标 facade_itt_doc.md", "bid-parse")
         md = self.expect_written("tender", out)
         cells = first_cells(md)
@@ -150,9 +239,9 @@ class Demo:
         self.say("  sign-off: bid posts are low risk, so no sentence is asked; submit_blocked stays true and every"
                  " P0 (qualification / rejection) row waits for a person.")
 
-    # 2 ---------------------------------------------------------------------------------------------
+    # 3 ---------------------------------------------------------------------------------------------
     def packing(self) -> None:
-        self.say("\n== 2 Packing and shipping: 24 unitised panels into 40HQ containers")
+        self.say("\n== 3 Packing and shipping: 24 unitised panels into 40HQ containers")
         plans = {}
         for name, session in zip(PANELS, (SESSION, SESSION + "-en")):
             out = self.turn("packing", f"按 {name} 装柜，柜型 40HQ", "pack-ship", session=session)
@@ -202,9 +291,9 @@ class Demo:
         wb.save(target)
         return target
 
-    # 3 ---------------------------------------------------------------------------------------------
+    # 4 ---------------------------------------------------------------------------------------------
     def daily(self) -> None:
-        self.say("\n== 3 Site documents: daily report, then the work-at-height briefing")
+        self.say("\n== 4 Site documents: daily report, then the work-at-height briefing")
         daily_text = (self.job / "inputs" / "daily_report_input.txt").read_text(encoding="utf-8").strip()
         out = self.turn("daily", daily_text, "pm-daily", command="- < inputs/daily_report_input.txt")
         md = self.expect_written("daily", out)
@@ -241,7 +330,7 @@ class Demo:
         self.result["briefing"] = brief
 
     def run(self) -> Dict[str, Any]:
-        for flow in (self.tender, self.packing, self.daily, self.briefing):
+        for flow in (self.linked, self.tender, self.packing, self.daily, self.briefing):
             try:
                 flow()
             except Exception as exc:  # a flow that raises is reported, and the next one still runs
@@ -269,7 +358,7 @@ def make_job(job: Optional[Path]) -> Path:
 
 
 def run_demo(job: Optional[Path] = None, sign: str = "") -> Dict[str, Any]:
-    """Create the job folder, enter it and run the three flows.
+    """Create the job folder, enter it and run the flows.
 
     Leaves the process inside the job folder, with tempfile.tempdir pointing into it."""
     os.environ["PYTHON_DOTENV_DISABLED"] = "1"
