@@ -419,6 +419,20 @@ def _tender_parse(args: Dict[str, Any]) -> Any:
     )
 
 
+def _tender_packing_link(args: Dict[str, Any]) -> Any:
+    """ITT + panel list in one run: logistics clauses, a plan under the clause's container type, statements tied to
+    clause and plan figure, the link record (and what changed since the previous one). Reads only; the agent loop
+    writes the deliverables through write_deliverable."""
+    from pathlib import Path
+
+    from packing_assistant.tender_packing_link import earlier_exports, load_previous, run_link
+
+    previous = str(args.get("previous_path") or "")
+    return run_link(str(args.get("tender_path") or ""), str(args.get("packing_list") or ""),
+                    previous=load_previous(previous), project_name=str(args.get("project_name") or ""),
+                    exports=earlier_exports(str(Path(previous).parent)) if previous else ())
+
+
 def _tender_review(args: Dict[str, Any]) -> Any:
     from packing_assistant.tools.tender_review import review_draft
 
@@ -477,6 +491,7 @@ def default_engine() -> ToolEngine:
         eng.register(name, _pack_handler(name), expert_id="pack-ship", writes=False)
     eng.register("tender.parse", _tender_parse, writes=True)
     eng.register("tender.review", _tender_review, writes=False)
+    eng.register("tender.packing_link", _tender_packing_link, expert_id="bid-parse", writes=False, timeout_s=60.0)
     eng.register(
         "write_deliverable",
         _write_deliverable,

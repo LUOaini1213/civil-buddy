@@ -121,6 +121,23 @@ _QUOTED = re.compile(r'```[\s\S]*?```|`[^`\n]*`|“[^”]*”|‘[^’]*’|「[
 _REFERENCE_END = re.compile(r"的(?:流程|注意事项|注意点|步骤|原因|含义|区别|意义|作用|风险|要求|方法|思路)[？?。！!\s]*$")
 _SEQUENCE = re.compile(r"先.+(?:再|然后)|之后|随后|接着", re.S)
 _TENDER = ("bid-parse", "bid-tech", "bid-compliance")
+# Tender <-> packing in one run (tender_packing_link.py, reached through the 招标解析 post): the tender's logistics
+# clauses, a plan from the named panel list under them, and the statements that answer them. Asked for by name only:
+# "the tender" and "packing list" alone still go to their own posts. A dot inside a file name does not end the sentence.
+_LINK_ZH = ("物流应答", "装柜应答", "投标装柜联动", "招标装柜联动", "标书装柜联动", "招标与装柜联动", "按招标装柜", "按招标要求装柜",
+            "按招标条款装柜")
+_LINK_EN = re.compile(
+    r"(?i)\b(?:(?:tender|bid|itt)[\s-]+(?:packing|logistics|shipping|delivery)[\s-]+(?:link|response|section|statements?)"
+    r"|logistics\s+(?:response|section|statements?)"
+    r"|link(?:s|ed|ing)?\s+(?:the\s+|this\s+|our\s+)?(?:tender|itt|bid)\b(?:[^.?!]|\.(?=\w)){0,120}?\b(?:packing|panel|loading)\s+(?:list|plan)"
+    r"|(?:pack|plan)\b(?:[^.?!]|\.(?=\w)){0,80}?\b(?:to|against|under)\s+the\s+(?:tender|itt)(?:[’']s)?\s+(?:clauses?|logistics|terms|requirements))\b")
+_FILE = re.compile(r"[\w.-]+\.(?:xlsx|xlsm|xls|csv|md|docx|pdf|txt)\b", re.I)
+
+
+def wants_link(message: str) -> bool:
+    """The request asks for the tender and the packing to be done as one linked run."""
+    text = _positive_text(_QUOTED.sub("〔引用〕", message or ""))
+    return any(phrase in text for phrase in _LINK_ZH) or bool(_LINK_EN.search(text))
 
 
 def _positive_text(message: str) -> str:
@@ -249,7 +266,12 @@ def route_task(message: str, expert_ids: list[str] | None = None) -> dict:
         explicit = bool(ids)
         if explicit:
             result["reason"] = "按任务中明确点名的岗位执行。"
-    if not explicit:
+    if not explicit and wants_link(text):
+        ids = ["bid-parse"]
+        result["reason"] = "招标与装柜联动：先读招标的物流条款，再按条款柜型用点名的装箱单真算，逐条写应答并记联动。"
+        if result["intent"] == "chat" and _FILE.search(text) and not _QUESTION.search(text):
+            result["intent"] = "run"      # "按招标 X.md 和 Y.xlsx 出物流应答" names its inputs: it asks for the run
+    elif not explicit:
         comprehensive = (bool(re.search(r"招标|投标|技术标", text))
                          and bool(re.search(r"综合|全面|整体|成套|完整|全套|三岗", text))
                          and bool(re.search(r"检查|审查|响应|评审|审阅", text)))

@@ -96,7 +96,7 @@ def run_tender_delivery_pipeline(
     *,
     run_delivery: bool = True,
     materials: Optional[List[Dict[str, Any]]] = None,
-    container_type: str = "40HQ",
+    container_type: Optional[str] = None,
     max_containers: int = 2,
     user_input: str = "投标交付：按招标运输包装要求装柜",
     session_id: str = "tender-delivery",
@@ -105,27 +105,44 @@ def run_tender_delivery_pipeline(
     save_artifacts: bool = False,
     p0_confirmed: bool = False,
 ) -> Dict[str, Any]:
-    """主线 C 端到端：招标文本 →（可选 A/B 装柜）→ 响应矩阵 + 应答导出包。"""
+    """主线 C 端到端：招标文本 →（可选 A/B 装柜）→ 响应矩阵 + 应答导出包。
+
+    柜型：调用方给了就用；没给就取招标条款里写明的柜型（tender_packing_link.container_decision），条款没写才
+    40HQ，条款写了引擎算不了的柜型就不装柜、交给人。没给装箱行时用内置样例料，结果里写明 materials_source=sample：
+    样例料算出的柜数不能当成这个项目的证据。按真实装箱单逐条应答走 tender_packing_link.run_link。"""
     from packing_assistant.tools.tender_parse import run_tender_pipeline
 
     packing_summary = None
     pack_state = None
+    materials_source = None
+    decision: Optional[Dict[str, Any]] = None
     if run_delivery:
+        materials_source = "request" if isinstance(materials, list) and materials else "sample"
+        ctype = str(container_type or "").strip().upper()
+        if ctype:
+            decision = {"type": ctype, "source": "request", "clause": None, "reason": f"Container type {ctype} given in the request."}
+        else:
+            from packing_assistant.tender_packing_link import container_decision, logistics_clauses
+
+            decision = container_decision(logistics_clauses(text or ""))
+            ctype = decision["type"] or ""
+    if run_delivery and ctype:
         from packing_assistant.teams.big_team import run_big_team
 
-        mats = materials if isinstance(materials, list) and materials else facade_sample_materials()
+        mats = materials if materials_source == "request" else facade_sample_materials()
         pack_state = run_big_team(
             raw_input=str(user_input or "投标交付：按招标运输包装要求装柜"),
             materials=mats,
-            container_type=str(container_type or "40HQ"),
+            container_type=ctype,
             max_containers=int(max_containers or 2),
             enable_auto_confirm=enable_auto_confirm,
             session_id=str(session_id or "tender-delivery"),
             save_artifacts=save_artifacts,
         )
-        packing_summary = packing_summary_from_state(
-            pack_state, container_type=str(container_type or "40HQ")
-        )
+        packing_summary = packing_summary_from_state(pack_state, container_type=ctype)
+        packing_summary["materials_source"] = materials_source
+        packing_summary["container_type_requested"] = ctype
+        packing_summary["container_type_source"] = decision["source"] if decision else "request"
         from packing_assistant.runtime.session_packing import save_packing_snapshot
 
         save_packing_snapshot(str(session_id or "tender-delivery"), packing_summary)
@@ -142,6 +159,9 @@ def run_tender_delivery_pipeline(
         "product": "tender_delivery",
         "product_mainline": "C_tender_delivery",
         "packing_summary": packing_summary,
+        # sample = the built-in demo materials, not this project's packing list; None = packing not run
+        "materials_source": materials_source,
+        "container_decision": decision,
         "readiness_score": ((out.get("matrix") or {}).get("summary") or {}).get("readiness_score"),
         "n_open_actions": len(out.get("open_actions") or []),
         **out,
