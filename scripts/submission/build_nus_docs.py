@@ -14,6 +14,10 @@ a pandoc span with the class "placeholder", which the stylesheet prints as a yel
 unfinished PDF cannot pass for a finished one. After building, the script prints how many placeholders each document
 still has. Placeholders do not fail the build: the exit code is 0 unless a tool is missing or a step fails (then 2).
 
+The SME partner is named only in the PDFs: the Markdown carries <!--SME:KEY-->generic words<!--/SME--> spans (and
+{{KEY}} tokens), and the build takes the values from the untracked docs/submission/sme.local.json (see
+sme.local.example.json). Without that file every span prints as a TEAM TO FILL placeholder.
+
 Output goes to output/submission/nus-iss/ (gitignored), with each PDF's HTML next to it.
 
 Needs pandoc (2.19+ for --embed-resources; older falls back to --self-contained), Google Chrome (run only as
@@ -29,6 +33,7 @@ The header and page numbers are stamped with pypdf because @page margin boxes on
 from __future__ import annotations
 
 import argparse
+import json
 import os
 import re
 import shutil
@@ -94,6 +99,31 @@ TAGS = ["LIVE", "OPT-IN", "BEFORE DEMO", "ROADMAP", "NOT NEEDED"]
 
 # [TEAM TO FILL], [TEAM TO FILL: ...], [TEAM TO VERIFY with BCA: ...] and so on.
 PLACEHOLDER = re.compile(r"\[TEAM TO (FILL|VERIFY)\b")
+# The SME partner is named only in the PDFs sent to the organisers, never in the public repo. The values come from
+# this untracked file (.gitignore: docs/submission/*.local.json), in two forms:
+#   <!--SME:SME_NAME-->a Singapore curtain-wall contractor<!--/SME-->
+#       GitHub hides the comments and shows the generic words; the PDF build puts the value in their place.
+#   {{SME_NAME}}
+#       the bare token, for text that never renders on GitHub as prose.
+# A key with no value becomes a highlighted TEAM TO FILL, so an unnamed PDF cannot pass for a finished one.
+PRIVATE = Path(__file__).resolve().parents[2] / "docs" / "submission" / "sme.local.json"
+TOKEN = re.compile(r"\{\{([A-Z][A-Z0-9_]*)\}\}")
+SPAN = re.compile(r"<!--SME:([A-Z][A-Z0-9_]*)-->(.*?)<!--/SME-->", re.S)
+
+
+def private_values() -> dict:
+    return json.loads(PRIVATE.read_text(encoding="utf-8")) if PRIVATE.is_file() else {}
+
+
+def fill_private(text: str, values: dict | None = None) -> str:
+    """Put the private values in: every <!--SME:KEY-->generic<!--/SME--> span and every {{KEY}} token."""
+    vals = private_values() if values is None else values
+
+    def value(key: str) -> str:
+        return str(vals.get(key) or "").strip() or f"[TEAM TO FILL: {key} in docs/submission/sme.local.json]"
+
+    text = SPAN.sub(lambda m: value(m[1]), text)
+    return TOKEN.sub(lambda m: value(m[1]), text)
 
 MM = 72 / 25.4
 # Helvetica advance widths (1/1000 em) for the characters of "Page N of M".
@@ -239,7 +269,9 @@ def mark_placeholders(text: str, source: str) -> tuple[str, Counter, list[str]]:
 # ---------------------------------------------------------------- HTML and PDF
 
 def build_html(pandoc: str, doc: Doc, html_out: Path) -> Counter:
-    text = (SRC_DIR / doc.source).read_text(encoding="utf-8")
+    text = fill_private((SRC_DIR / doc.source).read_text(encoding="utf-8"))
+    if "<!--SME:" in text or "<!--/SME-->" in text:  # an unclosed span would print as nothing at all
+        fail(f"{doc.source}: an <!--SME:KEY--> span without its <!--/SME--> (or the reverse)")
     marked, counts, problems = mark_placeholders(text, doc.source)
     for p in problems:
         print(f"  warning: {p}", file=sys.stderr)

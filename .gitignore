@@ -42,6 +42,8 @@ Desktop.ini
 !/output/.gitkeep
 
 # --- local / temp ---
+# names the SME partner for the submission PDFs only (see scripts/submission/build_nus_docs.py)
+docs/submission/*.local.json
 *.log
 *.tmp
 *.bak
