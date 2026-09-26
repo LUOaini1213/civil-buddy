@@ -1,4 +1,4 @@
-# 经营投标大类 · 网上门户（2026-08-14）
+# 经营投标大类 · 网上门户（2026-08-14；2026-09-26 续 CRS）
 
 本页只列入口。法规只报名称与年份口径，不贴全文、不编条款号。工程招标路径与政府采购货物服务路径不混用。
 
@@ -28,9 +28,12 @@
 - https://www1.bca.gov.sg/growth-and-transformation/procurement/standard-contract-forms/public-sector-standard-conditions-of-contract-psscoc/ PSSCOC Construction Works 2020（第 8 版）；PSSCOC-lite for Construction Works 2025（2025-03）。页更 2026-03-14。
 - https://sso.agc.gov.sg/Act/GPA1997 Government Procurement Act 1997；含 qualification of suppliers。
 - https://sso.agc.gov.sg/SL/GPA1997-S269-2014 Government Procurement Regulations 2014（条文定义 GeBIZ）。
+- https://isomer-user-content.by.gov.sg/338/791a4d62-df87-4320-b488-f22f8b6eb7d3/registration_cr.pdf BCA CR SRR – Jun 2025 Edition：CR16 Curtain Walls =「Supply and installation of curtain walls」；CR17 Windows 另须 RW01 注册。等级门槛见 design/facade 岗联网知识。2026-09-26 已开原文。
+- https://www1.bca.gov.sg/growth-and-transformation/procurement/registration-of-built-environment-firms/tendering-limits/crs-fm-and-sy-registries-tendering-limits/ CRS 投标限额（CR 与 ME workhead，2026-07-01 至 2027-06-30 有效，与 2025/26 相同；页更 2026-06-16）：L1 S$0.8m、L2 S$1.6m、L3 S$5m、L4 S$8m、L5 S$16m、L6 与 Single Grade 不限。
+- https://isomer-user-content.by.gov.sg/338/db773fa1-750f-437d-84fb-00f58a9cf2df/circular-on-the-expansion-of-the-crs-to-a-nation-wide-registry.pdf BCA CRS 扩展通告（2024-06-07）：CRS 注册用于按等级限额投公共施工标、做公共项目一级分包；BCA 不因私营项目本身要求 CRS。2025-06-01 起 CRS 为全国性名录，雇用施工 S Pass / Work Permit 须先注册。
 
 ## 通用提醒
-本次检索未在 GeBIZ / MOF / BCA 官方页见到独立「PEQ」评标框架。SG 施工公开评标词是 PQM；两阶段资格公开词是 Qualification / pre-qualification。CN 评标办法公开名称是综合评估法或经评审的最低投标价法。地方住建权重以项目所在地当期文本为准。咨询标 QFM 不得套施工技术标。
+本次检索未在 GeBIZ / MOF / BCA 官方页见到独立「PEQ」评标框架。ITT 写的 workhead 与等级（例 CR16 L4 及以上）只抄原文；本库的限额表不等于本项目资格已满足。SG 施工公开评标词是 PQM；两阶段资格公开词是 Qualification / pre-qualification。CN 评标办法公开名称是综合评估法或经评审的最低投标价法。地方住建权重以项目所在地当期文本为准。咨询标 QFM 不得套施工技术标。
 
 ## 与易标模块对应
 共享四步：parse（`bid-parse__extract`）→ outline（`bid-tech__expand`）→ qa（`bid-compliance__gaps`）→ kb / write。旧名 `bid__parse_tender` / `bid__tech_outline` / `bid__compliance_gaps` 已拒绝，兄弟专家看不见独有工具。

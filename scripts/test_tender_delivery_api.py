@@ -104,9 +104,16 @@ def main() -> int:
     assert 0.0 <= mid <= 1.0 or mid > 1.0  # allow ratio or percent-style
     matrix = jd.get("matrix") or {}
     assert matrix.get("summary", {}).get("n", 0) >= 1
-    # when packing can_fit true, transport/packaging (+ cog if mid ok) covered
+    # A fitting plan covers the transport clause only when it used the type the clause names:
+    # SAMPLE asks for 40HQ, so a 20GP plan must leave the row to a person, with both types in the note.
     if ps.get("can_fit") is True:
-        assert matrix["summary"].get("covered", 0) >= 1, matrix["summary"]
+        transport = next(r for r in matrix.get("rows") or [] if r.get("req_id") == "transport_container")
+        if ps.get("container_type") == "40HQ":
+            assert transport.get("status") == "covered", transport
+        else:
+            assert transport.get("status") == "human_required", transport
+            note = str((transport.get("evidence") or {}).get("note") or "")
+            assert "40HQ" in note and str(ps.get("container_type")) in note, transport
         if mid >= 0.55 or (mid > 1 and mid >= 55):
             # cog_lashing row should not stay partial when mid50 present
             cog_rows = [

@@ -312,7 +312,10 @@ def match_skill(text: str) -> Optional[str]:
     for e in experts:
         best = 0
         for lab in (e.id, e.name, *e.aliases):
-            if not lab or lab not in blob:
+            # Latin labels are words: "report" is not $port, "facade_panels.xlsx" is not $facade; a job file
+            # "plan-master__network.xlsx" still names $plan-master.
+            if not lab or not (re.search(r"(?<![a-z0-9_-])" + re.escape(lab) + r"(?![a-z0-9-]|_(?!_))", blob, re.I)
+                               if lab.isascii() else lab in blob):
                 continue
             n = len(lab)
             if n < 4:

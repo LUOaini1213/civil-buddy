@@ -83,6 +83,8 @@ CHECKS = (
     Check("pdf-grid", ("scripts/test_pdf_grid.py",)),
     Check("lots-addenda", ("scripts/test_lots_addenda.py",), timeout=600),
     Check("english-itt", ("scripts/test_english_itt.py",), timeout=600),
+    Check("facade-tender", ("scripts/test_facade_tender.py",)),
+    Check("facade-demo", ("scripts/test_facade_demo.py",)),
     Check("real-tender", ("scripts/test_real_tender.py",), timeout=1200),
     # Offline, model-free, a second or two each - and until 2026-09-20 run by nothing: not by ci.yml,
     # not by this registry, not by the acceptance glob. They pin the parser the three bid posts stand on.
@@ -116,6 +118,7 @@ CHECKS = (
     Check("desktop-app", ("scripts/test_desktop.py",), timeout=300),
     Check("example-plugin", ("-m", "packing_assistant.civil", "plugin", "validate", "examples/plugins/site-forms")),
     Check("task-intent-bench", ("scripts/eval_task_intent.py", "--check")),
+    Check("english-intents", ("scripts/test_english_intents.py",)),
     Check("verdict-bench", ("scripts/eval_verdicts.py", "--check")),
     Check("number-provenance-bench", ("scripts/eval_number_provenance.py", "--check")),
     Check("runtime-threads", ("scripts/test_runtime_threads.py",)),

@@ -1,0 +1,35 @@
+{
+  "schema": "civil.task_intent.bench.v1",
+  "note": "English round, held out: written on 2026-09-26 before any English verb, question word or strong phrase existed in task_router or contract/intents.v1.json, and before those rules were run on it. SYNTHETIC: every sentence was written for this benchmark in the voice of a Singapore curtain-wall (facade) contractor's site and tender staff; none comes from a real company, project or document. `post` is the post the turn should use (route_task's single post, else match_skill's); it is scored only on run/both rows, because a chat turn writes nothing. Scored by scripts/test_english_intents.py.",
+  "cases": [
+    {"text": "Write today's daily report for the east façade: 9 installers, 12 units installed, light rain", "intent": "run", "post": "pm-daily", "kind": "heldout_en"},
+    {"text": "Daily report for Block B level 7: 6 installers, 8 panels hung, weather fine", "intent": "run", "post": "pm-daily", "kind": "heldout_en"},
+    {"text": "Generate the site diary for 25 Sep: rain delay 2 hours, 5 installers on site", "intent": "run", "post": "pm-daily", "kind": "heldout_en"},
+    {"text": "Update the daily report: add 2 more installers and note the rain stoppage at 3pm", "intent": "run", "post": "pm-daily", "kind": "heldout_en"},
+    {"text": "Toolbox briefing for work at height on the swing stage", "intent": "run", "post": "safety-brief", "kind": "heldout_en"},
+    {"text": "Prepare a safety briefing for gondola work on the north elevation, 30 m high", "intent": "run", "post": "safety-brief", "kind": "heldout_en"},
+    {"text": "Draft a method statement for unitised panel installation with a mini crane", "intent": "run", "post": "construction", "kind": "heldout_en"},
+    {"text": "Review this tender: facade_itt_doc.md", "intent": "run", "post": "bid-parse", "kind": "heldout_en"},
+    {"text": "Parse the ITT and list the closing date, tender validity and performance bond", "intent": "run", "post": "bid-parse", "kind": "heldout_en"},
+    {"text": "Summarise the liquidated damages and retention clauses in the tender", "intent": "run", "post": "bid-parse", "kind": "heldout_en"},
+    {"text": "Check our tender response against the ITT requirements and list the gaps", "intent": "run", "post": "bid-compliance", "kind": "heldout_en"},
+    {"text": "Plan containers for facade_panels.xlsx, 40HQ", "intent": "run", "post": "pack-ship", "kind": "heldout_en"},
+    {"text": "Make a load plan for 24 unitised panels in 40HQ containers", "intent": "run", "post": "pack-ship", "kind": "heldout_en"},
+    {"text": "Can you pack the panels in facade_panels.xlsx into 20GP containers?", "intent": "run", "post": "pack-ship", "kind": "heldout_en"},
+    {"text": "Explain what goes into a method statement, then draft one for bracket installation", "intent": "both", "post": "construction", "kind": "heldout_en"},
+    {"text": "What is a load plan? Then make one for facade_panels.xlsx", "intent": "both", "post": "pack-ship", "kind": "heldout_en"},
+
+    {"text": "What does CR16 mean?", "intent": "chat", "post": null, "kind": "heldout_en"},
+    {"text": "What should a daily report include?", "intent": "chat", "post": null, "kind": "heldout_en"},
+    {"text": "Who signs off the method statement for work at height?", "intent": "chat", "post": null, "kind": "heldout_en"},
+    {"text": "How long should the toolbox briefing take", "intent": "chat", "post": null, "kind": "heldout_en"},
+    {"text": "Is PE endorsement needed for the bracket calculations?", "intent": "chat", "post": null, "kind": "heldout_en"},
+    {"text": "When does the tender close?", "intent": "chat", "post": null, "kind": "heldout_en"},
+    {"text": "Why did the load plan use six containers?", "intent": "chat", "post": null, "kind": "heldout_en"},
+    {"text": "Don't write the daily report yet, still waiting for the headcount", "intent": "chat", "post": null, "kind": "heldout_en"},
+    {"text": "No need for a method statement, just tell me the lifting limits of the mini crane", "intent": "chat", "post": null, "kind": "heldout_en"},
+    {"text": "The consultant's email says 'prepare a method statement' - is that our job or the main contractor's?", "intent": "chat", "post": null, "kind": "heldout_en"},
+    {"text": "Thanks, the daily report looks good", "intent": "chat", "post": null, "kind": "heldout_en"},
+    {"text": "Stop, do not generate the load plan until the crate sizes are confirmed", "intent": "chat", "post": null, "kind": "heldout_en"}
+  ]
+}
