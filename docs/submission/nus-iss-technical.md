@@ -40,7 +40,7 @@ Every result we claim was produced on that checkout, offline, with no model key;
 
 **Where it runs.** The target is one AWS Lightsail instance per company, used by employees in a browser. At this baseline the instance is not yet running. We plan to set it up before submitting and to give its URL in the submission email (§6).
 
-**Pilot partner.** We propose to pilot civil-buddy with a Singapore curtain-wall contractor, {{SME_NAME}}. So far the partner has given verbal feedback only, and no pilot has been agreed or started. The demo on 10 October will walk the partner's three façade jobs on synthetic files (§3.4): reviewing a façade tender, planning how unitised panels are crated and containerised, and drafting installation paperwork behind the licensed sign-off. The Business Proposal describes the partner and the proposed pilot.
+**Pilot partner.** We propose to pilot civil-buddy with a Singapore curtain-wall contractor, {{SME_NAME}}. The partner has confirmed the collaboration in writing; no pilot has been agreed or started yet. The demo on 10 October will walk the partner's three façade jobs on synthetic files (§3.4): reviewing a façade tender, planning how unitised panels are crated and containerised, and drafting installation paperwork behind the licensed sign-off. The Business Proposal describes the partner and the proposed pilot.
 
 ## 2. Architecture
 

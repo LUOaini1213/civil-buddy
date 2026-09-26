@@ -5,17 +5,17 @@ author: "Team Mintang · Team Code PJ2U63AF"
 date: "DRAFT 2026-09-26 · product facts as of main at 916971d (2026-09-26); Technical Document figures at d3ada11"
 ---
 
-> **Draft for the team: delete this box before exporting to PDF.** This file is in a public repository. Never write the partner's name, owners, UEN, address, projects, clients or people here, not even as an example. The `{{SME_…}}` tokens are filled only when `scripts/submission/build_nus_docs.py` builds the PDF, from the untracked `docs/submission/sme.local.json` (copy `sme.local.example.json`, fill it with confirmed facts only, never commit it). A token with no value prints as a highlighted `[TEAM TO FILL: …]` and is counted. Resolve or delete every `[TEAM TO FILL]` and `[TEAM TO VERIFY]`. Product facts follow the Technical Document (`nus-iss-technical.md`) and must not contradict it; the façade figures in §4 come from the façade demo in the repository (`examples/facade-demo/` and `scripts/demo_facade.py`, reference [5]): synthetic files, rerun by anyone with one command, and every façade number must match what that script prints or that folder's README states. Market and policy figures carry numbered references, each opened on or before 26 September 2026. The partner's feedback is verbal so far; there is no pilot, letter of intent, price or user count. Add one only if it is real and the partner has agreed.
+> **Draft for the team: delete this box before exporting to PDF.** This file is in a public repository. Never write the partner's name, owners, UEN, address, projects, clients or people here, not even as an example. The `{{SME_…}}` tokens are filled only when `scripts/submission/build_nus_docs.py` builds the PDF, from the untracked `docs/submission/sme.local.json` (copy `sme.local.example.json`, fill it with confirmed facts only, never commit it). A token with no value prints as a highlighted `[TEAM TO FILL: …]` and is counted. Resolve or delete every `[TEAM TO FILL]` and `[TEAM TO VERIFY]`. Product facts follow the Technical Document (`nus-iss-technical.md`) and must not contradict it; the façade figures in §4 come from the façade demo in the repository (`examples/facade-demo/` and `scripts/demo_facade.py`, reference [5]): synthetic files, rerun by anyone with one command, and every façade number must match what that script prints or that folder's README states. Market and policy figures carry numbered references, each opened on or before 26 September 2026. The partner has confirmed the collaboration in writing, and the organisers have confirmed it for the SME track; there is still no pilot, letter of intent, price or user count. Add one only if it is real and the partner has agreed.
 
 ## 1. Executive summary
 
-**Our partner and its three jobs.** Our partner is {{SME_NAME}}, a Singapore curtain-wall contractor registered with BCA under {{SME_CRS}} [TEAM TO VERIFY: SME-track eligibility — use "SME" for the partner only if the organisers confirm]. One of our team members works there and represents it in this entry (§2.2) [TEAM TO VERIFY: written authorisation]. Its work runs through three jobs, and each ends in numbers or verdicts that are expensive to get wrong:
+**Our partner and its three jobs.** Our partner is {{SME_NAME}}, a Singapore curtain-wall contractor registered with BCA under {{SME_CRS}}, confirmed by the organisers as our SME-track partner. One of our team members works there and represents it in this entry with its written authorisation (§2.2). Its work runs through three jobs, and each ends in numbers or verdicts that are expensive to get wrong:
 
 1. **Reviewing façade tenders.** Each enquiry has to be read clause by clause for the workhead, duration, bonds, liquidated damages, retention, mock-ups, testing and PE-endorsed submissions. A clause missed at tender still binds after award.
 2. **Crating and shipping unitised panels and glass.** A unitised curtain-wall unit is assembled in the factory and can weigh over 500 kg, and 1,000 kg in some cases [1]. Crate and container counts cannot be guessed from a spreadsheet.
 3. **Installation paperwork, including work at height.** Daily reports, method statements and safety briefs; and on a worksite where a person could fall more than 3 m, a permit-to-work [2][3]. In 2025, falls from height were construction's leading cause of fatal and major injuries (43) [4].
 
-What the partner told us is in §2.3. So far it is verbal; we are asking for a written confirmation [TEAM TO VERIFY: that the request was sent].
+What the partner told us is in §2.3; the partner has confirmed the collaboration in writing.
 
 **What we built for them.** civil-buddy is an agent workbench with 66 job "posts" that turn a person's words and the firm's own files into internal drafts in Word, Excel and Markdown. Three of its flows match the partner's three jobs. On synthetic façade files that anyone can rerun from our repository (§4), with no model and no network:
 
@@ -52,23 +52,21 @@ The demo also prints what is still missing: the tender check does not yet list t
 
 ### 2.1 Who they are
 
-{{SME_NAME}} ({{SME_NAME_ZH}}; UEN {{SME_UEN}}) is a Singapore curtain-wall contractor, registered with BCA under {{SME_CRS}}. [TEAM TO VERIFY: SME-track eligibility — use "SME" for the partner only if the organisers confirm]
+{{SME_NAME}} ({{SME_NAME_ZH}}; UEN {{SME_UEN}}) is a Singapore curtain-wall contractor, registered with BCA under {{SME_CRS}}. The organisers have confirmed it as an eligible partner for the SME track.
 
 CR16 "Curtain Walls" is BCA's workhead for the supply and installation of curtain walls [14]. Registration in BCA's Contractors Registration System (CRS) lets a firm bid for public-sector construction up to its grade's tender limit and work as a first-level subcontractor on public projects; since 1 June 2025 a firm must also be registered before it can hire construction Work Permit or S Pass holders [15].
-
-[TEAM TO FILL: eligibility note per the organisers' answer. This file is public: keep the wording generic and name no company here.]
 
 This proposal gives no headcount, revenue, project, client or staff member of the partner: none has been confirmed to us in writing.
 
 ### 2.2 Our representative at the partner
 
-One of our four team members works at the partner as {{SME_REP_ROLE}} and represents it in this entry with its authorisation, as the SME track asks. [TEAM TO VERIFY: the authorisation is in writing and meets the organisers' SME-track rules.] That member carries the partner's questions to the team and takes our drafts back for its review. So far no partner document has been used: every file behind the measurements in this proposal is synthetic, and none of the partner's documents is in our public repository.
+One of our four team members works at the partner as {{SME_REP_ROLE}} and represents it in this entry with its written authorisation, as the SME track asks. That member carries the partner's questions to the team and takes our drafts back for its review. So far no partner document has been used: every file behind the measurements in this proposal is synthetic, and none of the partner's documents is in our public repository.
 
 ### 2.3 What the partner told us
 
 {{SME_FEEDBACK}}
 
-So far this feedback is verbal. We are asking the partner to confirm it in writing [TEAM TO VERIFY: that the request was sent, and when; replace this sentence with the date of the written confirmation once it arrives]. Until then, we quote the partner only as above and give no volume, time or cost figure from it.
+The partner has confirmed the collaboration in writing. We quote the partner only as above and give no volume, time or cost figure from it.
 
 ## 3. The partner's problem
 
@@ -346,8 +344,7 @@ The English Work-at-Height Toolbox Briefing planned for the façade plugin (§4.
 
 | Risk | Mitigation today | Pilot or roadmap |
 |---|---|---|
-| **SME-track eligibility of the partner** | We are asking the organisers whether the partner qualifies for the SME track, and we do not call the partner an SME until they confirm. [TEAM TO VERIFY: that the question was sent, and the answer] | If the answer is no, the team decides the track with the organisers, and the proposal says so plainly |
-| **Feedback only verbal** | The partner is quoted only as it said it; no volume, time or cost from it is used | Written confirmation to be requested [TEAM TO VERIFY: that the request was sent]; update §2.3 when it arrives |
+| **Few partner figures** | The partner has confirmed the collaboration in writing, but no volume, time or cost figure has been agreed for publication, so none is used | The pilot measures them, and they are published only with the partner's consent |
 | **Single-partner dependence** | MIT licence: the partner keeps a working copy whatever happens to us | The 296 CR16 firms are the next segment (§7.1) |
 | **The partner's confidential data** | Local-first; no partner document in our public repository; synthetic test files only; the partner named only in the PDFs sent to the organisers | One server for the partner; [TEAM TO VERIFY: PDPA duties for pilot data] |
 | **Liability for a wrong document** | Drafts only, `submit_blocked`, licensed sign-off, blocked verdicts. Since 26 September no API or MCP caller of the deployed apps can approve with a flag | Accounts that name the approver are planned before the demo. [TEAM TO VERIFY: legal review of terms and a liability cap before any paid use] |
@@ -365,7 +362,7 @@ The English Work-at-Height Toolbox Briefing planned for the façade plugin (§4.
 |---|---|
 | 26 Sep 2026 (done) | Security baseline, pull request #61 (142 of 142 checks in CI): only the typed sentence approves, over MCP and HTTP too; once a token is set, every API request needs it, local ones included, and without one no server listens beyond the local machine unless an operator explicitly opts out; key lock; packing reads files only inside the sandbox folders |
 | 26 Sep 2026 (done) | Pull request #63 (145 of 145 checks in CI): the compliance schedule no longer marks clauses a packing run cannot answer "No Deviation": packaging and transport clauses go to a person, and a lashing clause reads at most "Partial Deviation"; English commands routed in the default mode; the synthetic façade demo (`examples/facade-demo/`, `scripts/demo_facade.py`) and sourced Singapore façade knowledge |
-| Before the submission (28 Sep 2026) | One Lightsail server behind TLS, set up by the deployment guide; its URL goes in the submission email. The partner's written confirmation and the organisers' answer on SME-track eligibility. [TEAM TO VERIFY: server running, URL in the email; both answers received] |
+| Before the submission (28 Sep 2026) | One Lightsail server behind TLS, set up by the deployment guide; its URL goes in the submission email. The partner's written confirmation and the organisers' confirmation of SME-track eligibility (both received). [TEAM TO VERIFY: server running, URL in the email] |
 | By 10 Oct 2026 (demo) | Accounts and roles (admin, engineer, licensed approver) with named sign-off; a Bedrock verification run. For the partner's three jobs: façade tender topics (the eight specification clauses, liquidated damages and retention); glass-handling notes and no fragile goods in mixed crates; the English façade plugin (daily report, work-at-height briefing, method-statement outline) |
 | [TEAM TO FILL] | English interface and sign-off sentence |
 | [TEAM TO FILL: start date agreed with the partner] | Pilot at the partner, 8–10 weeks |
@@ -385,7 +382,7 @@ The platform rows match the Technical Document §7, which also puts the audit lo
 | [TEAM TO FILL] | [TEAM TO FILL] | [TEAM TO FILL] |
 | [TEAM TO FILL] | [TEAM TO FILL] | [TEAM TO FILL] |
 
-- **Track:** SME track, with our partner {{SME_NAME}}. [TEAM TO VERIFY: SME-track eligibility — use "SME" for the partner only if the organisers confirm]
+- **Track:** SME track, with our partner {{SME_NAME}} (confirmed by the organisers).
 - **Authorised representative:** the team member who works at the partner as {{SME_REP_ROLE}} (§2.2).
 - **Contact for SBF and AWS follow-up:** [TEAM TO FILL]
 
