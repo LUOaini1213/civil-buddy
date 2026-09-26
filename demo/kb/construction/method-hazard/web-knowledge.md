@@ -1,4 +1,4 @@
-# 危大识别 · 联网知识（2026-08-14 现场）
+# 危大识别 · 联网知识（2026-08-14 现场；2026-09-26 续 SG 高处作业）
 
 岗位对应：只判定、不签发开工。CN 写是否危大/是否超规模/要否论证；SG 对照高风险施工与 PTW，不要翻译成「危大」。条目标辖区。未抽原文不写条款号。
 
@@ -16,6 +16,7 @@
 - WSH Act 持份者责任（雇主须风险评估与控制）：https://www.mom.gov.sg/workplace-safety-and-health/workplace-safety-and-health-act/responsibilities-of-stakeholders
 - 风险管控：Workplace Safety and Health (Risk Management) Regulations；常规与非常规作业都要做 RA。https://www.mom.gov.sg/workplace-safety-and-health/safety-and-health-management-systems/risk-management
 - 高风险施工 PTW：Workplace Safety and Health (Construction) Regulations 2007 Part III。SSO 现行版（对本日 2026-08-14；最近修订 S 434/2024，2024-06-01 施行）：https://sso.agc.gov.sg/SL/WSHA2006-S663-2007
+- 高处作业另有 Workplace Safety and Health (Work at Heights) Regulations 2013：人可能坠落超过 3 米为 hazardous work at height，Part III 为其 permit-to-work（SSO 现行版对本日 2026-09-26）：https://sso.agc.gov.sg/SL/WSHA2006-S223-2013 。MOM 修订说明（未标日期，述 2014-05-01 起）：PTW 只适用于 Factories（通常包括施工工地）；有效临边防护消除超过 3 米坠落风险时可不需 PTW；单张最长不应超过 7 天且每日复核：https://www.mom.gov.sg/-/media/mom/documents/safety-health/factsheet-on-wahamendmentregulations.pdf
 - 页述 high-risk construction work：demolition work；excavation and trenching work in a tunnel or hole in the ground exceeding 1.5 metres depth；lifting operations involving tower, mobile or crawler crane；piling work；tunnelling work。无 project manager 签发的 permit-to-work 不得做（救援或为保全生命财产所必需的工作除外）。
 - MOM 总入口另链 SHMS / ConSASS / 事故报告，不是危大名录。本轮 MOM 主站部分页面维护。https://www.mom.gov.sg/workplace-safety-and-health
 - CSOC（工人入职安全定向）不是危大判定替代件。页更 2026-07-03。https://www.mom.gov.sg/passes-and-permits/work-permit-for-foreign-worker/sector-specific-rules/construction-sector-requirements

@@ -15,12 +15,18 @@ from pathlib import Path
 from typing import Any, Dict, List, Optional
 
 
+# A short Latin code is a token: "CTU" not inside "struCTUral", "OT" not in "not", "ISO" not in "isolation",
+# "lashing" not in "flashing", "20GP" not in "20GPa", "A证" not in "CA证书". \b cannot say it: a CJK character
+# is a word character too, so r"\bBCA\b" missed 「在BCA注册」.
+_NO_L = r"(?<![A-Za-z])"
+_NO_R = r"(?![A-Za-z])"
+
 # (id, category, patterns, title, default_owner, risk)
 _RULES: List[tuple] = [
     (
         "pkg_standard",
         "packaging",
-        [r"包装", r"木箱", r"铁架", r"装箱", r"防护", r"防潮", r"packing", r"crate"],
+        [r"包装", r"木箱", r"铁架", r"(?<!集)装箱", r"防护", r"防潮", r"packing", r"crate"],   # 集装箱 is a container, not packing
         "包装/装箱要求",
         "delivery",
         "medium",
@@ -28,7 +34,7 @@ _RULES: List[tuple] = [
     (
         "transport_container",
         "transport",
-        [r"集装箱", r"柜型", r"40HQ", r"40GP", r"20GP", r"整柜", r"拼柜", r"海运", r"container"],
+        [r"集装箱", r"柜型", r"40HQ", r"40GP" + _NO_R, r"20GP" + _NO_R, r"整柜", r"拼柜", r"海运", r"container"],
         "集装箱/运输方式",
         "delivery",
         "high",
@@ -44,7 +50,7 @@ _RULES: List[tuple] = [
     (
         "overlength",
         "transport",
-        [r"超长", r"超限", r"异形", r"框架柜", r"开顶", r"OT\b"],
+        [r"超长", r"超限", r"异形", r"框架柜", r"开顶", _NO_L + r"OT" + _NO_R],
         "超长/异形运输",
         "delivery",
         "high",
@@ -52,7 +58,7 @@ _RULES: List[tuple] = [
     (
         "cog_lashing",
         "transport",
-        [r"重心", r"绑扎", r"加固", r"系固", r"CTU", r"lashing"],
+        [r"重心", r"绑扎", r"加固", r"系固", _NO_L + r"CTU" + _NO_R, _NO_L + r"lashing"],
         "重心/绑扎/系固",
         "delivery",
         "high",
@@ -68,7 +74,7 @@ _RULES: List[tuple] = [
     (
         "qualification",
         "qualification",
-        [r"资质", r"业绩", r"类似项目", r"注册资金", r"许可证", r"ISO"],
+        [r"资质", r"业绩", r"类似项目", r"注册资金", r"许可证", _NO_L + r"ISO" + _NO_R],
         "资格/业绩",
         "commercial",
         "critical",
@@ -112,7 +118,7 @@ _RULES: List[tuple] = [
     (
         "personnel",
         "qualification",
-        [r"建造师", r"注册证", r"安全生产考核", r"[ABC]\s*证", r"职称", r"项目经理须", r"项目经理应",
+        [r"建造师", r"注册证", r"安全生产考核", _NO_L + r"[ABC]\s*证", r"职称", r"项目经理须", r"项目经理应",
          r"项目负责人须", r"项目负责人应", r"技术负责人须", r"技术负责人应"],
         "人员资格",
         "commercial",
@@ -121,7 +127,7 @@ _RULES: List[tuple] = [
     (
         "registration",
         "qualification",
-        [r"\bBCA\b", r"workhead", r"registered with", r"financial grade"],
+        [_NO_L + r"BCA" + _NO_R, r"workhead", r"registered with", r"financial grade"],
         "注册/工作类别 (BCA workhead)",
         "commercial",
         "critical",
@@ -180,7 +186,7 @@ _DAYS_RE = re.compile(
     r"(\d+)\s*(?:个)?\s*(日历天|calendar\s*days?|工作日)",
     re.I,
 )
-_WORKHEAD_RE = re.compile(r"\bCW0[0-9]\b", re.I)
+_WORKHEAD_RE = re.compile(r"(?<![A-Za-z0-9])(?:CW0[0-9]|CR\d{2})(?![A-Za-z0-9])", re.I)   # CR16 Curtain Walls is a BCA CR workhead
 _ENVELOPE_RE = re.compile(
     r"双信封|两信封|三信封|two[\s-]*envelope|technical and (?:financial|price)|"
     r"技术标与报价分投|暗标",
@@ -845,6 +851,30 @@ def build_checklist(requirements: List[Dict[str, Any]]) -> Dict[str, Any]:
     }
 
 
+# A packing run shows that the goods fit, in which containers and how many, under payload, and the mid50 share.
+# How they are packed, stood, stacked or carried out of gauge it does not model: such a clause is not met
+# because the goods fit. Nor is a clause naming another container than the run's, or refusing the run's one,
+# nor a lashing / securing / CTU clause by mid50, which is the centre of gravity only.
+_PACK_ADDRESSES = {"transport_container", "weight_limit", "cog_lashing"}
+_PACK_UNMODELLED_RE = re.compile(_NO_L + r"(?:A[\s-]?frames?|stillages?|upright|vertical(?:ly)?|stack(?:ed|ing|able|s)?|fragile|"
+                                 r"protect(?:ed|ion|s)?)" + _NO_R + r"|竖放|立放|直立|竖立|堆叠|叠放|堆码|易碎|防护|防潮|防雨|熏蒸", re.I)
+_CONTAINER_RE = re.compile(
+    r"(?<![A-Za-z0-9])(20|40|45)\s*(?:ft|foot|feet|['’])?[\s-]*(?i:(GP|HQ|HC|OT|FR|high[\s-]?cube|open[\s-]?top|flat[\s-]?rack))(?![A-Za-z])"
+    r"|(?<![A-Za-z0-9])(OT|FR|(?i:high[\s-]?cube|open[\s-]?top|flat[\s-]?rack))(?![A-Za-z])|(开顶|框架)(?:柜|集装箱)")
+_CONTAINER_KIND = {"HC": "HQ", "HIGHCUBE": "HQ", "OPENTOP": "OT", "FLATRACK": "FR", "开顶": "OT", "框架": "FR"}
+_REFUSE_RE = re.compile(r"(?<![A-Za-z])(?:not|no(?!\.))(?![A-Za-z])|n't|prohibit|forbid|disallow|exclud|"
+                        r"不得|不接受|不允许|不可|不能|禁止|严禁|除外", re.I)
+_LASHING_RE = re.compile(r"(?<![A-Za-z])(?:lash(?:ing|ed)?|secur(?:e|ed|ing)|CTU)(?![A-Za-z])|绑扎|捆扎|系固|加固", re.I)
+
+
+def _container_codes(text: str) -> set:
+    codes = set()
+    for m in _CONTAINER_RE.finditer(text):
+        kind = re.sub(r"[\s-]", "", m.group(2) or m.group(3) or m.group(4)).upper()
+        codes.add((m.group(1) or "") + _CONTAINER_KIND.get(kind, kind))
+    return codes
+
+
 def build_response_matrix(
     requirements: List[Dict[str, Any]],
     *,
@@ -874,16 +904,30 @@ def build_response_matrix(
                 "ship_ok": ship_ok,
                 "mid50": mid50,
             }
-            # 重心条款：需要 mid50 证据
-            if rid == "cog_lashing":
-                if mid50 is not None and float(mid50) >= 0.55 and can_fit is True:
+            texts = [str(s) for s in (r.get("snippets") or [r.get("exact_text") or ""])]
+            unmodelled = sorted({m.group(0).lower() for s in texts for m in _PACK_UNMODELLED_RE.finditer(s)})
+            if can_fit is True and (rid not in _PACK_ADDRESSES or unmodelled):
+                status = "human_required"
+                evidence["note"] = ("装柜结果只说明装得下（柜型/柜数/货载/mid50），不说明本条"
+                                    + (f"：{'、'.join(unmodelled)}" if unmodelled else "的包装方式或超限运输"))
+            elif rid == "transport_container" and can_fit is True:
+                run = str(pack.get("container_type") or "").strip().upper()
+                named = set().union(*(_container_codes(s) for s in texts))
+                refused = any(_REFUSE_RE.search(s) for s in texts if _container_codes(s))
+                if named and (refused or not run or any(c != run and (c[:1].isdigit() or not run.endswith(c)) for c in named)):
+                    status = "human_required"
+                    evidence["note"] = (f"条款写明柜型 {'、'.join(sorted(named))}"
+                                        + ("（含不接受/不得）" if refused else "")
+                                        + f"，装柜结果用的是 {run or '（未给柜型）'}：柜型是否满足本条须人工确认")
+            # 重心条款：需要 mid50 证据；mid50 只说明重心，不说明绑扎/系固
+            elif rid == "cog_lashing" and can_fit is True:
+                lashing = any(_LASHING_RE.search(s) for s in texts)
+                if mid50 is not None and float(mid50) >= 0.55 and not lashing:
                     status = "covered"
-                elif can_fit is True:
+                else:
                     status = "partial"
-                    evidence = {
-                        **(evidence or {}),
-                        "note": "装柜可 fit，但 mid50 未达标或未提供",
-                    }
+                    evidence["note"] = ("mid50 只说明重心，不说明绑扎/系固/CTU 合规" if lashing
+                                        else "装柜可 fit，但 mid50 未达标或未提供")
         elif cat == "qualification":
             status = "human_required"
             evidence = {"type": "manual", "note": "资质/业绩须人工提供"}
@@ -1179,6 +1223,8 @@ def _action_hint(status: str, category: Optional[str], risk: Optional[str]) -> s
             return "项目经理/商务确认承诺值并写入投标函"
         if category == "payment":
             return "商务确认是否接受付款条件，不接受则写偏离"
+        if category in ("packaging", "transport"):
+            return "装柜结果不覆盖本条：交付负责人确认柜型/包装/竖放/不叠放/超限运输做法，做不到则写偏离"
         return "人工补充证据后改状态"
     return "待处理"
 

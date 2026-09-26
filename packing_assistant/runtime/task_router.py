@@ -8,6 +8,7 @@ from __future__ import annotations
 import re
 
 from packing_assistant.expert_roster import list_experts
+from packing_assistant.intent_contract import contract_strong
 from packing_assistant.understand import understand
 
 _TASK_PHRASES = {
@@ -28,7 +29,8 @@ _AMBIGUOUS_REASONS = {
     "variation": "整理变更签证的事实、依据与工程量栏",
 }
 _PREFIX = r"(?:(?:请帮我|帮我|麻烦|请|这次|本次|暂时|现在|进一步|继续|接着|先|再|仅仅|只需|只要|仅|只)\s*)*"
-_NEGATED = re.compile(r"^" + _PREFIX + r"(?:不要|不用|无需|暂不|不需要|不想|不做|不写|不生成|别|禁止|我不(?:想|需要|打算|要求))")
+_NEGATED = re.compile(r"^" + _PREFIX + r"(?:不要|不用|无需|暂不|不需要|不想|不做|不写|不生成|别|禁止|我不(?:想|需要|打算|要求))"
+                      r"|(?i:^(?:(?:please|pls|just)\s+)?(?:don[’']?t|dont|do\s+not|no\s+need|not\s+(?:yet|now)|never|stop|hold\s+off|skip|cancel)(?=\s+[a-z]|\s*$))")
 # 意图判定用的三张词表，各分组；每一组带来多少请求、又放进来多少提问，
 # 见 scripts/eval_task_intent.py --variant all（基准 test/benchmarks/task_intent）。
 # "core" 三组合起来就是改动前的写法，保留它是为了随时能量出「之前是多少」。
@@ -57,22 +59,64 @@ ACTION_VARIANTS = {
     "+draft verbs": {"verbs": ("core", "draft"), "questions": ("core",), "reads": ("core",)},
     "+give verbs": {"verbs": ("core", "draft", "give"), "questions": ("core",), "reads": ("core",)},
     "+question marks": {"verbs": ("core", "draft", "give"), "questions": ("core", "more"), "reads": ("core",)},
-    "+read verbs (shipped)": {"verbs": ("core", "draft", "give"), "questions": ("core", "more"), "reads": ("core", "more")},
+    "+read verbs": {"verbs": ("core", "draft", "give"), "questions": ("core", "more"), "reads": ("core", "more")},
     "ablate: question marks": {"verbs": ("core", "draft", "give"), "questions": ("core",), "reads": ("core", "more")},
+    "+english (shipped)": {"verbs": ("core", "draft", "give"), "questions": ("core", "more"), "reads": ("core", "more"), "english": True},
 }
-ACTION_VARIANTS["shipped"] = dict(ACTION_VARIANTS["+read verbs (shipped)"])
+ACTION_VARIANTS["shipped"] = dict(ACTION_VARIANTS["+english (shipped)"])
+
+# English. An imperative starts its clause and takes an object, so a verb counts only there and only before a
+# determiner, a deliverable or a file: "I'll write it later", "Plan B is ...", "Update on the tender: ...", "Review
+# comments are in ..." are not requests. Deliverable nouns are the contract's Latin strong phrases ("Daily report for
+# block B: ..."); one followed by a status ("... was wrong", "... on Monday at 8am") is news about it, not a request.
+# Scored on test/benchmarks/task_intent/heldout_en*.json by scripts/test_english_intents.py.
+_EN_CLAUSE = r"(?:^|(?<=，)|(?<=[.!?;:]\s))\s*"
+_EN_LEAD = r"(?:(?:please|pls|kindly|also|now|first|then|just|so|ok|okay|and|go\s+ahead\s+and|help\s+me|i\s+need\s+you\s+to|let[’']?s)[\s,]+)*"
+_EN_VERBS = ("write", "draft", "prepare", "generate", "create", "produce", "compile", r"make(?!\s+sure)", "update", "revise",
+             "amend", "edit", "redo", r"fill\s+(?:in|out|up)", r"put\s+together", "summari[sz]e", "parse", "extract", "review",
+             "check", "plan", "pack", "list", "tabulate", "outline", "calculate", r"work\s+out", "record")
+_EN_DELIVERABLES = "|".join(r"\s+".join(map(re.escape, phrase.split())) for phrase in sorted(
+    {p for p, _ in contract_strong() if p.isascii() and " " in p and p.split()[0] not in ("the", "this", "how")}, key=len, reverse=True))
+_EN_VERB = "(?:" + "|".join(_EN_VERBS) + r")(?![-\w])"
+_EN_AUX = r"(?:is|are|was|were|am|do|does|did|has|have|had|can|could|should|would|will|shall|may|might|must)"
+_EN_OBJECT = (r"\s+(?:up\s+)?(?:(?:a|an|the|this|these|those|our|my|your|one|(?:today|tomorrow|yesterday)[’']?s|(?:this|next)\s+week[’']?s)(?![-\w])"
+              r"|(?:" + _EN_DELIVERABLES + r")|[\w.-]+\.(?:xlsx|xlsm|xls|csv|md|docx|doc|pdf|txt|json)\b)")
+_EN_STATUS = (r"\b(?:" + _EN_AUX + r"|be|been|isn[’']?t|wasn[’']?t|went|got|came|\w+ed\s+by|approved|rejected|sent|received|submitted"
+              r"|attached|done|completed|cancell?ed|postponed|delayed|moved|attend\w*)\b")
+_EN_WHEN = r"(?:(?:mon|tues|wednes|thurs|fri|satur|sun)day|\d{1,2}(?::\d{2})?\s*[ap]\.?m\b|\d{1,2}:\d{2})"
+_EN_ACTION = ("(?i:" + _EN_CLAUSE + _EN_LEAD + r"(?:" + _EN_VERB + _EN_OBJECT + r"|(?:calculate|work\s+out)\s+how\s+(?:many|much)\b)"
+              + "|" + _EN_CLAUSE + r"(?:(?:today[’']?s|tomorrow[’']?s|a|an|new)\s+)?(?:" + _EN_DELIVERABLES + r")(?:e?s)?\s*"
+              + r"(?:[:\-–—](?!\s*" + _EN_STATUS + r")|(?:for|on|about)\b(?:(?!" + _EN_STATUS + r")[^:.!?;]){0,120}:(?!\d)"
+              + r"|(?:for|on|about)\b(?:(?!" + _EN_STATUS + "|" + _EN_WHEN + r")[^:]){0,300}$)"
+              + "|" + _EN_CLAUSE + _EN_LEAD + r"(?:(?:i|we)\s+(?:need|want|would\s+like)|give\s+me|send\s+me)\s+(?:(?:a|an|the|today[’']?s|new)\s+)?(?:"
+              + _EN_DELIVERABLES + r")(?!\s+from\b))")
+_EN_QUESTION = ("(?i:" + _EN_CLAUSE + r"(?:(?:so|and|but|ok|okay|hi|hey|also|then|just|quick\s+question)[\s,]+)*"
+                r"(?:what|whats|how|why|when|where|who|whom|whose|which|isn[’']?t|aren[’']?t|" + _EN_AUX + r"(?!\s+not\b))(?![-\w])"
+                r"|\bwhether\b|\b(?:check|see|confirm|find\s+out)\s+if\b)")
+_EN_READ = (r"(?i:(?:(?:please|pls|kindly|just|first|now|so|ok|okay|can\s+you|could\s+you|would\s+you)[\s,]+)*"
+            r"(?:explain|describe|tell\s+me|walk\s+me\s+through|talk\s+me\s+through|clarify|remind\s+me|help\s+me\s+understand)\b)")
+_EN_FOLLOWUP = (r"(?i:\b(?:and\s+then|then|after\s+that|afterwards|next)[\s,，]+(?:please\s+)?(?:(?:help\s+me|can\s+you|could\s+you)\s+)?"
+                + _EN_VERB + r"(?:" + _EN_OBJECT + r"|\s+(?:it|them)\b))")
+# "Can you pack these into 40HQ?" asks for the plan, not whether it is possible.
+_EN_POLITE = re.compile(r"(?i)^\s*(?:(?:please|pls|kindly|hi|hey|ok|okay)[\s,，]+)?(?:can|could|would|will)\s+you\s+(?:please\s+|kindly\s+)?(?="
+                        + _EN_VERB + ")")
+_EN_STOP = re.compile(r"[.!?;]\s+")
 
 
-def compile_intent(verbs=("core",), questions=("core",), reads=("core",)):
+def compile_intent(verbs=("core",), questions=("core",), reads=("core",), english=False):
     """(_QUESTION, _READ_REQUEST, _ACTION, _FOLLOWUP_ACTION) for the chosen word groups."""
     verb = "|".join(part for group in verbs for part in ACTION_VERBS[group])
-    return (re.compile("|".join(part for group in questions for part in QUESTION_MARKS[group])),
-            re.compile(r"^" + _PREFIX + "(?:" + "|".join(part for group in reads for part in READ_VERBS[group]) + ")"),
-            re.compile(r"(?:帮我|请|需要|想要|先|再|只)?\s*(?:" + verb + ")"),
-            re.compile(r"(?:然后|并且|之后|随后|接着|同时|再|并|后)\s*(?:请帮我|帮我|请|给我|为我)?\s*(?:" + verb + ")"))
+    en_q, en_r, en_a, en_f = ("|" + p for p in (_EN_QUESTION, _EN_READ, _EN_ACTION, _EN_FOLLOWUP)) if english else ("",) * 4
+    return (re.compile("|".join(part for group in questions for part in QUESTION_MARKS[group]) + en_q),
+            re.compile(r"^" + _PREFIX + "(?:" + "|".join(part for group in reads for part in READ_VERBS[group]) + en_r + ")"),
+            re.compile(r"(?:帮我|请|需要|想要|先|再|只)?\s*(?:" + verb + ")" + en_a),
+            re.compile(r"(?:然后|并且|之后|随后|接着|同时|再|并|后)\s*(?:请帮我|帮我|请|给我|为我)?\s*(?:" + verb + ")" + en_f))
 
 
 _QUESTION, _READ_REQUEST, _ACTION, _FOLLOWUP_ACTION = compile_intent(**ACTION_VARIANTS["shipped"])
+# Contract strong phrases in Latin script, matched on word boundaries (plural s allowed).
+_LATIN_STRONG = tuple((re.compile(r"(?<![a-z0-9_-])" + r"\s+".join(map(re.escape, phrase.split())) + r"(?:e?s)?(?![a-z0-9_-])", re.I),
+                       phrase, eid) for phrase, eid in contract_strong() if phrase.isascii())
 _QUOTED = re.compile(r'```[\s\S]*?```|`[^`\n]*`|“[^”]*”|‘[^’]*’|「[^」]*」|『[^』]*』|"[^"\n]*"|(?<!\w)\'[^\'\n]*\'')
 _REFERENCE_END = re.compile(r"的(?:流程|注意事项|注意点|步骤|原因|含义|区别|意义|作用|风险|要求|方法|思路)[？?。！!\s]*$")
 _SEQUENCE = re.compile(r"先.+(?:再|然后)|之后|随后|接着", re.S)
@@ -88,12 +132,16 @@ def _intent(text: str) -> str:
     # Quoted operations describe source material, not actions authorized by this
     # turn. Keep the original text separately for selecting the relevant post.
     text = _positive_text(_QUOTED.sub("〔引用〕", text))
+    if polite := _EN_POLITE.match(text):
+        text = text[polite.end():].rstrip(" ?？")
     base = understand(text)
     read_request = bool(_QUESTION.search(text) or _READ_REQUEST.search(text))
     if read_request:
         followup_action = False
         for match in _FOLLOWUP_ACTION.finditer(text):
             clause_start = text.rfind("，", 0, match.start()) + 1
+            if match.group()[0].isascii():      # "What goes in a site diary? Then draft one": a sentence also ends at "? "
+                clause_start = max([clause_start, *(stop.end() for stop in _EN_STOP.finditer(text, 0, match.start()))])
             clause_end = text.find("，", match.end())
             clause_end = len(text) if clause_end < 0 else clause_end
             # "为什么先检查再生成" asks about a sequence. A separate
@@ -220,6 +268,22 @@ def route_task(message: str, expert_ids: list[str] | None = None) -> dict:
                     if phrase in matchable:
                         hits[expert.id] = max(hits.get(expert.id, (0, 0)), (len(phrase), -matchable.index(phrase)))
                         matched_labels.setdefault(phrase, set()).add(expert.id)
+            # English, only when no Chinese phrase named the post: the job is the first contract phrase the request
+            # verb governs ("For the tender, draft a method statement"; "2 containers arrived, write the daily
+            # report"), else the earliest one (a pasted ITT opens with "Invitation to Tender"; "then draft one").
+            # "the tender response" is one phrase, not "the tender".
+            def latin_from(pos: int) -> list:
+                found = [(m.start(), m.end(), phrase, eid) for pattern, phrase, eid in _LATIN_STRONG
+                         if eid in roster and (m := pattern.search(matchable, pos))]
+                return [h for h in found if not any(o[1] - o[0] > h[1] - h[0] and o[0] < h[1] and h[0] < o[1] for o in found)]
+            latin = latin_from(0) if not hits else []
+            if latin:
+                polite = _EN_POLITE.match(matchable)
+                verbs = [found.start() for found in (_ACTION.search(matchable), _FOLLOWUP_ACTION.search(matchable)) if found]
+                anchor = polite.end() if polite else min(verbs, default=len(matchable) + 1)
+                start, _, phrase, eid = min(latin_from(anchor) or latin)
+                hits[eid] = max(hits.get(eid, (0, 0)), (len(phrase), -start))
+                matched_labels.setdefault(phrase, set()).add(eid)
             # A shared label alone cannot justify selecting two different duties.
             ambiguous = {eid for label, owners in matched_labels.items() if len(owners) > 1
                          for eid in owners if hits.get(eid, (0,))[0] <= len(label)}

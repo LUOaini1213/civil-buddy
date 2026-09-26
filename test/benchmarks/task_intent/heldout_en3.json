@@ -1,0 +1,36 @@
+{
+  "schema": "civil.task_intent.bench.v1",
+  "note": "English round 3, held out, statement-heavy: written on 2026-09-26 after a review found that English status messages ('Daily report for yesterday was wrong', 'Draft approved', 'you reviewed') ran as requests and that context before the deliverable ('For the tender, draft a method statement') picked the post. Written before the fix for that review was implemented and before any version of the rules ran on these sentences. Not blind: the same agent then wrote the fix, having read the review's probe sentences (none of which is repeated here). SYNTHETIC: written for this benchmark in the voice of a Singapore curtain-wall (facade) contractor's site, logistics and tender staff; nothing comes from a real company, project or document. Two thirds are statements, notices and reported past work that must stay chat; the requests put context before the deliverable. `post` is scored only on run/both rows.",
+  "cases": [
+    {"text": "Safety briefing this morning went well, 14 workers attended", "intent": "chat", "post": null, "kind": "heldout_en3"},
+    {"text": "Method statement rev B was returned with comments from the PE", "intent": "chat", "post": null, "kind": "heldout_en3"},
+    {"text": "The load plan you did last week worked, all 3 containers passed inspection", "intent": "chat", "post": null, "kind": "heldout_en3"},
+    {"text": "Daily report on Friday had the wrong weather, it rained in the afternoon", "intent": "chat", "post": null, "kind": "heldout_en3"},
+    {"text": "Tender closing date moved to 15 Oct per addendum 3", "intent": "chat", "post": null, "kind": "heldout_en3"},
+    {"text": "Draft MOS already sent to the main contractor", "intent": "chat", "post": null, "kind": "heldout_en3"},
+    {"text": "Review meeting with the facade consultant is at 3pm", "intent": "chat", "post": null, "kind": "heldout_en3"},
+    {"text": "Check-in at the site office is 7:30am for all installers", "intent": "chat", "post": null, "kind": "heldout_en3"},
+    {"text": "Update: crane inspection passed, lifting can resume", "intent": "chat", "post": null, "kind": "heldout_en3"},
+    {"text": "Packing list from the factory shows 42 crates", "intent": "chat", "post": null, "kind": "heldout_en3"},
+    {"text": "Toolbox talk yesterday was on fall protection", "intent": "chat", "post": null, "kind": "heldout_en3"},
+    {"text": "Plan is to start the south elevation on Monday", "intent": "chat", "post": null, "kind": "heldout_en3"},
+    {"text": "Prepared the site diary already, just FYI", "intent": "chat", "post": null, "kind": "heldout_en3"},
+    {"text": "You wrote the method statement too long last time, the PE complained", "intent": "chat", "post": null, "kind": "heldout_en3"},
+    {"text": "Generator on level 5 broke down again", "intent": "chat", "post": null, "kind": "heldout_en3"},
+    {"text": "Record of the toolbox briefing is in the site folder", "intent": "chat", "post": null, "kind": "heldout_en3"},
+    {"text": "List price for the brackets went up 8%", "intent": "chat", "post": null, "kind": "heldout_en3"},
+    {"text": "The ITT we got yesterday has 240 pages", "intent": "chat", "post": null, "kind": "heldout_en3"},
+    {"text": "Container 2 arrived damaged, 3 panels cracked", "intent": "chat", "post": null, "kind": "heldout_en3"},
+    {"text": "Please note the safety briefing is moved to 8:30am tomorrow", "intent": "chat", "post": null, "kind": "heldout_en3"},
+    {"text": "Prepare for heavy rain this afternoon, secure the loose panels", "intent": "chat", "post": null, "kind": "heldout_en3"},
+
+    {"text": "Panels for level 8 arrived this morning. Please update the site diary with the delivery", "intent": "run", "post": "pm-daily", "kind": "heldout_en3"},
+    {"text": "Since the tender closes Friday, draft the technical proposal now", "intent": "run", "post": "bid-tech", "kind": "heldout_en3"},
+    {"text": "Gondola 2 is down again, write a toolbox talk on gondola rescue", "intent": "run", "post": "safety-brief", "kind": "heldout_en3"},
+    {"text": "The consultant rejected rev A. Revise the method statement for the bracket fixing", "intent": "run", "post": "construction", "kind": "heldout_en3"},
+    {"text": "3 containers are booked for Thursday, make a load plan for batch 4", "intent": "run", "post": "pack-ship", "kind": "heldout_en3"},
+    {"text": "Before the PE visit, prepare a method statement for sealant works", "intent": "run", "post": "construction", "kind": "heldout_en3"},
+    {"text": "Daily report for 29 Sep: 10 installers, 14 panels, no rain", "intent": "run", "post": "pm-daily", "kind": "heldout_en3"},
+    {"text": "What does the ITT say about retention? After that, check our tender response for gaps", "intent": "both", "post": "bid-compliance", "kind": "heldout_en3"}
+  ]
+}
