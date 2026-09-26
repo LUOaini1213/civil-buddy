@@ -1,0 +1,61 @@
+# The Dockerfile does `COPY . .` because the gateway reads files from all over the repo at
+# startup and per request (contract/, workbench/seed.json, demo/kb, .agents/skills, ...).
+# This list keeps out everything that is local state, secret or build output.
+
+# VCS and CI
+.git
+.gitignore
+.github
+
+# Python / Node environments and caches
+.venv
+.venv-*
+venv
+**/__pycache__
+**/*.py[cod]
+.pytest_cache
+.mypy_cache
+.ruff_cache
+node_modules
+**/node_modules
+
+# Runtime state: never bake a developer's runs or database into the image
+output
+data/*.db
+data/*.db-*
+data/backup
+**/*.sqlite
+**/*.sqlite3
+
+# Secrets and local-only config
+.env
+.env.*
+!.env.example
+**/*.local.json
+**/*.local.*
+**/*.pem
+**/*.key
+**/credentials*
+**/*apiKey*
+**/*apikey*
+**/*api-key*
+**/secrets
+**/keys
+civil.toml
+
+# Build outputs
+dist
+**/dist
+target
+**/target
+build
+*.log
+*.tmp
+*.bak
+
+# Editors / OS
+.idea
+.vscode
+.claude
+**/.DS_Store
+**/Thumbs.db
