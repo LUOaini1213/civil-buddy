@@ -40,7 +40,7 @@ Every result we claim was produced on that checkout, offline, with no model key;
 
 **Where it runs.** The target is one AWS Lightsail instance per company, used by employees in a browser. At this baseline the instance is not yet running. We plan to set it up before submitting and to give its URL in the submission email (§6).
 
-**Pilot partner.** We propose to pilot civil-buddy with a Singapore curtain-wall contractor, {{SME_NAME}}. So far the partner has given verbal feedback only, and no pilot has been agreed or started. The demo on 10 October will walk the partner's three façade jobs on synthetic files: reviewing a façade tender, planning how unitised panels are crated and containerised, and drafting installation paperwork behind the licensed sign-off. The Business Proposal describes the partner and the proposed pilot.
+**Pilot partner.** We propose to pilot civil-buddy with a Singapore curtain-wall contractor, {{SME_NAME}}. So far the partner has given verbal feedback only, and no pilot has been agreed or started. The demo on 10 October will walk the partner's three façade jobs on synthetic files (§3.4): reviewing a façade tender, planning how unitised panels are crated and containerised, and drafting installation paperwork behind the licensed sign-off. The Business Proposal describes the partner and the proposed pilot.
 
 ## 2. Architecture
 
@@ -201,6 +201,18 @@ In the workbench, the user picks a post such as 项目日报 ("daily report"), o
 
 Routing can misfire. For most non-bid posts, the draft is a correct skeleton that keeps the user's words but places fewer than half of the facts (§5.2).
 
+### 3.4 The three flows on a synthetic façade job (pull request #63)
+
+Pull request #63, merged on 2026-09-26 as `916971d` after this baseline, adds a runnable demo of the pilot partner's three jobs. Every input in `examples/facade-demo/` is synthetic and says so: a façade subcontract ITT, 24 unitised panels as English and Chinese spreadsheets, and daily-report and work-at-height inputs as Chinese labelled lines. `python scripts/demo_facade.py` copies them into a new job folder and runs each turn through `civil.run_task`, the function behind `civil exec`, in steps mode with no key; it writes nothing outside that folder. On `916971d` it printed:
+
+- **Tender.** The parse lists the CR16 workhead, 420 calendar days, 90-day validity, the 10% performance bond, the 12-month defects-liability period, "alternative tenders not permitted", the 4 PQM weightings and 3 rejection clauses, and leaves 10 rows 未在原文检出 ("not found in the text") for a person. From its handoff, bid-tech drafts 4 chapters with 13 `[A001]` cells, and bid-compliance lists 8 requirements with no response and 3 rejection clauses to tick.
+- **Packing.** 24 panels become 24 crates in 6 × 40HQ (N0 = 6, `can_fit` true, space 0.4387, weight 0.0903). Pieces 24 → 24 and 10 800 → 10 800 kg; all 24 crate structure checks read 待详设 ("pending detailed design").
+- **Site documents.** The daily report copies the day's facts (date, weather, location, progress, attendance, plant, safety notes, next day's plan) into their rows and leaves the preparer and reviewer blank. The high-risk work-at-height briefing writes nothing, and the script never types the sentence.
+
+The script also prints what it does not do yet: the parse lists 0 of the ITT's 8 façade specification clauses (mock-ups, heat soak, site water test, PE endorsement, warranty, A-frame delivery, insurance) and no liquidated-damages or retention row; the plan is identical with Chinese notes, English notes and none, and A-frame stillages are not modelled. The folder's README adds that, once signed, the briefing body is generic. The folder's README states that the ITT carries the same clauses as the ITT of our 26 September study, so any score on it is a development figure, not a held-out one.
+
+**English requests.** The same pull request routes English requests in steps mode. On `heldout_en2`, 28 English sentences written after the English rules were frozen, `route_task` scores 0.786 accuracy with 0 false runs, and all 6 misses fall back to chat (`scripts/test_english_intents.py`). The two other English sets are not blind, so we do not quote them. The Chinese held-out 2 still scores 1.000 with 0 false runs on `916971d`. An English sentence still places almost nothing in a draft, which is why the demo's inputs are in Chinese.
+
 ## 4. Safety and governance
 
 ### 4.1 Human sign-off: the model proposes, code writes
@@ -296,6 +308,8 @@ We re-ran every row on `d3ada11`. Apart from timings, the output is identical to
 
 Locally, `ui-dom` fails until `npm ci` has installed `node_modules`, because it needs `jsdom`; CI installs them (`ci.yml:47`). On our machine we re-ran the checks that #60 and #61 touched or added (`planning-chat-ui`, `post-scorecard`, `access-guard`, `human-approval`, `pack-ship-read-sandbox`, `http-confirmation`), and all six pass. The 5 Python checks that run only with `--full` also pass, including `pytest demo/tests` (76 passed, 9 skipped).
 
+**Since this baseline: 145 checks.** Pull request #63 (merged 2026-09-26 as `916971d`) added three checks. `facade-tender` pins the tender-matrix fix: short Latin codes match whole words, so "CTU" in "structural" is no longer a lashing clause; a packing run is evidence only for the clauses it answers, so a clause on unmodelled handling (A-frame, stillage, upright, no stacking, fragile) or naming another container type goes to a person ("Pending SME") instead of "No Deviation", and a lashing or CTU clause is never covered by the run (at most "Partial Deviation"); and CR16 reaches the handoff. `english-intents` pins English routing, with floors on the three English held-out sets. `facade-demo` runs the flows of §3.4. All 145 checks passed on CI for the pull request (run 36222056643, on the PR head `46b6ac1`, whose tree is identical to `916971d`) and again on `main` at `916971d` (run 36222613544), and all three CI jobs succeeded in both runs. Locally on `916971d`, the three new checks, `task-intent-bench` and `tender-delivery-api`, which #63 also changed, pass (5 of 5).
+
 `main` was red from 2026-09-22 until pull request #60; at `be18c6a` CI stopped at 137 of 139 (run 35688428017), and our local run there had 136. #60 fixed both failures, neither a product regression: `planning-chat-ui` now loads the ES modules that the #56 split made of `demo/static/app.js` (the same 9 tests and assertions), and `post-scorecard`'s bid-parse gate asks for the section `ad3d079` renamed to SKILL.md's "7 专项触发", with unchanged strictness.
 
 ### 5.4 What we do not claim
@@ -313,7 +327,7 @@ We do not claim the following:
 From the repository root, with Python 3.11, `pip install -r requirements.txt` and no key; only `npm ci` needs the network. Appendix A lists the remaining commands.
 
 ```
-python scripts/check_project.py --list           # 148 lines: 142 default + 6 --full
+python scripts/check_project.py --list           # 148 lines at d3ada11: 142 default + 6 --full (151 from 916971d)
 npm ci ; npm run check                           # the release gate (ui-dom needs npm ci)
 python scripts/eval_task_intent.py --check       # heldout2 1.000/0
 python scripts/eval_verdicts.py --check          # heldout2 0.900/1.000
@@ -324,6 +338,8 @@ python scripts/test_real_tender.py ; python scripts/eval_real_bid_check.py --set
 python scripts/test_pack_ship_conservation.py --numbers
 python scripts/fanout16x8_online_cargo.py --skip-fetch   # ~3 min, 16 workers
 python scripts/test_acceptance_cases.py ; python scripts/demo_one_shot.py --all
+python scripts/demo_facade.py                    # from 916971d: the façade demo of §3.4
+python scripts/test_english_intents.py --score   # from 916971d: heldout_en2 0.786, 0 false runs
 ```
 
 ## 6. Deployment on AWS
@@ -404,6 +420,8 @@ The enterprise edition is **one AWS Lightsail Linux instance per company**, used
 
 **Environment.** Checkout `d3ada11` (`main`, 2026-09-26), on Windows 11 with Python 3.11.5 and Node v24.19.0. Model keys were unset and `PYTHON_DOTENV_DISABLED=1` was set; the fan-out ran with `--skip-fetch`. No tracked file changed. `node_modules` was not installed, so `ui-dom` was not run locally. The release-gate result is GitHub CI's.
 
+**After the baseline.** Every number in §3.4, the "Since this baseline" paragraph of §5.3 and row 13 below was run on `916971d` (`main` after pull request #63, 2026-09-26) in the same environment, with no key and `PYTHON_DOTENV_DISABLED=1`; the 145-check result is GitHub CI's. No other number in this document was re-run on `916971d`, so the baseline stays `d3ada11`.
+
 **Harness.** Rows marked *harness* were run by short scripts outside the repository that call the repository's own entry points: `run_agent`, `packing_assistant.civil.main`, `run_plan`, and FastAPI `TestClient`.
 
 | # | Claim | Source |
@@ -420,3 +438,4 @@ The enterprise edition is **one AWS Lightsail Linux instance per company**, used
 | 10 | Flows 1–3 (§3), re-run on `d3ada11` | harness: `run_agent` on `test/benchmarks/real_tender/bid_cn_municipal.json`; `TestClient` on `gateway.app`; `civil.main(['exec', …])` |
 | 11 | Security baseline and what remains open (§4.3–4.4) | `packing_assistant/access_guard.py:60-78, 101-106, 135-149, 159`; `demo/mcp_surface.py:102, 133-134, 297-333, 358, 369-389`; `gateway/app.py:110-127, 479-497, 576, 650, 767-781, 942, 1390, 1491-1508, 2704-2710, 2868, 2908`; `demo/app.py:66-67, 1126`; `demo/serve.py:23-29`; `demo/chat_service.py:349`; `demo/model_settings.py:33-42, 118-127`; `runtime/app_server.py:76-101`; `runtime/memory.py:85`; `runtime/policy.py:172-180`; `runtime/tool_engine.py:174-222`; `runtime/agent_loop.py:241, 260, 282`; `tools/pack_ship_mcp.py:310-332`; `workbench/src/mcp.rs:173-176`; `workbench/src/api.rs:1292`; `runtime/os_sandbox/__init__.py:116`; `model_loop.py:347-368`; tests `scripts/test_access_guard.py`, `test_human_approval.py`, `test_pack_ship_read_sandbox.py`, `test_http_confirmation.py` |
 | 12 | Operator settings; Lightsail not yet running; Bedrock not yet exercised; Bedrock endpoints and models in Singapore | `docs/deploy-minimal.md` ("AWS Lightsail"); AWS Bedrock User Guide, accessed 2026-09-26: <https://docs.aws.amazon.com/bedrock/latest/userguide/endpoints-region-availability.html>, <https://docs.aws.amazon.com/bedrock/latest/userguide/inference-chat-completions.html>, <https://docs.aws.amazon.com/bedrock/latest/userguide/models-region-compatibility.html> |
+| 13 | Pull request #63 at `916971d`: façade demo figures, English routing, Chinese held-out 2, three new checks (145/145 on CI), 5 of 5 local checks | `python scripts/demo_facade.py` (exit 0) on `examples/facade-demo/`; `scripts/test_english_intents.py --score` (`test/benchmarks/task_intent/heldout_en2.json`; README in that folder); `eval_task_intent.py --check`; `check_project.py --only facade-tender,facade-demo,english-intents,task-intent-bench,tender-delivery-api`; `check_project.py --list` (151 lines); GitHub Actions run 36222056643 (PR #63, head `46b6ac1`, tree identical to `916971d`) and run 36222613544 (push to `main` at `916971d`) |
