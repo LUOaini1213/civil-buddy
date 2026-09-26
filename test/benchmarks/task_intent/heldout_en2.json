@@ -1,0 +1,35 @@
+{
+  "schema": "civil.task_intent.bench.v1",
+  "note": "English round 2, held out: written on 2026-09-26 after the English rules were frozen (heldout_en.json was written by the same person who then wrote the rules, so it is not blind), and before those rules ran on these sentences. SYNTHETIC: written for this benchmark in the voice of a Singapore curtain-wall (facade) contractor's site, logistics and tender staff, including local shorthand (do up, MOS, pls) and mixed Chinese-English; nothing comes from a real company or document. `post` is scored only on run/both rows. If you change the rules because of a miss here, pin the sentence in scripts/test_english_intents.py and write a round 3.",
+  "cases": [
+    {"text": "Pls do up the daily report for today, 8 men on site, 10 panels installed at L9", "intent": "run", "post": "pm-daily", "kind": "heldout_en2"},
+    {"text": "Need a toolbox talk for scaffold dismantling tomorrow morning", "intent": "run", "post": "safety-brief", "kind": "heldout_en2"},
+    {"text": "Kindly prepare the MOS for bracket anchoring at grid line C", "intent": "run", "post": "construction", "kind": "heldout_en2"},
+    {"text": "Site diary 26/9: 6 installers, 2 hours lost to rain, gondola 2 down", "intent": "run", "post": "pm-daily", "kind": "heldout_en2"},
+    {"text": "Generate a load plan for the 3rd batch of unitised panels, 40HQ only", "intent": "run", "post": "pack-ship", "kind": "heldout_en2"},
+    {"text": "Help me go through the tender and pull out the key dates", "intent": "run", "post": "bid-parse", "kind": "heldout_en2"},
+    {"text": "Prepare the compliance schedule for the ITT", "intent": "run", "post": "bid-compliance", "kind": "heldout_en2"},
+    {"text": "Could you make a packing list for the brackets and fixings?", "intent": "run", "post": "pack-ship", "kind": "heldout_en2"},
+    {"text": "Do the daily report for Tower A please", "intent": "run", "post": "pm-daily", "kind": "heldout_en2"},
+    {"text": "Toolbox meeting notes for 27 Sep: topic is lifting glass with the vacuum lifter", "intent": "run", "post": "safety-brief", "kind": "heldout_en2"},
+    {"text": "Summarise the tender addendum no. 2", "intent": "run", "post": "bid-parse", "kind": "heldout_en2"},
+    {"text": "Create a method statement for sealant application on the west elevation", "intent": "run", "post": "construction", "kind": "heldout_en2"},
+    {"text": "Update today's site diary: add delivery of 12 crates at 2pm", "intent": "run", "post": "pm-daily", "kind": "heldout_en2"},
+    {"text": "Work out how many containers we need for facade_panels.xlsx", "intent": "run", "post": "pack-ship", "kind": "heldout_en2"},
+    {"text": "帮我写 daily report，今天 8 个人，装了 6 块板", "intent": "run", "post": "pm-daily", "kind": "heldout_en2"},
+    {"text": "Pls check the ITT for LD rates and retention", "intent": "run", "post": "bid-parse", "kind": "heldout_en2"},
+    {"text": "What should go into a lifting plan? After that, draft one for the mini crane", "intent": "both", "post": "construction", "kind": "heldout_en2"},
+    {"text": "Explain the heat soak test requirement and then prepare a quality checklist for it", "intent": "both", "post": "quality", "kind": "heldout_en2"},
+
+    {"text": "Any update on the tender?", "intent": "chat", "post": null, "kind": "heldout_en2"},
+    {"text": "How many installers did we have on site yesterday", "intent": "chat", "post": null, "kind": "heldout_en2"},
+    {"text": "Is the toolbox talk compulsory for the gondola team", "intent": "chat", "post": null, "kind": "heldout_en2"},
+    {"text": "We already sent the load plan to the forwarder", "intent": "chat", "post": null, "kind": "heldout_en2"},
+    {"text": "Not now, I'll do the daily report after the site walk", "intent": "chat", "post": null, "kind": "heldout_en2"},
+    {"text": "The method statement was rejected by the PE, what do we change?", "intent": "chat", "post": null, "kind": "heldout_en2"},
+    {"text": "Can the 40HQ take 26 panels at 450 kg each?", "intent": "chat", "post": null, "kind": "heldout_en2"},
+    {"text": "Remind me what retention percentage the ITT states", "intent": "chat", "post": null, "kind": "heldout_en2"},
+    {"text": "Who is doing the toolbox briefing tomorrow?", "intent": "chat", "post": null, "kind": "heldout_en2"},
+    {"text": "Cancel the site diary for today, no work due to rain", "intent": "chat", "post": null, "kind": "heldout_en2"}
+  ]
+}
