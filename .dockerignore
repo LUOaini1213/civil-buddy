@@ -19,8 +19,12 @@ venv
 node_modules
 **/node_modules
 
-# Runtime state: never bake a developer's runs or database into the image
+# Runtime state: never bake a developer's runs or database into the image. Patterns are anchored at the
+# context root; only **/ recurses (demo/.env and demo/out got in through the root-anchored lines before).
 output
+demo/out
+demo/data
+**/.civil-buddy
 data/*.db
 data/*.db-*
 data/backup
@@ -30,7 +34,10 @@ data/backup
 # Secrets and local-only config
 .env
 .env.*
+**/.env
+**/.env.*
 !.env.example
+!**/.env.example
 **/*.local.json
 **/*.local.*
 **/*.pem
@@ -50,6 +57,7 @@ target
 **/target
 build
 *.log
+**/*.log
 *.tmp
 *.bak
 
