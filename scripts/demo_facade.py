@@ -154,7 +154,7 @@ class Demo:
         self.say("    inputs: " + " · ".join(f"{k} {(inputs.get(k) or {}).get('name')} sha256 {str((inputs.get(k) or {}).get('sha256'))[:12]}"
                                             for k in ("tender", "panel_list", "plan")))
         for s in link["statements"]:
-            self.say(f"    {s['id']} Clause {s.get('clause') or '-'} · {s['kind']} · {s['status']} · {self.figure(s)}")
+            self.say(f"    {s['id']} {s.get('cite') or 'Clause ' + (s.get('clause') or '-')} · {s['kind']} · {s['status']} · {self.figure(s)}")
         if record is not None:
             self.say(f"    link record: {self.rel(record)} (statement -> clause -> plan figures -> sha256 of tender, list, plan)")
         return {"out": out, "link": link, "record": record}
