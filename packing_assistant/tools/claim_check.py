@@ -61,7 +61,8 @@ _ZH = re.compile("|".join((
     r"(?P<count>(?P<n>\d{1,3})\s*条(?:应答|条款|物流条款)?(?:均|都|全部)?(?:已经?|已)?(?:被)?覆盖)",
     r"(?P<named>(?P<ids>" + _SID + r"(?:\s*(?:、|,|，|和|与|至|到|-|–)\s*" + _SID + r")*)\s*(?:均|都)?(?:已经?|已)?(?:被)?覆盖)",
 )))
-_ZH_NEG = re.compile(r"不|未|没有?|无|非|是否|能否|尚")
+# 不仅 / 不但 / 不光 / 不只 ("not only") affirm what follows (review of #74)
+_ZH_NEG = re.compile(r"不(?![仅但光只])|未|没有?|无|非|是否|能否|尚")
 
 
 def load_record(files: Iterable[Any]) -> Optional[Dict[str, Any]]:
@@ -189,6 +190,7 @@ def record_sentence(record: Dict[str, Any], lang: str = "en", *, stop: bool = Tr
 # A sentence starts after . ! ? followed by a space, or after ; a line break or a CJK stop, and ends at the next one.
 _SENTENCE_START = re.compile(r"[.!?](?=\s)|[;\n。！？；]")
 _SENTENCE_END = re.compile(r"[.!?](?=\s|$)|[;\n。！？；]")
+_BULLET = re.compile(r"(?:[-*•>]|\d{1,3}[.)])[ \t]+|#{1,6}[ \t]+")
 
 
 def _sentence_span(text: str, start: int, end: int) -> tuple:
@@ -197,6 +199,11 @@ def _sentence_span(text: str, start: int, end: int) -> tuple:
     begin = verdict_guard._last_break(_SENTENCE_START, text, start)
     while begin < start and text[begin].isspace():
         begin += 1
+    if begin == 0 or text[begin - 1] == "\n":
+        # a list marker stays: "- All clauses are covered." becomes "- [Per the link record ...]." (review of #74)
+        bullet = _BULLET.match(text, begin, start)
+        if bullet:
+            begin = bullet.end()
     stop = _SENTENCE_END.search(text, end)
     if stop is None:
         finish = len(text)

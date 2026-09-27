@@ -164,7 +164,9 @@ _EN_REPORTED = re.compile(
 # "we have stated". Such a sentence is not reported speech. ("note to" is no longer a reporting word: "Note to the
 # user: the bid is ready to submit" states the verdict.)
 _EN_OWN_VOICE = re.compile(r"(?:^|\b)(?:as|i|we)\s+(?:(?:have|had|already|just|previously|also|would|could|might|must|can|"
-                           r"will|do)\s+)?$|(?:^|\b)(?:i|we)['’]d\s+$", re.I)
+                           r"will|do)\s+)?$|(?:^|\b)(?:i|we)['’]d\s+$"
+                           # "it is fair / safe to say", "needless to say" (review of #74, dev_round3_review.json)
+                           r"|\b(?:safe|fair|true|accurate|correct|reasonable|needless)\s+to\s+$|\bsuffice\s+(?:it\s+)?to\s+$", re.I)
 
 # Round 3 (review of 2026-09-27, dev_round3.json). Three ways a stated verdict slipped past the checks above:
 # (c) a leading "with no ... / having found no ... / without ..." adverbial carries a negation that belongs to the
@@ -172,17 +174,33 @@ _EN_OWN_VOICE = re.compile(r"(?:^|\b)(?:as|i|we)\s+(?:(?:have|had|already|just|p
 #     phrase that ends where the verdict's subject (the, this, it, we, all ...) begins, only the rest of the clause is
 #     searched for a negation. "Without the plan being compliant ..." has no phrase before its "the", so it still negates.
 _EN_SUBJECT_START = r"(?:the|this|these|those|your|our|its|their|it|we|you|they|all|every|each|everything)\b"
+#     Review of #74 (dev_round3_review.json): the phrase is looked for from the start of the sentence, so "With zero gaps
+#     and no open items the bid ..." (the clause splits at "and") and a leading reason ("Since there are no gaps the
+#     containers ...") count too. whether / if inside it are not its own ("Without checking whether the plan is
+#     compliant ..." asks, it does not state), and a phrase ending in a word that takes the verdict as its object
+#     ("With nothing showing the plan is compliant ...", "no evidence that ...") negates the verdict.
 _EN_NEG_ADVERBIAL = re.compile(
     r"^\s*(?:with\s+(?:no|nothing|zero)|having\s+(?:found|seen|had|identified|raised|flagged|noted)\s+(?:no|nothing)|"
-    r"(?:finding|seeing)\s+(?:no|nothing)|without(?:\s+any)?)\s+"
-    r"(?:(?!" + _EN_SUBJECT_START + r"|not\b|no\b|never\b)[\w'’-]+\s+){1,4}?(?=" + _EN_SUBJECT_START + r")", re.I)
+    r"(?:finding|seeing)\s+(?:no|nothing)|without(?:\s+any)?|"
+    r"(?:since|as|because|given\s+that|now\s+that|seeing\s+that)\s+(?:[\w'’-]+\s+){0,3}?(?:no|nothing|zero|none))\s+"
+    r"(?:(?:(?:and|or|nor)\s+|(?<=,\s))(?:no|zero|nothing|without(?:\s+any)?)\s+|"
+    r"(?!" + _EN_SUBJECT_START + r"|not\b|no\b|never\b|whether\b|if\b)[\w'’-]+,?\s+){1,6}?(?=" + _EN_SUBJECT_START + r")", re.I)
+_EN_ADVERBIAL_GOVERNS = re.compile(
+    r"\b(?:show\w*|prov(?:e|es|ed|en|ing)|proof|suggest\w*|indicat\w*|confirm\w*|say\w*|said|tell\w*|told|mean\w*|"
+    r"impl(?:y|ies|ied|ying)|guarantee\w*|establish\w*|demonstrat\w*|evidence|signs?|reason|basis|way|that|to\s+[\w'’-]+)\s+$",
+    re.I)
+# "Not only is the plan compliant with the tender" affirms the verdict: "not only / not just" is not a negation
+_EN_NOT_ONLY = re.compile(r"\bnot\s+(?:only|just|merely|simply)\b|不(?:仅|但|光|只)", re.I)
 # (d) after / when open a condition only when a subordinate clause follows them: a subject and a verb ("after the
 #     engineer signs", "when it is confirmed") or a participle done by someone ("when signed by the PE"). "After review
 #     the bid is ready" and "When checked against the ITT the plan meets ..." report a check already made.
 _EN_FINITE = r"(?:is|are|was|were|has|have|had|will|can|may|shall|must|does|do|did|[a-z]+(?:s|ed))\b"
 _EN_SUBORDINATE = re.compile(
     r"^\s*(?:(?:the|a|an|this|that|these|those|your|our|its|their|his|her|my)\s+(?:(?!(?:the|a|an|this|that)\b)[\w'’-]+\s+){1,3}?"
-    + _EN_FINITE + r"|(?:i|we|you|they|he|she|it|someone|somebody|anyone|everyone)\s+(?:\w+\s+)?" + _EN_FINITE
+    # "After the detailed checks the bid ...": a plural check noun is not the verb (review of #74)
+    + r"(?!(?:checks|cross-checks|reviews|process|processes|results|findings|comparisons|assessments|inspections|tests|"
+      r"analysis|analyses|audits|evaluations|runs|passes|calculations|verifications)\b)" + _EN_FINITE
+    + r"|(?:i|we|you|they|he|she|it|someone|somebody|anyone|everyone)\s+(?:\w+\s+)?" + _EN_FINITE
     + r"|[a-z]+(?:ed|en)\s+(?:[\w'’-]+\s+){0,2}?by\b"
     # a participle or state someone else still has to reach ("when confirmed", "after signing", "when ready"); the
     # product's own check ("when checked against the ITT", "after review") is not one
@@ -192,10 +210,12 @@ _EN_SUBORDINATE = re.compile(
 #     would / should / could / might followed by an opinion verb ("I would say the plan meets ...") put the verdict in
 #     the product's own voice; the modal governs "say", not the verdict.
 _EN_OPINION_MODAL = re.compile(r"\b(?:would|should|could|might)\s+(?:(?:just|still|also|honestly|probably)\s+)?"
+                               r"(?:be\s+(?:[\w'’-]+\s+)?(?:safe|fair|true|accurate|correct|reasonable)\s+to\s+)?"
                                r"(?:say|think|argue|conclude|reckon|guess|consider|add|note|state)\b", re.I)
 #     "you should go ahead and book" is advice to act on the verdict, not a requirement on the thing ("The response
 #     should be ready for submission by Friday" stays a requirement).
-_EN_ADVICE = re.compile(r"\byou\s+(?:really\s+|now\s+)?(?:should|could|ought\s+to)\s+(?:(?:now|just|simply|safely)\s+)?$", re.I)
+_EN_ADVICE = re.compile(r"\b(?:you|we|i)\s+(?:(?:really|now|just|[a-z]+ly)\s+)?(?:should|could|ought\s+to)\s+"
+                        r"(?:(?:now|just|simply|safely|really|[a-z]+ly)\s+){0,2}$", re.I)
 _EN_ACT = re.compile(r"(?:go\s+ahead|proceed)\b", re.I)
 # the Chinese condition words alone: in an English clause its English words are _en_condition_before's to judge
 _CONDITION_BEFORE_CJK = re.compile(_CONDITION_BEFORE.pattern.replace(r"|\b(?:must|shall|should|once|after|when|unless)\b", ""))
@@ -259,8 +279,13 @@ def _english_stated(blob: str, match: re.Match, *, negation: bool, conditions: b
     sentence = blob[_last_break(_EN_SENTENCE_BREAK, blob, match.start()): match.start()]
     rest = _EN_CLAUSE_BREAK.search(blob, match.end())
     after = blob[match.end(): rest.start() if rest else len(blob)]
-    adverbial = _EN_NEG_ADVERBIAL.match(clause)
-    negatable = clause[adverbial.end():] if adverbial else clause
+    negatable = clause
+    adverbial = _EN_NEG_ADVERBIAL.match(sentence)
+    if adverbial and not _EN_ADVERBIAL_GOVERNS.search(sentence[: adverbial.end()]):
+        cut = match.start() - len(sentence) + adverbial.end()
+        if cut > match.start() - len(clause):
+            negatable = blob[cut: match.start()]
+    negatable = _EN_NOT_ONLY.sub(" ", negatable)
     if negation and (_NEGATION.search(negatable) or _EN_NEGATION.search(negatable)):
         return False
     if conditions and (_CONDITION_BEFORE_CJK.search(clause) or _en_condition_before(clause, match.group(0))
@@ -278,9 +303,38 @@ def _english_stated(blob: str, match: re.Match, *, negation: bool, conditions: b
     return True
 
 
-def stated_verdicts(text: str, *, negation: bool = True, clause_scope: bool = True, questions: bool = True,
-                    conditions: bool = True, patterns: bool = True, english: bool = True, reported: bool = True,
-                    quotes: bool = True) -> List[Dict[str, Any]]:
+#: zero-width and invisible format characters. "ready to sub\u200bmit" and "compli\u00adant" read as the words they
+#: hide (review of #74, dev_round3_review.json)
+INVISIBLE = re.compile("[\u00ad\u180e\u200b-\u200f\u202a-\u202e\u2060-\u2064\ufeff]")
+
+
+def visible_variants(text: str):
+    """(variant, positions) pairs for text that carries invisible characters: each one read as a space (same length,
+    positions 1:1) and each one dropped (``positions[i]`` is the index in ``text`` of the variant's character i)."""
+    spaced = INVISIBLE.sub(" ", text)
+    where = [i for i, ch in enumerate(text) if not INVISIBLE.match(ch)]
+    return ((spaced, None), ("".join(text[i] for i in where), where))
+
+
+def stated_verdicts(text: str, **flags: bool) -> List[Dict[str, Any]]:
+    """Verdicts stated in ``text`` (see _stated_verdicts for the flags); invisible characters do not hide one."""
+    blob = text or ""
+    if not INVISIBLE.search(blob):
+        return _stated_verdicts(blob, **flags)
+    found: List[Dict[str, Any]] = []
+    for variant, where in visible_variants(blob):
+        for item in _stated_verdicts(variant, **flags):
+            start, end = item["start"], item["end"]
+            if where is not None:
+                start, end = where[start], where[end - 1] + 1
+            if not any(f["start"] < end and start < f["end"] for f in found):
+                found.append(dict(item, start=start, end=end))
+    return sorted(found, key=lambda item: item["start"])
+
+
+def _stated_verdicts(text: str, *, negation: bool = True, clause_scope: bool = True, questions: bool = True,
+                     conditions: bool = True, patterns: bool = True, english: bool = True, reported: bool = True,
+                     quotes: bool = True) -> List[Dict[str, Any]]:
     blob = text or ""
     found: List[Dict[str, Any]] = []
     use_english = english and patterns

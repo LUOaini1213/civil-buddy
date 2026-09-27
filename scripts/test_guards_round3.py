@@ -99,5 +99,42 @@ class ClaimCheck(unittest.TestCase):
                 self.assertEqual(record_guard.mismatches(text, {"statuses": statuses}), [])
 
 
+REVIEW = json.loads((ROOT / "test" / "benchmarks" / "verdicts" / "dev_round3_review.json").read_text(encoding="utf-8"))
+
+
+class ReviewProbes(unittest.TestCase):
+    """The independent review of #74 (dev_round3_review.json, DEV): bypasses of the round-3 rules, three false flags the
+    first version of them added (whether / if inside a leading "without ..." phrase), and seven "all covered" sentences
+    the first version of record_guard's exemption let through that main struck."""
+
+    def test_every_case(self):
+        for case in REVIEW["cases"]:
+            with self.subTest(case=case["id"]):
+                found = [item["text"] for item in verdict_guard.stated_verdicts(case["text"])]
+                self.assertEqual(found, case["verdicts"], case["text"])
+
+    def test_invisible_characters_keep_the_original_span(self):
+        text = "Draft done. The bid is ready to sub​mit. Next."
+        [item] = verdict_guard.stated_verdicts(text)
+        self.assertEqual(text[item["start"]: item["end"]], "ready to sub​mit")
+        self.assertEqual(verdict_guard.strike(text, [item]), "Draft done. The bid is " + verdict_guard.EN_STRUCK + ". Next.")
+
+    def test_record_guard_strikes_what_main_struck(self):
+        facts = {"statuses": REVIEW["record_guard"]["statuses"]}
+        for text in REVIEW["record_guard"]["flag"]:
+            with self.subTest(text=text):
+                self.assertTrue(record_guard.mismatches(text, facts))
+        for text in REVIEW["record_guard"]["pass"]:
+            with self.subTest(text=text):
+                self.assertEqual(record_guard.mismatches(text, facts), [])
+
+    def test_list_markers_stay(self):
+        record = _record(REVIEW["claim_check"]["record"])
+        for case in REVIEW["claim_check"]["cases"]:
+            with self.subTest(case=case["id"]):
+                found = claim_check.overclaims(case["text"], record)
+                self.assertEqual(claim_check.correct(case["text"], found, record), case["want"])
+
+
 if __name__ == "__main__":
     unittest.main(verbosity=2)
