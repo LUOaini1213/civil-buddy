@@ -14,6 +14,8 @@
              CIVIL_JOB_ROOT is untouched and the sandbox is not widened (a scoped folder outside its roots stays closed)
   demo       one call copies the SYNTHETIC examples/facade-demo files, runs rev A then rev B, leaves the examples as they were
   prune      10 jobs per session, 5 demo sessions, and nothing this module did not name is removed
+  review     an independent reviewer's probes: every app route closed without the token, foreign Origin, ?token=
+             on a POST, hostile file names, a lying Content-Length, inputs not downloadable
   landing    / and /workbench without the token: what this is and how to get access, in English, not "gateway down";
              index.html / workbench.html handle 401 and show the :8765 link only on this machine
 No model and no network.
@@ -428,6 +430,94 @@ class LandingTests(Case):
             for line in page.splitlines():
                 if re.search(r"href=\"http://127\.0\.0\.1:8765", line):
                     self.assertIn("isLocalHost", line, f"{name}: {line.strip()}")
+
+
+class ReviewProbeTests(Case):
+    """An independent reviewer's adversarial probes (2026-09-27), through the public routes only."""
+
+    def test_whole_app_is_closed_without_the_token(self) -> None:
+        """Every route the app registers, not only the new ones, from a remote client without the token: each HTTP
+        route answers 401 and each WebSocket is refused, except /, /workbench (the landing page, not the app),
+        /api/health and the /static mount. A route added later without the guard fails here."""
+        from starlette.routing import Mount, WebSocketRoute
+
+        remote = TestClient(gateway.app, **REMOTE)
+        public = {"/", "/workbench", "/api/health"}
+        opened, http, sockets = [], 0, 0
+        for route in gateway.app.routes:
+            path = re.sub(r"\{[^}]+\}", "x", getattr(route, "path", "")) or "/"
+            if isinstance(route, WebSocketRoute):
+                sockets += 1
+                try:
+                    with remote.websocket_connect(path) as ws:
+                        ws.receive_text()
+                        opened.append(("WS", path))
+                except Exception:  # noqa: BLE001 - the guard closes the handshake; any refusal is fine
+                    pass
+                continue
+            if isinstance(route, Mount):
+                self.assertEqual("/static", route.path, "a mount other than /static is not covered here")
+                continue
+            for method in sorted((getattr(route, "methods", None) or {"GET"}) - {"HEAD"}):
+                http += 1
+                status = remote.request(method, path).status_code
+                if path not in public and status != 401:
+                    opened.append((method, path, status))
+        self.assertEqual([], opened, "routes reachable without the token")
+        self.assertGreater(http, 50)
+        self.assertGreaterEqual(sockets, 1)
+        for path in ("/", "/workbench"):
+            self.assertIn("This server is private", remote.get(path).text)
+        self.assertEqual([], self.jobs(), "a refused request created a job folder")
+
+    def test_no_token_foreign_origin_and_query_token_write_nothing(self) -> None:
+        remote = TestClient(gateway.app, **REMOTE)
+        for headers in ({}, {"Authorization": "Bearer wrong"}, {"Cookie": "cb_token=wrong"},
+                        {"Origin": "https://evil.example"}):
+            r = remote.post("/api/tender/link", headers=headers,
+                            files={"tender": ("t.md", ITT), "panel_list": ("p.xlsx", REV_A)})
+            self.assertEqual(401, r.status_code, headers)
+        on_post = self.client.post("/api/tender/link?token=" + TOKEN,
+                                   files={"tender": ("t.md", ITT), "panel_list": ("p.xlsx", REV_A)})
+        self.assertEqual(401, on_post.status_code, "?token= is a GET-only link, never a POST credential")
+        pre = self.client.options("/api/tender/link", headers={"Origin": "https://evil.example",
+                                                               "Access-Control-Request-Method": "POST"})
+        self.assertNotIn(pre.headers.get("access-control-allow-origin"), ("*", "https://evil.example"))
+        self.assertEqual([], self.jobs())
+        self.assertFalse(self.root.exists() and any(self.root.rglob("*")), "a refused request wrote under web-link")
+
+    def test_hostile_file_names_stay_in_the_job_folder(self) -> None:
+        # ".md" is a dot-file with no extension: refused by the allow-list, which is fine
+        self.assertEqual(415, self.upload(tender=(".md", ITT), session_id="hostile").status_code)
+        names = ("CON.md", "nul.md", "..md", "a/../../../b.md", "....//....//x.md", "%2e%2e%2fx.md",
+                 "x" * 400 + ".md", "\u6807\u4e66.md", "e\u0301.md", "t.md\n.md")
+        for name in names:
+            d = self.upload(tender=(name, ITT), session_id="hostile").json()
+            self.assertTrue(d["ok"], (name, d))
+            saved = d["inputs"]["tender"]["name"]
+            self.assertRegex(saved, r"^[A-Za-z0-9][A-Za-z0-9._-]{0,80}\.md$", name)
+            self.assertTrue((self.root / "hostile" / d["job_id"] / saved).is_file(), name)
+        outside = [p for p in self.tmp.rglob("*") if p.is_file() and self.root not in p.parents]
+        self.assertEqual([], outside, "a client file name put a file outside the web-link root")
+
+    def test_declared_length_and_inputs_are_not_downloadable(self) -> None:
+        huge = self.client.post("/api/tender/link", content=b"", headers={
+            **BEARER, "Content-Type": "multipart/form-data; boundary=x", "Content-Length": "999999999999"})
+        self.assertEqual(413, huge.status_code)
+        d = self.upload(session_id="inp", project_name="<img src=x onerror=alert(1)>").json()
+        self.assertTrue(d["ok"], d)
+        tender = d["inputs"]["tender"]["name"]
+        self.assertEqual(404, self.client.get(f"/api/tender/link/file/inp/{d['job_id']}/{tender}", headers=BEARER).status_code)
+        for bad in (f"/api/tender/link/file/inp/{d['job_id']}/..%2f{tender}",
+                    f"/api/tender/link/file/..%2finp/{d['job_id']}/bidbook.en.md"):
+            self.assertEqual(404, self.client.get(bad, headers=BEARER).status_code, bad)
+        for f in d["files"]:
+            got = self.client.get(f["url"], headers=BEARER)
+            self.assertEqual(200, got.status_code, f)
+            self.assertNotIn("text/html", got.headers["content-type"])
+            self.assertEqual("nosniff", got.headers.get("x-content-type-options"))
+        self.assertTrue(d["submit_blocked"])
+        self.assertFalse(d["confirmed_by_person"])
 
 
 if __name__ == "__main__":
