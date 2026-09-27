@@ -103,3 +103,20 @@ python scripts/bench_tender_link.py --set test/benchmarks/tender_link/dev_round3
 
 The 90 cases above score the same before and after round 3 (98/98, 32/32, 11/11, 28/28, 18/18, 22/22, 0 false).
 Both are DEV numbers.
+
+## Round 3, reviewer: `dev_round3_review.json` (DEV, 2026-09-28)
+
+17 SYNTHETIC cases (origin `reviewer-round3`) written by the independent reviewer of PR #76 to attack the round-3
+reader: a trailing "each" in the second half of a sentence, lists of subjects, pounds sterling, "20.000 kg" and a
+zero-width space inside a figure, the same limit written twice ("20 t (44,092 lbs)"), bare numbers under "(lbs)" and
+five-digit ones under "(kg)", drawing scales and ratios that look like delivery hours, plus counter-probes. Fixed on
+this set, so these are DEV numbers too.
+
+| metric | `923ed38` (main) | `8282779` (round 3) | after the review |
+|---|---|---|---|
+| kind recall | 11/20 | 12/20 | 20/20 |
+| silently lost | 9 | 8 | 0 |
+| container limit read exactly | 4/7 | 2/7 | 7/7 |
+| false container limit | 5 | 5 | 0 |
+| false "covered" | 0 | 1 | 0 |
+| extra kinds | 6 | 6 | 0 |
