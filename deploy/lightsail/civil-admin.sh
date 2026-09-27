@@ -82,7 +82,7 @@ set_site() {
   fi
   [[ "$site" =~ ^(https?://)?[A-Za-z0-9.-]+(:[0-9]+)?$ ]] || die "'$site' is not a host name"
   env_set SITE_ADDRESS "$site"
-  compose up -d --force-recreate caddy >&2
+  compose up -d --no-deps --force-recreate caddy >&2    # --no-deps: the gateway keeps running
   say "Caddy now serves $(site_url) (a new certificate can take a minute; port 80 must be open for it)"
 }
 
