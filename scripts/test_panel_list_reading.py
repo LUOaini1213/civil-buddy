@@ -275,6 +275,25 @@ class Reading(unittest.TestCase):
         self.assertEqual(rows_blocking_plan([{"id": "PLT-01", "name": "Motor pallet", "quantity": 1, "weight_kg": 80,
                                               "length_mm": 1200, "width_mm": 1000, "height_mm": 900}]), [])
 
+    def test_equipment_named_for_what_it_carries_is_still_equipment(self):
+        # independent review of PR #76: on 8282779 any cargo word in the row made it cargo, so "Glass stillage",
+        # "A-frame for panels", "Returnable rack for glazing units", "Stillage unit" and "玻璃周转架" were crated as panels
+        def stops(**row):
+            return bool(rows_blocking_plan([{**row, "quantity": 1, "weight_kg": 400, "length_mm": 4200, "width_mm": 1800,
+                                             "height_mm": 2100}]))
+
+        for name in ("Glass stillage, returnable", "A-frame for panels", "Returnable rack for glazing units",
+                     "Stillage unit, galvanised", "Glass panel stillage, steel", "玻璃周转架"):
+            with self.subTest(name=name):
+                self.assertTrue(stops(id="EQ-1", name=name))
+        # a panel that rides on equipment is a panel; each cell is read on its own
+        for row in ({"id": "UCW-01", "name": "Unitised panel on A-frame stillage"},
+                    {"id": "UCW-9", "name": "Glazed unit, delivered on returnable steel rack"},
+                    {"id": "P-1", "name": "Spandrel panel (stillage bay)"},
+                    {"id": "UCW-10", "name": "Vision panel", "spec": "A-frame"}):
+            with self.subTest(row=row):
+                self.assertFalse(stops(**row))
+
     # review of PR #69 (2026-09-27) -----------------------------------------------------------------------------
     def test_a_total_word_on_a_sized_row_is_cargo(self):
         # the first cut dropped these three as sum rows: 2 x 300 kg of panels and a bracket kit lost from the plan

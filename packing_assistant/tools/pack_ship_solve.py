@@ -362,6 +362,12 @@ _PACKAGING_RE = re.compile(r"(?<![A-Za-z])(?:a[\s\-‐–]?frames?|stillages?|re
 _CARGO_WORD_RE = re.compile(r"(?<![A-Za-z])(?:panels?|units?|glass|glazing|glazed|mullions?|transoms?|cladding|louv(?:re|er)s?|"
                             r"canop(?:y|ies)|brackets?|spandrels?|vision|modules?)(?![A-Za-z])|板块|幕墙|玻璃|面板|单元",
                             re.I)
+# cargo words that only say what the equipment carries: "Glass stillage", "A-frame for panels", "Returnable rack for
+# glazing units", "stillage unit", "玻璃周转架" are equipment, not panels ("Unitised panel on A-frame stillage" is a panel)
+_CARRIES_RE = re.compile(r"(?<![A-Za-z])(?:for|carrying|holding|to\s+(?:carry|hold))\s+(?:[\w'’-]+\s+){0,3}?(?:"
+                         + _CARGO_WORD_RE.pattern + r")(?:[\s-]+(?:" + _CARGO_WORD_RE.pattern + r"))*"
+                         r"|(?:(?:" + _CARGO_WORD_RE.pattern + r")[\s\-‐–]*){1,3}(?=" + _PACKAGING_RE.pattern + r")"
+                         r"|(?<![A-Za-z])(?:stillages?|a[\s-]?frames?|racks?)\s+units?(?![A-Za-z])", re.I)
 
 
 def rows_packaging_not_cargo(materials: Sequence[Dict[str, Any]], *, lang: str = "zh",
@@ -372,9 +378,11 @@ def rows_packaging_not_cargo(materials: Sequence[Dict[str, Any]], *, lang: str =
     tare. A person removes the row or says it ships as cargo."""
     out: List[Dict[str, Any]] = []
     for index, m in enumerate(materials or []):
-        what = " ".join(str(m.get(key) or "") for key in ("id", "name", "spec", "part_no"))
+        fields = [str(m.get(key) or "") for key in ("id", "name", "spec", "part_no")]
+        what = " ".join(fields)
         found = _PACKAGING_RE.search(what)
-        if not found or _CARGO_WORD_RE.search(what):
+        # each cell is read on its own: a name "Vision panel" beside a spec "A-frame" is a panel
+        if not found or _CARGO_WORD_RE.search(" | ".join(_CARRIES_RE.sub(" ", field) for field in fields)):
             continue
         word = found.group(0)
         ask = (f"这一行是包装 / 运输器具（{word}），不是板块：请从装箱单里移出（它的皮重和装法另行确认），"

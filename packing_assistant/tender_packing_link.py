@@ -77,6 +77,11 @@ _MASS_RE = re.compile(r"(?<![\d.,])" + _NUMBER + r"\s*"
                       r"(kg|kgs|kilograms?|kilos?|(?:short|long|US)\s+tons?|tonnes?|tons?|metric\s+ton(?:ne)?s?|(?-i:MT)|t|"
                       r"lbs?|pounds?|公斤|千克|吨)(?![A-Za-z])", re.I)
 _TONNES = ("t", "tonne", "tonnes", "ton", "tons", "mt", "吨")
+# "pounds" in a sentence about money is sterling ("liquidated damages ... 20,000 pounds per container")
+_MONEY_RE = re.compile(r"(?i)(?<![A-Za-z])(?:pay(?:s|able|ment)?|paid|costs?|price[sd]?|charges?|fees?|damages|penalt(?:y|ies)|"
+                       r"compensat\w*|insur\w*|bonds?|retention|invoice\w*|sterling|GBP|per\s+(?:day|week|month))(?![A-Za-z])|£")
+# the text between a figure and the same figure in other units: "20 t (44,092 lbs)", "26,000 kg / 57,320 lbs"
+_SAME_FIGURE_RE = re.compile(r"\s*(?:[(\[/]|or|i\.e\.)\s*(?:(?:approx(?:imately|\.)?|about|abt\.?|c\.|ca\.|~|≈)\s*)?")
 # a mass written in imperial units is read and converted, never dropped: "44,000 lbs gross per container" is 19,958.1 kg
 _IMPERIAL_KG = {"lb": 0.45359237, "lbs": 0.45359237, "pound": 0.45359237, "pounds": 0.45359237,
                 "short ton": 907.18474, "short tons": 907.18474, "us ton": 907.18474, "us tons": 907.18474,
@@ -130,10 +135,17 @@ _MIXED_LIST_RE = re.compile(r"(?<![A-Za-z])(?:" + _ANY_SUBJECT + r")(?:\s*(?:,|/
 _INCLUDED_RE = re.compile(r"(?<![A-Za-z])(?:including|incl\.?|inclusive\s+of|together\s+with)\s+"
                           r"[^,;:()]{0,80}", re.I)
 # "... shall weigh no more than 1,500 kg each": a bare "each" after the figure
+# where one part of a sentence ends and the next begins, for a trailing "each"; and a list of subjects, which is none
+_CONJUNCT_RE = re.compile(r"[,;:]|(?<![A-Za-z])(?:and|but|while|whereas)(?![A-Za-z])", re.I)
+_SUBJECT_LIST_RE = re.compile(r"(?<![A-Za-z])(?:" + _ANY_SUBJECT + r")(?:\s*(?:,|/|&|\band/or\b|\bor\b|\band\b)\s*"
+                              r"(?:(?:the|all|any|each|every|loaded|laden)\s+)?(?:" + _ANY_SUBJECT + r")(?![A-Za-z]))+", re.I)
 _TRAILING_EACH_RE = re.compile(r"\s*(?:each|apiece|per\s+piece)(?![A-Za-z])", re.I)
 # how far before a figure the reader looks for what it limits: a frame is a few words, and a bounded look keeps a
 # 130 kB clause with hundreds of figures linear (it was quadratic: every figure re-scanned the sentence before it)
 _LOOK_BACK = 240
+# what a loaded shipping container's limit can be, in kg (an empty 20GP is ~2,200 kg; no ISO container is rated
+# above ~36 t): a container figure outside this range is a misreading, and goes to a person
+_CONTAINER_KG = (1000.0, 40000.0)
 # "20 t per container", "2,000 kg each crate", "1.5 t/stillage": the subject named right after the figure
 _AFTER_FIGURE_RE = re.compile(r"\s*(?:gross\s+|net\s+|max(?:imum|\.)?\s+)?(?:(?:per|each|a|an)\s+|/\s*)(?:loaded\s+|single\s+|laden\s+)?"
                              r"(?:" + _ANY_SUBJECT + r")(?![A-Za-z])", re.I)
@@ -168,9 +180,17 @@ _SITE_ACCESS_RE = re.compile(
     r"not\s+exceeding\s+[\d.]+\s*m(?![A-Za-z])|(?<![A-Za-z])GVW(?![A-Za-z])|gross\s+vehicle\s+weight|axle\s+loads?|road\s+closure|"
     # "Deliveries to site are limited to 08:00 to 17:00", "0800 hrs - 1700 hrs", "vehicles no longer than 12 m"
     r"deliver(?:y|ies)\b[^.;]{0,60}?\b(?:limited|restricted|permitted|allowed)\s+(?:to|between|only)|"
-    r"(?<![\d.])(?:\d{1,2}:\d{2}|\d{4}\s*hrs?)\s*(?:hrs?\s*)?(?:to|-|–|and|until)\s*\d{1,2}:?\d{2}(?!\.\d)|"
+    # (clock times only - "1:50 to 1:100" is a drawing scale - and only in a clause about time: see _TIME_CONTEXT_RE)
+    r"(?<![\d.:])(?:(?:[01]?\d|2[0-3]):[0-5]\d|(?:[01]\d|2[0-3])[0-5]\d\s*hrs?)\s*(?:hrs?\s*)?(?:to|-|–|and|until)\s*"
+    r"(?:[01]?\d|2[0-3]):?[0-5]\d(?:\s*hrs?(?![A-Za-z]))?(?![\d:]|\.\d)|"
     r"(?:vehicles?|lorr(?:y|ies)|trucks?|trailers?)\s+(?:shall\s+be\s+|must\s+be\s+)?(?:no\s+|not\s+)?(?:longer|wider|higher|taller|heavier)\s+than|"
     r"traffic\s+management|车辆进场|进场道路|限行|限高|卸货区|送货时间", re.I)
+# a clock-time range is delivery hours only in a clause about deliveries or time, and never after a scale or a ratio
+# ("Shop drawings at scales 1:50 to 1:20", "slopes 1:12 to 1:20" are no delivery hours)
+_TIME_CONTEXT_RE = re.compile(r"deliver|arriv|hours?|(?<![A-Za-z])hrs?(?![A-Za-z])|(?<![A-Za-z])(?:a\.?m|p\.?m)\.?(?![A-Za-z])|"
+                              r"working|weekdays?|weekends?|(?:mon|tues|wednes|thurs|fri|satur|sun)days?|site|gate|access|"
+                              r"traffic|time|送货|进场|时间", re.I)
+_RATIO_WORD_RE = re.compile(r"(?i)scales?|ratios?|slopes?|gradients?|falls?|mix(?:es)?|proportions?|比例|坡度")
 _CRATE_RE = re.compile(_NO_L + r"(?:crat(?:e|es|ed|ing)|timber\s+cases?|wooden\s+cases?|steel\s+frames?|packing\s+cases?)"
                        + _NO_R + r"|木箱|铁架|钢架", re.I)
 # what a handling clause asks for, in words a bid statement can use (tender_parse._PACK_UNMODELLED_RE finds them)
@@ -229,8 +249,10 @@ def _table_ref(label: str, caption: str, row: str, table_line: Optional[int], wh
     return f"table at line {table_line} row {row}", f"the table at line {table_line} of {where}, row {row}"
 
 
-_HEADER_UNIT_RE = re.compile(r"\(\s*(kg|kgs|t|tonnes?|tons?|MT)\s*\)|\[\s*(kg|kgs|t|tonnes?|tons?|MT)\s*\]|,\s*(kg|t|tonnes)\s*$", re.I)
-_BARE_NUMBER_RE = re.compile(r"^\s*(?:max(?:imum|\.)?\s*|≤\s*|<=\s*|up\s+to\s+)?\d{1,3}(?:[,\s]\d{3})*(?:\.\d+)?\s*$", re.I)
+_HEADER_UNIT_RE = re.compile(r"\(\s*(kg|kgs|t|tonnes?|tons?|MT|lbs?|pounds?)\s*\)|\[\s*(kg|kgs|t|tonnes?|tons?|MT|lbs?|pounds?)\s*\]|"
+                             r",\s*(kg|t|tonnes|lbs?)\s*$", re.I)
+# a bare number: "5", "26,500", "26500" (a kg column is written without a separator as often as with one)
+_BARE_NUMBER_RE = re.compile(r"^\s*(?:max(?:imum|\.)?\s*|≤\s*|<=\s*|up\s+to\s+)?(?:\d{1,3}(?:[,\s]\d{3})+|\d+)(?:\.\d+)?\s*$", re.I)
 
 
 def _with_units(header: Sequence[str], cells: Sequence[str]) -> Optional[str]:
@@ -244,7 +266,8 @@ def _with_units(header: Sequence[str], cells: Sequence[str]) -> Optional[str]:
         if unit and _BARE_NUMBER_RE.match(cell or ""):
             name = _HEADER_UNIT_RE.sub("", head).strip(" :-")
             written = next(u for u in unit.groups() if u).lower()
-            out.append(f"{name}: {cell.strip()} {'kg' if written.startswith('kg') else 't'}".strip())
+            unit_name = "kg" if written.startswith("kg") else "lbs" if written.startswith(("lb", "pound")) else "t"
+            out.append(f"{name}: {cell.strip()} {unit_name}".strip())
             changed = True
         else:
             out.append(cell)
@@ -383,14 +406,24 @@ def _clause_units(text: str, source: Optional[str] = None) -> List[Dict[str, Any
 def _mass_figures(text: str) -> List[Tuple[float, int, int]]:
     """Every mass figure in ``text`` as (kg, start, end). Pounds and short / long tons are converted
     (1 lb = 0.45359237 kg); ``text[start:end]`` is the figure as written."""
-    out = []
+    out: List[Tuple[float, int, int]] = []
+    money = None
     for m in _MASS_RE.finditer(text):
         number = float(re.sub(r"[,\s  ]", "", m.group(1)))
         unit = re.sub(r"\s+", " ", m.group(2).lower())
+        if unit.startswith("pound"):
+            # "pay up to 5,000 pounds per container per day" is money: a pound is a mass only in a sentence about mass
+            if money is None:
+                money = bool(_MONEY_RE.search(text)) or not _MASS_WORD_RE.search(text)
+            if money:
+                continue
         if unit in _IMPERIAL_KG:
             kg = round(number * _IMPERIAL_KG[unit], 1)
         else:
             kg = number * 1000.0 if unit in _TONNES or unit.startswith("metric") else number
+        if out and _SAME_FIGURE_RE.fullmatch(text, out[-1][2], m.start()) and abs(kg - out[-1][0]) <= 0.03 * max(kg, out[-1][0]):
+            # "20 t (44,092 lbs)", "44,000 lbs (19,958 kg)": the same limit written twice, one figure
+            continue
         out.append((kg, m.start(), m.end()))
     if _MASS_WORD_RE.search(text):
         taken = {start for _, start, _ in out}
@@ -463,8 +496,17 @@ def _subject(sentence: str, at: int, end: Optional[int] = None,
 
     if end is not None and _TRAILING_EACH_RE.match(sentence, end):
         # "Crates delivered in containers shall weigh no more than 1,500 kg each": "each" is the sentence's subject.
-        # "Each container shall carry 8 stillages of 2 t each": a stillage stands between - a person reads it
-        first = subjects[0]
+        # "Each container shall carry 8 stillages of 2 t each": a stillage stands between - a person reads it.
+        # "Crates shall not exceed 2 t each and containers shall not exceed 24 t each": the subject of the figure's own
+        # part of the sentence (after the last ", ; and but"), not the sentence's first - a list of subjects ("crates
+        # and stillages") is no break
+        lists = [m.span() for m in _SUBJECT_LIST_RE.finditer(before)]
+        cut = 0
+        for m in _CONJUNCT_RE.finditer(before):
+            if not any(a <= m.start() < b for a, b in lists):
+                cut = m.end()
+        own = [m for m in subjects if m.start() >= cut]
+        first = own[0] if own else subjects[0]
         if (first.lastgroup == "container" and between(first)) or mixed_list(first):
             return None, "ambiguous"
         return first.lastgroup, "each"
@@ -549,6 +591,10 @@ def _mass_limits(body: str, context: str = "") -> Dict[str, Any]:
         left = False
         for kg, start, _end in figures:
             subject, how = _subject(plain, start, _end, kinds) if limit and (massy or transport) else (None, "none")
+            if subject == "container" and not _CONTAINER_KG[0] <= kg <= _CONTAINER_KG[1]:
+                # "shall not exceed 20.000 kg" (a European thousands point) is 20 kg, and no container is limited to 20 kg
+                # or to 60 t: a figure outside what a container can weigh is read by a person, never compared
+                subject = None
             if subject == "container":
                 out["container"].append(kg)
                 out["basis"].append(_basis(plain))
@@ -678,7 +724,9 @@ def logistics_clauses(text: str, source: Optional[str] = None) -> List[Dict[str,
             kinds.append("crating")
         if _SEQUENCE_RE.search(body) and context:
             kinds.append("delivery_sequence")
-        access = {_access_label(m.group(0)) for m in _SITE_ACCESS_RE.finditer(body)}
+        access = {_access_label(m.group(0)) for m in _SITE_ACCESS_RE.finditer(body)
+                  if not m.group(0)[:1].isdigit()
+                  or (_TIME_CONTEXT_RE.search(body) and not _RATIO_WORD_RE.search(body, max(0, m.start() - 40), m.start()))}
         # "delivery hours" says less than "delivery hours 08:00 to 17:00": the specific one is kept
         access = sorted((a for a in access if not any(b != a and b.startswith(a + " ") for b in access)), key=str.lower)
         if access or limits["vehicle"]:

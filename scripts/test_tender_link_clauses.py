@@ -591,5 +591,23 @@ class DevSet(unittest.TestCase):
             self.assertEqual(t[got], t[of], f"{got}\n{summary}")
 
 
+    def test_round_3_reviewer_dev_set(self):
+        # test/benchmarks/tender_link/dev_round3_review.json: the independent reviewer's adversarial inputs for PR #76
+        # (DEV). On the PR head 8282779: a trailing "each" gave a container's 24 t to the crates, "5,000 pounds per
+        # container per day" was a 2,268 kg container limit, "20.000 kg" a 20 kg one, "1:50 to 1:100" delivery hours, and
+        # a bare number under "(lbs)" or a five-digit one under "(kg)" was silent (kind recall 12/20, 5 false container
+        # limits, 1 false covered)
+        import bench_tender_link
+
+        result = bench_tender_link.run(ROOT / "test" / "benchmarks" / "tender_link" / "dev_round3_review.json")
+        t = result["totals"]
+        summary = "\n".join(bench_tender_link.summary_lines(t))
+        for never in ("silently_lost", "false_container_limit", "invalid_cites", "false_covered", "unplaced_on_no_kind_cases",
+                      "extra_kinds"):
+            self.assertEqual(t[never], 0, f"{never}\n{summary}")
+        for got, of in (("kinds_found", "kinds_expected"), ("limit_ok", "limit_labelled"), ("package_ok", "package_labelled"),
+                        ("basis_ok", "basis_labelled"), ("decision_ok", "decision_labelled")):
+            self.assertEqual(t[got], t[of], f"{got}\n{summary}")
+
 if __name__ == "__main__":
     unittest.main(verbosity=2)
