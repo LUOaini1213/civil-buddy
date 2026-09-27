@@ -156,13 +156,43 @@ def _label_before(before: str) -> str:
     return best
 
 
+_NEARLY = re.compile(r"(?i)\b(?:nearly|almost|virtually|practically)\s+$")
+
+
+_NEARLY_OR_MOST = re.compile(r"(?i)\b(?:nearly|almost|virtually|practically|most|majority)\b")
+
+
+def _all_stated(text: str, match: re.Match) -> bool:
+    """An "all covered" claim the sentence makes, not one it negates or sets as a condition: "Not all clauses are
+    covered", "并非所有条款均已覆盖", "If all clauses are covered, a person still signs off", "Until all clauses are
+    covered, the bid stays blocked" say the opposite or nothing (review of #71, 2026-09-27). The checks are the claim
+    check's, which are the verdict guard's (negation, condition, question, quotation in the same clause), except that
+    a claim reported from the product's own source ("According to the link record, all ...") is still a claim."""
+    from packing_assistant.tools import claim_check
+
+    if _NEARLY.search(text, 0, match.start()):
+        return False            # "nearly all ... covered" is a count; claim_check holds it to the record
+    if re.search(r"[A-Za-z]", match.group(0)):
+        return claim_check._en_stated(text, match)
+    return claim_check._zh_stated(text, match)
+
+
 def _status_problem(text: str, statuses: Dict[str, str]) -> str:
     negated = bool(_NOT_COVERED.search(text))
     claimed = {k for k, rx in _STATUS.items() if rx.search(text)}
     if negated:
         claimed.discard("covered")
-    if _ALL.search(text) and not negated and any(v != "covered" for v in statuses.values()):
+    if (not negated and any(v != "covered" for v in statuses.values())
+            and any(_all_stated(text, m) for m in _ALL.finditer(text))):
         return "the record does not have every statement covered"
+    if _NEARLY_OR_MOST.search(text):
+        # "nearly all / most ... covered" is a count: held to the statuses the same way claim_check holds it to a
+        # link record file (a read_link_record turn has the statuses but may have no file)
+        from packing_assistant.tools import claim_check
+
+        view = {"statements": [{"id": sid, "clause": sid, "status": status} for sid, status in statuses.items()]}
+        if any(item["kind"] in ("near", "most") for item in claim_check.overclaims(text, view)):
+            return "the record has fewer statements covered than the sentence says"
     for sid in _ids(text):
         if claimed and sid in statuses and statuses[sid] not in claimed:
             return f"the record gives {sid} the status {statuses[sid]}"

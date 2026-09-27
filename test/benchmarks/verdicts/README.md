@@ -21,8 +21,21 @@ python scripts/eval_verdicts.py --check                     # CI 下限（npm ru
 | `heldout.json`（16 句，8 个必报） | 第一轮留出：第一版冻结后、运行前写的。**现在的规则就是照它的失败改的，所以它已经被看过** | **P 0.667 / R 0.500** | P 1.000 / R 1.000 |
 | `heldout2.json`（20 句，9 个必报） | 第二轮留出：句式模式和条件判定冻结后、运行前写的。**现行规则没见过它，引用请用这一行** | P 0.667 / R 0.222 | **P 0.900 / R 1.000** |
 | `english_dev.json`（95 句，46 个必报） | 英文开发集，见下节。建英文规则时一直在看它，满分是必然，**不是留出数** | P 0.000 / R 0.000 | P 1.000 / R 1.000 |
+| `dev_round3.json`（37 句，13 个必报；另有 record_guard / claim_check 两节） | 第三轮开发集（2026-09-27），见下文「第三轮」。规则照它改的，**不是留出数** | — | P 1.000 / R 1.000（改前 923ed38：P 1.000 / R 0.000，13 句全漏） |
 
-加英文规则族（2026-09-26）后，上面三个中文集的数一个没动：cases 1.000 / 1.000，heldout 1.000 / 1.000，heldout2 **0.900 / 1.000**（同一个误报 h2-if）。
+加英文规则族（2026-09-26）后，上面三个中文集的数一个没动：cases 1.000 / 1.000，heldout 1.000 / 1.000，heldout2 **0.900 / 1.000**（同一个误报 h2-if）。第三轮之后也没动（同上三组数，english_dev 1.000 / 1.000；密封英文集 `../safety_sealed/verdicts_en.json` 仍是 20/24，同样的四个漏报，没有照它改）。
+
+### 第三轮（dev_round3.json）
+
+2026-09-27 对 #72 的复审找到 7 种说法整条管线（verdict_guard + record_guard）都放过：「With no gaps the containers can be booked now」「Having found no issues the bid is ready to submit」「I would say the plan meets all requirements」「You should go ahead and book the containers now」「After review the bid is ready to submit」「When checked against the ITT the plan meets all requirements」，以及没读记录时的「Every clause of the ITT is covered」。改法：
+
+- 句首的 with no / having found no / without 短语，若在结论的主语（the、it、we、all……）之前就结束，它的否定只管这个短语，否定只在短语之后找；「Without the plan being compliant ...」没有这样的短语，照旧算否定。
+- after / when 只有后面跟着从句（主语 + 动词，「after the engineer signs」；或别人要做的分词，「when signed」「when confirmed by the PE」）才算条件；「after review」「when checked against the ITT」说的是已经做过的核对，不算。
+- would / should 接 say、think 这类观点动词时，结论是本系统自己说的（「I would say」「I'd say」也不再算转述）；「you should go ahead and ...」是叫人去做，不是要求。「The response should be ready for submission by Friday」仍是要求。
+- 「every clause of the ITT / all requirements in the tender documents」这种带 of / in 的名词短语也算。
+- 「nearly / almost all ... covered」是数量，不是全称：结论护栏不再把它当「全部覆盖」，由 claim_check 对照记录（少于 total − max(1, total // 5) 条 covered 才划）。
+
+同一文件的 `record_guard` 一节是复审第 7 项（#71）：「Not all clauses are covered」「并非所有条款均已覆盖」「If / Until all clauses are covered ...」原先被当成「记录里并非全部覆盖」的错话划掉，现在用 claim_check 的判定（即结论护栏的否定、条件、疑问、引号，外加「据联动记录」这类本系统来源仍算声明）；「nearly all / most ... covered」按数量对照记录里的状态（读了记录但本轮没有记录文件时，claim_check 管不到，由它管）。`claim_check` 一节是复审第 3 项（#72）：改正时整句替换，不再把记录的话塞进原句中间（「Nearly [per the link record ...]」），并且单复数一致（「1 of 7 statements is covered」）。测试：`scripts/test_guards_round3.py`（`guards-round3`），改前 923ed38 上 34 个子测试失败，改后 0。
 
 第一轮留出集是这件事的要点：开发集满分的字面短语表，在没见过的句子上漏掉一半（「这个标可以投」「满足规范要求」「已经通过专家论证」「不存在废标问题」），还把两句条件句当成了结论（「验收合格后方可进入下道工序」「……之后，才谈得上可以投标」）。
 
