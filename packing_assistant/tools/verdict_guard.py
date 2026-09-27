@@ -166,8 +166,12 @@ def _reports(sentence: str) -> bool:
 
 
 def _last_break(pattern: re.Pattern, blob: str, end: int) -> int:
-    last = 0
-    for m in pattern.finditer(blob, 0, end):
+    """End of the last break before ``end``. Every break pattern here counts a line break, so the scan starts at the
+    last line break: the same answer as scanning from 0, without going over the whole text for every match (a
+    216k-character draft with 2 000 verdicts took 9 s that way)."""
+    start = blob.rfind("\n", 0, end)
+    last = start + 1 if start >= 0 else 0
+    for m in pattern.finditer(blob, max(start, 0), end):
         last = m.end()
     return last
 
