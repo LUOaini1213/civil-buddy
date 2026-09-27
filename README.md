@@ -28,6 +28,12 @@ need a human confirmation. A preview path turns DXF outlines into a mesh
 engines and are not sign-off models. Rust workbench + MCP entry, Python packing harness,
 FastAPI gateway. MIT.
 
+**Deploy (EN)** — `CIVIL_TOKEN=<random> docker compose up --build`, then `http://localhost:8000/?token=<random>` and
+`/demo` (the tender ↔ packing link in one click, or on two files you upload). For a server:
+[docs/deploy-aws-lightsail.md](docs/deploy-aws-lightsail.md) (AWS Lightsail, Caddy with HTTPS, the gateway on
+127.0.0.1; rehearsed locally, not yet run on Lightsail) and [docs/deploy-minimal.md](docs/deploy-minimal.md)
+(other hosts).
+
 **30 秒，无 Key** — 策略引擎 + 失败恢复的四拍剧本（正常放行 → 越权被拒 → 工具故障重试降级 → 成本超限熔断）：
 
 ```bash
