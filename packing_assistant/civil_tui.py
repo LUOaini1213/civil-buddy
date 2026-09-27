@@ -321,10 +321,7 @@ def run_tui() -> int:
         st.last_skill = str(out.get("skill") or out.get("expert_id") or "")
         st.last_skill_source = str(out.get("skill_source") or "")
         st.last_plan = list(out.get("plan") or [])
-        if any(granted):      # 同意过一次，本 thread 后面的高风险写盘不再重复问
-            from packing_assistant.runtime.threads import save_thread
-
-            st.confirm = st.thread.confirm = True
-            save_thread(st.thread)
+        # approve> 的同意只管这一轮（#61 基线）：不记进 st.confirm / thread.confirm，下一次高风险写盘再问。
+        # 只有 /confirm（本机操作者自己的开关）让本 thread 不再问。
         _print_out(out)
     return 0

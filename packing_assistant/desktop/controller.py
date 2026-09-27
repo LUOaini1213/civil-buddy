@@ -124,7 +124,7 @@ class DesktopController:
     def submit(self, text: str, *, on_progress: Optional[Progress] = None, approve: Optional[Approve] = None) -> Dict[str, Any]:
         """Blocking — the window calls this from a worker thread. ``approve`` is asked at most once per turn."""
         from packing_assistant.civil import with_progress
-        from packing_assistant.runtime.threads import load_thread, run_on_thread, save_thread
+        from packing_assistant.runtime.threads import run_on_thread
 
         self._need_job()
         task = (text or "").strip()
@@ -142,12 +142,8 @@ class DesktopController:
         out = turn(self.confirmed or confirms_in_message(task))
         if out.get("hitl_pending") and not asked and ask({"name": out.get("expert_name") or "本次写盘", "risk": "high", "confirm_sentence": CONFIRM, "confirm_sentence_en": CONFIRM_EN}):
             out = turn(True)        # steps mode stops first; agreed on the spot, the same words run again
-        if any(asked):
-            self.confirmed = True
-            thread = load_thread(self.thread_id)
-            if thread is not None:
-                thread.confirm = True
-                save_thread(thread)
+        # The dialog's answer covers this turn only (the #61 baseline): it is not kept on the controller or the thread,
+        # so the next high-risk turn asks again.
         self.last_out = out
         return out
 

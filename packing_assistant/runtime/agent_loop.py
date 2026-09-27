@@ -723,7 +723,7 @@ def run_agent(
                 sched.transition(run, "waiting_hitl")
                 who = f"{exp.name} " if exp else ""
                 reply = (f"approval={cfg.approval}: {who or 'this post '}writes only after a person types the sign-off sentence "
-                         f"\"{CONFIRM_EN}\" (or 「{CONFIRM}」) in this turn. Nothing was written."
+                         f"\"{CONFIRM_EN}\" (or 「{CONFIRM}」) on its own. Nothing was written."
                          if english_request(text) else f"approval={cfg.approval}：{who}写盘须确认句「{CONFIRM}」。本轮未写盘。")
                 messages.append({"role": "assistant", "content": reply})
                 bus.emit(run.run_id, "hitl", {"required": True})
