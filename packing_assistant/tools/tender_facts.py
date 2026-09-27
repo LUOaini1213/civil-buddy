@@ -415,6 +415,13 @@ _LINE_LABELS = {"工程": "project", "项目": "project", "Project": "project", 
 
 _ALIAS_TABLE: List[Tuple[str, str]] = sorted(
     ((alias, topic.key) for topic in TOPICS for alias in topic.aliases), key=lambda pair: -len(pair[0]))
+# the same table compiled once: _topic_hits runs per sentence, and compiling (and escaping) every alias on every call
+# was most of a 130 kB tender's reading time. (alias, key, lower-case alias for a quick "not in this sentence" skip,
+# pattern)
+_ALIAS_PATTERNS: List[Tuple[str, str, str, "re.Pattern[str]"]] = [
+    (alias, key, alias.lower(),
+     re.compile(r"(?<![A-Za-z])" + re.escape(alias) + r"(?![A-Za-z])", re.I) if alias.isascii() else re.compile(re.escape(alias)))
+    for alias, key in _ALIAS_TABLE]
 
 _COMPOUND_SURNAMES = ("欧阳|司马|上官|诸葛|皇甫|令狐|司徒|东方|慕容|尉迟|长孙|夏侯|公孙|端木|轩辕|宇文|独孤|南宫|呼延|闻人|澹台|万俟|"
                       "濮阳|淳于|单于|太叔|申屠|公羊|赫连|钟离|宗政|司空|司寇|子车|颛孙|第五")
@@ -581,10 +588,11 @@ def _special_name(text: str) -> str:
 def _topic_hits(clause: str) -> List[Tuple[int, int, str]]:
     taken = [False] * len(clause)
     hits: List[Tuple[int, int, str]] = []
-    for alias, key in _ALIAS_TABLE:
-        ascii_alias = alias.isascii()
-        pattern = (r"(?<![A-Za-z])" + re.escape(alias) + r"(?![A-Za-z])") if ascii_alias else re.escape(alias)
-        for match in re.finditer(pattern, clause, re.I if ascii_alias else 0):
+    lowered = clause.lower()
+    for alias, key, folded, pattern in _ALIAS_PATTERNS:
+        if folded not in lowered:
+            continue          # a match needs the alias's own letters: skip the regex when they are not there
+        for match in pattern.finditer(clause):
             start, end = match.span()
             if any(taken[start:end]):
                 continue
