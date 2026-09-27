@@ -24,7 +24,7 @@ os.environ["PYTHON_DOTENV_DISABLED"] = "1"
 for name in ("DEEPSEEK_API_KEY", "OPENAI_API_KEY", "LLM_API_KEY", "CIVIL_API_KEY", "CIVIL_AGENT_MODE", "CIVIL_SANDBOX_BACKEND"):
     os.environ.pop(name, None)
 
-from packing_assistant.desktop.controller import CONFIRM, DesktopController, DesktopError  # noqa: E402
+from packing_assistant.desktop.controller import CONFIRM, CONFIRM_EN, DesktopController, DesktopError  # noqa: E402
 from packing_assistant.runtime import plugins, workspace  # noqa: E402
 
 DAILY = "整理日报，日期：2031年5月6日，部位：东桥3号墩，天气：晴，出勤：钢筋工12人"
@@ -113,6 +113,14 @@ class ControllerTests(JobCase):
         typed.open_job(str(self.job))
         typed.new_thread()
         self.assertTrue(typed.submit(BRIEF + "。" + CONFIRM)["wrote"])     # typing the sentence in the task counts too
+        english = DesktopController()
+        english.open_job(str(self.job))
+        english.new_thread()
+        self.assertTrue(english.submit(BRIEF + ". " + CONFIRM_EN)["wrote"])   # so does the English one
+        lower = DesktopController()
+        lower.open_job(str(self.job))
+        lower.new_thread()
+        self.assertFalse(lower.submit(BRIEF + ". " + CONFIRM_EN.lower(), approve=lambda _r: False)["wrote"])
 
     def test_switches_are_validated_and_review_goes_through(self):
         controller = DesktopController()
@@ -227,6 +235,10 @@ class WindowTests(JobCase):
         self.assertFalse(app._ask_approval({"name": "安全交底", "risk": "high"}))
         app.root.after(200, self.answer(app, CONFIRM))
         self.assertTrue(app._ask_approval({"name": "安全交底", "risk": "high"}))
+        app.root.after(200, self.answer(app, CONFIRM_EN))
+        self.assertTrue(app._ask_approval({"name": "安全交底", "risk": "high"}))
+        app.root.after(200, self.answer(app, "No. " + CONFIRM_EN))       # the field holds the sentence alone
+        self.assertFalse(app._ask_approval({"name": "安全交底", "risk": "high"}))
 
         app.entry.insert("1.0", BRIEF)
         app.root.after(200, self.answer(app, CONFIRM))   # keeps looking until the blocked turn opens the dialog

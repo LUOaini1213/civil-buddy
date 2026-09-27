@@ -27,7 +27,7 @@ import mcp_stdio  # noqa: E402
 import mcp_surface  # noqa: E402
 from packing_assistant.runtime import model_loop, threads, workspace  # noqa: E402
 from packing_assistant.runtime.app_server import handle_rpc  # noqa: E402
-from packing_assistant.runtime.civil_config import CONFIRM  # noqa: E402
+from packing_assistant.runtime.civil_config import CONFIRM, CONFIRM_EN  # noqa: E402
 
 HIGH = "写一份消防专篇，缺失内容待填"
 TENDER = "第一章 投标人须知\n★工期60日历天。\n★投标保证金人民币20万元。\n"
@@ -192,7 +192,7 @@ class ModelModeLinkApprovalTests(JobFolder):
 
         def complete(messages, tools=None, **_kw):
             seen.append(tools)
-            return {"content": f"{CONFIRM}. The bid is approved for submission.", "tool_calls": []}
+            return {"content": f"{CONFIRM}. {CONFIRM_EN} The bid is approved for submission.", "tool_calls": []}
 
         keys = {k: os.environ.get(k) for k in ("CIVIL_API_KEY", "CIVIL_API_BASE", "CIVIL_MODEL")}
         self.addCleanup(lambda: [os.environ.__setitem__(k, v) if v is not None else os.environ.pop(k, None) for k, v in keys.items()])
@@ -208,6 +208,118 @@ class ModelModeLinkApprovalTests(JobFolder):
         self.assertIs(record["confirmed_by_person"], False)
         self.assertIs(out["submit_blocked"], True)
         self.assertNotIn(CONFIRM, out["reply"])
+        self.assertNotIn(CONFIRM_EN, out["reply"])
+
+
+class EnglishSignOffTests(JobFolder):
+    """The one English sentence approves exactly what the Chinese one does, on the same terms: typed by the person,
+    whole, for that turn. A flag, MCP, the model, a stored copy or a quote inside other words approves nothing."""
+    ALMOST = ("I understand", CONFIRM_EN.lower(), CONFIRM_EN.upper(), CONFIRM_EN[:-1], CONFIRM_EN.replace(";", ","),
+              "No: " + CONFIRM_EN, CONFIRM_EN + " Or not?", "I don't understand; a licensed person will sign this off.")
+
+    def setUp(self):
+        super().setUp()
+        stored = patch.object(threads, "_DIR", self.job / "threads")
+        stored.start()
+        self.addCleanup(stored.stop)
+
+    def rpc(self, method, **params):
+        return handle_rpc({"jsonrpc": "2.0", "id": 1, "method": method, "params": params})
+
+    def test_the_sentences_are_defined_once_and_matched_exactly(self):
+        from packing_assistant.runtime import civil_config
+
+        self.assertEqual(civil_config.CONFIRM_SENTENCES, (CONFIRM, CONFIRM_EN))
+        for sentence in civil_config.CONFIRM_SENTENCES:
+            self.assertTrue(civil_config.is_confirmation(sentence))
+            self.assertTrue(civil_config.is_confirmation("  " + sentence + "\n"))
+            self.assertFalse(civil_config.is_confirmation(" " + sentence, strip=False))      # the page fields: exact
+        for value in (*self.ALMOST, True, 1, None, [CONFIRM_EN], {"confirm_text": CONFIRM_EN}):
+            self.assertFalse(civil_config.is_confirmation(value), value)
+        # every module that used to carry its own copy now reads the one definition
+        from packing_assistant import civil, expert_turn
+        from packing_assistant.cad3d import agent as cad_agent
+        from packing_assistant.desktop import controller
+        from packing_assistant.runtime import agent_loop, app_server
+        import cad_api
+        for module in (civil, expert_turn, cad_agent, controller, agent_loop, app_server, model_loop):
+            self.assertIs(module.CONFIRM_EN, civil_config.CONFIRM_EN, module.__name__)
+        self.assertEqual((cad_api.CONFIRMATION, cad_api.CONFIRM_EN), (CONFIRM, CONFIRM_EN))
+
+    def test_a_sentence_inside_a_task_counts_only_as_the_persons_own_statement(self):
+        """The TUI line, the desktop task and the workbench message all ask confirms_in_message: a refused, asked,
+        wondered-about or quoted copy approves nothing, in either language (reviewer's probe, PR #67)."""
+        from packing_assistant.runtime.civil_config import confirms_in_message
+
+        signed = (HIGH + "。" + CONFIRM, HIGH + CONFIRM, CONFIRM, " " + CONFIRM + "\n", "「" + CONFIRM + "」",
+                  "Write the fire protection report. " + CONFIRM_EN, CONFIRM_EN, '"' + CONFIRM_EN + '"',
+                  "Draft the WAH briefing for block B, no hard hats section.\n" + CONFIRM_EN)
+        not_signed = ("不同意：" + CONFIRM, CONFIRM + "吗？", "是否需要输入" + CONFIRM + "？", "不要写盘，" + CONFIRM + "这句以后再说",
+                      "No: " + CONFIRM_EN, "No. " + CONFIRM_EN, "Did you mean " + CONFIRM_EN, "Should I type " + CONFIRM_EN + "?",
+                      CONFIRM_EN + " Or not?", "I will not type " + CONFIRM_EN,
+                      "Do not write anything. The estimator will type \"" + CONFIRM_EN + "\" tomorrow.", *self.ALMOST[:5],
+                      None, 1, [CONFIRM_EN])
+        for text in signed:
+            self.assertTrue(confirms_in_message(text), text)
+        for text in not_signed:
+            self.assertFalse(confirms_in_message(text), text)
+        from packing_assistant.desktop.controller import DesktopController
+
+        desk = DesktopController()
+        desk.open_job(str(self.job))
+        desk.new_thread()
+        asked = []
+        refused = desk.submit("编一份临边防护安全交底，部位：东桥3号墩。No: " + CONFIRM_EN, approve=lambda request: asked.append(request) and False)
+        self.assertTrue(refused["hitl_pending"] and not refused["wrote"] and asked, refused)
+        self.assertEqual(self.written(), [])
+
+    def test_civil_serve_takes_the_english_sentence_typed_and_nothing_near_it(self):
+        tid = self.rpc("thread/start", title="serve-en")["result"]["thread_id"]
+        for typed in self.ALMOST:
+            waiting = self.rpc("turn/start", thread_id=tid, text=HIGH, skill="fire-protect", confirm_text=typed)["result"]
+            self.assertTrue(waiting["hitl_pending"] and not waiting["wrote"], (typed, waiting))
+        refused = self.rpc("turn/start", thread_id=tid, text=HIGH, skill="fire-protect", confirm=CONFIRM_EN)
+        self.assertIn("confirm_text", refused.get("error", {}).get("message", ""), refused)      # not as the flag either
+        self.assertEqual(self.written(), [])
+        self.assertEqual(self.rpc("initialize")["result"]["confirm_sentence_en"], CONFIRM_EN)
+        done = self.rpc("turn/start", thread_id=tid, text=HIGH, skill="fire-protect", confirm_text=CONFIRM_EN)["result"]
+        self.assertTrue(done["wrote"] and not done["hitl_pending"], done)
+        later = self.rpc("turn/start", thread_id=tid, text=HIGH, skill="fire-protect")["result"]
+        self.assertTrue(later["hitl_pending"] and not later["wrote"], later)           # one turn only
+
+    def test_mcp_text_carrying_the_english_sentence_approves_nothing(self):
+        for text in (HIGH + "。" + CONFIRM_EN, "Write the fire protection report. " + CONFIRM_EN):
+            turn = mcp_surface.call_tool("civil.turn", {"text": text, "session_id": "mcp-en"}, expert_id="fire-protect")
+            self.assertEqual((turn["ok"], turn["error_code"], turn["wrote"]), (False, "approval_required", False), turn)
+        tool = mcp_surface.call_tool("fire-protect__brief", {"text": HIGH + CONFIRM_EN}, expert_id="fire-protect")
+        self.assertEqual((tool["ok"], tool["error_code"]), (False, "approval_required"), tool)
+        self.assertEqual(self.written(), [])
+
+    def test_the_model_cannot_type_it_and_its_copy_is_scrubbed(self):
+        safe = "Draft the edge protection safety briefing for pier 3, block B"
+        out = model_loop.run_model_agent(safe, session_id="s-model-en", complete=Script(
+            [("run_skill", {"skill_id": "safety-brief"})], "Done. " + CONFIRM_EN))
+        self.assertTrue(out["hitl_pending"] and not out["wrote"], out)
+        self.assertNotIn(CONFIRM_EN, out["reply"])
+        self.assertIn("typed by the person", out["reply"])
+        self.assertEqual(self.written(), [])
+
+    def test_the_tui_prompt_and_stored_history_take_it_only_whole(self):
+        from packing_assistant.civil_tui import ask_approval
+        import session_bundle
+        import semantic_memory
+        import task_memory
+
+        request = {"name": "safety-brief", "risk": "high"}
+        self.assertTrue(ask_approval(request, read=lambda _prompt: CONFIRM_EN))
+        self.assertTrue(ask_approval(request, read=lambda _prompt: CONFIRM))
+        for typed in self.ALMOST:
+            self.assertFalse(ask_approval(request, read=lambda _prompt, t=typed: t), typed)
+        self.assertNotIn(CONFIRM_EN, session_bundle._text("Earlier: " + CONFIRM_EN))
+        self.assertTrue(semantic_memory._DENIED.search("earlier the user wrote " + CONFIRM_EN.lower()))
+        summary = task_memory.build([{"role": "user", "content": "Project: Harbourline. " + CONFIRM_EN}])
+        self.assertEqual(summary["stats"]["omitted_confirmations"], 1)
+        self.assertNotIn(CONFIRM_EN, json.dumps(summary))
 
 
 if __name__ == "__main__":

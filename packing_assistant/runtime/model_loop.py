@@ -41,7 +41,7 @@ from uuid import uuid4
 
 from packing_assistant.runtime.bus import get_bus
 
-CONFIRM = "我明白，将由持证人员签认"
+from packing_assistant.runtime.civil_config import CONFIRM, CONFIRM_EN, scrub_confirmations  # noqa: E402,F401  (one definition)
 MAX_STEPS = 10
 _RESULT_CHARS = 6000
 
@@ -133,6 +133,10 @@ SYSTEM = """你是 Civil Buddy（土木版 Codex）：在用户的工地文件�
 - 工具返回 approval_required 或 read_only 时停下来，把原因告诉用户，不要换个工具绕过去。
 - 问到招标条款、S1… 陈述或装柜方案（柜型、柜数、重量）时，先调 read_link_record（没有联动记录时用 read_job_file 读招标原文），只按读到的内容回答；读不到就说没有依据。Questions about the tender's clauses, the statements or the loading plan: read the link record first and answer only from it; the status of a statement, a figure and the container type are the record's, never yours.
 - 用中文回答：先说结论和文件位置，再说缺项和下一步。"""
+# An English request swaps only the last rule, so a Chinese turn's prompt is byte for byte what it was.
+_ANSWER_ZH = "- 用中文回答：先说结论和文件位置，再说缺项和下一步。"
+_ANSWER_EN = ("- The user wrote in English: answer in English. First the result and where the files are, then what is "
+              "missing and the next step. Keep file names, clause numbers and tool figures exactly as the tools give them.")
 
 
 @dataclass
@@ -164,6 +168,13 @@ class _Turn:
     facts: Dict[str, Any] = field(default_factory=dict)   # record / plan figures from tool results (tools/record_guard)
     record_question: bool = False                          # a question about the clauses, the statements or the plan
     forced_read: bool = False
+
+    @property
+    def english(self) -> bool:
+        """This turn's own notes (approval, guard, empty reply) are in English when the request is."""
+        from packing_assistant.runtime.reply_language import english_request
+
+        return english_request(self.user_text)
 
     def emit(self, kind: str, payload: Dict[str, Any]) -> None:
         get_bus().emit(self.run_id, kind, payload)
@@ -233,21 +244,25 @@ def _gate(turn: _Turn, *, risk: str, who: str) -> Optional[Dict[str, Any]]:
     from packing_assistant.runtime.civil_config import decide_gate, load_config
 
     if turn.intent == "chat":
-        return {"ok": False, "error_code": "read_only_intent", "reason": "本轮仅问答，未授权生成文件。"}
+        return {"ok": False, "error_code": "read_only_intent",
+                "reason": "This turn is a question: no file may be written." if turn.english else "本轮仅问答，未授权生成文件。"}
     gate = decide_gate(intent="run", risk=risk, confirmed=turn.confirmed, cfg=load_config())
     if gate == "go":
         return None
     if gate == "read_only":
         return {"ok": False, "error_code": "read_only",
                 "reason": "sandbox=read-only：本轮只读，不写盘。要成稿请用户改用 /sandbox workspace-write。"}
-    request = {"name": who, "risk": risk, "confirm_sentence": CONFIRM}
+    request = {"name": who, "risk": risk, "confirm_sentence": CONFIRM, "confirm_sentence_en": CONFIRM_EN}
     turn.emit("hitl", {"required": True, **request})
     if turn.approve is not None and turn.approve(request):
         turn.confirmed = True
         return None
     turn.hitl_pending = True
     return {"ok": False, "error_code": "approval_required", "risk": risk,
-            "reason": f"{who} 写盘前需要用户打确认句「{CONFIRM}」。本次未写盘；把这一点告诉用户，不要改用别的工具绕过。"}
+            "reason": (f"{who} is a high-risk post: nothing was written. The person types the sign-off sentence "
+                       f"\"{CONFIRM_EN}\" (or 「{CONFIRM}」) themselves; tell the user this and do not try another tool."
+                       if turn.english else
+                       f"{who} 写盘前需要用户打确认句「{CONFIRM}」。本次未写盘；把这一点告诉用户，不要改用别的工具绕过。")}
 
 
 def _update_plan(turn: _Turn, args: Dict[str, Any]) -> Dict[str, Any]:
@@ -512,7 +527,8 @@ def _dispatch(turn: _Turn, name: str, arguments: Dict[str, Any], worker: Any) ->
     reply = once()
     if reply["result"].get("error_code") == "approval_required" and turn.approve is not None:
         exp = _expert(arguments.get("skill_id")) if arguments.get("skill_id") else None
-        request = {"name": exp.name if exp else name, "risk": reply["result"].get("risk") or "high", "confirm_sentence": CONFIRM}
+        request = {"name": exp.name if exp else name, "risk": reply["result"].get("risk") or "high",
+                   "confirm_sentence": CONFIRM, "confirm_sentence_en": CONFIRM_EN}
         if turn.approve(request):       # the question is asked here, in the host; the worker has no terminal
             turn.confirmed = True
             reply = once()
@@ -624,11 +640,20 @@ def _guarded(reply: str, turn: _Turn, messages: List[Dict[str, Any]], complete: 
         turn.emit("guard", {"untraced": [item["text"] for item in numbers], "verdicts": [item["text"] for item in verdicts],
                             "record": [item["text"] for item in claims], "action": "rewrite"})
         asks = []
-        if numbers:
+        if turn.english:
+            if numbers:
+                asks.append("These numbers or clause references have no source in this turn's tool results, the user's words "
+                            "or the files read: " + ", ".join(dict.fromkeys(item["text"] for item in numbers))
+                            + ". Delete them or write UNSPECIFIED / [A001] to fill; do not bring in any new number.")
+            if verdicts:
+                asks.append("These sentences state a verdict, and the verdict is not yours to give: "
+                            + ", ".join(dict.fromkeys(item["text"] for item in verdicts))
+                            + ". State the facts the tools gave instead, and say who decides.")
+        elif numbers:
             asks.append("这些数字或条款号在本轮的工具结果、用户原文和已读资料里都没有出处："
                         + "、".join(dict.fromkeys(item["text"] for item in numbers))
                         + "。删掉它们，或写成 UNSPECIFIED / [A001] 待填；不要引入任何新数字。")
-        if verdicts:
+        if verdicts and not turn.english:
             asks.append("这些话是在下结论，而结论不由你下："
                         + "、".join(dict.fromkeys(item["text"] for item in verdicts))
                         + "。改成陈述工具给出的事实，并说明由谁来判断。")
@@ -637,7 +662,8 @@ def _guarded(reply: str, turn: _Turn, messages: List[Dict[str, Any]], complete: 
                         + " | ".join(dict.fromkeys(f"{item['text'][:160]} ({item['why']})" for item in claims))
                         + ". Say what the record says, or leave them out; never change a status, a figure or the container type.")
         retry = messages + [{"role": "assistant", "content": reply},
-                            {"role": "user", "content": "【系统核对】" + " ".join(asks) + " 只输出改写后的回复。"}]
+                            {"role": "user", "content": ("[System check] " + " ".join(asks) + " Output only the rewritten reply, in English.")
+                             if turn.english else "【系统核对】" + " ".join(asks) + " 只输出改写后的回复。"}]
         report["model_calls"] = 1
         try:
             if turn.cancel_event is not None and turn.cancel_event.is_set():
@@ -675,11 +701,11 @@ def _guarded(reply: str, turn: _Turn, messages: List[Dict[str, Any]], complete: 
         verdicts = verdict_guard.stated_verdicts(reply)
     if verdicts:
         report["verdicts"] = list(dict.fromkeys(item["text"] for item in verdicts))
-        reply = verdict_guard.strike(reply, verdicts)
-        tail.append(verdict_guard.notice(verdicts))
+        reply = verdict_guard.strike(reply, verdicts, english=turn.english)
+        tail.append(verdict_guard.notice(verdicts, english=turn.english))
     if numbers:
         report["untraced"] = list(dict.fromkeys(item["text"] for item in numbers))
-        tail.append(number_provenance.notice(numbers))
+        tail.append(number_provenance.notice(numbers, english=turn.english))
     if tail:
         turn.emit("guard", {"untraced": report["untraced"], "verdicts": report["verdicts"], "record": report.get("record", []),
                             "action": "notice"})
@@ -696,10 +722,13 @@ _READS = frozenset({"read_link_record", "read_job_file", "pack_plan", "run_skill
 
 def record_question(text: str) -> bool:
     """A question (not a request to draft or plan) about the tender's clauses, the statements or the loading plan."""
-    from packing_assistant.runtime.task_router import _QUESTION, _READ_REQUEST, wants_link
+    from packing_assistant.runtime.task_router import _QUESTION, _READ_REQUEST, route_task, wants_link
 
     body = text or ""
-    if not _RECORD_TOPIC.search(body) or wants_link(body):
+    # a link request the rules read as a run goes to the deterministic link first (turn.deterministic_first) and never
+    # reaches the loop; one they read as a question ("How many containers does X.xlsx need, and which clause of Y.md
+    # ...?", a link request by #67's wider wants_link) comes here and is answered from the record
+    if not _RECORD_TOPIC.search(body) or (wants_link(body) and route_task(body).get("intent") != "chat"):
         return False
     return bool(_QUESTION.search(body) or _READ_REQUEST.search(body) or body.rstrip().endswith(("?", "？")))
 
@@ -788,7 +817,8 @@ def explain_link(text: str, steps_out: Dict[str, Any], *, session_id: str = "", 
         out["mode_notice"] = ("The model could not be reached (" + str(exc)[:80] + "); the link above ran without it. "
                               "模型不可用，联动结果照常。")
         explanation = ""
-    explanation = _scrub(explanation).replace(CONFIRM, "（确认句须由用户本人输入）")
+    # both sign-off sentences (the English one came with #67): a model-written copy approves nothing
+    explanation = scrub_confirmations(_scrub(explanation), "(the sign-off sentence is typed by the person, not written by the model / 确认句须由用户本人输入)")
     if explanation:
         out["reply"] = deterministic + "\n\n" + EXPLANATION_HEAD + "\n" + explanation
     out.update(model_explanation=explanation, provenance=provenance,
@@ -822,6 +852,8 @@ def run_model_agent(text: str, *, session_id: str = "", expert_id: str = "", p0_
                  logistics_context=logistics_context)
     turn.record_question = not (cad_context or planning_context or logistics_context) and record_question(text)
     system = system_prompt(prompt_prefix(ctx))
+    if turn.english:
+        system = system.replace(_ANSWER_ZH, _ANSWER_EN)
     past = [{"role": m["role"], "content": str(m.get("content") or "")} for m in history or []
             if m.get("role") in {"user", "assistant"} and str(m.get("content") or "").strip()]
     turn.evidence += [system, text] + [m["content"] for m in past]
@@ -979,7 +1011,10 @@ def run_model_agent(text: str, *, session_id: str = "", expert_id: str = "", p0_
             out.update(ok=False, cancelled=True, error_code="cancelled")
             reply = "本轮已取消；已完成的文件保留。"
     # 确认句只有用户亲手输入才算数；模型把它抄进回复（实测 qwen2.5:3b 会）既无效又误导。
-    reply = _scrub(reply or "模型没有返回正文；请再说一次，或把任务拆小。").replace(CONFIRM, "（确认句须由用户本人输入）")
+    reply = scrub_confirmations(_scrub(reply or ("The model returned no text; ask again, or split the task." if turn.english else
+                                                 "模型没有返回正文；请再说一次，或把任务拆小。")),
+                                "(the sign-off sentence is typed by the person, not written by the model)" if turn.english
+                                else "（确认句须由用户本人输入）")
     turn.emit("message", {"text": reply})
     exp = _expert(turn.skill) if turn.skill else None
     out.update(reply=reply, intent="run" if turn.wrote else "chat", wrote=turn.wrote, files=turn.files,

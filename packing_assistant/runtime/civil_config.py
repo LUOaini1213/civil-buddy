@@ -13,7 +13,72 @@ from pathlib import Path
 from typing import Any, Dict, Optional
 
 _ROOT = Path(__file__).resolve().parents[2]
+# The licensed sign-off sentence, the one place it is defined. A person types one of the two, exactly, in the turn it
+# approves; every surface (CLI, TUI, desktop, workbench HTTP, gateway, the CAD / planning / logistics pages) accepts
+# either and nothing else, and every scrub (history, memory, model output, MCP text) removes both.
 CONFIRM = "我明白，将由持证人员签认"
+CONFIRM_EN = "I understand; a licensed person will sign this off."
+CONFIRM_SENTENCES = (CONFIRM, CONFIRM_EN)
+
+
+def is_confirmation(value: Any, *, strip: bool = True) -> bool:
+    """The whole value is one of the two sentences (surrounding blanks allowed unless ``strip`` is False). A flag, a
+    lower-cased or shortened copy, or the sentence quoted inside other words is not."""
+    if type(value) is not str:
+        return False
+    return (value.strip() if strip else value) in CONFIRM_SENTENCES
+
+
+def contains_confirmation(text: Any) -> bool:
+    """The text carries one of the two sentences anywhere. For scrubs and refusals (memory, history, a reply); the
+    approval check on a person's typed task is ``confirms_in_message``."""
+    return type(text) is str and any(sentence in text for sentence in CONFIRM_SENTENCES)
+
+
+# A sentence typed inside a task approves only when the person says it: not refused ("No: ...", "不同意：..."), not
+# asked ("... ?", "...吗"), not wondered about ("Did you mean ...", "是否..."), and not quoted inside other words ('the
+# estimator will type "..." later'). The clause before it is the text since the last sentence end or line break.
+_CLAUSE_END = re.compile(r"[。！？!?\n]|\.(?=\s|$)")
+_REFUSED = re.compile(r"(?i)\b(?:no|not|don['’]?t|never|won['’]?t|refuse[sd]?|mean|whether|should|if)\b"
+                      r"|不同意|不要|不用|不必|无需|先别|别写|别生成|并非|不是|是否|如果|假如|要不要")
+_ASKED = re.compile(r"\s*[\"”’」』)）]?\s*(?:吗|么|嘛|[^。！？!?\n.]{0,16}[?？])")
+_OPEN_QUOTE = re.compile(r"[\"“‘'「『]\s*$")
+
+
+def confirms_in_message(text: Any) -> bool:
+    """A person's own typed task (the TUI line, the desktop task, the workbench message) carries one of the two
+    sentences as their own statement for this turn. Anything else approves nothing; the person can still type the
+    sentence alone in the confirmation field, where ``is_confirmation`` decides."""
+    if type(text) is not str:
+        return False
+    for sentence in CONFIRM_SENTENCES:
+        start = text.find(sentence)
+        while start >= 0:
+            end = start + len(sentence)
+            parts = _CLAUSE_END.split(text[:start])
+            clause = parts[-1]
+            if not clause.strip() and len(parts) > 1 and len(parts[-2].strip()) <= 24:
+                clause = parts[-2] + " " + clause          # "No. <sentence>" / "不同意。<sentence>": a short refusal just before
+            quoted = _OPEN_QUOTE.search(clause) and _OPEN_QUOTE.sub("", clause).strip()
+            if not (_REFUSED.search(clause) or _ASKED.match(text[end:]) or quoted):
+                return True
+            start = text.find(sentence, end)
+    return False
+
+
+def count_confirmations(text: str) -> int:
+    return sum((text or "").count(sentence) for sentence in CONFIRM_SENTENCES)
+
+
+def scrub_confirmations(text: str, replacement: str) -> str:
+    """Text with both sentences replaced: a stored, quoted or model-written copy approves nothing."""
+    out = text or ""
+    for sentence in CONFIRM_SENTENCES:
+        out = out.replace(sentence, replacement)
+    return out
+
+
+CONFIRM_PATTERN = "|".join(re.escape(sentence) for sentence in CONFIRM_SENTENCES)
 
 SANDBOX_MODES = ("read-only", "workspace-write")
 APPROVAL_MODES = ("untrusted", "on-request", "never")
@@ -45,6 +110,7 @@ class CivilConfig:
     def to_dict(self) -> Dict[str, Any]:
         d = asdict(self)
         d["confirm_sentence"] = CONFIRM
+        d["confirm_sentence_en"] = CONFIRM_EN
         d["sandbox_modes"] = list(SANDBOX_MODES)
         d["approval_modes"] = list(APPROVAL_MODES)
         d["agent_modes"] = list(AGENT_MODES)
@@ -162,8 +228,11 @@ def high_risk_unconfirmed(*, risk: str, confirmed: bool) -> bool:
     return (risk or "low") == "high" and confirmed is not True
 
 
-def hitl_reply(who: str = "") -> str:
+def hitl_reply(who: str = "", *, english: bool = False) -> str:
     label = (who or "").strip()
+    if english:
+        return (f"{label or 'This post'} is a high-risk post: nothing was written. A licensed person types the sign-off "
+                f"sentence \"{CONFIRM_EN}\" (or 「{CONFIRM}」) in the turn that writes it.")
     prefix = f"高风险岗 {label} " if label else "高风险岗 "
     return f"{prefix}写盘须确认句「{CONFIRM}」。本轮未写盘。"
 
