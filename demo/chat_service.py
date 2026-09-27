@@ -26,7 +26,8 @@ import turn_control
 from turn_control import TurnCancelled
 from packing_assistant.expert_roster import get_expert as roster_expert
 from packing_assistant.runtime.civil_config import CONFIRM, confirms_in_message, contains_confirmation, hitl_reply, is_confirmation
-from packing_assistant.runtime.reply_language import english_request
+from packing_assistant.runtime.reply_language import english_request, using_page_language
+from ui_lang import localize, localize_route, page_language, post_name, tr
 from packing_assistant.runtime.expert_skills import match_skill
 from packing_assistant.understand import understand
 
@@ -187,15 +188,15 @@ def _fetch_addresses(sid: str, message: str, attachment_ids: list) -> tuple:
         try:
             got = fetch_upload(sid, address.rstrip(".,;:!?"))
         except UploadError as exc:
-            notes.append(f"网址没有取到（{exc}）：请下载后用「附件」上传。")
+            notes.append(localize(f"网址没有取到（{exc}）：请下载后用「附件」上传。"))
             continue
         except OSError:
-            notes.append("网址取回的文件没能保存，请检查工作台目录权限。")
+            notes.append(localize("网址取回的文件没能保存，请检查工作台目录权限。"))
             continue
         for item in got.get("files") or []:
             if item.get("id") and item["id"] not in ids:
                 ids.append(item["id"])
-                notes.append(f"已从网址取回「{item.get('name')}」并作为本轮附件。")
+                notes.append(localize(f"已从网址取回「{item.get('name')}」并作为本轮附件。"))
     return ids, " ".join(notes)
 
 
@@ -314,7 +315,7 @@ def prepare_turn(root: Path, body: dict) -> dict:
     intent = route["intent"]
     requests = {}
     context = {**policy(), "used": 0, "pct": 0, "mode": "local", "compressed": False,
-               "note": "本轮使用本地岗位工具；完整对话与任务记忆保存在本机。"}
+               "note": tr("本轮使用本地岗位工具；完整对话与任务记忆保存在本机。")}
     if intent == "chat" and not route["ambiguous"]:
         for eid in ids or [""]:
             requests[eid] = _chat_request(eid, prepared, message, sid)
@@ -325,8 +326,8 @@ def prepare_turn(root: Path, body: dict) -> dict:
             material = _whole_documents(sid, attachment_ids, message)
         omitted = prepared.get("material_omitted")
         if omitted:
-            context["note"] += (" 本轮资料超出预算，未加入：" + "、".join(omitted[:6])
-                                + (f" 等 {len(omitted)} 项" if len(omitted) > 6 else "") + "。")
+            context["note"] += localize(" 本轮资料超出预算，未加入：" + "、".join(omitted[:6])
+                                        + (f" 等 {len(omitted)} 项" if len(omitted) > 6 else "") + "。")
     if fetched_note:
         context["note"] = f"{context.get('note', '')} {fetched_note}".strip()
     context = {**context, "history_count": prepared["history_count"],
@@ -348,7 +349,7 @@ def prepare_turn(root: Path, body: dict) -> dict:
             "local_sources": [session_context.citation(sid, s["hit"]) for s in prepared["sources"]],
             "intent": intent, "project_id": project_id, "project_name": project_name,
             "confirmed": is_confirmation(str(body.get("confirm_text") or "")) or confirms_in_message(message),
-            "attachments": attachment_ids, "route": route,
+            "attachments": attachment_ids, "route": localize_route(route), "lang": page_language(),
             "workflow_sources": workflow_sources, "workflow_unreadable": workflow_unreadable,
             "workflow_budget": body.get("workflow_budget"),
             "attachment_roles": roles, "cad_project_id": cad_project_id, "cad_context": cad_context,
@@ -361,6 +362,7 @@ def _event(kind: str, **data) -> dict:
 
 
 def _offline_chat(eid: str, message: str) -> str:
+    english = page_language() == "en"
     if eid:
         from packing_assistant.expert_turn import explain_expert
         expert = roster_expert(eid)
@@ -369,7 +371,17 @@ def _offline_chat(eid: str, message: str) -> str:
         else:
             custom = get_expert(eid)
             text = f"本岗：{custom.name}。\n{custom.title}\n默认交付：{custom.delivers}"
+        if english:
+            head = (f"{post_name(eid)}: this answer is the post's local notes, written in Chinese (not machine-translated). "
+                    "For in-depth questions about your material, set an API key in \"Model settings\".")
+            return head + "\n\n" + text
         return text + "\n\n当前使用本地岗位说明。需要针对资料深入问答时，可在「模型设置」配置 API Key。"
+    if english:
+        return ("I am Civil Buddy, a civil-engineering workbench. Browse the 66 posts, or name one with @post in your task.\n\n"
+                "Without a model you can already browse posts, upload material and generate local drafts. Try: "
+                "\"@pm-daily Draft a daily site report template; keep anything not given as blanks to fill\". "
+                "Draft templates are in Chinese.\n\n"
+                "For open questions, set an API key in \"Model settings\".")
     return ("我是 Civil Buddy，土木工作台。你可以从左侧浏览 66 个岗位，或用 @岗位名 指定任务。\n\n"
             "现在无需模型即可浏览岗位、上传资料并生成本地草稿。试试："
             "「@项目日报 写一份项目日报模板，缺失内容保持待填」。\n\n"
@@ -414,7 +426,7 @@ def _chat_request(eid: str, prepared: dict, message: str, sid: str) -> dict:
             report["folded"] += covered
             report["compressed"] = True
             report["semantic_replaced_messages"] = covered
-            report["note"] += f" {covered} 条较早原文由有来源的语义摘要替代，完整记录仍在本机。"
+            report["note"] += localize(f" {covered} 条较早原文由有来源的语义摘要替代，完整记录仍在本机。")
     selected = [cites[str(i)] for i in report["sources_used"] if str(i) in cites]
     if "semantic-memory" in report["sources_used"]:
         selected.extend(prepared.get("semantic_citations", []))
@@ -589,11 +601,11 @@ def _stream_turn(root: Path, turn: dict, *, key_available: bool, plain_runner, l
         except (OSError, ValueError):
             # Derived caches cannot invalidate the durable user transcript.
             turn["context"]["cache_error"] = True
-            turn["context"]["note"] += " 本轮记忆或索引缓存未刷新，原始消息已保留。"
+            turn["context"]["note"] += tr(" 本轮记忆或索引缓存未刷新，原始消息已保留。")
         yield _event("session", session_id=sid)
         yield _event("context", **turn["context"])
         yield _event("status", phase="routing", route=turn["route"], text=turn["route"]["reason"])
-        yield _event("status", phase="understand", intent=turn["intent"], text="识别任务并选择岗位")
+        yield _event("status", phase="understand", intent=turn["intent"], text=tr("识别任务并选择岗位"))
         from semantic_service import events as semantic_events
         yield from semantic_events(root, turn, control, key_available=key_available)
         workflow = turn["route"].get("workflow")
@@ -607,10 +619,10 @@ def _stream_turn(root: Path, turn: dict, *, key_available: bool, plain_runner, l
             and not turn["route"].get("ambiguous")
         )
         if routed_model:
-            status = ("物流箱单：核对原文、汇总并形成待确认建议" if turn.get("logistics_context") else
-                      "施工计划：核对当前参数、形成待确认建议" if turn.get("planning_context") else
-                      "CAD 项目：检查图纸、执行受限工具" if turn.get("cad_context") else
-                      "模型驱动：选岗、调工具、出稿")
+            status = tr("物流箱单：核对原文、汇总并形成待确认建议" if turn.get("logistics_context") else
+                        "施工计划：核对当前参数、形成待确认建议" if turn.get("planning_context") else
+                        "CAD 项目：检查图纸、执行受限工具" if turn.get("cad_context") else
+                        "模型驱动：选岗、调工具、出稿")
             yield _event("status", phase="deliver", text=status)
             control.check()
             skill = turn["ids"][0] if len(turn["ids"]) == 1 else ""
@@ -653,15 +665,15 @@ def _stream_turn(root: Path, turn: dict, *, key_available: bool, plain_runner, l
                             action=result.get("planning_action"))
                     control.check()
                     if not isinstance(proposal_id, str) or not re.fullmatch(r"[0-9a-f]{32}", proposal_id):
-                        raise ValueError("建议编号无效")
+                        raise ValueError(tr("建议编号无效"))
                     link = "/engineering/planning?project_id=" + turn["planning_project_id"] + "&proposal_id=" + proposal_id
-                    result["reply"] = str(result.get("reply") or "") + "\n\n[打开施工计划，核对并确认建议](" + link + ")"
+                    result["reply"] = str(result.get("reply") or "") + localize("\n\n[打开施工计划，核对并确认建议](" + link + ")")
                 except cancel.RunCancelled:
-                    raise TurnCancelled("施工计划建议已取消。") from None
+                    raise TurnCancelled(tr("施工计划建议已取消。")) from None
                 except (ValueError, OSError, PermissionError, HTTPException) as exc:
                     result.update(ok=False, error_code="planning_proposal_failed")
                     reason = str(exc.detail) if isinstance(exc, HTTPException) else str(exc)
-                    result["reply"] = str(result.get("reply") or "") + "\n\n建议未登记，当前计划未修改：" + reason
+                    result["reply"] = str(result.get("reply") or "") + localize("\n\n建议未登记，当前计划未修改：" + reason)
             if (turn.get("logistics_context") and result.get("ok", True) and not result.get("cancelled")
                     and (result.get("logistics_proposal") is not None or result.get("logistics_action") == "undo")):
                 control.check()
@@ -678,15 +690,15 @@ def _stream_turn(root: Path, turn: dict, *, key_available: bool, plain_runner, l
                             action=result.get("logistics_action"))
                     control.check()
                     if not isinstance(proposal_id, str) or not re.fullmatch(r"[0-9a-f]{32}", proposal_id):
-                        raise ValueError("建议编号无效")
+                        raise ValueError(tr("建议编号无效"))
                     link = "/logistics?project_id=" + turn["logistics_project_id"] + "&proposal_id=" + proposal_id
-                    result["reply"] = str(result.get("reply") or "") + "\n\n[打开箱单，核对并确认建议](" + link + ")"
+                    result["reply"] = str(result.get("reply") or "") + localize("\n\n[打开箱单，核对并确认建议](" + link + ")")
                 except cancel.RunCancelled:
-                    raise TurnCancelled("箱单建议已取消。") from None
+                    raise TurnCancelled(tr("箱单建议已取消。")) from None
                 except (ValueError, OSError, PermissionError, HTTPException) as exc:
                     result.update(ok=False, error_code="logistics_proposal_failed")
                     reason = str(exc.detail) if isinstance(exc, HTTPException) else str(exc)
-                    result["reply"] = str(result.get("reply") or "") + "\n\n建议未登记，箱单未修改：" + reason
+                    result["reply"] = str(result.get("reply") or "") + localize("\n\n建议未登记，箱单未修改：" + reason)
             if turn.get("cad_context") and result.get("cad_changed") and not result.get("cancelled"):
                 control.check()
                 from packing_assistant.cad3d.projects import CadProjectStore
@@ -697,12 +709,12 @@ def _stream_turn(root: Path, turn: dict, *, key_available: bool, plain_runner, l
                         CadProjectStore(root / "_cad").update(turn["cad_project_id"],
                             expected_revision=turn["cad_context"]["project"]["revision"],
                             draft_config=updated["draft_config"], model=updated.get("model"))
-                    result["reply"] += "\n\n模型与参数已保存到所选 CAD 项目。"
+                    result["reply"] += tr("\n\n模型与参数已保存到所选 CAD 项目。")
                 except cancel.RunCancelled:
-                    raise TurnCancelled("CAD 项目保存已取消。") from None
+                    raise TurnCancelled(tr("CAD 项目保存已取消。")) from None
                 except (ValueError, OSError, PermissionError) as exc:
                     result.update(ok=False, error_code="cad_save_failed")
-                    result["reply"] += "\n\n模型预览计算已完成，但项目未保存：" + str(exc) + "。请重新打开 CAD 项目后再试。"
+                    result["reply"] += localize("\n\n模型预览计算已完成，但项目未保存：" + str(exc) + "。请重新打开 CAD 项目后再试。")
             result["engine_run_id"] = result.get("run_id", "")
             result["run_id"] = rid
             eid = str(result.get("expert_id") or result.get("skill") or skill or "")
@@ -712,7 +724,7 @@ def _stream_turn(root: Path, turn: dict, *, key_available: bool, plain_runner, l
                     turn["ids"] = [eid]
             local_files = _deliverables(root, sid, rid, result, eid)
             nodes = [
-                {"kind": "tool", "title": name, "detail": "完成"}
+                {"kind": "tool", "title": name, "detail": tr("完成")}
                 for name in (result.get("tools_run") or [])
             ]
             if result.get("hitl_pending"):
@@ -720,14 +732,14 @@ def _stream_turn(root: Path, turn: dict, *, key_available: bool, plain_runner, l
                     who = ""
                     if eid:
                         rec = roster_expert(eid)
-                        who = rec.name if rec else eid
+                        who = post_name(rec) if rec else eid
                     extra = hitl_reply(who, english=english_request(turn.get("message")))
                     result["reply"] = (str(result.get("reply") or "").rstrip() + "\n\n" + extra).strip()
                 nodes.append({
                     "kind": "decision",
-                    "title": "等待签认确认",
-                    "detail": "本轮未执行写入",
-                    "operator": "本地用户",
+                    "title": tr("等待签认确认"),
+                    "detail": tr("本轮未执行写入"),
+                    "operator": tr("本地用户"),
                 })
                 yield _event(
                     "status",
@@ -737,7 +749,7 @@ def _stream_turn(root: Path, turn: dict, *, key_available: bool, plain_runner, l
                     confirmed=False,
                 )
             if not result.get("reply"):
-                result["reply"] = "任务未完成：" + str(result.get("error_code") or "模型未返回结果")
+                result["reply"] = localize("任务未完成：" + str(result.get("error_code") or "模型未返回结果"))
             texts.append(str(result.get("reply") or ""))
             files.extend(local_files)
             citations.extend(turn["local_sources"])
@@ -751,7 +763,7 @@ def _stream_turn(root: Path, turn: dict, *, key_available: bool, plain_runner, l
                 control.check()
                 expert = get_expert(eid) if eid else None
                 yield _event("status", phase="summon" if eid else "plain", expert=eid,
-                             text=f"{expert.name} · {turn['intent']}" if expert else "Civil Buddy 路由器")
+                             text=f"{post_name(expert)} · {turn['intent']}" if expert else tr("Civil Buddy 路由器"))
                 rid, nodes = uuid4().hex, []
                 result = {"run_id": rid, "expert_id": eid, "ok": True}
                 local_files, local_cites = [], []
@@ -770,7 +782,7 @@ def _stream_turn(root: Path, turn: dict, *, key_available: bool, plain_runner, l
                     local_files = _deliverables(root, sid, rid, result, "tender-review")
                     collaboration_result = result["collaboration"]
                     turn["context"]["collaboration"] = collaboration_result.get("aggregate_metrics", {})
-                    nodes = [{"kind": "info", "title": "招标协作", "detail": result.get("state", "")},
+                    nodes = [{"kind": "info", "title": tr("招标协作"), "detail": result.get("state", "")},
                              *[{"kind": "tool", "title": c.get("skill", ""), "detail": c.get("status", "")}
                                for c in collaboration_result.get("children", [])]]
                     local_cites = turn["local_sources"]
@@ -791,44 +803,48 @@ def _stream_turn(root: Path, turn: dict, *, key_available: bool, plain_runner, l
                                 result["reply"] = event["data"].get("text") or "".join(current)
                                 local_cites = event["data"].get("citations") or request["citations"]
                             elif event["event"] == "error":
-                                raise RuntimeError("模型问答未完成")
+                                raise RuntimeError(tr("模型问答未完成"))
                             else:
                                 yield event
                         if not result.get("reply"):
-                            raise RuntimeError("模型未返回有效回答")
+                            raise RuntimeError(tr("模型未返回有效回答"))
                     else:
                         result["reply"] = _offline_chat(eid, message)
                         local_cites = turn["local_sources"]
                         if local_cites:
-                            result["reply"] += "\n\n本机找到以下相关原文，可展开来源核对。"
-                    nodes.append({"kind": "info", "title": "问答", "detail": "未调用写入工具"})
+                            result["reply"] += tr("\n\n本机找到以下相关原文，可展开来源核对。")
+                    nodes.append({"kind": "info", "title": tr("问答"), "detail": tr("未调用写入工具")})
                 elif not eid:
-                    result["reply"] = "请先选择一个岗位，或用 @岗位名 说明需要的交付物，例如「@项目日报 写一份日报模板」。"
+                    result["reply"] = tr("请先选择一个岗位，或用 @岗位名 说明需要的交付物，例如「@项目日报 写一份日报模板」。")
                 elif not roster_expert(eid):
-                    result["reply"] = f"{expert.name} 尚未接入本地起草工具。可以先提问或完善该岗位的工具配置。"
+                    result["reply"] = tr("{name} 尚未接入本地起草工具。可以先提问或完善该岗位的工具配置。", name=post_name(expert))
                 elif expert.risk == "high" and not turn["confirmed"]:
-                    result.update(reply=hitl_reply(expert.name), hitl_pending=True)
-                    nodes.append({"kind": "decision", "title": "等待签认确认", "detail": "本轮未执行写入", "operator": "本地用户"})
+                    result.update(reply=hitl_reply(post_name(expert), english=english_request(message)), hitl_pending=True)
+                    nodes.append({"kind": "decision", "title": tr("等待签认确认"), "detail": tr("本轮未执行写入"),
+                                  "operator": tr("本地用户")})
                     yield _event("status", phase="hitl_gate", text=result["reply"], gate="hitl", confirmed=False)
                 else:
                     from packing_assistant.runtime.agent_loop import run_agent
                     if expert.risk == "high":
-                        nodes.append({"kind": "decision", "title": "已收到签认确认", "detail": CONFIRM, "operator": "本地用户"})
-                    yield _event("status", phase="deliver", text=f"按 {expert.name} 工序起草")
+                        nodes.append({"kind": "decision", "title": tr("已收到签认确认"), "detail": CONFIRM, "operator": tr("本地用户")})
+                    yield _event("status", phase="deliver", text=tr("按 {name} 工序起草", name=post_name(expert)))
                     control.check()
                     result = run_agent(turn["material"], session_id=sid, expert_id=eid,
                                        p0_confirmed=turn["confirmed"], force_intent=turn["intent"],
                                        project_name=turn["project_name"], cancel_event=control.event)
+                    if result.get("reply"):
+                        result["reply"] = localize(result["reply"])  # the summary line; the draft files stay Chinese
                     # The UI run owns its own unique snapshot; the engine run remains linked.
                     result["engine_run_id"] = result.get("run_id", "")
                     result["run_id"] = rid
                     local_files = _deliverables(root, sid, rid, result, eid)
                     for tool in result.get("tool_results", []):
-                        nodes.append({"kind": "tool", "title": tool["name"], "detail": "完成" if tool.get("ok") else str(tool.get("error_code") or "失败")})
+                        nodes.append({"kind": "tool", "title": tool["name"],
+                                      "detail": tr("完成") if tool.get("ok") else str(tool.get("error_code") or tr("失败"))})
                     if not result.get("reply"):
-                        result["reply"] = "任务未完成：" + str(result.get("error_code") or "工具未返回结果")
+                        result["reply"] = localize("任务未完成：" + str(result.get("error_code") or "工具未返回结果"))
                 if len(turn["ids"]) > 1 and not workflow:
-                    texts.append(f"### {expert.name}\n\n" + result["reply"])
+                    texts.append(f"### {post_name(expert)}\n\n" + result["reply"])
                 else:
                     texts.append(result["reply"])
                 files.extend(local_files)
@@ -853,7 +869,7 @@ def _stream_turn(root: Path, turn: dict, *, key_available: bool, plain_runner, l
         control.seal("cancelled")
         # Say who stopped it: a turn nobody was connected to any more is stopped by the server.
         unattended = control.reason == "detached_timeout"
-        stopped = "页面断开后一直没有回来，本轮已取消" if unattended else "本轮已取消"
+        stopped = tr("页面断开后一直没有回来，本轮已取消" if unattended else "本轮已取消")
         if turn.get("planning_context") or turn.get("logistics_context"):
             # A proposal link may already be in texts when cancellation wins
             # just after _record. It must not reach this reply, restored history,
@@ -861,15 +877,23 @@ def _stream_turn(root: Path, turn: dict, *, key_available: bool, plain_runner, l
             texts.clear()
             partial.clear()
             subject = "箱单" if turn.get("logistics_context") else "施工计划"
-            text = f"{stopped}。{subject}未修改，本轮建议未发布。"
+            if page_language() == "en":
+                text = (f"{stopped}. The {'packing list' if subject == '箱单' else 'construction plan'} was not changed; "
+                        "no proposal was published in this turn.")
+            else:
+                text = f"{stopped}。{subject}未修改，本轮建议未发布。"
         else:
             text = "\n\n".join(texts) or "".join(partial)
-            text += f"\n\n[{stopped}，已完成的文件保留下载。]" if files else f"\n\n[{stopped}，回答可能不完整。]"
+            if page_language() == "en":
+                text += (f"\n\n[{stopped}; finished files can still be downloaded.]" if files
+                         else f"\n\n[{stopped}; the answer may be incomplete.]")
+            else:
+                text += f"\n\n[{stopped}，已完成的文件保留下载。]" if files else f"\n\n[{stopped}，回答可能不完整。]"
         rid = uuid4().hex
         _record(root, turn, {"run_id": rid, "ok": False, "state": "cancelled", "cancelled": True,
                             "error_code": "cancelled", "collaboration": collaboration_result}, [],
-                [{"kind": "info", "title": "本轮已取消",
-                  "detail": ("页面断开超过时限，服务端自动停止；" if unattended else "") + "停止后续步骤；已完成文件保留"}])
+                [{"kind": "info", "title": tr("本轮已取消"),
+                  "detail": (tr("页面断开超过时限，服务端自动停止；") if unattended else "") + tr("停止后续步骤；已完成文件保留")}])
         run_ids.append(rid)
         failure_recorded = True
         projects.append_turn(root, sid, "assistant", text)
@@ -882,21 +906,21 @@ def _stream_turn(root: Path, turn: dict, *, key_available: bool, plain_runner, l
                      route=turn["route"], collaboration=collaboration_result, context=turn["context"])
     except LLMError as exc:
         _record(root, turn, {"run_id": uuid4().hex, "ok": False, "error_code": "model_error"}, [],
-                [{"kind": "error", "title": "模型问答未完成", "detail": str(exc)}])
+                [{"kind": "error", "title": tr("模型问答未完成"), "detail": str(exc)}])
         failure_recorded = True
         yield _event("error", text=str(exc), **_error_extras(root, sid, "\n\n".join(texts) or "".join(partial), files, run_ids))
     except Exception:
         logger.exception("Workbench turn failed for session %s", sid)
-        yield _event("error", text="本轮未完成，请检查模型设置或本地日志后重试。",
+        yield _event("error", text=tr("本轮未完成，请检查模型设置或本地日志后重试。"),
                      **_error_extras(root, sid, "\n\n".join(texts) or "".join(partial), files, run_ids))
     finally:
         try:
             if user_saved and not assistant_saved:
                 if not failure_recorded:
                     _record(root, turn, {"run_id": uuid4().hex, "ok": False, "error_code": "interrupted"}, [],
-                            [{"kind": "error", "title": "本轮中断", "detail": "会话未完整结束，可重试"}])
+                            [{"kind": "error", "title": tr("本轮中断"), "detail": tr("会话未完整结束，可重试")}])
                 text = "\n\n".join(texts) or "".join(partial)
-                projects.append_turn(root, sid, "assistant", text + "\n\n[本轮中断，回答可能不完整]")
+                projects.append_turn(root, sid, "assistant", text + tr("\n\n[本轮中断，回答可能不完整]"))
         finally:
             try:
                 if user_saved:
@@ -1251,7 +1275,8 @@ def stream_turn(root: Path, turn: dict, *, key_available: bool, plain_runner, le
 
     def produce():
         try:
-            with turn_control.using(lease.control):
+            # the page's language rides with the turn into this thread (notes, notices, errors; never what is approved)
+            with turn_control.using(lease.control), using_page_language(turn.get("lang")):
                 for event in _stream_turn(root, turn, key_available=key_available, plain_runner=plain_runner, lease=lease):
                     if event["event"] in {"session", "context"}:
                         event["data"].setdefault("turn_id", turn["turn_id"])

@@ -11,9 +11,11 @@ from fastapi.responses import FileResponse, HTMLResponse, Response, StreamingRes
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field, StrictBool
 from starlette.background import BackgroundTask
+from starlette.exceptions import HTTPException as StarletteHTTPException
 from starlette.datastructures import UploadFile
 
 from agent import run_plain
+import ui_lang
 from packing_assistant import access_guard
 from catalog import catalog_payload, get_expert, resolve_mentions
 from config import DEMO_ROOT, OUT_ROOT, llm_model
@@ -937,15 +939,17 @@ def studio_limit(body: LimitIn) -> dict:
 
 
 @app.post("/api/chat", dependencies=[Depends(require_logistics_chat_access)])
-def chat(body: ChatIn):
+def chat(body: ChatIn, request: Request):
     from chat_service import SessionBusy, SessionLease, prepare_turn, start_background_turn, stream_turn, valid_session
 
     lease = None
+    lang = ui_lang.language_of(request.headers.raw)
     try:
         payload = body.model_dump()
         payload["session_id"] = valid_session(body.session_id or uuid4().hex[:12])
         lease = SessionLease(payload["session_id"])
-        turn = prepare_turn(OUT_ROOT, payload)
+        with ui_lang.using_page_language(lang):
+            turn = prepare_turn(OUT_ROOT, payload)
     except SessionBusy as exc:
         raise HTTPException(409, str(exc)) from exc
     except ValueError as exc:
@@ -1124,3 +1128,18 @@ def file(path: str = "", name: str = "", session: str = "", run: str = "", file:
 
 
 app.add_middleware(access_guard.AccessGuard, public=lambda path: path in _PUBLIC or path.startswith("/static/"))
+# 中文 | English: outermost, so the page's language (X-Civil-Lang, else cookie cb_lang) is known to every endpoint,
+# its thread pool and the error handler below. It changes wording only, never a check.
+app.add_middleware(ui_lang.PageLanguage)
+
+
+@app.exception_handler(StarletteHTTPException)
+async def localized_http_error(request: Request, exc: StarletteHTTPException):
+    """An error's detail in the page's language (ui_lang.localize); status and headers as raised."""
+    from fastapi.exception_handlers import http_exception_handler
+
+    if isinstance(exc.detail, str):
+        detail = ui_lang.localize(exc.detail)
+        if detail != exc.detail:
+            exc = StarletteHTTPException(exc.status_code, detail=detail, headers=getattr(exc, "headers", None))
+    return await http_exception_handler(request, exc)

@@ -3,7 +3,7 @@ from __future__ import annotations
 
 from collections import OrderedDict
 from contextlib import contextmanager
-from contextvars import ContextVar
+from contextvars import ContextVar, copy_context
 from queue import Empty, Full, Queue
 import socket
 from threading import Event, RLock, Thread
@@ -236,7 +236,8 @@ def model_events(iterator, control: TurnControl):
             finally:
                 finished.set()
 
-    Thread(target=produce, name="civil-model-" + control.session, daemon=True).start()
+    # the model thread sees this turn's context (its page language among it)
+    Thread(target=copy_context().run, args=(produce,), name="civil-model-" + control.session, daemon=True).start()
     while True:
         control.check()
         try:

@@ -16,6 +16,7 @@
  *   fmtBytes     (n) => "1.2 MB"
  *   fetch, XMLHttpRequest, doc                    the environment (XMLHttpRequest may be null)
  */
+import { tr } from "./i18n.js";
 export const UPLOAD_LIMITS = Object.freeze({
   maxBytes: 20 * 1024 * 1024,
   maxFiles: 12,
@@ -26,15 +27,15 @@ export const UPLOAD_CONCURRENCY = 2;
 export function precheck(file, limits = UPLOAD_LIMITS, fmtBytes = (n) => `${n} B`) {
   const name = String(file.name || "");
   const ext = (name.match(/\.([A-Za-z0-9]+)$/) || [, ""])[1].toLowerCase();
-  if (!limits.ext.includes(ext)) return `不支持 .${ext || "?"}，只收 ${limits.ext.map((e) => "." + e).join(" ")}`;
-  if (file.size > limits.maxBytes) return `单文件不能超过 ${fmtBytes(limits.maxBytes)}（这个 ${fmtBytes(file.size)}）`;
+  if (!limits.ext.includes(ext)) return tr("不支持 .{0}，只收 {1}", ext || "?", limits.ext.map((e) => "." + e).join(" "));
+  if (file.size > limits.maxBytes) return tr("单文件不能超过 {0}（这个 {1}）", fmtBytes(limits.maxBytes), fmtBytes(file.size));
   return "";
 }
 
 /* /api/upload answers {ok, files:[{id,name,bytes,...}]}, not a bare record. */
 export function accept(meta, attachments) {
   const items = Array.isArray(meta && meta.files) ? meta.files : (meta && meta.id ? [meta] : []);
-  if (!items.length) return "工作台未返回附件信息，请重试上传。";
+  if (!items.length) return tr("工作台未返回附件信息，请重试上传。");
   for (const item of items) {
     if (item && item.id && !attachments.some((a) => a.id === item.id)) attachments.push(item);
   }
@@ -85,7 +86,7 @@ export function createUploads(deps) {
     u.xhr = null;
     if (err) {
       u.error = err;
-      addStatus("附件上传失败（" + u.name + "）：" + err);
+      addStatus(tr("附件上传失败（") + u.name + "）：" + err);
       if (u.resolve) u.resolve(); // the caller does not wait for 重试
     } else {
       u.done = true;
@@ -119,7 +120,7 @@ export function createUploads(deps) {
     xhr.onload = async () => {
       if (state.session !== u.session) { drop(u); render(); pump(); return; }
       if (xhr.status === 401 && !retried) {
-        if (await askToken("上传需要口令，填好后再传一次")) { start(u, true); return; }
+        if (await askToken(tr("上传需要口令，填好后再传一次"))) { start(u, true); return; }
       }
       if (xhr.status < 200 || xhr.status >= 300) {
         let msg = "HTTP " + xhr.status;
@@ -127,10 +128,10 @@ export function createUploads(deps) {
         finish(u, msg); return;
       }
       let meta = null;
-      try { meta = JSON.parse(xhr.responseText); } catch (e) { finish(u, "工作台未返回附件信息，请重试上传。"); return; }
+      try { meta = JSON.parse(xhr.responseText); } catch (e) { finish(u, tr("工作台未返回附件信息，请重试上传。")); return; }
       finish(u, accept(meta, state.attachments));
     };
-    xhr.onerror = () => finish(u, "网络错误，可点「重试」");
+    xhr.onerror = () => finish(u, tr("网络错误，可点「重试」"));
     xhr.onabort = () => { u.xhr = null; render(); pump(); };
     xhr.open("POST", "/api/upload");
     xhr.send(fd);
@@ -156,7 +157,7 @@ export function createUploads(deps) {
   /* Queue every acceptable file and resolve when this batch has settled (done, failed or removed). */
   async function upload(fileList) {
     if (capability("attachments") === false) {
-      addStatus("当前工作台未提供附件上传，可以将材料要点粘贴到输入框。");
+      addStatus(tr("当前工作台未提供附件上传，可以将材料要点粘贴到输入框。"));
       return;
     }
     const files = Array.from(fileList || []);
@@ -168,7 +169,7 @@ export function createUploads(deps) {
     for (const file of files) {
       const why = precheck(file, limits, fmtBytes);
       if (why) { refused.push(`${file.name}：${why}`); continue; }
-      if (slots <= 0) { refused.push(`${file.name}：同一会话最多 ${limits.maxFiles} 个附件`); continue; }
+      if (slots <= 0) { refused.push(tr("{0}：同一会话最多 {1} 个附件", file.name, limits.maxFiles)); continue; }
       slots -= 1;
       counter += 1;
       const u = { key: "up" + counter, session, name: file.name, bytes: file.size || 0, loaded: 0, xhr: null, file, error: "", done: false };
@@ -176,7 +177,7 @@ export function createUploads(deps) {
       pending.push(u);
       queued.push(u);
     }
-    if (refused.length) addStatus("未上传：" + refused.join("；"));
+    if (refused.length) addStatus(tr("未上传：") + refused.join("；"));
     pump();
     await Promise.all(queued.map((u) => u.settled || Promise.resolve()));
   }

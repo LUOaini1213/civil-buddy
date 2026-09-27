@@ -15,6 +15,7 @@
  *   appendDocCards(files, bodyEl, opts), setLastDeliverables(files), refreshAuditSoon()
  *   capability(name), fetch, doc, log(), setTimeout / clearTimeout / now()   the environment
  */
+import { tr } from "./i18n.js";
 export function createSessionWatch(deps) {
   const { state, runState, sessionRequest, runPaint, announce, addMsg, addStatus, toast, openSession,
     loadThreads, appendDocCards, setLastDeliverables, refreshAuditSoon, capability, doc, log } = deps;
@@ -32,7 +33,7 @@ export function createSessionWatch(deps) {
     runState.active = null;
     runPaint(false);
     runState.background.add(run.session);
-    announce("任务继续在后台运行，回到该任务可查看结果");
+    announce(tr("任务继续在后台运行，回到该任务可查看结果"));
     loadThreads().catch(() => {});
     bgSchedule();
   }
@@ -58,7 +59,7 @@ export function createSessionWatch(deps) {
       runState.background.delete(sid);
       const row = bgRows.get(sid);
       if (!row) continue; /* 列表里已经没有它了：不猜结果 */
-      toast(`「${row.title || sid}」已在后台完成`, { action: "查看", onAction: () => openSession(row) });
+      toast(tr("「{0}」已在后台完成", row.title || sid), { action: tr("查看"), onAction: () => openSession(row) });
     }
     bgKnownRunning = nowRunning;
     bgSchedule();
@@ -131,7 +132,7 @@ export function createSessionWatch(deps) {
       releaseWatch();
       if (active) {
         /* 超过了本页愿意等的时长，但它确实还在跑：别把它说成「已完成」。 */
-        addStatus("这个任务仍在后台运行，稍后回到该任务查看结果。");
+        addStatus(tr("这个任务仍在后台运行，稍后回到该任务查看结果。"));
         return;
       }
       runState.background.delete(sid);
@@ -156,7 +157,7 @@ export function createSessionWatch(deps) {
     if (!live.text && !live.status) return;
     let bodyEl = options.bodyEl && options.bodyEl.isConnected ? options.bodyEl : null;
     if (!bodyEl && live.text) {
-      bodyEl = addMsg("assistant", "岗位", "");
+      bodyEl = addMsg("assistant", tr("岗位"), "");
       options.bodyEl = bodyEl;
     }
     if (bodyEl && live.text && bodyEl.textContent !== live.text) {
@@ -173,7 +174,7 @@ export function createSessionWatch(deps) {
         if (host) host.appendChild(line);
         options.liveStatusEl = line;
       }
-      line.textContent = "后台进行中 · " + live.status;
+      line.textContent = tr("后台进行中 · ") + live.status;
     }
   }
 
@@ -189,7 +190,7 @@ export function createSessionWatch(deps) {
       const known = state.history.filter((h) => h.role === "assistant").slice(-1)[0];
       if (text && (!known || known.content !== text)) state.history.push({ role: "assistant", content: text });
     } else if (text && !state.history.some((h) => h.role === "assistant" && h.content === text)) {
-      const el = addMsg("assistant", "岗位", text);
+      const el = addMsg("assistant", tr("岗位"), text);
       if (typeof deps.markdown === "function") deps.markdown(el, text);
       state.history.push({ role: "assistant", content: text });
       options.bodyEl = el;
@@ -203,9 +204,9 @@ export function createSessionWatch(deps) {
     }
     const st = d.turn_state && d.turn_state.state;
     /* 怎么结束的就怎么说：被停止（人点的，或无人值守超时由服务端停的）和没跑成，都不是「已完成」。 */
-    const outcome = st === "cancelled" ? "该任务已被停止，已有内容已保留。"
-      : st === "failed" ? "该任务没有跑完，已有内容已保留，可重试。"
-      : "任务已在后台完成，结果已恢复。";
+    const outcome = st === "cancelled" ? tr("该任务已被停止，已有内容已保留。")
+      : st === "failed" ? tr("该任务没有跑完，已有内容已保留，可重试。")
+      : tr("任务已在后台完成，结果已恢复。");
     addStatus((options.reason || "") + outcome);
     refreshAuditSoon();
   }

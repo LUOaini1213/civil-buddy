@@ -1251,3 +1251,11 @@ html.cb-large {
 .body.md th { background: var(--cb-bg-soft, rgba(0,0,0,.04)); }
 .body.md blockquote { border-left: 3px solid var(--cb-line); padding-left: .8em; color: var(--cb-text-muted); }
 .body.md a { color: var(--cb-blue); word-break: break-all; }
+
+/* 中文 | English 切换（i18n.js）：两个按钮成一组，当前语言高亮；按钮文字不随语言变。 */
+.cb-lang { display: inline-flex; gap: 2px; padding: 2px; border-radius: 10px; background: var(--line); }
+.cb-lang .cb-lang-btn { padding: 4px 10px; background: transparent; color: var(--ink); opacity: .75; }
+.cb-lang .cb-lang-btn[aria-pressed="true"] { background: var(--ink); color: var(--cb-panel); opacity: 1; }
+.cb-lang .cb-lang-btn:focus-visible { outline: 2px solid var(--cb-blue); outline-offset: 1px; }
+/* 英文界面里，草稿正文仍是岗位模板的中文：在那条回答下写一句说明，不机翻正文。 */
+.cb-lang-note { margin: 4px 0 0; font-size: 12px; color: var(--cb-text-muted, var(--muted)); }
