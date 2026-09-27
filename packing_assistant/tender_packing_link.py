@@ -1178,7 +1178,8 @@ def report_markdown(record: Dict[str, Any]) -> str:
     if not record["clauses"]:
         lines.append("- none: the tender states no logistics requirement the tool recognises; a person checks it.")
     for c in record["clauses"]:
-        lines.append(f"- {c.get('cite') or 'Clause ' + c['clause']} ({', '.join(c['kinds'])}): {c['text']}")
+        # the tender's words, marked as a quotation: text planted in a tender reads as quoted input, never as ours
+        lines.append(f"- {c.get('cite') or 'Clause ' + c['clause']} ({', '.join(c['kinds'])}), quoted from the tender: “{c['text']}”")
     lines += ["", "## Response matrix (logistics)", "", "| Stmt | Clause | Check | Status | Owner | Plan figure | Note |",
               "|---|---|---|---|---|---|---|"]
     for s in record["statements"]:
