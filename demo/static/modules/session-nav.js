@@ -14,6 +14,7 @@
  *   hooks   { render, loadThreads, openSession, attachToTurn, bgObserve }   cross-calls through
  *           the page, so a test can stub any of them
  */
+import { tr } from "./i18n.js";
 export const ACTIVE_SESSION_KEY = "cb_active_session_v1";
 export const PROJ_OPEN_KEY = "cb_proj_open_v1";
 
@@ -114,7 +115,7 @@ export function createSessionNav(deps) {
       hooks.render();
     } catch (e) {
       /* 降级：该后端没有项目接口。静默留一行弱文本，不写对话流。 */
-      fallback("本后端不提供项目列表");
+      fallback(tr("本后端不提供项目列表"));
     }
   }
 
@@ -129,7 +130,7 @@ export function createSessionNav(deps) {
     const groups = proj.projects.slice();
     if (proj.inbox) groups.push(proj.inbox); /* 未归类恒在最后 */
     if (!groups.length) {
-      fallback("还没有项目；跑一次任务后自动归入未归类");
+      fallback(tr("还没有项目；跑一次任务后自动归入未归类"));
       return;
     }
     for (const p of groups) {
@@ -146,7 +147,7 @@ export function createSessionNav(deps) {
       const tw = doc.createElement("button");
       tw.type = "button";
       tw.className = "proj-tw"; /* CSS 三角，不用字符（符号纪律） */
-      tw.setAttribute("aria-label", (open ? "折叠 " : "展开 ") + p.name);
+      tw.setAttribute("aria-label", (open ? tr("折叠 ") : tr("展开 ")) + (p.builtin ? tr(p.name) : p.name));
       tw.addEventListener("click", () => {
         if (proj.open.has(p.id)) proj.open.delete(p.id);
         else proj.open.add(p.id);
@@ -156,8 +157,8 @@ export function createSessionNav(deps) {
       const name = doc.createElement("button");
       name.type = "button";
       name.className = "proj-name";
-      name.textContent = p.name;
-      name.title = p.name;
+      name.textContent = p.builtin ? tr(p.name) : p.name; /* the built-in 未归类 has an English name; yours are shown as typed */
+      name.title = name.textContent;
       name.addEventListener("click", () => {
         proj.cur = p.id;
         proj.open.add(p.id);
@@ -174,8 +175,8 @@ export function createSessionNav(deps) {
         const more = doc.createElement("button");
         more.type = "button";
         more.className = "proj-more";
-        more.textContent = "改名";
-        more.setAttribute("aria-label", "重命名项目 " + p.name);
+        more.textContent = tr("改名");
+        more.setAttribute("aria-label", tr("重命名项目 ") + p.name);
         more.addEventListener("click", () => renameProject(p));
         row.appendChild(more);
       }
@@ -196,9 +197,9 @@ export function createSessionNav(deps) {
         t2.className = "t-time";
         const running = s.running === true || runState.background.has(s.session_id);
         const stale = !running && s.turn_state === "stale";
-        t2.textContent = running ? "运行中" : stale ? "已中断" : relTime(s.updated_at);
+        t2.textContent = running ? tr("运行中") : stale ? tr("已中断") : relTime(s.updated_at);
         if (running) t2.classList.add("t-running");
-        if (stale) { t2.classList.add("t-stale"); t2.title = "上一轮在服务重启时被中断"; }
+        if (stale) { t2.classList.add("t-stale"); t2.title = tr("上一轮在服务重启时被中断"); }
         b.append(t1, t2);
         b.addEventListener("click", () => hooks.openSession(s));
         kidBox.appendChild(b);
@@ -206,7 +207,7 @@ export function createSessionNav(deps) {
       if (!kids.length) {
         const none = doc.createElement("div");
         none.className = "sess-none";
-        none.textContent = "这个项目还没有会话";
+        none.textContent = tr("这个项目还没有会话");
         kidBox.appendChild(none);
       }
       wrap.appendChild(kidBox);
@@ -240,7 +241,7 @@ export function createSessionNav(deps) {
         if (!r.ok) throw new Error("HTTP " + r.status);
         await hooks.loadThreads();
       } catch (e) {
-        addStatus("改名失败：" + ((e && e.message) || e));
+        addStatus(tr("改名失败：") + ((e && e.message) || e));
       }
     };
     inp.addEventListener("keydown", (ev) => {
@@ -262,7 +263,7 @@ export function createSessionNav(deps) {
       if (!response.ok) throw new Error(await apiError(response));
       const d = await response.json();
       if (request !== navRequest.current()) return;
-      if (!d || !d.session_id || !Array.isArray(d.transcript)) throw new Error("会话数据格式不完整");
+      if (!d || !d.session_id || !Array.isArray(d.transcript)) throw new Error(tr("会话数据格式不完整"));
       state.session = d.session_id;
       rememberSession(d.session_id);
       reset.clearServerHitl();
@@ -293,17 +294,17 @@ export function createSessionNav(deps) {
       if (state.history.length) {
         reset.hideWelcome();
         for (const t of state.history) {
-          const body = addMsg(t.role === "user" ? "user" : "assistant", t.role === "user" ? "你" : "岗位", t.content);
+          const body = addMsg(t.role === "user" ? "user" : "assistant", t.role === "user" ? tr("你") : tr("岗位"), t.content);
           if (t.role !== "user" && typeof paint.markdown === "function") paint.markdown(body, t.content);
           if (t.role === "assistant") restoredBody = body;
           else restoredMessage = t.content;
         }
       } else {
         /* 诚实：没有留存正文就明说，不假装接上了 */
-        addStatus("这条会话没有留存对话正文；上文从此刻重新开始。");
+        addStatus(tr("这条会话没有留存对话正文；上文从此刻重新开始。"));
       }
       if (d.collaboration || d.route && (d.route.reason || d.route.ambiguous)) {
-        if (!restoredBody) restoredBody = addMsg("assistant", "本会话任务安排", "已恢复留存的任务状态。");
+        if (!restoredBody) restoredBody = addMsg("assistant", tr("本会话任务安排"), tr("已恢复留存的任务状态。"));
         if (d.route && (d.route.reason || d.route.ambiguous)) paint.routePaint(d.route, restoredBody, restoredMessage);
         if (d.collaboration) paint.collaborationPaint(d.collaboration, restoredBody);
       }
@@ -312,16 +313,16 @@ export function createSessionNav(deps) {
         paint.setLastDeliverables(files);
         reset.hideWelcome();
         const runs = Array.isArray(d.deliverable_runs) ? d.deliverable_runs : [];
-        const intro = runs.length > 1 ? `已恢复 ${runs.length} 轮留存的草稿（最近的在前），可继续预览或下载。` : "已恢复留存的草稿，可继续预览或下载。";
-        paint.appendDocCards(files, addMsg("assistant", "本会话交付物", intro), { runs });
+        const intro = runs.length > 1 ? tr("已恢复 {0} 轮留存的草稿（最近的在前），可继续预览或下载。", runs.length) : tr("已恢复留存的草稿，可继续预览或下载。");
+        paint.appendDocCards(files, addMsg("assistant", tr("本会话交付物"), intro), { runs });
       }
-      if (d.truncated) addStatus("列表只展示近期对话节选。可在「任务记忆与本地搜索」找回已保留的历史原文。");
+      if (d.truncated) addStatus(tr("列表只展示近期对话节选。可在「任务记忆与本地搜索」找回已保留的历史原文。"));
       if (d.turn_state && d.turn_state.active) {
-        addStatus("这个任务仍在后台运行，完成后会自动显示结果。");
+        addStatus(tr("这个任务仍在后台运行，完成后会自动显示结果。"));
         hooks.attachToTurn(d.session_id, "");
       } else if (d.turn_state && d.turn_state.state === "stale") {
         /* 服务重启时这一轮还在跑：它不会再有结果了，别让人以为还在等 */
-        addStatus("上一轮在服务重启时被中断，已有内容已保留；需要的话重新发送一次。");
+        addStatus(tr("上一轮在服务重启时被中断，已有内容已保留；需要的话重新发送一次。"));
       }
       if (d.context && (d.context.note || Number(d.context.limit) > 0)) reset.paintContext(d.context);
       else reset.paintContext(reset.estimateLocalContext());
@@ -329,7 +330,7 @@ export function createSessionNav(deps) {
       hooks.render();
     } catch (e) {
       if (request !== navRequest.current()) return;
-      addStatus("载入会话失败：" + ((e && e.message) || e));
+      addStatus(tr("载入会话失败：") + ((e && e.message) || e));
     }
   }
 

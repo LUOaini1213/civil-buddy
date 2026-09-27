@@ -163,6 +163,8 @@ async function loadPage() {
       win.scrollTo = () => {};
       win.prompt = () => null;
       win.HTMLElement.prototype.scrollIntoView = function scrollIntoView() {};
+      // jsdom's browser language is en-US; the tests below read the Chinese page, so they pin it (the switch has its own test)
+      win.localStorage.setItem("cb_lang_v1", "zh");
     },
   });
   window = dom.window;
@@ -281,4 +283,42 @@ test("stale: a turn left running by a dead process is shown as 已中断 when th
   assert.equal(detail.turn_state.state, "stale");
   await cb().cbProjOpenSession({ session_id: sid });
   await until(() => logText().includes("服务重启时被中断"), { what: "stale notice (log tail: " + logText().slice(-200).replace(/\s+/g, " ") + ")" });
+});
+
+test("中文 | English: the switch repaints the header and the post list, the page tells the server, and back", async () => {
+  const en = document.querySelector('[data-cb-lang="en"]');
+  const zh = document.querySelector('[data-cb-lang="zh"]');
+  const small = document.querySelector(".brand small");
+  const picker = () => [...$("cbCapabilityPost").options].map((o) => o.textContent);
+  await until(() => picker().length > 60, { what: "the post list from /api/catalog" });
+  assert.equal(zh.getAttribute("aria-pressed"), "true");
+  assert.equal(small.textContent, "内部讨论草稿 · 不是签认件");
+  assert.ok(picker().includes("项目与工人 / 项目日报"), picker().slice(0, 4).join(" | "));
+
+  en.click();
+  assert.equal(document.documentElement.getAttribute("lang"), "en");
+  assert.equal(en.getAttribute("aria-pressed"), "true");
+  assert.equal(zh.getAttribute("aria-pressed"), "false");
+  assert.equal(window.localStorage.getItem("cb_lang_v1"), "en");
+  assert.match(document.cookie, /(^|; )cb_lang=en/);
+  assert.equal(small.textContent, "Internal discussion draft · not a sign-off document");
+  assert.equal($("btnNewThread").textContent, "+ New task");
+  assert.equal($("send").getAttribute("aria-label"), "Send");
+  assert.match($("keyBadge").textContent, /^(Model configured|Offline workbench available|No model configured)$/);
+  assert.ok(picker().includes("Project & workers / Daily site report"), picker().slice(0, 4).join(" | "));
+  // the sign-off label names the English sentence; the Chinese one is still accepted and still shown
+  const signoff = document.querySelector("label.confirm span").textContent;
+  assert.ok(signoff.includes("I understand; a licensed person will sign this off.") && signoff.includes("我明白，将由持证人员签认"), signoff);
+  // the page's own calls carry the language, so the server answers in English
+  const res = await window.fetch("/api/experts/no-such-post/capability");
+  assert.equal(res.status, 404);
+  assert.equal((await res.json()).detail, "No capability contract for this post");
+
+  zh.click();
+  assert.equal(document.documentElement.getAttribute("lang"), "zh-CN");
+  assert.equal(small.textContent, "内部讨论草稿 · 不是签认件");
+  assert.equal($("btnNewThread").textContent, "+ 新建任务");
+  assert.ok(picker().includes("项目与工人 / 项目日报"), picker().slice(0, 4).join(" | "));
+  const back = await window.fetch("/api/experts/no-such-post/capability");
+  assert.equal((await back.json()).detail, "岗位能力契约不存在");
 });

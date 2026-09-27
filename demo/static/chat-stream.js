@@ -1,16 +1,27 @@
 /* Shared SSE transport. No DOM or vendor dependencies. */
 (function (root) {
   "use strict";
+  /* 中文 | English (/static/i18n.js); without it, the Chinese message as written, {0} {1} … filled. */
+  function tr(message) {
+    var args = Array.prototype.slice.call(arguments, 1);
+    var i18n = (typeof window !== "undefined" ? window : globalThis).CB_I18N;
+    if (i18n && typeof i18n.t === "function") return i18n.t.apply(i18n, arguments);
+    return String(message).replace(/\{(\d+)\}/g, function (whole, i) {
+      i = Number(i);
+      return i < args.length ? (args[i] == null ? "" : String(args[i])) : whole;
+    });
+  }
+
 
   function abortError() {
-    const error = new Error("已停止接收回答");
+    const error = new Error(tr("已停止接收回答"));
     error.name = "AbortError";
     return error;
   }
 
   async function read(body, onEvent, options) {
     if (!body || typeof body.getReader !== "function") {
-      throw new Error("服务器未返回可读取的回答流，请重试。");
+      throw new Error(tr("服务器未返回可读取的回答流，请重试。"));
     }
     const signal = options && options.signal;
     const reader = body.getReader();

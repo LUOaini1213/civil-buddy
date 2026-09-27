@@ -15,6 +15,7 @@ import time
 from uuid import uuid4
 
 import context
+from ui_lang import tr
 from packing_assistant.sandbox import assert_open, assert_write, guarded_write_text
 import turn_control
 
@@ -124,16 +125,16 @@ def events(root, turn, control, *, key_available):
     """Update only model requests; deterministic material and rule facts stay intact."""
     report = {"status": "disabled", "model_calls": 0, "input_tokens": 0,
               "output_reserve": 0, "output_tokens": 0, "covered_messages": 0,
-              "note": "语义摘要未启用；使用规则记忆与检索。"}
+              "note": tr("语义摘要未启用；使用规则记忆与检索。")}
     if not context.semantic_summary_enabled():
         yield _report(turn, report)
         return
     if turn["intent"] != "chat" or turn["route"].get("ambiguous") or turn["route"].get("workflow"):
-        report.update(status="not_applicable", note="本轮无需模型问答；语义摘要不会参与业务字段或签认。")
+        report.update(status="not_applicable", note=tr("本轮无需模型问答；语义摘要不会参与业务字段或签认。"))
         yield _report(turn, report)
         return
     if not key_available:
-        report.update(status="unconfigured", note="未配置模型，沿用本地规则记忆与检索。")
+        report.update(status="unconfigured", note=tr("未配置模型，沿用本地规则记忆与检索。"))
         yield _report(turn, report)
         return
     prepared = turn["prepared_context"]
@@ -145,7 +146,7 @@ def events(root, turn, control, *, key_available):
     changed_fields = (any(item.get("supersedes") for item in current)
                       or any(item.get("key") in current_keys and item.get("status") == "superseded" for item in items))
     if changed_fields or re.search(r"更正|纠正|修正|更新|改为|改成|调整为|作废|撤销|取消此前|不是.{0,30}而是", turn["message"]):
-        report.update(status="current_override", note="本轮更正优先，暂不加载旧语义摘要；使用当前原文与规则记忆。")
+        report.update(status="current_override", note=tr("本轮更正优先，暂不加载旧语义摘要；使用当前原文与规则记忆。"))
         yield _report(turn, report)
         return
     import semantic_memory
@@ -157,7 +158,7 @@ def events(root, turn, control, *, key_available):
     try:
         control.check()
         if semantic_memory.current_revision(history, turn["message"]):
-            report.update(status="current_override", note="本轮更正优先，暂不加载旧语义摘要；使用当前原文与规则记忆。")
+            report.update(status="current_override", note=tr("本轮更正优先，暂不加载旧语义摘要；使用当前原文与规则记忆。"))
             yield _report(turn, report)
             return
         cache = semantic_memory.load(root, sid, history=history, keep_recent=4)
@@ -170,9 +171,9 @@ def events(root, turn, control, *, key_available):
             messages = semantic_memory.messages(plan)
             digest = hashlib.sha256(json.dumps(messages, ensure_ascii=False, sort_keys=True).encode()).hexdigest()
             if _cooldown(root, sid, digest):
-                report.update(status="cooldown", note="相同资料的摘要暂缓重试；使用已有摘要、规则记忆与检索。")
+                report.update(status="cooldown", note=tr("相同资料的摘要暂缓重试；使用已有摘要、规则记忆与检索。"))
             else:
-                report.update(status="generating", note="正在整理较早对话的语义摘要，完整原文仍保留。",
+                report.update(status="generating", note=tr("正在整理较早对话的语义摘要，完整原文仍保留。"),
                     input_tokens=context.messages_tokens(messages), output_reserve=min(1024, pol["reserve"]))
                 if report["input_tokens"] > min(8192, pol["usable"] // 3):
                     raise ValueError("summary request exceeds budget")
@@ -185,18 +186,18 @@ def events(root, turn, control, *, key_available):
                 validated = semantic_memory.accept(plan, answer)
                 control.check()
                 cache = semantic_memory.persist(root, sid, validated)
-                report.update(status="generated", note="已生成部分历史的语义摘要；有原文依据，内容仍待核验。")
+                report.update(status="generated", note=tr("已生成部分历史的语义摘要；有原文依据，内容仍待核验。"))
         else:
             report.update(status="cached" if cache else "not_needed",
-                note="复用本任务已核对来源的语义摘要，内容仍待核验。" if cache else "当前无需新增语义摘要；原文和规则记忆保留。")
+                note=tr("复用本任务已核对来源的语义摘要，内容仍待核验。") if cache else tr("当前无需新增语义摘要；原文和规则记忆保留。"))
     except turn_control.TurnCancelled:
-        report.update(status="cancelled", note="本轮摘要已停止，迟到回复不会写入任务记忆。")
+        report.update(status="cancelled", note=tr("本轮摘要已停止，迟到回复不会写入任务记忆。"))
         _report(turn, report)
         raise
     except Exception as exc:
         control.check()
         report.update(status="fallback", error_code="timeout" if isinstance(exc, TimeoutError) else "summary_unavailable",
-                      note="语义摘要未生成或未通过校验，本轮沿用规则记忆与检索。")
+                      note=tr("语义摘要未生成或未通过校验，本轮沿用规则记忆与检索。"))
         if digest and report["model_calls"]:
             try:
                 _failed_attempt(root, sid, digest)
@@ -231,15 +232,15 @@ def events(root, turn, control, *, key_available):
                 report["included"] = any("semantic-memory" in r["context"]["sources_used"] for r in refreshed.values())
                 report["omitted_citations"] = omitted_citations
                 if omitted_citations:
-                    report["note"] += f" 原文链接展示最近 12 处，其余 {omitted_citations} 处位置保留在摘要中。"
+                    report["note"] += tr(" 原文链接展示最近 12 处，其余 {n} 处位置保留在摘要中。", n=omitted_citations)
                 if not report["included"]:
-                    report["note"] += " 摘要因本轮输入预算未加入，原文可检索。"
+                    report["note"] += tr(" 摘要因本轮输入预算未加入，原文可检索。")
             else:
-                report.update(included=False, note="摘要暂无可用条目或无法在预算内完整展示，本轮使用规则记忆与检索。")
+                report.update(included=False, note=tr("摘要暂无可用条目或无法在预算内完整展示，本轮使用规则记忆与检索。"))
         except turn_control.TurnCancelled:
-            report.update(status="cancelled", note="本轮已停止，摘要未加入新的问答请求。")
+            report.update(status="cancelled", note=tr("本轮已停止，摘要未加入新的问答请求。"))
             _report(turn, report)
             raise
         except Exception:
-            report.update(included=False, note=report["note"] + " 摘要未加入本轮问答，继续使用规则记忆与检索。")
+            report.update(included=False, note=report["note"] + tr(" 摘要未加入本轮问答，继续使用规则记忆与检索。"))
     yield _report(turn, report)

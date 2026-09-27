@@ -31,6 +31,9 @@ CHECKS = (
     Check("chat-stream", ("scripts/test_chat_stream.cjs",), "node"),
     Check("ui-modules", ("scripts/test_modules.cjs",), "node"),
     Check("ui-dom", ("scripts/e2e/ui_dom.cjs",), "node"),
+    # 中文 | English: the page side in jsdom, and the catalogue + server answers + "the switch relaxes nothing"
+    Check("workbench-i18n-ui", ("scripts/test_workbench_i18n.cjs",), "node"),
+    Check("workbench-i18n", ("scripts/test_workbench_i18n.py",), timeout=600),
     Check("cad-geometry", ("scripts/test_cad_geometry.py",)),
     Check("cad-selection", ("scripts/test_cad_selection.py",)),
     Check("cad-imports", ("scripts/test_cad_imports.py",)),

@@ -14,9 +14,10 @@
  *   hitl             { confirmed(), typed(), clear(), enable(data), pending(data) }
  *   turnUi           { tlCreate, routePaint, collaborationPaint, obStep, paintContext, estimateLocalContext,
  *                      renderCites, appendDocCards, fixMount, classifyMissing, refreshAuditSoon, skillWho,
- *                      namesOrPlain, setLastDeliverables }
+ *                      namesOrPlain, setLastDeliverables, markdown?, langNote? }
  *   projectId(), loadThreads(), apiError(res), capability(name), stream.read, fetch, AbortController
  */
+import { tr } from "./i18n.js";
 export function createTurnStream(deps) {
   const { state, run: runs, ui, hitl, turnUi } = deps; // `run` is a turn object inside the functions below
 
@@ -66,14 +67,14 @@ export function createTurnStream(deps) {
            从最后看到的编号往后续，跟到 done。没有这个能力的后端仍走轮询恢复。 */
         if (deps.capability("event_log") === true) await resumeTurn(v);
         if (!v.complete) {
-          const dropped = new Error("回答连接已中断，正在从服务端恢复结果…");
+          const dropped = new Error(tr("回答连接已中断，正在从服务端恢复结果…"));
           dropped.name = "StreamDroppedError";
           throw dropped;
         }
       }
       deps.loadThreads().catch(() => {});
     } catch (err) {
-      if (runs.active() === run && v.tl) v.tl.error(err.name === "AbortError" ? "已停止接收回答" : String(err.message || err));
+      if (runs.active() === run && v.tl) v.tl.error(err.name === "AbortError" ? tr("已停止接收回答") : String(err.message || err));
       throw err;
     }
   }
@@ -113,9 +114,9 @@ export function createTurnStream(deps) {
       if (!["context", "status", "token", "error", "done", "collaboration"].includes(eventName)) return;
       let data;
       try { data = JSON.parse(dataLine); }
-      catch (_) { throw turnError("服务器返回了无法解析的回答事件，请重试。"); }
+      catch (_) { throw turnError(tr("服务器返回了无法解析的回答事件，请重试。")); }
       if (!data || typeof data !== "object" || Array.isArray(data)) {
-        throw turnError("服务器返回的回答事件格式不完整，请重试。");
+        throw turnError(tr("服务器返回的回答事件格式不完整，请重试。"));
       }
       if (eventName === "context") {
         turnUi.paintContext(data);
@@ -168,14 +169,15 @@ export function createTurnStream(deps) {
         v.complete = true;
         if (v.tl) {
           if (hitl.pending(data)) v.tl.finish(data);
-          else if (data.ok === false) v.tl.error(data.text || "工具未完成本轮任务");
+          else if (data.ok === false) v.tl.error(data.text || tr("工具未完成本轮任务"));
           else v.tl.finish(data);
         }
         if (data.ok !== false && !hitl.pending(data)) turnUi.obStep(2);
         /* ux(round11)：流式收口才播报一行（只抄事件字段，不刷屏，附录 J） */
-        ui.announce(data.cancelled ? "任务已停止，已有结果已保留。" : hitl.pending(data) ? "等待签认：请在审批卡键入完整签认句后确认。" : data.ok === false ? "本轮未完成：请查看时间线和工具结果。" : "回答完毕" + (Array.isArray(data.deliverables) && data.deliverables.length ? " · 文书 " + data.deliverables.length + " 份" : ""));
+        ui.announce(data.cancelled ? tr("任务已停止，已有结果已保留。") : hitl.pending(data) ? tr("等待签认：请在审批卡键入完整签认句后确认。") : data.ok === false ? tr("本轮未完成：请查看时间线和工具结果。") : tr("回答完毕") + (Array.isArray(data.deliverables) && data.deliverables.length ? tr(" · 文书 ") + data.deliverables.length + tr(" 份") : ""));
         v.acc = data.text || v.acc;
         if (typeof turnUi.markdown === "function") turnUi.markdown(bodyEl, v.acc); else bodyEl.textContent = v.acc;
+        if (typeof turnUi.langNote === "function") turnUi.langNote(bodyEl, v.acc, data);
         const whoEl = bodyEl.parentElement && bodyEl.parentElement.querySelector(".who");
         if (whoEl) whoEl.textContent = turnUi.skillWho(data.skill || data.expert || "", data.skill_source || "");
         if (v.acc && !v.recorded) {
@@ -212,7 +214,7 @@ export function createTurnStream(deps) {
         if (e && e.name === "AbortError") throw e;
       }
       if (res && res.ok) {
-        if (announced) { ui.announce("已重新连上，继续接收回答"); announced = false; }
+        if (announced) { ui.announce(tr("已重新连上，继续接收回答")); announced = false; }
         try {
           await deps.stream.read(res.body, turnHandler(v), { signal: run.controller.signal });
         } catch (e) {
@@ -228,7 +230,7 @@ export function createTurnStream(deps) {
       } else if (res && (res.status === 404 || res.status === 400)) {
         return; // 没有事件记录：交给轮询恢复
       }
-      if (!announced) { ui.announce("连接中断，正在重连…"); announced = true; }
+      if (!announced) { ui.announce(tr("连接中断，正在重连…")); announced = true; }
       await new Promise((resolve) => setTimeout(resolve, wait));
       wait = Math.min(wait * 2, 15000);
     }
@@ -253,14 +255,14 @@ export function createTurnStream(deps) {
         runs.watch(sid, { bodyEl: v.bodyEl, reason: reason || "" });
         return;
       }
-      if (runs.active() === run) { runs.background.delete(sid); ui.addStatus((reason || "") + "任务已在后台完成，结果已恢复。"); deps.loadThreads().catch(() => {}); }
+      if (runs.active() === run) { runs.background.delete(sid); ui.addStatus((reason || "") + tr("任务已在后台完成，结果已恢复。")); deps.loadThreads().catch(() => {}); }
     } catch (err) {
       if (runs.active() !== run) return;
       const stopped = err && err.name === "AbortError";
       if (v.bodyEl) {
         const note = ui.doc.createElement("p");
         note.className = stopped ? "status-line" : "status-line err";
-        note.textContent = stopped ? "已停止接收回答。已有内容已保留。" : String(err.message || err);
+        note.textContent = stopped ? tr("已停止接收回答。已有内容已保留。") : String(err.message || err);
         v.bodyEl.parentElement.appendChild(note);
       } else if (!stopped) ui.addStatus(String(err.message || err));
     } finally {
