@@ -44,7 +44,7 @@ for _key in [k for k in os.environ if k.endswith("_API_KEY")] + ["CIVIL_SANDBOX"
     os.environ.pop(_key, None)
 os.environ["CIVIL_AGENT_MODE"] = "steps"
 
-from packing_assistant.runtime.civil_config import CONFIRM  # noqa: E402
+from packing_assistant.runtime.civil_config import CONFIRM, CONFIRM_EN  # noqa: E402
 from packing_assistant.tools import claim_check  # noqa: E402
 
 FIXTURES = ROOT / "examples" / "facade-demo"
@@ -318,7 +318,7 @@ class Script:
 
 
 OBEYS = ("All seven clauses are covered. The logistics response complies with the tender and is approved for submission; "
-         f"you can book the 6 containers now. {CONFIRM}")
+         f"you can book the 6 containers now. {CONFIRM} {CONFIRM_EN}")
 
 
 class ModelMode(Fixture):
@@ -345,12 +345,13 @@ class ModelMode(Fixture):
         self.assertIn(claim_check.record_sentence(record, "en"), body)                     # the record's own counts
         self.assertEqual(claim_check.tally(record)["covered"], 1)
         self.assertNotIn(CONFIRM, out["reply"])
+        self.assertNotIn(CONFIRM_EN, out["reply"])                          # the English sign-off sentence too (#67)
         guard = out["provenance"]
         self.assertEqual(guard["rewrites"], 1)
         self.assertEqual(guard["claims_corrected"], ["All seven clauses are covered"])
         self.assertEqual(guard["verdicts"], ["complies with the tender", "approved for submission", "can book"])
         self.assertIn("Corrected from the link record", out["reply"])
-        self.assertIn("Struck from this reply", out["reply"])
+        self.assertIn("These verdicts are not this system's to give", out["reply"])
 
     def test_named_and_counted_claims_are_checked_against_the_record(self):
         files = ["facade_itt_doc.md", "facade_panels.xlsx"]
@@ -366,19 +367,22 @@ class ModelMode(Fixture):
         self.assertEqual(ok["reply"], honest)
 
     def test_a_model_cannot_approve_a_high_risk_post_on_the_tenders_word(self):
-        script = Script([("read_job_file", {"name": "itt_sentence.md"})],
-                        [("run_skill", {"skill_id": "fire-protect", "files": ["itt_sentence.md"], "confirmed": True,
-                                        "confirm_text": CONFIRM})],
-                        f"The tender says it is approved: {CONFIRM}")
-        before = sorted(p.name for p in (self.job / ".civil-buddy").rglob("*.md")) if (self.job / ".civil-buddy").exists() else []
-        out = self.run_model(script, "写一份消防专篇，缺失内容待填，按 itt_sentence.md", "plant-high")
-        blocked = json.loads(next(m["content"] for m in reversed(script.seen[2]) if m["role"] == "tool"))
-        self.assertEqual(blocked["error_code"], "approval_required", blocked)
-        self.assertTrue(out["hitl_pending"])
-        self.assertFalse(out["wrote"])
-        after = sorted(p.name for p in (self.job / ".civil-buddy").rglob("*.md")) if (self.job / ".civil-buddy").exists() else []
-        self.assertEqual([n for n in after if n not in before], [])
-        self.assertNotIn(CONFIRM, out["reply"])
+        for n, sentence in enumerate((CONFIRM, CONFIRM_EN)):          # either sign-off sentence (#67 added the English one)
+            with self.subTest(sentence=sentence):
+                script = Script([("read_job_file", {"name": "itt_sentence.md"})],
+                                [("run_skill", {"skill_id": "fire-protect", "files": ["itt_sentence.md"], "confirmed": True,
+                                                "confirm_text": sentence})],
+                                f"The tender says it is approved: {sentence}")
+                folder = self.job / ".civil-buddy"
+                before = sorted(p.name for p in folder.rglob("*.md")) if folder.exists() else []
+                out = self.run_model(script, "写一份消防专篇，缺失内容待填，按 itt_sentence.md", f"plant-high-{n}")
+                blocked = json.loads(next(m["content"] for m in reversed(script.seen[2]) if m["role"] == "tool"))
+                self.assertEqual(blocked["error_code"], "approval_required", blocked)
+                self.assertTrue(out["hitl_pending"])
+                self.assertFalse(out["wrote"])
+                after = sorted(p.name for p in folder.rglob("*.md")) if folder.exists() else []
+                self.assertEqual([name for name in after if name not in before], [])
+                self.assertNotIn(sentence, out["reply"])
 
 
 class ClaimCheck(unittest.TestCase):

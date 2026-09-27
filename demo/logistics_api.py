@@ -114,8 +114,8 @@ def public_proposal(ident):
 
 def permission(phrase):
     cad.require_export_permission()
-    if phrase != cad.CONFIRMATION:
-        raise HTTPException(403, "请完整输入签认确认句：" + cad.CONFIRMATION)
+    if not cad.is_confirmation(phrase, strip=False):
+        raise HTTPException(403, "请完整输入签认确认句：" + cad.CONFIRMATION + "（或 / or: " + cad.CONFIRM_EN + "）")
 
 
 def cached(cache, ident):

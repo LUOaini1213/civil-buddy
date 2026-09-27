@@ -72,7 +72,7 @@ python scripts/eval_verdicts.py --check                     # CI 下限（npm ru
 
 还没有英文留出集：上面的数都是开发集上的，不能当成对没见过的英文的准确率引用。下一步是不看规则另写一轮英文留出集，报那一轮的数。
 
-划掉时的写法：英文结论换成 `[verdict removed: not the system's to give]`，文末用英文列出被划掉的原话；中文照旧。
+划掉时的写法：英文结论（以及英文请求里的任何结论）换成 `(verdict removed: not this system's call)`，文末用英文列出被划掉的原话；中文照旧。
 
 另有一道和它配套的检查不在这个基准里：`tools/claim_check.py` 在本轮写了联动记录（tender-packing-link.json）时，把回复里记录不支持的覆盖声明（「All seven clauses are covered」而记录只有 1 条 covered、「S4 is covered」而 S4 待人判断）换成记录的原话。它的测试在 `scripts/test_injection_plants.py`（`injection-plants`）。
 

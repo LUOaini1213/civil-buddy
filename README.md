@@ -93,7 +93,7 @@ submit_blocked=true  secret_leak=false  禁止：可以投标 / 可以开工
 **提交署名说明** — 仓内约 40% 的提交署名为 `Packing Assistant`：agent 起草并落盘的改动独立署名，经人审后合入 `main`。这是 HITL 流程的一部分，不是第二位作者。
 
 > 内部讨论草稿，不是法定专项方案、不是签认件。
-> 高风险写盘前确认句：`我明白，将由持证人员签认`。
+> 高风险写盘前确认句：`我明白，将由持证人员签认`（英文等价句 / English: `I understand; a licensed person will sign this off.`，两句都须原样键入，只管本轮）。
 >
 > Security model, what is tested and how to report a problem: [SECURITY.md](SECURITY.md).
 

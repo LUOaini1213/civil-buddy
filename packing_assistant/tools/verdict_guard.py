@@ -233,28 +233,29 @@ def stated_verdicts(text: str, *, negation: bool = True, clause_scope: bool = Tr
     return found
 
 
-def notice(found: List[Dict[str, Any]]) -> str:
+def notice(found: List[Dict[str, Any]], *, english: bool = False) -> str:
     if not found:
         return ""
-    zh = list(dict.fromkeys(str(item["text"]) for item in found if item.get("lang") != "en"))
-    en = list(dict.fromkeys(str(item["text"]) for item in found if item.get("lang") == "en"))
+    zh = list(dict.fromkeys(str(item["text"]) for item in found if item.get("lang") != "en" and not english))
+    en = list(dict.fromkeys(str(item["text"]) for item in found if item.get("lang") == "en" or english))
     lines = []
     if zh:
         lines.append(f"⚠ 以下结论不由本系统下，已从回复里去掉，请由有资格的人判断：{'、'.join(zh)}")
     if en:
-        lines.append("⚠ Struck from this reply: these are verdicts the system does not give; a qualified person decides: "
-                     + "; ".join(f'"{item}"' for item in en))
+        lines.append("⚠ These verdicts are not this system's to give; they were taken out of the reply, and a qualified "
+                     "person decides: " + ", ".join(en))
     return "\n".join(lines)
 
 
-EN_STRUCK = "[verdict removed: not the system's to give]"
+#: an English verdict, or any verdict in an English turn, is replaced by this
+EN_STRUCK = "(verdict removed: not this system's call)"
 
 
-def strike(text: str, found: List[Dict[str, Any]]) -> str:
+def strike(text: str, found: List[Dict[str, Any]], *, english: bool = False) -> str:
     """The text with each stated verdict replaced, right to left so positions stay valid."""
     out = text
     for item in sorted(found, key=lambda entry: entry["start"], reverse=True):
-        mark = EN_STRUCK if item.get("lang") == "en" else "（此处结论不由本系统判定）"
+        mark = EN_STRUCK if english or item.get("lang") == "en" else "（此处结论不由本系统判定）"
         out = out[: item["start"]] + mark + out[item["end"]:]
     return out
 
