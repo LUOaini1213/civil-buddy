@@ -59,11 +59,18 @@ TOOL = {"type": "function", "function": {
 _ERROR_CHARS = 200
 
 
-def _masked(text: str, key: str) -> str:
+def _hide(text: str, key: str) -> str:
+    """The key out of ``text``, also in the forms JSON gives it (a key holding a quote, a backslash or a non-ASCII
+    character is escaped when the record is written, and a plain replace would miss it)."""
     text = text or ""
     if key:
-        text = text.replace(key, "***")
-    return text[:_ERROR_CHARS]
+        for form in dict.fromkeys((key, json.dumps(key)[1:-1], json.dumps(key, ensure_ascii=False)[1:-1])):
+            text = text.replace(form, "***")
+    return text
+
+
+def _masked(text: str, key: str) -> str:
+    return _hide(text, key)[:_ERROR_CHARS]
 
 
 def normalise_base(base: str) -> str:
@@ -210,11 +217,10 @@ def main(argv=None) -> int:
                 summary = result["eval"]["summary"]
                 ok = ok and summary["passed"] == summary["n"]
     text = json.dumps(result, indent=1, ensure_ascii=False, default=str)
-    if key in text:                                   # belt and braces: the key never leaves this process
-        text = text.replace(key, "***")
+    text = _hide(text, key)                           # belt and braces: the key never leaves this process
     if args.eval and isinstance(result.get("eval"), dict) and "rows" in result["eval"]:
         shown = {k: v for k, v in result.items() if k != "eval"}
-        print(json.dumps(shown, indent=1, ensure_ascii=False).replace(key, "***"))
+        print(_hide(json.dumps(shown, indent=1, ensure_ascii=False), key))
         for row in result["eval"]["rows"]:
             eq = "-" if row["statuses_equal"] is None else ("yes" if row["statuses_equal"] else "NO")
             print(f"{row['id']:<17}{'PASS' if row['passed'] else 'FAIL':<6}tool={'yes' if row['right_tool'] else 'NO':<4}"

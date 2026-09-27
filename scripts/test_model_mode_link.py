@@ -317,6 +317,18 @@ class RecordGuard(unittest.TestCase):
         self.assertIn("A person confirms.", out)
         self.assertNotIn("S4 is covered", out)
 
+    def test_covered_and_approval_said_in_other_words(self):
+        # the reviewer's probes of PR #71 (2026-09-27): the same claims without the words "covered" or "approved"
+        for text in ("S5 is satisfied.", "S2 and S3 are met by the plan.", "Every logistics requirement has been met.",
+                     "All statements are satisfied.", "The bid is compliant with all logistics clauses.",
+                     "You can book the containers now.", "The submission can go ahead.",
+                     "This draft is final and may be issued.", "S4、S5 已满足。", "全部陈述均已满足。"):
+            self.assertTrue(self.flagged(text), text)
+        for text in ("S1 is met by the plan.", "S7 is not met yet; a person decides.", "S2 is not yet satisfied.",
+                     "You can submit the corrected panel list again.", "Once a person confirms, you can book the containers.",
+                     "The submission cannot go ahead until a person confirms.", "Clause 4.9 is met only when a person checks it."):
+            self.assertEqual(self.flagged(text), [], text)
+
 
 class EndpointCheck(unittest.TestCase):
     """scripts/check_model_endpoint.py against a stub on 127.0.0.1: the shape it prints, and never the key."""
@@ -378,6 +390,15 @@ class EndpointCheck(unittest.TestCase):
         self.assertEqual(json.loads(text)["no_tools"]["status"], 401)
         self.assertIn("***", text)
         self.assertNotIn("SECRET", text)
+
+    def test_a_key_that_json_escapes_is_still_masked(self):
+        sys.path.insert(0, str(ROOT / "scripts"))
+        import check_model_endpoint
+
+        for key in ('SECRET"quoted', "SECRET\\slash", "SECRET-é-non-ascii"):
+            for ensure_ascii in (True, False):
+                text = json.dumps({"error": "bad key Bearer " + key}, ensure_ascii=ensure_ascii)
+                self.assertNotIn("SECRET", check_model_endpoint._hide(text, key), (key, ensure_ascii))
 
     def test_a_pasted_full_url_is_cut_back_to_its_base(self):
         sys.path.insert(0, str(ROOT / "scripts"))
