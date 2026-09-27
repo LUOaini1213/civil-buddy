@@ -324,6 +324,28 @@ class EnglishSignOffTests(JobFolder):
                 self.assertTrue(asked)                          # asked at approve>, not taken from the line
                 self.assertEqual(self.written(), [])
 
+    def test_an_approval_at_approve_covers_that_turn_only_in_the_terminal(self):
+        """The #61 baseline: one typed sentence, one turn. Until the review of PR #75 an approval at approve> was kept
+        for the whole terminal session (and copied into /new threads), so the second line wrote without asking."""
+        from packing_assistant import civil_tui
+
+        first, second = "编一份临边防护安全交底，部位：东桥3号墩", "编一份临边防护安全交底，部位：西桥5号墩"
+        answers, replies, asked = iter([first, second]), iter([True, False]), []
+
+        def fake_input(_prompt=""):
+            try:
+                return next(answers)
+            except StopIteration:
+                raise EOFError from None
+
+        with patch("builtins.input", fake_input), patch("builtins.print"), \
+                patch.object(civil_tui, "ask_approval", lambda request: asked.append(request) or next(replies)):
+            self.assertEqual(civil_tui.run_tui(), 0)
+        self.assertEqual(len(asked), 2)                         # asked again for the second high-risk line
+        wrote_first = [n for n in self.written() if n.startswith("safety-brief")]
+        self.assertTrue(wrote_first, self.written())
+        self.assertFalse(any("西桥" in p.read_text(encoding="utf-8") for p in self.job.rglob("safety-brief*.md")))
+
     def test_civil_serve_takes_the_english_sentence_typed_and_nothing_near_it(self):
         tid = self.rpc("thread/start", title="serve-en")["result"]["thread_id"]
         for typed in self.ALMOST:

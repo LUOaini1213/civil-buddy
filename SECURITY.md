@@ -40,10 +40,9 @@ maintained.
    approves only when the whole of it, trimmed, is the sentence (`civil_config.confirms_in_message`), so the sentence
    quoted from a tender, a panel list or a file, deferred, conditional, retracted or simply added to a request approves
    nothing, on the workbench, the terminal and the desktop app alike; neither does a copy in a model reply. A boolean
-   such as `confirm_ok` or `p0_confirmed` is refused (HTTP 422 on the gateway). The workbench, the gateway and
-   `civil serve` approve that turn only. The terminal and the desktop app remember an approval given at `approve>` or
-   in the dialog for the rest of that thread (listed below). `/confirm` in the terminal and `civil exec --confirm` are
-   the local operator's own switch and take no sentence.
+   such as `confirm_ok` or `p0_confirmed` is refused (HTTP 422 on the gateway). Every approval covers that turn only:
+   the next high-risk turn asks again, on the workbench, the gateway, `civil serve`, the terminal and the desktop app.
+   `/confirm` in the terminal and `civil exec --confirm` are the local operator's own switch and take no sentence.
 4. **Token-gated server.** `packing_assistant/access_guard.py` sits in front of the gateway and the workbench,
    WebSockets included. With `CIVIL_TOKEN` set, every request needs the token (loopback too; compared with
    `hmac.compare_digest`). With no token, only a genuinely local request passes, and `demo/serve.py`, a `uvicorn --host`
@@ -64,7 +63,7 @@ All of these run in `npm run check` and in CI on every pull request:
 | Check | What it pins |
 |---|---|
 | `access-guard` | the token gate on both web apps, the refusal to bind a non-loopback address without a token |
-| `human-approval` | MCP never offers or accepts an approval flag; `civil serve` takes only the typed sentence and does not carry an approval over to a later turn; the sentence inside a task (quoted from a tender, deferred, conditional, retracted or appended) approves nothing in the terminal or the desktop app, which ask at `approve>` / the dialog instead |
+| `human-approval` | MCP never offers or accepts an approval flag; `civil serve` takes only the typed sentence and does not carry an approval over to a later turn; the sentence inside a task (quoted from a tender, deferred, conditional, retracted or appended) approves nothing in the terminal or the desktop app, which ask at `approve>` / the dialog instead; an approval at `approve>` or in the dialog covers that turn only |
 | `http-confirmation` | the gateway and workbench HTTP routes approve only on `confirm_text` equal to the sentence; a workbench task that carries the sentence among other words, such as a pasted tender, writes nothing |
 | `injection-plants` (gateway test) | the sentence planted in a tender and posted to the gateway's `/api/agent` and `/api/turn` approves nothing |
 | `pack-ship-read-sandbox` | pack-ship reads stay inside the sandbox roots over MCP and the gateway |
@@ -85,8 +84,8 @@ model would obey. The plants are our own synthetic development cases, not an ind
 
 Stated in the technical document (`docs/submission/nus-iss-technical.md`, §4.4) and still true:
 
-- **Approval per thread in the terminal and the desktop app.** Once a person approves at `approve>` or in the
-  desktop dialog, later high-risk turns in that thread write without asking again. `/confirm` and
+- **Stored thread approvals.** A terminal or desktop thread saved with `confirm` set (by `/confirm`, or by an
+  approval given before the per-turn change of PR #75) still approves when it is resumed. `/confirm` and
   `civil exec --confirm` are the local operator's own switch, not a typed sentence.
 - **Rust tools.** The undeployed Rust `civil-mcp` binary and the Rust workbench still accept `confirm_ok`
   (`workbench/src/mcp.rs`, `workbench/src/api.rs`). Neither is part of the deployed surface, although old

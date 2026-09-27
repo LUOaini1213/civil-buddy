@@ -16,9 +16,9 @@ _ROOT = Path(__file__).resolve().parents[2]
 # The licensed sign-off sentence, the one place it is defined. A person types one of the two, exactly and on its own:
 # the workbench's confirmation box (confirm_text), the gateway's and civil serve's confirm_text, the CAD / planning /
 # logistics pages, the terminal's approve> prompt or the desktop dialog. A task that carries the sentence among other
-# words approves nothing (confirms_in_message). The workbench, the gateway and civil serve approve that turn only; the
-# terminal and the desktop app remember one approval for the rest of that thread; /confirm in the terminal and
-# `civil exec --confirm` are the local operator's own switch and take no sentence. Every scrub (history, memory, model
+# words approves nothing (confirms_in_message). Every approval covers that turn only, on every surface (the terminal and
+# the desktop app ask again for the next high-risk turn); /confirm in the terminal and `civil exec --confirm` are the
+# local operator's own switch and take no sentence. Every scrub (history, memory, model
 # output, MCP text) removes both. Not covered: the undeployed Rust workbench and civil-mcp, which still read confirm_ok.
 CONFIRM = "我明白，将由持证人员签认"
 CONFIRM_EN = "I understand; a licensed person will sign this off."
