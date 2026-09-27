@@ -167,6 +167,7 @@ CHECKS = (
     Check("pack-ship-conservation", ("scripts/test_pack_ship_conservation.py",), timeout=300),
     Check("pack-ship-crates-structure", ("scripts/test_pack_ship_crates_structure.py",)),
     Check("table-quantity-cells", ("scripts/test_table_quantity_cells.py",)),
+    Check("panel-list-reading", ("scripts/test_panel_list_reading.py",), timeout=300),
     Check("workbench-needs-human", ("scripts/test_workbench_needs_human.py",)),
     Check("storage-parent", ("scripts/test_storage_ensure_run.py",)),
     Check("offline-eval", ("-c", "from packing_assistant.runtime.eval_live import live_eval; "
