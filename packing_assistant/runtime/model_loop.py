@@ -570,11 +570,27 @@ def _guarded(reply: str, turn: _Turn, messages: List[Dict[str, Any]], complete: 
     An untraced number that survives the rewrite is listed to the user. A verdict that survives
     (可以订舱, 符合招标文件的要求 ...) is struck from the text and listed: a wrong number can be
     checked by the reader, a verdict from the system is the thing the product may not produce.
+
+    When the turn wrote a link record (tender-packing-link.json), a coverage claim the record does not support
+    ("all seven clauses are covered" with one covered row) is replaced by what the record says before anything
+    else, and again after a rewrite (tools/claim_check). The record is the truth; the model is not asked.
     """
-    from packing_assistant.tools import number_provenance, verdict_guard
+    from packing_assistant.tools import claim_check, number_provenance, verdict_guard
     from packing_assistant.runtime.model_client import ModelCancelled
 
     reply, repeats = collapse_repeats(reply)
+    record = claim_check.load_record(turn.files)
+    claims: List[Dict[str, Any]] = []
+
+    def _claims(text: str) -> str:
+        found = claim_check.overclaims(text, record)
+        if not found:
+            return text
+        claims.extend(found)
+        turn.evidence.append(claim_check.record_sentence(record, "en") + " " + claim_check.record_sentence(record, "zh"))
+        return claim_check.correct(text, found, record)
+
+    reply = _claims(reply)
     numbers = number_provenance.untraced(reply, turn.evidence)
     verdicts = verdict_guard.stated_verdicts(reply)
     report: Dict[str, Any] = {"checked": True, "rewrites": 0, "untraced": [], "verdicts": []}
@@ -616,10 +632,14 @@ def _guarded(reply: str, turn: _Turn, messages: List[Dict[str, Any]], complete: 
         if rewritten:
             reply, again = collapse_repeats(rewritten)
             repeats += again
+            reply = _claims(reply)
             report["rewrites"] = 1
             numbers = number_provenance.untraced(reply, turn.evidence)
             verdicts = verdict_guard.stated_verdicts(reply)
     tail = []
+    if claims:
+        report["claims_corrected"] = list(dict.fromkeys(item["text"] for item in claims))
+        tail.append(claim_check.notice(claims, record))
     if verdicts:
         report["verdicts"] = list(dict.fromkeys(item["text"] for item in verdicts))
         reply = verdict_guard.strike(reply, verdicts, english=turn.english)
@@ -628,7 +648,8 @@ def _guarded(reply: str, turn: _Turn, messages: List[Dict[str, Any]], complete: 
         report["untraced"] = list(dict.fromkeys(item["text"] for item in numbers))
         tail.append(number_provenance.notice(numbers, english=turn.english))
     if tail:
-        turn.emit("guard", {"untraced": report["untraced"], "verdicts": report["verdicts"], "action": "notice"})
+        turn.emit("guard", {"untraced": report["untraced"], "verdicts": report["verdicts"],
+                            "claims_corrected": report.get("claims_corrected", []), "action": "notice"})
         reply = reply.rstrip() + "\n\n" + "\n".join(tail)
     if repeats:
         report["repeats_dropped"] = repeats

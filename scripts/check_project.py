@@ -97,6 +97,9 @@ CHECKS = (
     Check("tender-packing-link", ("scripts/test_tender_packing_link.py",), timeout=600),
     # how the link reads clauses: nothing silently dropped, per-package limits apart, cites as written, the DEV set floors
     Check("tender-link-clauses", ("scripts/test_tender_link_clauses.py",), timeout=600),
+    # planted text in SYNTHETIC tender / panel-list files does not change statuses, approve anything or become a
+    # statement (steps mode, gateway, and a scripted fake model that obeys the plant); a live model was not tested
+    Check("injection-plants", ("scripts/test_injection_plants.py",), timeout=600),
     Check("real-tender", ("scripts/test_real_tender.py",), timeout=1200),
     # Offline, model-free, a second or two each - and until 2026-09-20 run by nothing: not by ci.yml,
     # not by this registry, not by the acceptance glob. They pin the parser the three bid posts stand on.
