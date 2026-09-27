@@ -150,6 +150,23 @@ _LINK_CUE = re.compile(
 # A link request put as "how do I ... / why is ... / what does ..." asks about the link; "does X meet Y?", "check
 # whether X meets Y" and "which statements does the plan support?" ask for it to be run.
 _ASKS_ABOUT = re.compile(r"(?i)(?:^|[.?!]\s+)\W*(?:how|why|what|when|where|who)\b|怎么|怎样|如何|为什么|为何|什么|是啥")
+_LINK_ACTION = re.compile(
+    r"(?i)(?:^|[，,:;.!?]\s*)\s*" + _EN_LEAD
+    + r"(?:(?:can|could|would|will)\s+you\s+(?:please\s+)?)?"
+    r"(?:link|match|(?:cross-)?check|verify|answer)\b"
+    r"|^" + _PREFIX + r"(?:核对|对照|比对|匹配|把|用|按招标|招标装柜联动|投标装柜联动|标书装柜联动)")
+_LINK_CHECK_QUESTION = re.compile(
+    r"(?i)^\s*(?:do|does)\b.{0,500}\b(?:comply|meet|satisfy)\b"
+    r"|\bwhich\s+(?:bid\s+)?statements\b.{0,100}\bplan\b.{0,80}\bsupport\b"
+    r"|^装箱单.{0,500}(?:符合|满足).{0,500}吗[？?]?$")
+
+
+def _link_requests_execution(text: str) -> bool:
+    """A named link is a topic, not authorization. Promote only a positive action/check request."""
+    clean = _FILE.sub("〔文件〕", _positive_text(_QUOTED.sub("〔引用〕", text)))
+    if _READ_REQUEST.search(clean) or _ASKS_ABOUT.search(clean):
+        return False
+    return bool(_LINK_ACTION.search(clean) or _LINK_CHECK_QUESTION.search(clean))
 
 
 def _names_tender_and_list(text: str) -> bool:
@@ -300,8 +317,7 @@ def route_task(message: str, expert_ids: list[str] | None = None) -> dict:
     if not explicit and wants_link(text):
         ids = ["bid-parse"]
         result["reason"] = "招标与装柜联动：先读招标的物流条款，再按条款柜型用点名的装箱单真算，逐条写应答并记联动。"
-        if result["intent"] == "chat" and _FILE.search(text) and (
-                not _QUESTION.search(text) or (_names_tender_and_list(text) and not _ASKS_ABOUT.search(_FILE.sub(" ", text)))):
+        if result["intent"] == "chat" and _FILE.search(text) and _link_requests_execution(text):
             # "按招标 X.md 和 Y.xlsx 出物流应答" names its inputs: it asks for the run. So does "check whether Y.xlsx meets
             # the clauses of X.md" or "does Y.xlsx comply with X.md?"; "how do I check Y.xlsx against X.md?" does not.
             result["intent"] = "run"
