@@ -58,7 +58,7 @@ All of these run in `npm run check` and in CI on every pull request:
 | `human-approval` | MCP never offers or accepts an approval flag; `civil serve` takes only the typed sentence; approval does not carry over to a later turn |
 | `http-confirmation` | the gateway and workbench HTTP routes approve only on `confirm_text` equal to the sentence |
 | `pack-ship-read-sandbox` | pack-ship reads stay inside the sandbox roots over MCP and the gateway |
-| `injection-plants` | instructions planted in SYNTHETIC tender (Markdown and Word) and panel-list files do not change statuses, approve anything or become statements, in the steps-mode link, the steps-mode turn and the gateway; a scripted fake model that obeys the plant is corrected and struck by the guards |
+| `injection-plants` | instructions planted in SYNTHETIC tender (Markdown and Word) and panel-list files turn no statement covered and approve nothing (a planted figure sends its row to a person, a planted container code stops the plan: fail-safe, not a pass), in the steps-mode link, the steps-mode turn and the gateway; a scripted fake model that obeys the plant is corrected and struck by the guards; a planted clause that names a transport or packing term becomes one extra row that waits for a person and quotes it, never covered |
 | `verdict-bench` | floors for the verdict guard on its Chinese dev set, its second Chinese held-out set and the English dev set |
 | `model-loop` | the model loop with a scripted model: routing, number and verdict guards, approvals, read limits |
 | `tender-packing-link` | statuses are computed from the plan; lashing, stillages and sequencing are never covered |

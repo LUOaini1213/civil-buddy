@@ -87,6 +87,10 @@ CHECKS = (
     Check("facade-demo", ("scripts/test_facade_demo.py",)),
     # the partner's problem: tender and packing as one run that stays linked (tender_packing_link.py)
     Check("tender-packing-link", ("scripts/test_tender_packing_link.py",), timeout=600),
+    # how the link reads clauses: nothing silently dropped, per-package limits apart, cites as written, the DEV set floors
+    Check("tender-link-clauses", ("scripts/test_tender_link_clauses.py",), timeout=600),
+    # the same reader on the sealed held-out set written blind on 2026-09-26: floors = its first scored run (README there)
+    Check("tender-link-sealed", ("test/benchmarks/tender_link_sealed/score_sealed.py", "--check"), timeout=600),
     # planted text in SYNTHETIC tender / panel-list files does not change statuses, approve anything or become a
     # statement (steps mode, gateway, and a scripted fake model that obeys the plant); a live model was not tested
     Check("injection-plants", ("scripts/test_injection_plants.py",), timeout=600),
