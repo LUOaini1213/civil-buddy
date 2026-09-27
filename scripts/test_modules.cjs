@@ -14,6 +14,9 @@ const { createUploads, precheck, accept, UPLOAD_LIMITS } = require("../demo/stat
 function element(tag) {
   const el = { tagName: tag, children: [], listeners: {}, hidden: false, textContent: "", style: {},
     appendChild(c) { this.children.push(c); c.parentElement = this; return c; },
+    prepend(c) { this.children.unshift(c); c.parentElement = this; },
+    remove() { if (this.parentElement) this.parentElement.children = this.parentElement.children.filter((c) => c !== this); this.parentElement = null; },
+    replaceChildren(...children) { this.children.forEach((c) => { c.parentElement = null; }); this.children = []; children.forEach((c) => this.appendChild(c)); },
     setAttribute(k, v) { this[k] = v; }, addEventListener(n, f) { this.listeners[n] = f; } };
   Object.defineProperty(el, "innerHTML", { set(v) { if (v === "") el.children = []; }, get() { return ""; } });
   el.querySelector = () => null;
@@ -196,6 +199,101 @@ function turnDeps(overrides = {}) {
 }
 const sse = (frames) => new ReadableStream({ start(c) { c.enqueue(new TextEncoder().encode(frames)); c.close(); } });
 const idFrame = (id, ev, data) => `id: ${id}\nevent: ${ev}\ndata: ${JSON.stringify(data)}\n\n`;
+
+/* CAD handoffs cross both navigation and turn transport. Exercise the modules together,
+   including late session responses and the rendered selection's clear action. */
+const { createSessionNav, cadProjectFromUrl } = require("../demo/static/modules/session-nav.js");
+
+function cadNav(fetcher, href = "http://localhost/") {
+  const state = { session: "initial", history: [], summoned: new Set(), attachments: [], attachmentRoles: {}, experts: [],
+    cadProjectId: cadProjectFromUrl(href) };
+  const composer = element("div");
+  const els = { input: element("textarea"), confirmOk: { value: "" }, log: element("div") };
+  composer.appendChild(els.input);
+  const location = { href };
+  const saved = storage();
+  const errors = [];
+  let revision = 0, voiceCancels = 0;
+  const noop = () => {};
+  const nav = createSessionNav({
+    state, runState: { active: null, background: new Set() }, proj: { cur: "", sessions: [] }, storage: saved,
+    request: { current: () => revision, bump: () => ++revision }, fetch: fetcher,
+    doc: { createElement: element }, el: (id) => els[id] || composer.children.find((c) => c.id === id), location,
+    history: { replaceState(_state, _title, url) { location.href = String(url); } }, addStatus: (text) => errors.push(text),
+    addMsg: () => element("div"), apiError: async () => "read failed",
+    reset: { cancelVoice: () => ++voiceCancels, clearServerHitl: noop, detachActiveRun: noop, uploadAbortAll: noop, attachRender: noop, draftRestore: noop,
+      contextReset: noop, renderSummon: noop, toEmpty: noop, hideWelcome: noop, paintContext: noop, estimateLocalContext: () => ({}) },
+    paint: {}, hooks: { render: noop },
+  });
+  return { nav, state, composer, els, location, saved, errors, voiceCancels: () => voiceCancels };
+}
+
+test("CAD navigation: explicit handoff suppresses restoration; clear and new task remove the binding and URL", () => {
+  const id = "a".repeat(32);
+  const n = cadNav(() => assert.fail("local navigation must not fetch"), `http://localhost/?keep=1&cad_project_id=${id}#draft`);
+  n.nav.rememberSession("old-task");
+  assert.equal(n.nav.rememberedSession(), "");
+  n.nav.renderCadProject();
+  const banner = n.composer.children[0];
+  assert.equal(banner.children[0].href, `/cad?project_id=${id}`);
+  banner.children[1].listeners.click();
+  assert.equal(n.state.cadProjectId, "");
+  assert.deepEqual(n.composer.children, [n.els.input]);
+  assert.equal(n.location.href, "http://localhost/?keep=1#draft");
+  n.state.cadProjectId = id;
+  n.location.href = `http://localhost/?cad_project_id=${id}`;
+  n.nav.renderCadProject();
+  n.els.confirmOk.value = "我明白，将由持证人员签认";
+  n.nav.newLocalSession();
+  assert.equal(n.voiceCancels(), 2, "clear CAD selection and new session both invalidate pending voice");
+  assert.equal(n.state.cadProjectId, "");
+  assert.equal(n.els.confirmOk.value, "");
+  assert.equal(n.nav.rememberedSession(), "");
+  assert.equal(n.location.href, "http://localhost/");
+  assert.deepEqual(n.composer.children, [n.els.input]);
+  assert.equal(cadProjectFromUrl("http://localhost/?cad_project_id=../../other"), "");
+});
+
+test("CAD navigation and chat: late loads cannot change the selected project or the next turn payload", async () => {
+  const oldId = "a".repeat(32), currentId = "b".repeat(32);
+  const pending = new Map();
+  const n = cadNav((url) => new Promise((resolve) => pending.set(url.split("/").pop(), resolve)),
+    `http://localhost/?cad_project_id=${oldId}`);
+  const resolve = (sid, cad_project_id) => pending.get(sid)({ ok: true, json: async () => ({ session_id: sid, transcript: [], cad_project_id }) });
+  const oldLoad = n.nav.openSession({ session_id: "old-task" });
+  const currentLoad = n.nav.openSession({ session_id: "current-task" });
+  assert.equal(n.voiceCancels(), 2, "session navigation cancels voice before either load resolves");
+  resolve("current-task", currentId); await currentLoad;
+  resolve("old-task", oldId); await oldLoad;
+  assert.equal(n.state.session, "current-task");
+  assert.equal(n.state.cadProjectId, currentId);
+  assert.equal(n.location.href, "http://localhost/");
+  assert.equal(n.composer.children[0].children[0].href, `/cad?project_id=${currentId}`);
+  const sent = [];
+  const t = turnDeps({ state: n.state, fetch: async (_url, options) => {
+    sent.push(JSON.parse(options.body));
+    return { ok: true, body: sse(idFrame(1, "done", { text: "已检查" })) };
+  } });
+  const send = async () => {
+    const run = { controller: new AbortController(), session: n.state.session };
+    t.setActive(run);
+    await t.turns.streamChat("检查当前图纸", element("div"), run);
+  };
+  await send();
+  assert.equal(sent[0].session_id, "current-task");
+  assert.equal(sent[0].cad_project_id, currentId);
+  assert.equal(sent[0].confirm_ok, false);
+  const lateLoad = n.nav.openSession({ session_id: "late-task" });
+  n.nav.newLocalSession();
+  resolve("late-task", oldId); await lateLoad;
+  await send();
+  assert.notEqual(sent[1].session_id, "late-task");
+  assert.equal(sent[1].cad_project_id, "");
+  const invalidLoad = n.nav.openSession({ session_id: "invalid-task" });
+  resolve("invalid-task", "../other"); await invalidLoad;
+  assert.equal(n.state.cadProjectId, "");
+  assert.deepEqual(n.composer.children, [n.els.input]);
+});
 
 test("turn-stream: the handler paints tokens, records the answer once on done, and skips repeated ids", () => {
   const t = turnDeps();

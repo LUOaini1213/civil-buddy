@@ -51,6 +51,16 @@ CHECKS = (
     Check("engineering-ui", ("scripts/test_engineering_ui.cjs",), "node"),
     Check("engineering-agent", ("scripts/test_engineering_agent.py",)),
     Check("engineering-api", ("scripts/test_engineering_api.py",), timeout=300),
+    Check("ui-modules", ("scripts/test_modules.cjs",), "node"),  # demo/static/modules/*.js on their own
+    Check("agent-ui", ("scripts/test_agent_ui.cjs",), "node"),
+    Check("document-worker", ("scripts/test_document_worker.py",)),
+    Check("source-retrieval", ("scripts/test_source_retrieval.py",)),
+    Check("host-worker", ("scripts/test_host_worker.py",)),
+    Check("unified-acceptance-oracle", ("scripts/test_unified_acceptance.py",)),
+    Check("unified-launcher", ("scripts/test_unified_launcher.py",)),
+    Check("unified-packing", ("scripts/test_unified_packing.py",)),
+    Check("unified-release", ("scripts/test_unified_release.py",)),
+    Check("ui-dom", ("scripts/e2e/ui_dom.cjs",), "node"),  # real page + real backend in jsdom
     Check("engineering-planning", ("scripts/test_engineering_planning.py",)),
     Check("planning-exchange", ("scripts/test_planning_exchange.py",)),
     Check("planning-workbench", ("scripts/test_planning_workbench.py",), timeout=180),
@@ -187,7 +197,7 @@ FULL_CHECKS = (
 def check_environment() -> dict[str, str]:
     """Do not load personal model credentials or use paid model calls in checks."""
     env = dict(os.environ)
-    for key in ("CIVIL_API_KEY", "OPENAI_API_KEY", "LLM_API_KEY", "DEEPSEEK_API_KEY", "ZAI_API_KEY"):
+    for key in ("CIVIL_API_KEY", "OPENAI_API_KEY", "LLM_API_KEY", "DEEPSEEK_API_KEY", "ZAI_API_KEY", "JEV_API_KEY", "TYPESAFE_API_KEY"):
         env.pop(key, None)
     env.update(PYTHONUTF8="1", PYTHONIOENCODING="utf-8", PYTHON_DOTENV_DISABLED="1", PYTHONOPTIMIZE="0",
                CIVIL_JOB_ROOT=str(ROOT / "output" / "check-project" / "jobs"))

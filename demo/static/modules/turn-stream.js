@@ -8,7 +8,7 @@
  *
  * Everything the page must do for a turn is handed in as deps (see createTurnStream), so this
  * file reads nothing global:
- *   state            { session, history, summoned, attachments, attachmentRoles }
+ *   state            { session, history, summoned, attachments, attachmentRoles, cadProjectId }
  *   run              { active(), setActive(r), paint(bool), releaseWatch(), watch(sid, opts), background: Set }  (bound as `runs`)
  *   ui               { log(), addMsg(role, who, text), addStatus(text), announce(text), doc }
  *   hitl             { confirmed(), typed(), clear(), enable(data), pending(data) }

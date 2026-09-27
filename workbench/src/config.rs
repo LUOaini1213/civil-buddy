@@ -95,6 +95,7 @@ fn detect_demo_root() -> PathBuf {
 
 /// cwd `.env` fills gaps; exe-dir and repo `.env` next; `demo/.env` overrides a stale User-level key.
 pub fn load_env() {
+    if env::var("PYTHON_DOTENV_DISABLED").as_deref()==Ok("1") || env::var("CIVIL_DOTENV_DISABLED").as_deref()==Ok("1") { return; }
     let _ = dotenvy::dotenv();
     if let Ok(exe) = env::current_exe() {
         if let Some(dir) = exe.parent() {
@@ -175,7 +176,7 @@ where
     let model = if !model_explicit.is_empty() {
         model_explicit
     } else if base_url.to_ascii_lowercase().contains("deepseek") {
-        "deepseek-v4-flash".into()
+        "deepseek-flash".into()
     } else {
         "gpt-4o-mini".into()
     };
@@ -276,7 +277,7 @@ mod llm_env_tests {
         let c = from_map(&m);
         assert_eq!(c.api_key, "sk-ds");
         assert!(c.base_url.contains("deepseek"), "{}", c.base_url);
-        assert_eq!(c.model, "deepseek-v4-flash");
+        assert_eq!(c.model, "deepseek-flash");
         assert!(llm_uses_thinking(&c.base_url));
     }
 

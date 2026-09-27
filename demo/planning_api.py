@@ -53,7 +53,9 @@ class BundleExportIn(eng.RevisionIn):
 def store():
     from demo.config import REPO_ROOT
     from packing_assistant.engineering.planning_records import PlanningStore
-    return PlanningStore(REPO_ROOT)
+    import os
+    from pathlib import Path
+    return PlanningStore(Path(os.environ.get("CIVIL_DOMAIN_WORKSPACE", str(REPO_ROOT))))
 
 
 def example():

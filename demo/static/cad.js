@@ -325,7 +325,7 @@ export async function startCadApp(doc = document) {
     $('exportProject').disabled = !ready || state.busy || !state.project || state.projectDirty || !confirmed;
     const agentReady = !!state.project && !state.projectDirty && !state.busy;
     $('agentProjectLink').setAttribute('aria-disabled', String(!agentReady));
-    $('agentProjectLink').href = agentReady ? `/?cad_project_id=${encodeURIComponent(state.project.id)}` : '#';
+    $('agentProjectLink').href = agentReady ? `/static/index.html?cad_project_id=${encodeURIComponent(state.project.id)}` : '#';
     $('projectStatus').textContent = state.project ? `${state.project.name} · 修订 ${state.project.revision}${state.projectDirty ? ' · 有未保存更改' : ' · 已保存'}` : hasDoc ? '新项目 · 尚未保存' : projectListError || '尚未保存项目';
     doc.body.setAttribute('aria-busy', String(state.busy));
   }

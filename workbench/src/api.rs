@@ -130,7 +130,7 @@ async fn engine_fallback(State(st): State<Arc<AppState>>, req: axum::extract::Re
 }
 
 async fn index(State(st): State<Arc<AppState>>) -> Response {
-    let path = st.paths.static_dir.join("index.html");
+    let path = st.paths.static_dir.join(if std::env::var("CIVIL_UNIFIED_HOME").as_deref()==Ok("1"){ "agent.html" }else{ "index.html" });
     match tokio::fs::read(&path).await {
         Ok(bytes) => (
             [(axum::http::header::CONTENT_TYPE, "text/html; charset=utf-8")],
