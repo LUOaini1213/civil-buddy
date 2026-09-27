@@ -112,11 +112,13 @@ class ControllerTests(JobCase):
         typed = DesktopController()
         typed.open_job(str(self.job))
         typed.new_thread()
-        self.assertTrue(typed.submit(BRIEF + "。" + CONFIRM)["wrote"])     # typing the sentence in the task counts too
+        # the sentence typed inside the task approves nothing (review of #67): the dialog is still asked
+        self.assertFalse(typed.submit(BRIEF + "。" + CONFIRM, approve=lambda _r: False)["wrote"])
         english = DesktopController()
         english.open_job(str(self.job))
         english.new_thread()
-        self.assertTrue(english.submit(BRIEF + ". " + CONFIRM_EN)["wrote"])   # so does the English one
+        self.assertFalse(english.submit(BRIEF + ". " + CONFIRM_EN, approve=lambda _r: False)["wrote"])
+        self.assertTrue(english.submit(BRIEF + ". " + CONFIRM_EN, approve=lambda _r: True)["wrote"])   # the dialog approves
         lower = DesktopController()
         lower.open_job(str(self.job))
         lower.new_thread()

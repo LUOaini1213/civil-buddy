@@ -13,9 +13,13 @@ from pathlib import Path
 from typing import Any, Dict, Optional
 
 _ROOT = Path(__file__).resolve().parents[2]
-# The licensed sign-off sentence, the one place it is defined. A person types one of the two, exactly, in the turn it
-# approves; every surface (CLI, TUI, desktop, workbench HTTP, gateway, the CAD / planning / logistics pages) accepts
-# either and nothing else, and every scrub (history, memory, model output, MCP text) removes both.
+# The licensed sign-off sentence, the one place it is defined. A person types one of the two, exactly and on its own:
+# the workbench's confirmation box (confirm_text), the gateway's and civil serve's confirm_text, the CAD / planning /
+# logistics pages, the terminal's approve> prompt or the desktop dialog. A task that carries the sentence among other
+# words approves nothing (confirms_in_message). The workbench, the gateway and civil serve approve that turn only; the
+# terminal and the desktop app remember one approval for the rest of that thread; /confirm in the terminal and
+# `civil exec --confirm` are the local operator's own switch and take no sentence. Every scrub (history, memory, model
+# output, MCP text) removes both. Not covered: the undeployed Rust workbench and civil-mcp, which still read confirm_ok.
 CONFIRM = "我明白，将由持证人员签认"
 CONFIRM_EN = "I understand; a licensed person will sign this off."
 CONFIRM_SENTENCES = (CONFIRM, CONFIRM_EN)
@@ -35,35 +39,16 @@ def contains_confirmation(text: Any) -> bool:
     return type(text) is str and any(sentence in text for sentence in CONFIRM_SENTENCES)
 
 
-# A sentence typed inside a task approves only when the person says it: not refused ("No: ...", "不同意：..."), not
-# asked ("... ?", "...吗"), not wondered about ("Did you mean ...", "是否..."), and not quoted inside other words ('the
-# estimator will type "..." later'). The clause before it is the text since the last sentence end or line break.
-_CLAUSE_END = re.compile(r"[。！？!?\n]|\.(?=\s|$)")
-_REFUSED = re.compile(r"(?i)\b(?:no|not|don['’]?t|never|won['’]?t|refuse[sd]?|mean|whether|should|if)\b"
-                      r"|不同意|不要|不用|不必|无需|先别|别写|别生成|并非|不是|是否|如果|假如|要不要")
-_ASKED = re.compile(r"\s*[\"”’」』)）]?\s*(?:吗|么|嘛|[^。！？!?\n.]{0,16}[?？])")
-_OPEN_QUOTE = re.compile(r"[\"“‘'「『]\s*$")
-
-
 def confirms_in_message(text: Any) -> bool:
-    """A person's own typed task (the TUI line, the desktop task, the workbench message) carries one of the two
-    sentences as their own statement for this turn. Anything else approves nothing; the person can still type the
-    sentence alone in the confirmation field, where ``is_confirmation`` decides."""
-    if type(text) is not str:
-        return False
-    for sentence in CONFIRM_SENTENCES:
-        start = text.find(sentence)
-        while start >= 0:
-            end = start + len(sentence)
-            parts = _CLAUSE_END.split(text[:start])
-            clause = parts[-1]
-            if not clause.strip() and len(parts) > 1 and len(parts[-2].strip()) <= 24:
-                clause = parts[-2] + " " + clause          # "No. <sentence>" / "不同意。<sentence>": a short refusal just before
-            quoted = _OPEN_QUOTE.search(clause) and _OPEN_QUOTE.sub("", clause).strip()
-            if not (_REFUSED.search(clause) or _ASKED.match(text[end:]) or quoted):
-                return True
-            start = text.find(sentence, end)
-    return False
+    """The typed task itself (the TUI line, the desktop task, the workbench message) approves only when the whole of
+    it, trimmed, is one of the two sentences. The sentence among other words approves nothing, however it is put:
+    quoted from a tender or a file ('Per the ITT: "..."', '> Form C: ...'), deferred ('the PE will later type ...'),
+    conditional ('Unless the PE objects, ...'), retracted right after ('... Actually wait, don't write it yet.') or
+    simply appended to the request. A rule that tried to tell those apart kept approving new phrasings (review of
+    PR #67: 18 phrasings in both languages, pinned in scripts/test_human_approval.py), so the task is never read for approval: the person types the sentence on
+    its own, in the confirmation box, at the approve> prompt or in the desktop dialog, where ``is_confirmation``
+    decides."""
+    return is_confirmation(text)
 
 
 def count_confirmations(text: str) -> int:
@@ -232,7 +217,8 @@ def hitl_reply(who: str = "", *, english: bool = False) -> str:
     label = (who or "").strip()
     if english:
         return (f"{label or 'This post'} is a high-risk post: nothing was written. A licensed person types the sign-off "
-                f"sentence \"{CONFIRM_EN}\" (or 「{CONFIRM}」) in the turn that writes it.")
+                f"sentence \"{CONFIRM_EN}\" (or 「{CONFIRM}」) on its own, in the confirmation box, and sends the "
+                "request again; typed inside the request it approves nothing.")
     prefix = f"高风险岗 {label} " if label else "高风险岗 "
     return f"{prefix}写盘须确认句「{CONFIRM}」。本轮未写盘。"
 
