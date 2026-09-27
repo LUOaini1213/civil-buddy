@@ -13,7 +13,40 @@ from pathlib import Path
 from typing import Any, Dict, Optional
 
 _ROOT = Path(__file__).resolve().parents[2]
+# The licensed sign-off sentence, the one place it is defined. A person types one of the two, exactly, in the turn it
+# approves; every surface (CLI, TUI, desktop, workbench HTTP, gateway, the CAD / planning / logistics pages) accepts
+# either and nothing else, and every scrub (history, memory, model output, MCP text) removes both.
 CONFIRM = "我明白，将由持证人员签认"
+CONFIRM_EN = "I understand; a licensed person will sign this off."
+CONFIRM_SENTENCES = (CONFIRM, CONFIRM_EN)
+
+
+def is_confirmation(value: Any, *, strip: bool = True) -> bool:
+    """The whole value is one of the two sentences (surrounding blanks allowed unless ``strip`` is False). A flag, a
+    lower-cased or shortened copy, or the sentence quoted inside other words is not."""
+    if type(value) is not str:
+        return False
+    return (value.strip() if strip else value) in CONFIRM_SENTENCES
+
+
+def contains_confirmation(text: Any) -> bool:
+    """A person's own typed line carries one of the two sentences (the TUI / desktop / workbench message way)."""
+    return type(text) is str and any(sentence in text for sentence in CONFIRM_SENTENCES)
+
+
+def count_confirmations(text: str) -> int:
+    return sum((text or "").count(sentence) for sentence in CONFIRM_SENTENCES)
+
+
+def scrub_confirmations(text: str, replacement: str) -> str:
+    """Text with both sentences replaced: a stored, quoted or model-written copy approves nothing."""
+    out = text or ""
+    for sentence in CONFIRM_SENTENCES:
+        out = out.replace(sentence, replacement)
+    return out
+
+
+CONFIRM_PATTERN = "|".join(re.escape(sentence) for sentence in CONFIRM_SENTENCES)
 
 SANDBOX_MODES = ("read-only", "workspace-write")
 APPROVAL_MODES = ("untrusted", "on-request", "never")
@@ -45,6 +78,7 @@ class CivilConfig:
     def to_dict(self) -> Dict[str, Any]:
         d = asdict(self)
         d["confirm_sentence"] = CONFIRM
+        d["confirm_sentence_en"] = CONFIRM_EN
         d["sandbox_modes"] = list(SANDBOX_MODES)
         d["approval_modes"] = list(APPROVAL_MODES)
         d["agent_modes"] = list(AGENT_MODES)
@@ -162,8 +196,11 @@ def high_risk_unconfirmed(*, risk: str, confirmed: bool) -> bool:
     return (risk or "low") == "high" and confirmed is not True
 
 
-def hitl_reply(who: str = "") -> str:
+def hitl_reply(who: str = "", *, english: bool = False) -> str:
     label = (who or "").strip()
+    if english:
+        return (f"{label or 'This post'} is a high-risk post: nothing was written. A licensed person types the sign-off "
+                f"sentence \"{CONFIRM_EN}\" (or 「{CONFIRM}」) in the turn that writes it.")
     prefix = f"高风险岗 {label} " if label else "高风险岗 "
     return f"{prefix}写盘须确认句「{CONFIRM}」。本轮未写盘。"
 
