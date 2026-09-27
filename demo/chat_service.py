@@ -540,7 +540,7 @@ def deliverable_runs(runs: list[dict]) -> list[dict]:
             continue
         expert = get_expert(r.get("expert_id", ""))
         out.append({"run_id": r.get("run_id", ""), "expert_id": r.get("expert_id", ""),
-                    "expert": expert.name if expert else r.get("expert_id", ""),
+                    "expert": post_name(expert) if expert else r.get("expert_id", ""),
                     "mtime": r.get("mtime", ""), "state": r.get("state", "done"),
                     "deliverables": files, **notes})
     return out
@@ -730,10 +730,11 @@ def _stream_turn(root: Path, turn: dict, *, key_available: bool, plain_runner, l
             if result.get("hitl_pending"):
                 if not contains_confirmation(str(result.get("reply") or "")):
                     who = ""
+                    english = english_request(turn.get("message"))
                     if eid:
                         rec = roster_expert(eid)
-                        who = post_name(rec) if rec else eid
-                    extra = hitl_reply(who, english=english_request(turn.get("message")))
+                        who = post_name(rec, force=english) if rec else eid   # one language in the notice
+                    extra = hitl_reply(who, english=english)
                     result["reply"] = (str(result.get("reply") or "").rstrip() + "\n\n" + extra).strip()
                 nodes.append({
                     "kind": "decision",
@@ -819,7 +820,8 @@ def _stream_turn(root: Path, turn: dict, *, key_available: bool, plain_runner, l
                 elif not roster_expert(eid):
                     result["reply"] = tr("{name} 尚未接入本地起草工具。可以先提问或完善该岗位的工具配置。", name=post_name(expert))
                 elif expert.risk == "high" and not turn["confirmed"]:
-                    result.update(reply=hitl_reply(post_name(expert), english=english_request(message)), hitl_pending=True)
+                    english = english_request(message)   # one language in the notice, the post's name included
+                    result.update(reply=hitl_reply(post_name(expert, force=english), english=english), hitl_pending=True)
                     nodes.append({"kind": "decision", "title": tr("等待签认确认"), "detail": tr("本轮未执行写入"),
                                   "operator": tr("本地用户")})
                     yield _event("status", phase="hitl_gate", text=result["reply"], gate="hitl", confirmed=False)
@@ -906,9 +908,9 @@ def _stream_turn(root: Path, turn: dict, *, key_available: bool, plain_runner, l
                      route=turn["route"], collaboration=collaboration_result, context=turn["context"])
     except LLMError as exc:
         _record(root, turn, {"run_id": uuid4().hex, "ok": False, "error_code": "model_error"}, [],
-                [{"kind": "error", "title": tr("模型问答未完成"), "detail": str(exc)}])
+                [{"kind": "error", "title": tr("模型问答未完成"), "detail": localize(str(exc))}])
         failure_recorded = True
-        yield _event("error", text=str(exc), **_error_extras(root, sid, "\n\n".join(texts) or "".join(partial), files, run_ids))
+        yield _event("error", text=localize(str(exc)), **_error_extras(root, sid, "\n\n".join(texts) or "".join(partial), files, run_ids))
     except Exception:
         logger.exception("Workbench turn failed for session %s", sid)
         yield _event("error", text=tr("本轮未完成，请检查模型设置或本地日志后重试。"),

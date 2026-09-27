@@ -246,6 +246,33 @@ EN: Dict[str, str] = {
     "备份包损坏或格式不完整": "The backup is damaged or incomplete",
     "当前为只读模式，不能导入任务": "Read-only mode: tasks cannot be imported",
     "子任务已停止": "The subtask was stopped",
+    # demo/llm.py: what a model call that failed says (the error event and the audit line)
+    "未配置 API Key，请在工作台「模型设置」中配置。": "No API key is configured; set one in \"Model settings\".",
+    "模型流单条事件过大，已停止读取": "One event in the model stream was too large; reading stopped",
+    "模型服务返回流错误，回复未完成，请重试": "The model service returned a stream error; the reply is incomplete, retry",
+    "模型未返回可显示的文本，请检查模型设置后重试": "The model returned no text to show; check the model settings and retry",
+    "模型流数据格式错误，回复未完成，请重试": "The model stream was malformed; the reply is incomplete, retry",
+    "模型服务返回错误响应，回复未完成，请重试": "The model service returned an error; the reply is incomplete, retry",
+    "模型流缺少有效回复数据，请检查接口兼容性": "The model stream had no valid reply data; check the API compatibility",
+    "模型流回复结构无效，请检查接口兼容性": "The model stream reply had an invalid structure; check the API compatibility",
+    "模型流文本格式无效，请检查接口兼容性": "The model stream text was invalid; check the API compatibility",
+    "模型达到回复长度限制，内容未完成，请缩小问题后重试": "The model hit its reply length limit and did not finish; narrow the question and retry",
+    "模型提前停止回复，内容未完成，请检查请求后重试": "The model stopped early and did not finish; check the request and retry",
+    "模型连接已结束但未收到完成标记，回复可能不完整，请重试": "The model connection ended without a finish mark; the reply may be incomplete, retry",
+    "模型返回了无效回复，请检查接口兼容性后重试": "The model returned an invalid reply; check the API compatibility and retry",
+    "模型响应超时，请稍后重试": "The model timed out; retry later",
+    "无法连接模型接口，请检查 Base URL 和网络后重试": "Cannot reach the model API; check the Base URL and the network, then retry",
+    "模型响应超时，回复可能不完整，请重试": "The model timed out; the reply may be incomplete, retry",
+    "模型连接异常，回复可能不完整，请检查网络后重试": "The model connection failed; the reply may be incomplete, check the network and retry",
+    "模型输出预算必须为正整数": "The model output budget must be a positive integer",
+}
+
+_LLM_HINTS = {
+    "认证失败，请检查 API Key 和接口权限": "authentication failed; check the API key and its permissions",
+    "请求受限，请检查模型额度或稍后重试": "rate limited; check the model quota or retry later",
+    "模型服务暂不可用，请稍后重试": "the model service is unavailable; retry later",
+    "接口发生重定向，请检查 Base URL": "the API redirected; check the Base URL",
+    "模型请求失败，请检查 Base URL 和模型名称": "the model request failed; check the Base URL and the model name",
 }
 
 #: (pattern on the Chinese text, English template or function of the match)
@@ -282,6 +309,9 @@ def _build_patterns() -> Tuple[Tuple[re.Pattern, Replacement], ...]:
         (r"\n\n模型预览计算已完成，但项目未保存：(.*)。请重新打开 CAD 项目后再试。",
          r"\n\nThe model preview was computed, but the project was not saved: \1. Reopen the CAD project and retry."),
         (r"任务未完成：(.*)", r"Task not finished: \1"),
+        (r"LLM HTTP (\d+)：(.+)", lambda m: f"LLM HTTP {m.group(1)}: {_LLM_HINTS.get(m.group(2), m.group(2))}"),
+        # a history source's title (demo/local_retrieval.py keeps it Chinese: it is part of the source's fingerprint)
+        (r"(用户|助手) · 第 (\d+) 条消息", lambda m: f"{'User' if m.group(1) == '用户' else 'Assistant'} · message {m.group(2)}"),
         # the one-line summary the runtime writes after a draft (agent_loop / expert_turn); the draft itself stays Chinese
         (r"(.+?) 已出内部讨论草稿（(.+?)）。不可递交。(.*)",
          lambda m: f"{post_name(m.group(1))} produced an internal discussion draft ({m.group(2)}). Not for submission."

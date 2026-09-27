@@ -290,6 +290,42 @@ class Server(unittest.TestCase):
         self.assertIn(CONFIRM, en["text"])              # the Chinese sentence is named as accepted too
         self.assertFalse(zh["wrote"] or en["wrote"])
 
+    def test_sign_off_notice_is_in_one_language(self):
+        """An English request on a Chinese page gets the English notice with the post's English name, not
+        "安全交底 is a high-risk post"; a Chinese request on an English page gets it in English throughout."""
+        mixed = next(d for e, d in self.chat("@safety-brief Draft a work-at-height safety briefing", {"X-Civil-Lang": "zh"})
+                     if e == "done")
+        self.assertTrue(mixed["hitl_pending"])
+        self.assertTrue(mixed["text"].startswith("Safety briefing is a high-risk post"), mixed["text"][:80])
+        en = next(d for e, d in self.chat("@安全交底 写一份高处作业安全交底", {"X-Civil-Lang": "en"}) if e == "done")
+        self.assertTrue(en["text"].startswith("Safety briefing is a high-risk post"), en["text"][:80])
+
+    def test_model_errors_and_source_titles_follow_the_page(self):
+        import ui_lang
+
+        with ui_lang.using_page_language("en"):
+            self.assertEqual(ui_lang.localize("LLM HTTP 401：认证失败，请检查 API Key 和接口权限"),
+                             "LLM HTTP 401: authentication failed; check the API key and its permissions")
+            self.assertEqual(ui_lang.localize("模型响应超时，请稍后重试"), "The model timed out; retry later")
+            self.assertEqual(ui_lang.localize("用户 · 第 3 条消息"), "User · message 3")
+            self.assertEqual(ui_lang.localize("助手 · 第 12 条消息"), "Assistant · message 12")
+        with ui_lang.using_page_language("zh"):
+            self.assertEqual(ui_lang.localize("用户 · 第 3 条消息"), "用户 · 第 3 条消息")
+        # every message demo/llm.py raises has an English entry (or the LLM HTTP pattern)
+        import ast
+
+        tree = ast.parse((ROOT / "demo" / "llm.py").read_text(encoding="utf-8"))
+        raised = [node.args[0].value for node in ast.walk(tree)
+                  if isinstance(node, ast.Call) and getattr(node.func, "id", "") == "LLMError" and node.args
+                  and isinstance(node.args[0], ast.Constant) and isinstance(node.args[0].value, str)]
+        hints = [node.value.value for node in ast.walk(tree) if isinstance(node, ast.Assign)
+                 and getattr(node.targets[0], "id", "") == "hint" and isinstance(node.value, ast.Constant)]
+        self.assertGreater(len(raised), 10)
+        with ui_lang.using_page_language("en"):
+            for text in raised + [f"LLM HTTP 500：{hint}" for hint in hints]:
+                with self.subTest(text=text[:30]):
+                    self.assertIsNone(HAN.search(ui_lang.localize(text)), ui_lang.localize(text))
+
     def test_the_switch_relaxes_nothing(self):
         """Same request, same typed sentence: the same approval, the same route, whatever the page's language."""
         from packing_assistant.runtime.civil_config import CONFIRM, CONFIRM_EN

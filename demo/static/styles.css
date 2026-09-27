@@ -381,6 +381,9 @@ body[data-dock="open"] .layout { grid-template-columns: var(--cb-rail-w) minmax(
 @media screen and (max-width: 430px) { /* --cb-bp-mobile */
   .cb-cmd-desc { display: none; }  /* 手机竖屏：只留图标+名称，说明换 title 提示 */
   .cb-cmd-item { min-height: 44px; }  /* --cb-touch-min 触控目标 */
+  /* / 与 @ 菜单挂到整条输入框上：英文按钮更宽，textarea 只剩约 90px，岗位名被截成「Ten…」 */
+  .composer .composer-shell { position: relative; }
+  .composer .input-wrap { position: static; }
 }
 .composer-note { font-size: var(--cb-fs-xs); color: var(--cb-text-muted); margin: 0 0 6px; }
 #send:disabled { background: var(--cb-gray-200); color: var(--cb-gray-500); cursor: not-allowed; }

@@ -147,7 +147,7 @@ export function createSessionNav(deps) {
       const tw = doc.createElement("button");
       tw.type = "button";
       tw.className = "proj-tw"; /* CSS 三角，不用字符（符号纪律） */
-      tw.setAttribute("aria-label", (open ? tr("折叠 ") : tr("展开 ")) + p.name);
+      tw.setAttribute("aria-label", (open ? tr("折叠 ") : tr("展开 ")) + (p.builtin ? tr(p.name) : p.name));
       tw.addEventListener("click", () => {
         if (proj.open.has(p.id)) proj.open.delete(p.id);
         else proj.open.add(p.id);

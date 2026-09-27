@@ -17,7 +17,13 @@ from packing_assistant.sandbox import assert_open, assert_write, guarded_write_t
 
 
 def citation(sid: str, hit: dict) -> dict:
-    return {"source_id": hit["source_id"], "title": hit["title"],
+    try:  # 中文 | English: "用户 · 第 3 条消息" is shown as "User · message 3" on an English page
+        from ui_lang import localize
+    except ImportError:  # imported as demo.session_context
+        from demo.ui_lang import localize
+
+    title = hit["title"] if hit["kind"] == "attachment" else localize(hit["title"])   # a file keeps its own name
+    return {"source_id": hit["source_id"], "title": title,
             "layer": "upload" if hit["kind"] == "attachment" else "history",
             "snippet": hit["text"], "start": hit["start"], "end": hit["end"],
             "url": "/api/context/source?" + urlencode({"session_id": sid,
