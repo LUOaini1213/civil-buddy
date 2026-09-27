@@ -2,12 +2,23 @@
 title: "civil-buddy: Business Proposal"
 subtitle: "NUS-ISS “Show Me Your Agents” Hackathon 2026"
 author: "Team Mintang · Team Code PJ2U63AF"
-date: "2026-09-26 · product facts as of main at a161251 (2026-09-26)"
+date: "2026-09-27 · submitted release v0.7.0 (commit 0c0e803)"
+abstract-title: "At a glance"
+abstract: |
+  **The problem.** Our partner, {{SME_NAME}}, a Singapore curtain-wall contractor, answers English tenders and ships façade panels to site in containers. Its tender response and its outbound packing "run as two disconnected exercises and need to stay linked": the tender in Word or PDF, the panel list in Excel, the bookings in email, and first drafts take days.
+
+  **What civil-buddy does.** One request reads the tender's logistics clauses, plans the real panel list in the container type the tender names, and writes each packing statement of the English bid tied to its clause and to a plan figure. On synthetic files, offline and with no model key: 5 logistics clauses → 7 statements (1 covered by the plan, 2 partial, 4 for a named person); 6 × 40HQ, the type taken from Clause 4.8; 24 → 24 pieces and 10,800 → 10,800 kg conserved. A revised list (rev B) re-plans to 8 × 40HQ and names the stale statements (S2, S3, S6, S7) and the two earlier Word copies not to send.
+
+  **Next.** An 8–10-week pilot at the partner, proposed from November 2026 once the partner agrees.
+
+  **We ask for** (1) AWS credits and an architecture review for the pilot server; (2) SBF introductions to two or three other façade and cladding subcontractors; (3) guidance on EDGE, BCA's BETC grant and the Built Environment PSG.
 ---
 
 <!-- Note for the team (an HTML comment, so it is not printed). This file is in a public repository. Never write the partner's name, owners, UEN, address, projects, clients or people here, not even as an example. The SME_… and TEAM_CONTACT tokens (in double braces) are filled only when scripts/submission/build_nus_docs.py builds the PDF, from the untracked docs/submission/sme.local.json (copy sme.local.example.json, fill it with confirmed facts only, never commit it). A token with no value prints as a highlighted TEAM TO FILL and is counted. Product facts follow the Technical Document (nus-iss-technical.md) and must not contradict it. Every façade number must match what python scripts/demo_facade.py prints at the commit named in the date line, or what examples/facade-demo/README.md states. Market and policy figures carry numbered references, each opened on or before 26 September 2026. The partner's problem is the one in its business-problem letter to the organisers (24 August 2026): tender response and outbound packing kept linked. Site paperwork is a secondary capability, never the partner's problem. There is still no pilot, letter of intent, price or user count; add one only if it is real and the partner has agreed. Documents for the judges link only the showcase repository, never the development repository. -->
 
 ## 1. Executive summary
+
+**Which version.** All product figures in this document describe release v0.7.0 of github.com/LUOaini1213/civil-buddy-sme (commit 0c0e803, the version submitted for shortlisting); they were measured on commit a161251, whose product code v0.7.0 carries unchanged (only documentation changed after it). Later commits on main continue development (for example a unified-workbench preview, v0.8.0-sme-preview.1) and are not part of the figures here. Pull request numbers and CI run ids refer to the project's development history; the same commits are in the submitted repository, whose own CI run 36237284732 on v0.7.0 passed all 146 checks and its four jobs, `docker-smoke` included.
 
 **The partner's problem.** Our partner is {{SME_NAME}}, a Singapore curtain-wall contractor registered with BCA under {{SME_CRS}}, confirmed by the organisers as our SME-track partner. One of our team members works there and represents it in this entry with its written authorisation (§2.2). The partner supplies and installs façade packages. It describes a typical job as needing two things at once: an English tender response, and the packing and shipping of the panels to site, often in 40HQ containers, in crates and steel frames, under weight and lashing limits. The two live in separate files: the tender in Word or PDF, the packing list in Excel, the bookings in email. So the bid's statements on packing are often not tied to a loading plan, the container count is not tied to the clauses it should satisfy, first drafts take days, and the same scramble repeats on the next job. Qualifications and price remain human work. {{SME_FEEDBACK}}
 
@@ -17,7 +28,7 @@ date: "2026-09-26 · product facts as of main at a161251 (2026-09-26)"
 - it writes 7 statements: 1 covered by the plan (the container type); 2 partial (the container count, and the heaviest container at 6,472.8 kg gross against Clause 4.9's limit of 20,000 kg), because the A-frame stillages that Clause 4.7 asks for are not modelled; and 4 left to a named owner (lashing, handling, crate structure, delivery sequence). Nothing is marked covered that the plan cannot evidence;
 - when a revised panel list arrives (30 panels, 13,920 kg), the same request plans 8 × 40HQ and names what changed: containers 6 → 8, statements S2, S3, S6 and S7 to confirm again, and the two earlier Word copies that must not be sent [5].
 
-Qualifications and price stay `[TO FILL]` for people, as the partner's letter says they must. Nothing is booked or submitted: every link record is marked `submit_blocked`, and a person confirms the loading plan before any booking.
+Qualifications and price are left blank for people (marked `[TO FILL]` in the bid-book), as the partner's letter says they must. Nothing is booked or submitted: every link record is marked `submit_blocked`, and a person confirms the loading plan before any booking.
 
 **The same workbench also does** what the link is built on: a tender check that lists each requirement with its clause, a bid-against-tender check, a packing planner for any list, and drafts of site paperwork, whose high-risk documents (work at height among them) wait for a licensed person's typed sign-off (§4.4). These come with the product; they are not the partner's stated problem.
 
@@ -32,15 +43,17 @@ Qualifications and price stay `[TO FILL]` for people, as the partner's letter sa
 
 **Why now.** The government has formed an Action Team on built-environment productivity, and the Minister for National Development called for the industry to "scale up the adoption of robotics and AI technologies" [9]. BCA's own list of AI use cases for the built environment includes tender and contract management [10]. From 30 September 2026 the EDGE grant offers up to 70% support for SMEs [11], and BCA's BETC grant co-funds technology for built-environment firms, sub-contractors included [12]. In SBF's survey of 526 businesses (83% SMEs), the top challenges of transforming a business were the cost of adopting new technology (47%), getting staff skilled (31%) and uncertain return (30%) [13]. civil-buddy needs no model spend and is used in a browser; its return has not been measured and would be measured in the pilot, not asserted.
 
-**What is not ready yet.** No firm has used civil-buddy on live work, the partner included; the pilot has not started, and there is no customer or price. The linked run is started from the command line and the agent's turns, not yet from the browser workbench. The company server is not yet running; there are no user accounts yet, so a confirmation does not name its person; and the Bedrock path has never been run. The quality of model mode has not been measured. The interface and the sign-off sentence are in Chinese; the logistics statements of the English bid-book are in English, but its compliance chapter still shows Chinese titles for the other rows, and English tenders are reproducibly measured only on synthetic sets.
+**What is not ready yet.** No firm has used civil-buddy on live work, the partner included; the pilot has not started, and there is no customer or price. At v0.7.0 the linked run is started from a command-line or TUI turn in steps mode, where it is tested; the browser workbench is not tested for it, and there is no browser upload for its two files. The company server is not yet running; there are no user accounts yet, so a confirmation does not name its person; and the Bedrock path has never been run. The quality of model mode has not been measured. Client-facing documents (the tender response, the bid-book, the link report) are in English; the partner's staff can give requests in English or Chinese. That is the design; at v0.7.0 some bid-book rows are still in Chinese (the compliance chapter and the open-actions annex, outside logistics), English replies are being completed, and the interface and the sign-off sentence are in Chinese. English tenders are reproducibly measured only on synthetic sets.
 
 **What we ask for.** (1) AWS credits and an architecture review for the partner's pilot server on Lightsail; (2) SBF introductions to two or three other façade and cladding subcontractors, for a second round of pilots once the partner's pilot has run; (3) guidance on the EDGE route, which opens on 30 September 2026, on BCA's BETC grant, and on whether BCA's Built Environment PSG continues after Enterprise Singapore's PSG ends on 29 September.
 
-| Judging criterion | Where this proposal answers it |
+| SBF special award | Where this proposal answers it |
 |---|---|
 | SME readiness | §2 the partner · §3 its problem · §4.1 the linked run · §5 safe adoption · §6 pilot · §8 business model · §9 channels and grants |
 | Best use of agents | §4.5, and the Technical Document [6] for engineering depth |
 | Social impact | §11 |
+
+The seven judging criteria and the six qualities a solution should have are mapped one by one, with evidence and known gaps, in the Technical Document's section "How this entry meets the judging criteria" [6].
 
 ## 2. Our partner
 
@@ -111,13 +124,13 @@ SME adoption of AI has been driven mainly by off-the-shelf generative-AI tools [
 
 ## 4. What we built for them
 
-**What is measured, and on what.** The façade figures below come from our façade demo, which anyone can rerun from the repository: `python scripts/demo_facade.py` runs civil-buddy at `a161251` offline, in its default no-key mode, on the synthetic files in `examples/facade-demo/`. They are a Singapore façade subcontract enquiry (12 specification clauses in its section 4, five of them on logistics), a list of 24 unitised panels in English and in Chinese, a revision B of that list with 30 panels, and installation daily-report and work-at-height inputs [5]. The other figures are from the Technical Document [6] and the repository [7]. None is partner data. **We have not measured staff time saved.** Every time figure is machine time; time saved is a pilot metric. Each "before" line is the partner's letter or the team's understanding, not something observed at the partner.
+**What is measured, and on what.** The façade figures below come from our façade demo, which anyone can rerun from the repository: `python scripts/demo_facade.py` runs civil-buddy at `a161251` (the product code of release v0.7.0) offline, in its default no-key mode, on the synthetic files in `examples/facade-demo/`. They are a Singapore façade subcontract enquiry (12 specification clauses in its section 4, five of them on logistics), a list of 24 unitised panels in English and in Chinese, a revision B of that list with 30 panels, and installation daily-report and work-at-height inputs [5]. The other figures are from the Technical Document [6] and the repository [7]. None is partner data. **We have not measured staff time saved.** Every time figure is machine time; time saved is a pilot metric. Each "before" line is the partner's letter or the team's understanding, not something observed at the partner.
 
 ### 4.1 The linked run: tender and packing, kept together
 
 **Before.** The tender response and the packing plan are drafted apart, from separate files. A packing statement in the bid has no loading plan behind it, a container count is not tied to a clause, and when the panel list changes nobody is told which statements have gone stale.
 
-**Works today** (merged on 26 September 2026 as pull request #65, commit `a161251`).
+**Works today** in release v0.7.0 (merged on 26 September 2026 as pull request #65, commit `a161251`).
 
 - **One request.** A request that names one tender and one panel list, in English ("Link the tender … to the packing list … and write the logistics response") or in Chinese, is routed by rules to the linked run; a question stays in chat. It writes the link report and the English bid-book (Markdown, Word and Excel), the loading plan and the link record.
 - **The clauses, with their numbers.** It reads the tender's logistics clauses: container type, gross mass (with its basis: gross, cargo only, or unstated), cargo securing, handling (A-frame stillages, upright, no stacking, protection), crating and delivery sequence.
@@ -139,6 +152,10 @@ SME adoption of AI has been driven mainly by off-the-shelf generative-AI tools [
 | Crate structure | 24 of 24 crates pending detailed design | 30 of 30 |
 | Stale copies | None | The two earlier Word copies named: do not send |
 
+![Chapter 6 of the English bid-book written by the linked run](nus-iss-bidbook-ch6.png){width=100%}
+
+*Figure 1. Chapter 6 of the English bid-book from the linked run, rows S1–S3 of S1–S7: each row cites its ITT clause (orange) and the plan figure behind it (blue), and the inputs are identified by SHA-256 (green). Synthetic files; `python scripts/demo_facade.py` at v0.7.0.*
+
 The linked run has 18 automated tests in our release gate, which passed 146 of 146 checks in CI on the pull request (run 36230427585) and again on `main` after the merge (run 36231052332) [7].
 
 **The person still** confirms the loading plan before any booking and confirms again every statement a re-run names; designs and signs the lashing to the CTU Code; sizes the A-frame stillages; sequences deliveries to the installation programme; writes the qualifications and the price; and signs and submits the bid outside the product.
@@ -147,7 +164,7 @@ The linked run has 18 automated tests in our release gate, which passed 146 of 1
 
 - A-frame stillages, upright and no-stacking rules, lashing and delivery sequencing are not modelled. The count rests on the engine's own steel-frame crates (one panel per crate), so the count and mass statements read "partial", and securing, handling and sequence go to a person [5].
 - The plan does not follow the installation programme: containers mix floors, and in revision B the heavier level-8 panels load in container 1 [7].
-- The linked run is reached from `civil exec` and the agent's turns, not yet from the browser workbench or the packing gateway. Model mode was not run with it [7].
+- At v0.7.0 the linked run is started from a command-line (`civil exec`) or TUI turn in steps mode, where it is tested. The browser workbench is not tested for it and has no upload for its two files, and the packing gateway does not offer it. In model mode (opt-in) a request goes to the model loop instead; none of these figures comes from model mode [7].
 - In the English bid-book, the compliance chapter and the open-actions annex still show Chinese titles for rows outside logistics, and its scoring-point section says none was extracted, although the tender check finds 4 [7].
 - When a tender asks for no packaging the planner cannot model, the mass statement can read "covered" with any margin; no safety margin is set yet [7].
 
@@ -178,8 +195,8 @@ Beyond the partner's problem, the same workbench drafts site and office paperwor
 
 ### 4.5 How the agent works
 
-- **Rules, not a model, pick the post or workflow.** A fixed workflow runs before any open loop. The linked run is a registered, read-only tool of the tender post (`tender.packing_link`, 60-second limit), reading only files inside the job folder.
-- **An optional model loop** (off by default) runs only when no workflow matches, with eight registered tools and at most ten steps.
+- **In steps mode (the default), rules, not a model, pick the post or workflow.** A fixed workflow runs, and no open loop does. The linked run is a registered, read-only tool of the tender post (`tender.packing_link`, 60-second limit), reading only files inside the job folder.
+- **An optional model loop** (model mode, off by default) takes the request instead, with eight registered tools and at most ten steps: on the command line and in the TUI every model-mode request goes to the loop, while the workbench still runs a matched workflow first.
 - **A policy check runs before every registered tool call** on the default path, over MCP and through the packing gateway's tool route, and gives a reason for each refusal.
 - **Two deterministic guards** check every reply in model mode. One lists numbers with no source; the other strikes verdicts the product may never state. `civil review` runs both on any document, with no model [6].
 
@@ -193,11 +210,11 @@ Beyond the partner's problem, the same workbench drafts site and office paperwor
 | Named approver | Accounts with the roles admin, engineer and licensed approver; each confirmation names its person. Today it says "local user" | Before the 10 Oct demo |
 | **Model proposes, code writes** | Counts, masses and statements come from code. In the model loop the model cannot approve, and a sign-off sentence it copies is replaced | Live |
 | **Local-first, no key needed** | No key, no model call. By default the apps listen only on the local machine. Each check records every input file's SHA-256 | Live |
-| **One company, one server** | One AWS Lightsail instance per company, used in a browser, with job folders and the database on that instance. Our container image starts; without an access token it refuses to start (exit 3), and an API request without the token gets 401 (the health check stays open by design); CI builds it and checks this, and that a session survives a container re-create, on every pull request | Image checked in CI since pull request #64 (26 Sep 2026); the server is not yet running |
+| **One company, one server** | One AWS Lightsail instance per company, used in a browser, with job folders and the database on that instance. Our container image starts; without an access token it refuses to start (exit 3), and an API request without the token gets 401 (the health check stays open by design); CI builds it and checks this, and that a session survives a container re-create, on every pull request and on the submitted release (run 36237284732) | Image checked in CI since pull request #64 (26 Sep 2026); the server is not yet running |
 | Closed network by default | Without a token, the workbench and the packing gateway refuse to listen beyond the local machine. Once a token is set, every API request needs it, local ones included. Our deployment guide makes it mandatory on a server and serves the apps only through a TLS proxy, with ports 80 and 443 open | Live since pull request #61 |
 | **Red lines** | No signed or statutory documents, no "can bid", no promised win rate, no submission to GeBIZ, no invented clause numbers, prices or coordinates | Live in the post rules and code writers; in model mode the guards check replies |
 
-**At the partner.** Each statement the link leaves to a person names an owner: logistics, a competent person for lashing, the packing designer, the project manager. [TEAM TO FILL: which of the partner's roles hold these, and who types the sign-off sentence for high-risk documents — roles only, no names. If not answered, write: "The partner names these roles at the start of the pilot."] The partner's tenders and packing lists stay on its own machine or its own server; none goes into our repository, and our tests use synthetic files only. The partner is named only in the PDFs sent to the organisers.
+**At the partner.** Each statement the link leaves to a person names an owner: logistics, a competent person for lashing, the packing designer, the project manager. The partner names these roles at the start of the pilot. The partner's tenders and packing lists stay on its own machine or its own server; none goes into our repository, and our tests use synthetic files only. The partner is named only in the PDFs sent to the organisers.
 
 The gaps that remain are listed in the Technical Document [6]. Three matter to an adopting firm: a server behind a proxy is safe only with its token set; the Rust tools named above, including old Rust-workbench trial builds, must not be deployed as if they were covered; and on the workbench's packing post, three packing lists in a row that need a person's fix currently switch that post's planning off for everyone until the server restarts.
 
@@ -208,7 +225,7 @@ The gaps that remain are listed in the Technical Document [6]. Three matter to a
 - **Who and how long:** the partner, for 8–10 weeks. Proposed start: November 2026, once the partner agrees; nothing has started.
 - **Set-up:** one server for the partner behind TLS with accounts, or a laptop install. The pilot runs in no-key mode.
 - **Data:** the partner chooses past and live jobs for which it has both the tender and the panel list, and, if it wishes, the shipping records. They stay on its machine or server, and none enters our repository.
-- **Baseline:** [TEAM TO FILL: the partner's own volumes — tenders answered and shipments per month — only as the partner confirms them. If not answered, write: "The partner's volumes are recorded in weeks 1–2; none is given here."]
+- **Baseline:** The partner's volumes are recorded in weeks 1–2; none is given here.
 - **Schedule:** in weeks 1–2 the partner times its current process on at least three past jobs (tender and panel list each), and we check English readiness on its past tenders. In weeks 3–8 civil-buddy runs the link on live jobs alongside the usual process, with a person still confirming everything. Weeks 9–10 review the metrics below with the partner.
 
 | Metric | Baseline | How measured | Target |
@@ -224,6 +241,12 @@ The gaps that remain are listed in the Technical Document [6]. Three matter to a
 | Productivity gain; satisfaction with price and quality | Partner, weeks 1–2 | Time log and a week-10 survey | Recorded as evidence for pre-approval (built-environment threshold: 20%) [25] |
 
 Targets marked "Proposed" are ours and stay open until the partner agrees them. Baselines are measured by the partner in pilot weeks 1–2; none is given here.
+
+**How the pilot turns these metrics into value.** For each job:
+
+> value = hours saved × hourly cost + containers not over-booked × cost per container + stale statements caught before sending
+
+We give no number for any term. Each is measured at the partner during the pilot; the hourly cost and the cost per container are the partner's own, and stale statements are counted, not priced.
 
 ## 7. From one façade contractor to the market
 
@@ -288,7 +311,7 @@ The 15,864 firms span every registry in the dataset, not only CRS construction w
 
 ### 9.1 Channels
 
-1. **The partner as a reference.** Only with its written consent, and only in the words it approves. [TEAM TO FILL: whether the partner agrees to be a reference after the pilot, and in which form. If not answered, write: "Whether, and in which form, the partner acts as a reference is agreed with it after the pilot."]
+1. **The partner as a reference.** Only with its written consent, and only in the words it approves. Whether, and in which form, the partner acts as a reference is agreed with it after the pilot.
 2. **SBF network.** We will ask SBF which of its trade associations and chambers serve façade and construction firms, and seek introductions through them (our ask in §1).
 3. **BCA's public registry** lists registered firms by workhead and grade, with an address and phone number [8], so the 296 CR16 firms can be found. Before any outreach we will check the dataset's terms of use and Singapore's personal-data and Do Not Call rules, and contact firms only through their published business contacts.
 4. **Open source as the trial.** A firm can run the linked run and the tender check on its own files on a laptop, with no key and no contract; today the interface is in Chinese. A firm installs it from the repository; a packaged release of the current app is planned after the demo.
@@ -312,12 +335,15 @@ No vendor below publishes a Singapore market share, so we state none; descriptio
 
 | Category | Examples | How civil-buddy differs |
 |---|---|---|
+| **Today: Excel + Word + email** (no link between clause and plan) | The partner's own process (§3.1): the tender in Word or PDF, the panel list in Excel, the bookings in email | Each packing statement is tied by code to its clause and a plan figure; a revised list names the stale statements and the Word copies not to send |
 | General chat assistants | ChatGPT, Gemini, Copilot: the off-the-shelf tools behind most of the rise in SME AI adoption [22] | Statements tied to clauses and plan figures by code, visible gaps, blocked verdicts, a person's confirmation; also runs with no model |
 | Construction management suites | Procore, Autodesk, Hubble, Novade: projects, documents, safety permits, inspections [38]. Hubble and Novade have permit-to-work packages in the PSG directory [32] | Not a project-management suite. It drafts and checks the tender response and the loading plan from the firm's own files, locally, and can sit beside a suite |
 | AI tender analysis | Lucius AI reads a GeBIZ tender pack and returns requirements, deadlines, risk flags and a bid/no-bid recommendation [39] | Checks our response against the tender and ties the packing statements to a loading plan. It deliberately gives no bid/no-bid verdict, and in the default no-key mode the tender posts call no model |
+| Façade design and fabrication software (upstream, complementary; does not answer tender clauses) | Logikal: design, quoting and production for curtain walls, windows and doors [41] | It works upstream, where the panels are designed; civil-buddy starts from the panel list and the tender. We have not tested a Logikal export |
+| Free container-loading calculators (plan only, no tender clauses) | CBM3: free 3D loading simulation with Excel/CSV import [42] | They give a plan from dimensions and weights; they do not read the tender or tie the plan to its clauses |
 | Load planning | EasyCargo, Cargo-Planner: cloud 3D load planning, not specific to construction [38] | We do not compete on solving. We tie the plan to the tender clauses it must satisfy, read messy lists safely, stop on bad rows, check conservation and name the statements a revised list makes stale |
 
-**Where we are weaker.** Established vendors have customers, support teams, English interfaces, mobile apps and PSG listings; we have none yet. We have not searched specifically for software built for façade contractors, so we do not claim that none exists.
+**Where we are weaker.** Established vendors have customers, support teams, English interfaces, mobile apps and PSG listings; we have none yet. In a web search on 27 September 2026 we found no product that ties tender clauses to a loading plan. We do not claim that none exists, and we will ask the partner what it uses.
 
 ## 11. Social impact
 
@@ -359,7 +385,8 @@ No vendor below publishes a Singapore market share, so we state none; descriptio
 | 26 Sep 2026 (done) | Security baseline, pull request #61 (142 of 142 checks in CI): only the typed sentence approves, over MCP and HTTP too; token on every API request once set; no server listens beyond the local machine without one |
 | 26 Sep 2026 (done) | Pull request #63 (145 of 145 checks in CI): the compliance schedule no longer marks clauses a packing run cannot answer "No Deviation"; English requests routed; the synthetic façade demo |
 | 26 Sep 2026 (done) | Pull request #64 (`16316df`): the container image starts, refuses to start without a token, and is checked in CI on every pull request. Pull request #65 (`a161251`, 146 of 146 checks in CI on the pull request and on `main`): the linked tender and packing run, its link record and the English logistics chapter |
-| Before the submission (28 Sep 2026) | One Lightsail server behind TLS, set up by the deployment guide. Not yet running when this PDF was exported; the URL follows in the submission email |
+| 26 Sep 2026 (done) | Release v0.7.0 of the submitted repository (commit 0c0e803), the version this proposal describes; CI run 36237284732: 146 of 146 checks, `docker-smoke` passed |
+| By 10 Oct 2026 (demo) | One Lightsail server behind TLS, set up by the deployment guide. The Lightsail server is not running yet; deployment evidence is the CI docker-smoke job on the submitted release (run 36237284732 of civil-buddy-sme), which builds the image, starts it with a token, and checks 401 without / 200 with the token. |
 | By 10 Oct 2026 (demo) | Accounts and roles (admin, engineer, licensed approver) with named confirmations; a Bedrock verification run; façade tender topics (the seven other specification clauses, liquidated damages and retention); English handling words for packing lists, and fragile, upright or no-stack rows kept out of mixed crates |
 | Not yet scheduled; set with the partner after weeks 1–2 of the pilot | English interface and sign-off sentence |
 | From November 2026 (proposed, once the partner agrees) | Pilot at the partner, 8–10 weeks |
@@ -388,9 +415,9 @@ The platform rows follow the Technical Document [6], which also puts the audit l
 2. Attorney-General's Chambers, Singapore Statutes Online. Workplace Safety and Health (Work at Heights) Regulations 2013 (amended by S 280/2014 and S 434/2024): definition of hazardous work at height, regs 5–12, Part III (permit-to-work, regs 20–28). Version current at 26 September 2026. <https://sso.agc.gov.sg/SL/WSHA2006-S223-2013>
 3. MOM. Factsheet on the Workplace Safety and Health (Work at Heights) (Amendment) Regulations 2014 (undated; changes in force 1 May 2014). <https://www.mom.gov.sg/-/media/mom/documents/safety-health/factsheet-on-wahamendmentregulations.pdf>
 4. MOM. *Workplace Safety and Health Report 2025* (national statistics). March 2026. <https://www.mom.gov.sg/-/media/mom/documents/safety-health/reports-stats/wsh-national-statistics/wsh-national-stats-2025.pdf>
-5. Team Mintang. Façade demo in the civil-buddy repository at `a161251` (pull request #65, merged 26 September 2026, on the demo of pull request #63): `examples/facade-demo/` (synthetic fixtures: a Singapore façade subcontract ITT whose section 4 has 12 specification clauses, five of them on logistics (4.7–4.11); a list of 24 unitised panels as English and Chinese spreadsheets and its revision B with 30 panels; daily-report and work-at-height inputs; its README lists what the demo does not show yet) and `scripts/demo_facade.py`, which runs four flows, the linked tender and packing run first, through `civil exec`'s entry point offline, in the default no-key (steps) mode. Figures from our run on 26 September 2026; reproducible with `python scripts/demo_facade.py`. Every file is synthetic; none comes from the partner. <https://github.com/LUOaini1213/civil-buddy-sme>
+5. Team Mintang. Façade demo in the civil-buddy repository at `a161251`, the product code of release v0.7.0 (commit 0c0e803) (pull request #65, merged 26 September 2026, on the demo of pull request #63): `examples/facade-demo/` (synthetic fixtures: a Singapore façade subcontract ITT whose section 4 has 12 specification clauses, five of them on logistics (4.7–4.11); a list of 24 unitised panels as English and Chinese spreadsheets and its revision B with 30 panels; daily-report and work-at-height inputs; its README lists what the demo does not show yet) and `scripts/demo_facade.py`, which runs four flows, the linked tender and packing run first, through `civil exec`'s entry point offline, in the default no-key (steps) mode. Figures from our run on 26 September 2026; reproducible with `python scripts/demo_facade.py`. Every file is synthetic; none comes from the partner. <https://github.com/LUOaini1213/civil-buddy-sme>
 6. Team Mintang. *civil-buddy: Technical Document* (NUS-ISS submission), 26 September 2026. <https://github.com/LUOaini1213/civil-buddy-sme>
-7. Team Mintang. civil-buddy repository at `a161251` (26 September 2026), MIT licence: security baseline, pull request #61 (142/142 checks passed in CI runs 36170078042 on the pull request and 36171221472 on `main`), with operator settings in `docs/deploy-minimal.md`; pull request #63 (145/145 in runs 36222056643 and 36222613544): the compliance-schedule rules pinned by `scripts/test_facade_tender.py` and `scripts/test_tender_delivery_api.py`, and the container types the engine plans (`packing_assistant/knowledge.py`); pull request #64 (`16316df`; CI job docker-smoke in run 36227890649): `Dockerfile`, `scripts/docker_smoke.sh`; pull request #65 (`a161251`; 146/146 checks and all four CI jobs passed in runs 36230427585 on the pull request and 36231052332 on `main`): `packing_assistant/tender_packing_link.py`, `scripts/test_tender_packing_link.py` (18 tests), the review probe of a plan that does not fit, and the English bid-book `packing_assistant/bidbook/sg_facade.py`; `docs/civil-buddy/real-tender.md`, `plugins.md`, `civil-codex-eval-2026-09-19.md`; `test/benchmarks/verdicts/cases.json` (the recorded `qwen2.5:3b` sentence); `docs/submission/创意材料-工友侧.md` (worker-side material, 31 Aug 2026); `.agents/skills/{worker-brief,safety-brief,hr-labor}/SKILL.md` and `demo/kb/`; tonnes fix `53a550e` (13 Sep 2026). <https://github.com/LUOaini1213/civil-buddy-sme>
+7. Team Mintang. civil-buddy repository at `a161251` (26 September 2026; release v0.7.0, commit 0c0e803, has the same product code; its CI run 36237284732 passed 146 of 146 checks and `docker-smoke`), MIT licence: security baseline, pull request #61 (142/142 checks passed in CI runs 36170078042 on the pull request and 36171221472 on `main`), with operator settings in `docs/deploy-minimal.md`; pull request #63 (145/145 in runs 36222056643 and 36222613544): the compliance-schedule rules pinned by `scripts/test_facade_tender.py` and `scripts/test_tender_delivery_api.py`, and the container types the engine plans (`packing_assistant/knowledge.py`); pull request #64 (`16316df`; CI job docker-smoke in run 36227890649): `Dockerfile`, `scripts/docker_smoke.sh`; pull request #65 (`a161251`; 146/146 checks and all four CI jobs passed in runs 36230427585 on the pull request and 36231052332 on `main`): `packing_assistant/tender_packing_link.py`, `scripts/test_tender_packing_link.py` (18 tests), the review probe of a plan that does not fit, and the English bid-book `packing_assistant/bidbook/sg_facade.py`; `docs/civil-buddy/real-tender.md`, `plugins.md`, `civil-codex-eval-2026-09-19.md`; `test/benchmarks/verdicts/cases.json` (the recorded `qwen2.5:3b` sentence); `docs/submission/创意材料-工友侧.md` (worker-side material, 31 Aug 2026); `.agents/skills/{worker-brief,safety-brief,hr-labor}/SKILL.md` and `demo/kb/`; tonnes fix `53a550e` (13 Sep 2026). <https://github.com/LUOaini1213/civil-buddy-sme>
 8. BCA. "Listing of Registered Contractors" (open dataset on data.gov.sg, last updated 12 January 2026; coverage 1 July 2025 to 31 January 2026). Counts by Team Mintang through the data.gov.sg API on 26 September 2026: 24,014 workhead registrations and 15,864 distinct UENs; CR16 Curtain Walls 296 registrations (296 UENs); CR17 Windows 56; RW01 Window Contractors 278. <https://data.gov.sg/datasets/d_dcda79be4aded5f9e769b8e23ff69b47/view>
 9. BCA. Speech by the Minister for National Development at the BuildSG LEAD Summit 2026. 30 April 2026. Published in the BCA newsroom and by the Ministry of National Development.
 10. BCA. "Artificial Intelligence (AI) for the Built Environment." Page updated 5 August 2026 (use-case list dated 20 July 2026). <https://www1.bca.gov.sg/growth-and-transformation/productivity/ai/>
@@ -424,3 +451,5 @@ The platform rows follow the Technical Document [6], which also puts the audit l
 38. Vendor websites, no publication date, accessed 26 Sep 2026: Procore <https://www.procore.com/en-sg>; Autodesk <https://construction.autodesk.com/>; Hubble <https://hubble.build/>; Novade <https://www.novade.net/construction-project-management-software-singapore/>; EasyCargo <https://www.easycargo3d.com/en/>; Cargo-Planner <https://www.cargo-planner.com/>.
 39. Lucius AI. "GeBIZ Singapore government tenders guide" (vendor blog). 30 July 2026, updated 23 September 2026. <https://ailucius.com/blog/gebiz-singapore-government-tenders-guide>
 40. MOM. "Workplace Safety and Health Report 2025." Press release, 25 March 2026. <https://www.mom.gov.sg/newsroom/press-releases/2026/0325-wsh-report-2025>
+41. Logikal (Orgadata). Product home page: "Logikal: The No. 1 Software for Storefront, Curtain Wall, Windows & Doors" (design, quoting and production). Accessed 27 Sep 2026. <https://www.logikal-software.com/us/en.html>
+42. CBM3. "Free Container Loading Calculator — 3D Load Planner" (free; Excel/CSV import; 20' and 40' dry and high-cube containers). Accessed 27 Sep 2026. <https://www.cbm3.net/>

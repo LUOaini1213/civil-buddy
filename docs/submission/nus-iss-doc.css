@@ -57,9 +57,19 @@ p {
    follows it. */
 p:has(> strong:only-child),
 p:has(+ ul),
-p:has(+ ol) {
+p:has(+ ol),
+p:has(+ table),
+p:has(+ blockquote) {
   break-after: avoid;
   page-break-after: avoid;
+}
+
+/* A heading keeps its first paragraph (and, through the rule above, a table that paragraph introduces). */
+h2 + p,
+h3 + p,
+h4 + p {
+  break-before: avoid;
+  page-break-before: avoid;
 }
 
 a {
@@ -105,6 +115,33 @@ strong {
   margin: 0;
   font-size: 10.5pt;
   color: var(--muted);
+}
+
+/* "At a glance" (the pandoc abstract), printed in the title block above the contents. */
+#title-block-header .abstract {
+  margin: 8pt 0 0;
+  padding: 7pt 10pt 6pt;
+  border: 0.8pt solid var(--rule);
+  border-left: 3pt solid var(--head);
+  background: #f6f8fa;
+  font-size: 9.8pt;
+  line-height: 1.36;
+  break-inside: avoid;
+}
+
+#title-block-header .abstract-title {
+  margin: 0 0 3pt;
+  font-size: 11pt;
+  font-weight: 700;
+  color: var(--head);
+}
+
+#title-block-header .abstract p {
+  margin: 0 0 4pt;
+}
+
+#title-block-header .abstract p:last-child {
+  margin-bottom: 0;
 }
 
 nav#TOC {
@@ -184,6 +221,15 @@ body.flow > h2:first-of-type {
   break-before: page;
   page-break-before: always;
   margin-top: 0;
+}
+
+/* In the Technical Document, the Summary follows the "About this document" paragraph and status-tag table on the same
+   page, and §2 runs on after the criteria map, so its short §2.1 does not stand alone before the landscape figure. */
+body.doc-technical > h2:first-of-type,
+body.doc-technical > h2#architecture {
+  break-before: auto;
+  page-break-before: auto;
+  margin-top: 16pt;
 }
 
 h3 {
@@ -299,6 +345,11 @@ table:not(:has(tbody > tr:nth-child(9))) {
 }
 
 /* Region rows in the status table: a bold label in the first cell and empty cells after it. */
+tr:has(> td:first-child > strong:only-child):has(> td:nth-child(2):empty) {
+  break-after: avoid;
+  page-break-after: avoid;
+}
+
 tr:has(> td:first-child > strong:only-child):has(> td:nth-child(2):empty) td {
   background: var(--group-bg);
   border-top: 0.8pt solid var(--rule-strong);
@@ -365,6 +416,28 @@ code.tag-not-needed { background: #ffffff; color: #4b5563; border: 0.6pt dashed 
 
 img {
   max-width: 100%;
+}
+
+/* A screenshot (PNG) in the text: full text width, kept with its caption. */
+p:has(> img[src^="data:image/png"]) {
+  margin: 6pt 0 2pt;
+  text-align: center;
+  line-height: 0;
+  break-inside: avoid;
+  break-after: avoid;
+  page-break-after: avoid;
+}
+
+p:has(> img[src^="data:image/png"]) img {
+  width: 100%;
+  height: auto;
+  border: 0.5pt solid var(--rule);
+}
+
+p:has(> img[src^="data:image/png"]) + p {
+  margin: 0 0 8pt;
+  font-size: 8.5pt;
+  color: var(--muted);
 }
 
 p.figure-image,

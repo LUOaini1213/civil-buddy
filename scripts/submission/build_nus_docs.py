@@ -16,7 +16,8 @@ still has. Placeholders do not fail the build: the exit code is 0 unless a tool 
 
 The SME partner is named only in the PDFs: the Markdown carries <!--SME:KEY-->generic words<!--/SME--> spans (and
 {{KEY}} tokens), and the build takes the values from the untracked docs/submission/sme.local.json (see
-sme.local.example.json). Without that file every span prints as a TEAM TO FILL placeholder.
+sme.local.example.json). Without that file every span prints as a TEAM TO FILL placeholder. When the partner is named,
+every page's footer also says that its identity is shared with the organisers in confidence.
 
 Output goes to output/submission/nus-iss/ (gitignored), with each PDF's HTML next to it.
 
@@ -125,9 +126,17 @@ def fill_private(text: str, values: dict | None = None) -> str:
     text = SPAN.sub(lambda m: value(m[1]), text)
     return TOKEN.sub(lambda m: value(m[1]), text)
 
+# Printed in the footer of every page whenever the partner is named (SME_NAME has a value): the organisers treat
+# entries as public, so the PDFs say plainly that the name is given to them in confidence.
+CONFIDENTIAL = "The partner's identity is shared with the organisers in confidence; please do not publish it."
+
 MM = 72 / 25.4
-# Helvetica advance widths (1/1000 em) for the characters of "Page N of M".
-_HELV = {" ": 278, "P": 667, "a": 556, "g": 556, "e": 556, "o": 556, "f": 278, **{d: 556 for d in "0123456789"}}
+# Helvetica advance widths (1/1000 em) for "Page N of M" and the confidentiality note; other characters count as 556.
+_HELV = {" ": 278, ".": 278, ",": 278, ";": 278, "'": 191, "P": 667, "T": 611,
+         **dict(zip("abcdefghijklmnopqrstuvwxyz",
+                    [556, 556, 500, 556, 556, 278, 556, 556, 222, 222, 500, 222, 833,
+                     556, 556, 556, 556, 333, 500, 278, 556, 500, 722, 500, 500, 500])),
+         **{d: 556 for d in "0123456789"}}
 
 
 def fail(msg: str) -> None:
@@ -373,6 +382,7 @@ def stamp(doc: Doc, pdf_in: Path, pdf_out: Path) -> int:
     reader = pypdf.PdfReader(str(pdf_in))
     writer = pypdf.PdfWriter(clone_from=reader)
     total = len(writer.pages)
+    note = CONFIDENTIAL if str(private_values().get("SME_NAME") or "").strip() else ""
     font = DictionaryObject({
         NameObject("/Type"): NameObject("/Font"),
         NameObject("/Subtype"): NameObject("/Type1"),
@@ -394,6 +404,11 @@ def stamp(doc: Doc, pdf_in: Path, pdf_out: Path) -> int:
                 ops.append(b"0.78 0.81 0.86 RG 0.4 w %.2f %.2f m %.2f %.2f l S" % (side, head_y - 4, w - side, head_y - 4))
         lx = (w - _text_width(label, size)) / 2
         ops.append(b"BT /FHdr %.1f Tf 1 0 0 1 %.2f %.2f Tm %s Tj ET" % (size, lx, foot_y, _pdf_string(label)))
+        if note:  # portrait: centred under the page number; landscape (little margin): right-aligned on its line
+            nsize = 6.5
+            nw = _text_width(note, nsize)
+            nx, ny = ((w - side - nw), foot_y) if landscape else ((w - nw) / 2, foot_y - 3.8 * MM)
+            ops.append(b"BT /FHdr %.1f Tf 1 0 0 1 %.2f %.2f Tm %s Tj ET" % (nsize, nx, ny, _pdf_string(note)))
         ops.append(b"Q")
         overlay = pypdf.PageObject.create_blank_page(width=w, height=h)
         overlay[NameObject("/Resources")] = DictionaryObject({
