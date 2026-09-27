@@ -49,6 +49,9 @@ data/backup
 **/secrets
 **/keys
 civil.toml
+# the opt-in model key on a Lightsail host (deploy/lightsail/civil-admin.sh model-on), and its access-link marker
+**/model.env
+**/.link-shown
 
 # Build outputs
 dist

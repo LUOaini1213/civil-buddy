@@ -5,7 +5,9 @@
 #   plain HTTP (SITE_ADDRESS=http://localhost), then Caddy's internal CA (SITE_ADDRESS=localhost):
 #   token 401/200, the landing page, ?token= -> cookie, /demo, the linked demo route, an upload, a 20 MB body
 #   refused at Caddy, the WebSocket, the gateway bound to 127.0.0.1 only, .env mode 0600, the token in no log,
-#   the typed agent request on the seeded job folder, and its output surviving a re-create.
+#   the typed agent request on the seeded job folder, and its output surviving a re-create; then civil-admin.sh:
+#   the access link printed once, the opt-in model key (0600, never echoed or logged, removable), token rotation,
+#   and set-site switching Caddy to its internal CA.
 #
 #   bash deploy/lightsail/test-local.sh [<commit>]      (default: HEAD; the commit must be committed)
 #   TEST_REPO_URL=<repo to clone>   when this checkout is a git worktree whose .git points elsewhere
@@ -125,9 +127,47 @@ echo "$logs" | grep -q "$TOKEN" && fail "the token is in docker compose logs"
 echo "$logs" | grep -q '"uri"' || fail "Caddy wrote no access log"
 ok "the token is in no container log (Caddy access log on, token/cookie/auth filtered; uvicorn access log off)"
 
-echo "== Caddy internal CA: SITE_ADDRESS=localhost"
-sed -i 's/^SITE_ADDRESS=.*/SITE_ADDRESS=localhost/' "$INSTALL/.env"
-compose up -d --force-recreate caddy >/dev/null 2>&1
+echo "== civil-admin.sh: the link once, the opt-in model key, token rotation"
+ADMIN=(env CIVIL_INSTALL_DIR="$INSTALL" bash "$INSTALL/deploy/lightsail/civil-admin.sh")
+link="$("${ADMIN[@]}" show-link 2>"$WORK/admin.err")" || { cat "$WORK/admin.err"; fail "show-link"; }
+[ "$link" = "http://localhost/?token=$TOKEN" ] || fail "show-link printed something else than the one link"
+grep -q "$TOKEN" "$WORK/admin.err" && fail "show-link printed the token twice"
+if "${ADMIN[@]}" show-link > "$WORK/again.out" 2>&1; then fail "show-link printed the link a second time"; fi
+grep -q "$TOKEN" "$WORK/again.out" && fail "the refused second show-link still printed the token"
+[ "$(stat -c '%a' "$INSTALL/.link-shown")" = "600" ] || fail ".link-shown is not mode 600"
+ok "show-link prints exactly the access link once; a second call refuses without printing it"
+genv() { docker inspect -f '{{range .Config.Env}}{{println .}}{{end}}' "$(compose ps -q gateway)"; }
+genv | grep -q '^CIVIL_API_KEY=' && fail "a model key in the gateway before any opt-in"
+FAKE_KEY="sk-rehearsal-not-a-real-key-$(openssl rand -hex 8)"
+printf 'http://127.0.0.1:9/v1\nrehearsal-model\n%s\n' "$FAKE_KEY" | "${ADMIN[@]}" model-on > "$WORK/model.out" 2>&1 || { cat "$WORK/model.out"; fail "model-on"; }
+grep -q "$FAKE_KEY" "$WORK/model.out" && fail "model-on echoed the key"
+[ "$(stat -c '%a' "$INSTALL/model.env")" = "600" ] || fail "model.env is not mode 600"
+genv | grep -qx "CIVIL_API_KEY=$FAKE_KEY" || fail "the gateway did not get the opted-in key"
+for _ in $(seq 1 90); do [ "$(code "$B/api/health")" = 200 ] && break; sleep 1; done
+"${ADMIN[@]}" status > "$WORK/status.out" 2>&1
+grep -q "model key: SET" "$WORK/status.out" || fail "status does not say the key is set"
+grep -q "$FAKE_KEY" "$WORK/status.out" && fail "status printed the key"
+[ "$(code -H "Cookie: $cookie" "$B/demo")" = 200 ] || fail "/demo with a model key set"
+"${ADMIN[@]}" model-off > /dev/null 2>&1 || fail "model-off"
+[ -e "$INSTALL/model.env" ] && fail "model-off left model.env"
+genv | grep -q '^CIVIL_API_KEY=' && fail "the key is still in the gateway after model-off"
+compose logs --no-color 2>&1 | grep -q "$FAKE_KEY" && fail "the model key is in docker compose logs"
+ok "model key opt-in: model.env 0600, in the gateway only after model-on, never echoed or logged, gone after model-off"
+for _ in $(seq 1 90); do [ "$(code "$B/api/health")" = 200 ] && break; sleep 1; done
+OLD="$TOKEN"
+link="$("${ADMIN[@]}" rotate-token 2>"$WORK/rotate.err")" || { cat "$WORK/rotate.err"; fail "rotate-token"; }
+TOKEN="$(grep '^CIVIL_TOKEN=' "$INSTALL/.env" | cut -d= -f2-)"
+[ "$TOKEN" != "$OLD" ] && [ "$link" = "http://localhost/?token=$TOKEN" ] || fail "rotate-token did not print the new link"
+for _ in $(seq 1 90); do [ "$(code "$B/api/health")" = 200 ] && break; sleep 1; done
+[ "$(code -H "Authorization: Bearer $OLD" "$B/api/tools")" = 401 ] || fail "the old token still works"
+[ "$(code -H "Cookie: $cookie" "$B/api/tools")" = 401 ] || fail "the old cookie still works"
+[ "$(code -H "Authorization: Bearer $TOKEN" "$B/api/tools")" = 200 ] || fail "the new token"
+[ "$(stat -c '%a' "$INSTALL/.env")" = "600" ] || fail ".env not mode 600 after rotation"
+ok "rotate-token: old token and old cookie 401, new token 200, .env still 600, new link printed once"
+
+echo "== Caddy internal CA: SITE_ADDRESS=localhost (set with civil-admin.sh set-site)"
+"${ADMIN[@]}" set-site localhost > /dev/null 2>&1 || fail "set-site"
+grep -qx 'SITE_ADDRESS=localhost' "$INSTALL/.env" || fail "set-site did not write SITE_ADDRESS"
 H="https://localhost:${HTTPS_PORT}"
 for _ in $(seq 1 60); do [ "$(code -k "$H/api/health")" = 200 ] && break; sleep 1; done
 [ "$(code -k "$H/api/health")" = 200 ] || fail "HTTPS /api/health"

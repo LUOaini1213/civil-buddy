@@ -6,7 +6,9 @@
 #   SITE_ADDRESS=203-0-113-10.sslip.io   the static IP, dashed, under sslip.io: a real certificate, no domain to buy
 #   SITE_ADDRESS=facade.example.com      a domain whose A record points at the static IP
 #   SITE_ADDRESS=http://localhost        plain HTTP (local test only); SITE_ADDRESS=localhost: Caddy's internal CA
-# No model key is passed to any service: the linked run and the demo are deterministic and need none.
+# No model key is passed by default: the linked run and the demo are deterministic and need none. OPT-IN only:
+# `civil-admin.sh model-on` writes model.env (mode 0600: the model endpoint, name and key) next to .env;
+# the gateway reads it if it exists (required: false, Compose >= 2.24) and runs without it otherwise.
 # Needs Docker Compose >= 2.24.4 (the !override tag); docs/deploy-aws-lightsail.md installs Docker's own packages.
 services:
   gateway:
@@ -18,6 +20,9 @@ services:
       # reads this folder; user-data.sh seeds it with the SYNTHETIC demo files only. It is inside /app/output,
       # which is already a sandbox root, so the sandbox is not widened.
       - CIVIL_JOB_ROOT=/app/output/job
+    env_file:
+      - path: ./model.env
+        required: false
     restart: unless-stopped
 
   caddy:

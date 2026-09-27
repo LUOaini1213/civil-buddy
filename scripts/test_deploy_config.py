@@ -8,7 +8,10 @@
   caddy       reverse_proxy to the gateway, a body limit above the upload route's, HSTS, and an access log with the
               token, the cookie and the Authorization header filtered out; no `tls internal` on the real site
   user-data   bash with set -euo pipefail and no xtrace, a pinned 40-hex commit, the token from openssl into a 0600
-              .env and never printed, only the SYNTHETIC facade files seeded, no model key
+              .env and never printed, only the SYNTHETIC facade files seeded, no model key, the kit present at the commit
+  admin       civil-admin.sh prints the token in one line only (show_link), once per token (a marker with a
+              fingerprint, not the token), rotates it with openssl, reads a model key hidden (read -s) into a 0600
+              model.env and never echoes it; the override reads model.env only if it exists (required: false)
   image       uvicorn without its access log (it would print the ?token= link); .dockerignore keeps demo/.env,
               demo/out, demo/data, .civil-buddy and output out of the build context at any depth
   docs        docs/deploy-aws-lightsail.md in English with the exact aws lightsail commands and "not run on
@@ -78,6 +81,8 @@ class ComposeTests(unittest.TestCase):
         self.assertEqual(["127.0.0.1:${GATEWAY_PORT:-8000}:8000"], ports["value"])
         env = data["services"]["gateway"]["environment"]
         self.assertIn("CIVIL_JOB_ROOT=/app/output/job", env)
+        self.assertEqual([{"path": "./model.env", "required": False}], data["services"]["gateway"]["env_file"],
+                         "the model key is opt-in: read from model.env only when the operator wrote one")
         caddy = data["services"]["caddy"]
         self.assertEqual("caddy:2", caddy["image"])
         self.assertEqual(["${CADDY_HTTP_PORT:-80}:80", "${CADDY_HTTPS_PORT:-443}:443"], caddy["ports"])
@@ -130,7 +135,7 @@ class UserDataTests(unittest.TestCase):
             code = line.split("#", 1)[0] if not line.lstrip().startswith("say ") else line
             if "CIVIL_TOKEN" in code and re.search(r"\b(echo|say|printf|cat|tee)\b", code):
                 ok_write = "printf 'CIVIL_TOKEN=%s\\n'" in code and '> "$env_file"' in code
-                ok_hint = code.lstrip().startswith("say ") and "grep '^CIVIL_TOKEN='" in code
+                ok_hint = code.lstrip().startswith("say ") and "civil-admin.sh show-link" in code
                 self.assertTrue(ok_write or ok_hint, f"prints the token? {line.strip()}")
         self.assertNotRegex(t, r"\$\{?CIVIL_TOKEN\}?")
 
@@ -140,6 +145,58 @@ class UserDataTests(unittest.TestCase):
         self.assertEqual({"facade_itt_doc.md", "facade_panels.xlsx", "facade_panels_rev_b.xlsx"}, set(seeded))
         self.assertNotRegex(t, r"(API_KEY|OPENAI|DEEPSEEK|BEDROCK|AWS_SECRET|aws configure)")
 
+    def test_refuses_a_commit_without_the_kit(self) -> None:
+        self.assertIn('die "commit $CIVIL_REF has no $f', self.text)
+        self.assertIn('REPO_URL="${CIVIL_REPO_URL:-__CIVIL_REPO_URL__}"', self.text)
+
+
+class AdminTests(unittest.TestCase):
+    def setUp(self) -> None:
+        self.text = read(LS / "civil-admin.sh")
+
+    @staticmethod
+    def body(text: str, name: str) -> str:
+        return text.split(f"{name}() {{", 1)[1].split("\n}\n", 1)[0]
+
+    def test_shape(self) -> None:
+        t = self.text
+        self.assertTrue(t.startswith("#!/bin/bash\n"))
+        self.assertIn("\nset -euo pipefail\n", t)
+        self.assertNotRegex(t, r"(?m)^\s*set\s+-[a-z]*x")
+        self.assertNotIn("\r", t)
+        self.assertIn("NOT YET RUN ON LIGHTSAIL", t)
+        for cmd in ("show-link", "rotate-token", "set-site", "model-on", "model-off", "status"):
+            self.assertIn(f"  {cmd})", t)
+
+    def test_the_token_is_printed_in_one_line_and_once(self) -> None:
+        t = self.text
+        printing = [line.strip() for line in t.splitlines()
+                    if "$token" in line and re.search(r"\b(echo|printf|say|cat|tee)\b", line.split("#", 1)[0])]
+        self.assertEqual(["printf '%s/?token=%s\\n' \"$(site_url)\" \"$token\"    # the one place the token is printed"],
+                         printing)
+        body = self.body(t, "show_link")
+        refuse = body.index('die "the link for this token was already shown')
+        self.assertLess(refuse, body.index("printf '%s/?token=%s"), "the refusal comes before the print")
+        self.assertIn("fingerprint=%s", body)       # the marker stores a hash prefix, not the token
+        self.assertIn("umask 077", body)
+        self.assertIn("openssl rand -hex 32", self.body(t, "rotate_token"))
+        self.assertIn('rm -f "$shown_file"', self.body(t, "rotate_token"))
+
+    def test_model_key_is_read_hidden_into_a_0600_file_and_never_echoed(self) -> None:
+        t = self.text
+        body = self.body(t, "model_on")
+        self.assertIn('read -r -s -p "API key', body)
+        self.assertIn("umask 077", body)
+        self.assertIn('chmod 600 "$model_file"', body)
+        self.assertIn("OPT-IN", body)
+        for line in t.splitlines():
+            if "$key" in line and re.search(r"\b(echo|say|cat|tee)\b", line):
+                self.fail(f"echoes the key? {line.strip()}")
+        writes = [line for line in t.splitlines() if "$key" in line and "printf" in line]
+        self.assertEqual(1, len(writes))
+        self.assertIn('> "$model_file.new"', body)
+        self.assertIn('rm -f "$model_file"', self.body(t, "model_off"))
+
 
 class ImageTests(unittest.TestCase):
     def test_uvicorn_access_log_off(self) -> None:
@@ -148,7 +205,12 @@ class ImageTests(unittest.TestCase):
     def test_dockerignore_recurses(self) -> None:
         lines = {line.strip() for line in read(ROOT / ".dockerignore").splitlines()}
         for pattern in ("**/.env", "**/.env.*", "!**/.env.example", "demo/out", "demo/data", "output",
-                        "**/.civil-buddy", "**/*.log"):
+                        "**/.civil-buddy", "**/*.log", "**/model.env", "**/.link-shown"):
+            self.assertIn(pattern, lines)
+
+    def test_gitignore_keeps_the_model_key_and_the_filled_script_out(self) -> None:
+        lines = {line.strip() for line in read(ROOT / ".gitignore").splitlines()}
+        for pattern in ("model.env", ".link-shown", "deploy/lightsail/*.filled.sh"):
             self.assertIn(pattern, lines)
 
 
@@ -160,9 +222,15 @@ class DocTests(unittest.TestCase):
         for needle in ("aws lightsail create-instances", "--region ap-southeast-1", "--blueprint-id ubuntu_24_04",
                        "aws lightsail allocate-static-ip", "aws lightsail attach-static-ip",
                        "aws lightsail put-instance-public-ports", "aws lightsail enable-add-on", "AutoSnapshot",
-                       "10 Oct", "sslip.io", "deploy/lightsail/test-local.sh"):
+                       "10 Oct", "sslip.io", "deploy/lightsail/test-local.sh",
+                       # both paths, the operator commands, and the teardown that stops the charges
+                       "Path A", "Path B", "Lightsail console", "civil-admin.sh show-link", "civil-admin.sh model-on",
+                       "rotate-token", "aws lightsail delete-instance", "aws lightsail release-static-ip",
+                       "get-instance-snapshots", "small_3_0", "cidrs=${MYIP}/32"):
             self.assertIn(needle, text)
-        self.assertRegex(text, r"(?i)rotate")
+        self.assertRegex(text, r"(?i)tear.?down")
+        self.assertRegex(text, r"(?i)synthetic")
+        self.assertNotRegex(text, r"sk-[A-Za-z0-9]{16,}", "no key-shaped string in the guide")
 
     def test_minimal_guide_is_english_aws_first_render_last(self) -> None:
         text = read(ROOT / "docs" / "deploy-minimal.md")

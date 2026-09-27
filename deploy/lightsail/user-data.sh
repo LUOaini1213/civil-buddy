@@ -6,14 +6,16 @@
 #
 # It installs Docker from Docker's apt repository, clones the repository at one pinned commit, writes a random
 # CIVIL_TOKEN into /opt/civil-buddy/.env (mode 0600, never printed), starts the gateway on 127.0.0.1 behind Caddy
-# (automatic HTTPS), and seeds the job folder with the SYNTHETIC demo files only. No model key is written anywhere.
-# Output goes to /var/log/cloud-init-output.log; the token is not in it.
+# (automatic HTTPS), and seeds the job folder with the SYNTHETIC demo files only. No model key is written anywhere
+# (model keys are opt-in afterwards: deploy/lightsail/civil-admin.sh model-on).
+# Output goes to /var/log/cloud-init-output.log; the token is not in it. The operator gets the access link once,
+# over SSH: sudo bash /opt/civil-buddy/deploy/lightsail/civil-admin.sh show-link
 set -euo pipefail
 
 # ---- set these before launching (docs/deploy-aws-lightsail.md fills them in with sed) ------------------------
 CIVIL_REF="${CIVIL_REF:-__CIVIL_REF__}"             # the full 40-character commit to deploy
 SITE_ADDRESS="${SITE_ADDRESS:-__SITE_ADDRESS__}"    # 203-0-113-10.sslip.io (static IP, dashed) or your domain
-REPO_URL="${CIVIL_REPO_URL:-https://github.com/LUOaini1213/civil-buddy-sme.git}"
+REPO_URL="${CIVIL_REPO_URL:-__CIVIL_REPO_URL__}"      # empty/placeholder: the public showcase repository below
 # ---- local-test hooks: leave unset on Lightsail ----------------------------------------------------------------
 INSTALL_DIR="${CIVIL_INSTALL_DIR:-/opt/civil-buddy}"
 SKIP_DOCKER_INSTALL="${CIVIL_SKIP_DOCKER_INSTALL:-0}"
@@ -21,6 +23,7 @@ GATEWAY_PORT="${GATEWAY_PORT:-8000}"
 
 export HOME="${HOME:-/root}"
 [ "$SITE_ADDRESS" = "__SITE_ADDRESS__" ] && SITE_ADDRESS=""
+case "$REPO_URL" in ""|__CIVIL_REPO_URL__) REPO_URL="https://github.com/LUOaini1213/civil-buddy-sme.git" ;; esac
 
 say() { printf '[civil-buddy] %s\n' "$*"; }
 die() { say "ERROR: $*" >&2; exit 1; }
@@ -72,6 +75,9 @@ fi
 git -C "$INSTALL_DIR" -c advice.detachedHead=false checkout -q --detach "$CIVIL_REF"
 [ "$(git -C "$INSTALL_DIR" rev-parse HEAD)" = "$CIVIL_REF" ] || die "checkout is not at $CIVIL_REF"
 cd "$INSTALL_DIR"
+for f in deploy/lightsail/compose.override.yml deploy/lightsail/Caddyfile deploy/lightsail/civil-admin.sh; do
+  [ -f "$f" ] || die "commit $CIVIL_REF has no $f: deploy a commit that contains the Lightsail kit"
+done
 
 # The token: generated here, written only to .env (0600, root), never echoed. A re-run keeps the existing token.
 env_file="$INSTALL_DIR/.env"
@@ -106,4 +112,4 @@ compose exec -T gateway sh -c 'mkdir -p /app/output/job && cp -n examples/facade
 scheme="https://"
 case "$SITE_ADDRESS" in http://*|https://*) scheme="" ;; esac
 say "up: ${scheme}${SITE_ADDRESS}/  (the certificate can take a minute after the static IP is attached)"
-say "read the token over SSH, into your own terminal only:  sudo grep '^CIVIL_TOKEN=' ${env_file} | cut -d= -f2-"
+say "the access link, shown once, over SSH:  sudo bash ${INSTALL_DIR}/deploy/lightsail/civil-admin.sh show-link"
