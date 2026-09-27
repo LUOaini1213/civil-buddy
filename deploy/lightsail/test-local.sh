@@ -166,8 +166,10 @@ for _ in $(seq 1 90); do [ "$(code "$B/api/health")" = 200 ] && break; sleep 1; 
 ok "rotate-token: old token and old cookie 401, new token 200, .env still 600, new link printed once"
 
 echo "== Caddy internal CA: SITE_ADDRESS=localhost (set with civil-admin.sh set-site)"
+gw_before="$(compose ps -q gateway)"
 "${ADMIN[@]}" set-site localhost > /dev/null 2>&1 || fail "set-site"
 grep -qx 'SITE_ADDRESS=localhost' "$INSTALL/.env" || fail "set-site did not write SITE_ADDRESS"
+[ "$(compose ps -q gateway)" = "$gw_before" ] || fail "set-site restarted the gateway too"
 H="https://localhost:${HTTPS_PORT}"
 for _ in $(seq 1 60); do [ "$(code -k "$H/api/health")" = 200 ] && break; sleep 1; done
 [ "$(code -k "$H/api/health")" = 200 ] || fail "HTTPS /api/health"
