@@ -56,3 +56,23 @@ that did not ask for it, 11 files each) and 7 times after, once for each request
 (heldout_en2 0.786, 0 false runs) and the sealed `english_requests` score (19/30, 0 false runs) are unchanged, and
 none of the 297 requests in `task_intent/*.json`, `dev.json` and `english_requests/sealed.json` changes route,
 intent or link decision. `--check` now also holds round3 at accuracy >= 0.95 with no wrong link and no look-alike run.
+
+### Round 3, independent review (origin `review-r3`)
+
+The reviewer of PR #75 wrote 32 more inputs before the follow-up fix and ran them on `923ed38`, on the PR head
+`d455e57` and after: deferred ("Remind me tomorrow to check P against T", "Note to self: check ...", "Wait until
+Monday, then check ..."), a sentence that opens with the check done or as its subject ("Linked T and P yesterday",
+"Checking P against T was a waste of time"), "w/o checking" and "No checking against T" inside a pack request, and
+zero-width characters. At `d455e57` the opening-verb rule read "Remind", "Linked" and "Checking" as imperatives.
+The follow-up adds deferral and participle / gerund openings to the not-asked rule, `no` and `w/o` to the
+exclusions, and stops the opening-verb rule at a first word in -ed / -ing.
+
+| router | review-r3 accuracy | link | other | chat | wrongly linked | look-alikes run |
+|---|---|---|---|---|---|---|
+| `923ed38` | 0.375 | 6 / 7 | 2 / 4 | 4 / 21 | 19 | 17 |
+| `d455e57` | 0.719 | 6 / 7 | 2 / 4 | 15 / 21 | 8 | 6 |
+| after | 0.969 | 6 / 7 | 4 / 4 | 21 / 21 | 0 | 0 |
+
+The one miss is safe-side: "When you get a chance, check P against T." stays a chat (a leading "When" reads as a
+question). None of the 297 requests in `task_intent/*.json`, `dev.json` and `english_requests/sealed.json` changes
+route, intent or link decision between `d455e57`, `923ed38` and the follow-up.

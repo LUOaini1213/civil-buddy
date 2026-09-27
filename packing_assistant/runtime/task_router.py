@@ -165,13 +165,14 @@ _EN_SUBJECT_START = re.compile(
     r"(?i)(?:i|i[’']m|i[’']ve|we|you|they|he|she|it|my|our|your|their|his|her|its|the|this|that|these|those|a|an|someone|somebody"
     r"|anyone|anybody|everyone|nobody|yesterday|today|tomorrow|last|once|when|whenever|after|before|since|until|as|if|because"
     r"|here|there|maybe|perhaps|probably|hopefully)\b")
+_PARTICIPLE_START = re.compile(r"(?i)(?!(?:bring|string|need|proceed|feed|embed|speed|shed|seed)\b)[a-z-]{2,}(?:ed|ing)\b")
 _LINK_WORD = r"(?:(?:cross-)?check|link|match|compar|verif|reconcil)\w*"
 _LINK_DONE = r"(?:(?:cross-)?checked|linked|matched|compared|verified|reconciled)"
 _LINK_ZH_VERB = r"(?:核对|对照|比对|匹配|联动|检查)"
 _SUBJECT = (r"(?:i|we|you|they|he|she|someone|somebody|my\s+\w+|our\s+\w+|his\s+\w+|her\s+\w+|their\s+\w+"
             r"|the\s+(?:pm|pe|qs|estimator|engineer|client|team|consultant))")
 _LINK_EXCLUDED = re.compile(
-    r"(?i)\b(?:without|skip(?:ping|ped)?|no\s+need\s+to|don['’]?t(?!\s+forget)|do\s+not(?!\s+forget)|not)\s+(?:\w+\s+){0,2}"
+    r"(?i)(?:\b(?:without|skip(?:ping|ped)?|no\s+need\s+to|don['’]?t(?!\s+forget)|do\s+not(?!\s+forget)|not|no)|\bw/o)\s+(?:\w+\s+){0,2}"
     + _LINK_WORD + r"|不(?:用|要|必|需要?)(?:先|再)?(?:把)?[^，。；;？?]{0,20}?" + _LINK_ZH_VERB
     + r"|跳过[^，。；;]{0,20}?" + _LINK_ZH_VERB)
 _LINK_NOT_ASKED = re.compile(
@@ -183,8 +184,16 @@ _LINK_NOT_ASKED = re.compile(
     r"|\b" + _SUBJECT + r"\s+(?:have\s+|has\s+|had\s+)?" + _LINK_DONE + r"\b"
     r"|\b" + _SUBJECT.replace("you|", "") + r"\s+(?:will|['’]ll|would|might|may|could|plan\s+to|intend\s+to|(?:am|are|is)\s+going\s+to)"
     r"\s+(?:\w+\s+)?" + _LINK_WORD
+    # deferred ("Remind me tomorrow to check ...", "Note to self: ...", "Wait until Monday, then check ...") and a
+    # sentence that opens with the check already done or as its subject ("Linked X and Y yesterday", "Checking X against
+    # Y was a waste of time"); review of PR #75, dev_round3.json origin 'review-r3'
+    + r"|\bremind\s+(?:me|us|him|her|them)\b|\bnote\s+to\s+(?:self|myself)\b|\b(?:wait|hold\s+on)\s+(?:until|till|for)\b"
+    r"|\b(?:tomorrow|next\s+(?:week|month|time)|at\s+some\s+point|eventually|some\s*day)\b"
+    r"|(?:^|[.?!;]\s+)\W*(?:already\s+)?(?:" + _LINK_DONE + r"|(?:cross-)?checking|linking|matching|comparing|verifying"
+    r"|reconciling)\b"
     + r"|(?:要不要|应不应该?|该不该|需不需要|用不用|是否需要|有没有必要|值得|应该|如果|假如|要是)(?:先|再|现在)?[^，。；;？?]{0,20}?"
-    + _LINK_ZH_VERB + r"|已经[^，。；;？?]{0,20}?" + _LINK_ZH_VERB + r"|" + _LINK_ZH_VERB + r"过(?!程)")
+    + _LINK_ZH_VERB + r"|已经[^，。；;？?]{0,20}?" + _LINK_ZH_VERB + r"|" + _LINK_ZH_VERB + r"过(?!程)"
+    + r"|(?:提醒我|回头|以后|改天|明天|下周|下个月|晚点|稍后)[^，。；;？?]{0,20}?" + _LINK_ZH_VERB)
 _LINK_ASKED = re.compile(
     r"(?i)(?:^|[.?!;:]\s+|[,，]\s*)\W*(?:(?:please|pls|kindly|now|then|just|also|and|so|ok|okay|can\s+you|could\s+you|would\s+you"
     r"|will\s+you)[\s,]+)*(?:(?:does|do|will|is|are|can|could)\b[^.?!]{0,200}?\b(?:compl(?:y|ies|iant|iance)|meets?|satisf\w*|fits?|conform\w*)"
@@ -228,8 +237,10 @@ def _asks_for_link_run(text: str) -> bool:
     # An English sentence that is not a question and does not open with a subject opens with its verb: an imperative
     # ("Set Y.xlsx beside X.md", "Answer X.md from Y.xlsx"). "The PM checked ...", "Once ... I will check ..." open
     # with a subject or a time clause and stay a chat.
+    # A first word in -ed / -ing is a participle or a gerund, not an imperative ("Priced Y.xlsx, then ...").
     head = rest.lstrip(" \t\r\n\"'([")
-    return head[:1].isascii() and not _QUESTION.search(text) and not _EN_SUBJECT_START.match(head)
+    return (head[:1].isascii() and not _QUESTION.search(text) and not _EN_SUBJECT_START.match(head)
+            and not _PARTICIPLE_START.match(head))
 
 
 def _positive_text(message: str) -> str:
