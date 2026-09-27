@@ -41,11 +41,13 @@ What the region and model facts are, and where they come from: docs/model-mode.m
 from __future__ import annotations
 
 import argparse
+import base64
 import json
 import os
+import re
 import sys
 import time
-from urllib.parse import quote, urlsplit
+from urllib.parse import quote, quote_plus, urlsplit
 
 import httpx
 
@@ -59,14 +61,55 @@ TOOL = {"type": "function", "function": {
 _ERROR_CHARS = 200
 
 
+#: an echo of this many consecutive characters of the key (or of one of its encodings) is masked, so a gateway that
+#: prints the key cut short, or inside "Basic base64(user:key)", does not get it past _hide
+_ECHO_CHARS = 12
+
+
+def _key_forms(key: str) -> list:
+    """The key as a careless gateway may echo it: as sent, JSON-escaped (a quote, a backslash or a non-ASCII character
+    is escaped when the record is written), URL-encoded (a key put in a query string) and base64 (a key inside Basic
+    auth or a token blob). base64 depends on where the key starts in the encoded bytes: for each of the three
+    alignments, only the characters made from the key's own bits are kept, so the form matches whatever surrounds it."""
+    forms = [key, json.dumps(key)[1:-1], json.dumps(key, ensure_ascii=False)[1:-1], quote(key, safe=""),
+             quote_plus(key, safe=""), quote(key)]
+    # the same with lower-case %xx escapes, a JSON writer that escapes '/' as '\/', and hex (a key dumped as bytes)
+    forms += [re.sub(r"%[0-9A-F]{2}", lambda m: m.group(0).lower(), f) for f in forms[3:6]]
+    forms += [json.dumps(key)[1:-1].replace("/", "\\/")]
+    raw = key.encode("utf-8", "surrogatepass")
+    forms += [raw.hex(), raw.hex().upper()]
+    for off in range(3):
+        start, end = -(-8 * off // 6), 8 * (off + len(raw)) // 6
+        for encode in (base64.b64encode, base64.urlsafe_b64encode):
+            forms.append(encode(b"\0" * off + raw).decode("ascii")[start:end])
+    return [f for f in dict.fromkeys(forms) if len(f) >= min(4, len(key))]
+
+
 def _hide(text: str, key: str) -> str:
-    """The key out of ``text``, also in the forms JSON gives it (a key holding a quote, a backslash or a non-ASCII
-    character is escaped when the record is written, and a plain replace would miss it)."""
+    """The key out of ``text`` in every form of _key_forms, and any run of _ECHO_CHARS consecutive characters of one of
+    those forms (a key cut short by one character, or the part of a base64 blob that holds the key)."""
     text = text or ""
-    if key:
-        for form in dict.fromkeys((key, json.dumps(key)[1:-1], json.dumps(key, ensure_ascii=False)[1:-1])):
-            text = text.replace(form, "***")
-    return text
+    if not key:
+        return text
+    spans = []
+    for form in _key_forms(key):
+        width = min(len(form), _ECHO_CHARS)
+        for i in range(len(form) - width + 1):
+            window, at = form[i:i + width], 0
+            while (at := text.find(window, at)) != -1:
+                spans.append((at, at + width))
+                at += 1
+    merged: list = []
+    for begin, finish in sorted(spans):
+        if merged and begin <= merged[-1][1]:
+            merged[-1][1] = max(merged[-1][1], finish)
+        else:
+            merged.append([begin, finish])
+    out, last = [], 0
+    for begin, finish in merged:
+        out += [text[last:begin], "***"]
+        last = finish
+    return "".join(out) + text[last:]
 
 
 def _masked(text: str, key: str) -> str:
@@ -109,7 +152,7 @@ def chat(base: str, key: str, model: str, tools: bool, *, timeout: float, max_to
     try:
         r = httpx.post(base.rstrip("/") + "/chat/completions", json=payload, timeout=timeout,
                        headers={"Authorization": "Bearer " + key, "Content-Type": "application/json"})
-    except httpx.HTTPError as exc:
+    except (httpx.HTTPError, httpx.InvalidURL, UnicodeError) as exc:   # a key or URL httpx cannot send: the type
         return {"status": None, "seconds": round(time.perf_counter() - t0, 2), "error": type(exc).__name__}
     row = {"status": r.status_code, "seconds": round(time.perf_counter() - t0, 2),
            "request_id": r.headers.get("x-amzn-requestid", "")}
@@ -148,7 +191,7 @@ def converse(base: str, key: str, model: str, tools: bool, *, timeout: float, ma
     try:
         r = httpx.post(base.rstrip("/") + "/model/" + quote(model, safe="") + "/converse", json=body, timeout=timeout,
                        headers={"Authorization": "Bearer " + key, "Content-Type": "application/json"})
-    except httpx.HTTPError as exc:
+    except (httpx.HTTPError, httpx.InvalidURL, UnicodeError) as exc:   # a key or URL httpx cannot send: the type
         return {"status": None, "seconds": round(time.perf_counter() - t0, 2), "error": type(exc).__name__}
     row = {"status": r.status_code, "seconds": round(time.perf_counter() - t0, 2),
            "request_id": r.headers.get("x-amzn-requestid", "")}
