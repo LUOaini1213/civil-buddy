@@ -833,6 +833,146 @@ class HardeningTests(Case):
                 self.assertEqual("no_link_record", got.get("error_code"), (sid, str(got)[:200]))
 
 
+def sheet_xlsx(rows_xml: str, *, part: str = "xl/worksheets/sheet1.xml", head: str = "", tail: str = "") -> bytes:
+    """A workbook openpyxl opens, with its one sheet at ``part`` (the relationships may name any path)."""
+    main = "http://schemas.openxmlformats.org/spreadsheetml/2006/main"
+    rel = "http://schemas.openxmlformats.org/officeDocument/2006/relationships"
+    pkg = "http://schemas.openxmlformats.org/package/2006/relationships"
+    buf = io.BytesIO()
+    with zipfile.ZipFile(buf, "w", zipfile.ZIP_DEFLATED) as z:
+        z.writestr("[Content_Types].xml", '<Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types">'
+                   '<Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/>'
+                   '<Default Extension="xml" ContentType="application/xml"/><Override PartName="/xl/workbook.xml" '
+                   'ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet.main+xml"/>'
+                   f'<Override PartName="/{part}" '
+                   'ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.worksheet+xml"/></Types>')
+        z.writestr("_rels/.rels", f'<Relationships xmlns="{pkg}"><Relationship Id="rId1" '
+                   f'Type="{rel}/officeDocument" Target="xl/workbook.xml"/></Relationships>')
+        z.writestr("xl/workbook.xml", f'<workbook xmlns="{main}" xmlns:r="{rel}"><sheets>'
+                   '<sheet name="materials" sheetId="1" r:id="rId1"/></sheets></workbook>')
+        z.writestr("xl/_rels/workbook.xml.rels", f'<Relationships xmlns="{pkg}"><Relationship Id="rId1" '
+                   f'Type="{rel}/worksheet" Target="/{part}"/></Relationships>')
+        z.writestr(part, f'<worksheet xmlns="{main}">{head}<sheetData>{rows_xml}</sheetData>{tail}</worksheet>')
+    return buf.getvalue()
+
+
+def sheet_row(r: int, values, first_col: str = "A") -> str:
+    cells = "".join(f'<c r="{chr(ord(first_col) + i)}{r}" t="inlineStr"><is><t>{v}</t></is></c>' if isinstance(v, str)
+                    else f'<c r="{chr(ord(first_col) + i)}{r}"><v>{v}</v></c>' for i, v in enumerate(values))
+    return f'<row r="{r}">{cells}</row>'
+
+
+PANEL_HEAD = sheet_row(1, ["Mark", "Description", "Qty", "Weight (kg)", "Length (mm)", "Width (mm)", "Height (mm)"])
+
+
+def panel_rows(n: int, start: int = 2) -> str:
+    return "".join(sheet_row(start + k, [f"P{k:05d}", "Unitised panel", 1, 450, 4200, 1500, 250]) for k in range(n))
+
+
+class ReviewRound3Tests(Case):
+    """The independent review of #77 (2026-09-28): each upload below passed the row and cell caps and then cost the
+    reader seconds to hours, and with the slot now held until the worker stops, two of them kept the link busy."""
+
+    def test_caps_count_every_part_the_row_numbers_the_columns_and_merges(self) -> None:
+        far_cell = '<c r="XFD1" t="inlineStr"><is><t>x</t></is></c>'
+        wide_head = PANEL_HEAD.replace("</row>", far_cell + "</row>")
+        inputs = {
+            # a sheet anywhere the relationships point: 60,000 rows took the reader 17 s, then the pack step
+            "rows outside xl/worksheets": sheet_xlsx(PANEL_HEAD + panel_rows(5001), part="xl/sheets/data.xml"),
+            # 2 KB: openpyxl pads the gap to row 1,048,576 (10 s, 410 MB)
+            "last row numbered 1,048,576": sheet_xlsx(PANEL_HEAD + panel_rows(10) + sheet_row(1048576, ["END"])),
+            # one header cell in column XFD: 4,000 rows took 11 s
+            "a header cell in column XFD": sheet_xlsx(wide_head + panel_rows(4000)),
+            # both: the reader was still running at 90 s and the slot was never released
+            "column XFD and row 1,048,576": sheet_xlsx(wide_head + panel_rows(10) + sheet_row(1048576, ["END"])),
+            "stated dimension A1:XFD1048576": sheet_xlsx(PANEL_HEAD + panel_rows(10), head='<dimension ref="A1:XFD1048576"/>'),
+            # openpyxl makes one object per merged cell when a two-row header makes it read merges: 1 M took 27 s
+            "one merge over A40:Z40000": sheet_xlsx(PANEL_HEAD + panel_rows(10), tail='<mergeCells count="1">'
+                                                    '<mergeCell ref="A40:Z40000"/></mergeCells>'),
+            "5,001 rows numbered without r": sheet_xlsx("<row><c><v>1</v></c></row>" * 5001),
+        }
+        csv_cr = b"Mark,Qty,Weight (kg)\r" + b"P1,1,450\r" * 5001        # the csv reader ends a line at a bare CR too
+        before = len(self.jobs())
+        for name, data in [*inputs.items(), ("CR-only csv", csv_cr)]:
+            t0 = time.perf_counter()
+            ext = ".csv" if name.endswith("csv") else ".xlsx"
+            r = self.upload(panel=("p" + ext, data), session_id="caps3")
+            self.assertEqual((413, "too_many_rows"), (r.status_code, r.json().get("error_code")), (name, r.text[:300]))
+            self.assertLess(time.perf_counter() - t0, 5, f"{name}: refused only after parsing")
+        self.assertEqual(before, len(self.jobs()), "a refused list created a job folder")
+        # at the limits: 5,000 rows, a grid of 5,000 x 200, a small header merge
+        head_200 = PANEL_HEAD.replace("</row>", '<c r="GR1" t="inlineStr"><is><t>x</t></is></c></row>')
+        for name, data in (("5,000 rows", sheet_xlsx(PANEL_HEAD + panel_rows(4999))),
+                           ("5,000 x 200", sheet_xlsx(head_200 + panel_rows(4999))),
+                           ("header merge", sheet_xlsx(PANEL_HEAD + panel_rows(10), tail='<mergeCells count="1">'
+                                                       '<mergeCell ref="E1:G1"/></mergeCells>'))):
+            web_link._check_rows(data, "xlsx", name)
+        # every table in the repository still passes
+        tables = [p for top in ("docs", "examples", "test") for pattern in ("*.xlsx", "*.csv")
+                  for p in (ROOT / top).glob(f"**/{pattern}")]
+        self.assertGreater(len(tables), 20)
+        for path in tables:
+            kind = "xlsx" if path.suffix == ".xlsx" else "text"
+            if kind == "xlsx" and not zipfile.is_zipfile(path):
+                continue
+            web_link._check_rows(path.read_bytes(), kind, path.name)
+
+    def test_a_timed_out_link_stops_while_reading_a_padded_sheet(self) -> None:
+        """Behind the caps as well: the reader checks the engine's timeout event while openpyxl pads rows, so a sheet
+        that gets past the upload check (a workbench file, a future reader) cannot hold a slot for hours."""
+        from packing_assistant.runtime import tool_engine
+
+        self.assertTrue(self.upload(session_id="warm3").json()["ok"])
+        far = sheet_xlsx(PANEL_HEAD.replace("</row>", '<c r="XFD1" t="inlineStr"><is><t>x</t></is></c></row>')
+                         + panel_rows(10) + sheet_row(1048576, ["END"]))
+        engine = tool_engine.default_engine()
+        engine.tools["tender.packing_link"].timeout_s = 2.0
+        released = threading.Event()
+        idle = engine.when_idle
+
+        def tracked(run_id, callback):
+            def done():
+                try:
+                    callback()
+                finally:
+                    released.set()
+            idle(run_id, done)
+
+        with patch.object(web_link, "_RUNS", threading.BoundedSemaphore(2)), patch.object(engine, "when_idle", tracked), \
+                patch.object(tool_engine, "default_engine", return_value=engine):
+            t0 = time.monotonic()
+            with self.assertRaises(web_link.Refusal) as caught:
+                web_link._locked_run("far", lambda: web_link._upload_job(
+                    "far", (".md", "t.md", ITT), (".xlsx", "p.xlsx", far), "", ""))
+            answered = time.monotonic() - t0
+            self.assertEqual("timeout", caught.exception.code)
+            self.assertTrue(released.wait(15), "the timed-out worker kept reading padded rows")
+        self.assertLess(time.monotonic() - t0 - answered, 10)
+
+    def test_sessions_of_their_own_leave_no_empty_folders(self) -> None:
+        """Every upload without a session_id has a folder of its own; pruning removed its jobs and left the folder,
+        so the web-link root grew by one folder per upload (8 uploads, 3 jobs kept: 13 folders, 10 empty)."""
+        with patch.object(web_link, "KEEP_JOBS_TOTAL", 2):
+            for _ in range(4):
+                self.assertTrue(self.upload().json()["ok"])
+        folders = [p for p in self.root.iterdir() if p.is_dir()]
+        self.assertEqual([], [p.name for p in folders if not any(p.iterdir())], "empty session folders left behind")
+        self.assertEqual(2, len(folders))
+        self.assertEqual(2, len(self.jobs()))
+
+    def test_every_session_file_uses_one_folder_rule(self) -> None:
+        """memory.py and session_handoff.py kept the old rule: session '.' wrote its summary and hand-off into
+        demo/out itself, and an id such as 'x y' split one session's files across two folders."""
+        from packing_assistant.runtime import agent_loop, memory, session_handoff
+        from packing_assistant.runtime.session_packing import _path
+
+        for sid in (".", "..", "x y", "CON", "C:", "default", "web-0123", ""):
+            folder = agent_loop._safe_sid(sid)
+            self.assertEqual({folder}, {memory.summary_path(sid).parent.name, session_handoff.handoff_path(sid).parent.name,
+                                        _path(sid).parent.name}, sid)
+            self.assertNotEqual("out", memory.summary_path(sid).parent.name, sid)
+
+
 class LandingTests(Case):
     def test_visitor_without_token_is_told_what_this_is(self) -> None:
         for path in ("/", "/workbench"):

@@ -411,6 +411,9 @@ class EndpointCheck(unittest.TestCase):
 
         key = "sk-Probe/Key+with=odd&chars_0123456789"
         echoes = [key, quote(key, safe=""), quote_plus(key), quote(key), key[:-1], key[1:], key[5:30]]
+        # review of #77: lower-case %xx escapes, a JSON writer's '\/' and a hex dump still printed most of the key
+        echoes += [quote(key, safe="").replace("%2F", "%2f").replace("%2B", "%2b").replace("%3D", "%3d"),
+                   key.replace("/", "\\/"), key.encode().hex(), key.encode().hex().upper()]
         for prefix in ("", "u:", "us:", "user:"):
             raw = (prefix + key).encode()
             echoes += [base64.b64encode(raw).decode(), base64.urlsafe_b64encode(raw).decode().rstrip("=")]

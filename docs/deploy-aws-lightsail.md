@@ -267,7 +267,8 @@ without the token. Then `https://<site>/demo` runs the linked demo in one click.
   run evaluations). One token for all routes and no rate limit in front of it. That is why the box holds
   **synthetic data only and no model key by default**: the worst case is a mess that one snapshot restore undoes.
 - Bounded by design: uploads at most 10 MB + 5 MB (Caddy refuses bodies over 16 MB), an Office file that unpacks
-  to more than 20 MB or a panel list over 5,000 rows is refused before it is parsed, at most 2 linked runs at once
+  to more than 20 MB or a panel list over 5,000 rows (counted in every part of the workbook, row numbers, far
+  columns and merged cells included) is refused before it is parsed, at most 2 linked runs at once
   (a run that timed out keeps its slot until its worker has stopped, and the pack step stops at its next merge
   step), 10 upload jobs kept per session, and an upload without a `session_id` gets a session of its own. The linked run never approves anything: its record stays
   `submit_blocked = true`, `confirmed_by_person = false`; only a person's typed sentence approves high-risk work,

@@ -183,43 +183,93 @@ def _check_bytes(data: bytes, kind: str, label: str) -> None:
         raise Refusal(413, "too_large", f"the {label} unpacks to more than {MAX_UNZIPPED // MB} MB")
 
 
-_XML_ROW = re.compile(rb"<(?:[A-Za-z_][\w.-]*:)?row[\s>/]")
-_XML_CELL = re.compile(rb"<(?:[A-Za-z_][\w.-]*:)?c[\s>/]")
+#: the sheet elements that decide what openpyxl builds: a row (its number), a cell (its column), the sheet's stated
+#: size, and a merged range (openpyxl makes one object per merged cell). Any namespace prefix.
+_XML_EVENT = re.compile(rb"<(?:[A-Za-z_][\w.-]*:)?(row|c|dimension|mergeCell)(?=[\s>/])([^>]*)>")
+_XML_R = re.compile(rb"""(?:^|\s)r\s*=\s*["']\s*([A-Za-z]{0,3})\s*(\d+)""")
+_XML_REF = re.compile(rb"""(?:^|\s)ref\s*=\s*["']([^"']*)["']""")
+_XML_CORNER = re.compile(rb"\$?([A-Za-z]{0,3})\$?(\d*)")
+#: rows x columns of the grid openpyxl reads, gaps included: it pads every row to the widest column and every gap
+#: between two row numbers with empty rows. 5,000 rows of 200 columns; a far cell costs as much as a full sheet.
+MAX_PANEL_GRID = 1_000_000
+
+
+def _column(letters: bytes) -> int:
+    n = 0
+    for ch in letters.upper():
+        n = n * 26 + ch - 64
+    return n
 
 
 def _check_rows(data: bytes, kind: str, label: str) -> None:
-    """A panel list with more rows (or cells) than one linked run can use is refused before any parser opens it:
-    the rows of every worksheet are counted in the XML (a stream, at most MAX_UNZIPPED), a CSV's lines in the bytes."""
+    """A panel list with more rows (or cells) than one linked run can use is refused before any parser opens it.
+    A CSV's lines are counted in the bytes (CR, LF and CRLF all end a line for the csv reader). In a workbook every
+    part is scanned (a stream, at most MAX_UNZIPPED), not only xl/worksheets/: the workbook's relationships may put a
+    sheet anywhere. Counted: row and cell elements, the highest row number and column (a 2 KB sheet with one cell in
+    XFD1048576 makes openpyxl walk a million padded rows), the stated dimension and the merged area."""
     rows_cap = max_panel_rows()
     too_many = Refusal(413, "too_many_rows", f"the {label} has more than {rows_cap:,} rows; split it and link each part")
     if kind == "text":
-        if data.count(b"\n") + (0 if data.endswith(b"\n") else 1) > rows_cap:
+        lines = len(re.findall(rb"\r\n|\r|\n", data))
+        if lines + (0 if data.endswith((b"\n", b"\r")) else 1) > rows_cap:
             raise too_many
         return
     cells_cap = max(MAX_PANEL_CELLS, rows_cap * 20)
-    rows = cells = 0
+    grid_cap = max(MAX_PANEL_GRID, cells_cap)
+
+    def too(what: str) -> Refusal:
+        return Refusal(413, "too_many_rows", f"the {label} {what}; delete what lies outside the table, or split it "
+                                             "and link each part")
+
+    rows = cells = merged = 0
     with zipfile.ZipFile(BytesIO(data)) as z:
         for info in z.infolist():
-            if not (info.filename.startswith("xl/worksheets/") and info.filename.endswith(".xml")):
+            if info.is_dir():
                 continue
+            row_no = top_row = top_col = in_row = 0
             tail = b""
             with z.open(info) as member:
                 while True:
                     chunk = member.read(1 << 20)
-                    if not chunk:
-                        break
                     window = tail + chunk
                     # a tag split across two reads: everything from the last '<' waits for the next read
-                    cut = window.rfind(b"<") if len(chunk) == 1 << 20 else len(window)
+                    cut = window.rfind(b"<") if chunk else len(window)
                     cut = len(window) if cut <= 0 else cut
-                    rows += len(_XML_ROW.findall(window, 0, cut))
-                    cells += len(_XML_CELL.findall(window, 0, cut))
+                    for m in _XML_EVENT.finditer(window, 0, cut):
+                        tag, attrs = m.group(1), m.group(2)
+                        if tag == b"row":
+                            rows += 1
+                            numbers = [int(n) for _, n in _XML_R.findall(attrs)]
+                            row_no = max(numbers) if numbers else row_no + 1
+                            top_row, in_row = max(top_row, row_no), 0
+                        elif tag == b"c":
+                            cells += 1
+                            in_row += 1
+                            refs = _XML_R.findall(attrs)
+                            top_col = max([top_col, in_row] + [_column(c) for c, _ in refs if c])
+                            top_row = max([top_row] + [int(n) for _, n in refs])
+                        else:
+                            ref = _XML_REF.search(attrs)
+                            corners = [_XML_CORNER.fullmatch(p.strip()) for p in (ref.group(1) if ref else b"").split(b":")]
+                            spots = [(_column(c.group(1)), int(c.group(2) or 0)) for c in corners if c]
+                            if tag == b"dimension":
+                                top_col = max([top_col] + [c for c, _ in spots])
+                                top_row = max([top_row] + [r for _, r in spots])
+                            elif len(spots) == 2:
+                                (c1, r1), (c2, r2) = spots
+                                merged += (abs(c2 - c1) + 1) * (abs(r2 - r1) + 1)
                     tail = window[cut:]
-                    if rows > rows_cap:
+                    if rows > rows_cap or top_row > rows_cap:
                         raise too_many
                     if cells > cells_cap:
-                        raise Refusal(413, "too_many_rows", f"the {label} has more than {cells_cap:,} cells; "
-                                                            "split it and link each part")
+                        raise too(f"has more than {cells_cap:,} cells")
+                    if top_row * top_col > grid_cap:
+                        raise too(f"reaches row {top_row:,} and column {top_col:,}, more than {grid_cap:,} cells "
+                                  "to read")
+                    if merged > cells_cap:
+                        raise too(f"merges more than {cells_cap:,} cells")
+                    if not chunk:
+                        break
 
 
 async def _read_upload(form: Any, field: str, types: Dict[str, str], limit: int, label: str) -> Tuple[str, str, bytes]:
@@ -295,6 +345,14 @@ def _prune_idle(root: Path) -> None:
     for old in everything[:-KEEP_JOBS_TOTAL]:
         if old.parent.name not in protected:
             shutil.rmtree(old, ignore_errors=True)
+    for session in sessions:
+        # every upload without a session_id has a folder of its own: once its last job is pruned, the empty folder
+        # goes too, or the web-link root grows by one folder per upload (demo sessions are kept by count above)
+        if session.name not in protected and not session.name.startswith("demo-") and session.is_dir():
+            try:
+                session.rmdir()             # only an empty folder; one that still holds a job stays
+            except OSError:
+                pass
 
 
 def _write_input(job: Path, name: str, data: bytes) -> Path:

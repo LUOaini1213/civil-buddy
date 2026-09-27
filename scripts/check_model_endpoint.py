@@ -44,6 +44,7 @@ import argparse
 import base64
 import json
 import os
+import re
 import sys
 import time
 from urllib.parse import quote, quote_plus, urlsplit
@@ -72,7 +73,11 @@ def _key_forms(key: str) -> list:
     alignments, only the characters made from the key's own bits are kept, so the form matches whatever surrounds it."""
     forms = [key, json.dumps(key)[1:-1], json.dumps(key, ensure_ascii=False)[1:-1], quote(key, safe=""),
              quote_plus(key, safe=""), quote(key)]
+    # the same with lower-case %xx escapes, a JSON writer that escapes '/' as '\/', and hex (a key dumped as bytes)
+    forms += [re.sub(r"%[0-9A-F]{2}", lambda m: m.group(0).lower(), f) for f in forms[3:6]]
+    forms += [json.dumps(key)[1:-1].replace("/", "\\/")]
     raw = key.encode("utf-8", "surrogatepass")
+    forms += [raw.hex(), raw.hex().upper()]
     for off in range(3):
         start, end = -(-8 * off // 6), 8 * (off + len(raw)) // 6
         for encode in (base64.b64encode, base64.urlsafe_b64encode):
