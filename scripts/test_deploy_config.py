@@ -197,6 +197,10 @@ class AdminTests(unittest.TestCase):
         self.assertIn('> "$model_file.new"', body)
         self.assertIn('rm -f "$model_file"', self.body(t, "model_off"))
 
+    def test_set_site_restarts_caddy_only(self) -> None:
+        # --force-recreate on caddy alone would also recreate the gateway it depends on (a needless restart)
+        self.assertIn("up -d --no-deps --force-recreate caddy", self.body(self.text, "set_site"))
+
 
 class ImageTests(unittest.TestCase):
     def test_uvicorn_access_log_off(self) -> None:
@@ -226,7 +230,7 @@ class DocTests(unittest.TestCase):
                        # both paths, the operator commands, and the teardown that stops the charges
                        "Path A", "Path B", "Lightsail console", "civil-admin.sh show-link", "civil-admin.sh model-on",
                        "rotate-token", "aws lightsail delete-instance", "aws lightsail release-static-ip",
-                       "get-instance-snapshots", "small_3_0", "cidrs=${MYIP}/32"):
+                       "get-instance-snapshots", "small_3_0", "cidrs=[${MYIP}/32]"):
             self.assertIn(needle, text)
         self.assertRegex(text, r"(?i)tear.?down")
         self.assertRegex(text, r"(?i)synthetic")
