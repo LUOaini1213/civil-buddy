@@ -2678,7 +2678,7 @@ button.danger { background: var(--cb-red); box-shadow: none; }
                     </div>
                     <div class="cb-apr-foot">
                       确认 / 驳回为显式决策，写入下方审计行 · <b>Esc、关闭 = 驳回，永不放行</b> ·
-                      <span class="cb-apr-confirm-phrase" v-if="cbAprRisk === 'high'">高风险岗须持证人员签认（确认句：「我明白，将由持证人员签认」，流程层已强制勾选门禁）</span>
+                      <span class="cb-apr-confirm-phrase" v-if="cbAprRisk === 'high'">高风险岗须持证人员签认（确认句：「我明白，将由持证人员签认」或 “I understand; a licensed person will sign this off.”，流程层已强制勾选门禁）</span>
                       <span v-else>状态已持久化，可安全关闭后 resume</span>
                     </div>
                   </div>

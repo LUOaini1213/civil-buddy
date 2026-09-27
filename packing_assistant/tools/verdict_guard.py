@@ -83,18 +83,23 @@ def stated_verdicts(text: str, *, negation: bool = True, clause_scope: bool = Tr
     return found
 
 
-def notice(found: List[Dict[str, Any]]) -> str:
+def notice(found: List[Dict[str, Any]], *, english: bool = False) -> str:
     if not found:
         return ""
-    items = "、".join(dict.fromkeys(str(item["text"]) for item in found))
+    names = dict.fromkeys(str(item["text"]) for item in found)
+    if english:
+        return ("⚠ These verdicts are not this system's to give; they were taken out of the reply, and a qualified "
+                "person decides: " + ", ".join(names))
+    items = "、".join(names)
     return f"⚠ 以下结论不由本系统下，已从回复里去掉，请由有资格的人判断：{items}"
 
 
-def strike(text: str, found: List[Dict[str, Any]]) -> str:
+def strike(text: str, found: List[Dict[str, Any]], *, english: bool = False) -> str:
     """The text with each stated verdict replaced, right to left so positions stay valid."""
     out = text
     for item in sorted(found, key=lambda entry: entry["start"], reverse=True):
-        out = out[: item["start"]] + "（此处结论不由本系统判定）" + out[item["end"]:]
+        mark = "(verdict removed: not this system's call)" if english else "（此处结论不由本系统判定）"
+        out = out[: item["start"]] + mark + out[item["end"]:]
     return out
 
 
