@@ -6,7 +6,7 @@ import os
 import sys
 from typing import Any, Dict, List, Optional
 
-from packing_assistant.runtime.civil_config import CONFIRM, CONFIRM_EN, APPROVAL_MODES, SANDBOX_MODES, contains_confirmation, is_confirmation, load_config
+from packing_assistant.runtime.civil_config import CONFIRM, CONFIRM_EN, APPROVAL_MODES, SANDBOX_MODES, confirms_in_message, is_confirmation, load_config
 
 HELP = """/help              本页
 /status            作业文件夹 · CIVIL.md · sandbox · approval · 模型 · thread · 会话槽
@@ -298,7 +298,7 @@ def run_tui() -> int:
                 print(msg)
                 print()
             continue
-        confirm = st.confirm or contains_confirmation(line)
+        confirm = st.confirm or confirms_in_message(line)
         granted: List[bool] = []
 
         def approve(request: Dict[str, Any]) -> bool:

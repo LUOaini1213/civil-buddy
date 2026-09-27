@@ -28,6 +28,11 @@ QUOTED = ("不同意：" + CONFIRM, CONFIRM + "吗？", "No: " + CONFIRM_EN, "Di
 NOT_THE_SENTENCE = ("", "我明白", "我已核对 P0", CONFIRM[:-1], "I understand", CONFIRM_EN.lower(), CONFIRM_EN[:-1],
                     CONFIRM_EN.replace(";", ","), *QUOTED)
 SENTENCES = (CONFIRM, CONFIRM_EN)
+# A task that carries a sentence the person refuses, asks about or quotes (the message way, not confirm_text).
+IN_MESSAGE_NOT_SIGNED = ("写一份消防专篇。不同意：" + CONFIRM, "写一份消防专篇。" + CONFIRM + "吗？",
+                         "Write the fire protection report. No: " + CONFIRM_EN,
+                         "Write the fire protection report. Did you mean " + CONFIRM_EN,
+                         "Write the fire protection report; the estimator will type \"" + CONFIRM_EN + "\" tomorrow.")
 
 
 class WorkbenchConfirmationTests(unittest.TestCase):
@@ -83,6 +88,13 @@ class WorkbenchConfirmationTests(unittest.TestCase):
                 response = self.client.post("/api/chat", json={**body, "confirm_text": typed, "confirm_ok": True})
                 self.assertEqual(202, response.status_code, response.text)
                 self.assertIs(expected, seen[-1])
+            # typed inside the task, the sentence counts only as the person's own statement: a refused, asked or
+            # quoted copy in the message approves nothing, in either language
+            for message, expected in (("写一份消防专篇。" + CONFIRM, True), ("Write the fire protection report. " + CONFIRM_EN, True),
+                                      *((m, False) for m in IN_MESSAGE_NOT_SIGNED)):
+                response = self.client.post("/api/chat", json={**body, "message": message})
+                self.assertEqual(202, response.status_code, response.text)
+                self.assertIs(expected, seen[-1], message)
         self.assertFalse(flow.chat_service._ACTIVE)
 
 

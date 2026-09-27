@@ -30,8 +30,40 @@ def is_confirmation(value: Any, *, strip: bool = True) -> bool:
 
 
 def contains_confirmation(text: Any) -> bool:
-    """A person's own typed line carries one of the two sentences (the TUI / desktop / workbench message way)."""
+    """The text carries one of the two sentences anywhere. For scrubs and refusals (memory, history, a reply); the
+    approval check on a person's typed task is ``confirms_in_message``."""
     return type(text) is str and any(sentence in text for sentence in CONFIRM_SENTENCES)
+
+
+# A sentence typed inside a task approves only when the person says it: not refused ("No: ...", "不同意：..."), not
+# asked ("... ?", "...吗"), not wondered about ("Did you mean ...", "是否..."), and not quoted inside other words ('the
+# estimator will type "..." later'). The clause before it is the text since the last sentence end or line break.
+_CLAUSE_END = re.compile(r"[。！？!?\n]|\.(?=\s|$)")
+_REFUSED = re.compile(r"(?i)\b(?:no|not|don['’]?t|never|won['’]?t|refuse[sd]?|mean|whether|should|if)\b"
+                      r"|不同意|不要|不用|不必|无需|先别|别写|别生成|并非|不是|是否|如果|假如|要不要")
+_ASKED = re.compile(r"\s*[\"”’」』)）]?\s*(?:吗|么|嘛|[^。！？!?\n.]{0,16}[?？])")
+_OPEN_QUOTE = re.compile(r"[\"“‘'「『]\s*$")
+
+
+def confirms_in_message(text: Any) -> bool:
+    """A person's own typed task (the TUI line, the desktop task, the workbench message) carries one of the two
+    sentences as their own statement for this turn. Anything else approves nothing; the person can still type the
+    sentence alone in the confirmation field, where ``is_confirmation`` decides."""
+    if type(text) is not str:
+        return False
+    for sentence in CONFIRM_SENTENCES:
+        start = text.find(sentence)
+        while start >= 0:
+            end = start + len(sentence)
+            parts = _CLAUSE_END.split(text[:start])
+            clause = parts[-1]
+            if not clause.strip() and len(parts) > 1 and len(parts[-2].strip()) <= 24:
+                clause = parts[-2] + " " + clause          # "No. <sentence>" / "不同意。<sentence>": a short refusal just before
+            quoted = _OPEN_QUOTE.search(clause) and _OPEN_QUOTE.sub("", clause).strip()
+            if not (_REFUSED.search(clause) or _ASKED.match(text[end:]) or quoted):
+                return True
+            start = text.find(sentence, end)
+    return False
 
 
 def count_confirmations(text: str) -> int:

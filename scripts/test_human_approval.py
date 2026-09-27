@@ -209,6 +209,33 @@ class EnglishSignOffTests(JobFolder):
             self.assertIs(module.CONFIRM_EN, civil_config.CONFIRM_EN, module.__name__)
         self.assertEqual((cad_api.CONFIRMATION, cad_api.CONFIRM_EN), (CONFIRM, CONFIRM_EN))
 
+    def test_a_sentence_inside_a_task_counts_only_as_the_persons_own_statement(self):
+        """The TUI line, the desktop task and the workbench message all ask confirms_in_message: a refused, asked,
+        wondered-about or quoted copy approves nothing, in either language (reviewer's probe, PR #67)."""
+        from packing_assistant.runtime.civil_config import confirms_in_message
+
+        signed = (HIGH + "。" + CONFIRM, HIGH + CONFIRM, CONFIRM, " " + CONFIRM + "\n", "「" + CONFIRM + "」",
+                  "Write the fire protection report. " + CONFIRM_EN, CONFIRM_EN, '"' + CONFIRM_EN + '"',
+                  "Draft the WAH briefing for block B, no hard hats section.\n" + CONFIRM_EN)
+        not_signed = ("不同意：" + CONFIRM, CONFIRM + "吗？", "是否需要输入" + CONFIRM + "？", "不要写盘，" + CONFIRM + "这句以后再说",
+                      "No: " + CONFIRM_EN, "No. " + CONFIRM_EN, "Did you mean " + CONFIRM_EN, "Should I type " + CONFIRM_EN + "?",
+                      CONFIRM_EN + " Or not?", "I will not type " + CONFIRM_EN,
+                      "Do not write anything. The estimator will type \"" + CONFIRM_EN + "\" tomorrow.", *self.ALMOST[:5],
+                      None, 1, [CONFIRM_EN])
+        for text in signed:
+            self.assertTrue(confirms_in_message(text), text)
+        for text in not_signed:
+            self.assertFalse(confirms_in_message(text), text)
+        from packing_assistant.desktop.controller import DesktopController
+
+        desk = DesktopController()
+        desk.open_job(str(self.job))
+        desk.new_thread()
+        asked = []
+        refused = desk.submit("编一份临边防护安全交底，部位：东桥3号墩。No: " + CONFIRM_EN, approve=lambda request: asked.append(request) and False)
+        self.assertTrue(refused["hitl_pending"] and not refused["wrote"] and asked, refused)
+        self.assertEqual(self.written(), [])
+
     def test_civil_serve_takes_the_english_sentence_typed_and_nothing_near_it(self):
         tid = self.rpc("thread/start", title="serve-en")["result"]["thread_id"]
         for typed in self.ALMOST:
