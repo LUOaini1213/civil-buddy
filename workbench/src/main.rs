@@ -37,7 +37,7 @@ async fn main() {
         });
     axum::serve(
         listener,
-        app(AppState::live(paths))
+        app(state)
             .merge(civil_workbench::product::api::router(product))
             .merge(civil_workbench::product::domains::router()),
     )
