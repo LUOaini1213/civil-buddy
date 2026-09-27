@@ -26,6 +26,7 @@ pub struct ProductState {
     pub paths: Paths,
     pub runtime: RuntimeCore,
     pub worker: WorkerHost,
+    pub auth: Arc<super::auth::InstanceAuth>,
     index: Mutex<Connection>,
     _owner: std::fs::File,
 }
@@ -39,6 +40,9 @@ fn bad(message: impl ToString) -> HttpError {
 
 impl ProductState {
     pub fn open(paths: Paths) -> Result<Arc<Self>, String> {
+        Self::open_with_auth(paths, super::auth::InstanceAuth::from_env()?)
+    }
+    pub fn open_with_auth(paths: Paths, auth: Arc<super::auth::InstanceAuth>) -> Result<Arc<Self>, String> {
         let folder = std::env::var_os("CIVIL_STATE_ROOT")
             .map(PathBuf::from)
             .unwrap_or_else(|| paths.data_dir.join("unified"));
@@ -53,6 +57,7 @@ impl ProductState {
         owner
             .try_lock()
             .map_err(|_| "this state directory already has a running Rust host".to_string())?;
+        auth.claim_state(&folder)?;
         let runtime =
             RuntimeCore::open(folder.join("runtime.sqlite")).map_err(|e| e.to_string())?;
         runtime.recover_interrupted().map_err(|e| e.to_string())?;
@@ -63,10 +68,12 @@ impl ProductState {
             paths,
             runtime,
             index: Mutex::new(index),
+            auth,
             _owner: owner,
         }))
     }
     pub fn register(&self, path: &str) -> Result<Value, String> {
+        self.auth.authorize_workspace(std::path::Path::new(path))?;
         let ws = WorkspaceContext::new(path).map_err(|e| e.to_string())?;
         let db = self.index.lock().map_err(|_| "index lock failed")?;
         let id = uuid::Uuid::new_v4().simple().to_string();
@@ -90,6 +97,7 @@ impl ProductState {
                 r.get(0)
             })
             .map_err(|_| "unknown workspace")?;
+        self.auth.authorize_workspace(std::path::Path::new(&root))?;
         WorkspaceContext::new(root).map_err(|e| e.to_string())
     }
     pub fn register_artifact(&self, workspace_id: &str, result: &Value) -> Result<Value, String> {
@@ -107,7 +115,7 @@ impl ProductState {
             return Err("output outside publication directory".into());
         }
         let id = uuid::Uuid::new_v4().simple().to_string();
-        let record = json!({"id":id,"name":path.file_name().unwrap_or_default().to_string_lossy(),
+        let record = json!({"id":id,"actor_id":self.auth.owner(),"name":path.file_name().unwrap_or_default().to_string_lossy(),
             "url":format!("/api/agent/artifacts/{id}?workspace={workspace_id}"),
             "source":result["source"],"source_sha256":result["source_sha256"],"output_sha256":result["output_sha256"],
             "validation":result["validation"],"provenance":"model_proposed","evidence_validation":result["evidence_validation"]});
@@ -147,14 +155,14 @@ pub fn router(state: Arc<ProductState>) -> Router {
         .with_state(state)
 }
 
-async fn capabilities() -> Json<Value> {
+async fn capabilities(State(st): State<Arc<ProductState>>) -> Json<Value> {
     let cfg = crate::config::llm_config();
     Json(
         json!({"available":true,"models":{"configured":!cfg.api_key.is_empty(),"model":cfg.model},
         "modes":["steps","model"],"sandbox":["read-only","workspace-write"],
         "sandbox_controls":{"policy":true,"os_enforced":null,"network_confined":null,"reads_confined":null,"probe":"workspace_required"},
         "features":{"context":true,"subagents":true,"cancel":true,"documents":true,"retrieval":true,"voice":false},
-        "unavailability_reason":null}),
+        "identity":st.auth.capabilities(),"unavailability_reason":null}),
     )
 }
 #[derive(Deserialize)]
@@ -169,7 +177,7 @@ async fn register(
     let ws = st
         .workspace(workspace["id"].as_str().unwrap_or(""))
         .map_err(bad)?;
-    let mut caps = capabilities().await.0;
+    let mut caps = capabilities(State(st.clone())).await.0;
     match st
         .worker
         .capabilities(&ws, &crate::runtime_core::CancellationToken::new())
@@ -202,7 +210,8 @@ async fn workspaces(State(st): State<Arc<ProductState>>) -> Result<Json<Value>, 
             Ok(json!({"id":r.get::<_,String>(0)?,"root":r.get::<_,String>(1)?}))
         })
         .map_err(bad)?;
-    let workspaces: Vec<Value> = rows.collect::<Result<_, _>>().map_err(bad)?;
+    let workspaces: Vec<Value> = rows.collect::<Result<Vec<_>, _>>().map_err(bad)?.into_iter()
+        .filter(|row| row["root"].as_str().is_some_and(|root| st.auth.authorize_workspace(std::path::Path::new(root)).is_ok())).collect();
     Ok(Json(json!({"workspaces":workspaces})))
 }
 #[derive(Deserialize)]
@@ -328,9 +337,13 @@ async fn start(
     if req.mode == "model" && crate::config::llm_config().api_key.is_empty() {
         return Err(bad("请先配置模型 API Key，或使用资料检查模式"));
     }
+    let mut stored_request = serde_json::to_value(&req).map_err(bad)?;
+    stored_request["actor_id"] = json!(st.auth.owner());
+    stored_request["identity_mode"] = st.auth.capabilities()["mode"].clone();
+    stored_request["risk_confirmation_present"] = json!(agent::current_turn_confirmation(&req));
     let lease = st
         .runtime
-        .begin_turn(&ws, &session, serde_json::to_value(&req).map_err(bad)?)
+        .begin_turn(&ws, &session, stored_request)
         .map_err(|e| {
             if matches!(e, crate::runtime_core::RuntimeError::SessionBusy) {
                 error(StatusCode::CONFLICT, e)
@@ -338,6 +351,9 @@ async fn start(
                 bad(e)
             }
         })?;
+    lease.emit("authorization", json!({"actor_id":st.auth.owner(),"sandbox":req.sandbox,
+        "risk_confirmation_present":agent::current_turn_confirmation(&req),"confirmation_scope":"current_turn",
+        "professional_signoff":false})).map_err(bad)?;
     let response = json!({"turn_id":lease.turn_id(),"session_id":session});
     tokio::spawn(agent::run(st, ws, req, lease));
     Ok((StatusCode::ACCEPTED, Json(response)))

@@ -51,6 +51,22 @@ test("Agent UI: unavailable capability is honest and no task can be submitted", 
   assert.equal(h.calls.some((call) => call.url === "/api/agent/turns"), false);
 });
 
+test("Agent UI: identity and audit actors are displayed as text without claiming multi-tenant hosting", async (t) => {
+  const identity = { mode: "named_single_user_instance", user_id: "alice", multi_tenant: false };
+  const h = harness((url, init) => {
+    if (url === "/api/agent/capabilities") return response({ ...caps, identity });
+    if (url === "/api/agent/workspaces") return response({ workspace: { id: "workspace-1", root: "C:/engineering" }, capabilities: { ...caps, identity } });
+    if (url.startsWith("/api/agent/turns?")) return response({ turns: [{ turn_id: "audit-turn", status: "completed", actor_id: "alice" }] });
+    if (url === "/api/agent/turns" && init) return response({ turn_id: "audit-turn", session_id: JSON.parse(init.body).session_id });
+    if (url.includes("/audit-turn/events?")) return response({ events: [{ ...event(1, "authorization", { professional_signoff: false }), actor_id: "<b>alice</b>" }], turn: { status: "completed", actor_id: "alice" } });
+  }); t.after(h.close);
+  await h.ready(); assert.match(h.$("agentIdentity").textContent, /alice.*非共享多人服务/);
+  assert.match(h.$("agentTurns").textContent, /发起者：alice/);
+  h.$("agentMessage").value = "检查资料"; await h.app.send();
+  assert.match(h.$("agentTurnActor").textContent, /alice/); assert.match(h.$("agentEvents").textContent, /本轮权限记录.*发起者：<b>alice<\/b>/);
+  assert.equal(h.$("agentEvents").querySelector("b"), null);
+});
+
 test("Agent UI: worker write confinement does not imply read or network confinement", async (t) => {
   const h = harness((url) => url === "/api/agent/capabilities" ? response({ ...caps, sandbox_controls: { policy: true, os_enforced: true, reads_confined: false, network_confined: false } }) : undefined); t.after(h.close);
   await h.app.start();
@@ -319,7 +335,7 @@ test("Engineering selection: delayed inspection cannot restore authorization aft
   assert.equal(h.$("agentSend").disabled, false);
 });
 
-test("Expert selection: high-risk writes require explicit phrase once per session; read-only and ordinary work do not", async (t) => {
+test("Expert selection: high-risk writes require explicit phrase for each turn; read-only and ordinary work do not", async (t) => {
   const h = harness(terminalRoute); t.after(h.close); await h.ready();
   selectValue(h, "agentExpert", "plans"); h.$("agentMessage").value = "检查方案";
   assert.equal(h.$("agentRiskWrap").hidden, true); assert.equal(h.$("agentSend").disabled, false);
@@ -331,7 +347,7 @@ test("Expert selection: high-risk writes require explicit phrase once per sessio
   assert.equal(h.$("agentSend").disabled, false); await h.app.send();
   const payload = h.calls.find((call) => call.url === "/api/agent/turns").body;
   assert.equal(payload.expert_id, "plans"); assert.equal(payload.risk_confirmation, "我明白，将由持证人员签认");
-  assert.equal(h.$("agentRiskConfirmation").value, ""); assert.equal(h.$("agentRiskWrap").hidden, true);
+  assert.equal(h.$("agentRiskConfirmation").value, ""); assert.equal(h.$("agentRiskWrap").hidden, false); assert.equal(h.$("agentSend").disabled, true);
   await h.app.changeSession("", true); assert.equal(h.$("agentRiskWrap").hidden, false); assert.equal(h.$("agentSend").disabled, true);
   selectValue(h, "agentExpert", "checks"); assert.equal(h.$("agentRiskWrap").hidden, true); assert.equal(h.$("agentSend").disabled, false);
 });

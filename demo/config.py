@@ -10,6 +10,7 @@ DEMO_ROOT = Path(__file__).resolve().parent
 REPO_ROOT = DEMO_ROOT.parent
 KB_ROOT = DEMO_ROOT / "kb"
 OUT_ROOT = DEMO_ROOT / "out"
+DATA_ROOT = Path(os.environ.get("CIVIL_DATA_ROOT", str(DEMO_ROOT / "data"))).expanduser().resolve()
 SKILL_HARD_RULES = REPO_ROOT / "skills" / "civil-buddy" / "references" / "hard-rules.md"
 
 if str(REPO_ROOT) not in sys.path:

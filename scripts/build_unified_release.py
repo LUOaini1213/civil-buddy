@@ -25,6 +25,10 @@ except ImportError:  # Direct invocation from scripts/.
 
 ROOT = Path(__file__).resolve().parents[1]
 EXTRA = (
+    "SECURITY.md", "docs/civil-buddy/release-handoff.md",
+    "scripts/unified_acceptance.py", "scripts/test_unified_runtime_http.py",
+    "examples/facade-demo/README.md", "examples/facade-demo/facade_itt_doc.md",
+    "examples/facade-demo/facade_panels.xlsx",
     "workbench/Cargo.toml", "workbench/Cargo.lock",
     "scripts/build_workbench_release.py", "scripts/build_unified_release.py",
     "docs/civil-buddy/architecture/implementation.md",
@@ -178,6 +182,10 @@ py -3.11 -m venv .venv
 无需模型 Key 可执行资料结构检查。自然语言 Agent 任务需在页面模型设置配置兼容服务，
 或显式传入自己创建的 `--env-file <路径>`；`.env.example` 仅为模板。Jev 为可选工程决策建议，默认关闭。
 岗位签认、引用哈希、先预览再保存及只读权限仍由主程序执行；模型不能把文件或自身提议变成工程事实。
+
+具名账号和独立工程启动、登录、备份及同事导入见 `docs/civil-buddy/release-handoff.md`。
+具名模式使用 `--user-id`、`--workspace`、`--token-file`；每位用户独立目录与进程，
+不是同一进程多租户平台。`examples/facade-demo` 是明确标注的合成演示资料。
 
 ## 原入口与可选能力
 

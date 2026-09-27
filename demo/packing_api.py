@@ -68,7 +68,7 @@ def benchmark_status():
 
 
 @router.post("/packing/api/table/parse")
-async def table_upload(file: UploadFile = File(...), session_id: str = Form(""),
+async def table_upload(request: Request, file: UploadFile = File(...), session_id: str = Form(""),
                        store_session: str = Form("0"), path: str = Form("")):
     if path:
         raise HTTPException(400, "请上传材料表，不接受本机路径")
@@ -76,7 +76,7 @@ async def table_upload(file: UploadFile = File(...), session_id: str = Form(""),
     if len(raw) > 20 * 1024 * 1024:
         raise HTTPException(413, "材料表不得超过20MiB")
     await file.seek(0)
-    return await gateway.api_table_parse(file=file, session_id=session_id, store_session=store_session, path="")
+    return await gateway.api_table_parse(request=request, file=file, session_id=session_id, store_session=store_session, path="")
 
 
 @router.get("/packing/api/artifact")

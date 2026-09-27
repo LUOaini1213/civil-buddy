@@ -30,10 +30,13 @@ impl Paths {
             .map(Path::to_path_buf)
             .unwrap_or_else(|| demo_root.clone());
         let kb_root = demo_root.join("kb");
-        let data_dir = demo_root.join("data");
+        let instance = env::var_os("CIVIL_STATE_ROOT").map(PathBuf::from);
+        let data_dir = instance.as_ref().map(|p| p.join("legacy/data"))
+            .unwrap_or_else(|| demo_root.join("data"));
         let skill = repo_root.join("skills").join("civil-buddy");
         Self {
-            out_root: demo_root.join("out"),
+            out_root: instance.as_ref().map(|p| p.join("domains"))
+                .unwrap_or_else(|| demo_root.join("out")),
             user_catalog: data_dir.join("user_catalog.json"),
             skill_hard_rules: skill.join("references").join("hard-rules.md"),
             fill_scheme_py: skill.join("scripts").join("fill_scheme_template.py"),

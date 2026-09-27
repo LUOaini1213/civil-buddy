@@ -17,6 +17,10 @@ The default view offers a model-free structural check and a model task. Configur
 
 ## Provider configuration
 
+For a named account and a single private job directory, use the launcher options `--user-id`, `--workspace` and `--token-file` together. The full [release and handoff guide](release-handoff.md) describes state ownership, login, project-package transfer, restart recovery and outstanding real-world acceptance. Named instances isolate users by separate processes and physical workspaces; they are not a shared-process multi-tenant service.
+
+## Provider configuration details
+
 ```dotenv
 DEEPSEEK_API_KEY=your-key
 DEEPSEEK_BASE_URL=https://api.deepseek.com

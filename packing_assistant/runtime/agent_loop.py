@@ -18,7 +18,8 @@ from packing_assistant.runtime.tool_engine import ToolEngine, get_engine
 from packing_assistant.understand import understand
 
 _ROOT = Path(__file__).resolve().parents[2]
-_OUT = _ROOT / "demo" / "out"
+from packing_assistant.runtime.paths import default_out_root
+_OUT = default_out_root(_ROOT)
 
 
 def _out_root() -> Path:

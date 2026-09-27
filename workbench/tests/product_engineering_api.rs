@@ -32,12 +32,14 @@ impl Drop for Temp {
         let _ = std::fs::remove_dir_all(&self.0);
     }
 }
-struct DomainEnv(Option<OsString>);
+struct DomainEnv(Option<OsString>, Option<OsString>);
 impl DomainEnv {
     fn set(value: &str) -> Self {
         let old = std::env::var_os("CIVIL_DOMAIN_URL");
+        let old_token = std::env::var_os("CIVIL_DOMAIN_TOKEN");
         std::env::set_var("CIVIL_DOMAIN_URL", value);
-        Self(old)
+        std::env::set_var("CIVIL_DOMAIN_TOKEN", "synthetic-domain-service-token-at-least-32-bytes");
+        Self(old, old_token)
     }
 }
 impl Drop for DomainEnv {
@@ -45,6 +47,10 @@ impl Drop for DomainEnv {
         match &self.0 {
             Some(value) => std::env::set_var("CIVIL_DOMAIN_URL", value),
             None => std::env::remove_var("CIVIL_DOMAIN_URL"),
+        }
+        match &self.1 {
+            Some(value) => std::env::set_var("CIVIL_DOMAIN_TOKEN", value),
+            None => std::env::remove_var("CIVIL_DOMAIN_TOKEN"),
         }
     }
 }

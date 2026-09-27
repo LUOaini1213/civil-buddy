@@ -96,6 +96,26 @@ Stated in the technical document (`docs/submission/nus-iss-technical.md`, §4.4)
   file, and what a chat reply says before the guards. The URL fetch resolves DNS twice.
 - **Chat.** In the workbench, question-only turns call the model whenever a key is set, whatever `agent_mode` says.
 
+## Unified named instances (2026-09-27)
+
+The unified launcher now supports one named user and one exact private workspace per process pair. The Rust outer
+authentication layer covers Agent, legacy, domain and artifact routes. Accounts use a hashed login token and an
+HttpOnly SameSite=Strict session cookie; cookies expire on restart. Per-instance state and workspace ownership
+records reject reuse by another user or another state directory. This is separate-instance isolation, not a
+shared-process multi-tenant service. A public reverse proxy requires the configured HTTPS public origin.
+
+The internal Python service has a separate random Bearer token, a route allowlist, no provider keys and no model
+loop. Named mode disables legacy local-path import, URL import and studio editing. Rust Agent events, actor IDs,
+usage and interrupted/cancelled states are persisted. Confirmation is specific to the current operation and is
+not inherited from old turns, restored sessions, document quotations or a boolean field. The legacy limitations
+above still apply to separately launched Python/gateway entry points unless their own implementation says otherwise;
+they must not be used as an unprotected alternate entry into a named instance.
+
+Evidence: `product_identity`, `runtime_core`, `product_document_gates`, `scripts/test_domain_service.py`,
+`scripts/test_link_confirmation_regressions.py`, and the optional compiled-process
+`scripts/test_unified_runtime_http.py`. Tests use local scripted providers, not a live-model security assessment.
+See [the handoff guide](docs/civil-buddy/release-handoff.md) for deployment and acceptance boundaries.
+
 ## Reporting a problem
 
 Please open an issue at <https://github.com/LUOaini1213/civil-buddy/issues> and put "security" in the title. If the

@@ -19,9 +19,11 @@ pub fn router() -> Router {
         .route("/packing", any(forward))
         .route("/packing/{*path}", any(forward))
         .route("/cad", any(forward))
+        .route("/logistics", any(forward))
         .route("/engineering", any(forward))
         .route("/engineering/{*path}", any(forward))
         .route("/api/cad/{*path}", any(forward))
+        .route("/api/logistics/{*path}", any(forward))
         .route("/api/engineering/{*path}", any(forward))
         .route("/api/asr", any(forward))
         .route("/api/asr/{*path}", any(forward))
@@ -47,6 +49,9 @@ async fn forward(request: Request) -> Response {
         || !matches!(url.host_str(), Some("127.0.0.1" | "[::1]"))
         || url.path() != "/"
         || url.query().is_some()
+        || url.fragment().is_some()
+        || !url.username().is_empty()
+        || url.password().is_some()
     {
         return error(
             StatusCode::SERVICE_UNAVAILABLE,
@@ -90,6 +95,7 @@ async fn forward(request: Request) -> Response {
         Err(_) => return error(StatusCode::PAYLOAD_TOO_LARGE, "领域请求超过32MiB"),
     };
     let Ok(client) = reqwest::Client::builder()
+        .no_proxy()
         .timeout(Duration::from_secs(if is_packing { 300 } else { 150 }))
         .redirect(reqwest::redirect::Policy::none())
         .build()
@@ -110,6 +116,9 @@ async fn forward(request: Request) -> Response {
             ),
         )
         .body(bytes);
+    if let Ok(token) = std::env::var("CIVIL_DOMAIN_TOKEN") {
+        outgoing = outgoing.bearer_auth(token);
+    }
     for name in [
         "content-type",
         "x-civil-asr-id",

@@ -112,6 +112,7 @@ export function createSessionNav(deps) {
     state.planningProjectId = "";
     state.logisticsProjectId = "";
     if (reset.renderToolProjects) reset.renderToolProjects();
+    else renderCadProject();
     state.session = sessionId();
     reset.uploadAbortAll(state.session);
     reset.attachRender();
@@ -325,6 +326,12 @@ export function createSessionNav(deps) {
       reset.draftRestore();
       proj.cur = d.project_id || s.project_id || "";
       if (reset.restoreToolProjects) reset.restoreToolProjects(d);
+      else {
+        state.cadProjectId = validCadProjectId(d.cad_project_id);
+        state.planningProjectId = validCadProjectId(d.planning_project_id);
+        state.logisticsProjectId = validCadProjectId(d.logistics_project_id);
+        renderCadProject();
+      }
       state.summoned.clear();
       const enabledExperts = new Set(state.experts.filter((expert) => expert && expert.enabled !== false).map((expert) => expert.id));
       for (const id of Array.isArray(d.expert_ids) ? d.expert_ids : []) {

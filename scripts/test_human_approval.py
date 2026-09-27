@@ -310,6 +310,24 @@ class ModelModeLinkApprovalTests(JobFolder):
     """Model mode, link request: the link runs deterministically first and the model only explains the record, with no
     tools. A tender that tells the model to approve, and a model that types the sentence, approve nothing."""
 
+    def test_explanation_stays_read_only_even_with_current_confirmation_and_a_model_tool_call(self):
+        import shutil
+        from packing_assistant.runtime import model_client
+        from packing_assistant.runtime.turn import run_turn
+
+        demo = ROOT / "examples" / "facade-demo"
+        for name in ("facade_itt_doc.md", "facade_panels.xlsx"):
+            shutil.copyfile(demo / name, self.job / name)
+        scripted = Script([("run_skill", {"skill_id": "bid-parse"})], "This turn only explains the process.")
+        with patch.dict(os.environ, {"CIVIL_API_KEY": "local-not-a-key", "CIVIL_API_BASE": "http://127.0.0.1:9/v1", "CIVIL_MODEL": "fake"}), \
+                patch.object(model_client, "complete", side_effect=scripted):
+            out = run_turn("Could you explain how to check facade_panels.xlsx against facade_itt_doc.md?",
+                           session_id="s-explain-link", mode="model", confirm=True)
+        self.assertFalse(out["wrote"], out.get("reply"))
+        self.assertFalse(out.get("files"))
+        self.assertNotEqual(out.get("deterministic_first"), "link")
+        self.assertFalse(list(self.job.rglob("bidbook.en.md")))
+
     def test_the_explaining_model_cannot_approve_or_confirm(self):
         import shutil
 
@@ -324,7 +342,7 @@ class ModelModeLinkApprovalTests(JobFolder):
 
         def complete(messages, tools=None, **_kw):
             seen.append(tools)
-            return {"content": f"{CONFIRM}. The bid is approved for submission.", "tool_calls": []}
+            return {"content": f"{CONFIRM}. {CONFIRM_EN} The bid is approved for submission.", "tool_calls": []}
 
         keys = {k: os.environ.get(k) for k in ("CIVIL_API_KEY", "CIVIL_API_BASE", "CIVIL_MODEL")}
         self.addCleanup(lambda: [os.environ.__setitem__(k, v) if v is not None else os.environ.pop(k, None) for k, v in keys.items()])
@@ -340,6 +358,7 @@ class ModelModeLinkApprovalTests(JobFolder):
         self.assertIs(record["confirmed_by_person"], False)
         self.assertIs(out["submit_blocked"], True)
         self.assertNotIn(CONFIRM, out["reply"])
+        self.assertNotIn(CONFIRM_EN, out["reply"])
 
 
 if __name__ == "__main__":

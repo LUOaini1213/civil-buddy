@@ -230,12 +230,13 @@ async fn api_runs_persistent_scoped_tools_and_shared_child_tasks() {
         "/api/agent/turns/{}/events?workspace={wid}&session_id=model",
         started["turn_id"].as_str().unwrap()
     );
-    for _ in 0..100 {
+    let deadline = tokio::time::Instant::now() + Duration::from_secs(60);
+    while tokio::time::Instant::now() < deadline {
         result = request(&app, "GET", &url, Value::Null).await.1;
         if result["turn"]["status"] == "completed" || result["turn"]["status"] == "failed" {
             break;
         }
-        tokio::time::sleep(Duration::from_millis(10)).await;
+        tokio::time::sleep(Duration::from_millis(25)).await;
     }
     civil_workbench::config::set_runtime_llm(None);
     server.abort();

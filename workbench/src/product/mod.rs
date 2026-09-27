@@ -6,3 +6,4 @@ pub mod tools;
 pub mod agent;
 pub mod domains;
 pub mod engineering;
+pub mod auth;

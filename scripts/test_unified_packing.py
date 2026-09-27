@@ -1,6 +1,7 @@
 """Model-free packing boundary and real parser/HITL/export integration checks."""
 from pathlib import Path
 import os
+import secrets
 import sys
 import tempfile
 import unittest
@@ -15,16 +16,19 @@ class UnifiedPackingTests(unittest.TestCase):
     def setUpClass(cls):
         cls.temp = tempfile.TemporaryDirectory(prefix="civil-packing-tests-")
         cls.output = Path(cls.temp.name)
+        cls.token = secrets.token_urlsafe(48)
         cls.env = patch.dict(os.environ, {
             "PYTHON_DOTENV_DISABLED": "1", "PACKING_LLM_AGENT": "0", "PACKING_SKIP_SKJOLBER": "1",
             "PACKING_OUTPUT_DIR": str(cls.output), "PACKING_TRACE_DIR": str(cls.output / "traces"),
             "CB_DB_PATH": str(cls.output / "packing.db"), "CB_STORAGE": "json",
             "PACKING_LG_CHECKPOINT_PATH": str(cls.output / "checkpoints.db"),
+            "CIVIL_DOMAIN_TOKEN": cls.token, "CIVIL_OUT_ROOT": str(cls.output / "domains"),
+            "CIVIL_DATA_ROOT": str(cls.output / "data"), "CIVIL_DOMAIN_WORKSPACE": str(cls.output / "domains"),
         })
         cls.env.start()
         from fastapi.testclient import TestClient
         from demo.domain_service import app
-        cls.client = TestClient(app)
+        cls.client = TestClient(app, headers={"Authorization": "Bearer " + cls.token})
 
     @classmethod
     def tearDownClass(cls):

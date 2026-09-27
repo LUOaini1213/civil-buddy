@@ -559,7 +559,7 @@ async fn model_loop_requires_prior_read_identical_preview_and_loaded_risk_acknow
         }
         if matches!(
             scenario,
-            "high_risk_signed" | "explicit_signed_field" | "explicit_same_session_history"
+            "high_risk_signed" | "explicit_signed_field"
         ) {
             assert_eq!(apply["data"]["result"]["ok"], true, "{apply}");
             assert_eq!(

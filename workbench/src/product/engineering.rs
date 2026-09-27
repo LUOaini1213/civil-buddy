@@ -79,6 +79,7 @@ pub struct EngineeringHost {
     base: String,
     worker: WorkerHost,
     client: reqwest::Client,
+    token: Option<String>,
 }
 
 struct BoundInputs {
@@ -91,7 +92,10 @@ struct BoundInputs {
 impl EngineeringHost {
     pub fn from_env(worker: WorkerHost) -> Result<Self> {
         let base = std::env::var("CIVIL_DOMAIN_URL").map_err(|_| "工程领域服务未启动")?;
-        Self::new(worker, &base)
+        let mut host = Self::new(worker, &base)?;
+        host.token = Some(std::env::var("CIVIL_DOMAIN_TOKEN")
+            .ok().filter(|v| v.len() >= 32).ok_or("领域服务认证未配置")?);
+        Ok(host)
     }
 
     pub fn new(worker: WorkerHost, base: &str) -> Result<Self> {
@@ -107,6 +111,7 @@ impl EngineeringHost {
             return Err("工程服务只能使用宿主配置的固定回环地址".into());
         }
         let client = reqwest::Client::builder()
+            .no_proxy()
             .timeout(Duration::from_secs(60))
             .redirect(reqwest::redirect::Policy::none())
             .build()
@@ -115,15 +120,16 @@ impl EngineeringHost {
             base: base.trim_end_matches('/').to_owned(),
             worker,
             client,
+            token: None,
         })
     }
 
     async fn get(&self, path: &str, cancel: &CancellationToken) -> Result<Value> {
         cancel.check().map_err(|e| e.to_string())?;
         let request = async {
-            let mut response = self
-                .client
-                .get(format!("{}{path}", self.base))
+            let mut request = self.client.get(format!("{}{path}", self.base));
+            if let Some(token) = &self.token { request = request.bearer_auth(token); }
+            let mut response = request
                 .send()
                 .await
                 .map_err(|_| "领域项目读取失败")?;

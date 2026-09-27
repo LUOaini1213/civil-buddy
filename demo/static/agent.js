@@ -2,6 +2,7 @@ import { createAuth } from "./modules/auth.js";
 
 const STORE_KEY = "cb_agent_workspaces_v1";
 const RISK_PHRASE = "我明白，将由持证人员签认";
+const confirmedMessage = (text) => String(text || "").split(/[\n。;；]/).some((part) => part.trim() === RISK_PHRASE);
 const TERMINAL = new Set(["completed", "succeeded", "failed", "cancelled", "interrupted"]);
 const STATUS = { queued: "等待执行", running: "执行中", waiting_approval: "等待确认", cancelling: "正在停止", completed: "已完成", succeeded: "已完成", failed: "未完成", cancelled: "已停止", interrupted: "服务重启时中断" };
 const EVENT_NAMES = { status: "执行阶段", context: "上下文预算", model: "模型调用", tool_started: "工具开始", tool_finished: "工具结束", subtask_started: "子任务开始", subtask_finished: "子任务结束", artifact: "产物已保存", decision: "工程判断", error: "执行错误", done: "本轮结束" };
@@ -66,6 +67,7 @@ export function createAgentWorkbench(deps) {
     $("agentEvents").replaceChildren(); $("agentArtifacts").replaceChildren(); $("agentReply").textContent = "结果将显示在这里。";
     if ($("agentEngineeringResults")) { $("agentEngineeringResults").replaceChildren(); $("agentEngineeringResults").hidden = true; }
     $("agentTurnStatus").textContent = "尚未开始"; $("agentPartial").hidden = true; $("agentUsage").hidden = true;
+    $("agentTurnActor").textContent = "尚无任务发起者记录。";
     $("agentContextMeter").hidden = true; $("agentContextText").textContent = "收到后端请求预算后显示；这不是任务完成进度。";
     controls();
   }
@@ -75,11 +77,10 @@ export function createAgentWorkbench(deps) {
     const supported = caps && caps.available === true && Array.isArray(caps.modes) && caps.modes.includes(mode)
       && Array.isArray(caps.sandbox) && caps.sandbox.includes($("agentSandbox").value);
     const highRiskWrite = state.experts.find((item) => item.id === $("agentExpert").value)?.risk === "high" && $("agentSandbox").value === "workspace-write";
-    const alreadyConfirmed = sessionRecord()?.risk_confirmed === true;
-    const confirmationPresent = $("agentRiskConfirmation").value.trim() === RISK_PHRASE || $("agentMessage").value.includes(RISK_PHRASE);
-    $("agentRiskWrap").hidden = !highRiskWrite || alreadyConfirmed;
+    const confirmationPresent = $("agentRiskConfirmation").value.trim() === RISK_PHRASE || confirmedMessage($("agentMessage").value);
+    $("agentRiskWrap").hidden = !highRiskWrite;
     $("agentRiskConfirmation").disabled = state.submitting;
-    $("agentSend").disabled = !state.workspace || state.opening || state.submitting || !!active() || state.engineeringLoading || state.engineeringRows.some((row) => row.loading) || !supported || (mode === "model" && !state.modelConfigured) || (highRiskWrite && !alreadyConfirmed && !confirmationPresent);
+    $("agentSend").disabled = !state.workspace || state.opening || state.submitting || !!active() || state.engineeringLoading || state.engineeringRows.some((row) => row.loading) || !supported || (mode === "model" && !state.modelConfigured) || (highRiskWrite && !confirmationPresent);
     $("agentCancel").hidden = !active() || !(caps && caps.features && caps.features.cancel);
     $("agentCancel").disabled = state.cancelling || state.turn && state.turn.status === "cancelling";
     for (const id of ["agentRefreshFiles", "agentRefreshTurns", "agentNewSession", "agentSession"]) $(id).disabled = !state.workspace || state.opening;
@@ -91,6 +92,11 @@ export function createAgentWorkbench(deps) {
   }
   function paintCapabilities(caps) {
     state.capabilities = caps;
+    const identity = caps.identity || {};
+    $("agentIdentity").textContent = identity.mode === "named_single_user_instance"
+      ? `当前身份：${identity.user_id} · 独立用户与工程实例（非共享多人服务）`
+      : identity.mode === "local_single_user" ? "当前身份：本机单用户 · 未启用登录验证"
+      : "当前服务尚未声明用户身份与实例隔离方式。";
     if (caps.models && typeof caps.models.configured === "boolean") state.modelConfigured = caps.models.configured;
     $("agentCapability").textContent = caps.available === true
       ? "Agent 已连接。先选资料；执行阶段、工具结果与产物均来自服务端。"
@@ -268,7 +274,7 @@ export function createAgentWorkbench(deps) {
       if (!turns.length) host.appendChild(node("p", "本会话暂无执行记录。", "muted"));
       for (const turn of turns) {
         const id = idOf(turn); if (!id) continue;
-        const button = node("button", (turn.message || turn.title || id.slice(0, 12)) + " · " + (STATUS[turn.status] || turn.status || "状态待读取"));
+        const button = node("button", (turn.message || turn.title || id.slice(0, 12)) + " · " + (STATUS[turn.status] || turn.status || "状态待读取") + " · 发起者：" + (turn.actor_id || "历史记录未标记"));
         button.type = "button"; button.setAttribute("aria-current", String(id === idOf(state.turn)));
         button.addEventListener("click", () => showTurn(id)); host.appendChild(button);
       }
@@ -385,6 +391,7 @@ export function createAgentWorkbench(deps) {
     if (!object(turn)) return;
     state.turn = { ...state.turn, ...turn };
     $("agentTurnStatus").textContent = STATUS[state.turn.status] || state.turn.status || "状态待读取";
+    $("agentTurnActor").textContent = "任务发起者：" + (state.turn.actor_id || "历史记录未标记身份");
     paintResult(state.turn.result); controls();
   }
   function eventFrame(event) {
@@ -397,7 +404,7 @@ export function createAgentWorkbench(deps) {
     if (kind === "done") paintResult(data.result || data);
     if (TURN_EVENTS[kind]) paintTurn({ status: TURN_EVENTS[kind], ...(data.result ? { result: data.result } : {}) });
     const li = node("li"), title = node("div", undefined, "event-title");
-    title.append(node("strong", EVENT_NAMES[kind] || STATUS[TURN_EVENTS[kind]] || kind), node("span", `#${event.seq}`)); li.appendChild(title);
+    title.append(node("strong", kind === "authorization" ? "本轮权限记录" : EVENT_NAMES[kind] || STATUS[TURN_EVENTS[kind]] || kind), node("span", `#${event.seq}` + (event.actor_id ? ` · 发起者：${event.actor_id}` : ""))); li.appendChild(title);
     const text = data.message || data.text || data.summary || data.tool || data.name || data.phase || data.model;
     if (typeof text === "string") li.appendChild(node("p", text));
     if (Object.keys(data).length) { const details = node("details"); details.append(node("summary", "查看事件数据"), node("pre", printable(data))); li.appendChild(details); }
@@ -443,7 +450,6 @@ export function createAgentWorkbench(deps) {
       const data = await request("/api/agent/turns", post(payload));
       if (!current(epoch)) return;
       if (!data.turn_id || data.session_id !== state.session) throw new Error("任务响应缺少本会话的执行标识");
-      if (payload.risk_confirmation === RISK_PHRASE || message.includes(RISK_PHRASE)) sessionRecord().risk_confirmed = true;
       sessionRecord().turn = data.turn_id; persist(); state.turn = { turn_id: data.turn_id, status: "queued" };
       $("agentMessage").value = ""; $("agentRiskConfirmation").value = ""; notice("任务已提交，正在接收执行事件。"); await poll();
     } catch (error) { if (current(epoch)) notice("任务提交失败：" + error.message, true); }

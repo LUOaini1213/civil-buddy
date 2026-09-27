@@ -63,6 +63,20 @@ test("auth: the fetch guard retries an /api/ 401 exactly once after a successful
   assert.equal(count, 1);
 });
 
+test("auth: named instance expiry opens the HttpOnly login flow without writing a shared token or retrying writes", async () => {
+  let prompts=0, calls=0; const destinations=[]; const doc={cookie:""};
+  const win={location:{assign:(url)=>destinations.push(url)},fetch:async()=>{calls++;return new Response("{}",{status:401,headers:{"x-civil-login":"/auth/login"}});}};
+  createAuth({doc,win,prompt:()=>{prompts++;return "must-not-use";}}).installFetchGuard();
+  const response=await win.fetch("/api/agent/turns",{method:"POST",body:"{}"});
+  assert.equal(response.status,401);assert.equal(calls,1);assert.equal(prompts,0);assert.equal(doc.cookie,"");assert.deepEqual(destinations,["/auth/login"]);
+});
+
+test("auth: successful named health accepts the server-authenticated session without exposing its HttpOnly cookie", async () => {
+  const doc={cookie:""}; const win={fetch:async()=>new Response("{}",{status:200,headers:{"x-civil-identity-mode":"named_single_user_instance"}})};
+  const auth=createAuth({doc,win});assert.equal(auth.hasToken(),false);auth.installFetchGuard();
+  await win.fetch("/api/health");assert.equal(auth.hasToken(),true);assert.equal(doc.cookie,"");
+});
+
 test("toast: one box, replaced text, action button hides it, announce mirrors it", () => {
   const doc = fakeDoc();
   const announced = [];
@@ -186,7 +200,7 @@ function turnDeps(overrides = {}) {
     run: { active: () => active, setActive: (r) => { active = r; }, paint() {}, releaseWatch() {}, watch: (sid, opts) => status.push("watch:" + sid), background: new Set() },
     ui: { log: () => log, addMsg: (role, who, text) => { const b = element("div"); b.textContent = text; const m = element("div"); m.appendChild(b); msgs.push({ role, who, body: b }); return b; },
       addStatus: (t) => status.push(t), announce() {}, doc: { createElement: element } },
-    hitl: { confirmed: () => false, clear() {}, enable() {}, pending: () => false },
+    hitl: { confirmed: () => false, typed: () => "", clear() {}, enable() {}, pending: () => false },
     turnUi: { tlCreate: () => ({ status() {}, finish() {}, error() {} }), routePaint() {}, collaborationPaint() {}, obStep() {}, paintContext() {},
       estimateLocalContext: () => ({}), renderCites() {}, appendDocCards() {}, fixMount() {}, classifyMissing: () => null, refreshAuditSoon() {},
       skillWho: (id) => id || "岗位", namesOrPlain: () => "岗位", setLastDeliverables() {} },

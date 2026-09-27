@@ -50,6 +50,8 @@ impl TurnStatus {
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct TurnRecord {
+    #[serde(default)]
+    pub actor_id: Option<String>,
     pub workspace_id: String,
     pub session_id: SessionId,
     pub turn_id: TurnId,
@@ -64,6 +66,8 @@ pub struct TurnRecord {
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct RuntimeEvent {
+    #[serde(default)]
+    pub actor_id: Option<String>,
     pub workspace_id: String,
     pub session_id: SessionId,
     pub turn_id: TurnId,
@@ -217,7 +221,7 @@ impl RuntimeCore {
         limit: usize,
     ) -> Result<Vec<RuntimeEvent>> {
         let db = self.0.db.lock().map_err(|_| RuntimeError::Poisoned)?;
-        read_turn(&db, workspace.id(), session, turn)?;
+        let record = read_turn(&db, workspace.id(), session, turn)?;
         if after_seq >= i64::MAX as u64 {
             return Ok(Vec::new());
         }
@@ -237,6 +241,7 @@ impl RuntimeCore {
         rows.map(|row| {
             let (seq, task, event, data, ts) = row?;
             Ok(RuntimeEvent {
+                actor_id: record.actor_id.clone(),
                 workspace_id: workspace.id().to_owned(),
                 session_id: session.clone(),
                 turn_id: turn.clone(),
@@ -518,13 +523,15 @@ fn read_turn(
 ) -> Result<TurnRecord> {
     let row = db.query_row("SELECT task_id,status,request_json,result_json,created_at,updated_at,last_seq FROM runtime_turns WHERE workspace_id=?1 AND session_id=?2 AND turn_id=?3",
         params![workspace,session.as_str(),turn.as_str()], |r| Ok((r.get::<_, String>(0)?,r.get::<_, String>(1)?,r.get::<_, String>(2)?,r.get::<_, Option<String>>(3)?,r.get::<_, String>(4)?,r.get::<_, String>(5)?,r.get::<_, i64>(6)?))).optional()?.ok_or(RuntimeError::NotFound)?;
+    let request: Value = serde_json::from_str(&row.2)?;
     Ok(TurnRecord {
+        actor_id: request["actor_id"].as_str().map(str::to_owned),
         workspace_id: workspace.to_owned(),
         session_id: session.clone(),
         turn_id: turn.clone(),
         task_id: TaskId::parse(row.0)?,
         status: TurnStatus::parse(&row.1)?,
-        request: serde_json::from_str(&row.2)?,
+        request,
         result: row.3.as_deref().map(serde_json::from_str).transpose()?,
         created_at: row.4,
         updated_at: row.5,
@@ -556,8 +563,11 @@ fn append_event(
         [turn.as_str()],
         |r| r.get(0),
     )?;
+    let request: String = tx.query_row("SELECT request_json FROM runtime_turns WHERE turn_id=?1", [turn.as_str()], |r| r.get(0))?;
+    let actor_id = serde_json::from_str::<Value>(&request)?["actor_id"].as_str().map(str::to_owned);
     tx.execute("INSERT INTO runtime_events(turn_id,seq,task_id,event,data_json,ts) VALUES(?1,?2,?3,?4,?5,?6)", params![turn.as_str(),seq,task.as_str(),event,serde_json::to_string(&data)?,ts])?;
     Ok(RuntimeEvent {
+        actor_id,
         workspace_id: workspace.to_owned(),
         session_id: session.clone(),
         turn_id: turn.clone(),

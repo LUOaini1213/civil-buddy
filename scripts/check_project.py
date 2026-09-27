@@ -56,6 +56,7 @@ CHECKS = (
     Check("host-worker", ("scripts/test_host_worker.py",)),
     Check("unified-acceptance-oracle", ("scripts/test_unified_acceptance.py",)),
     Check("unified-launcher", ("scripts/test_unified_launcher.py",)),
+    Check("domain-service", ("scripts/test_domain_service.py",), timeout=300),
     Check("unified-packing", ("scripts/test_unified_packing.py",)),
     Check("unified-release", ("scripts/test_unified_release.py",)),
     Check("ui-dom", ("scripts/e2e/ui_dom.cjs",), "node"),  # real page + real backend in jsdom
@@ -139,6 +140,7 @@ CHECKS = (
     Check("task-intent-bench", ("scripts/eval_task_intent.py", "--check")),
     Check("english-intents", ("scripts/test_english_intents.py",)),
     Check("link-routing-bench", ("scripts/eval_link_routing.py", "--check")),
+    Check("link-confirmation", ("scripts/test_link_confirmation_regressions.py",), timeout=300),
     Check("verdict-bench", ("scripts/eval_verdicts.py", "--check")),
     Check("number-provenance-bench", ("scripts/eval_number_provenance.py", "--check")),
     Check("runtime-threads", ("scripts/test_runtime_threads.py",)),
@@ -198,7 +200,11 @@ FULL_CHECKS = (
     Check("office-job", ("scripts/test_office_job.py",)),
     Check("pipeline", ("scripts/test_p0_p1_p2_full.py",), timeout=600),
     Check("shadow-eval", ("scripts/eval_workteams_cli.py", "--tiny-only"), timeout=600),
-    Check("rust", ("test", "--locked", "--offline", "--manifest-path", "workbench/Cargo.toml"), "cargo", 900),
+    # Scripted-provider fixtures change process-wide configuration; keep them sequential.
+    Check("rust", ("test", "--locked", "--offline", "--manifest-path", "workbench/Cargo.toml", "--", "--test-threads=1"), "cargo", 1200),
+    Check("rust-build", ("build", "--locked", "--offline", "--manifest-path", "workbench/Cargo.toml", "--bin", "civil-workbench"), "cargo", 900),
+    Check("unified-runtime", ("scripts/test_unified_runtime_http.py", "--binary",
+          "workbench/target/debug/civil-workbench" + (".exe" if os.name == "nt" else "")), timeout=900),
 )
 
 

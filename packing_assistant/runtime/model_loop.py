@@ -615,7 +615,8 @@ def collapse_repeats(text: str) -> Tuple[str, int]:
     return "".join(kept).rstrip() if dropped else text, dropped
 
 
-def _guarded(reply: str, turn: _Turn, messages: List[Dict[str, Any]], complete: Complete) -> Tuple[str, Dict[str, Any]]:
+def _guarded(reply: str, turn: _Turn, messages: List[Dict[str, Any]], complete: Complete, *,
+             link_record: Optional[Dict[str, Any]] = None) -> Tuple[str, Dict[str, Any]]:
     """The reply, checked twice: every number traced, no verdict stated. One rewrite, then the rest is dealt with.
 
     An untraced number that survives the rewrite is listed to the user. A verdict that survives
@@ -630,7 +631,10 @@ def _guarded(reply: str, turn: _Turn, messages: List[Dict[str, Any]], complete: 
     from packing_assistant.runtime.model_client import ModelCancelled
 
     reply, repeats = collapse_repeats(reply)
-    record = claim_check.load_record(turn.files)
+    # A deterministic-first explanation already has the trusted record, including
+    # when the host returned it in memory or renamed an exported file. Never take
+    # this override from the model's arguments or its reply.
+    record = link_record if link_record is not None else claim_check.load_record(turn.files)
     coverage_corrections: List[Dict[str, Any]] = []
 
     def _claims(text: str) -> str:
@@ -820,7 +824,7 @@ def explain_link(text: str, steps_out: Dict[str, Any], *, session_id: str = "", 
         explanation = str(complete(messages, None).get("content") or "").strip()
         calls = 1
         if explanation:
-            explanation, provenance = _guarded(explanation, turn, messages, complete)
+            explanation, provenance = _guarded(explanation, turn, messages, complete, link_record=record)
             calls += provenance.pop("model_calls", 0)
     except ModelCancelled:
         out.update(ok=False, cancelled=True, error_code="cancelled", reply=deterministic + "\n\n本轮已取消。")
@@ -829,7 +833,8 @@ def explain_link(text: str, steps_out: Dict[str, Any], *, session_id: str = "", 
         out["mode_notice"] = ("The model could not be reached (" + str(exc)[:80] + "); the link above ran without it. "
                               "模型不可用，联动结果照常。")
         explanation = ""
-    explanation = _scrub(explanation).replace(CONFIRM, "（确认句须由用户本人输入）")
+    explanation = scrub_confirmations(_scrub(explanation),
+        "(the sign-off sentence must be typed by the person)" if turn.english else "（确认句须由用户本人输入）")
     if explanation:
         out["reply"] = deterministic + "\n\n" + EXPLANATION_HEAD + "\n" + explanation
     out.update(model_explanation=explanation, provenance=provenance,

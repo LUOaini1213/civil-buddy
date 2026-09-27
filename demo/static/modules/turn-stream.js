@@ -33,7 +33,7 @@ export function createTurnStream(deps) {
         // The server owns full history; this bounded fallback excludes this turn.
         history: state.history.slice(-81, -1),
         expert_ids: [...state.summoned],
-        confirm_ok: confirmed, // the Rust workbench serving this page still reads the flag
+        confirm_ok: confirmed, // Compatibility only; both hosts validate this turn's exact confirm_text.
         confirm_text: typed,
         session_id: state.session,
         project_id: deps.projectId() || "",

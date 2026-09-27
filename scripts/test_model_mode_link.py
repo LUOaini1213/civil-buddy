@@ -119,6 +119,53 @@ class Case(unittest.TestCase):
         return out, asked
 
 
+class ExplanationGuards(unittest.TestCase):
+    """The deterministic-first adapter must feed both guards the same trusted record."""
+
+    def record(self):
+        return {"container": {"type": "40HQ"}, "clauses": [], "confirmed_by_person": False,
+                "statements": [{"id": f"S{i + 1}", "clause": str(i + 1), "status": status, "text": "source"}
+                               for i, status in enumerate(["covered", "partial"] + ["human_required"] * 5)]}
+
+    def test_count_correction_and_record_guard_survive_a_dishonest_rewrite(self):
+        from packing_assistant.runtime.civil_config import CONFIRM_EN
+
+        record = self.record()
+        original = copy.deepcopy(record)
+        script = Script("5 statements are covered. The plan uses 40GP. S1 is covered by the plan. " + CONFIRM_EN,
+                        "6 statements are covered. The plan uses 40GP. S1 is covered by the plan. " + CONFIRM)
+        with patch.object(model_loop._Turn, "emit"):
+            out = model_loop.explain_link("Explain the record", {"ok": True, "reply": "record generated",
+                                           "tender_packing_link": record}, complete=script)
+        shown = "\n".join(line for line in out["model_explanation"].splitlines() if not line.startswith("⚠"))
+        self.assertIn("1 of 7 statements are covered", shown)
+        self.assertIn("S1 is covered by the plan", shown)
+        for wrong in ("5 statements are covered", "6 statements are covered", "plan uses 40GP", CONFIRM, CONFIRM_EN):
+            self.assertNotIn(wrong, shown)
+        self.assertEqual(out["provenance"]["claims_corrected"], ["5 statements are covered", "6 statements are covered"])
+        self.assertTrue(out["provenance"]["record"])
+        self.assertEqual(out["provenance"]["rewrites"], 1)
+        self.assertEqual(out["usage"]["model_calls"], 2)
+        self.assertTrue(all(call["tools"] is None for call in script.seen))
+        self.assertEqual(record, original)
+
+    def test_count_only_uses_the_record_file_and_preserves_supported_statements(self):
+        with tempfile.TemporaryDirectory(prefix="link-explanation-guard-") as folder:
+            path = Path(folder) / "tender-packing-link.json"
+            path.write_text(json.dumps(self.record()), encoding="utf-8")
+            script = Script("5 statements are covered. S1 is covered by the plan. S2 is partial.")
+            with patch.object(model_loop._Turn, "emit"):
+                out = model_loop.explain_link("Explain the record", {"ok": True, "reply": "record generated",
+                                               "files": [{"path": str(path)}]}, complete=script)
+        shown = "\n".join(line for line in out["model_explanation"].splitlines() if not line.startswith("⚠"))
+        self.assertNotIn("5 statements are covered", shown)
+        self.assertIn("1 of 7 statements are covered", shown)
+        self.assertIn("S1 is covered by the plan. S2 is partial.", shown)
+        self.assertEqual(out["provenance"]["claims_corrected"], ["5 statements are covered"])
+        self.assertEqual(out["provenance"]["rewrites"], 0)
+        self.assertEqual(len(script.seen), 1)
+
+
 class LinkFirst(Case):
     def test_the_link_runs_first_and_the_model_only_explains(self):
         gross = self.steps_record["statements"][2]["figures"]["max_gross_kg"]
@@ -151,7 +198,8 @@ class LinkFirst(Case):
             self.assertNotIn(wrong, shown)
         self.assertNotIn(CONFIRM, out["reply"])
         self.assertEqual(asked, [])
-        self.assertEqual(len(out["provenance"]["record"]), 3, out["provenance"])
+        self.assertEqual(out["provenance"]["claims_corrected"], ["S4 is covered"])
+        self.assertEqual(len(out["provenance"]["record"]), 2, out["provenance"])
 
     def test_a_stop_is_the_steps_stop_and_the_model_is_not_called(self):
         script = Script([("run_skill", {"skill_id": "bid-parse", "files": ["facade_itt_doc.md"]})], "Drafted.")

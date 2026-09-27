@@ -70,9 +70,10 @@ class PackIn(eng.RevisionIn):
 
 
 def store():
+    import os
     from demo.config import REPO_ROOT
     from packing_assistant.logistics.records import LogisticsStore
-    return LogisticsStore(REPO_ROOT)
+    return LogisticsStore(Path(os.environ.get("CIVIL_DOMAIN_WORKSPACE", str(REPO_ROOT))))
 
 
 def project_at(ident, revision):

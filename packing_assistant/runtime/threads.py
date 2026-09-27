@@ -23,7 +23,8 @@ from typing import Any, Dict, List, Optional, Set
 from uuid import uuid4
 
 _ROOT = Path(__file__).resolve().parents[2]
-_DIR = _ROOT / "demo" / "out" / "_threads"
+from packing_assistant.runtime.paths import default_out_root
+_DIR = default_out_root(_ROOT) / "_threads"
 _LOCK = Lock()
 _POOL: Optional[ThreadPoolExecutor] = None
 _ACTIVE: Set[str] = set()

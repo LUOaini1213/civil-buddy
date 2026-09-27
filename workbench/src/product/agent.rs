@@ -22,6 +22,12 @@ fn emit(lease: &TurnLease, kind: &str, data: Value) -> Result<(), String> {
         .map_err(|e| e.to_string())
 }
 
+/// A past message or an attachment never grants this turn a high-risk write.
+pub fn current_turn_confirmation(req: &TurnRequest) -> bool {
+    const CONFIRMATION: &str = "我明白，将由持证人员签认";
+    req.risk_confirmation == CONFIRMATION || req.message.split(['\n', '。', ';', '；']).any(|line| line.trim() == CONFIRMATION)
+}
+
 pub async fn run(
     state: Arc<ProductState>,
     workspace: WorkspaceContext,
@@ -154,21 +160,11 @@ async fn execute(
         );
     }
     let session = SessionId::parse(&req.session_id).map_err(|e| e.to_string())?;
-    const CONFIRMATION: &str = "我明白，将由持证人员签认";
     let recent = state
         .runtime
         .list_turns(ws, Some(&session), 100)
         .map_err(|e| e.to_string())?;
-    let signed = req.message.contains(CONFIRMATION)
-        || req.risk_confirmation == CONFIRMATION
-        || recent.iter().any(|turn| {
-            turn.status == TurnStatus::Completed
-                && turn.turn_id != *lease.turn_id()
-                && (turn.request["risk_confirmation"].as_str() == Some(CONFIRMATION)
-                    || turn.request["message"]
-                        .as_str()
-                        .is_some_and(|text| text.contains(CONFIRMATION)))
-        });
+    let signed = current_turn_confirmation(req);
     let history: Vec<Value> = recent.into_iter()
         .filter(|turn| turn.status == TurnStatus::Completed && turn.turn_id != *lease.turn_id())
         .take(12).collect::<Vec<_>>().into_iter().rev()
