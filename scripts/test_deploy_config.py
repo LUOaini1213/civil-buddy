@@ -195,6 +195,9 @@ class AdminTests(unittest.TestCase):
         writes = [line for line in t.splitlines() if "$key" in line and "printf" in line]
         self.assertEqual(1, len(writes))
         self.assertIn('> "$model_file.new"', body)
+        # single-quoted values: Compose interpolates $ in an unquoted env_file value and would cut a key short
+        self.assertIn("CIVIL_API_KEY='%s'", body)
+        self.assertIn("""*"'"*) die""", body)
         self.assertIn('rm -f "$model_file"', self.body(t, "model_off"))
 
     def test_set_site_restarts_caddy_only(self) -> None:

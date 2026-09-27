@@ -138,20 +138,21 @@ grep -q "$TOKEN" "$WORK/again.out" && fail "the refused second show-link still p
 ok "show-link prints exactly the access link once; a second call refuses without printing it"
 genv() { docker inspect -f '{{range .Config.Env}}{{println .}}{{end}}' "$(compose ps -q gateway)"; }
 genv | grep -q '^CIVIL_API_KEY=' && fail "a model key in the gateway before any opt-in"
-FAKE_KEY="sk-rehearsal-not-a-real-key-$(openssl rand -hex 8)"
+# a $ and a # in the key: model.env must carry both to the container unchanged (Compose interpolates unquoted $)
+FAKE_KEY="sk-rehearsal-not-a-real-key-\$x#$(openssl rand -hex 8)"
 printf 'http://127.0.0.1:9/v1\nrehearsal-model\n%s\n' "$FAKE_KEY" | "${ADMIN[@]}" model-on > "$WORK/model.out" 2>&1 || { cat "$WORK/model.out"; fail "model-on"; }
-grep -q "$FAKE_KEY" "$WORK/model.out" && fail "model-on echoed the key"
+grep -qF "$FAKE_KEY" "$WORK/model.out" && fail "model-on echoed the key"
 [ "$(stat -c '%a' "$INSTALL/model.env")" = "600" ] || fail "model.env is not mode 600"
-genv | grep -qx "CIVIL_API_KEY=$FAKE_KEY" || fail "the gateway did not get the opted-in key"
+genv | grep -qxF "CIVIL_API_KEY=$FAKE_KEY" || fail "the gateway did not get the opted-in key"
 for _ in $(seq 1 90); do [ "$(code "$B/api/health")" = 200 ] && break; sleep 1; done
 "${ADMIN[@]}" status > "$WORK/status.out" 2>&1
 grep -q "model key: SET" "$WORK/status.out" || fail "status does not say the key is set"
-grep -q "$FAKE_KEY" "$WORK/status.out" && fail "status printed the key"
+grep -qF "$FAKE_KEY" "$WORK/status.out" && fail "status printed the key"
 [ "$(code -H "Cookie: $cookie" "$B/demo")" = 200 ] || fail "/demo with a model key set"
 "${ADMIN[@]}" model-off > /dev/null 2>&1 || fail "model-off"
 [ -e "$INSTALL/model.env" ] && fail "model-off left model.env"
 genv | grep -q '^CIVIL_API_KEY=' && fail "the key is still in the gateway after model-off"
-compose logs --no-color 2>&1 | grep -q "$FAKE_KEY" && fail "the model key is in docker compose logs"
+compose logs --no-color 2>&1 | grep -qF "$FAKE_KEY" && fail "the model key is in docker compose logs"
 ok "model key opt-in: model.env 0600, in the gateway only after model-on, never echoed or logged, gone after model-off"
 for _ in $(seq 1 90); do [ "$(code "$B/api/health")" = 200 ] && break; sleep 1; done
 OLD="$TOKEN"

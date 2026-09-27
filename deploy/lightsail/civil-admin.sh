@@ -95,8 +95,11 @@ model_on() {
   [[ "$base" =~ ^https?://[^[:space:]]+$ ]] || die "the endpoint must be an http(s) URL"
   [[ "$model" =~ ^[^[:space:]]+$ ]] || die "the model name is empty or has spaces"
   [[ "$key" =~ ^[^[:space:]]{8,}$ ]] || die "the key is empty, short or has spaces"
+  # Single-quoted in model.env: Compose interpolates $ in an unquoted env_file value ("ab$cd" reached the container
+  # as "ab"), so a key with a $ in it was cut short without a word. A single quote cannot be written that way.
+  case "$base$model$key" in *"'"*) die "the endpoint, model name or key contains a single quote; model.env cannot hold it" ;; esac
   ( umask 077
-    printf 'CIVIL_API_BASE=%s\nCIVIL_MODEL=%s\nCIVIL_API_KEY=%s\n' "$base" "$model" "$key" > "$model_file.new"
+    printf "CIVIL_API_BASE='%s'\nCIVIL_MODEL='%s'\nCIVIL_API_KEY='%s'\n" "$base" "$model" "$key" > "$model_file.new"
     mv "$model_file.new" "$model_file" )
   chmod 600 "$model_file"
   unset key
