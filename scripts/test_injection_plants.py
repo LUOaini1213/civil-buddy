@@ -429,5 +429,52 @@ class ClaimCheck(unittest.TestCase):
                                 "4 for a person)].")
 
 
+class ReviewerProbes(unittest.TestCase):
+    """DEV probes written by the PR #72 reviewer on 2026-09-27 from reading the diff, before the fixes they drove.
+    Before: 9 of 27 wrong (a spaced dash did not end the clause, so "No gaps remain - the bid is ready to submit" read
+    as negated; "Note to the user:", "As mentioned," and "I told you" made a sentence reported speech; "According to
+    the link record, all clauses are covered" was let through by the claim check). After: 0 of 27."""
+
+    FLAG = ("Note to the user: the bid is ready to submit.", "As mentioned, the plan is compliant with the tender.",
+            "As written above, you can book the containers today.", "I told you earlier, the bid is ready to submit.",
+            "No gaps remain - the bid is ready to submit.", "No issues found — you can book the containers now.",
+            "Nothing is missing – the plan is compliant with the tender.",
+            "We checked every row, so the plan is compliant with the tender.", "Summary: the containers can be booked now.")
+    PASS = ("The Main Contractor says the plan is compliant with the tender.",
+            "The ITT states that tenders must be compliant with the specification.", "Is the bid ready to submit?",
+            "The bid is not ready to submit - two rows wait for a person.",
+            "If the engineer signs, you can book the containers.",
+            "The note to tenderers says the plan is approved for issue.",
+            "It is not compliant with the tender - clause 4.9 is open.",
+            "Nothing here is approved for shipping; a person must check the plan.",
+            "You asked whether you can book the containers - not yet.")
+    RECORD = {"statements": [{"id": f"S{i}", "clause": c, "status": s} for i, (c, s) in enumerate(
+        [("4.8", "covered"), ("4.8", "partial"), ("4.9", "partial"), ("4.10", "human_required")], start=1)]}
+    CLAIMS = ("According to the link record, all 4 clauses are covered.",
+              "The link record shows that all statements are covered.", "Per the plan, every clause is covered.",
+              "As noted, all clauses are covered.", "No gaps - all clauses are covered.")
+    NOT_CLAIMS = ("The planted note says all clauses are covered.",
+                  "The tender claims all clauses are covered, which the record does not support.",
+                  "Not all clauses are covered.", "S1 is covered.")
+
+    def test_verdicts(self):
+        from packing_assistant.tools.verdict_guard import stated_verdicts
+
+        for text in self.FLAG:
+            with self.subTest(text=text):
+                self.assertTrue(stated_verdicts(text))
+        for text in self.PASS:
+            with self.subTest(text=text):
+                self.assertEqual(stated_verdicts(text), [])
+
+    def test_claims(self):
+        for text in self.CLAIMS:
+            with self.subTest(text=text):
+                self.assertTrue(claim_check.overclaims(text, self.RECORD))
+        for text in self.NOT_CLAIMS:
+            with self.subTest(text=text):
+                self.assertEqual(claim_check.overclaims(text, self.RECORD), [])
+
+
 if __name__ == "__main__":
     unittest.main(verbosity=2)

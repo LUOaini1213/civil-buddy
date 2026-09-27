@@ -134,6 +134,10 @@ _QUESTION_TAIL = re.compile(r"^[^，,。；;！!\n]{0,12}(?:吗|么|呢)?\s*[？
 
 # English checks. A clause ends at , ; : ! ? a full stop, a line break, or a joining and / but / so / while.
 _EN_CLAUSE_BREAK = re.compile(r"[，,。；;：:！!？?\n]|\.(?=\s|$)|\b(?:and|but|so|while|whereas)\b", re.I)
+# Before a verdict a spaced dash or an em dash also ends a clause: "No gaps remain - the bid is ready to submit" states
+# it (the "no" belongs to the other clause). After a verdict the dash is not a break, so "ready to submit - once the
+# bond is attached" still reads as a condition. (Reviewer probe 2026-09-27; see test/benchmarks/verdicts/README.md.)
+_EN_CLAUSE_BREAK_BEFORE = re.compile(_EN_CLAUSE_BREAK.pattern + r"|\s[-–—]\s|—", re.I)
 _EN_SENTENCE_BREAK = re.compile(r"[.!?](?=\s|$)|[;\n。！？；]")
 _EN_SENTENCE_END = re.compile(r"[.!?](?=\s|$)|[\n。！？]")
 _EN_NEGATION = re.compile(r"\b(?:not|no|never|none|nothing|neither|nor|cannot|without|unable|nobody|whether|if|hardly|barely)\b|n['’]t", re.I)
@@ -148,8 +152,17 @@ _EN_CONDITION_LEAD = re.compile(r"^\s*(?:if|once|when|whenever|unless|after|prov
 _EN_REPORTED = re.compile(
     r"\b(?:says?|said|saying|states?|stated|stating|claims?|claimed|claiming|asks?|asked|asking|writes?|wrote|written|"
     r"reported|requests?|requested|alleges?|alleged|told|tells|instructs?|instructed|"
-    r"according\s+to|mentions?|mentioned|labell?ed|titled|asserts?|asserted|insists?|insisted|suggests?|suggested|note\s+to)\b",
+    r"according\s+to|mentions?|mentioned|labell?ed|titled|asserts?|asserted|insists?|insisted|suggests?|suggested)\b",
     re.I)
+# A reporting word in the product's own voice reports nobody else: "as mentioned", "as written above", "I told you",
+# "we have stated". Such a sentence is not reported speech. ("note to" is no longer a reporting word: "Note to the
+# user: the bid is ready to submit" states the verdict.)
+_EN_OWN_VOICE = re.compile(r"(?:^|\b)(?:as|i|we)\s+(?:(?:have|had|already|just|previously|also)\s+)?$", re.I)
+
+
+def _reports(sentence: str) -> bool:
+    """The sentence reports someone else's words: a reporting word not said in the product's own voice."""
+    return any(not _EN_OWN_VOICE.search(sentence[: m.start()]) for m in _EN_REPORTED.finditer(sentence))
 
 
 def _last_break(pattern: re.Pattern, blob: str, end: int) -> int:
@@ -168,7 +181,7 @@ def _quoted(blob: str, start: int) -> bool:
 
 def _english_stated(blob: str, match: re.Match, *, negation: bool, conditions: bool, questions: bool, reported: bool,
                     quotes: bool) -> bool:
-    clause = blob[_last_break(_EN_CLAUSE_BREAK, blob, match.start()): match.start()]
+    clause = blob[_last_break(_EN_CLAUSE_BREAK_BEFORE, blob, match.start()): match.start()]
     sentence = blob[_last_break(_EN_SENTENCE_BREAK, blob, match.start()): match.start()]
     rest = _EN_CLAUSE_BREAK.search(blob, match.end())
     after = blob[match.end(): rest.start() if rest else len(blob)]
@@ -181,7 +194,7 @@ def _english_stated(blob: str, match: re.Match, *, negation: bool, conditions: b
         end = _EN_SENTENCE_END.search(blob, match.end())
         if end and end.group(0) in "?？":
             return False
-    if reported and _EN_REPORTED.search(sentence):
+    if reported and _reports(sentence):
         return False
     if quotes and _quoted(blob, match.start()):
         return False

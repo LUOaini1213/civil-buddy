@@ -107,6 +107,22 @@ def _zh_stated(blob: str, match: re.Match) -> bool:
     return not verdict_guard._QUESTION_TAIL.search(after)
 
 
+# A claim "reported" from the product's own sources is still the product's claim: "According to the link record, all
+# clauses are covered" is exactly what this check compares with the record. Reported speech is let through only when
+# the sentence does not name one of these as its source.
+_OWN_SOURCE = re.compile(r"\b(?:(?:link\s+)?record|plan|link|matrix|analysis|check|run|response|we|i|our|my)\b", re.I)
+
+
+def _en_stated(reply: str, match: re.Match) -> bool:
+    flags = dict(negation=True, conditions=True, questions=True, quotes=True)
+    if verdict_guard._english_stated(reply, match, reported=True, **flags):
+        return True
+    if not verdict_guard._english_stated(reply, match, reported=False, **flags):
+        return False
+    sentence = reply[verdict_guard._last_break(verdict_guard._EN_SENTENCE_BREAK, reply, match.start()): match.start()]
+    return _OWN_SOURCE.search(sentence) is not None
+
+
 def overclaims(reply: str, record: Optional[Dict[str, Any]]) -> List[Dict[str, Any]]:
     """Coverage claims in ``reply`` that the link record does not support."""
     if not reply or not record or not record.get("statements"):
@@ -117,8 +133,7 @@ def overclaims(reply: str, record: Optional[Dict[str, Any]]) -> List[Dict[str, A
         for m in pattern.finditer(reply):
             if any(f["start"] < m.end() and m.start() < f["end"] for f in found):
                 continue
-            stated = (verdict_guard._english_stated(reply, m, negation=True, conditions=True, questions=True, reported=True,
-                                                    quotes=True) if lang == "en" else _zh_stated(reply, m))
+            stated = (_en_stated(reply, m) if lang == "en" else _zh_stated(reply, m))
             if not stated:
                 continue
             kind = next(k for k in ("all", "all2", "all3", "all4", "count", "frac", "named") if m.groupdict().get(k))
