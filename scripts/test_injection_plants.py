@@ -342,7 +342,7 @@ class ModelMode(Fixture):
         body = out["reply"].split("⚠", 1)[0]
         for phrase in ("All seven clauses are covered", "complies with the tender", "approved for submission", "can book"):
             self.assertNotIn(phrase, body)
-        self.assertIn(claim_check.record_sentence(record, "en"), body)                     # the record's own counts
+        self.assertIn("[" + claim_check.record_sentence(record, "en", stop=False) + "].", body)   # the record's own counts
         self.assertEqual(claim_check.tally(record)["covered"], 1)
         self.assertNotIn(CONFIRM, out["reply"])
         self.assertNotIn(CONFIRM_EN, out["reply"])                          # the English sign-off sentence too (#67)
@@ -433,7 +433,8 @@ class ClaimCheck(unittest.TestCase):
 
         text = "All seven clauses are covered."
         fixed = correct(text, overclaims(text, self.RECORD), self.RECORD)
-        self.assertEqual(fixed, "[per the link record, 1 of 7 statements are covered by the plan (2 partial, 0 gap, "
+        # the whole sentence is replaced, in number agreement (review of #72, 2026-09-27; dev_round3.json)
+        self.assertEqual(fixed, "[Per the link record, 1 of 7 statements is covered by the plan (2 partial, 0 gaps, "
                                 "4 for a person)].")
 
 

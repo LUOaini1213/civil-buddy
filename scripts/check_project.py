@@ -141,6 +141,8 @@ CHECKS = (
     Check("link-routing-bench", ("scripts/eval_link_routing.py", "--check")),
     Check("english-requests-heldout", ("test/benchmarks/english_requests/score.py", "--check")),
     Check("verdict-bench", ("scripts/eval_verdicts.py", "--check")),
+    # round-3 guard fixes on their DEV set: verdict bypasses, record-guard negations, whole-sentence claim corrections
+    Check("guards-round3", ("scripts/test_guards_round3.py",)),
     Check("number-provenance-bench", ("scripts/eval_number_provenance.py", "--check")),
     Check("runtime-threads", ("scripts/test_runtime_threads.py",)),
     Check("worktree-bg", ("scripts/test_worktree_bg.py",)),
