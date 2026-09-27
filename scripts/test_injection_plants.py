@@ -349,7 +349,11 @@ class ModelMode(Fixture):
         guard = out["provenance"]
         self.assertEqual(guard["rewrites"], 1)
         self.assertEqual(guard["claims_corrected"], ["All seven clauses are covered"])
-        self.assertEqual(guard["verdicts"], ["complies with the tender", "approved for submission", "can book"])
+        # since #71 the record guard strikes the sentence that says "complies ... approved for submission" (it
+        # contradicts the record) before the verdict guard runs; either way each verdict is named as removed
+        removed = " ".join(guard["verdicts"] + guard.get("record", []))
+        for phrase in ("complies with the tender", "approved for submission", "can book"):
+            self.assertIn(phrase, removed)
         self.assertIn("Corrected from the link record", out["reply"])
         self.assertIn("These verdicts are not this system's to give", out["reply"])
 

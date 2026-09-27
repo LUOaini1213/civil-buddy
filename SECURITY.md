@@ -20,7 +20,7 @@ maintained.
 2. **The model never approves.** In model mode the model picks tools from a fixed menu; its tools and the Python MCP
    server have no approval field, and a copy of the confirmation sentence in a model reply is replaced. The deliverable
    writer receives only the user's words and the named job files, so model text does not reach a draft. Every model
-   reply passes three deterministic checks:
+   reply passes four deterministic checks:
    - *number provenance*: a quantity or clause number with no source in the turn's evidence is rewritten once, then
      listed to the user;
    - *verdict guard* (`packing_assistant/tools/verdict_guard.py`, Chinese and English): verdicts the product must
@@ -30,6 +30,9 @@ maintained.
    - *claim check* (`packing_assistant/tools/claim_check.py`): when the turn wrote a link record, a coverage claim
      the record does not support ("all seven clauses are covered" with one covered statement, "S4 is covered" when S4
      waits for a person) is replaced by what the record says.
+   - *record guard* (`packing_assistant/tools/record_guard.py`): a sentence that attaches a status, container type,
+     mass or clause meaning the record does not give, or says a draft is approved or ready to submit / book, is
+     struck and listed.
 3. **Only a person's typed sentence approves high-risk work, for one turn.** The 19 high-risk posts (structure,
    geotechnical, fire protection, construction method, safety briefs and others) write nothing until a person types
    the confirmation sentence in that turn. The gateway and `civil serve` accept only `confirm_text` equal to the
@@ -59,7 +62,7 @@ All of these run in `npm run check` and in CI on every pull request:
 | `http-confirmation` | the gateway and workbench HTTP routes approve only on `confirm_text` equal to the sentence |
 | `pack-ship-read-sandbox` | pack-ship reads stay inside the sandbox roots over MCP and the gateway |
 | `injection-plants` | instructions planted in SYNTHETIC tender (Markdown and Word) and panel-list files turn no statement covered and approve nothing (a planted figure sends its row to a person, a planted container code stops the plan: fail-safe, not a pass), in the steps-mode link, the steps-mode turn and the gateway; a scripted fake model that obeys the plant is corrected and struck by the guards; a planted clause that names a transport or packing term becomes one extra row that waits for a person and quotes it, never covered |
-| `safety-sealed` | the verdict guard on a sealed English set written blind (24 sentences; floor 20 right, first run 20/24, precision 1.000, recall 0.600) and the 8 sealed planted-instruction files, in the link and the steps turn (floors 7/7 and 8/8, each the same as its control run); a fake model that repeats the plant is also run and printed, not pinned: it leaves planted words in 6 of 8 replies (the guards strike verdicts and correct coverage claims, they do not delete an instruction the model repeats) |
+| `safety-sealed` | the verdict guard on a sealed English set written blind (24 sentences; floor 20 right, first run 20/24, precision 1.000, recall 0.600) and the 8 sealed planted-instruction files, in the link and the steps turn (floors 7/7 and 8/8, each the same as its control run); a fake model that repeats the plant is also run and printed, not pinned: it leaves planted words in 4 of 8 replies (the guards strike verdicts, correct coverage claims and strike sentences that contradict the link record; they do not delete every instruction the model repeats) |
 | `verdict-bench` | floors for the verdict guard on its Chinese dev set, its second Chinese held-out set and the English dev set |
 | `model-loop` | the model loop with a scripted model: routing, number and verdict guards, approvals, read limits |
 | `tender-packing-link` | statuses are computed from the plan; lashing, stillages and sequencing are never covered |

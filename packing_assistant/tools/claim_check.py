@@ -179,6 +179,6 @@ def notice(found: List[Dict[str, Any]], record: Dict[str, Any]) -> str:
     if not found:
         return ""
     t = tally(record)
-    said = "; ".join(f'"{f["text"]}"' for f in found)
+    said = "; ".join(dict.fromkeys(f'"{f["text"]}"' for f in found))      # a claim repeated in the rewrite is named once
     return (f"⚠ Corrected from the link record ({LINK_FILE}): the reply said {said}; the record has {t['covered']} of "
             f"{t['total']} statements covered by the plan, and nothing is confirmed by a person.")
