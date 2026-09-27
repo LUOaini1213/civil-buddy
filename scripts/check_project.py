@@ -115,6 +115,13 @@ CHECKS = (
     Check("civil-config", ("scripts/test_civil_config.py",)),
     Check("civil-workspace", ("scripts/test_civil_workspace.py",)),
     Check("model-loop", ("scripts/test_model_loop.py",)),
+    # model mode on the link: deterministic first, the model only explains; its claims checked against the record
+    Check("model-mode-link", ("scripts/test_model_mode_link.py",), timeout=300),
+    # 12 frozen requests against a scripted OpenAI-compatible server on 127.0.0.1 (no network, no key)
+    Check("model-mode-eval", ("scripts/eval_model_mode.py", "--check"), timeout=300),
+    # model mode on the sealed held-out link requests and injections (written blind 2026-09-26); floors = the first
+    # scored run after merging #67 (README there)
+    Check("model-mode-sealed", ("test/benchmarks/model_mode_sealed/score_sealed.py", "--check"), timeout=600),
     Check("post-scorecard", ("scripts/eval_post_scorecard.py", "--all-pilots"), timeout=300),
     Check("workbench-model-turn", ("scripts/test_workbench_model_turn.py",), timeout=300),
     Check("steps-job-files", ("scripts/test_steps_job_files.py",)),

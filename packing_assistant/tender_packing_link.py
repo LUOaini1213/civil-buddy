@@ -622,6 +622,18 @@ def container_tare_kg(container_type: str) -> Optional[float]:
     return None
 
 
+def heaviest_container(per_container: Sequence[Dict[str, Any]], container_type: str) -> Dict[str, Any]:
+    """The heaviest loaded container of a plan: its number, the cargo in it (panels and crates, from the engine's
+    per-container load), the container's tare and their sum, the gross mass. One computation for the link's mass
+    statement, the model's pack_plan result and the reply check, so the three cannot disagree. The rated payload
+    of the container type is a different figure and is not here."""
+    heaviest = max(per_container, key=lambda item: float(item.get("cargo_kg") or 0))
+    cargo = float(heaviest.get("cargo_kg") or 0)
+    tare = container_tare_kg(container_type)
+    return {"heaviest_container_no": heaviest.get("container_no"), "max_cargo_kg": cargo, "container_tare_kg": tare,
+            "max_gross_kg": round(cargo + tare, 1) if tare is not None else None, "containers": len(per_container)}
+
+
 def _kg(value: Any) -> str:
     try:
         number = float(value)
@@ -786,13 +798,10 @@ def build_checks(clauses: Sequence[Dict[str, Any]], decision: Dict[str, Any], pl
                                  _placeholder("logistics", f"gross mass per container ({_ref(clause)}). {why}"),
                                  {"limit_kg": limits[0] if len(limits) == 1 else limits}, why, True))
             continue
-        heaviest = max(per, key=lambda item: float(item.get("cargo_kg") or 0))
-        cargo = float(heaviest.get("cargo_kg") or 0)
-        tare = container_tare_kg(ctype)
-        gross = round(cargo + tare, 1) if tare is not None else None
-        figures = {"limit_kg": limits[0] if len(limits) == 1 else limits, "limit_basis": basis,
-                   "heaviest_container_no": heaviest.get("container_no"), "max_cargo_kg": cargo, "container_tare_kg": tare,
-                   "max_gross_kg": gross, "containers": len(per)}
+        mass = heaviest_container(per, ctype)
+        heaviest = {"container_no": mass["heaviest_container_no"]}
+        cargo, tare, gross = mass["max_cargo_kg"], mass["container_tare_kg"], mass["max_gross_kg"]
+        figures = {"limit_kg": limits[0] if len(limits) == 1 else limits, "limit_basis": basis, **mass}
         if len(limits) != 1 or tare is None:
             why = ("several mass figures in one clause: " + ", ".join(_kg(x) for x in limits)) if len(limits) != 1 else f"no tare for {ctype}"
             checks.append(_check("gross_mass", clause, "human_required",
@@ -1326,3 +1335,58 @@ def load_previous(path: str) -> Optional[Dict[str, Any]]:
     except (OSError, ValueError):
         return {"schema": "unreadable"}
     return data if isinstance(data, dict) else None
+
+
+# ---------------------------------------------------------------------------------------------------------
+# the record, read back: what a model may explain and a question may be answered from
+
+RECORD_VIEW = "tender.link_record.view.v1"
+_VIEW_TEXT = 320
+
+
+def link_record_view(record: Dict[str, Any], *, where: str = "") -> Dict[str, Any]:
+    """The link record as a read-only tool result: every status, figure and clause text a reply may use, labelled so a
+    small model cannot misread one figure for another (the heaviest container's gross mass is not the container's
+    rated payload). Nothing here is computed afresh: it is the record as it was written."""
+    statements = [s for s in record.get("statements") or [] if isinstance(s, dict)]
+    plan = record.get("plan") or None
+    decision = record.get("container") or {}
+    heaviest = next((dict(s.get("figures") or {}) for s in statements if s.get("kind") == "gross_mass"
+                     and (s.get("figures") or {}).get("max_gross_kg") is not None), None)
+    if heaviest is None and plan and plan.get("can_fit") is True and plan.get("per_container"):
+        heaviest = heaviest_container(plan["per_container"], plan.get("container_type") or decision.get("type"))
+    if heaviest is not None:
+        heaviest = {k: heaviest.get(k) for k in ("heaviest_container_no", "max_cargo_kg", "container_tare_kg", "max_gross_kg",
+                                                 "containers", "limit_kg") if k in heaviest}
+    counts = {s: sum(1 for c in statements if c.get("status") == s) for s in ("covered", "partial", "gap", "human_required")}
+    return {
+        "ok": True, "schema": RECORD_VIEW, "record": where or LINK_FILE, "generated_at": record.get("generated_at"),
+        "inputs": {role: (record.get("inputs") or {}).get(role, {}).get("name") for role in ("tender", "panel_list")},
+        "container_type": decision.get("type"), "container_source": decision.get("source"),
+        "plan": ({"container_type": plan.get("container_type"), "containers_used": plan.get("containers_used"),
+                  "can_fit": plan.get("can_fit")} if plan else None),
+        "plan_refusal": record.get("plan_refusal"),
+        "heaviest_container": heaviest,
+        "labels": {"max_cargo_kg": "panels and crates in the heaviest loaded container, no tare",
+                   "max_gross_kg": "max_cargo_kg + container tare: the gross mass of the heaviest loaded container",
+                   "limit_kg": "the clause's limit, not a plan figure"},
+        "counts": counts,
+        "statements": [{"id": s.get("id"), "clause": s.get("clause"), "kind": s.get("kind"), "status": s.get("status"),
+                        "text": str(s.get("text") or "")[:_VIEW_TEXT]} for s in statements],
+        "clauses": [{"clause": c.get("clause"), "text": str(c.get("text") or "")[:_VIEW_TEXT]}
+                    for c in record.get("clauses") or [] if isinstance(c, dict)],
+        "confirmed_by_person": record.get("confirmed_by_person") is True,
+        "submit_blocked": True,
+        "rule": ("Statuses, figures and the container type are the record's. Explain them; do not change them. A person "
+                 "confirms every statement before booking or submission."),
+    }
+
+
+def latest_link_record(roots: Sequence[Path], session_dir: Optional[Path] = None) -> Optional[Path]:
+    """The link record a question means: this session's own, else the newest one under the given output roots."""
+    if session_dir is not None:
+        own = [p for p in session_dir.rglob(LINK_FILE) if p.is_file()]
+        if own:
+            return max(own, key=lambda p: p.stat().st_mtime)
+    found = [p for root in roots if root and root.is_dir() for p in root.rglob(LINK_FILE) if p.is_file()]
+    return max(found, key=lambda p: p.stat().st_mtime) if found else None
