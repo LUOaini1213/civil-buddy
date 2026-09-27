@@ -673,7 +673,9 @@ def build_checks(clauses: Sequence[Dict[str, Any]], decision: Dict[str, Any], pl
     if decision.get("type") is None:
         no_plan_why = decision.get("reason")
     else:
-        rows = [f"{r.get('id') or r.get('name')} ({r.get('reason')})" + (f" in row {r['sheet_row']}" if r.get("sheet_row") else "")
+        from packing_assistant.tools.pack_ship_solve import cell_text
+
+        rows = [f"{cell_text(r.get('id') or r.get('name'))} ({r.get('reason')})" + (f" in row {r['sheet_row']}" if r.get("sheet_row") else "")
                 for r in (plan or {}).get("needs_human") or [] if isinstance(r, dict)]
         no_plan_why = (f"no plan ({(plan or {}).get('error') or 'not run'}): {(plan or {}).get('detail') or ''}".strip(": ")
                        + (f"; panel-list rows a person must fix first: {', '.join(rows[:6])}" + (" ..." if len(rows) > 6 else "")
@@ -1124,7 +1126,9 @@ def report_markdown(record: Dict[str, Any]) -> str:
     if read.get("summary"):
         lines.append(f"- panel list read: {read['summary']}")
     if read.get("unmapped_columns"):
-        lines.append("- panel list columns not read: " + ", ".join(f"'{c}'" for c in read["unmapped_columns"]))
+        from packing_assistant.tools.pack_ship_solve import cell_text
+
+        lines.append("- panel list columns not read: " + ", ".join(cell_text(c) for c in read["unmapped_columns"]))
     lines += ["", f"Container type: {record['container']['reason']}", "", "## Logistics clauses found in the tender", ""]
     if not record["clauses"]:
         lines.append("- none: the tender states no logistics requirement the tool recognises; a person checks it.")

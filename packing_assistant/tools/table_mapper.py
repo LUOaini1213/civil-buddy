@@ -369,6 +369,9 @@ def build_column_map(headers: Sequence[Any]) -> Dict[str, str]:
                 std, score = word
         if not std:
             continue
+        if std in ("weight_kg", "total_weight_kg") and _FORCE_UNIT_RE.search(raw.lower()):
+            # "Self weight (kN)" matched the plain "weight" rule above: a force is not a mass, so a person is asked
+            continue
         if std == "weight_kg":
             score += _weight_pref(key)
         cur = best.get(std)
@@ -582,8 +585,10 @@ _LAST_READING: Dict[str, Any] = {}
 
 # "TOTAL", "Sub-total L5", "Grand Total", "Total weight": a sum row, not cargo. Checked in the name and the mark
 # column. It must be followed by nothing, punctuation or a word that says what is summed: "Total station" is cargo.
+# A dash counts only with a space after it ("TOTAL - L9"): "Total-glass panel" and the mark "TOTAL-01" are cargo.
+# And a row that gives a size is cargo whatever its label says (see rows_to_ir): a sum row has no size.
 _SUMMARY_LABEL_RE = re.compile(
-    r"^(?:grand\s*|sub[\s\-]*)?totals?(?:\s*$|\s*[:：(\-–=]|\s+(?:for|of|on|this|page|sheet|level|lvl|floor|block|"
+    r"^(?:grand\s*|sub[\s\-]*)?totals?(?:\s*$|\s*[:：(=]|\s*[\-–](?:\s|$)|\s+(?:for|of|on|this|page|sheet|level|lvl|floor|block|"
     r"elevation|zone|l\d+|weight|wt|mass|qty|quantity|kg|t|pcs|nos|panels|items)\b)",
     re.I,
 )
@@ -715,7 +720,9 @@ def rows_to_ir(
         row_no = row_numbers[i - 1] if row_numbers is not None and i - 1 < len(row_numbers) else None
 
         summary = next((c for c in (got.get("name"), got.get("id")) if _is_summary_label(c)), None)
-        if summary is not None:
+        sized = any(str(v).strip() for k, v in got.items() if v is not None and (
+            k in ("length_mm", "width_mm", "height_mm", "__dims__") or k.startswith(PAIR_PREFIX)))
+        if summary is not None and not sized:
             clean_stats["n_skip_summary_row"] += 1
             summary_rows.append({"row": row_no, "text": str(summary).strip()})
             continue
@@ -910,19 +917,21 @@ def rows_to_ir(
     return out
 
 
+# a number with thousands separators only in threes ("1,500"); "1,5" is not read
+_PAIR_NUM = r"((?:\d{1,3}(?:,\d{3})+|\d+)(?:\.\d+)?)"
 _DIM_PAIR_RE = re.compile(
-    r"^\s*(\d+(?:\.\d+)?)\s*" + _CELL_UNIT + r"?\s*[x×*✕]\s*(\d+(?:\.\d+)?)\s*" + _CELL_UNIT + r"?\s*$", re.I
+    r"^\s*" + _PAIR_NUM + r"\s*" + _CELL_UNIT + r"?\s*[x×*✕]\s*" + _PAIR_NUM + r"\s*" + _CELL_UNIT + r"?\s*$", re.I
 )
 
 
 def _parse_dim_pair(v: Any) -> Optional[Tuple[float, float]]:
-    """"1500 x 4200" -> (1500, 4200). A triple is not a pair (the triple reader handles it)."""
+    """"1500 x 4200" / "1,500 x 4,200" -> (1500, 4200). A triple is not a pair (the triple reader handles it)."""
     if v is None or isinstance(v, (int, float)):
         return None
     m = _DIM_PAIR_RE.match(str(v))
     if not m:
         return None
-    return float(m.group(1)), float(m.group(2))
+    return float(m.group(1).replace(",", "")), float(m.group(2).replace(",", ""))
 
 
 def _guess_category(L: float, W: float, H: float, weight: float, name: str) -> str:
