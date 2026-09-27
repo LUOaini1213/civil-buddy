@@ -94,6 +94,9 @@ CHECKS = (
     # planted text in SYNTHETIC tender / panel-list files does not change statuses, approve anything or become a
     # statement (steps mode, gateway, and a scripted fake model that obeys the plant); a live model was not tested
     Check("injection-plants", ("scripts/test_injection_plants.py",), timeout=600),
+    # the sealed held-out English verdict set and the planted-instruction set, written blind on 2026-09-26: floors =
+    # PR #72's first scored run (README there); the obeying-fake-model row is printed, not pinned
+    Check("safety-sealed", ("test/benchmarks/safety_sealed/score_sealed.py", "--check"), timeout=600),
     Check("real-tender", ("scripts/test_real_tender.py",), timeout=1200),
     # Offline, model-free, a second or two each - and until 2026-09-20 run by nothing: not by ci.yml,
     # not by this registry, not by the acceptance glob. They pin the parser the three bid posts stand on.
