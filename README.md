@@ -93,7 +93,7 @@ submit_blocked=true  secret_leak=false  禁止：可以投标 / 可以开工
 **提交署名说明** — 仓内约 40% 的提交署名为 `Packing Assistant`：agent 起草并落盘的改动独立署名，经人审后合入 `main`。这是 HITL 流程的一部分，不是第二位作者。
 
 > 内部讨论草稿，不是法定专项方案、不是签认件。
-> 高风险写盘前确认句：`我明白，将由持证人员签认`。
+> 高风险写盘前确认句：`我明白，将由持证人员签认`（英文等价句 / English: `I understand; a licensed person will sign this off.`，两句都须原样键入，只管本轮）。
 
 **竞赛材料（海之子杯 2026 · AI 智能体挑战）** — 评审维度对照、可复跑命令与 23 轮 UX 迭代记录移至 [docs/submission/haizizhi-entry.md](docs/submission/haizizhi-entry.md)；Agent Middleware 赛道对照表（**按赛题 checklist 自评**，非官方评审）见 [docs/civil-buddy/track1-qualified.md](docs/civil-buddy/track1-qualified.md)。同一仓库也是 NUS-ISS「Show Me Your Agents」2026 的参赛项目（提案 2026-09-28）：英文对照表、可复跑命令与边界见 [docs/submission/nus-iss-entry.md](docs/submission/nus-iss-entry.md)；两赛口径互不通用。
 
