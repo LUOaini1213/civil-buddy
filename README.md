@@ -6,6 +6,8 @@
 
 Natural Language → Agent Routing → Deterministic Tools → HITL → Evaluation
 
+**Rust 统一工作台**：[启动与能力边界](docs/civil-buddy/unified-workbench.md)。一个本地入口连接 Agent、66 岗位、文档副本编辑、资料检索、CAD、工程计算与规划页面；Python CLI 的原有流程继续保留。
+
 **CAD → 3D 建模助手（预览）** — 上传 DXF（闭合轮廓、圆弧、圆和受限块引用），确认单位、图层和实体区域，
 生成墙/柱/板或带孔截面的参数化网格；旋转查看、选中追溯、修改高度/长度与撤销，
 保存项目及版本、重启恢复、项目包交接，并在统一 Agent 对话里改参、撤销与导出。
@@ -42,33 +44,61 @@ python scripts/test_agent_middleware.py     # 同一剧本的断言版（CI 每�
 <summary>四拍剧本的实际输出（2026-09-03 本机，无 API Key）</summary>
 
 ```text
+
 ==========================================================
+
 Civil Buddy · 策略引擎 + 失败恢复
+
 ==========================================================
+
 两层 Runtime 中间件（不是五个平庸包装）
+
   1. 策略引擎  谁 / 哪个工具 / 花多少 / 能否碰生产数据
+
   2. 失败恢复  超时重试 → 降级 UNSPECIFIED → 审计链
+
 剧本：正常下单 → 越权被拒 → 工具挂掉自动恢复 → 成本超限熔断
 
+
+
 [1/4] 正常下单   ALLOW
+
   原因  低风险岗 finance-tax 写作业根
+
   结果  wrote=True  GST 9%=True  files=2  run=run-<id>
 
+
+
 [2/4] 越权被拒   DENY
+
   原因  拒绝：岗 bid-parse 不能调 pack-ship__plan（exclusive 属于 pack-ship）。
+
   弹窗  拒绝：岗 bid-parse 不能调 pack-ship__plan（exclusive 属于 pack-ship）。
+
   密钥  拒绝：secret path denied: .env  文件未落地
 
+
+
 [3/4] 工具挂掉自动恢复   DEGRADE
+
   原因  下游失败 timeout，工具 demo__downstream 降级，不编柜数/xyz。
+
   动作  degrade  审计 ['call', 'retry', 'degrade']
+
   结果  can_fit=UNSPECIFIED  不编柜数
 
+
+
 [4/4] 成本超限熔断   CIRCUIT
+
   原因  熔断：session 成本超限 steps 1/1 tokens 32/32。
+
   代码  circuit_open  已执行=False
 
+
+
 submit_blocked=true  secret_leak=false  禁止：可以投标 / 可以开工
+
 ```
 
 </details>
@@ -93,7 +123,9 @@ submit_blocked=true  secret_leak=false  禁止：可以投标 / 可以开工
 **提交署名说明** — 仓内约 40% 的提交署名为 `Packing Assistant`：agent 起草并落盘的改动独立署名，经人审后合入 `main`。这是 HITL 流程的一部分，不是第二位作者。
 
 > 内部讨论草稿，不是法定专项方案、不是签认件。
-> 高风险写盘前确认句：`我明白，将由持证人员签认`。
+> 高风险写盘前确认句：`我明白，将由持证人员签认`（英文等价句 / English: `I understand; a licensed person will sign this off.`，两句都须原样键入，只管本轮）。
+>
+> Security model, what is tested and how to report a problem: [SECURITY.md](SECURITY.md).
 
 **竞赛材料（海之子杯 2026 · AI 智能体挑战）** — 评审维度对照、可复跑命令与 23 轮 UX 迭代记录移至 [docs/submission/haizizhi-entry.md](docs/submission/haizizhi-entry.md)；Agent Middleware 赛道对照表（**按赛题 checklist 自评**，非官方评审）见 [docs/civil-buddy/track1-qualified.md](docs/civil-buddy/track1-qualified.md)。同一仓库也是 NUS-ISS「Show Me Your Agents」2026 的参赛项目（提案 2026-09-28）：英文对照表、可复跑命令与边界见 [docs/submission/nus-iss-entry.md](docs/submission/nus-iss-entry.md)；两赛口径互不通用。
 
