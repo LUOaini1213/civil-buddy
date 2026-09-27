@@ -567,7 +567,7 @@ def _mass_limits(body: str, context: str = "") -> Dict[str, Any]:
     import bisect
 
     out: Dict[str, Any] = {"container": [], "basis": [], "written": {}, "package": [], "package_subjects": [], "vehicle": [],
-                           "unplaced": []}
+                           "unplaced": [], "implausible": [], "pending": []}
     # the clause as a whole is about transport or packing ("Containers: 40HQ only. ... the terminal accepts up to 32 t")
     clause_transport = bool(_TRANSPORT_RE.search(_STRUCTURAL_LOAD_RE.sub(" ", body)) or _names_container(body)
                             or (context and _TRANSPORT_RE.search(context)))
@@ -589,12 +589,16 @@ def _mass_limits(body: str, context: str = "") -> Dict[str, Any]:
         package_ends = [m.end() for m in subjects if m.lastgroup == "package"]
         package_words = [m.group(0).lower() for m in subjects if m.lastgroup == "package"]
         left = False
+        implausible_before = len(out["implausible"])
         for kg, start, _end in figures:
             subject, how = _subject(plain, start, _end, kinds) if limit and (massy or transport) else (None, "none")
             if subject == "container" and not _CONTAINER_KG[0] <= kg <= _CONTAINER_KG[1]:
                 # "shall not exceed 20.000 kg" (a European thousands point) is 20 kg, and no container is limited to 20 kg
-                # or to 60 t: a figure outside what a container can weigh is read by a person, never compared
-                subject = None
+                # or to 60 t: a figure outside what a container can weigh is never compared on its own. Beside a
+                # plausible limit of the same clause it is one more figure (several figures: a person reads the clause);
+                # alone, the sentence goes to a person (see logistics_clauses)
+                out["implausible"].append(kg)
+                continue
             if subject == "container":
                 out["container"].append(kg)
                 out["basis"].append(_basis(plain))
@@ -616,6 +620,14 @@ def _mass_limits(body: str, context: str = "") -> Dict[str, Any]:
         # figure of the same sentence was placed ("20 t per container and 9,000 lbs per ...")
         if left and transport and (limit or massy):
             out["unplaced"].append(sentence.strip())
+        elif implausible_before != len(out["implausible"]) and not out["container"]:
+            out["pending"].append(sentence.strip())
+    if out["implausible"]:
+        if out["container"]:
+            # one more figure beside the plausible limit: the clause has several figures and a person reads it
+            out["container"] += out["implausible"]
+        else:
+            out["unplaced"] += out["pending"]
     return out
 
 
@@ -1076,7 +1088,8 @@ def build_checks(clauses: Sequence[Dict[str, Any]], decision: Dict[str, Any], pl
         label = "cargo mass (panels and crates)" if basis == "cargo" else "gross mass"
         written = (clause.get("limits_written") or {}).get(_kg(limit))
         head = (f"{_cap(_ref(clause))} limits the {'cargo' if basis == 'cargo' else 'gross'} mass of each loaded container to "
-                f"{_kg(limit)} kg" + (f" (written as {written}; {_conversion(written)})" if written else "") + ". The heaviest planned container (no. {heaviest.get('container_no')} of {len(per)}) carries "
+                f"{_kg(limit)} kg" + (f" (written as {written}; {_conversion(written)})" if written else "")
+                + f". The heaviest planned container (no. {heaviest.get('container_no')} of {len(per)}) carries "
                 f"{_kg(cargo)} kg of panels and crates; with the {ctype} tare of {_kg(tare)} kg (knowledge base, approximate - the "
                 f"container's CSC plate governs) its gross mass is {_kg(gross)} kg.")
         if compared > limit:

@@ -525,6 +525,16 @@ class Linked(unittest.TestCase):
         self.assertEqual((mass["figures"]["limit_kg"], mass["status"]), (19958.1, "partial"))
         self.assertIn("to 19,958.1 kg (written as 44,000 lbs; 1 lb = 0.45359237 kg)", mass["text"])
 
+    def test_the_gross_mass_statement_names_its_container(self):
+        # independent review of PR #76: on 8282779 the sentence after the limit lost its f-prefix, so every gross-mass
+        # statement (and the bid book) read "The heaviest planned container (no. {heaviest.get('container_no')} of
+        # {len(per)})"
+        for tender in ("itt.md", "itt_lbs.md"):
+            with self.subTest(tender=tender):
+                (mass,) = self.statements(tender, "gross_mass")
+                self.assertIn("The heaviest planned container (no. 1 of 6) carries", mass["text"])
+                self.assertFalse([s["id"] for s in self.link(tender)["statements"] if "{" in s["text"] or "}" in s["text"]])
+
     def test_statement_keys_are_unique_and_a_rerun_reports_every_change(self):
         from packing_assistant.tender_packing_link import compare, run_link
 
