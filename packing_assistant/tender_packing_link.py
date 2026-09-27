@@ -69,8 +69,10 @@ _NO_R = r"(?![A-Za-z])"
 _CONTEXT_RE = re.compile(r"transport|deliver|ship|pack|container|cargo|load|stillage|haul|lorr(?:y|ies)|truck|vehicle|"
                          r"crat(?:e|es|ing)|crane|hoist|lift|logistic|transit|freight|travel|call(?:ed)?[\s-]off|"
                          r"运输|包装|装柜|装箱|交货|发货|到货|集装箱|货物|货|柜", re.I)
-# a mass figure: kg / t / tonnes / "MT" (upper case only: "30 mt long" is metres) - always a number with its unit
-_MASS_RE = re.compile(r"(?<![\d.,])(\d{1,3}(?:,\d{3})+(?:\.\d+)?|\d+(?:\.\d+)?)\s*"
+# a mass figure: kg / t / tonnes / "MT" (upper case only: "30 mt long" is metres) - always a number with its unit.
+# Thousands are grouped by a comma or by a (no-break / thin) space: "26,000 kg" and "26 000 kg" are both 26,000 kg,
+# never 0 kg
+_MASS_RE = re.compile(r"(?<![\d.,])(\d{1,3}(?:,\d{3})+(?:\.\d+)?|\d{1,3}(?:[   ]\d{3})+(?:\.\d+)?|\d+(?:\.\d+)?)\s*"
                       r"(kg|kgs|kilograms?|kilos?|tonnes?|tons?|metric\s+ton(?:ne)?s?|(?-i:MT)|t|公斤|千克|吨)(?![A-Za-z])", re.I)
 _TONNES = ("t", "tonne", "tonnes", "ton", "tons", "mt", "吨")
 # a load that is no transport load: "the design wind load of 2.4 kPa", "the dead load of each panel"
@@ -314,7 +316,7 @@ def _mass_figures(text: str) -> List[Tuple[float, int, int]]:
     """Every mass figure in ``text`` as (kg, start, end)."""
     out = []
     for m in _MASS_RE.finditer(text):
-        number = float(m.group(1).replace(",", ""))
+        number = float(re.sub(r"[,   ]", "", m.group(1)))
         unit = re.sub(r"\s+", " ", m.group(2).lower())
         tonnes = unit in _TONNES or unit.startswith("metric")
         out.append((number * 1000.0 if tonnes else number, m.start(), m.end()))
@@ -337,13 +339,20 @@ def _subject(sentence: str, at: int, end: Optional[int] = None) -> Tuple[Optiona
             if found:
                 return found.lastgroup, "after"
     before = sentence[:at]
-    for frame in _SUBJECT_FRAMES:
+    for index, frame in enumerate(_SUBJECT_FRAMES):
         hits = list(frame.finditer(before))
         if hits:
             last = None
             for m in _SUBJECT_RE.finditer(hits[-1].group(0)):
                 last = m
             if last is not None:
+                if index == 1 and last.lastgroup == "container" and any(
+                        m.lastgroup != "container" for m in _SUBJECT_RE.finditer(before, hits[-1].end())):
+                    # "each container shall be lifted by a crane rated 50 t", "each container shall carry no more than 8
+                    # stillages of 2 t": "each" names the container, but a crane, a stillage or a truck stands between it
+                    # and the figure. Read as a container limit it would be "covered" by any plan - the tool does not
+                    # guess whose limit it is, a person reads it
+                    return None, "ambiguous"
                 return last.lastgroup, "frame"
     previous = [m for m in _SUBJECT_RE.finditer(before)]
     if previous:
@@ -370,14 +379,20 @@ def _mass_limits(body: str, context: str = "") -> Dict[str, Any]:
     mass. A figure in a sentence that reads like a transport limit but names none of these is returned as not placed,
     for a person - it never disappears."""
     out: Dict[str, Any] = {"container": [], "basis": [], "package": [], "package_subjects": [], "vehicle": [], "unplaced": []}
+    # the clause as a whole is about transport or packing ("Containers: 40HQ only. ... the terminal accepts up to 32 t")
+    clause_transport = bool(_TRANSPORT_RE.search(_STRUCTURAL_LOAD_RE.sub(" ", body)) or _CONTAINER_TERM_RE.search(body))
+    carried = (False, False)
     for sentence in (s for s in _SENTENCE_RE.split(body) if s and s.strip()):
         plain = _STRUCTURAL_LOAD_RE.sub(" ", sentence)
         figures = _mass_figures(plain)
+        own = (bool(_LIMIT_RE.search(plain)), bool(_MASS_WORD_RE.search(plain)))
+        # "Maximum weight per container: 26 t; per crate: 2 t": a bare figure after a semicolon keeps the limit before it
+        limit, massy = own if any(own) else carried
+        carried = (limit, massy) if sentence.rstrip().endswith((";", "；")) else (False, False)
         if not figures:
             continue
-        limit = bool(_LIMIT_RE.search(plain))
-        massy = bool(_MASS_WORD_RE.search(plain))
-        transport = bool(_TRANSPORT_RE.search(plain) or _CONTAINER_TERM_RE.search(plain) or _TRANSPORT_RE.search(context))
+        transport = bool(_TRANSPORT_RE.search(plain) or _CONTAINER_TERM_RE.search(plain) or _TRANSPORT_RE.search(context)
+                         or clause_transport)
         placed = False
         for kg, start, _end in figures:
             subject, how = _subject(plain, start, _end) if limit and (massy or transport) else (None, "none")
