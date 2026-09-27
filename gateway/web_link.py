@@ -6,6 +6,7 @@ no way to put a tender and a panel list in front of it.
 
     POST /api/tender/link           multipart: tender (.md/.docx/.pdf) + panel_list (.xlsx/.csv) [+ session_id,
                                     container_type, project_name] -> statements, sha256s, what went stale
+                                    (no session_id: a new session of its own, returned as session_id)
     POST /api/tender/link/demo      no input: the SYNTHETIC examples/facade-demo files, rev A then rev B
     GET  /api/tender/link/file/...  one of the four deliverables of a job
     GET  /demo                      the English page for both
@@ -24,6 +25,7 @@ record stays submit_blocked, confirmed_by_person false.
 from __future__ import annotations
 
 import hashlib
+import logging
 import os
 import re
 import secrets
@@ -31,6 +33,7 @@ import shutil
 import threading
 import time
 import zipfile
+from contextvars import ContextVar
 from datetime import datetime, timezone
 from io import BytesIO
 from pathlib import Path
@@ -50,8 +53,14 @@ DEMO_TENDER, DEMO_REV_A, DEMO_REV_B = "facade_itt_doc.md", "facade_panels.xlsx",
 TENDER_TYPES = {".md": "text", ".docx": "docx", ".pdf": "pdf"}
 PANEL_TYPES = {".xlsx": "xlsx", ".csv": "text"}
 MB = 1024 * 1024
-#: an Office file is a zip; its members are what openpyxl / the docx reader inflate
-MAX_UNZIPPED = 100 * MB
+#: an Office file is a zip; its members are what openpyxl / the docx reader inflate. The largest panel list in the
+#: repository unpacks to 0.4 MB; 20 MB leaves room for a Word tender with pictures and keeps two parses on a 2 GB box.
+MAX_UNZIPPED = 20 * MB
+#: rows of a panel list (all sheets, or lines of a CSV), counted in the bytes before openpyxl sees them. The largest
+#: list in the repository has 573 rows; openpyxl alone takes ~5 s on 5,000 rows and ~13 s on 10,000 on a laptop.
+MAX_PANEL_ROWS = 5000
+#: cells of a panel list: 5,000 rows of 20 columns. A few rows of 16,000 columns cost openpyxl as much as many rows.
+MAX_PANEL_CELLS = 100_000
 KEEP_JOBS_PER_SESSION = 10
 KEEP_JOBS_TOTAL = 200
 KEEP_DEMO_SESSIONS = 5
@@ -75,6 +84,13 @@ def max_panel_bytes() -> int:
     return _limit_mb("CIVIL_LINK_MAX_PANEL_MB", 5)
 
 
+def max_panel_rows() -> int:
+    try:
+        return max(1, int(os.getenv("CIVIL_LINK_MAX_PANEL_ROWS") or MAX_PANEL_ROWS))
+    except ValueError:
+        return MAX_PANEL_ROWS
+
+
 def max_request_bytes() -> int:
     return max_tender_bytes() + max_panel_bytes() + 64 * 1024     # the rest of the form and the multipart framing
 
@@ -82,7 +98,15 @@ def max_request_bytes() -> int:
 #: runs at once on this server; a third caller gets 429 instead of queueing behind a 60 s tool timeout
 _RUNS = threading.BoundedSemaphore(int(os.getenv("CIVIL_LINK_CONCURRENCY") or 2))
 _SESSION_LOCKS: Dict[str, threading.Lock] = {}
-_LOCKS_GUARD = threading.Lock()
+# Includes requests waiting for the same session lock: its prior record must
+# survive until that request can compare against it. Registration, job creation
+# and retention decisions share this lock, so pruning cannot race a new owner.
+_SESSION_USERS: Dict[str, int] = {}
+_DRAINING_SESSIONS: set[str] = set()
+_LOCKS_GUARD = threading.RLock()
+# Tools can return a timeout while their worker is still alive. A request keeps
+# every engine/run pair until when_idle confirms that its workers have exited.
+_RUN_WORKERS: ContextVar[Optional[List[Tuple[Any, str]]]] = ContextVar("web_link_workers", default=None)
 
 router = APIRouter()
 
@@ -112,11 +136,18 @@ def _session_lock(session: str) -> threading.Lock:
         return _SESSION_LOCKS.setdefault(session, threading.Lock())
 
 
+#: names Windows opens as a device whatever the extension (CON.md is the console, not a file)
+_DEVICE_STEM = re.compile(r"^(?:CON|PRN|AUX|NUL|COM[0-9]|LPT[0-9])(?:\..*)?$", re.I)
+
+
 def _safe_name(filename: str, ext: str, fallback: str) -> str:
-    """The client's file name, reduced to [A-Za-z0-9._-], with the extension we checked. Never a path."""
+    """The client's file name, reduced to [A-Za-z0-9._-], with the extension we checked. Never a path, never a
+    Windows device name."""
     stem = Path(str(filename or "").replace("\\", "/")).name
     stem = stem[: -len(ext)] if stem.lower().endswith(ext) else Path(stem).stem
     stem = re.sub(r"[^A-Za-z0-9._-]+", "_", stem).strip("._-")[:80]
+    if _DEVICE_STEM.match(stem):
+        stem += "_"
     return (stem or fallback) + ext
 
 
@@ -152,6 +183,45 @@ def _check_bytes(data: bytes, kind: str, label: str) -> None:
         raise Refusal(413, "too_large", f"the {label} unpacks to more than {MAX_UNZIPPED // MB} MB")
 
 
+_XML_ROW = re.compile(rb"<(?:[A-Za-z_][\w.-]*:)?row[\s>/]")
+_XML_CELL = re.compile(rb"<(?:[A-Za-z_][\w.-]*:)?c[\s>/]")
+
+
+def _check_rows(data: bytes, kind: str, label: str) -> None:
+    """A panel list with more rows (or cells) than one linked run can use is refused before any parser opens it:
+    the rows of every worksheet are counted in the XML (a stream, at most MAX_UNZIPPED), a CSV's lines in the bytes."""
+    rows_cap = max_panel_rows()
+    too_many = Refusal(413, "too_many_rows", f"the {label} has more than {rows_cap:,} rows; split it and link each part")
+    if kind == "text":
+        if data.count(b"\n") + (0 if data.endswith(b"\n") else 1) > rows_cap:
+            raise too_many
+        return
+    cells_cap = max(MAX_PANEL_CELLS, rows_cap * 20)
+    rows = cells = 0
+    with zipfile.ZipFile(BytesIO(data)) as z:
+        for info in z.infolist():
+            if not (info.filename.startswith("xl/worksheets/") and info.filename.endswith(".xml")):
+                continue
+            tail = b""
+            with z.open(info) as member:
+                while True:
+                    chunk = member.read(1 << 20)
+                    if not chunk:
+                        break
+                    window = tail + chunk
+                    # a tag split across two reads: everything from the last '<' waits for the next read
+                    cut = window.rfind(b"<") if len(chunk) == 1 << 20 else len(window)
+                    cut = len(window) if cut <= 0 else cut
+                    rows += len(_XML_ROW.findall(window, 0, cut))
+                    cells += len(_XML_CELL.findall(window, 0, cut))
+                    tail = window[cut:]
+                    if rows > rows_cap:
+                        raise too_many
+                    if cells > cells_cap:
+                        raise Refusal(413, "too_many_rows", f"the {label} has more than {cells_cap:,} cells; "
+                                                            "split it and link each part")
+
+
 async def _read_upload(form: Any, field: str, types: Dict[str, str], limit: int, label: str) -> Tuple[str, str, bytes]:
     upload = form.get(field)
     if not isinstance(upload, UploadFile):
@@ -164,14 +234,17 @@ async def _read_upload(form: Any, field: str, types: Dict[str, str], limit: int,
     if len(data) > limit:
         raise Refusal(413, "too_large", f"the {label} is larger than {limit // MB} MB")
     _check_bytes(data, types[ext], label)
+    if types is PANEL_TYPES:
+        _check_rows(data, types[ext], label)
     return ext, name, data
 
 
 def _new_job(session_dir: Path) -> Path:
-    stamp = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%S%fZ")     # to the microsecond: ids sort in run order
-    job = session_dir / f"{stamp}-{secrets.token_hex(3)}"
-    job.mkdir(parents=True, exist_ok=False)
-    return job
+    with _LOCKS_GUARD:
+        stamp = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%S%fZ")     # to the microsecond: ids sort in run order
+        job = session_dir / f"{stamp}-{secrets.token_hex(3)}"
+        job.mkdir(parents=True, exist_ok=False)
+        return job
 
 
 def _jobs(session_dir: Path) -> List[Path]:
@@ -193,22 +266,35 @@ def _previous_record(session_dir: Path, current: Path) -> Optional[Path]:
 
 def _prune(root: Path) -> None:
     """Bounded disk: 10 jobs per session, 200 jobs in all, the 5 latest demo sessions. Only folders this module
-    named (session and job patterns) inside the web-link root are ever removed."""
+    named (session and job patterns) inside the web-link root are ever removed. Active and queued sessions are
+    retained in full; the limits are reapplied when the last request leaves."""
+    with _LOCKS_GUARD:
+        _prune_idle(root)
+
+
+def _prune_idle(root: Path) -> None:
+    """Caller holds _LOCKS_GUARD through the checks and deletion, excluding registration and job creation."""
     if not root.is_dir():
         return
+    protected = set(_SESSION_USERS)
     sessions = [p for p in root.iterdir() if p.is_dir() and SESSION_RE.match(p.name)]
     demos = sorted((p for p in sessions if p.name.startswith("demo-")), key=lambda p: p.stat().st_mtime)
     for old in demos[:-KEEP_DEMO_SESSIONS]:
-        shutil.rmtree(old, ignore_errors=True)
+        if old.name not in protected:
+            shutil.rmtree(old, ignore_errors=True)
     everything: List[Path] = []
     for session in sessions:
         jobs = _jobs(session)
+        if session.name in protected:
+            everything += jobs
+            continue
         for old in jobs[:-KEEP_JOBS_PER_SESSION]:
             shutil.rmtree(old, ignore_errors=True)
         everything += jobs[-KEEP_JOBS_PER_SESSION:]
     everything.sort(key=lambda p: p.name)
     for old in everything[:-KEEP_JOBS_TOTAL]:
-        shutil.rmtree(old, ignore_errors=True)
+        if old.parent.name not in protected:
+            shutil.rmtree(old, ignore_errors=True)
 
 
 def _write_input(job: Path, name: str, data: bytes) -> Path:
@@ -225,6 +311,46 @@ def _statement(s: Dict[str, Any]) -> Dict[str, Any]:
             "text": s["text"], "sha256": s["sha256"]}
 
 
+#: what a browser is told when the tool fails, by error code. The engine's own reason is in Chinese and can carry a
+#: server path, so it goes to the job's log (run-error.log, never served) and the server log, not into the reply.
+_FAILURE_TEXT = {
+    "timeout": "it took longer than {timeout:g} s and was stopped. A panel list of a few hundred rows can take that "
+               "long; link a shorter list, or try again when the server is less busy",
+    "invalid_args": "{what}. A file may be damaged, protected by a password, not what its extension says, or laid out "
+                    "in a way the link does not read; open it on your computer, save it again and upload it again",
+    "permission_denied": "the server refused to open one of the uploaded files",
+    "circuit_open": "the link failed several times in a row and is paused; try again in a minute",
+    "cancelled": "the run was cancelled",
+}
+#: the one part of a tool reason that is safe and useful to pass on: which uploaded file could not be read
+_UNREADABLE = re.compile(r"^(the (?:tender|panel list) [A-Za-z0-9._-]{1,90} could not be read)")
+_LOG = logging.getLogger("civil.web_link")
+
+
+def _failure_text(code: str, result: Dict[str, Any], engine: Any) -> str:
+    """Fixed English text for a failed tool call: nothing of the raw reason but the name of an unreadable file."""
+    spec = getattr(engine, "tools", {}).get("tender.packing_link")
+    text = _FAILURE_TEXT.get(code, "the link reported an error ({code}); the reason is in the job's log")
+    which = _UNREADABLE.match(str(result.get("detail") or result.get("reason") or ""))
+    return text.format(timeout=float(getattr(spec, "timeout_s", 60) or 60), code=re.sub(r"[^a-z_]", "", code)[:40],
+                       what=which.group(1) if which else "the two files could not be used")
+
+
+def _log_failure(job: Path, what: str, result: Dict[str, Any]) -> None:
+    """The raw reason, for whoever runs the server: the server log and run-error.log in the job folder."""
+    raw = str(result.get("detail") or result.get("reason") or "")[:2000]
+    _LOG.warning("web link %s failed in job %s: %s %s", what, job.name, result.get("error_code"), raw)
+    try:
+        from packing_assistant.sandbox import guarded_write_bytes
+
+        line = f"{datetime.now(timezone.utc).isoformat()} {what}: {result.get('error_code')} {raw}\n"
+        log = job / "run-error.log"
+        before = log.read_bytes() if log.is_file() else b""
+        guarded_write_bytes(log, before + line.encode("utf-8"))
+    except Exception:  # noqa: BLE001 - the log is a convenience; the refusal still goes out
+        _LOG.exception("web link: run-error.log not written in job %s", job.name)
+
+
 def _run_job(session: str, job: Path, tender: Path, panel: Path, uploaded: Dict[str, str],
              container_type: str = "", project_name: str = "") -> Dict[str, Any]:
     """One linked run in ``job``: the tool through a ToolEngine, the deliverables through write_deliverable."""
@@ -234,6 +360,10 @@ def _run_job(session: str, job: Path, tender: Path, panel: Path, uploaded: Dict[
     t0 = time.perf_counter()
     previous = _previous_record(job.parent, job)
     engine = default_engine()
+    run_id = f"web-link-{session}-{job.name}"
+    workers = _RUN_WORKERS.get()
+    if workers is not None:
+        workers.append((engine, run_id))
     args: Dict[str, Any] = {"tender_path": str(tender), "packing_list": str(panel),
                             "previous_path": str(previous) if previous else ""}
     if container_type:
@@ -242,19 +372,21 @@ def _run_job(session: str, job: Path, tender: Path, panel: Path, uploaded: Dict[
         args["project_name"] = project_name
     with job_root_scope(job):
         result = engine.execute("tender.packing_link", args, expert_id="bid-parse", intent="run",
-                                run_id=f"web-link-{session}-{job.name}")
+                                run_id=run_id)
     if not result.get("ok"):
-        raise Refusal(422, str(result.get("error_code") or "link_failed"),
-                      "the link did not run: " + str(result.get("detail") or result.get("reason") or "")[:300])
+        code = str(result.get("error_code") or "link_failed")
+        _log_failure(job, "tender.packing_link", result)
+        raise Refusal(422, code, "the link did not run: " + _failure_text(code, result, engine))
     data = result["data"]
     out = job / "out"
     files = []
     for item in data.get("deliverables") or []:
         wrote = engine.execute("write_deliverable", {"path": str(out / item["name"]), "text": item["text"]},
-                               intent="run", run_id=f"web-link-{session}-{job.name}")
+                               intent="run", run_id=run_id)
         if not wrote.get("ok"):
+            _log_failure(job, "write_deliverable " + item["name"], wrote)
             raise Refusal(500, str(wrote.get("error_code") or "write_failed"),
-                          f"{item['name']} was not written: {wrote.get('detail') or wrote.get('reason')}")
+                          f"{item['name']} could not be written on the server; the reason is in the job's log")
         files.append({"name": item["name"], "url": f"/api/tender/link/file/{session}/{job.name}/{item['name']}"})
     record = data["record"]
     changes = record.get("changes_since_previous")
@@ -288,20 +420,56 @@ def _run_job(session: str, job: Path, tender: Path, panel: Path, uploaded: Dict[
 
 def _locked_run(session: str, work) -> Any:
     """At most CIVIL_LINK_CONCURRENCY runs at once (429 beyond), one at a time per session (so 'previous' is
-    well defined)."""
+    well defined). A timeout retains these resources until its actual tool workers have stopped."""
     if not _RUNS.acquire(blocking=False):
         raise Refusal(429, "busy", "another linked run is in progress on this server; try again in a few seconds")
     try:
-        lock = _session_lock(session)
+        with _LOCKS_GUARD:
+            if session in _DRAINING_SESSIONS:
+                raise Refusal(429, "busy", f"session {session} is waiting for its previous tool worker to stop")
+            lock = _session_lock(session)
+            _SESSION_USERS[session] = _SESSION_USERS.get(session, 0) + 1
+    except BaseException:
+        _RUNS.release()
+        raise
+    acquired = False
+    workers: List[Tuple[Any, str]] = []
+    token = _RUN_WORKERS.set(workers)
+    try:
         if not lock.acquire(timeout=90):
             raise Refusal(429, "busy", f"session {session} is still running its previous upload")
-        try:
-            return work()
-        finally:
-            lock.release()
-            _prune(link_root())
+        acquired = True
+        return work()
     finally:
-        _RUNS.release()
+        _RUN_WORKERS.reset(token)
+        with _LOCKS_GUARD:
+            if acquired:
+                _DRAINING_SESSIONS.add(session)
+
+        def release() -> None:
+            try:
+                with _LOCKS_GUARD:
+                    if acquired:
+                        _DRAINING_SESSIONS.discard(session)
+                        lock.release()
+                    _SESSION_USERS[session] -= 1
+                    if not _SESSION_USERS[session]:
+                        del _SESSION_USERS[session]
+                        # every upload without a session_id has a session of its own now: the lock map must not
+                        # grow with them. Registration happens under this guard, so nobody else holds this lock.
+                        _SESSION_LOCKS.pop(session, None)
+                    _prune(link_root())
+            finally:
+                _RUNS.release()
+
+        def after_worker(index: int) -> None:
+            if index == len(workers):
+                release()
+            else:
+                engine, run_id = workers[index]
+                engine.when_idle(run_id, lambda: after_worker(index + 1))
+
+        after_worker(0)
 
 
 def _upload_job(session: str, tender: Tuple[str, str, bytes], panel: Tuple[str, str, bytes],
@@ -334,7 +502,9 @@ async def api_tender_link(request: Request):
         except Exception as e:  # noqa: BLE001 - Starlette's multipart errors: too many parts, bad framing
             raise Refusal(400, "bad_form", f"the form could not be read: {str(e)[:120]}") from None
         try:
-            session = str(form.get("session_id") or "web").strip()
+            # no session_id: a session of its own, returned in the reply (a shared default would compare one
+            # caller's upload with another caller's previous job)
+            session = str(form.get("session_id") or "").strip() or "web-" + secrets.token_hex(8)
             if not SESSION_RE.match(session) or session.startswith("demo-"):
                 raise Refusal(400, "bad_session", "session_id: 1-64 of A-Z a-z 0-9 _ - (not starting with demo-)")
             container_type = str(form.get("container_type") or "").strip()
