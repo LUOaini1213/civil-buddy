@@ -140,6 +140,10 @@ CHECKS = (
     Check("app-launcher", ("scripts/test_app_launcher.py",)),
     Check("workbench-settings", ("scripts/test_workbench_settings.py",)),
     Check("access-guard", ("scripts/test_access_guard.py",)),
+    # the link from a browser (upload + /demo, token-gated) and the page a visitor without a token lands on
+    Check("web-tender-link", ("scripts/test_web_link.py",), timeout=600),
+    # docker-compose, the Lightsail override, Caddyfile, launch script and guides say what they promise
+    Check("deploy-config", ("scripts/test_deploy_config.py",)),
     Check("workbench-uploads", ("scripts/test_workbench_uploads.py",)),
     Check("document-text", ("scripts/test_document_text.py",)),
     Check("workbench-flow", ("scripts/test_workbench_flow.py",)),
