@@ -156,13 +156,59 @@ def _label_before(before: str) -> str:
     return best
 
 
+_NEARLY = re.compile(r"(?i)\b(?:nearly|almost|virtually|practically)\s+$")
+
+
+_NEARLY_OR_MOST = re.compile(r"(?i)\b(?:nearly|almost|virtually|practically|most|majority)\b")
+
+
+# A condition before the claim, in its clause or leading its sentence: "If / Until / Unless all clauses are covered".
+_ALL_CONDITION = re.compile(r"(?i)\b(?:if|once|unless|until|when|whenever|after|before|provided|providing|assuming|"
+                            r"as\s+soon\s+as|in\s+case|subject\s+to|pending)\b")
+
+
+def _all_stated(text: str, match: re.Match) -> bool:
+    """An "all covered" claim the sentence makes, not one it negates, asks or sets as a condition: "Not all clauses are
+    covered", "并非所有条款均已覆盖", "If all clauses are covered, a person still signs off", "Until all clauses are
+    covered, the bid stays blocked", "Are all clauses covered?" say the opposite or nothing (review of #71, 2026-09-27).
+
+    Only those three let a sentence through. Reported, quoted, hedged ("would appear", "as expected") or trailing
+    conditions ("... covered following the rev B update", "... after the latest run") do not: the coverage is the
+    record's fact, and a sentence that says every statement is covered contradicts a record where one is not, whoever
+    it is attributed to (review of #74: the claim check's full exemption list let those seven through, main struck them)."""
+    from packing_assistant.tools import claim_check, verdict_guard
+
+    if _NEARLY.search(text, 0, match.start()):
+        return False            # "nearly all ... covered" is a count; claim_check holds it to the record
+    if not re.search(r"[A-Za-z]", match.group(0)):
+        return claim_check._zh_stated(text, match)
+    if not verdict_guard._english_stated(text, match, negation=True, conditions=False, questions=True, reported=False,
+                                         quotes=False):
+        return False            # negated in its clause (a leading "with no ..." phrase does not count), or asked
+    clause = text[verdict_guard._last_break(verdict_guard._EN_CLAUSE_BREAK_BEFORE, text, match.start()): match.start()]
+    sentence = text[verdict_guard._last_break(verdict_guard._EN_SENTENCE_BREAK, text, match.start()): match.start()]
+    for m in _ALL_CONDITION.finditer(clause):
+        if m.group(0).lower() not in ("after", "when") or verdict_guard._EN_SUBORDINATE.match(clause[m.end():] + match.group(0)):
+            return False
+    return not verdict_guard._en_condition_lead(sentence)
+
+
 def _status_problem(text: str, statuses: Dict[str, str]) -> str:
     negated = bool(_NOT_COVERED.search(text))
     claimed = {k for k, rx in _STATUS.items() if rx.search(text)}
     if negated:
         claimed.discard("covered")
-    if _ALL.search(text) and not negated and any(v != "covered" for v in statuses.values()):
+    if (not negated and any(v != "covered" for v in statuses.values())
+            and any(_all_stated(text, m) for m in _ALL.finditer(text))):
         return "the record does not have every statement covered"
+    if _NEARLY_OR_MOST.search(text):
+        # "nearly all / most ... covered" is a count: held to the statuses the same way claim_check holds it to a
+        # link record file (a read_link_record turn has the statuses but may have no file)
+        from packing_assistant.tools import claim_check
+
+        view = {"statements": [{"id": sid, "clause": sid, "status": status} for sid, status in statuses.items()]}
+        if any(item["kind"] in ("near", "most") for item in claim_check.overclaims(text, view)):
+            return "the record has fewer statements covered than the sentence says"
     for sid in _ids(text):
         if claimed and sid in statuses and statuses[sid] not in claimed:
             return f"the record gives {sid} the status {statuses[sid]}"
@@ -225,13 +271,21 @@ def mismatches(reply: str, facts: Dict[str, Any]) -> List[Dict[str, Any]]:
     statuses: Dict[str, str] = facts.get("statuses") or {}
     ctype = str(facts.get("container_type") or "").upper()
     clauses: Dict[str, str] = facts.get("clauses") or {}
+    from packing_assistant.tools.verdict_guard import INVISIBLE, visible_variants
+
     for s in sentences(reply):
         text = s["text"]
-        why = ((_status_problem(text, statuses) if statuses else "")
-               or (_type_problem(text, ctype) if ctype else "")
-               or _mass_problem(text, facts)
-               or (_clause_problem(text, clauses) if clauses else "")
-               or _approval_problem(text))
+        # a zero-width space or soft hyphen hides no claim: the sentence is also read with them as spaces and dropped
+        # (review of #74, dev_round3_review.json); the struck span stays the original sentence
+        why = ""
+        for variant in ([text] + [v for v, _ in visible_variants(text)] if INVISIBLE.search(text) else [text]):
+            why = ((_status_problem(variant, statuses) if statuses else "")
+                   or (_type_problem(variant, ctype) if ctype else "")
+                   or _mass_problem(variant, facts)
+                   or (_clause_problem(variant, clauses) if clauses else "")
+                   or _approval_problem(variant))
+            if why:
+                break
         if why:
             found.append({"kind": "record", "text": text.strip(), "start": s["start"], "end": s["end"], "why": why})
     return found

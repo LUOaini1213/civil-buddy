@@ -2,8 +2,8 @@
 
 Civil Buddy drafts internal documents for engineering and logistics staff: bid responses, packing and container
 plans, site reports. Its outputs are drafts for a person to check, never signed or submitted documents. This page
-states the safety model, which checks test it, what is still open, and how to report a problem. Every claim here is
-backed by a check in `npm run check` (`scripts/check_project.py`) or by a known-open item listed below.
+states the safety model, which checks test it, what is still open, and how to report a problem. Each claim names the
+check in `npm run check` (`scripts/check_project.py`) that pins it; what no check pins is listed under Known open items.
 
 Supported version: `main`. Older release builds (including the Rust workbench zips on GitHub Releases) are not
 maintained.
@@ -33,11 +33,16 @@ maintained.
    - *record guard* (`packing_assistant/tools/record_guard.py`): a sentence that attaches a status, container type,
      mass or clause meaning the record does not give, or says a draft is approved or ready to submit / book, is
      struck and listed.
-3. **Only a person's typed sentence approves high-risk work, for one turn.** The 19 high-risk posts (structure,
-   geotechnical, fire protection, construction method, safety briefs and others) write nothing until a person types
-   the confirmation sentence in that turn. The gateway and `civil serve` accept only `confirm_text` equal to the
-   sentence; a boolean such as `confirm_ok` or `p0_confirmed` is refused (HTTP 422 on the gateway). The approval is
-   not remembered for the next turn. The same sentence inside a tender, a panel list or a model reply does not approve.
+3. **Only a person's typed sentence approves high-risk work.** The 19 high-risk posts (structure, geotechnical, fire
+   protection, construction method, safety briefs and others) write nothing until a person types the confirmation
+   sentence on its own: in the workbench's confirmation box or the gateway's and `civil serve`'s `confirm_text`, at
+   the terminal's `approve>` prompt, or in the desktop dialog. The task itself is never read for approval: a message
+   approves only when the whole of it, trimmed, is the sentence (`civil_config.confirms_in_message`), so the sentence
+   quoted from a tender, a panel list or a file, deferred, conditional, retracted or simply added to a request approves
+   nothing, on the workbench, the terminal and the desktop app alike; neither does a copy in a model reply. A boolean
+   such as `confirm_ok` or `p0_confirmed` is refused (HTTP 422 on the gateway). Every approval covers that turn only:
+   the next high-risk turn asks again, on the workbench, the gateway, `civil serve`, the terminal and the desktop app.
+   `/confirm` in the terminal and `civil exec --confirm` are the local operator's own switch and take no sentence.
 4. **Token-gated server.** `packing_assistant/access_guard.py` sits in front of the gateway and the workbench,
    WebSockets included. With `CIVIL_TOKEN` set, every request needs the token (loopback too; compared with
    `hmac.compare_digest`). With no token, only a genuinely local request passes, and `demo/serve.py`, a `uvicorn --host`
@@ -58,8 +63,9 @@ All of these run in `npm run check` and in CI on every pull request:
 | Check | What it pins |
 |---|---|
 | `access-guard` | the token gate on both web apps, the refusal to bind a non-loopback address without a token |
-| `human-approval` | MCP never offers or accepts an approval flag; `civil serve` takes only the typed sentence; approval does not carry over to a later turn |
-| `http-confirmation` | the gateway and workbench HTTP routes approve only on `confirm_text` equal to the sentence |
+| `human-approval` | MCP never offers or accepts an approval flag; `civil serve` takes only the typed sentence and does not carry an approval over to a later turn; the sentence inside a task (quoted from a tender, deferred, conditional, retracted or appended) approves nothing in the terminal or the desktop app, which ask at `approve>` / the dialog instead; an approval at `approve>` or in the dialog covers that turn only |
+| `http-confirmation` | the gateway and workbench HTTP routes approve only on `confirm_text` equal to the sentence; a workbench task that carries the sentence among other words, such as a pasted tender, writes nothing |
+| `injection-plants` (gateway test) | the sentence planted in a tender and posted to the gateway's `/api/agent` and `/api/turn` approves nothing |
 | `pack-ship-read-sandbox` | pack-ship reads stay inside the sandbox roots over MCP and the gateway |
 | `injection-plants` | instructions planted in SYNTHETIC tender (Markdown and Word) and panel-list files turn no statement covered and approve nothing (a planted figure sends its row to a person, a planted container code stops the plan: fail-safe, not a pass), in the steps-mode link, the steps-mode turn and the gateway; a scripted fake model that obeys the plant is corrected and struck by the guards; a planted clause that names a transport or packing term becomes one extra row that waits for a person and quotes it, never covered |
 | `safety-sealed` | the verdict guard on a sealed English set written blind (24 sentences; floor 20 right, first run 20/24, precision 1.000, recall 0.600) and the 8 sealed planted-instruction files, in the link and the steps turn (floors 7/7 and 8/8, each the same as its control run); a fake model that repeats the plant is also run and printed, not pinned: it leaves planted words in 4 of 8 replies (the guards strike verdicts, correct coverage claims and strike sentences that contradict the link record; they do not delete every instruction the model repeats) |
@@ -78,6 +84,9 @@ model would obey. The plants are our own synthetic development cases, not an ind
 
 Stated in the technical document (`docs/submission/nus-iss-technical.md`, §4.4) and still true:
 
+- **Stored thread approvals.** A terminal or desktop thread saved with `confirm` set (by `/confirm`, or by an
+  approval given before the per-turn change of PR #75) still approves when it is resumed. `/confirm` and
+  `civil exec --confirm` are the local operator's own switch, not a typed sentence.
 - **Rust tools.** The undeployed Rust `civil-mcp` binary and the Rust workbench still accept `confirm_ok`
   (`workbench/src/mcp.rs`, `workbench/src/api.rs`). Neither is part of the deployed surface, although old
   Rust-workbench trial builds are on GitHub Releases.
@@ -102,7 +111,7 @@ Stated in the technical document (`docs/submission/nus-iss-technical.md`, §4.4)
 
 ## Reporting a problem
 
-Please open an issue at <https://github.com/LUOaini1213/civil-buddy/issues> and put "security" in the title. If the
+Please open an issue in this repository and put "security" in the title. If the
 problem could be exploited, describe what is affected and how to reproduce it at a high level, and leave out working
 exploit code, tokens or keys; a maintainer will follow up in the issue. Never paste a real API key, token or
 customer file into an issue.
