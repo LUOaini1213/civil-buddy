@@ -195,6 +195,104 @@ function ui(fetcher) {
   };
 }
 
+test("URL attachment dialog submits through its form without browser prompts and accepts the server response", async () => {
+  const calls = [];
+  const h = ui(async (url, init) => {
+    calls.push({ url, body: JSON.parse(init.body) });
+    return { ok: true, json: async () => ({ files: [{ id: "url-source", name: "tender.txt" }] }) };
+  });
+  h.evaluate('window.prompt = () => { throw new Error("prompt is not supported"); }; cbApplyHealth({capabilities:{upload_url:true}}); cbAttachInit();');
+  assert.equal(h.elements.btnAttachUrl.hidden, false);
+  h.elements.btnAttachUrl.listeners.click();
+  const dialog = h.evaluate("cbAttachUrlDialog.dialog"), input = h.evaluate("cbAttachUrlDialog.input");
+  const form = dialog.children[0], submit = form.children.at(-1).children[0];
+  assert.equal(dialog.getAttribute("role"), "dialog"); assert.equal(dialog.getAttribute("aria-modal"), "true");
+  assert.equal(form.tagName, "FORM"); assert.equal(submit.type, "submit", "a form submit button supports Enter in the URL field");
+  assert.equal(input.type, "url"); assert.equal(input.focused, true); assert.equal(calls.length, 0);
+  input.value = "  https://example.invalid/tender.txt  ";
+  await form.listeners.submit({ preventDefault() {} });
+  assert.equal(calls.length, 1); assert.equal(calls[0].url, "/api/upload-url");
+  assert.equal(calls[0].body.session_id, h.evaluate("state.session"));
+  assert.equal(calls[0].body.url, "https://example.invalid/tender.txt");
+  assert.equal(h.evaluate("state.attachments[0].id"), "url-source");
+  assert.match(h.errors.at(-1), /已取回并作为附件：tender.txt/);
+  assert.equal(h.evaluate("cbAttachUrlDialog"), null); assert.equal(dialog.parentElement, null);
+  assert.equal(h.elements.btnAttachUrl.focused, true);
+  await form.listeners.submit({ preventDefault() {} });
+  assert.equal(calls.length, 1, "a closed form cannot submit twice");
+});
+
+test("URL dialog validates in place, contains keyboard focus, and cancels without requests", async () => {
+  const h = ui(async () => { assert.fail("cancelled or invalid URL must not send"); });
+  h.elements.btnAttachUrl.listeners.click();
+  const dialog = h.evaluate("cbAttachUrlDialog.dialog"), input = h.evaluate("cbAttachUrlDialog.input");
+  const form = dialog.children[0], error = form.children[3], [submit, cancel] = form.children.at(-1).children;
+  for (const value of ["", "example.invalid", "https:example.invalid", "https://", "file:///private.txt", "javascript:alert(1)"]) {
+    input.value = value;
+    await form.listeners.submit({ preventDefault() {} });
+    assert.equal(h.evaluate("cbAttachUrlDialog.dialog"), dialog); assert.equal(input.getAttribute("aria-invalid"), "true");
+    assert.match(error.textContent, /http:\/\/.*https:\/\//);
+  }
+  input.value = "https://example.invalid/tender.txt"; input.listeners.input();
+  assert.equal(error.textContent, ""); assert.equal(input.getAttribute("aria-invalid"), null);
+  h.elements.btnAttachUrl.listeners.click();
+  assert.equal(h.evaluate("cbAttachUrlDialog.dialog"), dialog, "opening twice reuses the current dialog");
+  h.evaluate("document.activeElement = cbAttachUrlDialog.input");
+  let prevented = 0;
+  dialog.listeners.keydown({ key: "Tab", shiftKey: true, preventDefault() { prevented++; } });
+  assert.equal(cancel.focused, true); assert.equal(prevented, 1);
+  dialog.listeners.keydown({ key: "Tab", shiftKey: false, preventDefault() { prevented++; } });
+  assert.equal(submit.focused, true); assert.equal(prevented, 2);
+  cancel.listeners.click();
+  assert.equal(h.evaluate("cbAttachUrlDialog"), null); assert.equal(h.elements.btnAttachUrl.focused, true);
+  h.elements.btnAttachUrl.listeners.click();
+  let stopped = false;
+  h.evaluate("cbAttachUrlDialog.dialog").listeners.keydown({ key: "Escape", preventDefault() {}, stopPropagation() { stopped = true; } });
+  assert.equal(stopped, true); assert.equal(h.evaluate("cbAttachUrlDialog"), null);
+});
+
+test("URL dialog closes on task navigation and a detached form cannot send to a new task", async () => {
+  const h = ui(async () => { assert.fail("old dialog must not send"); });
+  h.elements.btnAttachUrl.listeners.click();
+  const dialog = h.evaluate("cbAttachUrlDialog.dialog"), form = dialog.children[0];
+  h.evaluate('cbAttachUrlDialog.input.value = "https://example.invalid/tender.txt"; cbNewLocalSession();');
+  assert.equal(h.evaluate("cbAttachUrlDialog"), null); assert.equal(dialog.parentElement, null);
+  await form.listeners.submit({ preventDefault() {} });
+  h.elements.btnAttachUrl.listeners.click();
+  const secondForm = h.evaluate("cbAttachUrlDialog.dialog").children[0];
+  h.evaluate('cbAttachUrlDialog.input.value = "https://example.invalid/tender.txt"; state.session = "another-task";');
+  await secondForm.listeners.submit({ preventDefault() {} });
+  assert.equal(h.evaluate("cbAttachUrlDialog"), null);
+});
+
+test("an earlier error card retries its own message after a later task completes", async () => {
+  const sent = [];
+  const h = ui(async (_url, init) => {
+    sent.push(JSON.parse(init.body).message);
+    return sent.length === 1 ? { ok: false, status: 503, statusText: "Temporary failure" }
+      : { ok: true, body: bytesStream(encoder.encode(frame("done", { text: "Done", ok: true }))) };
+  });
+  h.evaluate('var retryCards = []; var CB_FIX = {classify: () => ({}), cardEl: (_desc, handlers) => { retryCards.push(handlers); return document.createElement("div"); }}; cbFixMount = __real.cbFixMount;');
+  await h.submit("Task A"); await h.submit("Task B");
+  let retried;
+  h.elements.form.dispatchEvent = event => { retried = h.elements.form.listeners.submit(event); return true; };
+  h.evaluate("retryCards[0].retry()"); await retried;
+  assert.deepEqual(sent, ["Task A", "Task B", "Task A"]);
+});
+
+test("retry cards preserve a newer draft and cannot send into another session or a running task", async () => {
+  const h = ui(async () => { throw new Error("retry should not send"); });
+  h.evaluate('state.lastSend = "Original task"; var originalRetry = cbFixHandlers();');
+  let dispatched = 0; h.elements.form.dispatchEvent = () => { dispatched += 1; };
+  h.elements.input.value = "My newer unsent draft";
+  h.evaluate("originalRetry.retry()");
+  assert.equal(h.elements.input.value, "My newer unsent draft"); assert.equal(dispatched, 0);
+  assert.match(h.errors.at(-1), /未发送内容/);
+  h.elements.input.value = "";
+  h.evaluate('runState.active = {}; originalRetry.retry(); runState.active = null; state.session = "another-session"; originalRetry.retry();');
+  assert.equal(h.elements.input.value, ""); assert.equal(dispatched, 0);
+});
+
 test("chat rejects truncated responses, keeps partial output and unlocks composer", async () => {
   const h = ui(async () => ({ ok: true, body: bytesStream(encoder.encode(frame("token", { text: "已生成的一部分" }))) }));
   await h.submit("测试任务");

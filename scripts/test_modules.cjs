@@ -168,6 +168,100 @@ test("uploads: a session switch mid-upload drops the result instead of attaching
   assert.equal(uploads.pending.length, 0);
 });
 
+function uploadFixture(overrides = {}) {
+  const state = { session: "s1", attachments: [] }, log = [], requests = [];
+  class XHR {
+    constructor() { this.upload = {}; requests.push(this); }
+    open() {}
+    send(body) { this.body = body; }
+    abort() { this.aborted = true; this.onabort(); }
+    async complete(value, status = 200) { this.status = status; this.responseText = JSON.stringify(value); await this.onload(); }
+  }
+  const uploads = createUploads({ state, capability: () => true, addStatus: text => log.push(text), render() {},
+    apiError: async () => "Failed", askToken: async () => false, doc: null, XMLHttpRequest: XHR, ...overrides });
+  return { state, log, requests, uploads };
+}
+
+test("uploads: cancelling XHR retires it before synchronous abort and ignores a late response", async () => {
+  const h = uploadFixture();
+  const batch = h.uploads.upload([new File(["source"], "cancelled.txt")]);
+  const item = h.uploads.pending[0], request = h.requests[0];
+  h.uploads.cancel(item); await batch;
+  assert.equal(request.aborted, true); assert.equal(h.requests.length, 1, "cancel must not start a replacement upload");
+  assert.equal(h.uploads.pending.length, 0);
+  await request.complete({ files: [{ id: "late", name: "cancelled.txt" }] });
+  request.onerror(); h.uploads.retry(item);
+  assert.deepEqual(h.state.attachments, []); assert.equal(h.requests.length, 1); assert.deepEqual(h.log, []);
+});
+
+test("uploads: changing session retires the whole XHR batch before abort callbacks pump", async () => {
+  const h = uploadFixture();
+  const batch = h.uploads.upload(["one.txt", "two.txt", "queued.txt"].map(name => new File(["source"], name)));
+  assert.equal(h.requests.length, 2);
+  h.state.session = "s2"; h.uploads.abortAll("s2"); await batch;
+  assert.equal(h.requests.length, 2, "neither the aborted files nor the queued file may restart");
+  assert.ok(h.requests.every(request => request.aborted)); assert.equal(h.uploads.pending.length, 0);
+  h.state.session = "s1";
+  for (const request of h.requests) await request.complete({ files: [{ id: "old", name: "old.txt" }] });
+  assert.deepEqual(h.state.attachments, []);
+});
+
+test("uploads: failed XHR can still retry once and accept the successful response", async () => {
+  const h = uploadFixture();
+  const batch = h.uploads.upload([new File(["source"], "retry.txt")]);
+  const item = h.uploads.pending[0];
+  await h.requests[0].complete({ detail: "Temporary failure" }, 503); await batch;
+  assert.equal(item.error, "Temporary failure");
+  h.uploads.retry(item); assert.equal(h.requests.length, 2);
+  await h.requests[1].complete({ files: [{ id: "retried", name: "retry.txt" }] });
+  assert.deepEqual(h.state.attachments.map(file => file.id), ["retried"]); assert.equal(h.uploads.pending.length, 0);
+});
+
+test("uploads: cancelling fetch while JSON is pending aborts and prevents late acceptance", async () => {
+  let finishJson, signal;
+  const h = uploadFixture({ XMLHttpRequest: null, fetch: async (_url, init) => {
+    signal = init.signal;
+    return { ok: true, json: () => new Promise(resolve => { finishJson = resolve; }) };
+  } });
+  const batch = h.uploads.upload([new File(["source"], "pending.txt")]);
+  await new Promise(resolve => setImmediate(resolve));
+  h.uploads.cancel(h.uploads.pending[0]); await batch;
+  assert.equal(signal.aborted, true);
+  finishJson({ files: [{ id: "late", name: "pending.txt" }] }); await new Promise(resolve => setImmediate(resolve));
+  assert.deepEqual(h.state.attachments, []); assert.deepEqual(h.log, []);
+});
+
+test("uploads: URL import uses the original session, reports failure, and obeys the attachment limit", async () => {
+  const calls = [];
+  const h = uploadFixture({ fetch: async (url, init) => {
+    calls.push({ url, body: JSON.parse(init.body) });
+    return calls.length === 1 ? { ok: false, status: 403, json: async () => ({ detail: "URL refused" }) }
+      : { ok: true, json: async () => ({ files: [{ id: "url-file", name: "tender.txt" }] }) };
+  } });
+  await h.uploads.uploadUrl("https://example.invalid/tender.txt");
+  assert.deepEqual(h.state.attachments, []); assert.match(h.log.at(-1), /URL refused/);
+  await h.uploads.uploadUrl("https://example.invalid/tender.txt");
+  assert.deepEqual(calls[1], { url: "/api/upload-url", body: { session_id: "s1", url: "https://example.invalid/tender.txt" } });
+  assert.deepEqual(h.state.attachments.map(file => file.id), ["url-file"]); assert.match(h.log.at(-1), /tender.txt/);
+  h.state.attachments = Array.from({ length: UPLOAD_LIMITS.maxFiles }, (_, i) => ({ id: "existing-" + i }));
+  await h.uploads.uploadUrl("https://example.invalid/extra.txt");
+  assert.equal(calls.length, 2); assert.match(h.log.at(-1), /12/);
+});
+
+test("uploads: stale URL success or failure cannot affect another or reopened session", async () => {
+  for (const reopen of [false, true]) for (const fail of [false, true]) {
+    let finish;
+    const h = uploadFixture({ fetch: () => new Promise(resolve => { finish = resolve; }) });
+    const importing = h.uploads.uploadUrl("https://example.invalid/tender.txt");
+    h.state.session = "s2"; h.uploads.abortAll("s2");
+    if (reopen) { h.state.session = "s1"; h.uploads.abortAll("s1"); }
+    const previousLog = h.log.slice();
+    finish({ ok: !fail, status: fail ? 503 : 200, json: async () => fail ? { detail: "Old error" } : { files: [{ id: "old", name: "old.txt" }] } });
+    await importing;
+    assert.deepEqual(h.state.attachments, []); assert.deepEqual(h.log, previousLog);
+  }
+});
+
 /* ---- turn-stream: the handler and the resume loop, with every dependency faked ---- */
 const { createTurnStream } = require("../demo/static/modules/turn-stream.js");
 const CB_CHAT_STREAM = require("../demo/static/chat-stream.js");

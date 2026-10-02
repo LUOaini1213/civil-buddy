@@ -25,6 +25,7 @@ class Check:
 CHECKS = (
     Check("runner", ("scripts/test_check_project.py",)),
     Check("secrets", ("scripts/scan_tracked_secrets.py",)),
+    Check("demo-config", ("scripts/test_demo_config.py",)),
     Check("offline-assets", ("scripts/test_no_external_urls.py",)),
     Check("js-syntax", ("scripts/test_js_syntax.py",)),
     Check("vue-bindings", ("scripts/test_vue_bindings.py",)),
@@ -199,6 +200,9 @@ CHECKS = (
     Check("release-package", ("scripts/test_trial_pack.py",)),
     Check("business-files", ("scripts/test_business_reliability.py",)),
     Check("trace-artifacts", ("scripts/test_trace_artifacts.py",)),
+    Check("hitl-disk-resume", ("scripts/test_hitl_resume_competition.py",), timeout=300),
+    Check("pack-ship-weight-validation", ("scripts/test_pack_ship_weight_validation.py",)),
+    Check("physical-cargo-shipping", ("scripts/test_physical_cargo_shipping.py",)),
     Check("pack-ship-conservation", ("scripts/test_pack_ship_conservation.py",), timeout=300),
     Check("pack-ship-crates-structure", ("scripts/test_pack_ship_crates_structure.py",)),
     Check("table-quantity-cells", ("scripts/test_table_quantity_cells.py",)),
