@@ -3,6 +3,8 @@
 from __future__ import annotations
 
 import json
+import errno
+import os
 from io import BytesIO
 from pathlib import Path
 import sys
@@ -22,6 +24,7 @@ import session_bundle
 import session_context
 import task_memory
 import uploads
+from packing_assistant import sandbox
 
 
 class ContextFlowTests(unittest.TestCase):
@@ -214,6 +217,89 @@ class ContextFlowTests(unittest.TestCase):
             self.assertEqual(response.status_code, 400)
             self.assertNotEqual(self.client.get("/api/llm-config").json()["model"], "must-not-apply")
             self.assertEqual(context.policy()["limit"], 8192)
+
+    @unittest.skipUnless(os.name == "nt", "Windows readers deny atomic replacement while open")
+    def test_context_report_retries_when_a_windows_reader_releases_the_file(self):
+        self.seed("项目名称：报告缓存竞态。")
+        session_context.persist(self.root, self.sid, {"used": 10})
+        target = self.root / self.sid / "context.last.json"
+        reader = target.open("rb")
+        original = reader.read()
+        replace = os.replace
+        attempts, conflicts = [], []
+
+        def replace_during_read(source, destination):
+            if Path(destination) != target:
+                return replace(source, destination)
+            attempts.append(source)
+            try:
+                return replace(source, destination)
+            except PermissionError as exc:
+                conflicts.append(exc.winerror)
+                self.assertEqual(target.read_bytes(), original)
+                reader.close()  # the concurrent /api/context read has now finished
+                raise
+
+        try:
+            with patch.object(os, "replace", side_effect=replace_during_read):
+                session_context.persist(self.root, self.sid, {"used": 20})
+        finally:
+            reader.close()
+        self.assertEqual(conflicts, [5])
+        self.assertEqual(len(attempts), 2)
+        self.assertEqual(json.loads(target.read_text(encoding="utf-8")), {"used": 20})
+        self.assertEqual(self.client.get("/api/context", params={"session_id": self.sid}).json()["context"], {"used": 20})
+        self.assertEqual(list(target.parent.glob(".context*.tmp")), [])
+
+    def test_context_report_permanent_access_failure_is_raised_and_preserves_old_report(self):
+        self.seed("项目名称：保存失败后保留原文。")
+        session_context.persist(self.root, self.sid, {"used": 10})
+        target = self.root / self.sid / "context.last.json"
+        original = target.read_bytes()
+        transcript = (target.parent / "transcript.jsonl").read_bytes()
+        failure = PermissionError(errno.EACCES, "persistent access denied")
+        replace = os.replace
+        attempts = []
+
+        def fail_report(source, destination):
+            if Path(destination) == target:
+                attempts.append(source)
+                raise failure
+            return replace(source, destination)
+
+        with patch.object(os, "replace", side_effect=fail_report), patch.object(sandbox.time, "sleep") as sleep:
+            with self.assertRaises(PermissionError) as caught:
+                session_context.persist(self.root, self.sid, {"used": 20})
+        self.assertIs(caught.exception, failure)
+        self.assertEqual(len(attempts), 20 if os.name == "nt" else 1)
+        self.assertEqual(sleep.call_count, 19 if os.name == "nt" else 0)
+        self.assertEqual(target.read_bytes(), original)
+        self.assertEqual((target.parent / "transcript.jsonl").read_bytes(), transcript)
+        self.assertEqual(list(target.parent.glob(".context*.tmp")), [])
+
+    def test_context_report_disk_failure_is_not_retried_or_silently_ignored(self):
+        self.seed("项目名称：磁盘失败。")
+        session_context.persist(self.root, self.sid, {"used": 10})
+        target = self.root / self.sid / "context.last.json"
+        original = target.read_bytes()
+        failure = OSError(errno.ENOSPC, "disk full")
+        replace = os.replace
+        attempts = []
+
+        def fail_report(source, destination):
+            if Path(destination) == target:
+                attempts.append(source)
+                raise failure
+            return replace(source, destination)
+
+        with patch.object(os, "replace", side_effect=fail_report), patch.object(sandbox.time, "sleep") as sleep:
+            with self.assertRaises(OSError) as caught:
+                session_context.persist(self.root, self.sid, {"used": 20})
+        self.assertIs(caught.exception, failure)
+        self.assertEqual(len(attempts), 1)
+        sleep.assert_not_called()
+        self.assertEqual(target.read_bytes(), original)
+        self.assertEqual(list(target.parent.glob(".context*.tmp")), [])
 
 
 if __name__ == "__main__":

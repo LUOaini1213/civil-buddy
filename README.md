@@ -153,6 +153,8 @@ uvicorn gateway.app:app --host 127.0.0.1 --port 8000
 PACKING_AGENT_URL=http://127.0.0.1:8000
 ```
 
+装箱前会核对原始物料：单重乘数量与总重冲突时，先列出冲突行，等待修正；不能把一件重物在计算中虚拟拆成多件来声称装得下。这两种情况会阻断装柜、订舱/VGM 草稿与出运文件导出，保留来源和原因供复核。普通完整件仍按实际尺寸、重量计算；磁盘恢复后的人工确认不会绕过检查。可离线复核：`npm run check -- --only pack-ship-weight-validation,physical-cargo-shipping,hitl-disk-resume`。
+
 详见 [docs/civil-buddy/packing-agent.md](docs/civil-buddy/packing-agent.md)。
 
 ---
