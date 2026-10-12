@@ -73,6 +73,11 @@ class TrialPackTests(unittest.TestCase):
             self.assertIn(page.name, release.STATIC, page.name)
             html = page.read_text(encoding="utf-8")
             loaded.update(m.split("?", 1)[0] for m in re.findall(r'(?:src|href)="/static/([^"]+)"', html))
+        # app.js and its modules import further modules (ES imports, not src/href)
+        for script in [ROOT / "demo" / "static" / "app.js", *(ROOT / "demo" / "static" / "modules").glob("*.js")]:
+            base = script.parent.relative_to(ROOT / "demo" / "static").as_posix()
+            for target in re.findall(r'^import [^;]*? from "\./([^"]+)";', script.read_text(encoding="utf-8"), re.M):
+                loaded.add(target if base == "." else f"{base}/{target}")
         self.assertIn("voice.js", loaded)
         self.assertFalse(loaded - set(release.STATIC), sorted(loaded - set(release.STATIC)))
         included = release.release_inputs(self.root)

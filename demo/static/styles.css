@@ -282,6 +282,9 @@ body[data-dock="open"] .layout { grid-template-columns: var(--cb-rail-w) minmax(
 @media screen and (max-width: 430px) { /* --cb-bp-mobile */
   .cb-cmd-desc { display: none; }  /* 手机竖屏：只留图标+名称，说明换 title 提示 */
   .cb-cmd-item { min-height: 44px; }  /* --cb-touch-min 触控目标 */
+  /* / 与 @ 菜单挂到整条输入框上：英文按钮更宽，textarea 只剩约 90px，岗位名被截成「Ten…」 */
+  .composer .composer-shell { position: relative; }
+  .composer .input-wrap { position: static; }
 }
 .composer-note { font-size: var(--cb-fs-xs); color: var(--cb-text-muted); margin: 0; }
 .composer-heading { display: flex; justify-content: space-between; align-items: center; gap: 10px; margin-bottom: 10px; }
@@ -1184,3 +1187,10 @@ html.cb-large {
   .composer-shell #send, .composer-shell .composer-plus { width: 40px; }
   .composer-risk summary > span { display: block; margin: 0 0 0 15px; }
 }
+/* 中文 | English 切换（i18n.js）：两个按钮成一组，当前语言高亮；按钮文字不随语言变。 */
+.cb-lang { display: inline-flex; gap: 2px; padding: 2px; border-radius: 10px; background: var(--line); }
+.cb-lang .cb-lang-btn { padding: 4px 10px; background: transparent; color: var(--ink); opacity: .75; }
+.cb-lang .cb-lang-btn[aria-pressed="true"] { background: var(--ink); color: var(--cb-panel); opacity: 1; }
+.cb-lang .cb-lang-btn:focus-visible { outline: 2px solid var(--cb-blue); outline-offset: 1px; }
+/* 英文界面里，草稿正文仍是岗位模板的中文：在那条回答下写一句说明，不机翻正文。 */
+.cb-lang-note { margin: 4px 0 0; font-size: 12px; color: var(--cb-text-muted, var(--muted)); }

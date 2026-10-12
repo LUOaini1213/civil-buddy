@@ -3,10 +3,16 @@
 from __future__ import annotations
 
 import json
-from datetime import datetime
+import re
+import uuid
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 from packing_assistant.runtime import cancel as _cancel
+
+
+class ShipmentSourceError(ValueError):
+    """Unresolved source cargo cannot be exported as a shipment workbook."""
 
 
 def export_shipment_xlsx(
@@ -18,6 +24,17 @@ def export_shipment_xlsx(
     """
     写 xlsx，返回 {xlsx_path, sheets, por_rows, secure_rows}。
     """
+    from packing_assistant.tools.cargo_conservation import physical_split_issues
+    from packing_assistant.tools.pack_ship_solve import rows_needing_human, NEEDS_HUMAN_WEIGHT_MISMATCH
+
+    # Revalidate the source and candidate contents even when an older session
+    # contains a cached manifest or stale success flags. Refuse before writing.
+    mats = state.get("materials") or []
+    boxes = state.get("boxes") or []
+    issues = physical_split_issues(mats, boxes)
+    issues += [row for row in rows_needing_human(mats) if row["reason"] == NEEDS_HUMAN_WEIGHT_MISMATCH]
+    if issues:
+        raise ShipmentSourceError("出运单未导出：" + "；".join(row["ask"] for row in issues[:3]))
     try:
         import openpyxl
         from openpyxl.styles import Font
@@ -25,8 +42,6 @@ def export_shipment_xlsx(
         raise RuntimeError("需要 openpyxl: pip install openpyxl") from e
 
     plan = state.get("container_plan") or {}
-    boxes = state.get("boxes") or []
-    mats = state.get("materials") or []
     swo = state.get("secure_work_order")
     if not swo:
         from packing_assistant.tools.secure_work_order import build_secure_work_order
@@ -40,8 +55,9 @@ def export_shipment_xlsx(
 
     out_dir = Path(output_dir)
     out_dir.mkdir(parents=True, exist_ok=True)
-    ts = datetime.now().strftime("%Y%m%d_%H%M%S")
-    name = basename or f"shipment_{ts}"
+    # One name per export: the session, UTC time and a random suffix. Named by the second alone, two sessions
+    # exporting in the same second wrote one file, and session A's download link served session B's workbook.
+    name = basename or _unique_name(state)
     xlsx_path = out_dir / f"{name}.xlsx"
 
     wb = openpyxl.Workbook()
@@ -125,7 +141,14 @@ def export_shipment_xlsx(
         if isinstance(p, dict):
             ws4.append([f"c{p.get('container_no')}", p.get("path")])
 
-    wb.save(xlsx_path)
+    # "xb": never overwrite an existing export (FileExistsError instead); a failed write leaves no torn file
+    with open(xlsx_path, "xb") as fh:
+        try:
+            wb.save(fh)
+        except BaseException:
+            fh.close()
+            xlsx_path.unlink(missing_ok=True)
+            raise
     meta = {
         "xlsx_path": str(xlsx_path),
         "sheets": ["摘要", "POR_by_part", "POR_by_container", "绑扎空隙工单", "侧视路径"],
@@ -134,7 +157,14 @@ def export_shipment_xlsx(
         "n_por_parts": len(por.get("by_part") or []),
         "n_secure_items": len(swo.get("items") or []),
     }
-    (out_dir / f"{name}_meta.json").write_text(
-        json.dumps(meta, ensure_ascii=False, indent=2), encoding="utf-8"
-    )
+    with open(out_dir / f"{name}_meta.json", "x", encoding="utf-8") as fh:
+        fh.write(json.dumps(meta, ensure_ascii=False, indent=2))
     return meta
+
+
+def _unique_name(state: Dict[str, Any]) -> str:
+    """shipment_<session>_<UTC time>_<uuid6>: the session part is sanitised to [A-Za-z0-9_-], at most 48 chars."""
+    sid = str(state.get("session_id") or state.get("packing_plan_id") or "session")
+    safe = re.sub(r"[^A-Za-z0-9_-]+", "-", sid).strip("-")[:48] or "session"
+    ts = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%SZ")
+    return f"shipment_{safe}_{ts}_{uuid.uuid4().hex[:6]}"

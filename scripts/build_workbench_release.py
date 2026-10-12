@@ -18,9 +18,11 @@ VERSION = re.compile(r"[0-9]+\.[0-9]+\.[0-9]+(?:-[0-9A-Za-z]+(?:[.-][0-9A-Za-z]+
 STATIC = (
     "app.js", "chat-stream.js", "docpreview.js", "fixcard.js", "index.html",
     "manifest.webmanifest", "posts.js", "studio.js", "styles.css", "tickets.js", "voice.js",
-    "sw.js", "modules/auth.js", "modules/toast.js", "modules/drafts.js", "modules/uploads.js",
-    "modules/turn-stream.js", "modules/deliverables.js", "modules/session-watch.js", "modules/session-nav.js",
-    "agent.html", "agent.css", "agent.js", "theme.css", "theme.js", "workbench-shell.css",
+    "i18n.js", "i18n/en.js", "i18n/posts-en.js",
+    # app.js is an ES module; what it imports ships with it
+    "modules/auth.js", "modules/deliverables.js", "modules/drafts.js", "modules/i18n.js", "modules/session-nav.js",
+    "modules/session-watch.js", "modules/toast.js", "modules/turn-stream.js", "modules/uploads.js",
+    "sw.js", "agent.html", "agent.css", "agent.js", "theme.css", "theme.js", "workbench-shell.css",
     "icons/cb-icon-192.png", "icons/cb-icon-512.png", "icons/cb-icon.svg",
     "vendor/marked.LICENSE.md", "vendor/marked.min.js",
     "cad.html", "cad.css", "cad.js", "cad-viewer.js",
@@ -46,7 +48,7 @@ EXPLICIT = (
     "docs/civil-buddy/KB.md", "docs/civil-buddy/CONTEXT.md", "docs/civil-buddy/COLLABORATION.md",
     "docs/civil-buddy/task-routing.md", "docs/civil-buddy/product-plan.md", "docs/civil-buddy/product-completion-plan.md",
     "contract/intents.v1.json", "contract/projects.v1.json", "contract/kb_boosts.v1.json",
-    "workbench/seed.json", "workbench/yibiao-map.json",
+    "workbench/seed.json", "workbench/posts_en.json", "workbench/yibiao-map.json",
     "scripts/start_workbench.py",
     "scripts/start_unified_workbench.py", "requirements-documents.txt", "docs/civil-buddy/unified-workbench.md",
     "skills/document/manifest.json", "skills/document/doc-word/SKILL.md", "skills/document/doc-spreadsheet/SKILL.md",

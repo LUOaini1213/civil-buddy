@@ -21,6 +21,8 @@ from scripts import test_workbench_flow as flow
 READ_ONLY = (
     "Could you explain how to check facade_panels.xlsx against facade_itt_doc.md?",
     "Explain the shipping requirements in facade_itt_doc.md using facade_panels.xlsx as context.",
+    "Please explain the shipping requirements in facade_itt_doc.md using facade_panels.xlsx as context.",
+    "Could you explain the shipping requirements in facade_itt_doc.md using facade_panels.xlsx as context?",
     "Please explain whether facade_panels.xlsx meets the clauses in facade_itt_doc.md; do not run anything or write any files.",
     "I checked facade_panels.xlsx against the requirements in facade_itt_doc.md yesterday.",
     "We will check facade_panels.xlsx against facade_itt_doc.md tomorrow.",
@@ -47,11 +49,12 @@ class LinkIntentTests(unittest.TestCase):
 
 
 class MessageApprovalTests(unittest.TestCase):
-    def test_only_current_standalone_unquoted_sentences_approve(self):
+    def test_only_the_complete_current_confirmation_message_approves(self):
         for sentence in (CONFIRM, CONFIRM_EN):
-            for request in (sentence, "写一份消防专篇。" + sentence, "Draft the fire protection report. " + sentence):
-                self.assertTrue(message_confirmation(request), request)
+            self.assertTrue(message_confirmation(sentence), sentence)
             for request in (
+                "写一份消防专篇。" + sentence,
+                "Draft the fire protection report. " + sentence,
                 'Draft the report. "' + sentence + '"',
                 "Draft the report.\n> " + sentence,
                 "Draft the report.\n```text\n" + sentence + "\n```",
@@ -86,7 +89,7 @@ class HttpRegressions(unittest.TestCase):
                                             files={"files": (name, source.read_bytes())})
             self.assertEqual(response.status_code, 200, response.text)
             attachments.append(response.json()["files"][0]["id"])
-        for request in READ_ONLY[:3]:
+        for request in READ_ONLY[:5]:
             with self.subTest(request=request):
                 out, _ = self.flow.post(request, attachments=attachments)
                 self.assertFalse(out["wrote"], out)
@@ -97,6 +100,8 @@ class HttpRegressions(unittest.TestCase):
 
     def test_quoted_or_refused_message_sentence_cannot_write_high_risk_draft(self):
         requests = (
+            "Draft the fire protection report. " + CONFIRM_EN,
+            "写一份消防专篇。" + CONFIRM,
             'Draft the fire protection report. I refuse the confirmation phrase "' + CONFIRM_EN + '"; leave signing for later.',
             'Draft the fire protection report. "' + CONFIRM_EN + '"',
             "写一份消防专篇。不同意：" + CONFIRM,
@@ -109,10 +114,10 @@ class HttpRegressions(unittest.TestCase):
                 self.assertTrue(out["hitl_pending"], out)
         self.assertFalse(list(self.flow.root.rglob("fire-protect__brief.*")))
 
-    def test_current_standalone_sentence_still_writes_for_both_languages(self):
+    def test_dedicated_current_confirmation_still_writes_for_both_languages(self):
         for sentence in (CONFIRM, CONFIRM_EN):
-            out, _ = self.flow.post("写一份消防专篇，缺失内容待填。" + sentence,
-                                   expert_ids=["fire-protect"], confirm_text="")
+            out, _ = self.flow.post("写一份消防专篇，缺失内容待填。",
+                                   expert_ids=["fire-protect"], confirm_text=sentence)
             self.assertTrue(out["wrote"], out)
             self.assertFalse(out["hitl_pending"], out)
 

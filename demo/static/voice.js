@@ -9,6 +9,17 @@
    一段录音最长 20 秒（后端 asr.MAX_SECONDS）：页面提前 1 秒自动停，后端另有 2 秒宽限并裁到 20 秒。 */
 (function () {
   "use strict";
+  /* 中文 | English (/static/i18n.js); without it, the Chinese message as written, {0} {1} … filled. */
+  function tr(message) {
+    var args = Array.prototype.slice.call(arguments, 1);
+    var i18n = (typeof window !== "undefined" ? window : globalThis).CB_I18N;
+    if (i18n && typeof i18n.t === "function") return i18n.t.apply(i18n, arguments);
+    return String(message).replace(/\{(\d+)\}/g, function (whole, i) {
+      i = Number(i);
+      return i < args.length ? (args[i] == null ? "" : String(args[i])) : whole;
+    });
+  }
+
 
   const MAX_SECONDS = 20;
   const MAX_MS = (MAX_SECONDS - 1) * 1000;
@@ -49,7 +60,7 @@
       pending.abort.abort();
       if (supportsCancel) fetch("/api/asr/" + encodeURIComponent(pending.id) + "/cancel", { method: "POST", keepalive: true }).catch(() => {});
     }
-    say(wasActive ? reason || (pending && !supportsCancel ? "已取消回填；此服务未声明后台转写取消能力。" : "已取消语音草稿。") : "", "");
+    say(wasActive ? reason || (pending && !supportsCancel ? tr("已取消回填；此服务未声明后台转写取消能力。") : tr("已取消语音草稿。")) : "", "");
   }
   window.CivilBuddyVoice = { cancel };
 
@@ -68,14 +79,14 @@
     let text = "";
     if (phase === "recording") {
       const secs = Math.floor((Date.now() - startedAt) / 1000);
-      text = "停止 0:" + String(secs).padStart(2, "0");
-      btn.setAttribute("aria-label", "停止录音");
+      text = tr("停止 0:") + String(secs).padStart(2, "0");
+      btn.setAttribute("aria-label", tr("停止录音"));
     } else if (phase === "preparing") {
-      text = "取消";
-      btn.setAttribute("aria-label", "取消等待识别模型");
+      text = tr("取消");
+      btn.setAttribute("aria-label", tr("取消等待识别模型"));
     } else {
-      text = phase === "transcribing" ? "取消识别" : "";
-      btn.setAttribute("aria-label", phase === "transcribing" ? "取消语音识别" : "语音输入");
+      text = phase === "transcribing" ? tr("取消识别") : "";
+      btn.setAttribute("aria-label", phase === "transcribing" ? tr("取消语音识别") : tr("语音输入"));
     }
     // 只改图标旁的文字，不碰按钮里的 SVG 图标
     if (labelEl) labelEl.textContent = text;
@@ -106,7 +117,7 @@
   function fill(text) {
     const words = String(text || "").trim();
     if (!words) {
-      say("没有听清，请再说一次。", "warn");
+      say(tr("没有听清，请再说一次。"), "warn");
       return false;
     }
     const current = input.value;
@@ -144,7 +155,7 @@
     if (info.state === "failed") {
       serverBroken = true;
       mode = null;
-      say("本机识别模型准备失败（" + (info.load_error || "原因未知") + "）。再点一次「语音」将改用浏览器识别。", "warn");
+      say(tr("本机识别模型准备失败（") + (info.load_error || tr("原因未知")) + tr("）。再点一次「语音」将改用浏览器识别。"), "warn");
       return false;
     }
     try {
@@ -155,8 +166,8 @@
     if (!alive(token)) return false;
     setPhase("preparing");
     say(info.state === "missing"
-      ? "第一次使用要下载本机识别模型（约 460 MB），下载好之前先不录音。可以先打字；点「取消」不影响后台下载。"
-      : "正在加载本机识别模型，几秒钟后开始录音。", "");
+      ? tr("第一次使用要下载本机识别模型（约 460 MB），下载好之前先不录音。可以先打字；点「取消」不影响后台下载。")
+      : tr("正在加载本机识别模型，几秒钟后开始录音。"), "");
     while (phase === "preparing" && alive(token)) {
       await new Promise((resolve) => setTimeout(resolve, POLL_MS));
       if (phase !== "preparing" || !alive(token)) return false; // 点了「取消」
@@ -170,8 +181,8 @@
         serverBroken = true;
         mode = null;
         setPhase("idle");
-        say("本机识别模型准备失败" + (info && info.load_error ? "（" + info.load_error + "）" : "") +
-          "。再点一次「语音」将改用浏览器识别。", "warn");
+        say(tr("本机识别模型准备失败") + (info && info.load_error ? "（" + info.load_error + "）" : "") +
+          tr("。再点一次「语音」将改用浏览器识别。"), "warn");
         return false;
       }
     }
@@ -180,15 +191,15 @@
 
   function micError(err) {
     const name = err && err.name;
-    if (name === "NotAllowedError" || name === "SecurityError") return "没有麦克风权限：请在地址栏旁允许本页使用麦克风。";
-    if (name === "NotFoundError") return "没有检测到麦克风。";
-    return "麦克风无法启动：" + (name || "未知原因");
+    if (name === "NotAllowedError" || name === "SecurityError") return tr("没有麦克风权限：请在地址栏旁允许本页使用麦克风。");
+    if (name === "NotFoundError") return tr("没有检测到麦克风。");
+    return tr("麦克风无法启动：") + (name || tr("未知原因"));
   }
 
   /* ---------- 本机识别：录音 → /api/asr ---------- */
   async function startServer(token) {
     if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia || !window.MediaRecorder) {
-      say("浏览器不让本页录音：请用 http://127.0.0.1 或 https 打开工作台（局域网 http 地址拿不到麦克风）。", "warn");
+      say(tr("浏览器不让本页录音：请用 http://127.0.0.1 或 https 打开工作台（局域网 http 地址拿不到麦克风）。"), "warn");
       return;
     }
     try {
@@ -208,7 +219,7 @@
     recorder.onstop = () => { if (alive(token)) sendServer(token); }; // 麦克风自己停下也处理
     recorder.start();
     setPhase("recording");
-    say("正在录音，说完再点一次「停止」。最长 " + MAX_SECONDS + " 秒。", "");
+    say(tr("正在录音，说完再点一次「停止」。最长 ") + MAX_SECONDS + tr(" 秒。"), "");
   }
 
   async function sendServer(token) {
@@ -218,11 +229,11 @@
     recorder = null;
     if (!blob.size) {
       setPhase("idle");
-      say("没有录到声音，请再试一次。", "warn");
+      say(tr("没有录到声音，请再试一次。"), "warn");
       return;
     }
     setPhase("transcribing");
-    say("本机识别中…", "");
+    say(tr("本机识别中…"), "");
     const abort = new AbortController();
     const id = "voice-" + Date.now().toString(36) + "-" + Math.random().toString(36).slice(2);
     activeRequest = { abort, id };
@@ -237,17 +248,17 @@
         // 本机识别运行出错：本页不再撞它，下一次改走浏览器识别
         serverBroken = true;
         mode = null;
-        throw new Error((data.detail || "本机识别不可用") +
-          (BrowserRecognition ? "。再点一次「语音」将改用浏览器识别。" : ""));
+        throw new Error((data.detail || tr("本机识别不可用")) +
+          (BrowserRecognition ? tr("。再点一次「语音」将改用浏览器识别。") : ""));
       }
       if (!response.ok) throw new Error(data.detail || "HTTP " + response.status);
       if (fill(data.text)) {
-        say("已转成文字（本机识别，" + data.elapsed_seconds + " 秒）。请核对后再发送，不会自动发送。", "ok");
+        say(tr("已转成文字（本机识别，") + data.elapsed_seconds + tr(" 秒）。请核对后再发送，不会自动发送。"), "ok");
       }
     } catch (err) {
       if (!alive(token)) return;
-      const why = err && err.name === "AbortError" ? "识别超时" : (err && err.message) || "未知原因";
-      say("识别失败：" + why, "warn");
+      const why = err && err.name === "AbortError" ? tr("识别超时") : (err && err.message) || tr("未知原因");
+      say(tr("识别失败：") + why, "warn");
     } finally {
       clearTimeout(timer);
       if (alive(token)) { activeRequest = null; setPhase("idle"); }
@@ -260,9 +271,9 @@
     try { remembered = localStorage.getItem(CONSENT_KEY); } catch (_) { /* 隐私模式 */ }
     if (remembered === "yes") return true;
     const ok = window.confirm(
-      "本机语音识别不可用，将改用浏览器自带识别。\n" +
-      "浏览器会把录音发送到浏览器厂商的服务器处理（Chrome 为 Google）。\n" +
-      "涉密或内网项目请不要使用。是否继续？"
+      tr("本机语音识别不可用，将改用浏览器自带识别。\n") +
+      tr("浏览器会把录音发送到浏览器厂商的服务器处理（Chrome 为 Google）。\n") +
+      tr("涉密或内网项目请不要使用。是否继续？")
     );
     if (ok) {
       try { localStorage.setItem(CONSENT_KEY, "yes"); } catch (_) { /* 隐私模式 */ }
@@ -272,7 +283,7 @@
 
   function startBrowser(token) {
     if (!browserConsent()) {
-      say("已取消。本机识别需要在 Python 工作台安装 requirements-asr.txt。", "");
+      say(tr("已取消。本机识别需要在 Python 工作台安装 requirements-asr.txt。"), "");
       return;
     }
     recognition = new BrowserRecognition();
@@ -295,10 +306,10 @@
     recognition.onerror = (event) => {
       if (!alive(token)) return;
       failed = true;
-      const why = event.error === "not-allowed" ? "没有麦克风权限" :
-        event.error === "network" ? "浏览器识别服务连不上（断网或所在网络无法访问）" :
-        event.error === "no-speech" ? "没有听到说话" : event.error;
-      say("浏览器识别失败：" + why, "warn");
+      const why = event.error === "not-allowed" ? tr("没有麦克风权限") :
+        event.error === "network" ? tr("浏览器识别服务连不上（断网或所在网络无法访问）") :
+        event.error === "no-speech" ? tr("没有听到说话") : event.error;
+      say(tr("浏览器识别失败：") + why, "warn");
     };
     recognition.onend = () => {
       if (!alive(token)) return;
@@ -306,20 +317,20 @@
       interim("");
       setPhase("idle");
       if (finalText.trim()) {
-        if (fill(finalText)) say("已转成文字（浏览器识别）。请核对后再发送，不会自动发送。", "ok");
+        if (fill(finalText)) say(tr("已转成文字（浏览器识别）。请核对后再发送，不会自动发送。"), "ok");
       } else if (!failed) {
-        say("没有听清，请再说一次。", "warn");
+        say(tr("没有听清，请再说一次。"), "warn");
       }
     };
     try {
       recognition.start();
     } catch (err) {
       recognition = null;
-      say("浏览器识别无法启动：" + (err && err.message ? err.message : "未知原因"), "warn");
+      say(tr("浏览器识别无法启动：") + (err && err.message ? err.message : tr("未知原因")), "warn");
       return;
     }
     setPhase("recording");
-    say("正在听（浏览器识别），说完再点一次「停止」。最长 " + MAX_SECONDS + " 秒。", "");
+    say(tr("正在听（浏览器识别），说完再点一次「停止」。最长 ") + MAX_SECONDS + tr(" 秒。"), "");
   }
 
   /* ---------- 共用 ---------- */
@@ -339,7 +350,7 @@
       return;
     }
     if (phase === "preparing") {
-      cancel("已取消等待，模型在后台继续准备。准备好后再点「语音」。");
+      cancel(tr("已取消等待，模型在后台继续准备。准备好后再点「语音」。"));
       return;
     }
     if (phase === "transcribing") {
@@ -357,8 +368,8 @@
         return;
       }
       if (current === "browser") return startBrowser(token);
-      btn.title = "当前浏览器不支持语音识别，本机识别也未安装";
-      say("语音输入不可用：本机未安装识别引擎，浏览器也不支持语音识别。", "warn");
+      btn.title = tr("当前浏览器不支持语音识别，本机识别也未安装");
+      say(tr("语音输入不可用：本机未安装识别引擎，浏览器也不支持语音识别。"), "warn");
     } finally {
       if (alive(token) && phase === "starting") setPhase("idle");
     }

@@ -10,6 +10,7 @@
  *   log         () => the conversation log element
  *   doc         document
  */
+import { tr, cbLang } from "./i18n.js";
 export function docStem(name) {
   return String(name || "").replace(/\.(md|markdown|docx|xlsx|csv|pdf|txt|json)$/i, "");
 }
@@ -63,11 +64,11 @@ export function createDeliverables({ state, capability, obStep, addStatus, openD
     try {
       await openDoc({
         url: fileUrl(f),
-        title: f.name || f.title || "交付物文书",
-        role: `岗位 · ${f.expert || "未指定"}`,
+        title: f.name || f.title || tr("交付物文书"),
+        role: tr("岗位 · {0}", f.expert || tr("未指定")),
       });
     } catch (e) {
-      addStatus(`预览失败 ${f.name || ""}：${(e && e.message) || e}`);
+      addStatus(tr("预览失败 {0}：{1}", f.name || "", (e && e.message) || e));
     }
   }
 
@@ -89,8 +90,8 @@ export function createDeliverables({ state, capability, obStep, addStatus, openD
     for (const run of runs) {
       const groups = groupDeliverables(run.deliverables);
       const notes = [];
-      if (run.docx_pending) notes.push("Word 稿待生成：本轮只有 Markdown，稍后可在「本会话交付物」里取 Word。");
-      for (const e of run.export_errors || []) notes.push(`${e}：只有 Markdown 稿可下载。`);
+      if (run.docx_pending) notes.push(tr("Word 稿待生成：本轮只有 Markdown，稍后可在「本会话交付物」里取 Word。"));
+      for (const e of run.export_errors || []) notes.push(tr("{0}：只有 Markdown 稿可下载。", e));
       if (!groups.length && !notes.length) continue;
       const card = doc.createElement("div");
       card.className = "cb-doc-card";
@@ -98,7 +99,7 @@ export function createDeliverables({ state, capability, obStep, addStatus, openD
       head.className = "cb-doc-card-head";
       const tag = doc.createElement("span");
       tag.className = "cb-doc-card-tag";
-      tag.textContent = "交付物文书";
+      tag.textContent = tr("交付物文书");
       head.appendChild(tag);
       const label = runLabel(run);
       if (label) {
@@ -113,7 +114,7 @@ export function createDeliverables({ state, capability, obStep, addStatus, openD
         zip.className = "dl cb-doc-card-zip";
         zip.href = `/api/deliverables.zip?session_id=${encodeURIComponent(state.session)}&run_id=${encodeURIComponent(run.run_id)}`;
         zip.setAttribute("download", `civil-docs-${run.run_id.slice(0, 8)}.zip`);
-        zip.textContent = `打包下载（${nFiles} 个文件）`;
+        zip.textContent = tr("打包下载（{0} 个文件）", nFiles);
         zip.addEventListener("click", () => obStep(3));
         head.appendChild(zip);
       }
@@ -123,14 +124,14 @@ export function createDeliverables({ state, capability, obStep, addStatus, openD
         row.className = "cb-doc-row";
         const t = doc.createElement("span");
         t.className = "cb-doc-card-t";
-        t.textContent = g.stem || "文书";
+        t.textContent = g.stem || tr("文书");
         t.title = g.formats.map((f) => f.name).join(" / ");
         row.appendChild(t);
         const md = g.formats.find(isDocMd);
         if (md) {
           const b = doc.createElement("button");
           b.type = "button";
-          b.textContent = "预览";
+          b.textContent = tr("预览");
           b.addEventListener("click", () => openDeliverable(md));
           row.appendChild(b);
         }
@@ -138,9 +139,9 @@ export function createDeliverables({ state, capability, obStep, addStatus, openD
           const a = doc.createElement("a");
           a.className = "dl";
           a.href = fileUrl(f);
-          a.setAttribute("download", f.name || "文书.md");
-          a.textContent = "." + (docExt(f.name) || "文件");
-          a.title = "下载 " + (f.name || "");
+          a.setAttribute("download", f.name || tr("文书.md"));
+          a.textContent = "." + (docExt(f.name) || tr("文件"));
+          a.title = tr("下载 ") + (f.name || "");
           a.addEventListener("click", () => obStep(3)); /* ux(round10)：下载 → 引导第 3 步打勾 */
           row.appendChild(a);
         }
@@ -154,8 +155,15 @@ export function createDeliverables({ state, capability, obStep, addStatus, openD
       }
       const k = doc.createElement("span");
       k.className = "cb-doc-card-k";
-      k.textContent = "AI 草稿 · 不签认";
+      k.textContent = tr("AI 草稿 · 不签认");
       card.appendChild(k);
+      if (cbLang() === "en") {
+        /* the post templates are Chinese; the page says so instead of machine-translating a draft */
+        const zh = doc.createElement("p");
+        zh.className = "cb-doc-note cb-lang-note";
+        zh.textContent = tr("草稿模板为中文，未做机器翻译。");
+        card.appendChild(zh);
+      }
       host.appendChild(card);
       painted += 1;
     }

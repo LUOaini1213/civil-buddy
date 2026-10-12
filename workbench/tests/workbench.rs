@@ -632,8 +632,10 @@ async fn test_kb_files_have_zh_display_names() {
 
 #[tokio::test]
 async fn test_health_exposes_context_policy() {
+    let legacy = state();
+    assert!(legacy.engine.is_none(), "this fixture has no Python engine bridge");
     let (st, body) = send(
-        state(),
+        legacy,
         Request::builder().uri("/api/health").body(Body::empty()).unwrap(),
     )
     .await;
@@ -649,7 +651,8 @@ async fn test_health_exposes_context_policy() {
     assert_eq!(v["capabilities"]["chat"], Value::Bool(true), "{body}");
     assert_eq!(v["capabilities"]["attachments"], Value::Bool(true), "{body}");
     assert_eq!(v["capabilities"]["cancel"], Value::Bool(true), "{body}");
-    assert_eq!(v["capabilities"]["session_backup"], Value::Bool(true), "{body}");
+    assert_eq!(v["capabilities"]["session_backup"], Value::Bool(false), "{body}");
+    assert_eq!(v["identity"]["mode"], "unprotected_legacy_router", "{body}");
     assert!(v["capabilities"]["packing"].is_boolean(), "{body}");
     assert_eq!(v["harness"]["expert_runtime"].as_str(), Some("understand"));
     assert_eq!(v["harness"]["summoned_default"].as_str(), Some("chat"));

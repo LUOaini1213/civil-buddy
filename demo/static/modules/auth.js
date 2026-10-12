@@ -2,6 +2,7 @@
    Kept in a cookie so plain download links and uploads carry it too; asked for once — on
    boot when /api/health says auth is on, or on the first 401 — then the failed /api/ call is
    retried once. Pure of app state: hand it the window and document it should use. */
+import { tr } from "./i18n.js";
 export const TOKEN_COOKIE = "cb_token";
 
 export function createAuth({ win, doc, prompt } = {}) {
@@ -22,7 +23,7 @@ export function createAuth({ win, doc, prompt } = {}) {
     if (promptOpen) return false;
     promptOpen = true;
     try {
-      const tok = ask(`${reason || "这个工作台需要访问口令"}（CIVIL_TOKEN）`);
+      const tok = ask(`${reason || tr("这个工作台需要访问口令")}（CIVIL_TOKEN）`);
       if (!tok) return false;
       setToken(tok);
       return true;
@@ -45,7 +46,7 @@ export function createAuth({ win, doc, prompt } = {}) {
         return res;
       }
       if (res.status === 401 && url.startsWith("/api/") && !(init && init.cbRetried)) {
-        if (await askToken("口令缺失或不对")) return cbFetch(input, { ...(init || {}), cbRetried: true });
+        if (await askToken(tr("口令缺失或不对"))) return cbFetch(input, { ...(init || {}), cbRetried: true });
       }
       return res;
     };

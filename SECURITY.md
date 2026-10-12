@@ -2,8 +2,8 @@
 
 Civil Buddy drafts internal documents for engineering and logistics staff: bid responses, packing and container
 plans, site reports. Its outputs are drafts for a person to check, never signed or submitted documents. This page
-states the safety model, which checks test it, what is still open, and how to report a problem. Every claim here is
-backed by a check in `npm run check` (`scripts/check_project.py`) or by a known-open item listed below.
+states the safety model, which checks test it, what is still open, and how to report a problem. Each claim names the
+check in `npm run check` (`scripts/check_project.py`) that pins it; what no check pins is listed under Known open items.
 
 Supported version: `main`. Older release builds (including the Rust workbench zips on GitHub Releases) are not
 maintained.
@@ -20,7 +20,7 @@ maintained.
 2. **The model never approves.** In model mode the model picks tools from a fixed menu; its tools and the Python MCP
    server have no approval field, and a copy of the confirmation sentence in a model reply is replaced. The deliverable
    writer receives only the user's words and the named job files, so model text does not reach a draft. Every model
-   reply passes three deterministic checks:
+   reply passes four deterministic checks:
    - *number provenance*: a quantity or clause number with no source in the turn's evidence is rewritten once, then
      listed to the user;
    - *verdict guard* (`packing_assistant/tools/verdict_guard.py`, Chinese and English): verdicts the product must
@@ -30,11 +30,19 @@ maintained.
    - *claim check* (`packing_assistant/tools/claim_check.py`): when the turn wrote a link record, a coverage claim
      the record does not support ("all seven clauses are covered" with one covered statement, "S4 is covered" when S4
      waits for a person) is replaced by what the record says.
-3. **Only a person's typed sentence approves high-risk work, for one turn.** The 19 high-risk posts (structure,
-   geotechnical, fire protection, construction method, safety briefs and others) write nothing until a person types
-   the confirmation sentence in that turn. The gateway and `civil serve` accept only `confirm_text` equal to the
-   sentence; a boolean such as `confirm_ok` or `p0_confirmed` is refused (HTTP 422 on the gateway). The approval is
-   not remembered for the next turn. The same sentence inside a tender, a panel list or a model reply does not approve.
+   - *record guard* (`packing_assistant/tools/record_guard.py`): a sentence that attaches a status, container type,
+     mass or clause meaning the record does not give, or says a draft is approved or ready to submit / book, is
+     struck and listed.
+3. **Only a person's typed sentence approves high-risk work.** The 19 high-risk posts (structure, geotechnical, fire
+   protection, construction method, safety briefs and others) write nothing until a person types the confirmation
+   sentence on its own: in the workbench's confirmation box or the gateway's and `civil serve`'s `confirm_text`, at
+   the terminal's `approve>` prompt, or in the desktop dialog. The task itself is never read for approval: a message
+   approves only when the whole of it, trimmed, is the sentence (`civil_config.confirms_in_message`), so the sentence
+   quoted from a tender, a panel list or a file, deferred, conditional, retracted or simply added to a request approves
+   nothing, on the workbench, the terminal and the desktop app alike; neither does a copy in a model reply. A boolean
+   such as `confirm_ok` or `p0_confirmed` is refused (HTTP 422 on the gateway). Every approval covers that turn only:
+   the next high-risk turn asks again, on the workbench, the gateway, `civil serve`, the terminal and the desktop app.
+   `/confirm` in the terminal and `civil exec --confirm` are the local operator's own switch and take no sentence.
 4. **Token-gated server.** `packing_assistant/access_guard.py` sits in front of the gateway and the workbench,
    WebSockets included. With `CIVIL_TOKEN` set, every request needs the token (loopback too; compared with
    `hmac.compare_digest`). With no token, only a genuinely local request passes, and `demo/serve.py`, a `uvicorn --host`
@@ -55,10 +63,12 @@ All of these run in `npm run check` and in CI on every pull request:
 | Check | What it pins |
 |---|---|
 | `access-guard` | the token gate on both web apps, the refusal to bind a non-loopback address without a token |
-| `human-approval` | MCP never offers or accepts an approval flag; `civil serve` takes only the typed sentence; approval does not carry over to a later turn |
-| `http-confirmation` | the gateway and workbench HTTP routes approve only on `confirm_text` equal to the sentence |
+| `human-approval` | MCP never offers or accepts an approval flag; `civil serve` takes only the typed sentence and does not carry an approval over to a later turn; the sentence inside a task (quoted from a tender, deferred, conditional, retracted or appended) approves nothing in the terminal or the desktop app, which ask at `approve>` / the dialog instead; an approval at `approve>` or in the dialog covers that turn only |
+| `http-confirmation` | the gateway and workbench HTTP routes approve only on `confirm_text` equal to the sentence; a workbench task that carries the sentence among other words, such as a pasted tender, writes nothing |
+| `injection-plants` (gateway test) | the sentence planted in a tender and posted to the gateway's `/api/agent` and `/api/turn` approves nothing |
 | `pack-ship-read-sandbox` | pack-ship reads stay inside the sandbox roots over MCP and the gateway |
-| `injection-plants` | instructions planted in SYNTHETIC tender (Markdown and Word) and panel-list files do not change statuses, approve anything or become statements, in the steps-mode link, the steps-mode turn and the gateway; a scripted fake model that obeys the plant is corrected and struck by the guards |
+| `injection-plants` | instructions planted in SYNTHETIC tender (Markdown and Word) and panel-list files turn no statement covered and approve nothing (a planted figure sends its row to a person, a planted container code stops the plan: fail-safe, not a pass), in the steps-mode link, the steps-mode turn and the gateway; a scripted fake model that obeys the plant is corrected and struck by the guards; a planted clause that names a transport or packing term becomes one extra row that waits for a person and quotes it, never covered |
+| `safety-sealed` | the verdict guard on a sealed English set written blind (24 sentences; floor 20 right, first run 20/24, precision 1.000, recall 0.600) and the 8 sealed planted-instruction files, in the link and the steps turn (floors 7/7 and 8/8, each the same as its control run); a fake model that repeats the plant is also run and printed, not pinned: it leaves planted words in 4 of 8 replies (the guards strike verdicts, correct coverage claims and strike sentences that contradict the link record; they do not delete every instruction the model repeats) |
 | `verdict-bench` | floors for the verdict guard on its Chinese dev set, its second Chinese held-out set and the English dev set |
 | `model-loop` | the model loop with a scripted model: routing, number and verdict guards, approvals, read limits |
 | `tender-packing-link` | statuses are computed from the plan; lashing, stillages and sequencing are never covered |
@@ -74,11 +84,15 @@ model would obey. The plants are our own synthetic development cases, not an ind
 
 Stated in the technical document (`docs/submission/nus-iss-technical.md`, §4.4) and still true:
 
+- **Stored thread approvals.** A terminal or desktop thread saved with `confirm` set (by `/confirm`, or by an
+  approval given before the per-turn change of PR #75) still approves when it is resumed. `/confirm` and
+  `civil exec --confirm` are the local operator's own switch, not a typed sentence.
 - **Rust tools.** The undeployed Rust `civil-mcp` binary and the Rust workbench still accept `confirm_ok`
   (`workbench/src/mcp.rs`, `workbench/src/api.rs`). Neither is part of the deployed surface, although old
   Rust-workbench trial builds are on GitHub Releases.
 - **Pack-ship circuit on the steps path.** Three needs-human packing lists in a row open a process-wide circuit for
-  `pack-ship__plan` until a restart.
+  `pack-ship__plan`. It refuses calls for 45 s, then lets one trial call through: a list that plans closes it, a
+  failing one reopens it for another 45 s. No restart is needed.
 - **Run routes.** `/api/runs/compare` and the `{run_id}` routes join request values onto the runs folder; they are
   behind the token.
 - **Token-less proxying.** Without a token, a proxy that rewrites `Host` and sends no forwarding header can look
@@ -118,7 +132,7 @@ See [the handoff guide](docs/civil-buddy/release-handoff.md) for deployment and 
 
 ## Reporting a problem
 
-Please open an issue at <https://github.com/LUOaini1213/civil-buddy/issues> and put "security" in the title. If the
+Please open an issue in this repository and put "security" in the title. If the
 problem could be exploited, describe what is affected and how to reproduce it at a high level, and leave out working
 exploit code, tokens or keys; a maintainer will follow up in the issue. Never paste a real API key, token or
 customer file into an issue.

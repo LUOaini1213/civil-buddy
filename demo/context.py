@@ -169,14 +169,20 @@ def _report(used: int, pol: dict, *, folded: int = 0, kept: int = 0,
     compressed = bool(folded or omitted or memory_omitted)
     pct = min(100, used * 100 // pol["usable"])
     zone = "full" if pct >= 90 else "compact" if compressed or pct >= pol["compress_pct"] else "warn" if pct >= 50 else "room"
-    note = f"完整请求约 {used} / {pol['usable']} 输入 token，回复预留 {pol['reserve']}，窗口 {pol['limit']}。"
+    try:  # 中文 | English: the page's language for this note
+        from ui_lang import tr
+    except ImportError:  # imported as demo.context
+        from demo.ui_lang import tr
+
+    note = tr("完整请求约 {used} / {usable} 输入 token，回复预留 {reserve}，窗口 {limit}。",
+              used=used, usable=pol["usable"], reserve=pol["reserve"], limit=pol["limit"])
     if folded:
-        note += f"已压缩上下文：保留最近 {kept} 条原文，较早 {folded} 条仍可从本地检索找回。"
+        note += tr("已压缩上下文：保留最近 {kept} 条原文，较早 {folded} 条仍可从本地检索找回。", kept=kept, folded=folded)
     if memory_omitted:
-        note += "历史记忆因预算不足未加入。"
+        note += tr("历史记忆因预算不足未加入。")
     if omitted:
-        note += f"{len(omitted)} 条检索片段因预算不足未加入。"
-    note += "按本地编码保守估算，并非模型官方精确计数。"
+        note += tr("{n} 条检索片段因预算不足未加入。", n=len(omitted))
+    note += tr("按本地编码保守估算，并非模型官方精确计数。")
     return {**pol, "used": used, "pct": pct, "zone": zone, "compressed": compressed,
             "folded": folded, "kept": kept, "note": note, "estimated": True,
             "counter": "tiktoken-cl100k+20%" if _offline_encoding() is not None else "utf8-bytes",

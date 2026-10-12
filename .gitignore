@@ -102,3 +102,8 @@ data/civilbuddy.db-shm
 data/backup/
 /node_modules/
 /work/
+
+# Lightsail: the opt-in model key, the access-link marker, and the launch script filled in for one deploy
+model.env
+.link-shown
+deploy/lightsail/*.filled.sh

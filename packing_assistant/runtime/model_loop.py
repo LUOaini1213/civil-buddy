@@ -370,9 +370,10 @@ _PLAN_KEYS = ("ok", "source", "error", "detail", "needs_human", "n_rows", "can_f
 def plan_masses(result: Dict[str, Any]) -> Dict[str, Any]:
     """Per-container masses for the model, each under a name it cannot misread: the heaviest loaded container's cargo
     and gross mass (tender_packing_link.heaviest_container, the same computation as the link's mass statement) and each
-    container's cargo. Measured 2026-09-26: qwen2.5:3b reported the 40HQ rated payload as the heaviest container's
-    mass; tools/record_guard now strikes a reply whose "heaviest container ... kg" is not max_gross_kg or max_cargo_kg.
-    A plan that does not fit (can_fit is not true) evidences no mass, so none is given."""
+    container's cargo and gross mass (cargo + the same tare). Measured 2026-09-26: qwen2.5:3b reported the 40HQ rated
+    payload as the heaviest container's mass; tools/record_guard now strikes a reply whose "heaviest container ... kg"
+    is not max_gross_kg or max_cargo_kg. A plan that does not fit (can_fit is not true) evidences no mass, so none is
+    given."""
     from packing_assistant.tender_packing_link import heaviest_container
 
     per = result.get("per_container") or []
@@ -380,9 +381,14 @@ def plan_masses(result: Dict[str, Any]) -> Dict[str, Any]:
         return {"heaviest_container": None, "max_gross_kg": None,
                 "mass_note": "no per-container mass: the plan did not run or does not fit (can_fit is not true)"}
     mass = heaviest_container(per, str(result.get("container_type") or ""))
+    tare = mass["container_tare_kg"]
+
+    def gross(item: Dict[str, Any]) -> Optional[float]:
+        return round(float(item.get("cargo_kg") or 0) + tare, 1) if tare is not None else None
+
     return {"heaviest_container": mass, "max_gross_kg": mass["max_gross_kg"],
-            "per_container_cargo_kg": [{"container_no": item.get("container_no"), "cargo_kg": item.get("cargo_kg")}
-                                       for item in per[:40]],
+            "per_container_kg": [{"container_no": item.get("container_no"), "cargo_kg": item.get("cargo_kg"),
+                                  "gross_kg": gross(item)} for item in per[:40]],
             "mass_note": ("max_gross_kg = gross mass of the heaviest LOADED container (its cargo_kg + container tare, tare from "
                           "the knowledge base, approximate; the CSC plate governs). It is not the container's rated payload "
                           "or rated maximum gross.")}
@@ -741,10 +747,13 @@ _READS = frozenset({"read_link_record", "read_job_file", "pack_plan", "run_skill
 
 def record_question(text: str) -> bool:
     """A question (not a request to draft or plan) about the tender's clauses, the statements or the loading plan."""
-    from packing_assistant.runtime.task_router import _QUESTION, _READ_REQUEST, wants_link
+    from packing_assistant.runtime.task_router import _QUESTION, _READ_REQUEST, route_task, wants_link
 
     body = text or ""
-    if not _RECORD_TOPIC.search(body) or wants_link(body):
+    # a link request the rules read as a run goes to the deterministic link first (turn.deterministic_first) and never
+    # reaches the loop; one they read as a question ("How many containers does X.xlsx need, and which clause of Y.md
+    # ...?", a link request by #67's wider wants_link) comes here and is answered from the record
+    if not _RECORD_TOPIC.search(body) or (wants_link(body) and route_task(body).get("intent") != "chat"):
         return False
     return bool(_QUESTION.search(body) or _READ_REQUEST.search(body) or body.rstrip().endswith(("?", "？")))
 

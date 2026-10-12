@@ -30,6 +30,12 @@ need a human confirmation. A preview path turns DXF outlines into a mesh
 engines and are not sign-off models. Rust workbench + MCP entry, Python packing harness,
 FastAPI gateway. MIT.
 
+**Deploy (EN)** — `CIVIL_TOKEN=<random> docker compose up --build`, then `http://localhost:8000/?token=<random>` and
+`/demo` (the tender ↔ packing link in one click, or on two files you upload). For a server:
+[docs/deploy-aws-lightsail.md](docs/deploy-aws-lightsail.md) (AWS Lightsail, Caddy with HTTPS, the gateway on
+127.0.0.1; rehearsed locally, not yet run on Lightsail) and [docs/deploy-minimal.md](docs/deploy-minimal.md)
+(other hosts).
+
 **30 秒，无 Key** — 策略引擎 + 失败恢复的四拍剧本（正常放行 → 越权被拒 → 工具故障重试降级 → 成本超限熔断）：
 
 ```bash
@@ -123,7 +129,7 @@ submit_blocked=true  secret_leak=false  禁止：可以投标 / 可以开工
 **提交署名说明** — 仓内约 40% 的提交署名为 `Packing Assistant`：agent 起草并落盘的改动独立署名，经人审后合入 `main`。这是 HITL 流程的一部分，不是第二位作者。
 
 > 内部讨论草稿，不是法定专项方案、不是签认件。
-> 高风险写盘前确认句：`我明白，将由持证人员签认`（英文等价句 / English: `I understand; a licensed person will sign this off.`，两句都须原样键入，只管本轮）。
+> 高风险写盘前确认句：`我明白，将由持证人员签认`（英文等价句 / English: `I understand; a licensed person will sign this off.`）。两句都须单独原样键入：网页的确认框、终端的 `approve>` 或桌面弹窗；写在任务里、夹在招标原文里都不算。每次同意只管本轮（网页、网关、`civil serve`、终端与桌面都一样）；终端的 `/confirm` 和 `civil exec --confirm` 是本机操作者自己的开关，不输入确认句。
 >
 > Security model, what is tested and how to report a problem: [SECURITY.md](SECURITY.md).
 
@@ -176,6 +182,8 @@ uvicorn gateway.app:app --host 127.0.0.1 --port 8000
 ```env
 PACKING_AGENT_URL=http://127.0.0.1:8000
 ```
+
+装箱前会核对原始物料：单重乘数量与总重冲突时，先列出冲突行，等待修正；不能把一件重物在计算中虚拟拆成多件来声称装得下。这两种情况会阻断装柜、订舱/VGM 草稿与出运文件导出，保留来源和原因供复核。普通完整件仍按实际尺寸、重量计算；磁盘恢复后的人工确认不会绕过检查。可离线复核：`npm run check -- --only pack-ship-weight-validation,physical-cargo-shipping,hitl-disk-resume`。
 
 详见 [docs/civil-buddy/packing-agent.md](docs/civil-buddy/packing-agent.md)。
 

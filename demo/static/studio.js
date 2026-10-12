@@ -1,4 +1,15 @@
 (() => {
+  /* 中文 | English (/static/i18n.js); without it, the Chinese message as written, {0} {1} … filled. */
+  function tr(message) {
+    var args = Array.prototype.slice.call(arguments, 1);
+    var i18n = (typeof window !== "undefined" ? window : globalThis).CB_I18N;
+    if (i18n && typeof i18n.t === "function") return i18n.t.apply(i18n, arguments);
+    return String(message).replace(/\{(\d+)\}/g, function (whole, i) {
+      i = Number(i);
+      return i < args.length ? (args[i] == null ? "" : String(args[i])) : whole;
+    });
+  }
+
   const $ = (id) => document.getElementById(id);
   let tree = null;
   let currentPath = "";
@@ -32,7 +43,7 @@
   };
 
   function closeStudio() {
-    if (dirty && !confirm("文件未保存，确定离开？")) return;
+    if (dirty && !confirm(tr("文件未保存，确定离开？"))) return;
     $("studio").classList.add("hidden");
     $("studio").setAttribute("aria-hidden", "true");
     if (window.reloadCatalog) window.reloadCatalog();
@@ -40,7 +51,7 @@
 
   async function loadTree() {
     tree = await fetch("/api/studio/tree").then((r) => r.json());
-    $("studioTotal").textContent = `总库 ${tree.total_label} · 软上限 ${tree.kb_soft_limit_kb} KB / 本岗知识`;
+    $("studioTotal").textContent = tr("总库 {0} · 软上限 {1} KB / 本岗知识", tree.total_label, tree.kb_soft_limit_kb);
     $("softLimit").value = tree.kb_soft_limit_kb;
     fillCatSelect({ categories: tree.categories });
     renderTree();
@@ -64,18 +75,18 @@
   function renderTree() {
     const box = $("studioTree");
     box.innerHTML = "";
-    box.appendChild(heading("公司规则（所有专家都能读）"));
+    box.appendChild(heading(tr("公司规则（所有专家都能读）")));
     for (const f of tree.company.files || []) box.appendChild(fileBtn(f));
 
     for (const cat of tree.categories) {
-      box.appendChild(heading(`${cat.name} · 大类共享 ${cat.shared.label}`));
+      box.appendChild(heading(tr("{0} · 大类共享 {1}", cat.name, cat.shared.label)));
       for (const f of cat.shared.files || []) box.appendChild(fileBtn(f));
       for (const exp of cat.experts) {
         const mark = exp.over_limit ? " over" : "";
         const h = document.createElement("button");
         h.type = "button";
         h.className = `tree-item${mark}`;
-        h.textContent = `${exp.name} · 本岗知识 ${exp.label} · ${exp.count} 篇`;
+        h.textContent = tr("{0} · 本岗知识 {1} · {2} 篇", exp.name, exp.label, exp.count);
         h.addEventListener("click", () => fillExpert(exp.id));
         box.appendChild(h);
         for (const f of exp.files || []) box.appendChild(fileBtn(f, exp.id));
@@ -103,7 +114,7 @@
     const b = document.createElement("button");
     b.type = "button";
     b.className = "tree-item" + (path === currentPath ? " on" : "");
-    b.textContent = `${name} · ${fmtBytes(f.bytes)} · ${f.chars || 0} 字`;
+    b.textContent = tr("{0} · {1} · {2} 字", name, fmtBytes(f.bytes), f.chars || 0);
     b.title = path;
     b.addEventListener("click", () => {
       if (expertId) fillExpert(expertId);
@@ -137,7 +148,7 @@
   }
 
   async function openFile(path) {
-    if (dirty && !confirm("当前编辑未保存，丢弃吗？")) return;
+    if (dirty && !confirm(tr("当前编辑未保存，丢弃吗？"))) return;
     const res = await fetch(`/api/studio/file?path=${encodeURIComponent(path)}`);
     if (!res.ok) {
       alert(await apiError(res));
@@ -148,7 +159,7 @@
     $("editor").value = data.content;
     const shown = data.display || data.title || data.path;
     $("filePath").textContent = data.display && data.path !== shown ? `${shown}  ·  ${data.path}` : data.path;
-    $("fileSize").textContent = `${data.bytes} 字节 · ${data.chars} 字 · ${data.lines} 行`;
+    $("fileSize").textContent = tr("{0} 字节 · {1} 字 · {2} 行", data.bytes, data.chars, data.lines);
     $("saveFile").disabled = false;
     dirty = false;
     renderTree();
@@ -157,7 +168,7 @@
   $("editor").addEventListener("input", () => {
     dirty = true;
     const t = $("editor").value;
-    $("fileSize").textContent = `${new Blob([t]).size} 字节（未保存） · ${t.length} 字`;
+    $("fileSize").textContent = tr("{0} 字节（未保存） · {1} 字", new Blob([t]).size, t.length);
   });
 
   $("saveFile").addEventListener("click", async () => {
@@ -169,17 +180,17 @@
     });
     const data = await res.json().catch(() => ({}));
     if (!res.ok) {
-      alert(typeof data.detail === "string" ? data.detail : "保存失败");
+      alert(typeof data.detail === "string" ? data.detail : tr("保存失败"));
       return;
     }
     dirty = false;
-    $("fileSize").textContent = `${data.bytes} 字节 · ${data.chars} 字 · 已保存`;
+    $("fileSize").textContent = tr("{0} 字节 · {1} 字 · 已保存", data.bytes, data.chars);
     await loadTree();
   });
 
   $("btnNewFile").addEventListener("click", async () => {
     const base = guessDir();
-    const name = prompt("新文件名（.md 或 .txt）", "notes.md");
+    const name = prompt(tr("新文件名（.md 或 .txt）"), "notes.md");
     if (!name) return;
     const path = `${base}/${name}`.replaceAll("//", "/");
     const res = await fetch("/api/studio/file", {
@@ -197,7 +208,7 @@
 
   $("btnDelFile").addEventListener("click", async () => {
     if (!currentPath) return;
-    if (!confirm(`删除 ${currentPath}？`)) return;
+    if (!confirm(tr("删除 {0}？", currentPath))) return;
     const res = await fetch(`/api/studio/file?path=${encodeURIComponent(currentPath)}`, { method: "DELETE" });
     if (!res.ok) {
       alert(await apiError(res));
@@ -205,7 +216,7 @@
     }
     currentPath = "";
     $("editor").value = "";
-    $("filePath").textContent = "未打开文件";
+    $("filePath").textContent = tr("未打开文件");
     $("saveFile").disabled = true;
     dirty = false;
     await loadTree();
@@ -244,14 +255,14 @@
     selectedExpert = body.id;
     await loadTree();
     if (window.reloadCatalog) window.reloadCatalog();
-    alert("专家已保存。左侧对话墙会立刻出现。");
+    alert(tr("专家已保存。左侧对话墙会立刻出现。"));
   });
 
   $("btnDelExp").addEventListener("click", async () => {
     const id = $("expertForm").id.value.trim();
     if (!id) return;
     const exp = findExpert(id);
-    const msg = exp && exp.builtin ? `内置专家 ${id} 将从召唤墙隐藏（可再保存恢复）。` : `删除自定义专家 ${id} 及其本岗知识？`;
+    const msg = exp && exp.builtin ? tr("内置专家 {0} 将从召唤墙隐藏（可再保存恢复）。", id) : tr("删除自定义专家 {0} 及其本岗知识？", id);
     if (!confirm(msg)) return;
     const res = await fetch(`/api/studio/experts/${encodeURIComponent(id)}?delete_kb=true`, { method: "DELETE" });
     if (!res.ok) {
@@ -264,9 +275,9 @@
   });
 
   $("btnNewCat").addEventListener("click", async () => {
-    const id = prompt("大类 id（英文，如 lab）");
+    const id = prompt(tr("大类 id（英文，如 lab）"));
     if (!id) return;
-    const name = prompt("大类中文名", id);
+    const name = prompt(tr("大类中文名"), id);
     if (!name) return;
     const res = await fetch("/api/studio/categories", {
       method: "POST",

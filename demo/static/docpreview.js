@@ -8,11 +8,22 @@
  */
 (function (global) {
   "use strict";
+  /* 中文 | English (/static/i18n.js); without it, the Chinese message as written, {0} {1} … filled. */
+  function tr(message) {
+    var args = Array.prototype.slice.call(arguments, 1);
+    var i18n = (typeof window !== "undefined" ? window : globalThis).CB_I18N;
+    if (i18n && typeof i18n.t === "function") return i18n.t.apply(i18n, arguments);
+    return String(message).replace(/\{(\d+)\}/g, function (whole, i) {
+      i = Number(i);
+      return i < args.length ? (args[i] == null ? "" : String(args[i])) : whole;
+    });
+  }
 
-  var DOC_VER = "ux(round4) 文书预览 v1";
-  var UNSPEC_TITLE = "UNSPECIFIED · 数据哨兵，待人工补全（导出保留原文）";
-  var ANCHOR_TITLE = "锚点 · 待人工补全编号（导出保留原文）";
-  var PENDING_TITLE = "待填 · 须人工补全";
+
+  var DOC_VER = "ux(round4) 文书预览 v1"; /* i18n: keep (version tag) */
+  var UNSPEC_TITLE = function () { return tr("UNSPECIFIED · 数据哨兵，待人工补全（导出保留原文）"); };
+  var ANCHOR_TITLE = function () { return tr("锚点 · 待人工补全编号（导出保留原文）"); };
+  var PENDING_TITLE = function () { return tr("待填 · 须人工补全"); };
   var TOOL_SECTION_RE = /(工具计算|回传|只抄|非本岗编造)/;
   var DISCLAIM_RE = /(不构成|仅供内部讨论|不是签认)/;
   /* 诚实元素令牌：UNSPECIFIED 原文 / [A001] 锚点 / 中文待填词（词边界防误伤） */
@@ -44,7 +55,7 @@
     overlay.hidden = true;
     overlay.setAttribute("role", "dialog");
     overlay.setAttribute("aria-modal", "true");
-    overlay.setAttribute("aria-label", "交付物文书预览");
+    overlay.setAttribute("aria-label", tr("交付物文书预览"));
     overlay.innerHTML =
       '<div class="cb-doc-backdrop" data-cb-doc-act="close"></div>' +
       '<div class="cb-doc-modal">' +
@@ -52,10 +63,10 @@
           '<span class="cb-doc-title"></span>' +
           '<span class="cb-doc-meta"></span>' +
           '<span class="cb-doc-actions">' +
-            '<button type="button" class="cb-doc-btn" data-cb-doc-act="copy">复制 Markdown</button>' +
-            '<button type="button" class="cb-doc-btn" data-cb-doc-act="download">下载 .md</button>' +
-            '<button type="button" class="cb-doc-btn" data-cb-doc-act="print">打印 / 存 PDF</button>' +
-            '<button type="button" class="cb-doc-btn cb-doc-close" data-cb-doc-act="close" aria-label="关闭预览">关闭</button>' +
+            tr("<button type=\"button\" class=\"cb-doc-btn\" data-cb-doc-act=\"copy\">复制 Markdown</button>") +
+            tr("<button type=\"button\" class=\"cb-doc-btn\" data-cb-doc-act=\"download\">下载 .md</button>") +
+            tr("<button type=\"button\" class=\"cb-doc-btn\" data-cb-doc-act=\"print\">打印 / 存 PDF</button>") +
+            tr("<button type=\"button\" class=\"cb-doc-btn cb-doc-close\" data-cb-doc-act=\"close\" aria-label=\"关闭预览\">关闭</button>") +
           "</span>" +
         "</div>" +
         '<div class="cb-doc-scroll">' +
@@ -68,7 +79,7 @@
             '<footer class="cb-doc-foot">' +
               '<span class="cb-doc-time"></span>' +
               '<span class="cb-doc-ver">' + esc(DOC_VER) + "</span>" +
-              '<span class="cb-doc-disclaim">内部讨论 AI 草稿 · 不签认</span>' +
+              tr("<span class=\"cb-doc-disclaim\">内部讨论 AI 草稿 · 不签认</span>") +
             "</footer>" +
           "</article>" +
         "</div>" +
@@ -89,7 +100,7 @@
     return overlay;
   }
 
-  var current = { text: "", filename: "文书.md", url: "" };
+  var current = { text: "", filename: tr("文书.md"), url: "" };
 
   function copyMd() {
     var t = current.text || "";
@@ -97,7 +108,7 @@
       var btn = overlay.querySelector('[data-cb-doc-act="copy"]');
       if (!btn) return;
       var old = btn.textContent;
-      btn.textContent = "已复制";
+      btn.textContent = tr("已复制");
       setTimeout(function () { btn.textContent = old; }, 1200);
     };
     if (navigator.clipboard && navigator.clipboard.writeText) {
@@ -124,7 +135,7 @@
     if (current.url) {
       /* 服务端文件本体（带 Content-Disposition），手机端不靠 download 属性也能存 */
       a.href = current.url;
-      a.download = current.filename || "文书.md";
+      a.download = current.filename || tr("文书.md");
       document.body.appendChild(a);
       a.click();
       setTimeout(function () { a.remove(); }, 400);
@@ -132,7 +143,7 @@
     }
     var blob = new Blob([current.text || ""], { type: "text/markdown;charset=utf-8" });
     a.href = URL.createObjectURL(blob);
-    a.download = current.filename || "文书.md";
+    a.download = current.filename || tr("文书.md");
     document.body.appendChild(a);
     a.click();
     setTimeout(function () { URL.revokeObjectURL(a.href); a.remove(); }, 400);
@@ -191,9 +202,9 @@
     var last = 0, m;
     while ((m = TOKEN_RE.exec(data))) {
       if (m.index > last) frag.appendChild(document.createTextNode(data.slice(last, m.index)));
-      if (m[1]) frag.appendChild(makeBadge("unspec", "未提供", UNSPEC_TITLE));
-      else if (m[2]) frag.appendChild(makeBadge("anchor", m[2], ANCHOR_TITLE));
-      else frag.appendChild(makeBadge("unspec", m[3], PENDING_TITLE));
+      if (m[1]) frag.appendChild(makeBadge("unspec", tr("未提供"), UNSPEC_TITLE()));
+      else if (m[2]) frag.appendChild(makeBadge("anchor", m[2], ANCHOR_TITLE()));
+      else frag.appendChild(makeBadge("unspec", m[3], PENDING_TITLE()));
       last = m.index + m[0].length;
     }
     if (last < data.length) frag.appendChild(document.createTextNode(data.slice(last)));
@@ -269,7 +280,7 @@
     current.text = md;
     current.url = opts.url || "";
     var guess = guessMeta(md);
-    var title = opts.title || guess.title || "交付物文书";
+    var title = opts.title || guess.title || tr("交付物文书");
     current.filename = String(title).replace(/[\\/:*?"<>|]/g, "_") + ".md";
 
     var body = ov.querySelector(".cb-doc-body");
@@ -279,11 +290,11 @@
     while (dom.firstChild) body.appendChild(dom.firstChild);
 
     ov.querySelector(".cb-doc-title").textContent = title;
-    ov.querySelector(".cb-doc-proj").textContent = opts.project || guess.project || "Civil Buddy 交付物";
-    ov.querySelector(".cb-doc-role").textContent = opts.role || "岗位 · 未指定";
-    ov.querySelector(".cb-doc-time").textContent = "生成 " + (opts.time || fmtNow());
+    ov.querySelector(".cb-doc-proj").textContent = opts.project || guess.project || tr("Civil Buddy 交付物");
+    ov.querySelector(".cb-doc-role").textContent = opts.role || tr("岗位 · 未指定");
+    ov.querySelector(".cb-doc-time").textContent = tr("生成 ") + (opts.time || fmtNow());
     var meta = [];
-    if (md) meta.push(md.length + " 字符");
+    if (md) meta.push(md.length + tr(" 字符"));
     ov.querySelector(".cb-doc-meta").textContent = meta.join(" · ");
 
     ov.hidden = false;
@@ -296,7 +307,7 @@
   async function cbDocOpenUrl(opts) {
     opts = opts || {};
     var res = await fetch(opts.url, { headers: { Accept: "text/markdown,text/plain,*/*" } });
-    if (!res.ok) throw new Error("文书读取失败 HTTP " + res.status);
+    if (!res.ok) throw new Error(tr("文书读取失败 HTTP ") + res.status);
     var text = await res.text();
     return cbDocOpen(Object.assign({}, opts, { text: text }));
   }

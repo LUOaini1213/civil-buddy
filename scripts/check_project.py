@@ -25,10 +25,16 @@ class Check:
 CHECKS = (
     Check("runner", ("scripts/test_check_project.py",)),
     Check("secrets", ("scripts/scan_tracked_secrets.py",)),
+    Check("demo-config", ("scripts/test_demo_config.py",)),
     Check("offline-assets", ("scripts/test_no_external_urls.py",)),
     Check("js-syntax", ("scripts/test_js_syntax.py",)),
     Check("vue-bindings", ("scripts/test_vue_bindings.py",)),
     Check("chat-stream", ("scripts/test_chat_stream.cjs",), "node"),
+    Check("ui-modules", ("scripts/test_modules.cjs",), "node"),
+    Check("ui-dom", ("scripts/e2e/ui_dom.cjs",), "node"),
+    # 中文 | English: the page side in jsdom, and the catalogue + server answers + "the switch relaxes nothing"
+    Check("workbench-i18n-ui", ("scripts/test_workbench_i18n.cjs",), "node"),
+    Check("workbench-i18n", ("scripts/test_workbench_i18n.py",), timeout=600),
     Check("cad-geometry", ("scripts/test_cad_geometry.py",)),
     Check("cad-selection", ("scripts/test_cad_selection.py",)),
     Check("cad-imports", ("scripts/test_cad_imports.py",)),
@@ -49,7 +55,6 @@ CHECKS = (
     Check("engineering-ui", ("scripts/test_engineering_ui.cjs",), "node"),
     Check("engineering-agent", ("scripts/test_engineering_agent.py",)),
     Check("engineering-api", ("scripts/test_engineering_api.py",), timeout=300),
-    Check("ui-modules", ("scripts/test_modules.cjs",), "node"),  # demo/static/modules/*.js on their own
     Check("agent-ui", ("scripts/test_agent_ui.cjs",), "node"),
     Check("document-worker", ("scripts/test_document_worker.py",)),
     Check("source-retrieval", ("scripts/test_source_retrieval.py",)),
@@ -59,7 +64,6 @@ CHECKS = (
     Check("domain-service", ("scripts/test_domain_service.py",), timeout=300),
     Check("unified-packing", ("scripts/test_unified_packing.py",)),
     Check("unified-release", ("scripts/test_unified_release.py",)),
-    Check("ui-dom", ("scripts/e2e/ui_dom.cjs",), "node"),  # real page + real backend in jsdom
     Check("engineering-planning", ("scripts/test_engineering_planning.py",)),
     Check("planning-exchange", ("scripts/test_planning_exchange.py",)),
     Check("planning-workbench", ("scripts/test_planning_workbench.py",), timeout=180),
@@ -98,9 +102,16 @@ CHECKS = (
     Check("tender-packing-link", ("scripts/test_tender_packing_link.py",), timeout=600),
     # how the link reads clauses: nothing silently dropped, per-package limits apart, cites as written, the DEV set floors
     Check("tender-link-clauses", ("scripts/test_tender_link_clauses.py",), timeout=600),
+    # the same reader on the sealed held-out set written blind on 2026-09-26: floors = its first scored run (README there)
+    Check("tender-link-sealed", ("test/benchmarks/tender_link_sealed/score_sealed.py", "--check"), timeout=600),
+    # the reader is bounded: a sentence too dense to read figure by figure goes to a person, runs stop at checkpoints
+    Check("tender-link-bounded", ("scripts/test_tender_link_bounded.py",), timeout=600),
     # planted text in SYNTHETIC tender / panel-list files does not change statuses, approve anything or become a
     # statement (steps mode, gateway, and a scripted fake model that obeys the plant); a live model was not tested
     Check("injection-plants", ("scripts/test_injection_plants.py",), timeout=600),
+    # the sealed held-out English verdict set and the planted-instruction set, written blind on 2026-09-26: floors =
+    # PR #72's first scored run (README there); the obeying-fake-model row is printed, not pinned
+    Check("safety-sealed", ("test/benchmarks/safety_sealed/score_sealed.py", "--check"), timeout=600),
     Check("real-tender", ("scripts/test_real_tender.py",), timeout=1200),
     # Offline, model-free, a second or two each - and until 2026-09-20 run by nothing: not by ci.yml,
     # not by this registry, not by the acceptance glob. They pin the parser the three bid posts stand on.
@@ -119,16 +130,24 @@ CHECKS = (
     Check("middleware", ("scripts/test_agent_middleware.py",)),
     Check("deadlock", ("scripts/test_deadlock.py",)),
     Check("runtime-cancel-isolation", ("scripts/test_runtime_cancel_isolation.py",)),
+    # the shared ToolEngine's fault circuit: open after 3 faults, half-open trial after the cool-down
+    Check("tool-circuit", ("scripts/test_tool_circuit.py",)),
+    Check("lg-checkpoint-errors", ("scripts/test_lg_checkpoint_errors.py",)),
     Check("sandbox", ("scripts/test_sandbox.py",)),
     Check("pack-ship-read-sandbox", ("scripts/test_pack_ship_read_sandbox.py",), timeout=300),
     Check("civil-cli", ("scripts/test_civil_codex.py",)),
     Check("civil-config", ("scripts/test_civil_config.py",)),
     Check("civil-workspace", ("scripts/test_civil_workspace.py",)),
     Check("model-loop", ("scripts/test_model_loop.py",)),
+    # bounded retry of one model request (429/5xx/timeouts/resets) against a fake endpoint on 127.0.0.1
+    Check("model-retry", ("scripts/test_model_retry.py",), timeout=300),
     # model mode on the link: deterministic first, the model only explains; its claims checked against the record
     Check("model-mode-link", ("scripts/test_model_mode_link.py",), timeout=300),
     # 12 frozen requests against a scripted OpenAI-compatible server on 127.0.0.1 (no network, no key)
     Check("model-mode-eval", ("scripts/eval_model_mode.py", "--check"), timeout=300),
+    # model mode on the sealed held-out link requests and injections (written blind 2026-09-26); floors = the first
+    # scored run after merging #67 (README there)
+    Check("model-mode-sealed", ("test/benchmarks/model_mode_sealed/score_sealed.py", "--check"), timeout=600),
     Check("post-scorecard", ("scripts/eval_post_scorecard.py", "--all-pilots"), timeout=300),
     Check("workbench-model-turn", ("scripts/test_workbench_model_turn.py",), timeout=300),
     Check("steps-job-files", ("scripts/test_steps_job_files.py",)),
@@ -141,13 +160,20 @@ CHECKS = (
     Check("english-intents", ("scripts/test_english_intents.py",)),
     Check("link-routing-bench", ("scripts/eval_link_routing.py", "--check")),
     Check("link-confirmation", ("scripts/test_link_confirmation_regressions.py",), timeout=300),
+    Check("english-requests-heldout", ("test/benchmarks/english_requests/score.py", "--check")),
     Check("verdict-bench", ("scripts/eval_verdicts.py", "--check")),
+    # round-3 guard fixes on their DEV set: verdict bypasses, record-guard negations, whole-sentence claim corrections
+    Check("guards-round3", ("scripts/test_guards_round3.py",)),
     Check("number-provenance-bench", ("scripts/eval_number_provenance.py", "--check")),
     Check("runtime-threads", ("scripts/test_runtime_threads.py",)),
     Check("worktree-bg", ("scripts/test_worktree_bg.py",)),
     Check("app-launcher", ("scripts/test_app_launcher.py",)),
     Check("workbench-settings", ("scripts/test_workbench_settings.py",)),
     Check("access-guard", ("scripts/test_access_guard.py",)),
+    # the link from a browser (upload + /demo, token-gated) and the page a visitor without a token lands on
+    Check("web-tender-link", ("scripts/test_web_link.py",), timeout=600),
+    # docker-compose, the Lightsail override, Caddyfile, launch script and guides say what they promise
+    Check("deploy-config", ("scripts/test_deploy_config.py",)),
     Check("workbench-uploads", ("scripts/test_workbench_uploads.py",)),
     Check("document-text", ("scripts/test_document_text.py",)),
     Check("workbench-flow", ("scripts/test_workbench_flow.py",)),
@@ -184,16 +210,28 @@ CHECKS = (
     Check("release-package", ("scripts/test_trial_pack.py",)),
     Check("business-files", ("scripts/test_business_reliability.py",)),
     Check("trace-artifacts", ("scripts/test_trace_artifacts.py",)),
+    Check("hitl-disk-resume", ("scripts/test_hitl_resume_competition.py",), timeout=300),
+    Check("pack-ship-weight-validation", ("scripts/test_pack_ship_weight_validation.py",)),
+    Check("physical-cargo-shipping", ("scripts/test_physical_cargo_shipping.py",)),
     Check("pack-ship-conservation", ("scripts/test_pack_ship_conservation.py",), timeout=300),
     Check("pack-ship-crates-structure", ("scripts/test_pack_ship_crates_structure.py",)),
     Check("table-quantity-cells", ("scripts/test_table_quantity_cells.py",)),
+    Check("panel-list-reading", ("scripts/test_panel_list_reading.py",), timeout=300),
+    # the blind panel lists (SYNTHETIC, written 2026-09-26 before PR #69): first-run floors, see its README
+    Check("panel-lists-sealed", ("test/benchmarks/panel_lists_sealed/score_sealed.py", "--check"), timeout=300),
     Check("workbench-needs-human", ("scripts/test_workbench_needs_human.py",)),
     Check("storage-parent", ("scripts/test_storage_ensure_run.py",)),
+    # confirm runs Team B once (replay / 409), exports never collide, busy 429s carry Retry-After, restarts mark
+    # running sessions interrupted, a pipeline concurrency cap
+    Check("gateway-state-safety", ("scripts/test_gateway_state_safety.py",), timeout=300),
+    Check("python-idempotency", ("scripts/test_python_idempotency.py",), timeout=300),
     Check("offline-eval", ("-c", "from packing_assistant.runtime.eval_live import live_eval; "
           "v=live_eval(); assert v.get('verdict')=='offline_gate_pass', v; print(v['verdict'])")),
     Check("industry-eval", ("scripts/test_industry_agent_eval.py",)),
     Check("product-smoke", ("scripts/smoke_agent_product.py",), timeout=300),
 )
+RUST_BINARY = str(Path(os.environ.get("CARGO_TARGET_DIR") or "workbench/target") / "debug"
+                  / ("civil-workbench.exe" if os.name == "nt" else "civil-workbench"))
 FULL_CHECKS = (
     Check("http-demo", ("-m", "pytest", "demo/tests", "-q", "--basetemp=output/check-project-pytest")),
     Check("runtime-api", ("scripts/test_runtime_p0.py",)),
@@ -204,7 +242,7 @@ FULL_CHECKS = (
     Check("rust", ("test", "--locked", "--offline", "--manifest-path", "workbench/Cargo.toml", "--", "--test-threads=1"), "cargo", 1200),
     Check("rust-build", ("build", "--locked", "--offline", "--manifest-path", "workbench/Cargo.toml", "--bin", "civil-workbench"), "cargo", 900),
     Check("unified-runtime", ("scripts/test_unified_runtime_http.py", "--binary",
-          "workbench/target/debug/civil-workbench" + (".exe" if os.name == "nt" else "")), timeout=900),
+          RUST_BINARY), timeout=900),
 )
 
 
