@@ -51,7 +51,8 @@ export function createUploads(deps) {
   const doFetch = deps.fetch;
   /* In flight: { key, session, name, bytes, loaded, xhr, file, error, done, settled, resolve } */
   const pending = [];
-  let counter = 0;
+  let counter = 0, scopeEpoch = 0;
+  const current = (u) => !u.done && pending.includes(u) && state.session === u.session;
 
   function slotsLeft(session) {
     const have = state.attachments.filter((a) => !String(a.id || "").startsWith("job:")).length
@@ -60,29 +61,35 @@ export function createUploads(deps) {
   }
 
   function drop(u) {
+    u.done = true;
     const i = pending.indexOf(u);
     if (i >= 0) pending.splice(i, 1);
     if (u.resolve) u.resolve();
   }
 
   function abortAll(exceptSession) {
-    for (const u of pending.slice()) {
-      if (exceptSession && u.session === exceptSession) continue;
-      if (u.xhr) { u.xhr.abort(); u.xhr = null; }
-      drop(u);
-    }
+    scopeEpoch += 1;
+    const removed = pending.filter((u) => !exceptSession || u.session !== exceptSession);
+    const requests = removed.map((u) => u.xhr).filter(Boolean);
+    // abort dispatches onabort synchronously: retire the whole batch before its
+    // callbacks can pump the queue and accidentally restart cancelled uploads.
+    removed.forEach(drop);
+    for (const u of removed) u.xhr = null;
+    for (const xhr of requests) xhr.abort();
+    render(); pump();
   }
 
   function pump() {
     for (const u of pending) {
       if (pending.filter((v) => v.xhr).length >= concurrency) break;
-      if (u.xhr || u.error || u.done) continue;
+      if (u.xhr || u.error || u.done || u.session !== state.session) continue;
       start(u);
     }
     render();
   }
 
   function finish(u, err) {
+    if (!current(u)) { drop(u); render(); pump(); return; }
     u.xhr = null;
     if (err) {
       u.error = err;
@@ -106,6 +113,7 @@ export function createUploads(deps) {
   }
 
   function start(u, retried) {
+    if (!current(u)) return;
     if (!u.settled) u.settled = new Promise((resolve) => { u.resolve = resolve; });
     if (typeof XHR !== "function") { startFetch(u); return; }
     const xhr = new XHR();
@@ -118,9 +126,11 @@ export function createUploads(deps) {
       paintProgress(u);
     };
     xhr.onload = async () => {
-      if (state.session !== u.session) { drop(u); render(); pump(); return; }
+      if (!current(u)) { drop(u); render(); pump(); return; }
       if (xhr.status === 401 && !retried) {
-        if (await askToken(tr("上传需要口令，填好后再传一次"))) { start(u, true); return; }
+        const authorized = await askToken(tr("上传需要口令，填好后再传一次"));
+        if (!current(u)) return;
+        if (authorized) { start(u, true); return; }
       }
       if (xhr.status < 200 || xhr.status >= 300) {
         let msg = "HTTP " + xhr.status;
@@ -132,24 +142,27 @@ export function createUploads(deps) {
       finish(u, accept(meta, state.attachments));
     };
     xhr.onerror = () => finish(u, tr("网络错误，可点「重试」"));
-    xhr.onabort = () => { u.xhr = null; render(); pump(); };
+    xhr.onabort = () => { u.xhr = null; drop(u); render(); pump(); };
     xhr.open("POST", "/api/upload");
     xhr.send(fd);
     render();
   }
 
   async function startFetch(u) {
-    u.xhr = { abort() {} };
+    const controller = new AbortController();
+    u.xhr = controller;
     const fd = new FormData();
     fd.append("session_id", u.session);
     fd.append("file", u.file);
     try {
-      const r = await doFetch("/api/upload", { method: "POST", body: fd });
-      if (state.session !== u.session) { drop(u); render(); pump(); return; }
+      const r = await doFetch("/api/upload", { method: "POST", body: fd, signal: controller.signal });
+      if (!current(u)) { drop(u); render(); pump(); return; }
       if (!r.ok) throw new Error(await apiError(r) || "HTTP " + r.status);
-      finish(u, accept(await r.json(), state.attachments));
+      const meta = await r.json();
+      if (!current(u)) { drop(u); render(); pump(); return; }
+      finish(u, accept(meta, state.attachments));
     } catch (e) {
-      if (state.session !== u.session) { drop(u); render(); pump(); return; }
+      if (!current(u)) { drop(u); render(); pump(); return; }
       finish(u, (e && e.message) || String(e));
     }
   }
@@ -182,8 +195,28 @@ export function createUploads(deps) {
     await Promise.all(queued.map((u) => u.settled || Promise.resolve()));
   }
 
-  function retry(u) { u.error = ""; pump(); }
-  function cancel(u) { if (u.xhr) u.xhr.abort(); drop(u); render(); pump(); }
+  async function uploadUrl(address) {
+    const session = state.session, epoch = scopeEpoch;
+    if (slotsLeft(session) <= 0) { addStatus(tr("同一会话最多 {0} 个附件", limits.maxFiles)); return; }
+    const isCurrent = () => state.session === session && scopeEpoch === epoch;
+    addStatus(tr("正在从网址取文件…"));
+    try {
+      const res = await doFetch("/api/upload-url", { method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ session_id: session, url: address }) });
+      const data = await res.json().catch(() => ({}));
+      if (!isCurrent()) return;
+      if (!res.ok) { addStatus(tr("没有取到：") + (data.detail || data.error || res.status)); return; }
+      const why = accept(data, state.attachments);
+      if (why) { addStatus(why); return; }
+      render();
+      addStatus(tr("已取回并作为附件：") + (data.files || []).map((f) => f.name).join("、"));
+    } catch (err) {
+      if (isCurrent()) addStatus(tr("没有取到：") + (err && err.message ? err.message : tr("网络错误")));
+    }
+  }
 
-  return { pending, upload, abortAll, pump, drop, retry, cancel, paintProgress, slotsLeft, limits };
+  function retry(u) { if (current(u)) { u.error = ""; pump(); } }
+  function cancel(u) { const xhr = u.xhr; drop(u); u.xhr = null; if (xhr) xhr.abort(); render(); pump(); }
+
+  return { pending, upload, uploadUrl, abortAll, pump, drop, retry, cancel, paintProgress, slotsLeft, limits };
 }

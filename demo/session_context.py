@@ -5,7 +5,6 @@ import json
 from pathlib import Path
 import re
 from urllib.parse import urlencode
-from uuid import uuid4
 
 import local_retrieval
 import projects
@@ -13,7 +12,7 @@ import task_memory
 import uploads
 from context import policy
 from packing_assistant.runtime.civil_config import scrub_confirmations
-from packing_assistant.sandbox import assert_open, assert_write, guarded_write_text
+from packing_assistant.sandbox import assert_open, guarded_write_text
 
 
 def citation(sid: str, hit: dict) -> dict:
@@ -252,14 +251,9 @@ def persist(root: Path, sid: str, report: dict | None = None) -> dict:
     documents = uploads.extracted_documents(sid, [f["id"] for f in uploads.list_uploads(sid)])
     local_retrieval.sync_session(root, sid, history, documents)
     if report is not None:
-        folder = root / sid
-        target = assert_write(folder / "context.last.json")
-        tmp = assert_write(folder / (".context-" + uuid4().hex + ".tmp"))
-        try:
-            guarded_write_text(tmp, json.dumps(report, ensure_ascii=False))
-            tmp.replace(target)
-        finally:
-            tmp.unlink(missing_ok=True)
+        # This already writes atomically and briefly retries Windows readers
+        # holding the old report open. A second bare replace bypasses that retry.
+        guarded_write_text(root / sid / "context.last.json", json.dumps(report, ensure_ascii=False))
     return summary
 
 

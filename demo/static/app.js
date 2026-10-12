@@ -26,7 +26,7 @@ const state = {
   cadProjectId: cbCadProjectFromUrl(),
   planningProjectId: cbPlanningProjectFromUrl(),
   logisticsProjectId: cbProjectFromUrl("logistics_project_id"),
-  lastSend: "", /* ux(round7)：纠偏卡「重试」重放同 payload */
+  lastSend: "", /* New correction cards capture this message when they are mounted. */
   policy: { sandbox: "workspace-write", approval: "on-request" },
   context: {
     limit: 32768,
@@ -568,7 +568,10 @@ function cbAttachRender() {
 }
 
 async function cbAttachUpload(fileList) { return uploads.upload(fileList); }
-function cbUploadAbortAll(exceptSession) { uploads.abortAll(exceptSession); }
+function cbUploadAbortAll(exceptSession) {
+  if (cbAttachUrlDialog) cbAttachUrlDialog.close();
+  uploads.abortAll(exceptSession);
+}
 
 /* 上传队列（modules/uploads.js）：发前预检、并发 2、XHR 进度、失败留在原位可重试。 */
 const uploads = createUploads({
@@ -585,23 +588,101 @@ const uploads = createUploads({
 });
 
 /* 从网址取文件：服务端去取（demo/uploads.py fetch_upload / workbench attach::import_url），回来的形状与 /api/upload 相同。 */
-async function cbAttachFromUrl() {
-  const address = (window.prompt(tr("招标文件或招标公告的网址（工作台去取；只取公网地址，20 MB 以内）：")) || "").trim();
-  if (!address) return;
-  if (cbUploadSlotsLeft(state.session) <= 0) { addStatus(tr("同一会话最多 {0} 个附件", CB_UPLOAD_LIMITS.maxFiles)); return; }
-  addStatus(tr("正在从网址取文件…"));
-  try {
-    const res = await fetch("/api/upload-url", { method: "POST", headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ session_id: state.session, url: address }) });
-    const data = await res.json().catch(() => ({}));
-    if (!res.ok) { addStatus(tr("没有取到：") + (data.detail || data.error || res.status)); return; }
-    const why = cbUploadAccept(null, data);
-    if (why) { addStatus(why); return; }
-    cbAttachRender();
-    addStatus(tr("已取回并作为附件：") + (data.files || []).map((f) => f.name).join("、"));
-  } catch (err) {
-    addStatus(tr("没有取到：") + (err && err.message ? err.message : tr("网络错误")));
+let cbAttachUrlDialog = null;
+function cbAttachFromUrl() {
+  if (cbAttachUrlDialog) { cbAttachUrlDialog.input.focus(); return; }
+  const session = state.session;
+  const opener = document.activeElement || $("btnAttachUrl");
+  const dialog = document.createElement("div");
+  dialog.className = "cb-llm";
+  dialog.id = "cbAttachUrlDialog";
+  dialog.setAttribute("role", "dialog");
+  dialog.setAttribute("aria-modal", "true");
+  dialog.setAttribute("aria-labelledby", "cbAttachUrlTitle");
+  dialog.setAttribute("aria-describedby", "cbAttachUrlNote");
+  const form = document.createElement("form");
+  form.className = "cb-llm-box";
+  form.noValidate = true; // Keep basic validation in the page, including embedded browsers.
+  const header = document.createElement("div");
+  header.className = "cb-llm-head";
+  const title = document.createElement("strong");
+  title.id = "cbAttachUrlTitle";
+  title.textContent = tr("从网址添加附件");
+  header.appendChild(title);
+  const note = document.createElement("p");
+  note.id = "cbAttachUrlNote";
+  note.className = "cb-llm-note";
+  note.textContent = tr("招标文件或招标公告的网址（工作台去取；只取公网地址，20 MB 以内）：");
+  const label = document.createElement("label");
+  label.className = "cb-llm-row";
+  const caption = document.createElement("span");
+  caption.textContent = tr("网址");
+  const input = document.createElement("input");
+  input.id = "cbAttachUrlInput";
+  input.type = "url";
+  input.inputMode = "url";
+  input.autocomplete = "url";
+  input.spellcheck = false;
+  input.required = true;
+  input.setAttribute("aria-describedby", "cbAttachUrlError");
+  label.append(caption, input);
+  const error = document.createElement("p");
+  error.id = "cbAttachUrlError";
+  error.className = "cb-llm-status err";
+  error.setAttribute("role", "alert");
+  const actions = document.createElement("div");
+  actions.className = "cb-llm-acts";
+  const submit = document.createElement("button");
+  submit.type = "submit";
+  submit.className = "top-btn";
+  submit.textContent = tr("添加附件");
+  const cancel = document.createElement("button");
+  cancel.type = "button";
+  cancel.className = "top-btn";
+  cancel.textContent = tr("取消");
+  actions.append(submit, cancel);
+  form.append(header, note, label, error, actions);
+  dialog.appendChild(form);
+  let closed = false;
+  function close() {
+    if (closed) return;
+    closed = true;
+    dialog.remove();
+    cbAttachUrlDialog = null;
+    if (opener && opener.isConnected) opener.focus();
   }
+  form.addEventListener("submit", (ev) => {
+    ev.preventDefault();
+    if (closed) return;
+    if (state.session !== session) { close(); return; }
+    const address = input.value.trim();
+    let url;
+    try { url = new URL(address); } catch (_) { /* show the same inline hint below */ }
+    if (!url || !/^https?:\/\//i.test(address) || !["http:", "https:"].includes(url.protocol) || !url.hostname) {
+      error.textContent = tr("请输入有效的 http:// 或 https:// 网址。");
+      input.setAttribute("aria-invalid", "true");
+      input.focus();
+      return;
+    }
+    close();
+    return uploads.uploadUrl(address);
+  });
+  input.addEventListener("input", () => { error.textContent = ""; input.removeAttribute("aria-invalid"); });
+  cancel.addEventListener("click", close);
+  dialog.addEventListener("click", (ev) => { if (ev.target === dialog) close(); });
+  dialog.addEventListener("keydown", (ev) => {
+    if (ev.key === "Escape") { ev.preventDefault(); ev.stopPropagation(); close(); }
+    if (ev.key === "Tab") {
+      const controls = [input, submit, cancel], index = controls.indexOf(document.activeElement);
+      ev.preventDefault();
+      const next = index < 0 ? (ev.shiftKey ? controls.length - 1 : 0)
+        : (index + (ev.shiftKey ? controls.length - 1 : 1)) % controls.length;
+      controls[next].focus();
+    }
+  });
+  cbAttachUrlDialog = { dialog, input, close };
+  document.body.appendChild(dialog);
+  input.focus();
 }
 
 function cbAttachInit() {
@@ -1234,8 +1315,8 @@ function addStatus(text) {
 /* ===== ux(round7) 纠偏卡片（docs/ux/ux-design-spec.md 附录 F）=====
    错误/拒绝/缺数 → 「发生了什么 + 为什么(code) + 现在能做什么(≤3 动作)」的可行动卡片。
    分类/渲染逻辑 canonical 在 /static/fixcard.js；此处只注入端侧动作句柄：
-   prefill=预填输入框草稿（不自动发送）· retry=重放同 payload · newsession=新开会话。 */
-function cbFixHandlers() {
+   prefill=预填输入框草稿（不自动发送）· retry=重试卡片对应消息 · newsession=新开会话。 */
+function cbFixHandlers(message = state.lastSend, session = state.session) {
   return {
     prefill(v) {
       const input = $("input");
@@ -1245,9 +1326,13 @@ function cbFixHandlers() {
       input.focus();
     },
     retry() {
-      const msg = state.lastSend;
-      if (!msg) return;
-      $("input").value = msg;
+      if (!message || state.session !== session || runState.active || runState.watched || cbContextRebuilding()) return;
+      const input = $("input");
+      if (input.value.trim() && input.value.trim() !== message.trim()) {
+        addStatus(tr("输入框已有未发送内容，请先发送或清空，再重试这条任务。"));
+        return;
+      }
+      input.value = message;
       cbAutosize($("input"));
       $("form").dispatchEvent(new Event("submit", { cancelable: true }));
     },
@@ -1258,9 +1343,9 @@ function cbFixHandlers() {
   };
 }
 
-function cbFixMount(anchor, desc) {
+function cbFixMount(anchor, desc, message = state.lastSend) {
   if (!anchor || !desc || typeof CB_FIX === "undefined") return null;
-  const el = CB_FIX.cardEl(desc, cbFixHandlers());
+  const el = CB_FIX.cardEl(desc, cbFixHandlers(message, state.session));
   anchor.appendChild(el);
   const log = $("log");
   if (log) log.scrollTop = log.scrollHeight;
@@ -1307,7 +1392,7 @@ $("form").addEventListener("submit", async (ev) => {
     addStatus(tr("用法：/pack <票名>（如 /pack small_one_container）、/bid <要点>、/safety <要点>；或输入 / 从面板选。"));
     return;
   }
-  state.lastSend = message; /* ux(round7)：重试=重放同 payload */
+  state.lastSend = message;
   $("input").value = "";
   cbDraftClear();
   cbAutosize($("input"));
@@ -1363,7 +1448,7 @@ $("form").addEventListener("submit", async (ev) => {
     note.className = stopped ? "status-line" : "status-line err";
     note.textContent = raw;
     run.bodyEl.parentElement.appendChild(note);
-    if (!stopped) cbFixMount(run.bodyEl.parentElement, typeof CB_FIX !== "undefined" ? CB_FIX.classify(raw, { retryable: true }) : null);
+    if (!stopped) cbFixMount(run.bodyEl.parentElement, typeof CB_FIX !== "undefined" ? CB_FIX.classify(raw, { retryable: true }) : null, message);
     cbAnnounce(stopped ? tr("已停止接收回答") : tr("本轮失败：请看纠偏卡的建议动作"));
   } finally {
     if (runState.active === run) {
