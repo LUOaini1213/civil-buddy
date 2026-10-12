@@ -176,7 +176,8 @@ _LINK_EXCLUDED = re.compile(
     + _LINK_WORD + r"|不(?:用|要|必|需要?)(?:先|再)?(?:把)?[^，。；;？?]{0,20}?" + _LINK_ZH_VERB
     + r"|跳过[^，。；;]{0,20}?" + _LINK_ZH_VERB)
 _LINK_NOT_ASKED = re.compile(
-    r"(?i)(?:^|[.?!;:,，]\s*)\W*should\b|\bshould\s+(?:i|we|you|they)\b|\bwould\s+it\b|\bis\s+it\s+worth\b"
+    r"(?i)(?:^|[.?!;:,，]\s*)\W*(?:(?:please|pls|kindly|can\s+you|could\s+you|would\s+you|will\s+you)[,\s]+)*explain\b"
+    r"|(?:^|[.?!;:,，]\s*)\W*should\b|\bshould\s+(?:i|we|you|they)\b|\bwould\s+it\b|\bis\s+it\s+worth\b"
     r"|\bworth\s+(?:\w+\s+){0,2}" + _LINK_WORD + r"|\bmake\s+sense\b|\bdo\s+(?:i|we)\s+(?:really\s+)?(?:need|have)\s+to\b"
     r"|\bneed\s+(?:i|we)\b|\bif\s+(?:i|we|you|they)\s+(?:\w+\s+){0,2}" + _LINK_WORD
     + r"|\b(?:has|have|did)\s+(?:anyone|anybody|someone|somebody)\b"

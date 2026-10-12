@@ -621,7 +621,8 @@ def collapse_repeats(text: str) -> Tuple[str, int]:
     return "".join(kept).rstrip() if dropped else text, dropped
 
 
-def _guarded(reply: str, turn: _Turn, messages: List[Dict[str, Any]], complete: Complete) -> Tuple[str, Dict[str, Any]]:
+def _guarded(reply: str, turn: _Turn, messages: List[Dict[str, Any]], complete: Complete, *,
+             link_record: Optional[Dict[str, Any]] = None) -> Tuple[str, Dict[str, Any]]:
     """The reply, checked twice: every number traced, no verdict stated. One rewrite, then the rest is dealt with.
 
     An untraced number that survives the rewrite is listed to the user. A verdict that survives
@@ -636,14 +637,17 @@ def _guarded(reply: str, turn: _Turn, messages: List[Dict[str, Any]], complete: 
     from packing_assistant.runtime.model_client import ModelCancelled
 
     reply, repeats = collapse_repeats(reply)
-    record = claim_check.load_record(turn.files)
-    corrected: List[Dict[str, Any]] = []      # coverage claims replaced from the link record (claim_check)
+    # A deterministic-first explanation already has the trusted record, including
+    # when the host returned it in memory or renamed an exported file. Never take
+    # this override from the model's arguments or its reply.
+    record = link_record if link_record is not None else claim_check.load_record(turn.files)
+    coverage_corrections: List[Dict[str, Any]] = []
 
     def _claims(text: str) -> str:
         found = claim_check.overclaims(text, record)
         if not found:
             return text
-        corrected.extend(found)
+        coverage_corrections.extend(found)
         turn.evidence.append(claim_check.record_sentence(record, "en") + " " + claim_check.record_sentence(record, "zh"))
         return claim_check.correct(text, found, record)
 
@@ -700,9 +704,9 @@ def _guarded(reply: str, turn: _Turn, messages: List[Dict[str, Any]], complete: 
             verdicts = verdict_guard.stated_verdicts(reply)
             claims = record_guard.mismatches(reply, turn.facts)
     tail = []
-    if corrected:
-        report["claims_corrected"] = list(dict.fromkeys(item["text"] for item in corrected))
-        tail.append(claim_check.notice(corrected, record))
+    if coverage_corrections:
+        report["claims_corrected"] = list(dict.fromkeys(item["text"] for item in coverage_corrections))
+        tail.append(claim_check.notice(coverage_corrections, record))
     # a question about the clauses or the plan is answered from the record: an unsourced figure or clause number in
     # that answer is struck with its sentence, not only listed
     struck = claims + (record_guard.sentences_with(reply, numbers, "no source in the record or the files read")
@@ -727,8 +731,9 @@ def _guarded(reply: str, turn: _Turn, messages: List[Dict[str, Any]], complete: 
         report["untraced"] = list(dict.fromkeys(item["text"] for item in numbers))
         tail.append(number_provenance.notice(numbers, english=turn.english))
     if tail:
-        turn.emit("guard", {"untraced": report["untraced"], "verdicts": report["verdicts"], "record": report.get("record", []),
-                            "claims_corrected": report.get("claims_corrected", []), "action": "notice"})
+        turn.emit("guard", {"untraced": report["untraced"], "verdicts": report["verdicts"],
+                            "claims_corrected": report.get("claims_corrected", []),
+                            "record": report.get("record", []), "action": "notice"})
         reply = reply.rstrip() + "\n\n" + "\n".join(tail)
     if repeats:
         report["repeats_dropped"] = repeats
@@ -828,7 +833,7 @@ def explain_link(text: str, steps_out: Dict[str, Any], *, session_id: str = "", 
         explanation = str(complete(messages, None).get("content") or "").strip()
         calls = 1
         if explanation:
-            explanation, provenance = _guarded(explanation, turn, messages, complete)
+            explanation, provenance = _guarded(explanation, turn, messages, complete, link_record=record)
             calls += provenance.pop("model_calls", 0)
     except ModelCancelled:
         out.update(ok=False, cancelled=True, error_code="cancelled", reply=deterministic + "\n\n本轮已取消。")
@@ -837,8 +842,8 @@ def explain_link(text: str, steps_out: Dict[str, Any], *, session_id: str = "", 
         out["mode_notice"] = ("The model could not be reached (" + str(exc)[:80] + "); the link above ran without it. "
                               "模型不可用，联动结果照常。")
         explanation = ""
-    # both sign-off sentences (the English one came with #67): a model-written copy approves nothing
-    explanation = scrub_confirmations(_scrub(explanation), "(the sign-off sentence is typed by the person, not written by the model / 确认句须由用户本人输入)")
+    explanation = scrub_confirmations(_scrub(explanation),
+        "(the sign-off sentence must be typed by the person)" if turn.english else "（确认句须由用户本人输入）")
     if explanation:
         out["reply"] = deterministic + "\n\n" + EXPLANATION_HEAD + "\n" + explanation
     out.update(model_explanation=explanation, provenance=provenance,

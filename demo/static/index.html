@@ -7,39 +7,23 @@
   <link rel="manifest" href="/static/manifest.webmanifest" />
   <link rel="icon" href="/static/icons/cb-icon.svg" type="image/svg+xml" />
   <title>Civil Buddy</title>
-  <!-- ux(round11) 主题/大字早应用：持久化值先于首帧落地，防 FOUC（VS Code settings pattern，附录 J）
-       ux(round14)：暗色为默认主题（未选择时不再跟随系统；浅色仍可显式切换，参考图深炭色基线） -->
-  <script>
-  (function () {
-    var d = document.documentElement, KEY_T = "cb_theme_v1", KEY_L = "cb_large_v1";
-    function read(k) { try { return localStorage.getItem(k); } catch (e) { return null; } }
-    window.cbApplyTheme = function (t) {
-      if (t === "light") d.setAttribute("data-theme", "light");
-      else d.setAttribute("data-theme", "dark"); /* round14：dark 为默认（含未设置/未知值） */
-      var m = document.querySelector('meta[name="theme-color"]');
-      var dark = d.getAttribute("data-theme") !== "light";
-      if (m) m.setAttribute("content", dark ? "#17181a" : "#2563eb");
-    };
-    window.cbThemeSaved = function () { return read(KEY_T) || ""; };
-    window.cbLargeSaved = function () { return read(KEY_L) === "1"; };
-    cbApplyTheme(read(KEY_T) || "dark");
-    if (read(KEY_L) === "1") d.classList.add("cb-large");
-  })();
-  </script>
+  <script src="/static/theme.js?v=unified1"></script>
+  <link rel="stylesheet" href="/static/theme.css?v=unified1" />
+  <link rel="stylesheet" href="/static/styles.css?v=unified1" />
+  <link rel="stylesheet" href="/static/workbench-shell.css?v=unified1" />
   <script src="/static/i18n/en.js?v=1"></script>
   <script src="/static/i18n.js?v=1"></script>
-  <link rel="stylesheet" href="/static/styles.css?v=voice1" />
 </head>
 <body>
-  <header class="top">
-    <div class="brand">
-      <span class="mark">CB</span>
+  <header class="top cb-app-header">
+    <div class="brand cb-app-brand">
+      <span class="mark cb-app-mark">CB</span>
       <div>
         <strong>Civil Buddy</strong>
         <small data-i18n>内部讨论草稿 · 不是签认件</small>
       </div>
     </div>
-    <div class="top-meta">
+    <div class="top-meta cb-app-actions">
       <!-- ux(round8) 汉堡键：≤768 显示，展开「会话/岗位」侧栏（.rail.mobile-open，附录 G） -->
       <button type="button" id="railToggle" class="top-btn" aria-label="展开或收起会话与岗位栏" aria-expanded="false" data-i18n data-i18n-attr="aria-label">栏目</button>
       <!-- 中文 | English：cb_lang_v1 持久化（i18n.js），并以 cookie cb_lang / X-Civil-Lang 告诉服务端；
@@ -68,6 +52,16 @@
         </div>
       </div>
     </div>
+    <nav class="cb-app-nav" aria-label="工作台导航">
+      <a href="/static/index.html" aria-current="page" data-i18n>工作台</a>
+      <a href="/static/agent.html">Agent</a>
+      <a href="/packing" data-i18n>装箱拼柜</a>
+      <a href="/cad">CAD</a>
+      <a href="/engineering" data-i18n>工程计算</a>
+      <a href="/engineering/planning" data-i18n>施工计划</a>
+      <a href="/engineering/schedule" data-i18n>日期计划</a>
+      <a href="/engineering/routes" data-i18n>现场路线</a>
+    </nav>
   </header>
   <input type="file" id="cbBackupFile" accept=".zip,application/zip" hidden />
 
@@ -99,6 +93,16 @@
           <p class="cb-empty-desc" data-i18n>说明要完成的任务，工作台帮你选择岗位。也可自行点名；示例只预填，不会自动发送。</p>
           <p class="cb-empty-note" id="cbAvailability" role="status" data-i18n>正在检测可用能力…</p>
           <div class="cb-empty-cards">
+            <a href="/static/agent.html" class="cb-empty-card tone-strong" style="text-decoration:none;color:inherit">
+              <span class="cb-empty-ico" aria-hidden="true">AI</span>
+              <span class="cb-empty-k" data-i18n>Agent 工程工作台</span>
+              <span class="cb-empty-v" data-i18n>打开工程文件夹，让模型读取资料、调用工具并生成可追溯的文档修改</span>
+            </a>
+            <a id="cbPackingEntry" href="/packing" class="cb-empty-card tone-blue" style="text-decoration:none;color:inherit">
+              <span class="cb-empty-ico" aria-hidden="true" data-i18n>装</span>
+              <span class="cb-empty-k" data-i18n>装箱拼柜工作台</span>
+              <span class="cb-empty-v" data-i18n>上传装箱清单，预览成箱方案，人工确认后查看拼柜 3D 与重心</span>
+            </a>
             <a href="/logistics" class="cb-empty-card tone-blue" style="text-decoration:none;color:inherit">
               <span class="cb-empty-ico" aria-hidden="true" data-i18n>箱</span>
               <span class="cb-empty-k" data-i18n>箱单识别与物流材料</span>
@@ -153,11 +157,17 @@
         </div>
       </div>
       <form id="form" class="composer">
-        <label class="confirm">
-          <span data-i18n>高风险任务确认：请键入「我明白，将由持证人员签认」或 “I understand; a licensed person will sign this off.”</span>
-          <input type="text" id="confirmOk" autocomplete="off" spellcheck="false" placeholder="普通提问无需填写" data-i18n-attr="placeholder" />
-        </label>
-        <div class="composer-note" data-i18n>AI 草稿 · 不签认</div>
+        <div class="composer-heading">
+          <span class="composer-note" data-i18n>AI 草稿 · 待人工核对</span>
+          <span class="composer-shortcut" data-i18n>Enter 发送 · Shift+Enter 换行</span>
+        </div>
+        <details id="riskDisclosure" class="composer-risk">
+          <summary><span data-i18n>高风险任务确认</span> <span data-i18n>普通提问无需填写</span></summary>
+          <label class="confirm" for="confirmOk">
+            <span data-i18n>高风险任务确认：请键入「我明白，将由持证人员签认」或 “I understand; a licensed person will sign this off.”</span>
+            <input type="text" id="confirmOk" autocomplete="off" spellcheck="false" placeholder="普通提问无需填写" data-i18n-attr="placeholder" />
+          </label>
+        </details>
         <!-- ux(round19)：点名岗位贴着输入框（公理①一个输入框）。空时整条隐藏；
              #summonBar / #clearExperts 的 id 不可删——renderSummon 与其回调读它们。 -->
         <div class="summon-bar" id="summonBar" hidden></div>
@@ -356,7 +366,7 @@
   <script src="/static/tickets.js?v=ui9"></script>
   <script src="/static/chat-stream.js?v=1"></script>
   <script type="module" src="/static/app.js?v=modules1"></script>
-  <script src="/static/voice.js?v=3"></script>
+  <script src="/static/voice.js?v=4"></script>
   <script src="/static/studio.js?v=ui4"></script>
 </body>
 </html>

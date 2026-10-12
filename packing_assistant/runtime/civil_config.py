@@ -51,6 +51,11 @@ def confirms_in_message(text: Any) -> bool:
     return is_confirmation(text)
 
 
+def message_confirmation(text: Any) -> bool:
+    """Compatibility name for current-operation callers; task prose never supplies sign-off."""
+    return confirms_in_message(text)
+
+
 def count_confirmations(text: str) -> int:
     return sum((text or "").count(sentence) for sentence in CONFIRM_SENTENCES)
 

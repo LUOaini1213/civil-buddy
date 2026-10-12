@@ -12,7 +12,7 @@ import os
 from pathlib import Path
 from typing import Any, Callable, Dict, List, Optional
 
-from packing_assistant.runtime.civil_config import CONFIRM, CONFIRM_EN, confirms_in_message  # noqa: E402,F401  (one definition)
+from packing_assistant.runtime.civil_config import CONFIRM, CONFIRM_EN, message_confirmation  # noqa: E402,F401  (one definition)
 Progress = Callable[[str], None]
 Approve = Callable[[Dict[str, Any]], bool]
 
@@ -107,7 +107,8 @@ class DesktopController:
         from packing_assistant.runtime.threads import new_thread
 
         self._need_job()
-        self.thread_id, self.last_out = new_thread(title, confirm=self.confirmed).thread_id, {}
+        self.thread_id, self.last_out = new_thread(title).thread_id, {}
+        self.confirmed = False
         return self.thread_id
 
     def switch_thread(self, thread_id: str) -> List[Dict[str, str]]:
@@ -117,7 +118,7 @@ class DesktopController:
         found = load_thread(thread_id)
         if found is None:
             raise DesktopError("没有这个对话")
-        self.thread_id, self.confirmed, self.last_out = thread_id, self.confirmed or found.confirm, {}
+        self.thread_id, self.confirmed, self.last_out = thread_id, False, {}
         return load_rollout(thread_id, limit=200, chars=20000)
 
     # ------------------------------------------------------------------ one turn
@@ -139,11 +140,10 @@ class DesktopController:
         def turn(confirmed: bool) -> Dict[str, Any]:
             return with_progress(lambda: run_on_thread(self.thread_id, task, confirm=confirmed, approve=ask), on_progress or (lambda _line: None))
 
-        out = turn(self.confirmed or confirms_in_message(task))
+        self.confirmed = False
+        out = turn(message_confirmation(task))
         if out.get("hitl_pending") and not asked and ask({"name": out.get("expert_name") or "本次写盘", "risk": "high", "confirm_sentence": CONFIRM, "confirm_sentence_en": CONFIRM_EN}):
             out = turn(True)        # steps mode stops first; agreed on the spot, the same words run again
-        # The dialog's answer covers this turn only (the #61 baseline): it is not kept on the controller or the thread,
-        # so the next high-risk turn asks again.
         self.last_out = out
         return out
 

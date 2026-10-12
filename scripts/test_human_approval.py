@@ -140,9 +140,12 @@ class AppServerApprovalTests(JobFolder):
         wrong = self.rpc("turn/start", thread_id=tid, text=HIGH, skill="fire-protect", confirm_text="我明白")["result"]
         self.assertTrue(wrong["hitl_pending"] and not wrong["wrote"], wrong)
         self.assertEqual(self.written(), [])
-        signed = threads.new_thread("终端里签认过", confirm=True).thread_id      # what TUI /confirm or the desktop persists
-        borrowed = self.rpc("turn/start", thread_id=signed, text=HIGH, skill="fire-protect")
-        self.assertIn("confirm_text", borrowed.get("error", {}).get("message", ""), borrowed)
+        old = threads.new_thread("旧版本里签认过")
+        old.confirm = True  # a persisted record created by an older release
+        threads.save_thread(old)
+        borrowed = self.rpc("turn/start", thread_id=old.thread_id, text=HIGH, skill="fire-protect")["result"]
+        self.assertTrue(borrowed["hitl_pending"] and not borrowed["wrote"], borrowed)
+        self.assertFalse(threads.load_thread(old.thread_id).confirm)
         self.assertEqual(self.written(), [])
         done = self.rpc("turn/start", thread_id=tid, text=HIGH, skill="fire-protect", confirm_text=CONFIRM)["result"]
         self.assertTrue(done["wrote"] and not done["hitl_pending"], done)
@@ -150,6 +153,51 @@ class AppServerApprovalTests(JobFolder):
 
 class PerTurnApprovalTests(JobFolder):
     SAFE = "编一份临边防护安全交底，部位：东桥3号墩"
+
+    def test_legacy_thread_approval_and_completed_operation_do_not_authorize_next_one(self):
+        th = threads.new_thread("legacy", confirm=True)
+        self.assertFalse(th.confirm)  # even creation no longer persists permission
+        th.confirm = True
+        threads.save_thread(th)       # old releases may have left such a record on disk
+        refused = threads.run_on_thread(th.thread_id, HIGH, skill="fire-protect")
+        self.assertTrue(refused["hitl_pending"] and not refused["wrote"], refused)
+        accepted = threads.run_on_thread(th.thread_id, HIGH, skill="fire-protect", confirm=True)
+        self.assertTrue(accepted["wrote"], accepted)
+        self.assertFalse(threads.load_thread(th.thread_id).confirm)
+        later = threads.run_on_thread(th.thread_id, HIGH, skill="fire-protect")
+        self.assertTrue(later["hitl_pending"] and not later["wrote"], later)
+
+    def test_tui_confirmation_retries_only_pending_text_and_is_consumed(self):
+        from packing_assistant.civil_tui import TuiState, handle_slash, submit_task
+
+        st = TuiState()
+        self.assertIn("没有当前待签认", handle_slash("/confirm " + CONFIRM, st))
+        waiting = submit_task(st, self.SAFE, approve=lambda _request: False)
+        self.assertTrue(waiting["hitl_pending"] and not waiting["wrote"])
+        self.assertEqual(st.pending_text, self.SAFE)
+        self.assertIn("请原样输入", handle_slash("/confirm", st))
+        self.assertFalse(threads.load_thread(st.thread.thread_id).wrote)
+        handle_slash("/confirm " + CONFIRM_EN, st)
+        self.assertTrue(threads.load_thread(st.thread.thread_id).wrote)
+        self.assertEqual(st.pending_text, "")
+        self.assertFalse(st.confirm or st.thread.confirm)
+        self.assertIn("没有当前待签认", handle_slash("/confirm " + CONFIRM, st))
+        later = submit_task(st, self.SAFE, approve=lambda _request: False)
+        self.assertTrue(later["hitl_pending"] and not later["wrote"])
+        handle_slash("/new another", st)
+        self.assertEqual(st.pending_text, "")
+        self.assertIn("没有当前待签认", handle_slash("/confirm " + CONFIRM, st))
+
+    def test_tui_inline_confirmation_is_asked_again_for_new_operation(self):
+        from packing_assistant.civil_tui import TuiState, submit_task
+
+        st, asked = TuiState(), []
+        first = submit_task(st, self.SAFE, approve=lambda request: asked.append(request) or True)
+        self.assertTrue(first["wrote"], first)
+        self.assertEqual(len(asked), 1)
+        second = submit_task(st, self.SAFE, approve=lambda request: asked.append(request) or False)
+        self.assertTrue(second["hitl_pending"] and not second["wrote"], second)
+        self.assertEqual(len(asked), 2)
 
     def test_model_loop_asks_again_in_a_later_turn(self):
         model_loop.run_model_agent("你好", session_id="s-model", p0_confirmed=True, complete=Script("你好。"))
@@ -393,6 +441,30 @@ class EnglishSignOffTests(JobFolder):
         summary = task_memory.build([{"role": "user", "content": "Project: Harbourline. " + CONFIRM_EN}])
         self.assertEqual(summary["stats"]["omitted_confirmations"], 1)
         self.assertNotIn(CONFIRM_EN, json.dumps(summary))
+
+
+class CurrentOperationLinkExplanationTests(JobFolder):
+    """Model mode, link request: the link runs deterministically first and the model only explains the record, with no
+    tools. A tender that tells the model to approve, and a model that types the sentence, approve nothing."""
+
+    def test_explanation_stays_read_only_even_with_current_confirmation_and_a_model_tool_call(self):
+        import shutil
+        from packing_assistant.runtime import model_client
+        from packing_assistant.runtime.turn import run_turn
+
+        demo = ROOT / "examples" / "facade-demo"
+        for name in ("facade_itt_doc.md", "facade_panels.xlsx"):
+            shutil.copyfile(demo / name, self.job / name)
+        scripted = Script([("run_skill", {"skill_id": "bid-parse"})], "This turn only explains the process.")
+        with patch.dict(os.environ, {"CIVIL_API_KEY": "local-not-a-key", "CIVIL_API_BASE": "http://127.0.0.1:9/v1", "CIVIL_MODEL": "fake"}), \
+                patch.object(model_client, "complete", side_effect=scripted):
+            out = run_turn("Could you explain how to check facade_panels.xlsx against facade_itt_doc.md?",
+                           session_id="s-explain-link", mode="model", confirm=True)
+        self.assertFalse(out["wrote"], out.get("reply"))
+        self.assertFalse(out.get("files"))
+        self.assertNotEqual(out.get("deterministic_first"), "link")
+        self.assertFalse(list(self.job.rglob("bidbook.en.md")))
+
 
 
 if __name__ == "__main__":

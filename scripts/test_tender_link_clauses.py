@@ -175,6 +175,58 @@ class Reading(unittest.TestCase):
         # a structural load is no transport limit
         self.assertEqual(clauses("9.21 The dead load of each panel shall not exceed 600 kg for the structural design of the brackets."), [])
 
+    def test_lower_bounds_never_become_upper_mass_limits(self):
+        for requirement in ("shall be more than 20 t", "shall exceed 20 t", "must be greater than 20 t",
+                            "shall have a minimum of 20 t", "shall be at least 20 t", "shall not be less than 20 t",
+                            "shall exceed 20 t and no crate shall exceed 2 t",
+                            "shall not exceed 30 t and shall exceed 20 t"):
+            with self.subTest(requirement=requirement):
+                text = f"4.9 The gross mass of each loaded container {requirement}."
+                found = clauses(text)
+                self.assertFalse(any("gross_mass" in c["kinds"] for c in found), found)
+                self.assertTrue(any("unplaced" in c["kinds"] for c in found), found)
+                self.assertTrue(any(c.get("unplaced_text") == text for c in found), found)
+
+    def test_each_mass_figure_keeps_its_subject_in_one_sentence(self):
+        for second, kind, field in (("and no crate shall exceed {n} t", "per_package_limit", "package_limits_kg"),
+                                    ("while the site crane capacity is {n} t", "per_package_limit", "package_limits_kg"),
+                                    ("and each delivery truck shall not exceed {n} t", "site_access", "vehicle_limits_kg")):
+            for number in (2, 30):
+                with self.subTest(second=second, number=number):
+                    found = clauses("4.9 The gross mass of each container shall not exceed 30 t, " + second.format(n=number) + ".")
+                    self.assertEqual(len(found), 1)
+                    self.assertEqual(found[0]["limits_kg"], [30000.0])
+                    self.assertIn(kind, found[0]["kinds"])
+                    self.assertEqual(found[0][field], [float(number * 1000)])
+
+    def test_included_cargo_does_not_take_the_next_container_limit(self):
+        text = ("4.9 The gross mass of each container shall not exceed 30 t, including stillages, "
+                "and shall not exceed 25 t.")
+        found = clauses(text)
+        self.assertEqual(len(found), 1, found)
+        self.assertEqual(found[0]["limits_kg"], [25000.0, 30000.0])
+        self.assertNotIn("per_package_limit", found[0]["kinds"])
+        self.assertEqual(found[0]["text"], text)
+
+    def test_unsupported_direction_reaches_human_checks_with_source(self):
+        from packing_assistant.tender_packing_link import build_checks, container_decision
+
+        plan = {"ok": True, "source": "solver", "can_fit": True, "container_type": "40HQ", "n_boxes": 1,
+                "containers_used": 1, "n0": 1, "conservation": {"pieces_in": 1, "pieces_out": 1, "kg_in": 1000},
+                "per_container": [{"container_no": 1, "cargo_kg": 1000, "boxes": 1, "box_types": {}}]}
+        text = "4.9 The gross mass of each loaded container shall be more than 20 t."
+        found = clauses(HEAD + text)
+        checks = build_checks(found, container_decision(found), plan, "synthetic.csv")
+        sourced = [c for c in checks if c["clause"] == "4.9"]
+        self.assertTrue(sourced)
+        self.assertTrue(all(c["status"] == "human_required" for c in sourced), sourced)
+        self.assertTrue(any(c["clause_text"] == text and c["cite"] == "Clause 4.9" for c in sourced))
+        self.assertFalse(any(c["kind"] == "gross_mass" and c["status"] == "covered" for c in checks))
+        # The same valid plan still supports an explicit upper bound.
+        found = clauses(HEAD + text.replace("shall be more than", "shall not exceed"))
+        checks = build_checks(found, container_decision(found), plan, "synthetic.csv")
+        self.assertEqual(next(c["status"] for c in checks if c["kind"] == "gross_mass"), "covered")
+
     def test_nothing_with_a_logistics_term_disappears(self):
         for text in ("4.9 Containers arriving at site shall be within the permissible limits of the authorities for road haulage.",
                      "4.9 The heaviest container shall be declared to the Main Contractor before shipment, with its VGM certificate."):

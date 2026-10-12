@@ -136,6 +136,7 @@ _MIXED_LIST_RE = re.compile(r"(?<![A-Za-z])(?:" + _ANY_SUBJECT + r")(?:\s*(?:,|/
                             + r")(?![A-Za-z]))+", re.I)
 _INCLUDED_RE = re.compile(r"(?<![A-Za-z])(?:including|incl\.?|inclusive\s+of|together\s+with)\s+"
                           r"[^,;:()]{0,80}", re.I)
+_INCLUDED_APPOSITIVE_RE = re.compile(r",\s*" + _INCLUDED_RE.pattern + r"\s*,", re.I)
 # "... shall weigh no more than 1,500 kg each": a bare "each" after the figure
 # where one part of a sentence ends and the next begins, for a trailing "each"; and a list of subjects, which is none
 _CONJUNCT_RE = re.compile(r"[,;:]|(?<![A-Za-z])(?:and|but|while|whereas)(?![A-Za-z])", re.I)
@@ -157,8 +158,15 @@ _TARE_RE = re.compile(r"tare|including\s+the\s+container|incl\.?\s+(?:the\s+)?co
                       re.I)
 _CARGO_BASIS_RE = re.compile(r"payload|cargo\s+(?:mass|weight)|net\s+(?:mass|weight)|货重|货载|净重", re.I)
 _GROSS_WORD_RE = re.compile(r"gross|(?<![A-Za-z])(?:VGM|MGW)(?![A-Za-z])|毛重", re.I)
-_LIMIT_NOT_RE = re.compile(r"(?<![A-Za-z])(?:not|no)\s+(?:to\s+)?(?:be\s+)?(?:exceed(?:ing)?|more\s+than|heavier\s+than|greater\s+than)"
+_LIMIT_NOT_RE = re.compile(r"(?<![A-Za-z])(?:not|no)\s+(?:to\s+)?(?:(?:be|weigh|carry)\s+)?(?:exceed(?:ing)?|more\s+than|heavier\s+than|greater\s+than)"
                            r"|不(?:得|应|能)?(?:超过|大于)", re.I)
+_LOWER_BOUND_RE = re.compile(r"\b(?:min(?:imum)?|at\s+least|not\s+less\s+than|no\s+less\s+than)\b|>=|≥|至少|最低|不小于", re.I)
+_POSITIVE_COMPARISON_RE = re.compile(r"\b(?:exceed(?:s|ed|ing)?|(?:more|heavier|greater)\s+than|in\s+excess\s+of)\b|超过|大于", re.I)
+_REJECT_OVER_RE = re.compile(r"\b(?:not|never)\s+(?:be\s+)?(?:accepted|allowed|permitted)\b|不得(?:进场|入场)|拒收", re.I)
+_NO_SUBJECT_UPPER_RE = re.compile(
+    r"\bno\s+(?:[\w'-]+\s+){0,3}(?:" + _ANY_SUBJECT + r")(?![A-Za-z])"
+    r"(?:(?!\b(?:and|while|but)\b)[^.;,:\d]){0,100}?"
+    r"(?:exceed(?:s|ed|ing)?|(?:more|heavier|greater)\s+than)\b", re.I)
 _SENTENCE_RE = re.compile(r"(?<=[;。；])\s*|(?<![Mm]ax)(?<!No)(?<!Nos)(?<!Cl)(?<!incl)(?<!excl)(?<!approx)(?<!Art)"
                           r"(?<=[a-z0-9)\]%])\.\s+(?=[A-Z(])")
 _SEQUENCE_RE = re.compile(r"sequenc|installation\s+programme|installation\s+program|delivery\s+schedule|just[\s-]in[\s-]time|"
@@ -490,6 +498,15 @@ def _subject(sentence: str, at: int, end: Optional[int] = None,
     before = sentence[start:at]
     if start:
         before = before[len(re.match(r"\S*", before).group(0)):]
+    # A later figure with a new subject starts its own relation. Keep the
+    # bounded window, but do not let an earlier "mass of each container"
+    # capture ", and no crate ... 2 t" or ", while the crane ... 2 t".
+    previous_figures = _mass_figures(before)
+    if previous_figures:
+        local = before[previous_figures[-1][2]:]
+        # An included crate/stillage is cargo, not a newly stated limit subject.
+        if _SUBJECT_RE.search(_INCLUDED_RE.sub(" ", local)):
+            before = local
     subjects = list(_SUBJECT_RE.finditer(before))
     if not subjects:
         following = _SUBJECT_RE.search(sentence[at:at + _LOOK_BACK])
@@ -576,6 +593,29 @@ def _basis(sentence: str) -> str:
     return "unstated"
 
 
+def _upper_bound(sentence: str) -> bool:
+    """Only recognise upper bounds; lower or mixed bounds need a person's reading.
+
+    A naked "exceed" / "more than" is not an upper bound. Explicit negation,
+    "no single container ... more than", or rejection of overweight deliveries
+    provides its direction. This is deliberately conservative for mixed wording.
+    """
+    if _LOWER_BOUND_RE.search(sentence):
+        return False
+    # A bounded appositive does not change "no single lift ... shall exceed".
+    # Keep other commas/conjunctions so one relation cannot borrow another's no.
+    direction = _INCLUDED_APPOSITIVE_RE.sub(" ", sentence)
+    remaining = _NO_SUBJECT_UPPER_RE.sub(" ", _LIMIT_NOT_RE.sub(" ", direction))
+    if not _POSITIVE_COMPARISON_RE.search(remaining):
+        return True
+    # Do not borrow a "no" or refusal from another numeric relation in the sentence.
+    if len(_mass_figures(sentence)) != 1:
+        return False
+    if _REJECT_OVER_RE.search(sentence):
+        return True
+    return False
+
+
 def _mass_limits(body: str, context: str = "") -> Dict[str, Any]:
     """The mass limits a clause sets, sorted by what they limit. A limit on a stillage, a crate, a piece or a crane
     lift is a per-package limit and a truck's is a vehicle limit: neither is ever compared with a container's gross
@@ -606,6 +646,11 @@ def _mass_limits(body: str, context: str = "") -> Dict[str, Any]:
             # only a sentence whose figures could be read as a limit (placed or not placed below) goes to a person
             if (limit and (massy or transport)) or (transport and massy):
                 out["dense"].append((len(figures), len(sentence.strip())))
+            continue
+        if limit and transport and not _upper_bound(plain):
+            # Lower/mixed bounds are not maximum masses. Preserve the exact
+            # sentence for human review rather than manufacturing an upper limit.
+            out["unplaced"].append(sentence.strip())
             continue
         # the sentence's subject nouns, found once: every figure looks them up instead of re-scanning the sentence
         subjects = list(_SUBJECT_RE.finditer(plain))

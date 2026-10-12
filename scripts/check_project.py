@@ -55,6 +55,15 @@ CHECKS = (
     Check("engineering-ui", ("scripts/test_engineering_ui.cjs",), "node"),
     Check("engineering-agent", ("scripts/test_engineering_agent.py",)),
     Check("engineering-api", ("scripts/test_engineering_api.py",), timeout=300),
+    Check("agent-ui", ("scripts/test_agent_ui.cjs",), "node"),
+    Check("document-worker", ("scripts/test_document_worker.py",)),
+    Check("source-retrieval", ("scripts/test_source_retrieval.py",)),
+    Check("host-worker", ("scripts/test_host_worker.py",)),
+    Check("unified-acceptance-oracle", ("scripts/test_unified_acceptance.py",)),
+    Check("unified-launcher", ("scripts/test_unified_launcher.py",)),
+    Check("domain-service", ("scripts/test_domain_service.py",), timeout=300),
+    Check("unified-packing", ("scripts/test_unified_packing.py",)),
+    Check("unified-release", ("scripts/test_unified_release.py",)),
     Check("engineering-planning", ("scripts/test_engineering_planning.py",)),
     Check("planning-exchange", ("scripts/test_planning_exchange.py",)),
     Check("planning-workbench", ("scripts/test_planning_workbench.py",), timeout=180),
@@ -150,6 +159,7 @@ CHECKS = (
     Check("task-intent-bench", ("scripts/eval_task_intent.py", "--check")),
     Check("english-intents", ("scripts/test_english_intents.py",)),
     Check("link-routing-bench", ("scripts/eval_link_routing.py", "--check")),
+    Check("link-confirmation", ("scripts/test_link_confirmation_regressions.py",), timeout=300),
     Check("english-requests-heldout", ("test/benchmarks/english_requests/score.py", "--check")),
     Check("verdict-bench", ("scripts/eval_verdicts.py", "--check")),
     # round-3 guard fixes on their DEV set: verdict bypasses, record-guard negations, whole-sentence claim corrections
@@ -220,20 +230,26 @@ CHECKS = (
     Check("industry-eval", ("scripts/test_industry_agent_eval.py",)),
     Check("product-smoke", ("scripts/smoke_agent_product.py",), timeout=300),
 )
+RUST_BINARY = str(Path(os.environ.get("CARGO_TARGET_DIR") or "workbench/target") / "debug"
+                  / ("civil-workbench.exe" if os.name == "nt" else "civil-workbench"))
 FULL_CHECKS = (
     Check("http-demo", ("-m", "pytest", "demo/tests", "-q", "--basetemp=output/check-project-pytest")),
     Check("runtime-api", ("scripts/test_runtime_p0.py",)),
     Check("office-job", ("scripts/test_office_job.py",)),
     Check("pipeline", ("scripts/test_p0_p1_p2_full.py",), timeout=600),
     Check("shadow-eval", ("scripts/eval_workteams_cli.py", "--tiny-only"), timeout=600),
-    Check("rust", ("test", "--locked", "--offline", "--manifest-path", "workbench/Cargo.toml"), "cargo", 900),
+    # Scripted-provider fixtures change process-wide configuration; keep them sequential.
+    Check("rust", ("test", "--locked", "--offline", "--manifest-path", "workbench/Cargo.toml", "--", "--test-threads=1"), "cargo", 1200),
+    Check("rust-build", ("build", "--locked", "--offline", "--manifest-path", "workbench/Cargo.toml", "--bin", "civil-workbench"), "cargo", 900),
+    Check("unified-runtime", ("scripts/test_unified_runtime_http.py", "--binary",
+          RUST_BINARY), timeout=900),
 )
 
 
 def check_environment() -> dict[str, str]:
     """Do not load personal model credentials or use paid model calls in checks."""
     env = dict(os.environ)
-    for key in ("CIVIL_API_KEY", "OPENAI_API_KEY", "LLM_API_KEY", "DEEPSEEK_API_KEY", "ZAI_API_KEY"):
+    for key in ("CIVIL_API_KEY", "OPENAI_API_KEY", "LLM_API_KEY", "DEEPSEEK_API_KEY", "ZAI_API_KEY", "JEV_API_KEY", "TYPESAFE_API_KEY"):
         env.pop(key, None)
     env.update(PYTHONUTF8="1", PYTHONIOENCODING="utf-8", PYTHON_DOTENV_DISABLED="1", PYTHONOPTIMIZE="0",
                CIVIL_JOB_ROOT=str(ROOT / "output" / "check-project" / "jobs"))

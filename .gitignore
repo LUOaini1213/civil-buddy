@@ -101,6 +101,7 @@ data/civilbuddy.db-wal
 data/civilbuddy.db-shm
 data/backup/
 /node_modules/
+/work/
 
 # Lightsail: the opt-in model key, the access-link marker, and the launch script filled in for one deploy
 model.env
