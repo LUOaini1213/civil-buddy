@@ -198,11 +198,31 @@ test("Agent UI: artifact downloads must stay on this host and in this workspace"
 test("Agent voice: a transcript is only a draft; late results cannot cross session or workspace", async (t) => {
   const h = harness(); t.after(h.close); await h.ready();
   const voiceCalls = []; let finish;
+  const nextTurn = () => new Promise((resolve) => setImmediate(resolve));
+  async function until(predicate, message) {
+    const deadline = Date.now() + 2000;
+    while (!predicate()) {
+      assert.ok(Date.now() < deadline, message);
+      await nextTurn();
+    }
+  }
   h.win.fetch = async (url, init) => {
     voiceCalls.push({ url, init });
-    if (url === "/api/asr/status") return response({ available: true, state: "ready", supports_cancel: true });
+    // Real Response.json() may need an event-loop turn on Node22/Linux.
+    // Deliberately defer discovery so microtask-only waiting cannot pass by luck.
+    if (url === "/api/asr/status") { await nextTurn(); return response({ available: true, state: "ready", supports_cancel: true }); }
     if (url.endsWith("/cancel")) return response({ ok: true, status: "cancelled" });
-    if (url === "/api/asr") return new Promise((resolve) => { finish = (text) => resolve(response({ text, elapsed_seconds: 1 })); });
+    if (url === "/api/asr") return new Promise((resolve) => {
+      finish = async (text) => {
+        const reply = response({ text, elapsed_seconds: 1 });
+        const read = reply.json.bind(reply); let consumed;
+        reply.json = () => (consumed = read());
+        resolve(reply);
+        await until(() => consumed, "voice response body was not read");
+        await consumed;
+        await nextTurn(); // let the voice continuation apply or discard the parsed body
+      };
+    });
     throw new Error("unexpected voice request " + url);
   };
   Object.defineProperty(h.win.navigator, "mediaDevices", { value: { getUserMedia: async () => ({ getTracks: () => [{ stop() {} }] }) } });
@@ -215,15 +235,21 @@ test("Agent voice: a transcript is only a draft; late results cannot cross sessi
   h.win.eval(fs.readFileSync(path.join(__dirname, "../demo/static/voice.js"), "utf8"));
   await h.app.changeSession("", true);
   assert.equal(h.$("voiceStatus").textContent, "", "idle navigation should not claim voice was cancelled");
-  const flush = async () => { for (let i = 0; i < 25; i++) await Promise.resolve(); };
-  async function transcribing() { h.$("btnVoice").click(); await flush(); h.$("btnVoice").click(); await flush(); assert.ok(finish); }
-  await transcribing(); finish("核对混凝土资料"); await flush();
+  async function transcribing() {
+    finish = null;
+    h.$("btnVoice").click();
+    await until(() => h.$("btnVoice").getAttribute("aria-pressed") === "true", "recording did not start");
+    h.$("btnVoice").click();
+    await until(() => typeof finish === "function", "a fresh ASR request did not start");
+    assert.ok(finish);
+  }
+  await transcribing(); await finish("核对混凝土资料");
   assert.equal(h.$("agentMessage").value, "核对混凝土资料");
   assert.equal(h.calls.filter((c) => c.url === "/api/agent/turns").length, 0);
   await transcribing(); await h.app.changeSession("", true); h.$("agentMessage").value = "新会话";
-  finish("旧会话转写"); await flush(); assert.equal(h.$("agentMessage").value, "新会话");
+  await finish("旧会话转写"); assert.equal(h.$("agentMessage").value, "新会话");
   await transcribing(); await h.app.openWorkspace("C:/other-engineering"); h.$("agentMessage").value = "新工程";
-  finish("旧工程转写"); await flush(); assert.equal(h.$("agentMessage").value, "新工程");
+  await finish("旧工程转写"); assert.equal(h.$("agentMessage").value, "新工程");
   const requests = voiceCalls.filter((c) => c.url === "/api/asr");
   assert.equal(requests.length, 3);
   for (const request of requests.slice(1)) {
