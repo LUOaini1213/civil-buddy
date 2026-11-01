@@ -21,6 +21,14 @@ class ToolSpec:
 
 # 产品工具面（可被 NL Agent 调度；与 skills_registry 对齐并扩展）
 TOOL_CATALOG: List[ToolSpec] = [
+    ToolSpec("jpj.catalog", "JPJ 数据目录", "big", "packing_assistant.tools.readonly_sources",
+             "查看本地 JPJ 注册量数据版本、月份与查询能力", "只读；固定 loopback 服务"),
+    ToolSpec("jpj.query", "JPJ 注册量查询", "big", "packing_assistant.tools.readonly_sources",
+             "按固定查询模板读取注册量，返回参数、SQL、来源与版本哈希", "不支持销量/TIV或品牌×燃料交叉"),
+    ToolSpec("literature.catalog", "技术资料目录", "big", "packing_assistant.tools.readonly_sources",
+             "查看本地技术资料来源、许可说明与语料版本", "只读；不上传用户资料"),
+    ToolSpec("literature.search", "技术资料检索", "big", "packing_assistant.tools.readonly_sources",
+             "检索原文段落、位置及带原文证据的实体关系", "确定性检索；不冒充 LLM 推理"),
     # —— 大 Team / 共享 ——
     ToolSpec(
         "intent.interpret",
