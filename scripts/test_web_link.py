@@ -2,7 +2,8 @@
 """The tender <-> packing link from a browser (gateway/web_link.py) and the page a visitor without a token lands on.
 
   guard      POST /api/tender/link, POST /api/tender/link/demo, GET /demo and the deliverable route answer 401 without
-             CIVIL_TOKEN (a browser gets an HTML page, not the app) and create no job folder
+             CIVIL_TOKEN (a browser gets an HTML page, not the app) and create no job folder; every other route
+             of the app too (enumerated from app.routes): only /, /workbench, /api/health and /static answer
   upload     a tender (.md / .docx / .pdf) and a panel list (.xlsx / .csv) in a job folder of their own under the data
              volume: the same tender.packing_link statements as the CLI (S1-S7, 1 covered / 2 partial / 4 for a person,
              6 x 40HQ from Clause 4.8), sha256 of the bytes sent, submit_blocked, the four deliverables
@@ -176,6 +177,42 @@ class GuardTests(Case):
         self.assertEqual(403, remote.post("/api/tender/link/demo").status_code)
         self.assertEqual(403, remote.get("/demo").status_code)
         self.assertEqual([], self.jobs())
+
+    def test_no_route_of_the_whole_app_computes_without_the_token(self) -> None:
+        """Every route the app registers, not only the new ones: without the token each HTTP route answers 401 and
+        each WebSocket is refused, except the three public pages (/ and /workbench show the landing page, not the
+        app) and /static (files only). A route added later without thinking about the guard fails here."""
+        from starlette.routing import Mount, WebSocketRoute
+
+        public_pages = {"/", "/workbench", "/api/health"}
+        http, sockets, opened = 0, 0, []
+        for route in gateway.app.routes:
+            path = re.sub(r"\{[^}]+\}", "x", getattr(route, "path", "")) or "/"
+            if isinstance(route, WebSocketRoute):
+                sockets += 1
+                try:
+                    with self.client.websocket_connect(path) as ws:
+                        ws.receive_text()
+                        opened.append(("WS", path, "open"))
+                except Exception:  # noqa: BLE001 - the guard closes the handshake; any refusal is fine
+                    pass
+                continue
+            if isinstance(route, Mount):
+                self.assertEqual("/static", route.path, "a mount other than /static is not covered by this test")
+                continue
+            for method in sorted((getattr(route, "methods", None) or {"GET"}) - {"HEAD"}):
+                http += 1
+                status = self.client.request(method, path).status_code
+                if path in public_pages:
+                    continue
+                if status != 401:
+                    opened.append((method, path, status))
+        self.assertEqual([], opened, "routes reachable without the token")
+        self.assertGreater(http, 70)
+        self.assertGreaterEqual(sockets, 2)
+        for path in ("/", "/workbench"):
+            self.assertIn("This server is private", self.client.get(path).text)
+        self.assertEqual([], self.jobs(), "a refused request created a job folder")
 
     def test_demo_page_is_english_and_builds_no_html_from_data(self) -> None:
         page = self.client.get("/demo", headers=BEARER)
