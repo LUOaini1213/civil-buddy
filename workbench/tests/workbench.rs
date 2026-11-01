@@ -4245,3 +4245,40 @@ async fn test_upload_url_refuses_inward_addresses() {
     let health: serde_json::Value = serde_json::from_str(&text).unwrap();
     assert_eq!(health["capabilities"]["upload_url"], true);
 }
+
+/// The tender post reads the WHOLE original upload through the Python document reader. The workbench's own path gave it
+/// twenty thousand characters an upload: of a tender longer than that, the evaluation chapter at its END was never
+/// seen. Where the engine is not there (no `python`, no packages - CI's rust job), the workbench's own reading stands,
+/// as before; the test says which of the two it saw.
+#[test]
+fn test_bid_parse_reads_the_whole_upload_through_the_engine() {
+    use civil_workbench::{attach, packing_bridge};
+
+    let p = paths();
+    let session = "rust-whole-tender";
+    if let Ok(dir) = attach::session_dir(&p, session) {
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+    let filler: String = (1..1200)
+        .map(|n| format!("{n}.1 承包人应在收到监理人指示后{n}天内提交书面报告，监理人应在其后答复。\n\n"))
+        .collect();
+    let tender = format!(
+        "第一章 招标公告\n\n项目名称：临溪镇文化站修缮工程\n\n第二章 投标人须知\n\n| 条款号 | 条款名称 | 编列内容 |\n| --- | --- | --- |\n| 1.3.2 | 计划工期 | 120日历天 |\n\n1. 总则\n\n1.1 适用范围：仅适用于本项目。\n\n第三章 合同条款及格式\n\n{filler}\n\n第四章 评标办法\n\n本次评标采用综合评估法。\n\n4.1 投标人不按要求提交投标保证金的，其投标将被否决。\n"
+    );
+    assert!(tender.chars().count() > 30_000, "longer than the prefix the workbench keeps for the prompt");
+    attach::save_upload(&p, session, "招标文件.txt", tender.as_bytes()).expect("upload");
+    assert_eq!(attach::upload_originals(&p, session).len(), 1);
+
+    let mut ctx = ToolCtx::new(p.clone(), "bid-parse", "bid", "low", true, session);
+    let out = packs::execute(&mut ctx, "bid-parse__extract", &json!({"project_name": "临溪镇文化站修缮工程"}));
+    assert!(out.contains("已写入"), "{out}");
+    let table = std::fs::read_to_string(ctx.out_dir.join("招标解析表.md")).unwrap();
+    let engine = packing_bridge::tender_extract("第一章 招标公告\n★工期60日历天。", "x").is_ok();
+    if engine {
+        assert!(table.contains("按文件结构解析"), "read as a document, by the engine: {}", &table.chars().take(400).collect::<String>());
+        assert!(table.contains("综合评估法"), "the chapter at the END of the file was read");
+        assert!(table.contains("120日历天"));
+    } else {
+        assert!(table.contains("招标解析表"), "the workbench's own reading stands where the engine is not there");
+    }
+}

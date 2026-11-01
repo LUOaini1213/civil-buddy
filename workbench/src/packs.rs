@@ -1523,12 +1523,43 @@ fn gather_tender_source(ctx: &ToolCtx, args: &Value) -> String {
     chunks.join("\n")
 }
 
+/// The tender read WHOLE by the Python document reader (the same 招标解析表 the command line writes): the session's
+/// original uploads plus whatever the turn typed. None where the engine is not there or read nothing - the caller
+/// keeps the workbench's own reading.
+fn whole_document_table(ctx: &ToolCtx, args: &Value, project: &str) -> Option<String> {
+    let files = crate::attach::upload_originals(&ctx.paths, &ctx.session_id);
+    if files.is_empty() {
+        return None;
+    }
+    let mut typed = Vec::new();
+    for key in ["tender_text", "text", "excerpt", "source", "body"] {
+        let v = s(args, key);
+        if !v.is_empty() {
+            typed.push(v);
+        }
+    }
+    let got = crate::packing_bridge::tender_extract_files(&typed.join("\n"), project, &files).ok()?;
+    let read_any = got
+        .get("files_read")
+        .and_then(|v| v.as_array())
+        .map(|a| !a.is_empty())
+        .unwrap_or(false);
+    let md = got.get("extract_table_markdown").and_then(|v| v.as_str())?;
+    (read_any && !md.trim().is_empty()).then(|| md.to_string())
+}
+
 fn parse_tender(ctx: &mut ToolCtx, args: &Value) -> String {
+    let project = nonempty(&s(args, "project_name"), "未命名招标");
+    if let Some(md) = whole_document_table(ctx, args, &project) {
+        return match ctx.write_md("招标解析表.md", &md) {
+            Ok(m) => m,
+            Err(e) => e,
+        };
+    }
     let text = gather_tender_source(ctx, args);
     if text.trim().is_empty() {
         return "拒绝写盘：没有招标正文。请粘贴 ITT 或上传 pdf/docx/xlsx/txt 后再抽。".into();
     }
-    let project = nonempty(&s(args, "project_name"), "未命名招标");
     let (jur, banner) = zone_banner(args);
     let facts = crate::extract::facts_from_text(&text);
     let portal = if jur == "SG" || jur == "DUAL" {

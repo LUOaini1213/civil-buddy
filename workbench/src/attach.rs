@@ -526,6 +526,23 @@ pub fn import_url(paths: &Paths, session: &str, url: &str) -> Result<Vec<Value>,
     Ok(vec![save_upload(paths, session, &name, &bytes)?])
 }
 
+/// The session's uploads as they came in: `(<id>.bin, the name they were uploaded under)`, in the order of
+/// `list_uploads`. For readers that want the ORIGINAL file, not the text this workbench extracted from it.
+pub fn upload_originals(paths: &Paths, session: &str) -> Vec<(PathBuf, String)> {
+    let Ok(dir) = session_dir(paths, session) else {
+        return Vec::new();
+    };
+    list_uploads(paths, session)
+        .iter()
+        .filter_map(|m| {
+            let id = m.get("id").and_then(|v| v.as_str())?;
+            let name = m.get("name").and_then(|v| v.as_str())?;
+            let bin = dir.join(format!("{id}.bin"));
+            bin.is_file().then(|| (bin, name.to_string()))
+        })
+        .collect()
+}
+
 /// The http(s) addresses a message holds, in order, each once: up to the first blank or the first mark that ends an
 /// address in running Chinese text ("…见 https://example.org/a.pdf，请解析").
 pub fn addresses_in(message: &str) -> Vec<String> {

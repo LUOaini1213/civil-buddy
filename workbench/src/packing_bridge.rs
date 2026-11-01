@@ -115,6 +115,17 @@ pub fn probe() -> Value {
 
 /// Bid-parse extract via the same Python transform as packing tender-handoff.
 pub fn tender_extract(tender_text: &str, project_name: &str) -> Result<Value, String> {
+    tender_extract_files(tender_text, project_name, &[])
+}
+
+/// ... with the session's ORIGINAL uploads (`(<id>.bin, name as uploaded)`): the sidecar reads each of them whole -
+/// a PDF by what its pages draw, a Word file with its list numbers - instead of the prefix the workbench keeps for
+/// the prompt. A tender is five times that prefix.
+pub fn tender_extract_files(
+    tender_text: &str,
+    project_name: &str,
+    files: &[(PathBuf, String)],
+) -> Result<Value, String> {
     let root = root_configured().ok_or_else(|| "no packing_assistant root".to_string())?;
     let script = {
         if let Ok(m) = env::var("CARGO_MANIFEST_DIR") {
@@ -143,7 +154,11 @@ pub fn tender_extract(tender_text: &str, project_name: &str) -> Result<Value, St
         .stderr(Stdio::piped())
         .spawn()
         .map_err(|e| format!("python: {e}"))?;
-    let payload = json!({"tender_text": tender_text, "project_name": project_name});
+    let listed: Vec<Value> = files
+        .iter()
+        .map(|(path, name)| json!({"path": path.display().to_string(), "name": name}))
+        .collect();
+    let payload = json!({"tender_text": tender_text, "project_name": project_name, "files": listed});
     if let Some(stdin) = child.stdin.as_mut() {
         use std::io::Write;
         stdin

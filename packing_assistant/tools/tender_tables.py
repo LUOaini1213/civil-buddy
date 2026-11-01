@@ -323,6 +323,13 @@ def _document_sections(parsed: Mapping[str, Any], facts: Facts, document: Mappin
                 "这些行原文里多半不带「否决」字样，所以单列。不代判是否满足，逐项自查。", ""]
         out += _table(PARSE_HEADER, [[f"{r.get('group')}{'：' + str(r.get('factor')) if r.get('factor') else ''}", _clip(r.get("standard"), 160),
                                       str(r.get("locator") or "—"), "已检出", "逐项自查：不符合即不能通过初步评审"] for r in review])
+    remainder = list(document.get("remainder") or [])
+    if remainder:
+        out += ["## 10B 前附表其余各行（照抄）", "",
+                "前附表里没有归入上面任何一项的行，原样抄在这里：行名不在本工具词表里的行也不会从成稿里消失。通读一遍，"
+                "其中可能就有本工具没认出来的要求。", ""]
+        out += _table(PARSE_HEADER, [[f"前附表 {r.get('name') or '（无行名）'}", _clip(r.get("text"), 160), str(r.get("locator") or "—"), "已检出", "未归类：照抄原文"]
+                                     for r in remainder])
     out += ["## 11 否决与拒收条款（逐条）", "",
             "每一条都是原文里会让投标被否决、被拒收或按无效处理的句子，一句一行。不代判是否触发，逐条自查。", ""]
     rows = []
