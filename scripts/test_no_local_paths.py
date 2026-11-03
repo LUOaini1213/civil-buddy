@@ -49,6 +49,8 @@ def tracked_files() -> list[str]:
 def scan() -> list[str]:
     problems = []
     for rel in tracked_files():
+        if rel == "scripts/test_no_local_paths.py":  # its self-test fixtures are fictitious home paths
+            continue
         path = ROOT / rel
         if path.suffix.lower() in BINARY_EXT or not path.is_file() or path.stat().st_size > MAX_BYTES:
             continue
@@ -67,7 +69,7 @@ def self_test() -> int:
         r"cd C:\Users\alice\civil-buddy",
         r'"cwd": "C:\\Users\\bob\\civil-buddy"',
         "SUB = Path(r'C:/Users/carol/out')",
-        "default=r\"D:\\Users\\wenjie.luo\\Downloads\\x.xlsx\"",
+        "default=r\"D:\\Users\\frank\\Downloads\\x.xlsx\"",
         "see /home/dave/civil-buddy/README.md",
         "open /Users/erin/Desktop/x.md",
     ]
