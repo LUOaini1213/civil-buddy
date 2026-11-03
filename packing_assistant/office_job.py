@@ -3,7 +3,7 @@
 NL run writes real .xlsx next to table drafts so Excel can open them.
 If the user names an existing workbook in CIVIL_JOB_ROOT, patch only CB草稿-*
 sheets and leave the owner's sheets alone.
-Not a desktop shell. Not D:\\layout. Not COM into an open Excel window.
+Not a desktop shell. Never a folder listed in CIVIL_PROTECTED_ROOTS. Not COM into an open Excel window.
 """
 
 from __future__ import annotations
@@ -33,12 +33,12 @@ CUT = "（未读完）"
 DRAFT_PREFIX = "CB草稿"
 _OFFICE_CONTENT_ERRORS = (BadZipFile, ValueError, KeyError, SyntaxError)
 
-FORBIDDEN_LAYOUT = ("d:\\layout", "d:/layout")
-
-
 def is_forbidden_layout(path: Path) -> bool:
-    n = str(path).replace("/", "\\").rstrip("\\").lower()
-    return n == "d:\\layout" or n.startswith("d:\\layout\\")
+    """The folder is, or lies inside, a production-data root this machine protects (CIVIL_PROTECTED_ROOTS,
+    empty by default; packing_assistant.protected_roots). Such a folder is never a job root."""
+    from packing_assistant.protected_roots import is_protected
+
+    return is_protected(path)
 
 
 #: A job folder for the current request only (the gateway's upload route, gateway/web_link.py). A context
@@ -215,7 +215,7 @@ def _resolve_job_file(path: Path) -> Path:
     except (OSError, ValueError) as e:
         raise PermissionError("job file outside authorized root") from e
     if is_forbidden_layout(resolved):
-        raise PermissionError("D:\\layout denied")
+        raise PermissionError("protected root denied (CIVIL_PROTECTED_ROOTS)")
     return assert_open(resolved)
 
 

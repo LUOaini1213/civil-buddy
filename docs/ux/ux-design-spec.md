@@ -991,7 +991,7 @@ skills，**没有 `packing_assistant/`、没有 `data/civilbuddy.db`** → proje
 | 输入 | 箱数 | 利用率 |
 |---|---|---|
 | 仓库内相对路径 `test/sim_materials/small_one_container/materials.xlsx` | 8 | 0.0014（真读了，与表逐项吻合） |
-| 绝对路径 `C:\Users\LW\Desktop\我的表.xlsx` | 15 | 0.675 |
+| 绝对路径 `C:\Users\你\Desktop\我的表.xlsx` | 15 | 0.675 |
 | **什么都不给**，只说「帮我装箱」 | 15 | 0.675 |
 
 后两行**数字完全一样** —— 绝对路径被丢弃后回落到了演示预设物料，**不报错、照样给

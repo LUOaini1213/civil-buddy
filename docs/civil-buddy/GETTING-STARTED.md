@@ -25,7 +25,7 @@ TUI 斜杠：`/skills` `/new` `/bg` `/threads` `/resume` `/approvals` `/sandbox`
 在仓库根目录使用 Python 3.11 或更新版本：
 
 ```powershell
-cd C:\Users\LW\civil-buddy
+cd path\to\civil-buddy
 python -m venv .venv
 .\.venv\Scripts\python.exe -m pip install -r requirements.txt
 .\.venv\Scripts\python.exe -m packing_assistant.civil app
@@ -52,7 +52,7 @@ python -m venv .venv
 如需真装箱 3D / HITL，再单独启动工程装柜服务：
 
 ```powershell
-cd C:\Users\LW\civil-buddy
+cd path\to\civil-buddy
 .\.venv\Scripts\python.exe -m uvicorn gateway.app:app --host 127.0.0.1 --port 8000
 ```
 
@@ -69,17 +69,17 @@ cd C:\Users\LW\civil-buddy
 文书会另存可编辑的 `.docx`，有表格的岗同时另存 `.xlsx`。可从文书卡下载 Word 或 Excel；设置菜单支持单任务 ZIP 备份和导入，导入始终创建新任务，操作步骤见 [试用说明](../../TRY.md)。要把稿落到工程文件夹、并让专家**直接读该夹里的 Word/Excel**（不必再点上传）：
 
 ```powershell
-$env:CIVIL_JOB_ROOT = "C:\Users\LW\Documents\某工地"
+$env:CIVIL_JOB_ROOT = "C:\Users\你\Documents\某工地"
 ```
 
-目录须已存在。说「写一份」会自动抄夹内 `.xlsx` / `.docx` / `.csv` / `.txt`。点名已有工作簿（如「现场台账」）时，在该文件里只增改 `CB草稿-*` 工作表，**不改你原来的表**。**禁止**把 `D:\layout` 当缺省作业根。construction 方案另有模板 `专项施工方案-AI草稿.docx`。这不是接管本机 Word/Excel 窗口，也不是全盘搜索。
+目录须已存在。说「写一份」会自动抄夹内 `.xlsx` / `.docx` / `.csv` / `.txt`。点名已有工作簿（如「现场台账」）时，在该文件里只增改 `CB草稿-*` 工作表，**不改你原来的表**。**禁止**把生产数据目录当作业根：在 `CIVIL_PROTECTED_ROOTS` 里列出它们（默认为空），这些目录既不能当作业根，也不能写入。construction 方案另有模板 `专项施工方案-AI草稿.docx`。这不是接管本机 Word/Excel 窗口，也不是全盘搜索。
 
 文本 PDF 可直接上传。扫描 PDF 无文字层时会提示无法提取，需先提供文字版；不能把扫描件当作已抽出招标。工程装柜服务另有 `CIVIL_PARSE=auto` 的可选解析器，此配置不代表工作台已提供 OCR。
 
 本机刚跑过的冒烟（刀后快闸）：
 
 ```powershell
-cd C:\Users\LW\civil-buddy
+cd path\to\civil-buddy
 npm run check
 python scripts/demo_agent_middleware.py
 python scripts/test_understand.py
@@ -117,7 +117,7 @@ curl -s http://127.0.0.1:8000/api/agent -H "Content-Type: application/json" -d "
 ## 3. 接 MCP Host（无 MSVC）
 
 ```powershell
-cd C:\Users\LW\civil-buddy
+cd path\to\civil-buddy
 python demo/mcp_stdio.py --pack bid
 ```
 

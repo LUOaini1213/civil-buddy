@@ -415,7 +415,7 @@ def job_listing() -> dict:
         "hint": (
             "说「写一份」会自动抄作业根里的 xlsx/docx/csv/txt，不必再上传。"
             if job_root_granted()
-            else "设 CIVIL_JOB_ROOT 为工程文件夹后，本岗直接读该目录，不必上传。禁止 D:\\layout。"
+            else "设 CIVIL_JOB_ROOT 为工程文件夹后，本岗直接读该目录，不必上传。CIVIL_PROTECTED_ROOTS 所列目录不能当作业根。"
         ),
     }
 

@@ -458,7 +458,7 @@ test("turn-stream: resume replays from the last id and completes; a 404 hands ov
 const { createDeliverables, groupDeliverables, docExt, docStem, isDocMd } = require("../demo/static/modules/deliverables.js");
 
 test("deliverables: fileUrl uses session/run/file when the backend has file_ref, path= otherwise, never the Rust verbatim prefix", () => {
-  const rec = { path: "C:\\Users\\LW\\demo\\out\\s1\\deliverables\\r9\\1-方案.md", name: "方案.md", run_id: "r9" };
+  const rec = { path: "C:\\work\\demo\\out\\s1\\deliverables\\r9\\1-方案.md", name: "方案.md", run_id: "r9" };
   const byRef = createDeliverables({ state: { session: "s1" }, capability: () => true });
   assert.equal(byRef.fileUrl(rec), "/api/file?session=s1&run=r9&file=1-%E6%96%B9%E6%A1%88.md&name=%E6%96%B9%E6%A1%88.md");
   const byPath = createDeliverables({ state: { session: "s1" }, capability: () => undefined });

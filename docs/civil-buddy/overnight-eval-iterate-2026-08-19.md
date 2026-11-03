@@ -6,7 +6,7 @@
 
 > 编写时刻：2026-08-19 22:30 中国标准时间  
 > 截止： **2026-08-20 08:30:00+08:00**（约 10 小时）  
-> 仓库：`C:\Users\LW\civil-buddy` · 分支 `main`  
+> 仓库：`<repo>` · 分支 `main`  
 > 身份：内部讨论 AI 起草搭子。默认产出永远是草稿。`submit_blocked=true`。
 
 本文件是**可执行规划**，不是愿望清单。心跳脚本、监督进程、Grok 定时刀都按这里的闸运行。
@@ -95,7 +95,7 @@ while now < 08:30:
 启动：
 
 ```powershell
-cd C:\Users\LW\civil-buddy
+cd path\to\civil-buddy
 $env:AUTONOMY_END_TS = "2026-08-20T08:30:00+08:00"
 $env:PYTHONUNBUFFERED = "1"
 python scripts/overnight_civil_supervisor.py

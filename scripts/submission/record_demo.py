@@ -15,7 +15,7 @@ from pathlib import Path
 
 from playwright.sync_api import sync_playwright
 
-ROOT = Path(r"C:\Users\LW\civil-buddy")
+ROOT = Path(__file__).resolve().parents[2]
 SUB = ROOT / "output/submission"
 TTS = SUB / "tts_demo"
 VID_DIR = SUB / "rec"

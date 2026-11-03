@@ -107,8 +107,9 @@ def default_profile() -> SandboxProfile:
     job = (os.getenv("CIVIL_JOB_ROOT") or "").strip()
     if job:
         jp = Path(job)
-        n = str(jp).replace("/", "\\").rstrip("\\").lower()
-        if n != "d:\\layout" and not n.startswith("d:\\layout\\"):
+        from packing_assistant.protected_roots import is_protected
+
+        if not is_protected(jp):
             roots.append(jp)
     roots.append(Path.cwd() / ".civil-buddy" / "out")
     try:

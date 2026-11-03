@@ -7,9 +7,9 @@
 先启动 JPJ 项目 `127.0.0.1:8777` 及技术资料项目 `127.0.0.1:8778`。合入本地主仓后运行：
 
 ```powershell
-Set-Location 'C:/Users/LW/civil-buddy'
+Set-Location 'path/to/civil-buddy'
 $env:PYTHON_DOTENV_DISABLED = '1'
-& 'C:/Users/LW/civil-buddy/.venv/Scripts/python.exe' -m packing_assistant.runtime.research_demo
+& '.venv/Scripts/python.exe' -m packing_assistant.runtime.research_demo
 ```
 
 打开 `http://127.0.0.1:8779`。可换成已安装项目依赖的 Python；源码及输出来自命令执行时所在的 checkout。
@@ -39,8 +39,8 @@ JPJ 是汽车注册量，不能称销量、批发 TIV、进口量或库存。冻
 ## 验证与真实日志
 
 ```powershell
-& 'C:/Users/LW/civil-buddy/.venv/Scripts/python.exe' scripts/test_readonly_sources.py
-$env:PYTHON = 'C:/Users/LW/civil-buddy/.venv/Scripts/python.exe'
+& '.venv/Scripts/python.exe' scripts/test_readonly_sources.py
+$env:PYTHON = (Resolve-Path '.venv/Scripts/python.exe').Path
 npm run check
 ```
 

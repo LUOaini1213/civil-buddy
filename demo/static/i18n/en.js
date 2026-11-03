@@ -462,7 +462,7 @@ window.CB_I18N_EN = {
   "策略 deny_production · 禁写生产数据区": "Policy deny_production · no writes to production data",
   "目标 ": "Target ",
   " 被判定为生产数据，写入被拒": " is treated as production data; the write was refused",
-  "输出只落本次运行的输出目录；不要指向 D:\\layout / prod": "Output goes only to this run's output folder; do not point at D:\\layout / prod",
+  "输出只落本次运行的输出目录；不要指向受保护目录（CIVIL_PROTECTED_ROOTS）或 prod": "Output goes only to this run's output folder; do not point at a protected folder (CIVIL_PROTECTED_ROOTS) or prod",
   "策略 deny_secret · 密钥沙箱": "Policy deny_secret · secrets sandbox",
   "目标碰到密钥/敏感文件，写入被拒，文件未落地": "The target touches a secret or sensitive file; the write was refused and no file was written",
   "密钥永不写盘：敏感值放环境变量或密钥管理，不经 AI 落文件": "Secrets are never written: keep sensitive values in environment variables or a secrets manager, not in files written by AI",

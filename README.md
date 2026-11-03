@@ -4,31 +4,20 @@
 
 **Agentic AI Workspace for Engineering** — 土木版 Codex
 
+**In one paragraph (EN)** — **Built:** a civil / construction workbench (Rust workbench + MCP entry, Python packing
+harness, FastAPI gateway; MIT) whose one measured engine is container packing (`pack-ship`): coordinates, counts and
+prices come only from that tool, and high-risk actions (qualification, bids, disk writes) need a typed human confirmation.
+**Found:** an archived 128-run evaluation (16 cargo variants of 2 public D-Wave 3D-BPP samples, 64 distinct inputs, 5 distinct outcomes)
+completes every run, and the plan fits (`can_fit=True`) in 71 of 128 runs; the other 57 return `can_fit=False` for a person to revise.
+**Limits:** that is a stability check on 2 public instances, not a benchmark over real shipments; CI runs a 2×1 offline slice
+of it on every push, not the full 128. The other 65 job-post skills are SOPs the model drafts against (not 65 engines), and
+the CAD → 3D, planning and packing-list pages are previews, not sign-off models. Numbers: `python scripts/render_eval_table.py`.
+
 Natural Language → Agent Routing → Deterministic Tools → HITL → Evaluation
 
-**Rust 统一工作台**：[启动与能力边界](docs/civil-buddy/unified-workbench.md)。一个本地入口连接 Agent、66 岗位、文档副本编辑、资料检索、CAD、工程计算与规划页面；Python CLI 的原有流程继续保留。
-
-**CAD → 3D 建模助手（预览）** — 上传 DXF（闭合轮廓、圆弧、圆和受限块引用），确认单位、图层和实体区域，
-生成墙/柱/板或带孔截面的参数化网格；旋转查看、选中追溯、修改高度/长度与撤销，
-保存项目及版本、重启恢复、项目包交接，并在统一 Agent 对话里改参、撤销与导出。
-先运行 `python -m pip install -r requirements-cad.txt`，
-再运行 `python -m packing_assistant.civil app`，从首页进入「CAD → 3D 建模助手」（`/cad`）。
-同仓还有施工计划（关键路径 / 资源调整，`/engineering/planning`）和箱单台账（来源核对后才改数，`/logistics`）。
-附带明确标注的合成样例，真实项目图纸、工期和箱单须另行验收；不支持直接导入 DWG，
-不自动识别门窗，不是完整 BIM 或签认模型。操作与边界见 [CAD 建模说明](docs/civil-buddy/cad-to-3d.md)。
+**Rust 统一工作台**：[启动与能力边界](docs/civil-buddy/unified-workbench.md)。一个本地入口连接 Agent、66 岗位、文档副本编辑、资料检索、CAD、工程计算与规划页面；Python CLI 的原有流程继续保留。预览工具（CAD → 3D、施工计划、箱单台账）见下文[预览工具](#预览工具)。
 
 ![Civil Buddy workbench](docs/assets/workbench.png)
-
-**In one paragraph (EN)** — a civil / construction workbench whose one measured
-engine is container packing (`pack-ship`). Coordinates, counts and prices come
-only from that tool, and a 128-run evaluation is archived in the repo. CI on
-every push runs a 2×1 offline slice of that eval, not the full 128. The other
-65 job-post skills are SOPs the model drafts against, at the depth the ladder
-states — not 65 engines. High-risk actions (qualification, bids, disk writes)
-need a human confirmation. A preview path turns DXF outlines into a mesh
-(`/cad`), plus a planning page and a packing-list ledger; those are not extra
-engines and are not sign-off models. Rust workbench + MCP entry, Python packing harness,
-FastAPI gateway. MIT.
 
 **Deploy (EN)** — `CIVIL_TOKEN=<random> docker compose up --build`, then `http://localhost:8000/?token=<random>` and
 `/demo` (the tender ↔ packing link in one click, or on two files you upload). For a server:
@@ -36,7 +25,7 @@ FastAPI gateway. MIT.
 127.0.0.1; rehearsed locally, not yet run on Lightsail) and [docs/deploy-minimal.md](docs/deploy-minimal.md)
 (other hosts).
 
-**30 秒，无 Key** — 策略引擎 + 失败恢复的四拍剧本（正常放行 → 越权被拒 → 工具故障重试降级 → 成本超限熔断）：
+**30 秒，无 Key**（Python 3.10+，CI 用 3.11；Windows / Linux 同样的命令）— 策略引擎 + 失败恢复的四拍剧本（正常放行 → 越权被拒 → 工具故障重试降级 → 成本超限熔断）：
 
 ```bash
 pip install -r requirements.txt
@@ -118,12 +107,12 @@ submit_blocked=true  secret_leak=false  禁止：可以投标 / 可以开工
 | 证据 | 数字 | 复跑 |
 |---|---|---|
 | 66 岗诚实分级 | L1 知识库 66/66 · L2 工具写盘 66/66 · L3 引擎岗 1 | [docs/depth-ladder.md](docs/depth-ladder.md)（每级挂验收命令） |
-| 自动化装箱评测 | **128** 次（16 并发 × 8 轮），2026-09-02 复跑 **128/128 PASS**。PASS 只表示流水线跑完并返回了柜数与 `can_fit`，不表示都装得下：其中 `can_fit=True` **71/128**，其余 57 次 `can_fit=False` 交回人改方案 | [留档](docs/eval/fanout16x8-2026-09-02/rollup.md)（128 条逐次记录）· `python scripts/fanout16x8_online_cargo.py`（联网抓公开货样约 4 分钟；`--skip-fetch` 用仓内 `data/external/fanout16x8/` 缓存可离线跑）· 本表数字由 `python scripts/render_eval_table.py --check README.md` 对留档核对（CI）· CI 每次提交跑 2 lane × 1 round 离线切片 |
+| 自动化装箱评测 | **128** 次（16 并发 × 8 轮），2026-09-02 复跑 **128/128 PASS**。输入来自 **2** 个公开 D-Wave 3D-BPP 样本，派生 **16** 个货物变体，再按轮次改数量与长度，共 **64** 种不同输入（每 lane 8 轮里 4 种，其余是同一输入重跑，作稳定性检查，不是 128 个独立案例）；留档里共 **5** 种结果（箱数、`can_fit`、柜数的组合）。PASS 只表示流水线跑完并返回了柜数与 `can_fit`，不表示都装得下：其中 `can_fit=True` **71/128**，其余 57 次 `can_fit=False` 交回人改方案 | [留档](docs/eval/fanout16x8-2026-09-02/rollup.md)（128 条逐次记录）· `python scripts/fanout16x8_online_cargo.py`（联网抓公开货样约 4 分钟；`--skip-fetch` 用仓内 `data/external/fanout16x8/` 缓存可离线跑）· 本表数字由 `python scripts/render_eval_table.py --check README.md` 对留档核对（CI）· CI 每次提交跑 2 lane × 1 round 离线切片 |
 | steps 主路径 vs LLM 自主调工具 | 影子评测（steps 臂 vs `llm_toolcall` 臂），CI 每次提交都跑 tiny 一例 | `python scripts/eval_workteams_cli.py --tiny-only`。**CI 里没有 Key**：llm 臂的工具选择走 `policy_fallback`（`harness._path_honesty` 会标出），CI 证明的是链路与两臂一致性检查，不是真模型的表现 |
 | Agent 中间件四拍剧本 | 正常放行 → 越权被拒 → 工具故障重试降级 → 成本超限熔断 | `python scripts/demo_agent_middleware.py`（无需 Key）· 断言版 `python scripts/test_agent_middleware.py` 与 `npm run check` 在 CI 每次提交都跑 |
-| 端到端金线 | 8/8（R13 时点实测，需 playwright，未进 CI） | `python scripts/r13_golden_path_e2e.py` |
+| 端到端金线 | 本表不报数：R13 时点手工跑过一次，过程记在 [ux-design-spec](docs/ux/ux-design-spec.md) K.7，没有留档运行日志；需 playwright，未进 CI | `python scripts/r13_golden_path_e2e.py` |
 
-**试用（零编译）** — 下载 [Releases](https://github.com/LUOaini1213/civil-buddy/releases) 的 **v0.4.0-workbench** zip → 双击 `start-workbench.bat`（浏览器自动打开 :8765）→「设置 → 模型设置」填自己的 Key（DeepSeek / z.ai / OpenAI 兼容任选，运行时生效）。
+**试用（零编译）** — 下载 [Releases](https://github.com/LUOaini1213/civil-buddy/releases) 的 **v0.4.0-workbench** zip（2026-08-31 由提交 `fb73005` 打包，比当前 `main` 早；之后加入的 CAD → 3D、语音输入、真实招标解析等不在包里）→ 双击 `start-workbench.bat`（浏览器自动打开 :8765）→「设置 → 模型设置」填自己的 Key（DeepSeek / z.ai / OpenAI 兼容任选，运行时生效）。
 试用包**不含装箱引擎**；要看真柜数需源码起装柜台：`pip install -r requirements.txt` → `uvicorn gateway.app:app --port 8000`。边界见 [TRY.md](TRY.md)。
 
 **提交署名说明** — 仓内约 40% 的提交署名为 `Packing Assistant`：agent 起草并落盘的改动独立署名，经人审后合入 `main`。这是 HITL 流程的一部分，不是第二位作者。
@@ -137,7 +126,7 @@ submit_blocked=true  secret_leak=false  禁止：可以投标 / 可以开工
 
 ---
 
-## 两套入口
+## 入口一览（工作台 :8765 · 装箱网关 :8000）
 
 | 入口 | 地址 | 用途 |
 |------|------|------|
@@ -161,7 +150,7 @@ Python 参考实现：`demo/`（`uvicorn app:app --host 127.0.0.1 --port 8765`�
 
 **语音输入（可选）**：输入框左边的「语音」按钮，说完只把文字回填到输入框、**不会自动发送**，核对后自己按发送。Python 参考实现装了 `requirements-asr.txt` 后用本机 faster-whisper 识别（带 35 个土木术语的提示，录音不出本机）；否则退回浏览器自带识别，首次使用前说明录音会发给浏览器厂商。设计与边界见 [docs/voice-input.md](docs/voice-input.md)，术语表修好了什么、没修好什么见 [eval/asr](eval/asr/README.md)。
 
-产品 CLI（土木版 Codex）：`python -m packing_assistant.civil`（TUI）· `python -m packing_assistant.civil app` · `python -m packing_assistant.civil mcp --pack construction`。像 Codex 在仓库里工作一样，`civil` 在**工地文件夹**里工作：`civil init` 写一份 `CIVIL.md`（本工程说明，相当于 AGENTS.md，写明的项目 / 辖区 / 业主会进成稿，留空的保持 `UNSPECIFIED`），之后在该文件夹或其子目录里运行，会话与文书落在 `<工地>/.civil-buddy/out`；`civil -C <文件夹>` 等同于先 cd；`civil exec --jsonl` 逐行输出事件流，`civil status` 看当前文件夹、沙箱、审批与模型。一轮任务有两种跑法：默认 `steps`（规则路由 + 确定性流程，不调模型）；`civil --mode model`（或 TUI 里 `/mode model`）换成模型驱动——模型自己列步骤、选岗位、读文件夹里的资料、调 `run_skill` / `pack_plan` / `tender_compare`，高风险岗位当场问确认句。模型写的字进不了成稿（交给流程的只有你的原话和你文件夹里的资料），回复里没有出处的数字会被改写或点名（基准 `test/benchmarks/number_provenance`，37 例 P/R 1.000）。模型用 `CIVIL_API_BASE` / `CIVIL_API_KEY` / `CIVIL_MODEL` 配，本机 Ollama 即可：`CIVIL_API_BASE=http://127.0.0.1:11434/v1 CIVIL_API_KEY=ollama CIVIL_MODEL=qwen2.5:3b`。两种跑法都读你点名的文件：`civil exec "packing.csv 要几个柜"` 由装箱引擎真算并留下 `pack-plan.md`，缺重量或尺寸的行逐条列出、不给柜数；`civil exec "解析招标 招标文件.docx"` 解析的是那份文件。完整走法见 [docs/civil-buddy/civil-cli.md](docs/civil-buddy/civil-cli.md)。
+产品 CLI（土木版 Codex）：`python -m packing_assistant.civil`（TUI）· `python -m packing_assistant.civil app` · `python -m packing_assistant.civil mcp --pack construction`。像 Codex 在仓库里工作一样，`civil` 在**工地文件夹**里工作：`civil init` 写一份 `CIVIL.md`（本工程说明，相当于 AGENTS.md，写明的项目 / 辖区 / 业主会进成稿，留空的保持 `UNSPECIFIED`），之后在该文件夹或其子目录里运行，会话与文书落在 `<工地>/.civil-buddy/out`；`civil -C <文件夹>` 等同于先 cd；`civil exec --jsonl` 逐行输出事件流，`civil status` 看当前文件夹、沙箱、审批与模型。一轮任务有两种跑法：默认 `steps`（规则路由 + 确定性流程，不调模型）；`civil --mode model`（或 TUI 里 `/mode model`）换成模型驱动——模型自己列步骤、选岗位、读文件夹里的资料、调 `run_skill` / `pack_plan` / `tender_compare`，高风险岗位当场问确认句。模型写的字进不了成稿（交给流程的只有你的原话和你文件夹里的资料），回复里没有出处的数字会被改写或点名（基准 `test/benchmarks/number_provenance`，37 例自编用例上 P/R 1.000，不是对任意模型的保证）。模型用 `CIVIL_API_BASE` / `CIVIL_API_KEY` / `CIVIL_MODEL` 配，本机 Ollama 即可：`CIVIL_API_BASE=http://127.0.0.1:11434/v1 CIVIL_API_KEY=ollama CIVIL_MODEL=qwen2.5:3b`。两种跑法都读你点名的文件：`civil exec "packing.csv 要几个柜"` 由装箱引擎真算并留下 `pack-plan.md`，缺重量或尺寸的行逐条列出、不给柜数；`civil exec "解析招标 招标文件.docx"` 解析的是那份文件。完整走法见 [docs/civil-buddy/civil-cli.md](docs/civil-buddy/civil-cli.md)。
 
 **拿真实招标文件来用**（招标三岗，不调模型、不联网）：`civil exec "解析招标 招标文件.pdf"` 整份读完（Word、带文字层的 PDF、装了 `.[ocr]` 之后的扫描件），字段取自前附表并标条款号和页码，否决与拒收条款一句一行；`civil exec "全面检查投标响应：招标文件.pdf 投标函.docx 施工组织设计.docx"` 把我方每份文件里的工期、报价、有效期、项目经理逐个跟招标要求比，并列出我方文件之间互相不一致的地方。用法和不能指望它的地方见 [docs/civil-buddy/real-tender.md](docs/civil-buddy/real-tender.md)。系统级沙箱（`--sandbox-backend os`：工具在被内核限制的进程里跑，Linux 用 Landlock + seccomp，Windows 用 Low 完整性级别 + Job 对象；`civil sandbox` 当场自检）见 [docs/civil-buddy/os-sandbox.md](docs/civil-buddy/os-sandbox.md)。自己公司的岗位做成插件装进来（`civil plugin install examples/plugins/site-forms`：SOP + 表单模板 + 知识，纯声明、不含代码；未受信任一律按高风险）见 [docs/civil-buddy/plugins.md](docs/civil-buddy/plugins.md)。不想用终端：`civil desktop` 打开原生桌面窗口（Tk，不用装任何东西；对话、逐步进度、审批对话框、双击打开成稿、复核），见 [docs/civil-buddy/desktop-app.md](docs/civil-buddy/desktop-app.md)。`civil review <文稿>` 不调模型，列出文稿里在工地资料中找不到出处的数字、条款号，以及「已具备报审条件」这类不该由文稿下的结论（退出码 0 干净 / 1 有待核对 / 2 审不了）。技能一岗一份：`.agents/skills/<id>/SKILL.md`。IDE：`ide/README.md`。Grok 总控：`skills/civil-buddy`。  
 **全量产品规划书**：[docs/civil-buddy/product-plan.md](docs/civil-buddy/product-plan.md)。切片执行：[product-completion-plan.md](docs/civil-buddy/product-completion-plan.md)。
@@ -186,6 +175,19 @@ PACKING_AGENT_URL=http://127.0.0.1:8000
 装箱前会核对原始物料：单重乘数量与总重冲突时，先列出冲突行，等待修正；不能把一件重物在计算中虚拟拆成多件来声称装得下。这两种情况会阻断装柜、订舱/VGM 草稿与出运文件导出，保留来源和原因供复核。普通完整件仍按实际尺寸、重量计算；磁盘恢复后的人工确认不会绕过检查。可离线复核：`npm run check -- --only pack-ship-weight-validation,physical-cargo-shipping,hitl-disk-resume`。
 
 详见 [docs/civil-buddy/packing-agent.md](docs/civil-buddy/packing-agent.md)。
+
+---
+
+## 预览工具
+
+**CAD → 3D 建模助手（预览）** — 上传 DXF（闭合轮廓、圆弧、圆和受限块引用），确认单位、图层和实体区域，
+生成墙/柱/板或带孔截面的参数化网格；旋转查看、选中追溯、修改高度/长度与撤销，
+保存项目及版本、重启恢复、项目包交接，并在统一 Agent 对话里改参、撤销与导出。
+先运行 `python -m pip install -r requirements-cad.txt`，
+再运行 `python -m packing_assistant.civil app`，从首页进入「CAD → 3D 建模助手」（`/cad`）。
+同仓还有施工计划（关键路径 / 资源调整，`/engineering/planning`）和箱单台账（来源核对后才改数，`/logistics`）。
+附带明确标注的合成样例，真实项目图纸、工期和箱单须另行验收；不支持直接导入 DWG，
+不自动识别门窗，不是完整 BIM 或签认模型。操作与边界见 [CAD 建模说明](docs/civil-buddy/cad-to-3d.md)。
 
 ---
 
@@ -231,7 +233,8 @@ python scripts/eval_workteams_cli.py --tiny-only      # steps vs llm 影子评�
 | `CIVIL_API_KEY` / `OPENAI_API_KEY` / `DEEPSEEK_API_KEY` | 成稿用的 Chat Completions Key（自选；DeepSeek 可选） |
 | `CIVIL_API_BASE` / `OPENAI_BASE_URL` | 兼容网关，例 `https://api.openai.com/v1` |
 | `CIVIL_MODEL` / `LLM_MODEL` | 模型名，须与网关一致 |
-| `CIVIL_JOB_ROOT` | 授权作业文件夹（禁止 `D:\layout`） |
+| `CIVIL_JOB_ROOT` | 授权作业文件夹（不能落在 `CIVIL_PROTECTED_ROOTS` 所列目录里） |
+| `CIVIL_PROTECTED_ROOTS` | 本机存放生产数据、任何工具都不能当作业根或写入的目录，多个用系统路径分隔符隔开（Windows `;`）；默认为空。名为 `prod` 的目录无论是否列出都拒写 |
 | `PACKING_AGENT_URL` | 装箱网关（可选） |
 | `PACKING_AGENT_ROOT` | 默认本仓根，一般不用设 |
 | `CIVIL_PORT` | 工作台端口，默认 8765 |

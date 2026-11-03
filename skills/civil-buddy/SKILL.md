@@ -30,7 +30,7 @@ V1 离线可完成 construction 草稿，不依赖 MCP。工作台 / Host 要 KB
 
 装箱/拼柜：工作台召唤 **pack-ship**，数字只抄 packing-agent（`PACKING_AGENT_URL` 或 `PACKING_AGENT_ROOT`）。见仓库 `docs/packing-agent.md`。禁止在草稿里手写柜数或 xyz。
 
-禁止把 `D:\layout` 当缺省作业根。
+禁止把生产数据目录（`CIVIL_PROTECTED_ROOTS` 所列）当作业根。
 
 ## Step 0 — 读规则（每次）
 

@@ -8,7 +8,7 @@ import wave
 from pathlib import Path
 
 sys.stdout.reconfigure(encoding="utf-8", errors="replace")
-SUB = Path(r"C:\Users\LW\civil-buddy\output\submission")
+SUB = Path(__file__).resolve().parents[2] / "output" / "submission"
 TTS = SUB / "tts_v2"
 import imageio_ffmpeg
 FFMPEG = imageio_ffmpeg.get_ffmpeg_exe()

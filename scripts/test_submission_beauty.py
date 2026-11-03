@@ -2,7 +2,7 @@
 """海之子杯提交包门禁（v0.4.0 提交定稿版）。
 
 历史：旧版驱动 build_submission_docs.py 重建 docx/PDF，但那个生成器硬编码了
-另一台机器的官方模板路径（C:\\Users\\wenjie.luo\\Downloads\\*.docx），在本机必然
+下载目录里的官方模板路径（~/Downloads/*.docx，仓内没有），在别的机器上必然
 FileNotFoundError——门禁等于恒红。2026-08-31 提交定稿改为：
 
   - 视频：仍然**真重建**（build_demo_video.py + narration.json 全在仓内，

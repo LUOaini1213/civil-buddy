@@ -1,6 +1,6 @@
 # 66 岗深度分级（Depth Ladder · 对人诚实）
 
-> 更新：2026-09-12（设计 20 岗逐岗专业文书与 105 项实测通过）· 依据 [product-plan.md](civil-buddy/product-plan.md) §3.2 / §6 / §7.2。
+> 更新：2026-11-03（各车道验收改挂可复跑命令；评分卡复跑口径）· 上次：2026-09-12（设计 20 岗逐岗专业文书与 105 项实测通过）· 依据 [product-plan.md](civil-buddy/product-plan.md) §3.2 / §6 / §7.2。
 > **铁律：广度以"路线图"形态出现，深度以"可复跑证据"形态出现。** 本页每一条深度声明都挂验收文件或可复跑命令；不确定的岗宁可标低不标高。
 
 ## 三级阶梯
@@ -8,14 +8,14 @@
 | 级 | 定义 | 覆盖 | 验收（可复跑） |
 |----|------|------|----------------|
 | **L1 KB 草稿岗** | 每岗四件套：faq≥5 + README 字段表 + outline 缺数栏 + `search_kb` 命中本岗（且不见兄弟岗私库） | **66/66** | `python scripts/test_kb_k4_depth.py` → `PASS kb_k4_depth experts=66 faq5=66 fields=66 gaps=66 search_hit=66` |
-| **L2 工具写盘岗** | 该岗有自己的成稿栏位/写盘函数（非通用 `_draft_markdown` 骨架句） | **66/66** | 依据 product-plan §3.2/§7.2 逐岗字段和测试证据；T044–T047 新增 20 岗，真实 Markdown 与 Excel 的四组回归共 105 项通过；新分发包另做本地验收 |
-| **L3 引擎岗** | 硬数字走本仓引擎：NL→IntentSpec→白名单 tools→HITL→影子评测 | **1**（pack-ship） | `python scripts/demo_one_shot.py` → ALL_PASS；`python scripts/eval_competition_scorecard.py --skip-phase0` → 综合分 **8.85**（本地校准、对外口径）门禁全 PASS |
+| **L2 工具写盘岗** | 该岗有自己的成稿栏位/写盘函数（非通用 `_draft_markdown` 骨架句） | **66/66** | `python scripts/test_expert_turn.py` → `PASS expert_turn n=66 chat=66 run=66`（66 岗各跑一次写盘回合；`npm run check` 的 expert-drafts 组，CI 每次提交跑）；设计 20 岗另有四组回归 `scripts/test_design_{basic,services,specialties,infrastructure}_drafts.py`，共 105 项（37 + 20 + 28 + 20） |
+| **L3 引擎岗** | 硬数字走本仓引擎：NL→IntentSpec→白名单 tools→HITL→影子评测 | **1**（pack-ship） | `python scripts/demo_one_shot.py` → ALL_PASS；`python scripts/run_phase0_baseline.py --quick` 之后再跑 `python scripts/eval_competition_scorecard.py --skip-phase0` → 综合分 **8.85**（本地校准评分卡，见下） |
 
 **L3 pack-ship 证据链（净仓能复跑的是长框架样例）：**
 
 - 净仓复跑：`python scripts/test_pack_ship_crates_structure.py`。长框架样例 9 箱、`can_fit` 为真、23800 kg 守恒。公开货样另见 `docs/eval/fanout16x8-2026-09-02/`。
 - 446 t 单票上曾经记下的 25×40HQ、mid50 0.594 依赖客户文件 `output/cases_446t/materials.json`。该文件不在仓库里，净仓不能复跑，不能当成这次的结果。29 柜基线已废弃。
-- 综合分 **8.85**：本地校准评分卡，phase0 quick（n=12，pass_rate 1.0）封顶口径，**不报 10.0**
+- 综合分 **8.85**：本地校准评分卡（维度权重和封顶规则都是本仓自定的，不是外部基准），phase0 quick 封顶口径，**不报 10.0**。2026-11-03 在本分支（基于 `c0bffb9`）上复跑：phase0 quick n=12、pass_rate 0.917（`sim:near_payload` 未过），综合 8.85、赢线 PASS。评分卡读的是 `output/phase0/` 下的 phase0 结果；净仓不先跑 `run_phase0_baseline.py --quick` 时同一命令报 8.21、赢线 FAIL、退出码 1。不进 CI。
 
 **UNSPECIFIED 是特性，不是未完成。** 每岗成稿缺数处一律写 `[A001]` / `UNSPECIFIED` / `TBD`，不编造数字、不冒充签认件——这是产品纪律（tools compute numbers; the model only routes）的直接体现，也是 L1 验收闸（gaps=66）的一部分。
 
@@ -23,26 +23,26 @@
 
 ## 16 车道 × L1/L2/L3 分级表
 
-数据提取自 product-plan §6（车道/岗数）与 §7.2（逐岗字段与验收，该表为状态权威）。设计 20 岗已各有专业文书，本地发布验收已完成，后续按用户试用反馈迭代；不把文书写盘提升为设计求解能力。
+数据提取自 product-plan §6（车道/岗数）与 §7.2（逐岗字段）。下表「验收」列只列可复跑命令，不再以规划书行号代替。设计 20 岗已各有专业文书，本地发布验收已完成，后续按用户试用反馈迭代；不把文书写盘提升为设计求解能力。
 
 | # | 车道 | 大类 | 岗数 | L1 | L2 | L3 | 已富化岗（写盘） | 验收 |
 |---|------|------|------|----|----|----|------------------|------|
 | 1 | `lane-bid` | 经营投标 | 3 | 3 | 3 | 0 | bid-parse / bid-compliance / bid-tech（handoff 三列 + 评分点目录） | `python scripts/test_tender_handoff.py` |
 | 2 | `lane-design` | 勘察设计 | 20 | 20 | 20 | 0 | 基础设计 4 岗、机电及钢结构 5 岗、专项 5 岗、基础设施及统筹 6 岗；只整理用户输入 | 四个 `scripts/test_design_*_drafts.py`，逐岗证据见下 |
 | 3 | `lane-bim` | BIM | 3 | 3 | 3 | 0 | bim-coord / bim-qto / bim-deliver（专用记录，不执行 IFC 检查） | `python scripts/test_bim_drafts.py` |
-| 4 | `lane-planning` | 计划 | 3 | 3 | 3 | 0 | plan-master / plan-lookahead / plan-resource（T032） | product-plan §7.2 行 12–14 |
+| 4 | `lane-planning` | 计划 | 3 | 3 | 3 | 0 | plan-master / plan-lookahead / plan-resource（T032） | `python scripts/test_expert_turn.py`（逐岗写盘回合，CI 每次提交跑） |
 | 5 | `lane-construction` | 施工生产 | 4 | 4 | 4 | 0 | construction（十一章 + fill_scheme/`docx_pending`）、method-hazard（判定书）、survey / dispatch（T030） | `python scripts/test_construction_skill_path.py` |
-| 6 | `lane-hse` | 安质环 | 4 | 4 | 4 | 0 | safety-brief（11 栏，毫米/电话 `[A001]`）/ quality / env / emergency（T035） | product-plan §7.2 行 19–22 |
-| 7 | `lane-commercial` | 商务造价 | 5 | 5 | 5 | 0 | cost（takeoff，无单价 UNSPECIFIED）/ variation / claim / subcontract / interim（T031） | product-plan §7.2 行 5、8–11 |
-| 8 | `lane-procurement` | 采购 | 3 | 3 | 3 | 0 | proc-plan / proc-compare / proc-vendor（T037） | product-plan §7.2 行 26–28 |
-| 9 | `lane-plant` | 物机 | 4 | 4 | 4 | **1** | pack-ship（引擎岗）+ equip / warehouse / material-site（T036） | `python scripts/demo_one_shot.py` + `python scripts/eval_competition_scorecard.py --skip-phase0` |
-| 10 | `lane-lab` | 试验室 | 3 | 3 | 3 | 0 | lab-mix / lab-sample / lab-record（T033） | product-plan §7.2 行 15–17 |
-| 11 | `lane-finance` | 财务 | 3 | 3 | 3 | 0 | finance-tax（日历页述 9%、申报期空栏）/ finance-book / finance-fund（T038） | product-plan §7.2 行 6、29–30 |
-| 12 | `lane-docs` | 资料监理 | 1 | 1 | 1 | 0 | supervision（T034） | product-plan §7.2 行 18 |
+| 6 | `lane-hse` | 安质环 | 4 | 4 | 4 | 0 | safety-brief（11 栏，毫米/电话 `[A001]`）/ quality / env / emergency（T035） | `python scripts/test_expert_turn.py`（逐岗写盘回合，CI 每次提交跑） |
+| 7 | `lane-commercial` | 商务造价 | 5 | 5 | 5 | 0 | cost（takeoff，无单价 UNSPECIFIED）/ variation / claim / subcontract / interim（T031） | `python scripts/test_expert_turn.py`（逐岗写盘回合，CI 每次提交跑） |
+| 8 | `lane-procurement` | 采购 | 3 | 3 | 3 | 0 | proc-plan / proc-compare / proc-vendor（T037） | `python scripts/test_expert_turn.py`（逐岗写盘回合，CI 每次提交跑） |
+| 9 | `lane-plant` | 物机 | 4 | 4 | 4 | **1** | pack-ship（引擎岗）+ equip / warehouse / material-site（T036） | `python scripts/demo_one_shot.py` + `python scripts/test_expert_turn.py`（逐岗写盘回合，CI 每次提交跑） |
+| 10 | `lane-lab` | 试验室 | 3 | 3 | 3 | 0 | lab-mix / lab-sample / lab-record（T033） | `python scripts/test_expert_turn.py`（逐岗写盘回合，CI 每次提交跑） |
+| 11 | `lane-finance` | 财务 | 3 | 3 | 3 | 0 | finance-tax（日历页述 9%、申报期空栏）/ finance-book / finance-fund（T038） | `python scripts/test_expert_turn.py`（逐岗写盘回合，CI 每次提交跑） |
+| 12 | `lane-docs` | 资料监理 | 1 | 1 | 1 | 0 | supervision（T034） | `python scripts/test_expert_turn.py`（逐岗写盘回合，CI 每次提交跑） |
 | 13 | `lane-hr` | 人力 | 3 | 3 | 3 | 0 | hr-recruit / hr-labor / hr-train（合同与人员分表、三级培训） | `python scripts/test_hr_drafts.py` + `scripts/test_expert_turn.py` |
 | 14 | `lane-admin` | 行政 | 2 | 2 | 2 | 0 | admin-doc / admin-office（请示、纪要、用印及会务；不代决定） | `python scripts/test_admin_drafts.py` |
 | 15 | `lane-it` | IT | 3 | 3 | 3 | 0 | it-ops / it-data / it-app（独立系统记录及凭据过滤） | `python scripts/test_it_drafts.py` |
-| 16 | `lane-people` | 项目与工人 | 2 | 2 | 2 | 0 | worker-brief（三段口播，无尺寸不报毫米）/ pm-daily（T039） | product-plan §7.2 行 31–32 |
+| 16 | `lane-people` | 项目与工人 | 2 | 2 | 2 | 0 | worker-brief（三段口播，无尺寸不报毫米）/ pm-daily（T039） | `python scripts/test_expert_turn.py`（逐岗写盘回合，CI 每次提交跑） |
 | — | **合计** | | **66** | **66** | **66** | **1** | | |
 
 > 代码证据：`packing_assistant/expert_turn.py` 的原有专业函数，以及 `packing_assistant/post_drafts/` 中按岗位分派的纯起草器。L2 指专业章节、用户字段、提资与缺项表进入真实产物。

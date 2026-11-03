@@ -315,7 +315,7 @@ def main() -> int:
     ap = argparse.ArgumentParser()
     ap.add_argument(
         "--xlsx",
-        default=r"C:\Users\wenjie.luo\Downloads\Material_Summary (3).xlsx",
+        default=str(Path.home() / "Downloads" / "Material_Summary (3).xlsx"),
     )
     ap.add_argument("--container", default="40HQ")
     ap.add_argument("--max-containers", type=int, default=6)

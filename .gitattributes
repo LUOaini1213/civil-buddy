@@ -1,3 +1,9 @@
+# Text files are stored and checked out with LF on every OS, so a Windows clone hashes, diffs and
+# parses the same bytes as CI. Windows batch files keep CRLF (cmd.exe mis-parses labels in LF .bat).
+* text=auto eol=lf
+*.bat text eol=crlf
+*.cmd text eol=crlf
+
 # 二进制夹具不得做行尾转换。generic_en.pdf 这类 reportlab 输出前 8KB 内没有
 # NUL 字节，git 会把它判成文本，在 core.autocrlf=true 的机器上 checkout 时
 # LF 被换成 CRLF，文件当场损坏。xlsx 装箱单夹具同理。
@@ -16,6 +22,12 @@
 *.ttf  binary
 *.woff binary
 *.woff2 binary
+*.webm binary
+*.wav  binary
+*.mp3  binary
+*.db   binary
+*.sqlite binary
+*.onnx binary
 
 # Preserve the line endings of the bundled upstream Gantt sources.
 demo/static/vendor/frappe-gantt-1.2.2/* text eol=lf

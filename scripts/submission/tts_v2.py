@@ -7,7 +7,7 @@ import wave
 from pathlib import Path
 
 sys.stdout.reconfigure(encoding="utf-8", errors="replace")
-SUB = Path(r"C:\Users\LW\civil-buddy\output\submission")
+SUB = Path(__file__).resolve().parents[2] / "output" / "submission"
 OUT = SUB / "tts_v2"
 OUT.mkdir(exist_ok=True)
 import edge_tts
