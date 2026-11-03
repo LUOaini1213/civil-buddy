@@ -8,10 +8,10 @@
 | 状态 | Approved for implementation (user 2026-08-13) |
 | 产品代号 | `civil-buddy` |
 | 斜杠命令 | `/civil-buddy` |
-| 实现宿主 | 用户级 Grok Build，**不是**当前工作区 `C:\Users\LW\Saved Games` |
-| 产品仓库 | `C:\Users\LW\civil-buddy`（独立 git repo；本文批准后由实施 PR-1 创建） |
+| 实现宿主 | 用户级 Grok Build，**不是**当前工作区 `%USERPROFILE%\Saved Games` |
+| 产品仓库 | `<repo>`（独立 git repo；本文批准后由实施 PR-1 创建） |
 | 对标 | 腾讯 WorkBuddy 的「下指令 → 多专家并行 → 交出成品」行为，**不是**其桌面 OS 控制产品 |
-| 切片含义 | 下文「PR」= 该仓库内可独立审查的提交。Workflow 源在仓库，启用时再复制到 `C:\Users\LW\.grok\workflows\`（PR-3）。 |
+| 切片含义 | 下文「PR」= 该仓库内可独立审查的提交。Workflow 源在仓库，启用时再复制到 `%USERPROFILE%\.grok\workflows\`（PR-3）。 |
 
 ---
 
@@ -23,7 +23,7 @@
 
 **启动规则：** V1 **全程 inline**——主会话同一回合写 `draft.md` 并按占位符表填模板出 docx。`workflow()` 是后台启动，返回值 **不是** `complete()`。Workflow **只**在用户显式 `/civil-buddy-deliver` 或说「用并行」且 `.rhai` 在盘时启动。**从不自动改道。** 不存在「握手已测通」开关。`.rhai` 在磁盘上存在 ≠ 必须调用它。
 
-本机已核实：`C:\Users\LW\.grok\skills` **不存在**；`C:\Users\LW\civil-buddy` 产品仓库由实施阶段创建（本文不建）。可复用：bundled `docx` / `pptx` / `pdf`、`create-skill` / `create-workflow` / `skill-design-principles`，以及 `C:\Users\LW\.grok\workflows\teams-requirements-audit.rhai`。**没有** bundled `xlsx` skill。`09-plugins.md` 的 plugin 内容是 skills / commands / agents / hooks / MCP / LSP，**不含** workflow。`replace_text.py` 与 `unpack.py` **不在同一目录**。`convert_doc.py` 在 `docx\scripts\`，`soffice.py` 在 `docx\scripts\office\`。当前工作区 `Saved Games` 不是产品仓库。**V1 不接 MCP**；V2 接只读 MCP（规范库 / 图纸管理），见 §11。
+本机已核实：`%USERPROFILE%\.grok\skills` **不存在**；`<repo>` 产品仓库由实施阶段创建（本文不建）。可复用：bundled `docx` / `pptx` / `pdf`、`create-skill` / `create-workflow` / `skill-design-principles`，以及 `%USERPROFILE%\.grok\workflows\teams-requirements-audit.rhai`。**没有** bundled `xlsx` skill。`09-plugins.md` 的 plugin 内容是 skills / commands / agents / hooks / MCP / LSP，**不含** workflow。`replace_text.py` 与 `unpack.py` **不在同一目录**。`convert_doc.py` 在 `docx\scripts\`，`soffice.py` 在 `docx\scripts\office\`。当前工作区 `Saved Games` 不是产品仓库。**V1 不接 MCP**；V2 接只读 MCP（规范库 / 图纸管理），见 §11。
 
 ---
 
@@ -48,12 +48,12 @@
 
 ### 本机现状与痛点
 
-1. **没有土木 skill。** 产品仓库 `C:\Users\LW\civil-buddy` 尚未创建。每次都要重讲规范体系、禁止编造、要出文件。
+1. **没有土木 skill。** 产品仓库 `<repo>` 尚未创建。每次都要重讲规范体系、禁止编造、要出文件。
 2. **Office 管道已在，未接到土木工序。**
-   - `C:\Users\LW\.grok\bundled\skills\docx\SKILL.md`（`user-invocable: false`；**docx-js 默认纸张是 A4**；有模板时必须走 `editing.md`）
-   - `C:\Users\LW\.grok\bundled\skills\docx\editing.md`：`unpack.py` → `replace_text.py` / `replace_field.py` → `pack.py`；只做**字符串**替换，不能增行、不能把 Markdown 变成 Word 标题
-   - `C:\Users\LW\.grok\bundled\skills\pptx\SKILL.md`
-   - `C:\Users\LW\.grok\bundled\skills\pdf\SKILL.md`（pypdf / pdfplumber / reportlab / OCR；**不是** `soffice.py` 的家）
+   - `%USERPROFILE%\.grok\bundled\skills\docx\SKILL.md`（`user-invocable: false`；**docx-js 默认纸张是 A4**；有模板时必须走 `editing.md`）
+   - `%USERPROFILE%\.grok\bundled\skills\docx\editing.md`：`unpack.py` → `replace_text.py` / `replace_field.py` → `pack.py`；只做**字符串**替换，不能增行、不能把 Markdown 变成 Word 标题
+   - `%USERPROFILE%\.grok\bundled\skills\pptx\SKILL.md`
+   - `%USERPROFILE%\.grok\bundled\skills\pdf\SKILL.md`（pypdf / pdfplumber / reportlab / OCR；**不是** `soffice.py` 的家）
    - **没有** `xlsx` skill
 3. **并行+skeptic 范例已在。** `teams-requirements-audit.rhai` 第 46 行默认 `root = D:/layout`。Civil Buddy **禁止**复制这个默认。
 4. **用户作业已是双辖区。** `D:\layout` 为新加坡 Tuas South Ave 5 / Line-5；会话里同时有国内施工话语。
@@ -95,7 +95,7 @@
 - **不做法条 RAG**（V1–V2）。
 - **不做** 独立 Web/桌面安装包。
 - **不新增** bundled skill，不覆盖 `docx`/`pptx`/`pdf`。
-- **不把** `C:\Users\LW\Saved Games` 当成产品仓库。
+- **不把** `%USERPROFILE%\Saved Games` 当成产品仓库。
 - **不把** `.rhai` 打进 plugin（宿主不支持）。
 - **V1 不做 Markdown→Word 样式转换。** 标题样式来自模板里已排好的 Heading，脚本只换 token。
 - **V1 验收不写 `D:\layout`。** SG 中英对照是 V2。
@@ -106,32 +106,32 @@
 
 ### 1. 宿主、范围与命名
 
-按 `C:\Users\LW\.grok\docs\user-guide\08-skills.md` 与 `C:\Users\LW\.grok\bundled\skills\create-skill\SKILL.md`。用户已定：**独立 git 仓库**，不是只写 `~\.grok\skills`。
+按 `%USERPROFILE%\.grok\docs\user-guide\08-skills.md` 与 `%USERPROFILE%\.grok\bundled\skills\create-skill\SKILL.md`。用户已定：**独立 git 仓库**，不是只写 `~\.grok\skills`。
 
 | 项 | 决定 |
 |----|------|
 | 名称 | `civil-buddy` |
-| 产品仓库 | `C:\Users\LW\civil-buddy`（standalone git；plugin 形：根下 `skills/`） |
-| Skill 路径 | `C:\Users\LW\civil-buddy\skills\civil-buddy\SKILL.md` |
-| 发现 | 在 `C:\Users\LW\.grok\config.toml` **只追加**下面 `[skills]` 片段（**禁止**整文件重写）。`grok inspect` 来源为 `config`。 |
+| 产品仓库 | `<repo>`（standalone git；plugin 形：根下 `skills/`） |
+| Skill 路径 | `<repo>\skills\civil-buddy\SKILL.md` |
+| 发现 | 在 `%USERPROFILE%\.grok\config.toml` **只追加**下面 `[skills]` 片段（**禁止**整文件重写）。`grok inspect` 来源为 `config`。 |
 | 调用 | `/civil-buddy`；`/skills civil-buddy`；`description` / `when-to-use` 自动触发 |
 | 若撞名 | 内置命令占裸名；`[skills].paths` 技能可用合格名。当前无撞名。 |
-| Workflow 源 | 仓库 `C:\Users\LW\civil-buddy\workflows\*.rhai` |
-| Workflow 启用 | PR-3 起**复制**到 `C:\Users\LW\.grok\workflows\`（宿主只扫该处与作业 `.grok/workflows/`；plugin 不装 rhai） |
+| Workflow 源 | 仓库 `<repo>\workflows\*.rhai` |
+| Workflow 启用 | PR-3 起**复制**到 `%USERPROFILE%\.grok\workflows\`（宿主只扫该处与作业 `.grok/workflows/`；plugin 不装 rhai） |
 | 作者规范 | 写 skill 前读 `skill-design-principles`；写 workflow 前读 `create-workflow` 全文 |
 
 **发现片段（实施者或用户手工合并进现有 `config.toml`，不要覆盖其它段）：**
 
 ```toml
 [skills]
-paths = ["C:/Users/LW/civil-buddy/skills"]
+paths = ["<repo>/skills"]
 ```
 
 等价备选（二选一即可，推荐上一行，便于日后同仓库再放其它 skill）：
 
 ```toml
 [skills]
-paths = ["C:/Users/LW/civil-buddy/skills/civil-buddy"]
+paths = ["<repo>/skills/civil-buddy"]
 ```
 
 `08-skills.md`：`paths` 可以是 `SKILL.md` 或目录，Grok 会递归走。`~` 展开可用，本机用正斜杠绝对路径以免 PowerShell 歧义。
@@ -141,7 +141,7 @@ paths = ["C:/Users/LW/civil-buddy/skills/civil-buddy"]
 ### 2. 目录布局
 
 ```
-C:\Users\LW\civil-buddy\                 # 产品 git 根（plugin 形）
+<repo>\                 # 产品 git 根（plugin 形）
   README.md
   plugin.json                            # PR-8 再写；V1 可空缺
   skills\
@@ -178,7 +178,7 @@ C:\Users\LW\civil-buddy\                 # 产品 git 根（plugin 形）
     civil-buddy-deliver.rhai
     civil-buddy-audit.rhai
 
-C:\Users\LW\.grok\workflows\             # 宿主加载处（PR-3 起）
+%USERPROFILE%\.grok\workflows\             # 宿主加载处（PR-3 起）
   teams-requirements-audit.rhai          # 已存在，勿改
   civil-buddy-deliver.rhai               # 自仓库复制
   civil-buddy-audit.rhai
@@ -402,7 +402,7 @@ PR-3 说明里由实施者人工记一次本机 `complete()` 成功即可，**�
 
 #### 6.2 `civil-buddy-deliver`
 
-**文件：** `C:\Users\LW\.grok\workflows\civil-buddy-deliver.rhai`
+**文件：** `%USERPROFILE%\.grok\workflows\civil-buddy-deliver.rhai`
 
 | Phase | 做什么 | Agent 数（V1.1） | capability_mode |
 |-------|--------|------------------|-----------------|
@@ -645,8 +645,8 @@ sequenceDiagram
 PDF 两条路径（不是同一文件夹）：
 
 ```text
-C:\Users\LW\.grok\bundled\skills\docx\scripts\office\soffice.py --headless --convert-to pdf <docx>
-C:\Users\LW\.grok\bundled\skills\docx\scripts\convert_doc.py <docx> --to pdf
+%USERPROFILE%\.grok\bundled\skills\docx\scripts\office\soffice.py --headless --convert-to pdf <docx>
+%USERPROFILE%\.grok\bundled\skills\docx\scripts\convert_doc.py <docx> --to pdf
 ```
 
 水印用 pdf skill 的 pypdf `merge_page`。
@@ -656,8 +656,8 @@ C:\Users\LW\.grok\bundled\skills\docx\scripts\convert_doc.py <docx> --to pdf
 **CLI（实现必须认这些开关，不得再发明一套）：**
 
 ```text
-python C:\Users\LW\civil-buddy\skills\civil-buddy\scripts\fill_scheme_template.py
-  --template C:\Users\LW\civil-buddy\skills\civil-buddy\references\templates\scheme-cn-a4.docx
+python <repo>\skills\civil-buddy\scripts\fill_scheme_template.py
+  --template <repo>\skills\civil-buddy\references\templates\scheme-cn-a4.docx
   --draft      <out_dir>/draft.md
   --assumptions <out_dir>/assumptions.md
   --citations  <out_dir>/citations.md
@@ -676,10 +676,10 @@ python C:\Users\LW\civil-buddy\skills\civil-buddy\scripts\fill_scheme_template.p
 4. 调用 bundled 工具，**绝对路径如下，分属两个目录**：
 
 ```text
-python C:\Users\LW\.grok\bundled\skills\docx\scripts\office\unpack.py <work.docx> <unpacked>/
-python C:\Users\LW\.grok\bundled\skills\docx\scripts\replace_text.py <unpacked>/ --map <out_dir>/replacements.json --all-files
-python C:\Users\LW\.grok\bundled\skills\docx\scripts\office\pack.py <unpacked>/ <out.docx> --original <work.docx>
-python C:\Users\LW\.grok\bundled\skills\docx\scripts\office\validate.py <out.docx>
+python %USERPROFILE%\.grok\bundled\skills\docx\scripts\office\unpack.py <work.docx> <unpacked>/
+python %USERPROFILE%\.grok\bundled\skills\docx\scripts\replace_text.py <unpacked>/ --map <out_dir>/replacements.json --all-files
+python %USERPROFILE%\.grok\bundled\skills\docx\scripts\office\pack.py <unpacked>/ <out.docx> --original <work.docx>
+python %USERPROFILE%\.grok\bundled\skills\docx\scripts\office\validate.py <out.docx>
 ```
 
 `--all-files` 必开，否则页脚 `{{JURISDICTION}}` 不会被换。  
@@ -764,9 +764,9 @@ python C:\Users\LW\.grok\bundled\skills\docx\scripts\office\validate.py <out.doc
 #### 7.4 写后必跑
 
 ```text
-python C:\Users\LW\.grok\bundled\skills\docx\scripts\office\validate.py <out_dir>/专项施工方案-AI草稿.docx
-python C:\Users\LW\civil-buddy\skills\civil-buddy\scripts\scan_forbidden_inventions.py --draft <draft.md> --docx <docx>
-python C:\Users\LW\civil-buddy\skills\civil-buddy\scripts\assert_outdir_only.py --root <root> --out-dir <out_dir>
+python %USERPROFILE%\.grok\bundled\skills\docx\scripts\office\validate.py <out_dir>/专项施工方案-AI草稿.docx
+python <repo>\skills\civil-buddy\scripts\scan_forbidden_inventions.py --draft <draft.md> --docx <docx>
+python <repo>\skills\civil-buddy\scripts\assert_outdir_only.py --root <root> --out-dir <out_dir>
 ```
 
 **计算：** 有来源才四行。V1 无来源 → `[Axxx] 待填`，禁止「验算满足」。
@@ -910,7 +910,7 @@ V2 **将**接入只读 MCP，用于规范库检索与图纸管理。V1 **不**�
 | 规则 | 说明 |
 |------|------|
 | 方向 | **只读**：列目录、取 PDF/图纸元数据、按文件名检索。禁止 create/update/delete、禁止回写图档库、禁止改规范库 |
-| 配置 | 沿用 `07-mcp-servers.md`：用户在 `C:\Users\LW\.grok\config.toml` 自行增加 `[mcp_servers.<name>]`。实施切片只提交**示例片段**与 skill 内「如何调用」工序，**不得**整文件重写 config |
+| 配置 | 沿用 `07-mcp-servers.md`：用户在 `%USERPROFILE%\.grok\config.toml` 自行增加 `[mcp_servers.<name>]`。实施切片只提交**示例片段**与 skill 内「如何调用」工序，**不得**整文件重写 config |
 | 与 skill 关系 | 规范全文仍不进 `references/`。MCP 只提供用户本机/内网库的只读句柄；`verified` 仍须 `verify_clause.py` 抽词 |
 | 机密 | `confidential: true` 时只打用户已声明的库；不得把图纸/单价经 MCP 送到外网 |
 | 失败 | MCP 不可用则降级为现有 `sources/` PDF + `UNSPECIFIED`，不得编造 |
@@ -921,7 +921,7 @@ V2 **将**接入只读 MCP，用于规范库检索与图纸管理。V1 **不**�
 
 ## API / Interface Changes
 
-不改 Grok 运行时。**V1 不新增 MCP。** V2 只追加只读 `[mcp_servers.*]`（§11）。发现 skill 时只追加 §1 的 `[skills] paths` 片段。**禁止**整文件重写 `C:\Users\LW\.grok\config.toml`。
+不改 Grok 运行时。**V1 不新增 MCP。** V2 只追加只读 `[mcp_servers.*]`（§11）。发现 skill 时只追加 §1 的 `[skills] paths` 片段。**禁止**整文件重写 `%USERPROFILE%\.grok\config.toml`。
 
 | 接口 | 行为 |
 |------|------|
@@ -1091,7 +1091,7 @@ V1 采用其执行模型（inline）。并行后续可选。
 1. ~~V1 用虚构 CN 还是 `D:\layout`？~~ **已冻结：** `%TEMP%` 虚构包。
 2. ~~SG 语言？~~ **已冻结：** V1 中文；双语 = V2。
 3. ~~V2 是否只读 MCP？~~ **已冻结（用户 2026-08-13）：** V2 **做**只读 MCP（规范库 / 图纸管理）；永不回写图档或规范库。V1 无 MCP。见 §11、KD 19。
-4. ~~落地 scope？~~ **已冻结：** 独立仓库 `C:\Users\LW\civil-buddy` + `[skills] paths`；不是只写 `~\.grok\skills`。见 §1、KD 2。
+4. ~~落地 scope？~~ **已冻结：** 独立仓库 `<repo>` + `[skills] paths`；不是只写 `~\.grok\skills`。见 §1、KD 2。
 5. ~~xlsx？~~ **已冻结：** PR-6c 前只出 md。
 
 仍开放、不挡 V1：实施完成后是否另开任务给 `D:\layout` 建 SG pack。
@@ -1101,29 +1101,29 @@ V1 采用其执行模型（inline）。并行后续可选。
 ## References
 
 - WorkBuddy 营销页：https://www.workbuddy.ai/ 、https://copilot.tencent.com/work/（未再爬活站）
-- `C:\Users\LW\.grok\docs\user-guide\08-skills.md`
-- `C:\Users\LW\.grok\docs\user-guide\04-slash-commands.md`
-- `C:\Users\LW\.grok\docs\user-guide\16-subagents.md`
-- `C:\Users\LW\.grok\docs\user-guide\12-project-rules.md`
-- `C:\Users\LW\.grok\docs\user-guide\13-memory.md`
-- `C:\Users\LW\.grok\docs\user-guide\22-permissions-and-safety.md`
-- `C:\Users\LW\.grok\docs\user-guide\09-plugins.md`（无 workflow）
-- `C:\Users\LW\.grok\bundled\skills\create-skill\SKILL.md`
-- `C:\Users\LW\.grok\bundled\skills\create-workflow\SKILL.md`（`timestamp()` 抛错；args 不可变；`pause` vs `await_user`）
-- `C:\Users\LW\.grok\bundled\skills\skill-design-principles\SKILL.md`
-- `C:\Users\LW\.grok\bundled\skills\docx\SKILL.md`、`editing.md`
-- `C:\Users\LW\.grok\bundled\skills\docx\scripts\office\unpack.py`
-- `C:\Users\LW\.grok\bundled\skills\docx\scripts\office\pack.py`
-- `C:\Users\LW\.grok\bundled\skills\docx\scripts\office\validate.py`
-- `C:\Users\LW\.grok\bundled\skills\docx\scripts\office\soffice.py`
-- `C:\Users\LW\.grok\bundled\skills\docx\scripts\replace_text.py`（`--map` `--all-files`）
-- `C:\Users\LW\.grok\bundled\skills\docx\scripts\convert_doc.py`（`--to pdf`；**不在** office\ 下）
-- `C:\Users\LW\.grok\bundled\skills\pptx\SKILL.md`
-- `C:\Users\LW\.grok\bundled\skills\pdf\SKILL.md`
-- `C:\Users\LW\.grok\workflows\teams-requirements-audit.rhai`
+- `%USERPROFILE%\.grok\docs\user-guide\08-skills.md`
+- `%USERPROFILE%\.grok\docs\user-guide\04-slash-commands.md`
+- `%USERPROFILE%\.grok\docs\user-guide\16-subagents.md`
+- `%USERPROFILE%\.grok\docs\user-guide\12-project-rules.md`
+- `%USERPROFILE%\.grok\docs\user-guide\13-memory.md`
+- `%USERPROFILE%\.grok\docs\user-guide\22-permissions-and-safety.md`
+- `%USERPROFILE%\.grok\docs\user-guide\09-plugins.md`（无 workflow）
+- `%USERPROFILE%\.grok\bundled\skills\create-skill\SKILL.md`
+- `%USERPROFILE%\.grok\bundled\skills\create-workflow\SKILL.md`（`timestamp()` 抛错；args 不可变；`pause` vs `await_user`）
+- `%USERPROFILE%\.grok\bundled\skills\skill-design-principles\SKILL.md`
+- `%USERPROFILE%\.grok\bundled\skills\docx\SKILL.md`、`editing.md`
+- `%USERPROFILE%\.grok\bundled\skills\docx\scripts\office\unpack.py`
+- `%USERPROFILE%\.grok\bundled\skills\docx\scripts\office\pack.py`
+- `%USERPROFILE%\.grok\bundled\skills\docx\scripts\office\validate.py`
+- `%USERPROFILE%\.grok\bundled\skills\docx\scripts\office\soffice.py`
+- `%USERPROFILE%\.grok\bundled\skills\docx\scripts\replace_text.py`（`--map` `--all-files`）
+- `%USERPROFILE%\.grok\bundled\skills\docx\scripts\convert_doc.py`（`--to pdf`；**不在** office\ 下）
+- `%USERPROFILE%\.grok\bundled\skills\pptx\SKILL.md`
+- `%USERPROFILE%\.grok\bundled\skills\pdf\SKILL.md`
+- `%USERPROFILE%\.grok\workflows\teams-requirements-audit.rhai`
 - `D:\layout\LINE5_SITE_README.md`（只读）
-- `C:\Users\LW\.grok\config.toml`（`permission_mode = "always-approve"`，`default = grok-4.6`；实施只追加 `[skills] paths`）
-- `C:\Users\LW\.grok\docs\user-guide\07-mcp-servers.md`（V2 只读 MCP 配置面）
+- `%USERPROFILE%\.grok\config.toml`（`permission_mode = "always-approve"`，`default = grok-4.6`；实施只追加 `[skills] paths`）
+- `%USERPROFILE%\.grok\docs\user-guide\07-mcp-servers.md`（V2 只读 MCP 配置面）
 
 ---
 
@@ -1132,7 +1132,7 @@ V1 采用其执行模型（inline）。并行后续可选。
 1. **产品是 Grok 用户级 skill + 可选 workflow，不是 WorkBuddy 桌面克隆。**  
    理由：宿主与 office 技能已在。
 
-2. **名称 `civil-buddy`。落地独立 git 仓库 `C:\Users\LW\civil-buddy`，skill 在 `skills\civil-buddy\`（plugin 形）。用 `[skills] paths = ["C:/Users/LW/civil-buddy/skills"]` 发现。禁止整文件重写 `config.toml`。Workflow 源在仓库 `workflows\`，PR-3 复制到 `C:\Users\LW\.grok\workflows\`。**  
+2. **名称 `civil-buddy`。落地独立 git 仓库 `<repo>`，skill 在 `skills\civil-buddy\`（plugin 形）。用 `[skills] paths = ["<repo>/skills"]` 发现。禁止整文件重写 `config.toml`。Workflow 源在仓库 `workflows\`，PR-3 复制到 `%USERPROFILE%\.grok\workflows\`。**  
    理由：用户已定仓库而非只靠 `~\.grok\skills`；plugin 形让 PR-8 自然；宿主仍只从 `~\.grok\workflows` 加载 rhai。
 
 3. **一个 skill 路由；专家 id 与文件名统一连字符（`structural-geotech`）。**  
@@ -1190,14 +1190,14 @@ V1 采用其执行模型（inline）。并行后续可选。
 
 ## PR Plan
 
-「PR」= `C:\Users\LW\civil-buddy` 仓库内提交。合并 PR-3 **不得**删除 inline 自动路径。下列相对路径均相对该仓库根。
+「PR」= `<repo>` 仓库内提交。合并 PR-3 **不得**删除 inline 自动路径。下列相对路径均相对该仓库根。
 
 ### PR-1 — Scaffold（建仓 + 问答 / init_pack / 路由 YAML，不出 docx）
 
 - **标题：** `civil-buddy: init repo, skill scaffold, hard rules, project pack`
-- **文件：** 初始化 git 于 `C:\Users\LW\civil-buddy`；`skills/civil-buddy/SKILL.md`（Step 0–4、7）；`references/hard-rules.md`（含 §10 声明与断言禁语）；`jurisdictions.md`；`citation-format.md`（A001 块）；`project-pack.md`（§8.1 全文）；`scheme-outline.md`（§7.2 十一章）；`examples/sample-cn-project.md`（§8.2）；`experts/construction.md`（§5.1）；其余 experts 骨架；`README.md`（含 §1 `[skills] paths` 片段）
+- **文件：** 初始化 git 于 `<repo>`；`skills/civil-buddy/SKILL.md`（Step 0–4、7）；`references/hard-rules.md`（含 §10 声明与断言禁语）；`jurisdictions.md`；`citation-format.md`（A001 块）；`project-pack.md`（§8.1 全文）；`scheme-outline.md`（§7.2 十一章）；`examples/sample-cn-project.md`（§8.2）；`experts/construction.md`（§5.1）；其余 experts 骨架；`README.md`（含 §1 `[skills] paths` 片段）
 - **依赖：** 无
-- **说明：** 不出 docx。规范正文不进 skill。发现：手工把 §1 TOML 片段 merge 进 `C:\Users\LW\.grok\config.toml` 的 `[skills].paths`（已有表则 append）。不整文件重写 config。
+- **说明：** 不出 docx。规范正文不进 skill。发现：手工把 §1 TOML 片段 merge 进 `%USERPROFILE%\.grok\config.toml` 的 `[skills].paths`（已有表则 append）。不整文件重写 config。
 
 ### PR-2 — V1：分章 token 模板 + 扫描器 + 虚构目录验收
 
@@ -1209,7 +1209,7 @@ V1 采用其执行模型（inline）。并行后续可选。
 ### PR-3 — deliver workflow（仅显式；自出 docx；schema 门闩）
 
 - **标题：** `civil-buddy-deliver: explicit-only; synth gated on assert/scan/validate`
-- **文件：** 仓库 `workflows/civil-buddy-deliver.rhai`（本文 plan/expert/verify/synth schema）；复制到 `C:\Users\LW\.grok\workflows\civil-buddy-deliver.rhai`；`SKILL.md` Step 6
+- **文件：** 仓库 `workflows/civil-buddy-deliver.rhai`（本文 plan/expert/verify/synth schema）；复制到 `%USERPROFILE%\.grok\workflows\civil-buddy-deliver.rhai`；`SKILL.md` Step 6
 - **依赖：** PR-2
 - **说明：** 缺 `jurisdiction`/`confirm_ok`/`out_dir`/`root` → `pause`。仅显式启动。三布尔不全真则 `rejected` complete。inline 仍是自动路径。禁止默认 `D:/layout`。宿主不扫产品仓库的 `workflows/`，必须复制。
 
@@ -1223,7 +1223,7 @@ V1 采用其执行模型（inline）。并行后续可选。
 ### PR-5 — audit workflow（只审 md）
 
 - **标题：** `civil-buddy-audit: adversarial review of draft.md`
-- **文件：** 仓库 `workflows/civil-buddy-audit.rhai`；复制到 `C:\Users\LW\.grok\workflows\`；`SKILL.md` audit 分支
+- **文件：** 仓库 `workflows/civil-buddy-audit.rhai`；复制到 `%USERPROFILE%\.grok\workflows\`；`SKILL.md` audit 分支
 - **依赖：** PR-1
 - **说明：** docx 先 `pandoc`。
 

@@ -7,6 +7,14 @@
 - Each round drives packing_assistant.harness.run_agent_pipeline (real path)
 - Fan-out: ProcessPoolExecutor max_workers=16
 - Writes rollup JSON/MD under output/fanout16x8/
+
+What the 128 runs cover: of the fetched files only the two D-Wave 3D-BPP
+samples parse as cargo (4 and 7 item types). load_material_bank derives 16
+deterministic lane variants from those 2 instances, and round_materials /
+round_options change each lane's input by round (qty +1 on even rounds,
+lengths x1.06 / x1.12 on rounds 3 / 6, prefer_single_row on odd rounds), so a
+lane's 8 rounds see 4 distinct inputs: 64 distinct inputs in 128 runs.
+scripts/render_eval_table.py --check README.md recomputes these counts.
 """
 
 from __future__ import annotations
@@ -63,6 +71,20 @@ def _log(msg: str) -> None:
     print(msg, flush=True)
 
 
+def _rel(path: Path) -> str:
+    """Path as written into fetch_meta.json: relative to the repository (POSIX form) when it lies inside it,
+    so an archived run carries no machine-specific absolute path."""
+    try:
+        return Path(path).resolve().relative_to(ROOT).as_posix()
+    except ValueError:
+        return str(path)
+
+
+def _resolve(path: str) -> Path:
+    p = Path(path)
+    return p if p.is_absolute() else ROOT / p
+
+
 def fetch_online_cargo(dest: Path) -> Dict[str, Any]:
     """Download public cargo/BPP samples. Network failure recorded, not faked green."""
     dest.mkdir(parents=True, exist_ok=True)
@@ -81,7 +103,7 @@ def fetch_online_cargo(dest: Path) -> Dict[str, Any]:
             path.write_bytes(data)
             entry["ok"] = True
             entry["bytes"] = len(data)
-            entry["path"] = str(path)
+            entry["path"] = _rel(path)
             ok_n += 1
             _log(f"FETCH_OK {name} {len(data)} bytes from {url}")
         except Exception as e:
@@ -91,7 +113,7 @@ def fetch_online_cargo(dest: Path) -> Dict[str, Any]:
             if path.is_file() and path.stat().st_size > 0:
                 entry["ok"] = True
                 entry["bytes"] = path.stat().st_size
-                entry["path"] = str(path)
+                entry["path"] = _rel(path)
                 entry["from_cache"] = True
                 ok_n += 1
                 _log(f"FETCH_CACHE {name} {entry['bytes']} bytes")
@@ -142,21 +164,26 @@ def parse_dwave_bpp(text: str, *, scale_mm: float = 80.0) -> List[Dict[str, Any]
     return mats
 
 
-def load_material_bank(
-    fetch_meta: Dict[str, Any], *, n_lanes: int = DEFAULT_LANES
-) -> List[List[Dict[str, Any]]]:
-    """Build N material sets from online files + deterministic variants."""
+def cargo_instances(fetch_meta: Dict[str, Any]) -> List[List[Dict[str, Any]]]:
+    """The fetched files that parse as cargo, in fetch_meta order (a cached copy of a sample counts again)."""
     bank: List[List[Dict[str, Any]]] = []
-
     for item in fetch_meta.get("items") or []:
         p = item.get("path")
-        if not p or not Path(p).is_file():
+        if not p or not _resolve(p).is_file():
             continue
-        raw = Path(p).read_text(encoding="utf-8", errors="replace")
+        raw = _resolve(p).read_text(encoding="utf-8", errors="replace")
         if "case_id" in raw or "quantity" in raw.lower():
             parsed = parse_dwave_bpp(raw)
             if parsed:
                 bank.append(parsed)
+    return bank
+
+
+def load_material_bank(
+    fetch_meta: Dict[str, Any], *, n_lanes: int = DEFAULT_LANES
+) -> List[List[Dict[str, Any]]]:
+    """Build N material sets from online files + deterministic variants."""
+    bank = cargo_instances(fetch_meta)
 
     # If online parse produced lists, expand to n_lanes via slices/shuffles
     if not bank:
@@ -203,6 +230,34 @@ def _pass_criteria(state: Dict[str, Any]) -> Tuple[bool, str]:
     return False, f"weak phase={phase}"
 
 
+def round_options(round_id: int) -> Dict[str, Any]:
+    """Packing options for a round: densify-ish options on the real steps path; odd rounds add
+    prefer_single_row."""
+    opts: Dict[str, Any] = {
+        "dense_mode": True,
+        "standard_boxes": False,
+        "mix_mode": True,
+    }
+    if round_id % 2 == 1:
+        opts["prefer_single_row"] = True
+    return opts
+
+
+def round_materials(materials: List[Dict[str, Any]], round_id: int) -> List[Dict[str, Any]]:
+    """The cargo a lane packs in a given round. The input changes by round, so rounds are not repeats:
+    even rounds add 1 to every qty, and rounds divisible by 3 stretch every length by 2 % per round number
+    (x1.06 on round 3, x1.12 on round 6). With round_options this gives each lane 4 distinct inputs in
+    8 rounds (rounds 1/5/7, 2/4/8, 3 and 6)."""
+    mats = []
+    for m in materials:
+        mm = dict(m)
+        mm["qty"] = max(1, int(mm.get("qty") or 1) + ((round_id - 1) % 2))
+        if round_id % 3 == 0:
+            mm["length_mm"] = round(float(mm["length_mm"]) * (1.0 + 0.02 * round_id), 1)
+        mats.append(mm)
+    return mats
+
+
 def run_one_round(payload: Dict[str, Any]) -> Dict[str, Any]:
     """Worker: one packing evaluation on shipped harness."""
     lane_id = int(payload["lane_id"])
@@ -223,15 +278,7 @@ def run_one_round(payload: Dict[str, Any]) -> Dict[str, Any]:
     try:
         from packing_assistant.harness import run_agent_pipeline
 
-        # densify-ish options for diverse cargo; still real steps path
-        opts = {
-            "dense_mode": True,
-            "standard_boxes": False,
-            "mix_mode": True,
-        }
-        # slight option diversify by round
-        if round_id % 2 == 1:
-            opts["prefer_single_row"] = True
+        opts = round_options(round_id)
         state = run_agent_pipeline(
             f"fanout lane={lane_id} round={round_id} online cargo",
             materials=materials,
@@ -262,13 +309,7 @@ def run_lane(args: Tuple[int, List[Dict[str, Any]], int]) -> Dict[str, Any]:
     lane_id, materials, n_rounds = args
     rounds_out: List[Dict[str, Any]] = []
     for r in range(1, n_rounds + 1):
-        mats = []
-        for j, m in enumerate(materials):
-            mm = dict(m)
-            mm["qty"] = max(1, int(mm.get("qty") or 1) + ((r - 1) % 2))
-            if r % 3 == 0:
-                mm["length_mm"] = round(float(mm["length_mm"]) * (1.0 + 0.02 * r), 1)
-            mats.append(mm)
+        mats = round_materials(materials, r)
         rec = run_one_round(
             {"lane_id": lane_id, "round_id": r, "materials": mats}
         )
@@ -310,30 +351,30 @@ def main() -> int:
             "items": [
                 {
                     "name": p.name,
-                    "path": str(p),
+                    "path": _rel(p),
                     "ok": True,
                     "bytes": p.stat().st_size,
                     "url": "local",
                 }
-                for p in EXT_DIR.glob("*")
+                for p in sorted(EXT_DIR.glob("*"))
                 if p.is_file()
             ],
             "ok_count": len(list(EXT_DIR.glob("*"))),
             "network_any_ok": False,
             "total_urls": len(FETCH_URLS),
         }
-        for p in (ROOT / "data" / "external").glob("sample_data_*.txt"):
+        for p in sorted((ROOT / "data" / "external").glob("sample_data_*.txt")):
             fetch_meta["items"].append(
-                {"name": p.name, "path": str(p), "ok": True, "bytes": p.stat().st_size, "url": "local_cache"}
+                {"name": p.name, "path": _rel(p), "ok": True, "bytes": p.stat().st_size, "url": "local_cache"}
             )
             fetch_meta["ok_count"] += 1
     else:
         fetch_meta = fetch_online_cargo(EXT_DIR)
-        for p in (ROOT / "data" / "external").glob("sample_data_*.txt"):
+        for p in sorted((ROOT / "data" / "external").glob("sample_data_*.txt")):
             fetch_meta["items"].append(
                 {
                     "name": p.name,
-                    "path": str(p),
+                    "path": _rel(p),
                     "ok": True,
                     "bytes": p.stat().st_size,
                     "url": "data/external cache",

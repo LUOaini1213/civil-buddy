@@ -5,7 +5,7 @@ from pathlib import Path
 from PIL import Image, ImageDraw, ImageFont
 
 sys.stdout.reconfigure(encoding="utf-8", errors="replace")
-OUT = Path(r"C:\Users\LW\civil-buddy\output\submission")
+OUT = Path(__file__).resolve().parents[2] / "output" / "submission"
 W, H = 1920, 1080
 BG_TOP, BG_BOT = (10, 16, 30), (16, 26, 46)
 ACCENT, ACCENT2 = (91, 141, 239), (139, 108, 255)

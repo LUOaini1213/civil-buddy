@@ -9,7 +9,7 @@ Skill 是 SOP。MCP 是动作。不要把装箱 skill 名（`bin3d.pack`）当�
 无 MSVC 时用 Python（本机已跑 `scripts/test_mcp_stdio.py`）：
 
 ```powershell
-cd C:\Users\LW\civil-buddy
+cd path\to\civil-buddy
 python demo/mcp_stdio.py --pack bid
 python demo/mcp_stdio.py --pack construction
 python demo/mcp_stdio.py --expert pack-ship
@@ -41,7 +41,7 @@ python demo/mcp_stdio.py --expert pack-ship
     "civil-construction": {
       "command": "python",
       "args": ["demo/mcp_stdio.py", "--pack", "construction"],
-      "cwd": "C:\\\\Users\\\\LW\\\\civil-buddy"
+      "cwd": "C:\\\\path\\\\to\\\\civil-buddy"
     }
   }
 }

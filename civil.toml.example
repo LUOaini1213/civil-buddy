@@ -10,5 +10,5 @@ max_parallel = 4
 # JSON-RPC on this harness. Not the openai/codex binary. No Cloud.
 
 [workspace]
-# job_root = "C:/Users/LW/Documents/某工地"
-# 禁止 D:\layout
+# job_root = "C:/Users/你/Documents/某工地"
+# 生产数据目录不能当作业根：在环境变量 CIVIL_PROTECTED_ROOTS 里列出（默认为空）

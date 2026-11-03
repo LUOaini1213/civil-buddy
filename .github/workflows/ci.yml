@@ -165,7 +165,7 @@ jobs:
         run: npm run check
       - name: Full gate API, Office, pipeline and shadow checks
         # The rust job runs the remaining FULL_CHECKS: Rust tests, host build and
-        # real unified-runtime HTTP/restart smoke. Together these require all 190 groups.
+        # real unified-runtime HTTP/restart smoke. Together these run every group in CHECKS + FULL_CHECKS (scripts/check_project.py).
         run: npm run check:full -- --only http-demo,runtime-api,office-job,pipeline,shadow-eval
       - name: TMS booking stub
         run: |
@@ -209,8 +209,16 @@ jobs:
               assert k in t, k
           print("frontend continue OK")
           PY
-      - name: Fan-out evaluation archive matches the README numbers
+      - name: Fan-out evaluation archive matches the README numbers (incl. distinct inputs / outcomes)
         run: python scripts/render_eval_table.py --check README.md
+      - name: Requirements files are ASCII-only (pip reads them in the locale code page on Windows)
+        run: |
+          python - <<'PY'
+          import pathlib, sys
+          bad = [p.name for p in sorted(pathlib.Path(".").glob("requirements*.txt")) if any(b > 127 for b in p.read_bytes())]
+          print("non-ASCII requirements files:", bad or "none")
+          sys.exit(1 if bad else 0)
+          PY
       - name: P0 cog t80 (if materials present)
         run: |
           if [ -f test/sim_materials/t80_random_mixed_s20260729/materials.json ]; then

@@ -104,7 +104,7 @@ def main() -> int:
 
     example = (ROOT / "civil.toml.example").read_text(encoding="utf-8")
     assert cc._parse_toml_lite(example) == {"sandbox": "workspace-write", "approval": "on-request", "max_steps": "8", "max_parallel": "4"}
-    assert cc._parse_toml_lite(example.replace("# job_root", "job_root"))["job_root"] == "C:/Users/LW/Documents/某工地"
+    assert cc._parse_toml_lite(example.replace("# job_root", "job_root"))["job_root"] == "C:/Users/你/Documents/某工地"
 
     rng = random.Random(7)
     alpha = ['"', "'", "#", "=", " ", "[", "]", BS, "a", "read-only", "2", "\t", "\u3000", "x]", "工地"]

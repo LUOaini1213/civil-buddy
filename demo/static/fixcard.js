@@ -87,7 +87,7 @@
         kind: "blocked", code: "deny_production", why: tr("策略 deny_production · 禁写生产数据区"),
         title: tr("目标 ") + m[1] + tr(" 被判定为生产数据，写入被拒"),
         actions: [
-          { kind: "note", label: tr("输出只落本次运行的输出目录；不要指向 D:\\layout / prod") },
+          { kind: "note", label: tr("输出只落本次运行的输出目录；不要指向受保护目录（CIVIL_PROTECTED_ROOTS）或 prod") },
         ], raw: text,
       };
     }

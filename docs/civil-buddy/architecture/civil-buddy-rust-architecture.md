@@ -442,10 +442,10 @@ demo/tests/test_links_and_cache.py::test_legacy_uploads_are_adopted_into_the_ses
 
 | 位置 / 分支 | 核对版本与状态 | 对本设计的影响 |
 |---|---|---|
-| 主目录 `C:\Users\LW\civil-buddy` | main `40ba86c`，相对已核对 origin/main 落后 35 个提交；有未跟踪工程文档及 outputs | 主目录的旧状态不能代表所有本地开发工作 |
+| 主目录 `<repo>` | main `40ba86c`，相对已核对 origin/main 落后 35 个提交；有未跟踪工程文档及 outputs | 主目录的旧状态不能代表所有本地开发工作 |
 | 远端 main | `b3ccc72`，已含 PR55 和共享模型回合修复 | 聊天、会话、事件与附件的稳定参考 |
 | 队友 `cuizhi-chat/civil-buddy` 的 `refactor/app-modules` | PR56 `f328693`，开放；相对 PR55 有 10 个提交 | 复用八模块前端、错误时已有产物、续流及后台任务行为 |
-| CAD 工作区 `C:\Users\LW\.codex\worktrees\cad-to-3d\civil-buddy` | PR58 `3e93025`，已推送、开放，工作区干净 | 复用 CAD、工程工具、版本记录、计划页面及 runtime 改进 |
+| CAD 工作区 `%USERPROFILE%\.codex\worktrees\cad-to-3d\civil-buddy` | PR58 `3e93025`，已推送、开放，工作区干净 | 复用 CAD、工程工具、版本记录、计划页面及 runtime 改进 |
 | `feat/post-depth-g14-kb` | PR57 `79bcb58`，开放 | 知识、意图与评测增量；不算新增工程求解器 |
 
 本次核对过程中 PR58 从 `8359bc7` 更新到了 `3e93025`。工程层已包含在后者，不再标为未提交。队友 fork 的 main 与当前主仓库 main 没有可用的共同祖先比较；应沿已经移植到本仓历史的 PR56 分支集成，不能把 fork main 当作统一基线直接拉入。PR56 描述仍说“两个提交”，实际固定版本为十个增量提交，以源码和提交记录为准。

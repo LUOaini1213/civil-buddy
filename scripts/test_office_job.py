@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Job-root Office interchange: tables → xlsx; never D:\\layout."""
+"""Job-root Office interchange: tables → xlsx; never a folder in CIVIL_PROTECTED_ROOTS."""
 
 from __future__ import annotations
 
@@ -19,11 +19,18 @@ def main() -> int:
         tables_from_md,
     )
 
-    assert is_forbidden_layout(Path(r"D:\layout"))
-    assert is_forbidden_layout(Path(r"D:\layout\foo"))
-    assert not is_forbidden_layout(Path(r"C:\Users\LW\civil-buddy"))
+    # Protected (production-data) roots are configured per machine; none ship with the repository.
+    protected = ROOT / "output" / "office-job-protected"
+    protected.mkdir(parents=True, exist_ok=True)
+    os.environ.pop("CIVIL_PROTECTED_ROOTS", None)
+    assert not is_forbidden_layout(protected)
+    os.environ["CIVIL_PROTECTED_ROOTS"] = str(protected)
+    assert is_forbidden_layout(protected)
+    assert is_forbidden_layout(protected / "foo")
+    assert not is_forbidden_layout(ROOT / "output" / "office-job-protected-sibling")
+    assert not is_forbidden_layout(ROOT)
 
-    os.environ["CIVIL_JOB_ROOT"] = r"D:\layout"
+    os.environ["CIVIL_JOB_ROOT"] = str(protected)
     assert not is_forbidden_layout(job_root())
     assert str(job_root()).replace("\\", "/").lower().endswith(".civil-buddy/out")
 

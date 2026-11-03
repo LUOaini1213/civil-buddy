@@ -301,7 +301,7 @@ def main() -> int:
     ap = argparse.ArgumentParser()
     ap.add_argument(
         "--xlsx",
-        default=r"C:\Users\wenjie.luo\Downloads\Material_Summary (3).xlsx",
+        default=str(Path.home() / "Downloads" / "Material_Summary (3).xlsx"),
     )
     ap.add_argument("--container", default="40HQ", choices=["20GP", "40GP", "40HQ"])
     ap.add_argument("--also-40gp", action="store_true", help="再跑一版 40GP 对比")

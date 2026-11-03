@@ -146,7 +146,7 @@ def style_heading_para(p, level: int = 1) -> None:
 
 
 def build_shuoming() -> Path:
-    src = Path(r"C:\Users\wenjie.luo\Downloads\说明文档模版.docx")
+    src = Path(Path.home() / "Downloads" / r"说明文档模版.docx")
     dst = OUT / "01-说明文档-装箱拼柜Agent工作台.docx"
     shutil.copy2(src, dst)
     doc = Document(str(dst))
@@ -329,7 +329,7 @@ def build_shuoming() -> Path:
 
 
 def build_resume() -> Path:
-    src = Path(r"C:\Users\wenjie.luo\Downloads\人机协同履历表模板.docx")
+    src = Path(Path.home() / "Downloads" / r"人机协同履历表模板.docx")
     dst = OUT / "03-人机协同履历表-packing-agent.docx"
     shutil.copy2(src, dst)
     doc = Document(str(dst))

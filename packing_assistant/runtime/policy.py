@@ -96,8 +96,11 @@ def _tokens(name: str, args: Dict[str, Any]) -> int:
 
 
 def _production_path(path: str) -> bool:
+    """A folder listed in CIVIL_PROTECTED_ROOTS (packing_assistant.protected_roots), or any folder named prod."""
+    from packing_assistant.protected_roots import is_protected
+
     p = (path or "").replace("/", "\\").lower()
-    return "d:\\layout" in p or "\\prod\\" in p or p.endswith("\\prod")
+    return is_protected(path) or "\\prod\\" in p or p.endswith("\\prod")
 
 
 def evaluate(
@@ -184,7 +187,7 @@ def evaluate(
             return PolicyDecision(
                 False,
                 CODE_PRODUCTION,
-                f"拒绝：目标 {path} 视为生产数据（禁止 D:\\layout / prod）。",
+                f"拒绝：目标 {path} 视为生产数据（CIVIL_PROTECTED_ROOTS 所列目录或名为 prod 的目录）。",
                 ERR_DENIED,
                 cost,
             )

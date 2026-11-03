@@ -7,7 +7,7 @@
 ## 启动
 
 ```powershell
-cd C:\Users\LW\civil-buddy\demo
+cd path\to\civil-buddy\demo
 copy .env.example .env
 # 编辑 .env，填入 CIVIL_API_KEY / OPENAI_API_KEY / DEEPSEEK_API_KEY（自选模型，不必 DeepSeek）
 python -m pip install -r requirements.txt
